@@ -38,7 +38,7 @@ the NVIDIA AVOS / DRIVE OS SE role this portfolio targets.
 - Build host (primary): **local Windows PC** — QNX SDP 8.0 ships a Windows-native installer; `mkqnximage --arch=aarch64le` produces the IFS locally and it is scp'd to the runtime host
 - Build host (fallback): t3.medium x86_64 Ubuntu 22.04 — retained for users without a local x86_64 Windows or Linux machine
 - Runtime host: c7g.large (Graviton3 Neoverse-V1, Ubuntu 22.04 arm64, KVM-on-arm64)
-- Honest framing: the Windows-host pivot is a **friction/cost optimisation only**. It does NOT demonstrate cross-host build determinism — Phase 1 must verify the Windows-built IFS is byte-equivalent (or at minimum functionally identical) to an EC2-built IFS. It is also NOT closer to a real DRIVE OS customer build environment than EC2 — DRIVE OS customer builds typically sit on rented or vendor-provided Linux hosts, not local Windows.
+- Honest framing: the Windows-host pivot is a **friction/cost optimisation only**. The build host runs only `mkqnximage` and host-side QNX tooling (no guests run on it) and produces a target-aarch64 IFS via cross-compilation; per F1's arch-agnostic-IFS argument, host platform (Windows vs Linux x86_64) affects only build metadata (embedded paths, timestamps), not the ARM code QNX boots, so F5 Q2 (any x86_64-built IFS boots on Graviton) is the only verification needed — there is no separate cross-host build-determinism check. The pivot is also NOT closer to a real DRIVE OS customer build environment than EC2 — DRIVE OS customer builds typically sit on rented or vendor-provided Linux hosts, not local Windows.
 
 **Hardware twin (Orin Nano):**
 - Jetson Orin Nano Dev Kit ($499) — Ampere GPU, 6× Cortex-A78AE, 8 GB RAM
@@ -141,10 +141,10 @@ The `.claude/agents/` files are intentionally thin and refer back to `agents/<na
 **Phase 1 starting sequence (concrete):**
 
 ```text
-1. research              → close out F6 BSP questions in docs/bsp-selection.md (Rosetta-2 and IFS-on-Orin claims)
-2. architect             → review research findings; lock Phase 1 plan or trigger fallback (F6 risk register)
-3. implementation        → run scripts/bootstrap-build-host.sh + scripts/bootstrap-runtime-host.sh end-to-end
-4. implementation        → scripts/build-qnx-ifs.sh (build host) + setup-bridge.sh + launch-{qnx,linux}-vm.sh
+1. research + architect  → complete (commit 072446c — HARA / TARA / F6 verdicts; 2026-05-07 amendment in findings.md — Windows build-host pivot)
+2. user (manual)         → install QNX SDP 8.0 on local Windows PC via QNX Software Center (primary path is GUI-only; not scripted)
+3. implementation        → scripts/bootstrap-runtime-host.sh on Graviton c7g.large (provision QEMU + KVM + bridge tooling). Fallback only: scripts/bootstrap-build-host.sh on a t3.medium EC2 if no local x86_64 host
+4. implementation        → scripts/build-qnx-ifs.bat on Windows (or build-qnx-ifs.sh on EC2 fallback) → scp ifs.bin to runtime → setup-bridge.sh + launch-{qnx,linux}-vm.sh on the runtime
 5. test                  → capture boot logs into logs/sample-boot/cloud-{qnx,linux}-boot1.log; record QNX boot time
 6. fusa-analysis         + cyber-analysis (parallel)  →  Phase-1-gate review
 7. docs                  → update findings.md with Phase 1 measured numbers
@@ -219,6 +219,9 @@ Quick summary for context:
   Qualcomm-Cockpit-class proxy on AWS, exercise inter-SoC IPC (QC ↔ NV).
   Feasibility frozen in `docs/future-multi-soc.md`; not started until Phase 6 lands.
 
-Next action after scaffold: invoke 🔍 **Research Agent** on the open
-empirical questions in `docs/bsp-selection.md` (chiefly: same IFS
-portability to QEMU-on-Orin; JetPack 6 KVM availability).
+Next action: install QNX SDP 8.0 on the local Windows PC via the QNX
+Software Center (manual step; user is currently waiting on QNX
+Everywhere verification). Once SDP is installed, implementation runs
+`scripts/bootstrap-runtime-host.sh` on the Graviton c7g.large runtime,
+then `scripts/build-qnx-ifs.bat` on Windows. See the **Phase 1
+starting sequence** above for the full handoff.

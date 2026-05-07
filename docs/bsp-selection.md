@@ -110,13 +110,19 @@ answered by running the cloud-twin toolchain end-to-end in Phase 1.
       baseline for any later real-time / latency framing.)
 - [ ] Does `joexue/qemu-virt`'s missing PCI support matter for Phase 2 IPC
       (virtio-net-mmio is sufficient if so)?
-- [ ] Is a Windows-built `ifs.bin` byte-equivalent (or at minimum functionally
-      identical under QEMU/KVM-on-Graviton) to an EC2-built `ifs.bin` from the
-      same git SHA? Validates that the 2026-05-07 Windows-host pivot did not
-      silently diverge build outputs. Method: build on both hosts at the same
-      commit, `sha256sum` both; if hashes differ, boot each IFS on the same
-      Graviton runtime and compare `pidin sysinfo` + boot logs. See
-      [findings.md](findings.md) 2026-05-07 entry.
+
+**Note — there is no separate Windows-vs-EC2 build-equivalence
+question.** An earlier draft of this section had one (and the
+2026-05-07 amendment in [findings.md](findings.md) called for one);
+both were over-specified. The IFS target is aarch64; `mkqnximage`
+cross-compiles to it from any supported x86_64 host; the build host
+itself does not run any guest. Per F1's arch-agnostic-IFS argument,
+swapping Windows for Linux x86_64 on the build host affects only
+build metadata (embedded paths, timestamps), not the ARM code QNX
+boots. Q2 above already validates that *any* x86_64-built IFS boots
+on Graviton — that question is host-platform-agnostic and covers the
+load-bearing claim. The 2026-05-07 [findings.md](findings.md) caveat
+is corrected in the same commit that drops this question.
 
 ---
 
@@ -258,7 +264,7 @@ Open empirical questions for Phase 3:
 | Item | Choice |
 |---|---|
 | QNX SDP version | **SDP 8.0** (Everywhere / NCEULA) |
-| Host architecture | **Hybrid**: x86_64 build (t3.medium) + arm64 runtime (c7g.large) |
+| Host architecture | **Hybrid**: x86_64 build (Windows local primary; EC2 t3.medium fallback) + arm64 runtime (c7g.large) |
 | Phase 1 BSP | **`mkqnximage --type=qemu --arch=aarch64le`** |
 | Phase 2+ BSP study | **`joexue/qemu-virt`** (community, MIT) |
 | Repo redistribution policy | **Scripts + screenshots + boot logs only.** No QNX binaries. |

@@ -27,8 +27,8 @@
 > including hands-on experience with QNX on automotive SoC targets.
 > To deepen my understanding of NVIDIA's DRIVE OS architecture —
 > specifically the dual-VM partition model — I built a personal
-> project on AWS EC2: running QNX SDP 8.0 and Linux aarch64 as two VMs
-> under QEMU, with IPC between them over virtio-net.
+> project: QNX SDP 8.0 and Linux aarch64 running as two VMs under
+> QEMU on AWS Graviton, with IPC between them over virtio-net.
 >
 > I want to be upfront: this isn't a real hypervisor. It's two QEMU
 > processes on a Graviton KVM host, so it's a software-layer proxy
@@ -40,11 +40,11 @@
 > between DRIVE OS VMs.
 >
 > One concrete engineering takeaway from the project setup itself:
-> QNX SDP 8.0 doesn't support ARM hosts, so I had to design a hybrid
-> build/runtime architecture — build IFS on an x86_64 EC2 instance,
-> then scp the image to a Graviton arm64 instance for KVM-accelerated
-> execution. That kind of toolchain constraint discovery is the
-> day-to-day of BSP work.
+> QNX SDP 8.0 doesn't support ARM hosts, so I designed a hybrid
+> build/runtime architecture — build the IFS on an x86_64 host
+> (Windows or Linux), then scp the image to a Graviton arm64 instance
+> for KVM-accelerated execution. That kind of toolchain-constraint
+> discovery is the day-to-day of BSP work.
 >
 > The takeaway for me was concrete intuition for which DRIVE OS
 > design choices are hardware-driven versus software-configurable,
@@ -74,9 +74,10 @@ work + QNX hands-on; gap I wanted to close was concrete familiarity with
 DRIVE OS partition behaviour from the customer-port perspective. Honest
 framing front-loaded: this is a Digital Twin design, not a hypervisor.
 
-**Section 2 — Architecture choices (2 min).** Cloud twin on AWS
-(t3.medium x86_64 build host because SDP 8.0 host toolchain is
-x86_64-only; c7g.large Graviton runtime host for KVM-on-arm64).
+**Section 2 — Architecture choices (2 min).** Cloud twin runtime on
+AWS Graviton (c7g.large, KVM-on-arm64); build host is local Windows
+since SDP 8.0 host toolchain is x86_64-only and ships both Linux and
+Windows installers (EC2 t3.medium fallback if no local x86_64 host).
 Hardware twin on Jetson Orin Nano because A78AE matches DRIVE Orin's
 CCPLEX core family. The "same IFS, same IPC code, only host changes"
 property is the design's load-bearing claim — walk through how the

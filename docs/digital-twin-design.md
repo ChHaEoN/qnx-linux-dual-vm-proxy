@@ -26,7 +26,7 @@ A short table of what crosses the twin boundary:
 
 | Artefact | Twinned? | Notes |
 |---|---|---|
-| QNX IFS (`output/ifs.bin`) | **Yes — bit-for-bit identical** | Built once on the cloud-side x86_64 build host; scp'd to both runtime hosts |
+| QNX IFS (`output/ifs.bin`) | **Yes — bit-for-bit identical** | Built once on the x86_64 build host (Windows local primary; EC2 fallback); scp'd to both runtime hosts |
 | QNX IPC server (`ipc-test/qnx-server`) source | **Yes** | Same C99; compiled with `qcc` inside QNX guest in both twins |
 | Linux IPC client (`ipc-test/linux-client`) source | **Yes** | Same C99; compiled with `gcc` — on the Linux guest in cloud twin, on L4T natively in HW twin |
 | Wire protocol (sequence + timestamp + payload) | **Yes** | Fixed-width binary frame, version-tagged |
@@ -83,7 +83,7 @@ imperfect mirrors. The Phase 4 comparison doc holds that line.
 There are three artefacts that must stay in lockstep across the twin
 sides for the comparison to be sound:
 
-1. **The QNX IFS** — built on the cloud-side x86_64 build host and
+1. **The QNX IFS** — built on the x86_64 build host (Windows local primary; EC2 fallback) and
    distributed to both runtime hosts. There is exactly one source of
    truth (the build host's `output/ifs.bin`) and a SHA-256 checksum
    committed to `results/ifs.sha256` in each measurement run so any

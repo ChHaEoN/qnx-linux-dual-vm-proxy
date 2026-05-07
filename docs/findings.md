@@ -118,15 +118,22 @@ browser-flow hops needed to drive the QNX Software Center GUI on a
 remote EC2 box. Validation surface unchanged: per F1's existing
 arch-agnostic-IFS argument, `mkqnximage --arch=aarch64le` produces
 the same blob whether run on Windows or Linux x86_64; runtime side
-stays Graviton arm64. Honest-framing caveats: this **does not**
-demonstrate cross-host build determinism — Phase 1 must still verify
-the Windows-built IFS produces a byte-identical (or at least
-functionally identical) result vs. an EC2-built IFS, and that
-verification step is being added to F5's open empirical questions in
-a follow-up edit. A local Windows build host also **does not**
-demonstrate any closer parity to a real DRIVE OS customer build
-environment than EC2 does — it is purely a friction/cost
-optimisation, not an architectural improvement. Cross-link: see F1
+stays Graviton arm64. Honest-framing caveats: the build host runs only `mkqnximage` and
+host-side QNX tooling — no guests run on the build host — and the
+IFS it produces is target-aarch64, cross-compiled by SDP 8.0's
+host toolchain. Per F1's arch-agnostic-IFS argument, swapping
+Windows for Linux x86_64 on the build host affects only build
+metadata (embedded paths, timestamps), not the ARM code QNX boots;
+F5 Q2 already validates the load-bearing claim that *any*
+x86_64-built IFS boots on Graviton, and that question is host-
+platform-agnostic. (An earlier wording of this amendment treated
+"Windows-built vs EC2-built byte-equivalence" as a separate
+Phase 1 verification target — that was over-specified and is
+withdrawn in the same commit that corrects it; see the F5 note in
+[bsp-selection.md](bsp-selection.md).) A local Windows build host
+also **does not** demonstrate any closer parity to a real DRIVE OS
+customer build environment than EC2 does — it is purely a
+friction/cost optimisation, not an architectural improvement. Cross-link: see F1
 in [bsp-selection.md](bsp-selection.md). Implementation agent will
 follow up with the actual edits to F1, README.md, CLAUDE.md,
 docs/architecture.md, scripts/README.md,

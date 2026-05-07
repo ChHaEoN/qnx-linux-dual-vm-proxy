@@ -28,9 +28,17 @@ produces a CSV in `results/hw/` with the same column schema as
 | Ethernet | For initial JetPack flash + apt installs |
 | Host machine for flashing | x86_64 Linux with NVIDIA SDK Manager (Phase 3 first task is to confirm whether this exists at hand or needs an EC2 throwaway instance) |
 
-The user already runs an x86_64 EC2 build host for the cloud twin's
-QNX IFS build — that same instance can run SDK Manager for the
-initial Orin Nano flash, avoiding a separate Linux box.
+SDK Manager officially supports only x86_64 Ubuntu (22.04 LTS or
+20.04 LTS) — it does NOT run on Windows. The 2026-05-07 build-host
+pivot moves the QNX IFS build to local Windows as the primary path,
+which means an x86_64 Linux host is no longer automatically present.
+Phase 3 first task is therefore to either (a) spin up a t3.medium
+Ubuntu EC2 dedicated to SDK Manager (single-shot, then teardown),
+(b) reuse the EC2 fallback build host if it was kept around from
+Phase 1, or (c) bring up an existing local Linux box. Honest framing:
+the pivot did **not** improve this corner — it removed a convenient
+piggyback that the old EC2-build-host path provided. See the
+2026-05-07 amendment in [findings.md](findings.md).
 
 ---
 
@@ -39,8 +47,8 @@ initial Orin Nano flash, avoiding a separate Linux box.
 ### 0. Pre-flight
 
 - [ ] Confirm JetPack 6.x is the right release (matches L4T r36.x; Ubuntu 22.04 base)
-- [ ] Confirm SDK Manager runs on the cloud-twin x86_64 build host (or stand up a separate t3.medium for it)
-- [ ] On the build host, retain the existing `output/ifs.bin` from Phase 1 — this is the artefact under test on Orin
+- [ ] Stand up an x86_64 Linux host for SDK Manager: Phase 1 EC2 fallback build host if it was retained, otherwise a fresh t3.medium Ubuntu 22.04 (SDK Manager does not run on Windows)
+- [ ] On the Phase 1 build host (Windows local primary, or EC2 fallback), retain the existing `output/ifs.bin` from Phase 1 — this is the artefact under test on Orin
 
 ### 1. Flash and first boot
 
@@ -66,7 +74,7 @@ initial Orin Nano flash, avoiding a separate Linux box.
 
 ### 4. Transfer the cloud-twin IFS
 
-- [ ] On the cloud-twin x86_64 build host: `sha256sum output/ifs.bin output/disk-qemu.vmdk > output/SHA256SUMS`
+- [ ] On the Phase 1 build host: `sha256sum output/ifs.bin output/disk-qemu.vmdk > output/SHA256SUMS` (on Windows: use Git Bash, which ships with Git for Windows and provides `sha256sum`; or `Get-FileHash` in PowerShell)
 - [ ] `scp output/ifs.bin output/disk-qemu.vmdk output/SHA256SUMS orin:~/output/`
 - [ ] On Orin: `sha256sum -c ~/output/SHA256SUMS` — must pass
 
