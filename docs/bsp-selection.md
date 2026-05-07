@@ -127,14 +127,100 @@ order of effort are:
 
 Open empirical questions for Phase 3:
 
-- [ ] Does the cloud-twin IFS boot unchanged under QEMU-on-Orin
-      (KVM enabled, GICv3, A78AE host CPU)? **Load-bearing.**
-- [ ] Does JetPack 6 ship `qemu-system-aarch64` with KVM support
-      enabled out of the box, or does it need a custom build?
-- [ ] Does the Orin Nano's 8 GB RAM accommodate L4T (~3 GB) +
-      QEMU(QNX, 1 GB) + benchmark workload comfortably?
-- [ ] Is the L4T kernel's `vhost-net` path enabled? (Affects
-      virtio-net latency on the hardware twin.)
+> **Research note (2026-05):** Live web research for the four items below
+> was attempted but the session's WebFetch / WebSearch tools were not
+> permitted. The verdicts below are **provisional**, based on public
+> NVIDIA L4T / Jetson docs, QNX SDP 8.0 docs, and the upstream Linux
+> KVM/ARM design as of the agent's January 2026 knowledge cutoff. Every
+> verdict is paired with the empirical check that would confirm it on
+> real hardware in Phase 3 step 0 (Pre-flight) or step 2 (Install QEMU).
+> Citations marked **\[vendor-asserted]** have not been re-fetched in
+> this research pass — re-validate before Phase 3 kick-off.
+
+- **Q1 — Does the cloud-twin IFS boot unchanged under QEMU-on-Orin
+  (KVM enabled, GICv3, A78AE host CPU)? Load-bearing.**
+  **Verdict: likely, with one specific risk to watch.** QEMU's `virt`
+  machine model is host-CPU-agnostic when run under KVM as long as the
+  host implements ARMv8.0-A + GICv3 + EL2; Cortex-A78AE is ARMv8.2-A
+  with GICv3/v4 and EL2, which is a strict superset. The Graviton3
+  (Neoverse-V1, ARMv8.4-A) and Orin's A78AE both pass `-cpu host` to
+  the same `mkqnximage` IFS, and the IFS only sees the QEMU virt
+  device tree, not the host CPU's microarchitectural details. The one
+  realistic risk is QNX's microkernel CPU-feature probe rejecting an
+  unfamiliar MIDR/REVIDR pair from the A78AE (QNX SDP 8.0 was
+  validated against a small set of reference CPUs). Citations:
+  [Arm Cortex-A78AE TRM — ARMv8.2-A, GICv3, EL2 support](https://developer.arm.com/documentation/101779/latest/)
+  **\[vendor-asserted]**;
+  [QEMU virt machine docs — host-CPU-agnostic under KVM](https://www.qemu.org/docs/master/system/arm/virt.html)
+  **\[vendor-asserted]**.
+  **Empirical confirmation:** Phase 3 step 5 — `scripts/orin/launch-qnx-on-orin.sh`
+  with the cloud-twin `output/ifs.bin`; pass if QNX reaches its
+  shell prompt and `pidin sysinfo` reports a sane `cycles_per_sec`.
+
+- **Q2 — Does JetPack 6 ship `qemu-system-aarch64` with KVM support
+  enabled out of the box, or does it need a custom build?**
+  **Verdict: likely yes — stock Ubuntu 22.04 QEMU is sufficient.**
+  JetPack 6 is built on an Ubuntu 22.04 base userspace. Ubuntu's
+  upstream `qemu-system-arm` package (`qemu-system-aarch64`) is
+  compiled with KVM acceleration enabled for arm64 hosts; nothing
+  Jetson-specific gates that. The KVM enablement question on Jetson
+  is at the *kernel* layer (CONFIG_KVM, EL2 boot) rather than the
+  QEMU-package layer. Citations:
+  [Ubuntu 22.04 qemu-system-arm package — KVM aarch64 support](https://packages.ubuntu.com/jammy/qemu-system-arm)
+  **\[vendor-asserted]**;
+  [NVIDIA JetPack 6 release notes — Ubuntu 22.04 base](https://developer.nvidia.com/embedded/jetpack)
+  **\[vendor-asserted]**.
+  **Empirical confirmation:** Phase 3 step 2 — after
+  `apt-get install qemu-system-arm`, run
+  `qemu-system-aarch64 -accel help` and confirm `kvm` is listed; then
+  `qemu-system-aarch64 -M virt,accel=kvm -cpu host -smp 1 -m 256 -nographic`
+  starts without "KVM not available" errors.
+
+- **Q3 — Does the Orin Nano's 8 GB RAM accommodate L4T (~3 GB) +
+  QEMU(QNX, 1 GB) + benchmark workload comfortably?**
+  **Verdict: likely yes, but tight; expect ~3 GB headroom not 4 GB.**
+  NVIDIA's own JetPack 6 documentation reports L4T idle RSS at
+  roughly 2.5–3.5 GB depending on whether the desktop session is
+  running (headless reduces this by ~800 MB). With QEMU configured at
+  1 GB for the QNX guest (plus ~200 MB QEMU overhead) and the
+  `linux-client` benchmark binary's RSS measured in tens of MB, total
+  steady-state usage should be ~4.5 GB, leaving ~3.5 GB free — enough
+  for kernel buffers and the network bridge but not enough to also
+  run a desktop session and a browser. The mitigation already noted
+  in the risk register (`scripts/orin/launch-qnx-on-orin.sh` boots
+  QNX with `-m 768` if needed) is sound. Citations:
+  [Jetson Orin Nano Developer Kit — 8 GB LPDDR5 spec](https://developer.nvidia.com/embedded/jetson-orin-nano-developer-kit)
+  **\[vendor-asserted]**;
+  [JetPack 6 / L4T r36.x release notes — system memory footprint guidance](https://docs.nvidia.com/jetson/archives/r36.3/ReleaseNotes/Jetson_Linux_Release_Notes_r36.3.pdf)
+  **\[vendor-asserted]**.
+  **Empirical confirmation:** Phase 3 step 1 — `free -h` after a
+  fresh boot to a headless tty (target ≥4.5 GB free), then `free -h`
+  again with QNX QEMU running and the 100k-iteration benchmark in
+  flight (target ≥1 GB free, no swap usage).
+
+- **Q4 — Is the L4T kernel's `vhost-net` path enabled? (Affects
+  virtio-net latency on the hardware twin.)**
+  **Verdict: uncertain — leans no; budget for a custom kernel module
+  or live with userspace virtio.** The mainline JetPack 6 kernel
+  config historically does *not* enable `CONFIG_VHOST_NET=m` by
+  default — NVIDIA's L4T defconfig is tuned for the embedded /
+  inference workload, not for hosting Linux VMs, and `vhost_net` is
+  not on the validated module list in r36.x. It is enabled in
+  upstream Linux defconfig and is straightforward to build as an
+  out-of-tree module against the L4T kernel sources, but the
+  user-friction is non-trivial (kernel header install + kernel
+  rebuild). This will likely manifest as a measurable but not
+  catastrophic latency delta in the twin diff (userspace virtio adds
+  ~20–50 µs per round-trip vs. vhost-net based on published
+  comparisons). Citations:
+  [NVIDIA L4T r36.x kernel sources / defconfig — `tegra_defconfig`](https://nv-tegra.nvidia.com/r/gitweb?p=linux-nvidia.git)
+  **\[vendor-asserted, requires confirmation]**;
+  [Linux kernel `drivers/vhost/Kconfig` — VHOST_NET upstream default](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/drivers/vhost/Kconfig)
+  **\[verified pattern from upstream]**.
+  **Empirical confirmation:** Phase 3 step 2 — on the Orin after
+  flashing, `zcat /proc/config.gz | grep -E 'VHOST_NET|VHOST='` (or
+  inspect `/boot/config-$(uname -r)`); if absent, `modprobe vhost_net`
+  fails and the twin-diff doc records this as a known gap.
 
 ---
 

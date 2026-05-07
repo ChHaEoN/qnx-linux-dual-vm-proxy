@@ -8,6 +8,59 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 
 ---
 
+## Phase 1 — Cyber-Analysis TARA (TBD: gate review)
+
+> **Study-level only; not 21434 evidence. TARA here is illustrative,
+> not the work-product a real programme would audit.**
+>
+> Starting-point Phase 1 cloud-twin TARA produced by the Cyber-Analysis
+> agent before any IPC traffic exists. Full document:
+> [tara/phase1-cloud-tara.md](tara/phase1-cloud-tara.md). 21 threat
+> scenarios across the QNX guest, Linux guest, host bridge `br0`, and
+> IFS build pipeline. Top-3 risk: **T4** Linux→QNX bridge flood
+> starving the Safety guest's virtio-net ring (Risk 5, cyber-FuSa
+> candidate); **T17** tampered `mkqnximage` build inputs producing a
+> malicious IFS booted by both twins (Risk 4, supply-chain cyber-FuSa
+> candidate); **T7** tampered Ubuntu cloudimg subverting the Compute
+> guest kernel (Risk 4, cyber-FuSa candidate). Thirteen threats are
+> flagged as cyber-FuSa interaction candidates (T1, T2, T4, T5, T6,
+> T7, T10, T11, T12, T14, T15, T17, T21) for joint review with the
+> parallel FuSa-Analysis HARA at the Phase 1 gate — note especially
+> the alignment with FuSa's B5 (bridge L2 promiscuity) and K2 (wrong /
+> cached IFS) findings. Six open questions handed to Cyber-Design
+> (peer authentication, anti-replay primitive, `tap-qnx`
+> rate-limiting, build-pipeline integrity controls, KVM-escape
+> posture, bridge MAC filtering). §2 of
+> [security-model.md](security-model.md) updated with populated
+> Likelihood/Impact ratings.
+
+---
+
+## Phase 1 — FuSa-Analysis HARA (TBD: gate review)
+
+> _Study-level only; not certification evidence._
+>
+> Initial HARA + Design FMEA for the Phase 1 cloud twin (QNX SDP 8.0 +
+> Linux aarch64 on Graviton QEMU/KVM) is captured in
+> [`skills/fmea/examples/phase1-cloud-bringup-fmea.md`](../skills/fmea/examples/phase1-cloud-bringup-fmea.md).
+> Scope is the cloud twin only; Orin / hardware-twin failures are
+> deferred to Phase 3. Top hazards at notional integration level:
+> HE-02 / HE-03 / HE-06 (loss or stale Safety-partition IPC) score
+> ASIL-D under the study's notional vehicle integration; HE-04 / HE-07
+> / HE-13 / HE-15 score ASIL-C. Top D-FMEA rows (RPN ≥ 60) are H1
+> (KVM trap unbounded latency), Q6 (RT deadline miss from KVM trap),
+> B2 (stale tap flap), B5 (bridge L2 promiscuity — also a cyber-FuSa
+> interaction candidate), N3 (KVM IRQ tail latency), N1 (silent
+> virtio-net drop), and K2 (wrong / cached IFS at runtime). Ten open
+> questions are handed to FuSa-Design (FTTI numbers, payload integrity
+> layer above virtio-net, freedom-from-interference residual-risk
+> argument given the shared host kernel, IFS integrity binding from
+> build to runtime). Pair-review with Cyber-Analysis at the Phase-1
+> gate to close the five interaction-analysis items called out in the
+> worksheet.
+
+---
+
 ## Phase 4 — TBD: cloud-vs-HW twin diff
 
 > _Stub. Filled in after the twin-diff measurement run lands. Expected

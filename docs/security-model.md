@@ -1,8 +1,15 @@
 # Phase 5 — Security model (cybersecurity overlay)
 
+> **Study-level only; not 21434 evidence. TARA here is illustrative,
+> not the work-product a real programme would audit.**
+
 > **Status:** scaffold. Phase 5 starts after Phase 4 (twin diff)
 > lands so the threat model can be applied to a *measured* system,
-> not a hypothetical one.
+> not a hypothetical one. §2 below has been pre-populated with a
+> Phase 1 starting-point TARA (cloud twin only, pre-IPC) by the
+> Cyber-Analysis agent — see [tara/phase1-cloud-tara.md](tara/phase1-cloud-tara.md)
+> for the full underlying analysis. Likelihood/Impact ratings are
+> qualitative L/M/H using ISO/SAE 21434 vocabulary.
 
 This document is the cybersecurity-overlay deliverable. It pairs with
 the FuSa overlay (FMEA worksheets in `skills/fmea/examples/`) — both
@@ -33,33 +40,55 @@ Out of scope:
 
 ## 2. STRIDE threat model (per-component skeleton)
 
-> Filled per component during Phase 5. Skeleton below; ratings are
-> placeholders (`L/M/H`) until the agent walks through each entry.
+> Phase 1 cloud-twin starting-point ratings populated by the
+> Cyber-Analysis agent. The Mitigation column references mechanisms
+> Cyber-Design **will specify** in Phase 5 — these are placeholders,
+> not commitments produced by Cyber-Analysis. Ratings are L/M/H per
+> ISO/SAE 21434-style qualitative scales (see TARA doc for the rubric).
 
 ### 2.1 QNX Safety guest
 
 | Threat | STRIDE | Likelihood | Impact | Mitigation |
 |---|---|---|---|---|
-| Spoofed `linux-client` connecting to `qnx-server` | **S**poofing | _TBD_ | _TBD_ | Static IP allow-list on QNX side; future: mTLS |
-| Frame replay | **T**ampering | _TBD_ | _TBD_ | Sequence-number monotonicity check |
-| Repudiation of message origin | **R**epudiation | _TBD_ | _TBD_ | Log sequence + timestamp pairs at server |
-| Frame disclosure (eavesdrop on `br0`) | **I**nformation Disclosure | _TBD_ | _TBD_ | Threat is host-internal; encryption deferred |
-| Flooding causing buffer exhaustion | **D**enial of Service | _TBD_ | _TBD_ | Rate limit on accept(); bounded queue |
-| Privilege escalation via virtio-net driver | **E**levation of Privilege | _TBD_ | _TBD_ | QNX guest runs as least-privileged user; rely on QEMU isolation |
+| Spoofed `linux-client` connecting to `qnx-server` | **S**poofing | M — single-host attacker on `br0` can craft any source MAC/IP; no auth in Phase 1 | M — wrong commands reach Safety guest; *cyber-FuSa candidate* if Phase 2 IPC carries any safety-relevant payload | Static IP allow-list on QNX side; future: mTLS |
+| Frame replay | **T**ampering | L — Phase 1 has no live IPC traffic to replay; rises to M in Phase 2 once `qnx-server` is up | M — duplicate command may re-arm a Safety action; *cyber-FuSa candidate* | Sequence-number monotonicity check |
+| Repudiation of message origin | **R**epudiation | L — same-host attack surface; logs sit on host fs | L — no audit obligation in study scope | Log sequence + timestamp pairs at server |
+| Frame disclosure (eavesdrop on `br0`) | **I**nformation Disclosure | M — anyone with root on the runtime host can `tcpdump br0`; cleartext virtio-net | L — Phase 1 boot traffic carries no secrets; rises to M only if SSH keys or NCEULA-restricted blobs ever traverse `br0` | Threat is host-internal; encryption deferred |
+| Flooding causing buffer exhaustion | **D**enial of Service | M — co-resident Linux guest can saturate `tap-qnx` trivially; no rate limiting | M — QNX boot or Phase 2 listener stalls; *cyber-FuSa candidate* (loss-of-availability of Safety guest is a hazard pattern) | Rate limit on accept(); bounded queue |
+| Privilege escalation via virtio-net driver | **E**levation of Privilege | L — QNX virtio-net is mature, KVM virtio backend is well-audited; no public 0-day on Phase 1 baseline | H — guest→host break = full runtime-host compromise = both VMs lost; *cyber-FuSa candidate* | QNX guest runs as least-privileged user; rely on QEMU isolation |
 
 ### 2.2 Linux Compute side
 
-> _Same template applied. Filled in Phase 5._
+| Threat | STRIDE | Likelihood | Impact | Mitigation |
+|---|---|---|---|---|
+| Spoofed `qnx-server` peer (rogue process binds to expected port) | **S**poofing | M — Linux cloudimg ships with broad userspace; any local process can bind unprivileged ports | M — `linux-client` mis-routes commands; *cyber-FuSa candidate* in Phase 2 | Static peer-IP pinning; future: mTLS |
+| Tampered cloudimg (supply-chain) | **T**ampering | L — Ubuntu cloudimg fetched over HTTPS with apt signing; checksum verified on download | H — compromised guest kernel = persistent foothold in runtime host's KVM scheduling domain | Pin cloudimg SHA256 in `bootstrap-runtime-host.sh`; signed apt repos |
+| Repudiation of guest-side command origin | **R**epudiation | L — single-developer scope | L — no audit need in study scope | Same as §2.1 |
+| Cleartext payload eavesdrop via host `tcpdump` | **I**nformation Disclosure | M — root-on-host trivially captures bridge traffic | L (Phase 1 boot only) → M (Phase 2 IPC payloads) | Encryption deferred; payload kept non-secret in Phase 1 |
+| Inbound `br0` flood from QNX side or external | **D**enial of Service | M — no firewalling in `setup-bridge.sh`; bridge is open within host namespace | L — Linux kernel network stack absorbs reasonable load; M only at sustained line-rate | Bounded socket buffers; future: nftables on `br0` |
+| Container/guest-kernel exploit reaching host | **E**levation of Privilege | L — Ubuntu kernel CVE patch latency; KVM hardened | H — full runtime-host compromise; *cyber-FuSa candidate* | Keep host & guest kernels patched; KVM isolation as trust boundary |
 
 ### 2.3 Host bridge `br0`
 
-> _Threat model focuses on whether a misbehaving guest can affect the
-> other guest via the bridge. Filled in Phase 5._
+| Threat | STRIDE | Likelihood | Impact | Mitigation |
+|---|---|---|---|---|
+| Misbehaving guest spoofs the *other* guest's MAC on the bridge | **S**poofing | H — Linux bridge does not validate source MAC by default; trivial with `ip link set address` inside a guest | M — peer guest receives forged frames; *cyber-FuSa candidate* in Phase 2 | Future: bridge MAC-filter / ebtables rules |
+| Tampered bridge config (`brctl` / `ip link` after bring-up) | **T**ampering | M — anyone with `CAP_NET_ADMIN` on the host can reconfigure; SSH access = root in this lab | H — silent re-routing of all inter-VM IPC; *cyber-FuSa candidate* | Bridge bring-up by systemd unit; config diff tripwire (deferred) |
+| Repudiation of bridge config changes | **R**epudiation | M — no auditd by default | L — single-developer scope | Future: auditd rules on `ip`/`brctl` |
+| Promiscuous capture on `br0` | **I**nformation Disclosure | H — `tcpdump -i br0` is one command; bridge is by design a shared L2 domain | L (Phase 1) → M (Phase 2 once payloads carry semantically meaningful data) | Bridge is host-internal only; no external exposure; payload encryption deferred |
+| Broadcast / ARP flood across bridge | **D**enial of Service | M — no storm control on Linux bridges by default | M — both guests degrade simultaneously; *cyber-FuSa candidate* (common-cause loss) | Future: Linux bridge `flood` controls / port rate limits |
+| Bridge → host kernel pivot via L2 stack vuln | **E**levation of Privilege | L — Linux bridging is mature code | H — host kernel compromise = full collapse of trust model; *cyber-FuSa candidate* | Keep host kernel patched; bridge attack surface is the trusted base per §1 scope |
 
 ### 2.4 IFS build pipeline
 
-> _Threat model focuses on the cloud-twin build host: SSH key handling,
-> NCEULA compliance, accidental binary commits. Filled in Phase 5._
+| Threat | STRIDE | Likelihood | Impact | Mitigation |
+|---|---|---|---|---|
+| Attacker authenticates to build host with stolen SSH key | **S**poofing | M — SSH key sits on dev workstation (Macbook); no hardware-backed key in Phase 1 | H — attacker can build & sign arbitrary IFS that the runtime host will boot trustingly | Future: hardware-backed SSH (Secure Enclave / YubiKey); `.ssh/config` hardening |
+| Tampered `mkqnximage` inputs (build script, config, kernel-args) | **T**ampering | L — repo is single-developer git; PRs reviewed by self | H — silently malicious IFS reaches both twins; *cyber-FuSa candidate* (corrupted Safety guest = direct hazard) | Git history as audit; future: signed commits |
+| Accidental commit of QNX SDK / IFS binary (NCEULA breach) | **R**epudiation / compliance | M — easy to mistype `git add`; `.gitignore` is conservative but not absolute | M — license breach (legal/operational impact, not safety); reputational | `.gitignore` covers `*.bin`/`*.img`/`*.vmdk`/`output/`/`qnx800/`; manual audit per Phase boundary (see §4) |
+| `scp` of IFS over untrusted network leaks binary | **I**nformation Disclosure | L — scp uses SSH; AWS internal traffic only | M — NCEULA breach if intercepted blob redistributed | Default SSH transport; do not put IFS on public buckets |
+| Build-host CPU starvation / runaway build | **D**enial of Service | L — single-tenant t3.medium | L — delayed build only; no safety impact | Cost discipline; teardown.sh |
+| Compromised build host produces backdoored IFS | **E**levation of Privilege | L — t3.medium is single-purpose; hardened Ubuntu | H — every downstream guest boots untrusted code; *cyber-FuSa candidate* | Build host treated as part of TCB; future: ephemeral build host per release |
 
 ---
 
