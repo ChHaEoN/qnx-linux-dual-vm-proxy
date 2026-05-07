@@ -2,7 +2,10 @@
 #
 # build-qnx-ifs.sh — build the QNX IFS for the Safety-proxy VM
 #
-# Run on: x86_64 build host, with QNX SDP 8.0 installed and qnxsdp-env.sh sourced
+# Run on: x86_64 Linux build host, with QNX SDP 8.0 installed and qnxsdp-env.sh sourced.
+# Windows users: see scripts/build-qnx-ifs.bat — the primary build path
+# since the 2026-05-07 amendment in ../docs/findings.md. This .sh is the
+# Linux/EC2 fallback equivalent.
 #
 # Output:
 #   qnx-safety-vm/output/ifs.bin           ← the kernel image fed to qemu -kernel

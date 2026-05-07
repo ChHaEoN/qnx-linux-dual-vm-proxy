@@ -110,6 +110,13 @@ answered by running the cloud-twin toolchain end-to-end in Phase 1.
       baseline for any later real-time / latency framing.)
 - [ ] Does `joexue/qemu-virt`'s missing PCI support matter for Phase 2 IPC
       (virtio-net-mmio is sufficient if so)?
+- [ ] Is a Windows-built `ifs.bin` byte-equivalent (or at minimum functionally
+      identical under QEMU/KVM-on-Graviton) to an EC2-built `ifs.bin` from the
+      same git SHA? Validates that the 2026-05-07 Windows-host pivot did not
+      silently diverge build outputs. Method: build on both hosts at the same
+      commit, `sha256sum` both; if hashes differ, boot each IFS on the same
+      Graviton runtime and compare `pidin sysinfo` + boot logs. See
+      [findings.md](findings.md) 2026-05-07 entry.
 
 ---
 
