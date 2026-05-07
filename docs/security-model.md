@@ -154,3 +154,68 @@ discussion, **not** as compliance evidence:
 The intent is that the project owner can fluently discuss what each
 21434 work product *is* and how a real DRIVE OS programme would
 produce it, without claiming to have produced one here.
+
+---
+
+## 2026-05-07 amendment — build-host pivot
+
+> **Study-level only; not 21434 evidence. TARA here is illustrative,
+> not the work-product a real programme would audit.**
+
+The 2026-05-07 [findings.md](findings.md) entry pivots the primary
+build host from "AWS t3.medium x86_64 Ubuntu" to "**local Windows
+PC**", with EC2 retained as a documented fallback. As a side effect,
+the dev workstation (formerly: Macbook macOS) and the build host
+(formerly: separate EC2 instance) collapse into a **single Windows
+machine** that now plays both roles. The runtime host (c7g.large
+Graviton) is unchanged.
+
+The detailed amendment to the threat catalogue — including the new
+threat IDs **T22..T28**, the revised feasibility ratings for **T16,
+T20, T21**, and the new asset **A11** (Windows user-profile
+directory) — lives in [tara/phase1-cloud-tara.md](tara/phase1-cloud-tara.md)
+under the same date heading. Only the STRIDE rows that change because
+of the pivot are restated below; the §2 tables above are otherwise
+unchanged.
+
+The pivot is best understood as a **friction/cost optimisation whose
+net security effect is non-obvious**: it removes the SSH-between-two-hosts
+boundary and the entire EC2-build-host attack surface (IMDS, IAM-role,
+keypair, snapshot exfiltration), but it adds Windows-native surfaces
+(NTFS ACLs, Defender / SmartScreen telemetry, optional consumer
+cloud-sync clients, Windows-native QNX SW Center installer supply
+chain) and it concentrates source-tree + build-environment + IFS
+production + scp credentials onto a **single foothold target**. See
+the TARA amendment §H for the full honest-framing paragraph.
+
+### Revised STRIDE rows (delta only)
+
+The rows below replace the corresponding rows in §2.1–§2.4 *only when
+the primary path (Windows build host) is in use*. The fallback path
+(EC2 build host) retains the §2 ratings.
+
+#### 2.4 IFS build pipeline — revised rows
+
+| Threat | STRIDE | Likelihood | Impact | Mitigation |
+|---|---|---|---|---|
+| Attacker authenticates to build host with stolen SSH key (revised: T16) | **S**poofing | **H** — single Windows PC holds private key, source tree, SDP install, and scp credentials in one place; `%USERPROFILE%\.ssh\` ACL hardening is not enforced by ssh on Windows the way 0600 is on POSIX | H — attacker can build & sign arbitrary IFS that the runtime host will boot trustingly, *and* ship it in the same session | Cyber-Design to specify; Cyber-Analysis does not propose |
+| Build-host CPU starvation / runaway build (revised: T20) | **D**enial of Service | M — multi-tenant developer PC (browser, IDE, video calls) vs. previous single-purpose t3.medium | L — delivery delay only; integrity unaffected | Cyber-Design to specify |
+| Compromised build host produces backdoored IFS (revised: T21) | **E**levation of Privilege | M — general-purpose Windows PC has materially broader attack surface than single-purpose hardened Ubuntu EC2 (web browsing, email, third-party software updates, USB, OEM utilities) | H — every downstream guest boots untrusted code; *cyber-FuSa candidate* | Cyber-Design to specify; treat build host as part of TCB |
+
+#### 2.4 IFS build pipeline — new rows
+
+| Threat | STRIDE | Likelihood | Impact | Mitigation |
+|---|---|---|---|---|
+| QNX Software Center Windows-native installer supply-chain compromise (T22) | **T**ampering | L — vendor-distribution attack; one-shot per release | H — malicious SDP install tree → backdoored IFS → *cyber-FuSa candidate* | Cyber-Design to specify |
+| Windows Defender / third-party AV quarantines `mkqnximage` artefact mid-build, producing a truncated IFS (T23) | **T**ampering (against A1 integrity; non-malicious actor) | H — on-access scanning of large generated binaries is a known integrity-failure mode; no attacker required | H — corrupted Safety guest IFS may boot into a degraded state; *cyber-FuSa candidate* | Cyber-Design to specify; coordinate with FuSa-Design |
+| OneDrive / Dropbox / iCloud-for-Windows silently syncs SDP install tree, repo, IFS, or `%USERPROFILE%\.ssh\` to a personal cloud account (T24) | **I**nformation Disclosure | H — default Windows installs increasingly redirect `Documents` to OneDrive without prominent UI; automatic / continuous | M — NCEULA breach (A8 / A1 redistribution) and key-material exposure if `.ssh` is in a synced root; chains into T16 | Cyber-Design to specify; coordinate with NCEULA audit (§4) |
+| Windows local-privilege-escalation pivot into build pipeline (T25) | **E**levation of Privilege | M — known LPE attack surface from third-party services / UAC-bypass on consumer Windows | H — chains into T21; *cyber-FuSa candidate* | Cyber-Design to specify |
+| NTFS ACL / Win32-OpenSSH key-permission mismatch exposes `%USERPROFILE%\.ssh\id_*` to other local accounts or services (T26) | **S**poofing | H — Win32-OpenSSH does not enforce 0600-equivalent permissions automatically; many tutorials skip the `icacls` step | M — chains into T16 / T21 once on runtime host | Cyber-Design to specify |
+| Windows SmartScreen / Defender cloud-protection auto-submission of build artefacts to Microsoft (T27) | **I**nformation Disclosure | H — automatic by default for unfamiliar binaries on consumer Windows | M — NCEULA: blob copy on Microsoft infrastructure outside developer's licensed possession | Cyber-Design to specify; coordinate with NCEULA audit (§4) |
+| Single-machine compromise yields source + build env + IFS production + scp credentials in one foothold (T28; topology blast-radius amplifier) | **E**levation of Privilege | H (post-foothold; gating rate is the upstream foothold threat) | H — *cyber-FuSa candidate*; structural delta from the Phase 0 two-host model | Cyber-Design to specify; modelling-choice question OQ-7 in TARA amendment |
+
+### What this amendment does NOT demonstrate
+
+- It remains a **study-level** STRIDE delta, not 21434 audit evidence.
+- The new Windows-native ratings are **enumerated, not measured**. T23 (AV quarantine), T24 (cloud-sync), T26 (NTFS ACL drift), and T27 (SmartScreen submission) have not been verified against a default-configured Windows 11 build host in this repo. The ratings are expert-judgement, consistent with the rest of §2.
+- The **net security delta** vs. the old EC2 topology has not been quantified. This amendment lists added surfaces; the TARA amendment §H lists removed surfaces. They are **not** netted into a single verdict, because doing so would require a probability-weighted attack-tree model the project does not have. The honest framing is: the pivot is a cost / friction optimisation whose security effect is non-obvious, and the single biggest open concern is the topology blast-radius concentration captured in T28.

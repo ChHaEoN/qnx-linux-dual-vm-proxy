@@ -425,3 +425,201 @@ The CFI-flagged threats in §6.2 are the candidate set for the
 Cyber-Analysis does not block on FuSa-Analysis output (per the
 hard rules); each side runs its analysis in parallel and the
 CFI list is the join key for the gate review.
+
+---
+
+## 2026-05-07 amendment — build-host pivot
+
+> **Study-level only; not 21434 evidence. TARA here is illustrative,
+> not the work-product a real programme would audit.**
+
+This amendment refreshes the Phase 1 TARA after the 2026-05-07
+build-host pivot recorded in [findings.md](../findings.md) (the
+"Phase 0 amendment: build host pivots to local Windows" entry).
+The pivot collapses two previously-distinct hosts — the dev
+workstation (Macbook macOS) and the build host (AWS t3.medium
+x86_64 Ubuntu) — onto a **single local Windows PC** that now plays
+both roles. The runtime host (c7g.large Graviton arm64) is
+unchanged. The EC2 x86_64 build host is retained as a documented
+*fallback* path (i.e., still in scope for users who follow the
+fallback) but the *primary* path is Windows-native.
+
+The Phase 0 record (sections 1–9 above, threat IDs T1..T21) is
+preserved verbatim. This amendment only describes the *delta*: which
+existing threats need to be re-rated, and which entirely new threats
+arise from the new attack surfaces. New threat IDs continue at T22
+and onward in the same rating style.
+
+### A. Revised trust-boundary diagram (collapsed topology)
+
+```
+                        AWS account/IAM (out of scope)
+                                    │
+   ┌────────────────────────────────────────────────┐
+   │           Local Windows PC (x86_64)            │
+   │   ── plays BOTH roles: dev driver + build ──   │
+   │                                                │
+   │   git / IDE / OpenSSH client (Win32-OpenSSH)   │
+   │   QNX Software Center (Windows-native GUI)     │
+   │   SDP 8.0 install tree   C:\qnx800\            │
+   │   mkqnximage --arch=aarch64le → output\ifs.bin │
+   │   %USERPROFILE%\.ssh\id_*  (NTFS ACLs)         │
+   │   Windows Defender + cloud-protection          │
+   │   Optional: OneDrive / Dropbox / iCloud sync   │
+   └────────────────────────────────────────────────┘
+                              │
+                              │ scp (Win32-OpenSSH client)
+                              │ over public Internet → AWS VPC
+                              ▼
+                Runtime host (c7g.large arm64, KVM)
+                              │
+                      ┌───────┴───────┐
+                      │  Host kernel  │ ◄── TCB (unchanged)
+                      │  + bridge br0 │
+                      └───┬───────┬───┘
+                      tap-qnx tap-linux
+                          │       │
+                  ┌───────▼─┐  ┌──▼──────────┐
+                  │ QNX VM  │  │ Linux VM    │
+                  │ (IFS)   │  │ (cloudimg)  │
+                  └─────────┘  └─────────────┘
+                      ▲             ▲
+                      └─trust bdry──┘  (peer guests; NOT mutually trusted)
+```
+
+Trust boundaries crossed in the new topology:
+1. ~~Dev workstation → build host (SSH)~~ — **REMOVED** (single machine).
+2. Local Windows PC (build host) → Runtime host (SCP of IFS) — **unchanged in shape, changed in client implementation**: now Windows-native OpenSSH client (`%SYSTEMROOT%\System32\OpenSSH\ssh.exe`) instead of Linux/macOS `ssh`. Default key store is `%USERPROFILE%\.ssh\` on NTFS, not `~/.ssh` on POSIX.
+3. Runtime host kernel ↔ each guest (KVM/virtio) — unchanged.
+4. Guest ↔ Guest (`br0`) — unchanged.
+5. Each guest ↔ host bridge (tap interface) — unchanged.
+
+New trust boundary added by the pivot:
+6. **Windows user account ↔ Windows admin (UAC)** — formerly handled implicitly across two POSIX hosts via `sudo` + per-host accounts; now a *within-machine* boundary on the build host.
+7. **Local filesystem ↔ cloud-sync agent (OneDrive / Dropbox / iCloud-on-Windows)** — new exfiltration channel that did not exist when the build host was an EC2 instance with no consumer cloud-sync clients installed.
+
+### B. Asset list delta
+
+The Phase 0 asset rows A1..A10 are retained. Two are repointed and one is added:
+
+- **A7 (SSH keys)** — `Owner / Location` reads "Dev workstation; runtime+build hosts" in the Phase 0 table. Under the new topology this collapses to a **single location**: `%USERPROFILE%\.ssh\` on the local Windows PC, plus `authorized_keys` on the runtime host. The C/I/Au/Az ratings are unchanged but the blast radius of A7 compromise is materially larger (see T16 revised, below).
+- **A8 (QNX SDP 8.0 install tree)** — `Owner / Location` repoints from `qnx800/` on EC2 build host to `C:\qnx800\` (or installer-default per QNX SW Center) on the local Windows PC. Cybersec property ratings unchanged.
+- **A11 (NEW)** — **Windows user-profile directory** (`%USERPROFILE%`, including `\.ssh`, `\Documents`, optionally synced subtrees). Owner / Location: local Windows PC NTFS. C: **H** (contains A7 plus potentially scp-staged copies of A1). I: **H**. A: M. Au: M. Az: **H** (a non-admin local process reading another user's profile is the relevant authorisation question on Windows, distinct from the POSIX `chmod 600` model). NR: L. A11 did not exist as a distinct asset in the Phase 0 model because the dev workstation was out of scope as a "Macbook IDE only".
+
+### C. Revised feasibility ratings for existing threats (Phase 0 rows kept; revisions listed here only)
+
+For each revised threat the original Phase 0 rating is preserved in §5/§6 above; the revised rating below is what the Cyber-Design hand-off should now act on. Rationale is one line per threat. Method: same 5-factor (ET / SE / KoT / WoO / Eq) aggregate as §5.
+
+- **T7 revised**: Tampered Ubuntu cloudimg — feasibility unchanged at **Medium**, impact unchanged at **H**. Risk **4**. The cloudimg fetch is a runtime-host concern; the build-host pivot does not touch it.
+- **T16 revised**: Stolen SSH key — *feasibility raised* from Medium to **High**. Aggregate Risk **4** (was 3). Rationale: the Phase 0 model spread the SSH key footprint across two machines (dev workstation private + build-host authorized_keys) and treated dev-workstation theft as the dominant path. Under the new topology the *same* private key now grants direct access to the runtime host from the same machine that produces the IFS — phishing-grade malware that lands on the Windows PC obtains source tree, build environment, IFS production, and an interactive scp session in one step. Windows-default `%USERPROFILE%\.ssh\` ACLs also do not enforce 0600-equivalent restrictions out of the box (other local users / services with read access are a known footgun); this raises ET and KoT into the L range.
+- **T17 revised**: Tampered build inputs (`mkqnximage` config, kernel args) — feasibility unchanged at **Medium**, impact unchanged at **H**. Risk **4**. The supply chain into the repo is git, not the host OS, so the pivot does not change this rating directly. (But see T22 below for the *installer*-side supply-chain delta.)
+- **T18 revised**: Accidental commit of QNX SDK / IFS binary into git — feasibility unchanged at **High**, impact unchanged at **M**. Risk **4**. The QNX install tree now lives on the same machine that holds the working tree (`C:\qnx800\` next to `E:\Project\qnx-linux-dual-vm-proxy\`); on Linux EC2 the SDP tree was outside the repo path by convention, so accidental staging of NCEULA-restricted files was bounded by directory layout. On Windows the user is more likely to drag-and-drop or VS Code's "Open Folder" across both trees. The aggregate stays High because §5 already rated it High; this note sharpens the rationale.
+- **T19 revised**: `scp` of IFS to wrong destination — feasibility unchanged at **High**, impact unchanged at **M**. Risk **4**. The transport itself is unchanged (still SSH/SCP), but path-completion semantics differ on Windows (drive letters, `\` vs `/`, OpenSSH on Windows behaves like Unix here but PowerShell tab-completion does not always match), which is a minor offsetting friction; net rating unchanged.
+- **T20 revised**: ~~Build host CPU starvation by runaway process~~ — *threat reframed.* Feasibility unchanged at **High**, impact unchanged at **L**. Risk **2**. Rationale: the original wording assumed a single-tenant t3.medium. On a developer's own Windows PC the host is multi-tenant by definition (browser, IDE, video calls, OS background tasks). Resource contention is therefore *more likely* but the **operational impact** is not safety- or integrity-relevant, only delivery-time, so the aggregate Risk does not move. Logged here for transparency.
+- **T21 revised**: Build host fully compromised → all future IFS images silently backdoored — *feasibility raised* from Low to **Medium**. Aggregate Risk **4** (was 3). Rationale: the Phase 0 rating treated the build host as "single-tenant t3.medium ... hardened Ubuntu" with no consumer-grade attack surface. A general-purpose Windows PC has materially broader exposure (web browsing, email attachments, Office macros, USB devices, third-party software updates, gaming/streaming software). ET drops from H to M and KoT drops from M to L (the attacker no longer needs to know "this is a build host"; any compromise of the Windows machine reaches the build pipeline by virtue of the role collapse). SE remains M (still need to identify and tamper with the SDP install tree once on the box).
+
+### D. New threats introduced by the pivot (T22 onward)
+
+Same 5-factor feasibility scheme as §5. Same impact dimensions (S/F/O/P) as §4. CFI flag where realisation could plausibly induce a hazard for joint cyber-FuSa review.
+
+#### Build-host (Windows) attack surface
+
+- **T22 [T][CFI]** — *Windows-native QNX Software Center installer compromised at distribution.* The Windows installer is a new GUI executable signed by QNX/BlackBerry that did not exist in the Phase 0 model (the Linux flow was an extracted tarball / shell installer). A supply-chain compromise of the signed installer or its update channel results in a malicious-by-design SDP install tree that subsequently produces a backdoored IFS.
+  - Path: attacker controls the QNX SW Center distribution endpoint or signing chain → developer installs SDP 8.0 → all IFS builds inherit backdoor.
+  - ET: H, SE: H, KoT: M, WoO: H (one shot per release), Eq: M → **Feasibility: Low**.
+  - Impact: S **H** (CFI: corrupted Safety guest), F M, O H, P L → Max **H**.
+  - Risk **3**. CFI: yes (parallels T17/T21 but at vendor-installer layer).
+
+- **T23 [T][CFI]** — *Windows Defender (or third-party AV) quarantines an in-progress `mkqnximage` artefact, producing a silently-truncated or missing IFS.* On-access scanning of large generated binaries during build is a known integrity failure mode (AV products have heuristically quarantined cross-compilation outputs in the past). The resulting IFS may boot partway and exhibit hard-to-diagnose runtime failure.
+  - Path: AV on-access scanner triggers on a `mkqnximage` intermediate or final blob → file is quarantined or zeroed → downstream `scp` ships a truncated artefact → runtime host boots a corrupted IFS.
+  - ET: L, SE: L (no attacker required; this is a misconfiguration / FP threat), KoT: L, WoO: L, Eq: L → **Feasibility: High**.
+  - Impact: S M (CFI: a truncated Safety-guest IFS that boots into a degraded state is a hazard pattern; usually it just fails to boot, but a partial boot is the worse case), F L, O **H** (build pipeline broken with confusing failure mode), P L → Max **H**.
+  - Risk **5**. CFI: yes. *This is a new top-of-stack risk introduced by the pivot.* The threat actor here is unintentional (defender is a defensive product) — but ISO/SAE 21434 vocabulary still treats a tampering event as tampering regardless of intent; the integrity property of A1 is what matters.
+
+- **T24 [I][CFI]** — *OneDrive / Dropbox / iCloud-for-Windows silently syncs the SDP install tree, the working repo, or `output\ifs.bin` into a personal cloud account.* Default Windows installs increasingly redirect `Documents`, `Desktop`, `Pictures` to OneDrive without prominent UI indication; if the user clones the project under their `Documents` folder, or if SDP is installed under a synced location, the QNX IFS, SDP install tree, and SSH private key directory may end up replicated to a consumer cloud bucket.
+  - Path: synced folder root contains repo or `C:\qnx800\` or `%USERPROFILE%\.ssh\` → cloud client uploads on file change → blob ends up in a personal cloud account whose credentials are out of scope.
+  - ET: L (continuous, automatic), SE: L, KoT: L, WoO: L (every file write), Eq: L → **Feasibility: High**.
+  - Impact: S L, F **M** (NCEULA breach: SDP redistribution to a non-licensed cloud account; A8 confidentiality compromise), O M (loss of NCEULA-compliance posture documented in security-model.md §4), P **M** (developer's identity bound to the synced account) → Max **M**.
+  - Risk **4**. CFI: no (compliance/IP, not safety) but coupled with T16: **if `%USERPROFILE%\.ssh\` syncs, the private key replicates to a consumer cloud and T16 feasibility rises further.** Note this dependency for Cyber-Design.
+
+- **T25 [E]** — *Windows local-privilege-escalation pivot from a non-admin user context into the build pipeline.* On a developer's general-purpose Windows PC, low-quality third-party software (gaming launchers, OEM utilities) commonly runs as a service with broad privileges; standard UAC-bypass techniques may allow lateral movement from a phishing-delivered initial foothold up to the build pipeline. Not a 0-day class threat — a known LPE attack surface that the EC2 single-purpose Ubuntu host did not present.
+  - Path: phishing payload runs as user → LPE via third-party service or known UAC-bypass → write access to `C:\qnx800\` or `%USERPROFILE%\.ssh\` → pivots to T16 / T21.
+  - ET: M, SE: M, KoT: M, WoO: M, Eq: L → **Feasibility: Medium**.
+  - Impact: S **H** (chains into T21), F M, O H, P M → Max **H**.
+  - Risk **4**. CFI: yes (chains).
+
+- **T26 [S]** — *NTFS ACL / OpenSSH-on-Windows key-permission mismatch exposes `%USERPROFILE%\.ssh\id_*` to other local accounts or services.* On Linux/macOS, OpenSSH refuses to use a private key with permissions wider than 0600. On Windows the equivalent enforcement uses NTFS ACLs and the Win32-OpenSSH project has had a bumpy history of correctly applying / inheriting them; the developer must explicitly run `icacls` or PowerShell ACL fix-ups for the key to be considered "secure" by ssh, and many tutorials skip this step.
+  - Path: developer creates / imports keys without ACL hardening → background service or another local user reads the private key → attacker authenticates to runtime host as the developer.
+  - ET: L, SE: L, KoT: M, WoO: M, Eq: L → **Feasibility: High**.
+  - Impact: S M (chains into T16 / T21 once on runtime host), F M, O M, P M → Max **M**.
+  - Risk **4**. CFI: indirectly (chains).
+
+- **T27 [I]** — *Windows SmartScreen / cloud-protection telemetry submits fragments of `output\ifs.bin` or `mkqnximage` outputs to Microsoft for reputation scoring.* Windows submits unfamiliar binaries to Defender cloud-protection by default ("Send sample files automatically" is on for many users). NCEULA-restricted artefacts may be uploaded to a Microsoft-controlled endpoint as a side effect of running the build.
+  - Path: build produces unfamiliar PE-like artefacts (or AV heuristic flags an `output\` blob) → cloud-protection submits sample → blob copy lands on Microsoft infrastructure outside the developer's NCEULA-licensed possession.
+  - ET: L (automatic), SE: L, KoT: L, WoO: L, Eq: L → **Feasibility: High**.
+  - Impact: S L, F **M** (NCEULA: same compliance shape as T19), O M, P L → Max **M**.
+  - Risk **4**. CFI: no (compliance).
+
+#### Topology-collapse blast-radius threats
+
+- **T28 [E][CFI]** — *Single-machine compromise yields source tree + build environment + IFS production + interactive scp session in one step.* This is the structural delta from the pivot, separated from the per-vector threats above so it can be argued about on its own merits. Under Phase 0, an attacker who landed on the dev workstation (Macbook) still had to pivot via SSH to the build host to produce a malicious IFS, and pivot again to scp it; under the new topology, all three capabilities are present on the same Windows host the moment a single foothold lands.
+  - Path: any of T16 / T22 / T25 / T26 → attacker has source, SDP, build, and scp credentials in one place → produces and ships a backdoored IFS without any further pivot.
+  - ET: L (post-foothold; pre-foothold is rated by the upstream T-IDs), SE: L, KoT: L, WoO: L, Eq: L → **Feasibility: High** (post-foothold; the upstream foothold is its own gating rate).
+  - Impact: S **H** (CFI: corrupted Safety guest), F M, O H, P M → Max **H**.
+  - Risk **5** (post-foothold). CFI: yes.
+  - **Note:** the Risk-5 rating is conditional on a foothold existing. Cyber-Design should treat T28 as a *blast-radius amplifier* rather than a stand-alone threat, and decide whether to count it once or count it as a multiplier on T16 / T22 / T25 / T26. Cyber-Analysis flags this as an open-question modelling choice (see OQ-7 below).
+
+#### Removed-attack-surface bookkeeping (no T-IDs assigned)
+
+For audit traceability, the following Phase 0 attack surfaces are *no longer present* in the primary path (still present in the documented EC2 fallback path; out of scope of this amendment unless the user takes the fallback):
+
+- SSH boundary between dev workstation and build host — collapsed; no separate hop.
+- AWS EC2 build-host instance metadata service (IMDSv1/v2) — not reachable on the new primary path.
+- IAM-role escalation from the build-host EC2 — not reachable on the new primary path.
+- EC2 keypair handling specific to the build host — not reachable on the new primary path.
+- t3.medium snapshot exfiltration via AWS API — not reachable on the new primary path.
+
+These are surface *reductions*, but Cyber-Analysis does not net them against the additions above as a single "verdict number" — see honest-framing paragraph at the end of this amendment.
+
+### E. Updated risk-table delta
+
+Threats whose risk rating changes from §6 (Phase 0) under this amendment:
+
+| Threat | Phase 0 Risk | Revised Risk | Change driver |
+|--------|--------------|--------------|---------------|
+| T16 Stolen SSH key | 3 | **4** | Single-machine collapse + Windows ACL footgun |
+| T21 Build host fully compromised | 3 | **4** | Consumer-grade attack surface vs. single-purpose EC2 |
+| T22 (NEW) QNX SW Center installer supply chain | — | **3** | New surface |
+| T23 (NEW) AV quarantines IFS mid-build | — | **5** | New surface; integrity-impacting top risk |
+| T24 (NEW) Cloud-sync exfiltration of SDP / IFS / keys | — | **4** | New surface; NCEULA + chains into T16 |
+| T25 (NEW) Windows LPE pivot into build pipeline | — | **4** | New surface |
+| T26 (NEW) NTFS / Win32-OpenSSH ACL mismatch on private key | — | **4** | New surface |
+| T27 (NEW) SmartScreen / cloud-protection submission of build artefacts | — | **4** | New surface; NCEULA |
+| T28 (NEW) Single-machine compromise = source + build + scp in one | — | **5** (post-foothold) | Topology collapse blast radius |
+
+Top-of-stack risks under the revised model:
+1. **T23** AV quarantines IFS mid-build (Risk 5; CFI). Replaces T4 as the highest-rated threat in the Phase 1 cloud-twin TARA when measured by aggregate Risk score.
+2. **T28** Single-machine blast radius (Risk 5; CFI; post-foothold conditional).
+3. **T4** Linux→QNX flood (Risk 5; CFI). Unchanged from Phase 0.
+
+### F. Open questions handed to Cyber-Design (additions to §7)
+
+- **OQ-7**: Should T28 (single-machine blast-radius amplifier) be counted as a stand-alone threat or as a multiplier on the upstream foothold threats (T16 / T22 / T25 / T26)? The choice affects how the Cybersecurity Concept should describe the build-host TCB.
+- **OQ-8**: How should the project document the *existence* of the EC2 fallback path without rating its threats twice? (The fallback retains T20-original / T21-original feasibility ratings; the primary path uses the revised ratings. Cyber-Design will need to choose a documentation convention.)
+- **OQ-9**: Is the AV-quarantine integrity threat (T23) a security threat, a build-system reliability issue, or both? In ISO/SAE 21434 vocabulary it is a tampering event against A1's integrity property (regardless of attacker intent), so Cyber-Analysis lists it here. Cyber-Design may wish to coordinate with FuSa-Design because a corrupted-but-bootable IFS is also a FuSa concern.
+- **OQ-10**: Cloud-sync exfiltration (T24) and SmartScreen/cloud-protection submission (T27) both turn the Windows build host into an outbound NCEULA-leak channel. Are these in-scope for Cyber-Design's Cybersecurity Concept, or do they belong in the NCEULA compliance-audit table in security-model.md §4 (a separate work product)? Cyber-Analysis flags both — Cyber-Design picks the home.
+
+### G. Pair-review note for FuSa-Analysis (amendment)
+
+New CFI-flagged threats added to the cyber-FuSa interaction candidate set: **T22, T23, T25, T28**. The full revised CFI list is now:
+
+T1, T2, T4, T5, T6, T7, T10, T11, T12, T14, T15, T17, T21, T22, T23, T25, T28.
+
+T23 (AV quarantines IFS mid-build) is the most novel addition — it is a *non-malicious-actor* tampering event that nonetheless breaches A1 integrity. FuSa-Analysis should be aware that "the build pipeline can produce a corrupted Safety-guest image without anyone noticing" is now a Phase 1 cloud-twin top-of-stack concern, not an edge case.
+
+### H. What this amendment does NOT demonstrate
+
+- This remains a **study-level TARA**. It is not 21434 audit evidence, it is not signed off by an independent assessor, and the threat ratings are expert-judgement L/M/H, not measured base rates from CVE feeds or vendor advisories.
+- The new Windows-native attack surfaces (OneDrive sync behaviour, Defender quarantine likelihood, SmartScreen submission rate, NTFS ACL drift on `%USERPROFILE%\.ssh\`) have been **enumerated, not measured**. None of T22..T28 has been verified under real Windows-build conditions in this repo. Phase 1 implementation/test work could measure (for example) whether `mkqnximage` outputs actually trigger Defender quarantine on a default-configured Windows 11 host — but until that data exists, the feasibility ratings here are illustrative.
+- The **net security delta vs. the old EC2 topology has NOT been quantified.** This amendment lists removed surfaces (the EC2 IMDS / IAM-role / keypair / snapshot exfiltration) and added surfaces (T22..T28) but it deliberately does not collapse them into a single "the pivot is/is not a security improvement" verdict. That comparison requires a probability-weighted apples-to-apples model the project does not have. The honest framing is: the pivot is a **cost/friction optimisation whose net security effect is non-obvious**, and the asymmetric blast-radius concern in T28 is the single biggest reason a real programme might push back on the pivot regardless of the cost win.
+- The fallback EC2 path has **not** been re-analysed in this amendment. Its Phase 0 ratings (T1..T21) still apply when the user takes the fallback. There is no "merged" rating that combines both paths — the choice of build host changes which threat list is in force.
