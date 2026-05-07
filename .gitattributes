@@ -1,0 +1,47 @@
+# Line-ending and merge-attribute pinning for a cross-platform repo.
+#
+# Context: this project is developed on a mix of Windows (primary build
+# host since the 2026-05-07 pivot in docs/findings.md), Linux EC2
+# (fallback build host), and Graviton arm64 (runtime host). Without
+# explicit eol pinning, Git on Windows defaults to autocrlf=true and
+# every cross-platform commit produces noisy "LF→CRLF" diffs.
+#
+# Reference: https://git-scm.com/docs/gitattributes#_end_of_line_conversion
+
+# Default: treat as text, normalise to LF in the repo.
+* text=auto eol=lf
+
+# Windows-native shells must keep CRLF on checkout; cmd.exe and
+# PowerShell are CRLF-strict for some constructs.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# POSIX shells must keep LF; CRLF breaks shebangs and `set -e` parsing.
+*.sh text eol=lf
+
+# Markdown / YAML / TOML / JSON: LF is the common-denominator convention.
+*.md   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.json text eol=lf
+
+# C / Make: LF — matches both QNX SDP 8.0 host toolchain and Linux.
+*.c   text eol=lf
+*.h   text eol=lf
+Makefile text eol=lf
+*.mk  text eol=lf
+
+# Binary types — never touch (most are also gitignored, but pin anyway
+# in case something slips through).
+*.bin  binary
+*.img  binary
+*.vmdk binary
+*.iso  binary
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.pdf  binary
+*.gz   binary
+*.zip  binary
