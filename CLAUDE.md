@@ -156,9 +156,16 @@ These limitations are deliberate; documenting them precisely *is* the point.
 
 ---
 
-## NVIDIA JD mapping (AVOS / DRIVE OS Software Engineer, customer-facing)
+## NVIDIA JD mapping — internal working reference (do NOT surface in README)
 
-Full table: [docs/jd-mapping.md](docs/jd-mapping.md). Summary:
+> **For Claude Code sessions only.** When deciding what to prioritise,
+> what to expand, or how to phrase findings, refer to the JD mapping
+> as the project's targeting context. The full JD-to-artefact table
+> lives at [docs/jd-mapping.md](docs/jd-mapping.md). It is **not**
+> linked from README.md (the public face stays focused on the
+> engineering work itself).
+
+Quick summary for context:
 
 | JD requirement | Where addressed |
 |----------------|-----------------|

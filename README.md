@@ -143,14 +143,6 @@ These are **study artifacts**, not certification evidence.
 
 ---
 
-## NVIDIA JD mapping
-
-This portfolio targets the NVIDIA AVOS / DRIVE OS Software Engineer
-(customer-facing) role. See [docs/jd-mapping.md](docs/jd-mapping.md) for the
-full requirement → artifact table.
-
----
-
 ## Interview narrative
 
 A 2-minute spoken version is at [docs/interview-narrative.md](docs/interview-narrative.md).
@@ -171,7 +163,6 @@ A 2-minute spoken version is at [docs/interview-narrative.md](docs/interview-nar
 │   ├── drive-os-comparison.md
 │   ├── findings.md
 │   ├── interview-narrative.md
-│   ├── jd-mapping.md
 │   ├── orin-port.md                # Phase 3 detailed plan
 │   └── security-model.md           # Phase 5 STRIDE + NCEULA audit
 ├── agents/                         # sub-prompt templates per agent
