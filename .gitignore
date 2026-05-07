@@ -1,0 +1,64 @@
+# This .gitignore is conservative because the QNX NCEULA forbids redistributing
+# QNX binaries, IFS images, or compiled QNX components in any form. The patterns
+# below exist to make accidental commits of QNX-derived artifacts very hard.
+
+# QNX-derived binaries — NEVER commit
+*.bin
+*.img
+*.vmdk
+*.iso
+**/ifs*.bin
+**/disk-qemu.*
+output/
+
+# QNX SDP install directories
+qnx800/
+qnx710/
+
+# Secrets / credentials / cloud
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.ec2-instance-id
+.ec2-*.json
+.aws/
+
+# Build artifacts
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.elf
+*.efi
+*.dtb
+*.itb
+build/
+out/
+artifacts/
+
+# Logs (allow only the curated samples under logs/sample-boot/)
+*.log
+!logs/sample-boot/*.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Editor / OS noise
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.code-workspace
+
+# Claude Code: per-user local settings stay out; project-shared subagents go in.
+.claude/settings.local.json
+.claude/.credentials.json
