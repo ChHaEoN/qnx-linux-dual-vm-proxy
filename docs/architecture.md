@@ -31,44 +31,63 @@ camera ingest; the IPC path is shared memory, not a network.
 
 ---
 
-## Cloud twin — hybrid build/runtime on AWS
+## Cloud twin — hybrid build/runtime
 
 QNX SDP 8.0 does not have an arm64 host toolchain. The build-side
 tools (`mkqnximage`, `qcc`, the QNX Software Center) only run on
-x86_64. The runtime side wants arm64 + KVM so the `mkqnximage
+**x86_64 Linux native** or **Windows native** — no macOS, no arm64
+Linux. The runtime side wants arm64 + KVM so the `mkqnximage
 --arch=aarch64le` IFS executes natively under hardware virtualization
 and the project narrative stays on the target architecture
 (Orin / Thor are arm64). Reconciling those two constraints forces
-the cloud twin's toolchain across two hosts.
+the cloud twin's toolchain across two hosts: an x86_64 builder and
+an arm64 runtime.
 
-The local dev driver (Macbook Pro M1 Max) is **not** part of the
-toolchain — it is the IDE / git / SSH terminal only. All QNX install,
-build, and validation lives on AWS, which keeps the validation
-surface single-sourced.
+Per the 2026-05-07 amendment in [findings.md](findings.md), the
+primary build host is a **local Windows PC** (the same machine that
+serves as the dev driver). The EC2 t3.medium x86_64 Ubuntu instance
+is retained as an **explicit fallback** for users without a local
+x86_64 Windows or Linux box. The runtime host stays on Graviton.
 
 ```
 ┌──────────────────────────────┐         ┌─────────────────────────────────┐
-│ Build Host (x86_64 EC2)      │  scp    │ Runtime Host (Graviton arm64)   │
-│ t3.medium, Ubuntu 22.04      │────────▶│ c7g.large, Ubuntu 22.04 + KVM   │
-│                              │  ifs    │                                 │
-│ • QNX SDP 8.0 (NCEULA)       │         │ • qemu-system-aarch64 (KVM)     │
-│ • mkqnximage --type=qemu     │         │ • Bridge br0 + tap-qnx,tap-linux│
-│   --arch=aarch64le           │         │                                 │
-│ • produces output/ifs.bin    │         │ ┌──────────┐  ┌──────────────┐  │
-│                              │         │ │ QNX VM   │  │ Linux aarch64│  │
-└──────────────────────────────┘         │ │ (Safety  │  │ VM (Compute  │  │
-                                         │ │ proxy)   │  │ proxy)       │  │
-                                         │ └────┬─────┘  └──────┬───────┘  │
-                                         │      └────virtio-net┘           │
+│ Build Host (PRIMARY)         │  scp    │ Runtime Host (Graviton arm64)   │
+│ Local Windows PC (x86_64)    │────────▶│ c7g.large, Ubuntu 22.04 + KVM   │
+│ • QNX SDP 8.0 Windows native │  ifs    │                                 │
+│ • mkqnximage --type=qemu     │         │ • qemu-system-aarch64 (KVM)     │
+│   --arch=aarch64le           │         │ • Bridge br0 + tap-qnx,tap-linux│
+│ • produces output\ifs.bin    │         │                                 │
+│                              │         │ ┌──────────┐  ┌──────────────┐  │
+│ Build Host (FALLBACK)        │         │ │ QNX VM   │  │ Linux aarch64│  │
+│ t3.medium x86_64 Ubuntu EC2  │ ──scp──▶│ │ (Safety  │  │ VM (Compute  │  │
+│ • same QNX SDP 8.0 install   │  ifs    │ │ proxy)   │  │ proxy)       │  │
+│ • same mkqnximage invocation │         │ └────┬─────┘  └──────┬───────┘  │
+└──────────────────────────────┘         │      └────virtio-net┘           │
                                          └─────────────────────────────────┘
 ```
 
-Build host: `t3.medium` (2 vCPU, 4 GB) is enough headroom for
-SDP install + IFS build; t3 charges by the hour and can be stopped
-between builds.
+Build host (primary): a developer-class Windows PC. SDP install,
+IFS build, and `scp` to the runtime host all run locally; no EC2
+build-host hours billed.
+
+Build host (fallback): `t3.medium` (2 vCPU, 4 GB) is enough headroom
+for SDP install + IFS build; t3 charges by the hour and can be
+stopped between builds.
 
 Runtime host: `c7g.large` (2 vCPU Graviton3, 4 GB, KVM-on-arm64).
 Both VMs run on this single instance.
+
+**Honest framing:** the Windows-primary pivot removes ssh / X11 /
+browser-flow friction and EC2 build-host cost — but it does **not**
+demonstrate cross-host build determinism. Phase 1 must verify the
+Windows-built IFS is functionally equivalent to an EC2-built IFS
+from the same `mkqnximage --arch=aarch64le` invocation; until that
+verification lands, the EC2 fallback is the canonical reference.
+And the local Windows host is **not** closer to a real DRIVE OS
+customer build environment than EC2 is — production AVOS / DRIVE OS
+customer builds run on rented / vendor-provided Linux farms, not
+local Windows. The pivot is a friction/cost win, not an
+architectural improvement.
 
 ---
 
@@ -127,9 +146,10 @@ variant in `scripts/orin/`).
 ## Why two hosts (cloud-side)?
 
 **Constraint 1 — `mkqnximage` is x86_64-only.** The QNX SDP 8.0
-host toolchain exists only for x86_64 Linux and macOS. Running it
-under qemu-user emulation on an arm64 host is unsupported and not
-worth the headache.
+host toolchain exists only for x86_64 Linux native and x86_64
+Windows native (no macOS, no arm64 Linux). Running it under
+qemu-user emulation on an arm64 host is unsupported and not worth
+the headache.
 
 **Constraint 2 — runtime should be arm64 + KVM.** The portfolio
 narrative is BSP / customer-port engineering on arm64 silicon (Orin,

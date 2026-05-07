@@ -7,26 +7,29 @@
 
 ## Findings
 
-### F1. QNX SDP 8.0 host toolchain is x86_64 Linux only
+### F1. QNX SDP 8.0 host toolchain is x86_64 Linux native + Windows native (no macOS)
 
-The SDP 8.0 host toolchain ships for **x86_64 Linux only** — no macOS
-build (Intel or Apple Silicon), no arm64 Linux. Empirically confirmed
-2026-05 by inspecting the QNX Software Center download matrix on a
-QNX Everywhere account: only an x86_64 Linux installer is offered.
-Earlier project drafts loosely described "Linux + macOS" support; that
-was inaccurate and has been corrected here.
+The SDP 8.0 host toolchain ships for **x86_64 Linux native** *and*
+**Windows native**; macOS (Intel and Apple Silicon) remains
+unsupported in 8.0. Empirically confirmed 2026-05 by a re-inspection
+of the QNX Software Center download matrix on a QNX Everywhere
+account: both a Linux x86_64 installer and a Windows installer are
+offered. An earlier pass through the matrix recorded "Linux x86_64
+only" — that was a partial inspection and is corrected here. See the
+2026-05-07 amendment in [findings.md](findings.md) for the
+build-host-pivot decision that follows from this correction.
 
 `mkqnximage`, `qcc`, and the QNX Software Center therefore will not run on:
 - Graviton arm64
 - Apple Silicon macOS (M1 / M2 / M3)
 - Intel macOS (no installer offered for any macOS variant in 8.0)
-- Windows (not supported by SDP 8.0 either)
+- arm64 Linux (no installer offered)
 
 **Consequence — hybrid build/runtime architecture:**
 
 ```
-x86_64 build host (t3.medium)  ──ifs.bin / disk-qemu.vmdk──▶  Graviton runtime host (c7g.large)
-SDP 8.0 + mkqnximage                  scp                     qemu-system-aarch64 + KVM
+x86_64 build host (Windows local primary; EC2 t3.medium fallback)  ──ifs.bin / disk-qemu.vmdk──▶  Graviton runtime host (c7g.large)
+SDP 8.0 + mkqnximage                                                       scp                     qemu-system-aarch64 + KVM
 ```
 
 The IFS (`ifs.bin`) produced by `mkqnximage --arch=aarch64le` is an

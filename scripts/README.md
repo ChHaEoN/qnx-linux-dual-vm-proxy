@@ -6,12 +6,24 @@ because QNX SDP 8.0 does not have an arm64 host toolchain — see
 [../docs/bsp-selection.md](../docs/bsp-selection.md) for the full
 rationale.
 
+As of the 2026-05-07 amendment in
+[../docs/findings.md](../docs/findings.md), the primary build path
+is a **local Windows PC** (QNX SDP 8.0 ships a Windows native
+installer). The previous EC2 t3.medium walkthrough is retained as
+an explicit fallback further down this page. Honest framing: the
+Windows-host pivot removes ssh / X11 / browser-flow friction and EC2
+billing for the build side, but it does **not** demonstrate
+cross-host build determinism (Phase 1 will verify Windows-built vs.
+EC2-built IFS equivalence) and it is **not** closer to a real DRIVE
+OS customer build environment than EC2.
+
 > **Cost discipline:** the runtime host (`c7g.large`) bills around
-> $0.0725/hr on-demand (us-east-1, May 2026). The build host
-> (`t3.medium`) bills around $0.0416/hr. Stop both instances when
-> not actively using them; data egress for the IFS scp is
-> negligible. There is no automated teardown — when you finish a
-> session, run `aws ec2 stop-instances` (or terminate) yourself.
+> $0.0725/hr on-demand (us-east-1, May 2026). The fallback build
+> host (`t3.medium`) bills around $0.0416/hr; the primary path
+> (local Windows) bills nothing. Stop the runtime instance when not
+> actively using it; data egress for the IFS scp is negligible.
+> There is no automated teardown — when you finish a session, run
+> `aws ec2 stop-instances` (or terminate) yourself.
 
 > **License:** the user must obtain their own QNX Everywhere license
 > from <https://qnx.com/getqnx> and install QNX SDP 8.0 themselves.
@@ -20,7 +32,68 @@ rationale.
 
 ---
 
-## Workflow
+## Workflow — primary path (local Windows build host)
+
+Use this path on a Windows 10 / 11 x86_64 machine. The runtime side
+(steps 4–7) is unchanged from the fallback path — the only
+difference is where `output\ifs.bin` is produced.
+
+### 1. Install QNX SDP 8.0 (manual, license-bound)
+
+On the Windows PC:
+
+1. Visit <https://www.qnx.com/getqnx> and create a myQNX account.
+2. Accept the QNX Everywhere NCEULA in your account.
+3. Download the **QNX Software Center for Windows x86_64**.
+4. Run the installer (`qnx-setup-*.exe`); sign in; install **QNX
+   SDP 8.0** with the **aarch64le** target packages selected.
+5. The default install root is `%USERPROFILE%\qnx800`.
+
+### 2. Source the SDP environment
+
+In a Cmd shell (or wrap in PowerShell with `cmd /c`):
+
+```cmd
+"%USERPROFILE%\qnx800\qnxsdp-env.bat"
+where mkqnximage
+where qcc
+```
+
+`mkqnximage` and `qcc` should resolve under `%USERPROFILE%\qnx800\host\...`.
+
+### 3. Build the QNX IFS
+
+From the repo root in the same Cmd shell:
+
+```cmd
+scripts\build-qnx-ifs.bat
+```
+
+Produces `qnx-safety-vm\output\ifs.bin` and
+`qnx-safety-vm\output\disk-qemu.vmdk`. These are gitignored. **Do
+not commit them** — the QNX NCEULA forbids redistributing
+QNX-derived binaries.
+
+### 4. scp the IFS to the runtime host
+
+From the Windows PC (OpenSSH ships with Windows 10/11):
+
+```cmd
+scp qnx-safety-vm\output\ifs.bin           ubuntu@<runtime-host>:~/output/
+scp qnx-safety-vm\output\disk-qemu.vmdk    ubuntu@<runtime-host>:~/output/
+```
+
+Then continue with **steps 4–7 of the fallback path below** (provision
+runtime, set up bridge, launch VMs) — those steps are runtime-host
+side and identical regardless of where the IFS was built.
+
+---
+
+## Workflow — fallback path (EC2 build host)
+
+Use this path **only if** you do not have a local x86_64 Windows or
+Linux machine available. It is the original Phase 0 workflow,
+preserved verbatim except for the relabel.
 
 ### 1. Provision the build host (x86_64)
 

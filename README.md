@@ -26,8 +26,8 @@ cannot demonstrate vs. a real hypervisor partition.
 
 The same QNX IFS and IPC source run on both twin sides. Only the host
 changes. The build of the QNX IFS happens once on an x86_64 host (QNX
-SDP 8.0 toolchain is x86_64-only) and the resulting binary is reused
-across both twins.
+SDP 8.0 toolchain is x86_64 Linux + Windows; no arm64, no macOS) and
+the resulting binary is reused across both twins.
 
 ```
                   ┌──────── shared artifacts ────────┐
@@ -41,11 +41,12 @@ across both twins.
             │                                             │
   ┌─────────v──────────┐                       ┌──────────v─────────┐
   │ Cloud twin (AWS)   │                       │ HW twin (Orin Nano)│
-  │  build: t3.medium  │                       │  host: L4T (Ubuntu)│
-  │  run:   c7g.large  │                       │  on A78AE × 6      │
-  │  QEMU/KVM hosts    │ ── compare twin-diff ▶│  QEMU on Tegra;    │
-  │  both VMs          │   latency, jitter,    │  L4T = Compute side│
-  │                    │   boot, correctness   │                    │
+  │ build: Local       │                       │  host: L4T (Ubuntu)│
+  │  Windows PC        │                       │  on A78AE × 6      │
+  │  (EC2 fallback)    │                       │                    │
+  │  run:  c7g.large   │ ── compare twin-diff ▶│  QEMU on Tegra;    │
+  │  QEMU/KVM runtime  │   latency, jitter,    │  L4T = Compute side│
+  │  both VMs          │   boot, correctness   │                    │
   │  purpose: fast     │                       │  purpose: validate │
   │   iterate, sweep   │                       │   on real silicon  │
   └────────────────────┘                       └────────────────────┘

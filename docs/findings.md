@@ -98,6 +98,43 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 
 ---
 
+## 2026-05-07 — Phase 0 amendment: build host pivots to local Windows (EC2 fallback retained)
+
+F1 in [bsp-selection.md](bsp-selection.md) previously asserted "QNX SDP
+8.0 host toolchain is x86_64 Linux only." A second pass through the
+QNX Software Center download matrix on a QNX Everywhere account
+confirmed that SDP 8.0 ships **both** a Linux x86_64 native installer
+**and** a Windows native installer; macOS (Intel and Apple Silicon)
+remains unsupported. The earlier wording was a partial inspection,
+not a complete one, and is being corrected. Consequence: the
+build-host role moves from "AWS t3.medium x86_64 Ubuntu (rented EC2)"
+to **local Windows PC as the primary path**, with the EC2 x86_64
+build host retained as an explicit **fallback** for users without a
+local x86_64 Windows or Linux machine. Cost win: removes EC2
+build-host hours from the AWS Free Plan budget (~$100 / 98 days
+remaining at decision time; existing $80/month budget alert and $5/day
+Cost Anomaly Detection unchanged). Friction win: removes ssh / X11 /
+browser-flow hops needed to drive the QNX Software Center GUI on a
+remote EC2 box. Validation surface unchanged: per F1's existing
+arch-agnostic-IFS argument, `mkqnximage --arch=aarch64le` produces
+the same blob whether run on Windows or Linux x86_64; runtime side
+stays Graviton arm64. Honest-framing caveats: this **does not**
+demonstrate cross-host build determinism — Phase 1 must still verify
+the Windows-built IFS produces a byte-identical (or at least
+functionally identical) result vs. an EC2-built IFS, and that
+verification step is being added to F5's open empirical questions in
+a follow-up edit. A local Windows build host also **does not**
+demonstrate any closer parity to a real DRIVE OS customer build
+environment than EC2 does — it is purely a friction/cost
+optimisation, not an architectural improvement. Cross-link: see F1
+in [bsp-selection.md](bsp-selection.md). Implementation agent will
+follow up with the actual edits to F1, README.md, CLAUDE.md,
+docs/architecture.md, scripts/README.md,
+scripts/bootstrap-build-host.sh, agents/research.md,
+agents/implementation.md, and a new scripts/build-qnx-ifs.bat.
+
+---
+
 ## Apr 2026 — Phase 0 BSP research
 
 QNX SDP 8.0 host toolchain is x86_64-only, which forces a hybrid

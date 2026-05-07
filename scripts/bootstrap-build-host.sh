@@ -2,6 +2,13 @@
 #
 # bootstrap-build-host.sh — prepare an x86_64 EC2 instance for QNX SDP 8.0
 #
+# ============================================================================
+# AWS FALLBACK PATH. Per the 2026-05-07 amendment in ../docs/findings.md, the
+# primary build path is a local Windows PC running QNX SDP 8.0 natively (see
+# scripts/build-qnx-ifs.bat). This script is the EC2 fallback for users who
+# do not have a local x86_64 Windows or Linux build host available.
+# ============================================================================
+#
 # Target instance: t3.medium, x86_64, Ubuntu 22.04 LTS, >= 30 GB EBS
 # Run as: a sudo-capable user (the default `ubuntu` user works)
 #

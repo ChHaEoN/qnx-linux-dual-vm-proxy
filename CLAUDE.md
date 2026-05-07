@@ -35,8 +35,10 @@ the NVIDIA AVOS / DRIVE OS SE role this portfolio targets.
 ## Tech stack
 
 **Cloud twin (AWS):**
-- Build host: t3.medium x86_64 Ubuntu 22.04 (QNX SDP 8.0 host toolchain is x86_64-only)
+- Build host (primary): **local Windows PC** — QNX SDP 8.0 ships a Windows-native installer; `mkqnximage --arch=aarch64le` produces the IFS locally and it is scp'd to the runtime host
+- Build host (fallback): t3.medium x86_64 Ubuntu 22.04 — retained for users without a local x86_64 Windows or Linux machine
 - Runtime host: c7g.large (Graviton3 Neoverse-V1, Ubuntu 22.04 arm64, KVM-on-arm64)
+- Honest framing: the Windows-host pivot is a **friction/cost optimisation only**. It does NOT demonstrate cross-host build determinism — Phase 1 must verify the Windows-built IFS is byte-equivalent (or at minimum functionally identical) to an EC2-built IFS. It is also NOT closer to a real DRIVE OS customer build environment than EC2 — DRIVE OS customer builds typically sit on rented or vendor-provided Linux hosts, not local Windows.
 
 **Hardware twin (Orin Nano):**
 - Jetson Orin Nano Dev Kit ($499) — Ampere GPU, 6× Cortex-A78AE, 8 GB RAM
@@ -49,12 +51,22 @@ the NVIDIA AVOS / DRIVE OS SE role this portfolio targets.
 - IPC: virtio-net via host bridge `br0` + tap devices (`tap-qnx` / `tap-linux`)
 - Reference architecture: NVIDIA DRIVE OS dual-VM partition design (public docs)
 
-**Dev driver:** Macbook Pro M1 Max (arm64 macOS) — used purely as the
-local IDE / git / SSH-into-AWS workstation. The toolchain is **not**
-expected to run on the Mac; QNX install, IFS build, and all VM
-validation live on AWS (build = t3.medium x86_64; runtime = c7g.large
-arm64). This keeps the validation surface single-sourced and avoids
-opening a Rosetta-2 / x86-VM-on-Mac side quest.
+**Dev driver / build host:** local Windows PC (x86_64) — both the
+IDE / git / SSH-into-AWS workstation **and**, as of the 2026-05-07
+amendment in [docs/findings.md](docs/findings.md), the primary QNX
+SDP 8.0 build host. QNX Software Center, SDP install, and IFS build
+all run natively on Windows; the resulting `output\ifs.bin` is scp'd
+to the c7g.large Graviton runtime host. The EC2 t3.medium x86_64
+Ubuntu host stays in the repo as a fallback for users without a
+local x86_64 Windows or Linux box. Honest framing: this collapses
+two roles (dev driver + build host) onto one machine and removes the
+ssh / X11 / browser hops needed to drive the QNX Software Center GUI
+on a remote EC2 — but it does **not** demonstrate build-environment
+parity with a real DRIVE OS customer's Linux build host, and Phase 1
+must still verify Windows-built vs. EC2-built IFS produce equivalent
+output before the pivot is treated as fully validated. The Macbook
+Pro M1 Max remains usable as a secondary IDE / SSH terminal but
+cannot host SDP 8.0 (no macOS installer in 8.0).
 
 ---
 
