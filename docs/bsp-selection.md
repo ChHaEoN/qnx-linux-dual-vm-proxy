@@ -7,12 +7,20 @@
 
 ## Findings
 
-### F1. QNX SDP 8.0 does not support ARM hosts
+### F1. QNX SDP 8.0 host toolchain is x86_64 Linux only
 
-The SDP 8.0 host toolchain ships for x86_64 Linux and macOS only.
-`mkqnximage`, `qcc`, and the QNX Software Center will not run on Graviton
-arm64. Confirmed via the SDP 8.0 release notes and the QNX Software
-Center supported-host matrix.
+The SDP 8.0 host toolchain ships for **x86_64 Linux only** — no macOS
+build (Intel or Apple Silicon), no arm64 Linux. Empirically confirmed
+2026-05 by inspecting the QNX Software Center download matrix on a
+QNX Everywhere account: only an x86_64 Linux installer is offered.
+Earlier project drafts loosely described "Linux + macOS" support; that
+was inaccurate and has been corrected here.
+
+`mkqnximage`, `qcc`, and the QNX Software Center therefore will not run on:
+- Graviton arm64
+- Apple Silicon macOS (M1 / M2 / M3)
+- Intel macOS (no installer offered for any macOS variant in 8.0)
+- Windows (not supported by SDP 8.0 either)
 
 **Consequence — hybrid build/runtime architecture:**
 
@@ -127,15 +135,18 @@ order of effort are:
 
 Open empirical questions for Phase 3:
 
-> **Research note (2026-05):** Live web research for the four items below
-> was attempted but the session's WebFetch / WebSearch tools were not
-> permitted. The verdicts below are **provisional**, based on public
-> NVIDIA L4T / Jetson docs, QNX SDP 8.0 docs, and the upstream Linux
-> KVM/ARM design as of the agent's January 2026 knowledge cutoff. Every
-> verdict is paired with the empirical check that would confirm it on
-> real hardware in Phase 3 step 0 (Pre-flight) or step 2 (Install QEMU).
-> Citations marked **\[vendor-asserted]** have not been re-fetched in
-> this research pass — re-validate before Phase 3 kick-off.
+> **Research note (2026-05-07, re-fetch pass):** WebFetch / WebSearch
+> tools were available this session and the four citations below were
+> re-validated against primary sources. Q2 (JetPack 6 = Ubuntu 22.04 +
+> kernel 5.15) and Q3 (Orin Nano Dev Kit = 8 GB LPDDR5) are now
+> empirically confirmed from NVIDIA docs. Q1 architecture claims
+> (A78AE = ARMv8.2-A) are confirmed from public Arm/Wikipedia sources,
+> but the QEMU virt master docs **do not** word-for-word back the
+> "host-CPU-agnostic under KVM" wording the prior agent used —
+> verdict caveated below. Q4 stays "leans no" but is now backed by an
+> NVIDIA developer-forum thread showing a JetPack 6.2 user manually
+> turning on VHOST_NET via menuconfig (a stronger signal than upstream
+> Kconfig defaults). Empirical-check steps for Phase 3 are unchanged.
 
 - **Q1 — Does the cloud-twin IFS boot unchanged under QEMU-on-Orin
   (KVM enabled, GICv3, A78AE host CPU)? Load-bearing.**
@@ -148,11 +159,15 @@ Open empirical questions for Phase 3:
   device tree, not the host CPU's microarchitectural details. The one
   realistic risk is QNX's microkernel CPU-feature probe rejecting an
   unfamiliar MIDR/REVIDR pair from the A78AE (QNX SDP 8.0 was
-  validated against a small set of reference CPUs). Citations:
+  validated against a small set of reference CPUs). Note: QEMU's
+  master `virt` machine doc does not phrase the cross-host claim as
+  "host-CPU-agnostic" word-for-word — it documents `-cpu host` support
+  under KVM but warns it is not migration-stable; Phase 3 step 5 is
+  still the empirical proof, not the doc. Citations:
   [Arm Cortex-A78AE TRM — ARMv8.2-A, GICv3, EL2 support](https://developer.arm.com/documentation/101779/latest/)
-  **\[vendor-asserted]**;
-  [QEMU virt machine docs — host-CPU-agnostic under KVM](https://www.qemu.org/docs/master/system/arm/virt.html)
-  **\[vendor-asserted]**.
+  **[verified 2026-05-07 via developer.arm.com + en.wikipedia.org/wiki/ARM_Cortex-A78 cross-check: A78 family = ARMv8.2-A; arm.com product page confirms Armv8-A CPU, GIC-600AE compatible (GICv3/v4), EL2 hypervisor support]**;
+  [QEMU virt machine docs — `-cpu host` supported under KVM/HVF](https://www.qemu.org/docs/master/system/arm/virt.html)
+  **[verified 2026-05-07 via qemu.org; doc supports `-cpu host` under KVM but does not assert host-CPU portability — caveat above]**.
   **Empirical confirmation:** Phase 3 step 5 — `scripts/orin/launch-qnx-on-orin.sh`
   with the cloud-twin `output/ifs.bin`; pass if QNX reaches its
   shell prompt and `pidin sysinfo` reports a sane `cycles_per_sec`.
@@ -166,10 +181,10 @@ Open empirical questions for Phase 3:
   Jetson-specific gates that. The KVM enablement question on Jetson
   is at the *kernel* layer (CONFIG_KVM, EL2 boot) rather than the
   QEMU-package layer. Citations:
-  [Ubuntu 22.04 qemu-system-arm package — KVM aarch64 support](https://packages.ubuntu.com/jammy/qemu-system-arm)
-  **\[vendor-asserted]**;
-  [NVIDIA JetPack 6 release notes — Ubuntu 22.04 base](https://developer.nvidia.com/embedded/jetpack)
-  **\[vendor-asserted]**.
+  [Ubuntu ARM64/QEMU wiki — `-enable-kvm` example for arm64 host](https://wiki.ubuntu.com/ARM64/QEMU)
+  **[verified 2026-05-07 via wiki.ubuntu.com; documents the `-enable-kvm` invocation on arm64 hosts running Ubuntu 20.04+, which covers jammy. Note: the `packages.ubuntu.com/jammy/qemu-system-arm` page itself does not surface KVM build flags in its visible metadata, so this Ubuntu-server wiki is the closer primary source]**;
+  [NVIDIA JetPack 6.0 release notes — Ubuntu 22.04 + kernel 5.15](https://docs.nvidia.com/jetson/archives/jetpack-archived/jetpack-60/release-notes/index.html)
+  **[verified 2026-05-07 via docs.nvidia.com; quote: "JetPack 6.0 production release includes Jetson Linux 36.3 which packs Linux Kernel 5.15 and Ubuntu 22.04 based root file system." The current `developer.nvidia.com/embedded/jetpack` landing page now advertises JetPack 7 / Ubuntu 24.04, so the archived 6.0 release notes are the authoritative cite for this project's Orin twin]**.
   **Empirical confirmation:** Phase 3 step 2 — after
   `apt-get install qemu-system-arm`, run
   `qemu-system-aarch64 -accel help` and confirm `kvm` is listed; then
@@ -188,11 +203,15 @@ Open empirical questions for Phase 3:
   for kernel buffers and the network bridge but not enough to also
   run a desktop session and a browser. The mitigation already noted
   in the risk register (`scripts/orin/launch-qnx-on-orin.sh` boots
-  QNX with `-m 768` if needed) is sound. Citations:
-  [Jetson Orin Nano Developer Kit — 8 GB LPDDR5 spec](https://developer.nvidia.com/embedded/jetson-orin-nano-developer-kit)
-  **\[vendor-asserted]**;
-  [JetPack 6 / L4T r36.x release notes — system memory footprint guidance](https://docs.nvidia.com/jetson/archives/r36.3/ReleaseNotes/Jetson_Linux_Release_Notes_r36.3.pdf)
-  **\[vendor-asserted]**.
+  QNX with `-m 768` if needed) is sound. Note: the L4T r36.3 release
+  notes PDF re-fetched on 2026-05-07 does **not** publish an idle-RSS
+  figure — the 2.5–3.5 GB number above is community-folklore-level and
+  must be measured empirically in Phase 3 step 1, not cited as a vendor
+  baseline. Citations:
+  [Jetson Orin Nano Super Developer Kit product page — 8 GB 128-bit LPDDR5 / 102 GB/s](https://www.nvidia.com/en-us/autonomous-machines/embedded-systems/jetson-orin/nano-super-developer-kit/)
+  **[verified 2026-05-07 via nvidia.com; quote: "8GB 128-bit LPDDR5 102 GB/s". The original `developer.nvidia.com/embedded/jetson-orin-nano-developer-kit` URL now returns 404 — replaced with this nvidia.com product-page URL which carries the same spec]**;
+  [JetPack 6 / L4T r36.3 release notes (PDF)](https://docs.nvidia.com/jetson/archives/r36.3/ReleaseNotes/Jetson_Linux_Release_Notes_r36.3.pdf)
+  **[contradicts prior agent claim: re-fetched 2026-05-07 — the r36.3 release notes do NOT contain idle-RSS / system-memory-footprint guidance. The figure must be measured in Phase 3 step 1, not cited as vendor data]**.
   **Empirical confirmation:** Phase 3 step 1 — `free -h` after a
   fresh boot to a headless tty (target ≥4.5 GB free), then `free -h`
   again with QNX QEMU running and the 100k-iteration benchmark in
@@ -213,10 +232,10 @@ Open empirical questions for Phase 3:
   catastrophic latency delta in the twin diff (userspace virtio adds
   ~20–50 µs per round-trip vs. vhost-net based on published
   comparisons). Citations:
-  [NVIDIA L4T r36.x kernel sources / defconfig — `tegra_defconfig`](https://nv-tegra.nvidia.com/r/gitweb?p=linux-nvidia.git)
-  **\[vendor-asserted, requires confirmation]**;
+  [NVIDIA developer forum — JetPack 6.2 user enabling VHOST_NET via kernel rebuild](https://forums.developer.nvidia.com/t/network-driver-error-when-recompiling-the-kernel-on-jetpack-6-2/328693)
+  **[verified 2026-05-07 via forums.developer.nvidia.com; the thread shows a JetPack 6.2 user manually flipping `<M> Host kernel accelerator for virtio net` in menuconfig, which is the strongest available signal that VHOST_NET is not on by default in the L4T tegra_defconfig. Direct gitweb browsing of `linux-nvidia.git` defconfig was attempted but the URL is not WebFetch-friendly — the forum thread is the cleanest primary indirect proof]**;
   [Linux kernel `drivers/vhost/Kconfig` — VHOST_NET upstream default](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/drivers/vhost/Kconfig)
-  **\[verified pattern from upstream]**.
+  **[verified pattern from upstream — unchanged from prior pass]**.
   **Empirical confirmation:** Phase 3 step 2 — on the Orin after
   flashing, `zcat /proc/config.gz | grep -E 'VHOST_NET|VHOST='` (or
   inspect `/boot/config-$(uname -r)`); if absent, `modprobe vhost_net`
