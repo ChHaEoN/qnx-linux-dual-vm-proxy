@@ -6,7 +6,9 @@
 # Run on:  Orin Nano L4T, after:
 #   1. ./bootstrap-orin-l4t.sh                (and re-login for kvm group)
 #   2. sudo ./setup-bridge-orin.sh            (br0 + tap-qnx exist)
-#   3. scp output/ifs.bin and output/disk-qemu.vmdk from the cloud-twin build host
+#   3. scp output/ifs.bin, output/disk-qemu.vmdk AND output/disk-qemu from the
+#      cloud-twin build host (disk-qemu.vmdk is only a descriptor pointing at
+#      the raw extent disk-qemu — both are required)
 #   4. sha256sum -c ~/output/SHA256SUMS       (twin-sync invariant; do NOT skip)
 #
 # This script intentionally mirrors scripts/launch-qnx-vm.sh almost
@@ -19,6 +21,7 @@ set -euo pipefail
 
 ifs="output/ifs.bin"
 disk="output/disk-qemu.vmdk"
+disk_extent="output/disk-qemu"   # raw extent the .vmdk descriptor points at
 
 if [[ ! -f "${ifs}" ]]; then
   echo "ERROR: ${ifs} not found." >&2
@@ -27,6 +30,11 @@ if [[ ! -f "${ifs}" ]]; then
 fi
 if [[ ! -f "${disk}" ]]; then
   echo "ERROR: ${disk} not found." >&2
+  exit 1
+fi
+if [[ ! -f "${disk_extent}" ]]; then
+  echo "ERROR: ${disk_extent} not found — the .vmdk is only a descriptor." >&2
+  echo "       scp the raw extent disk-qemu too (twin-sync copies both)." >&2
   exit 1
 fi
 if [[ ! -f "output/SHA256SUMS" ]]; then

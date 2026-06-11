@@ -8,6 +8,97 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 
 ---
 
+## 2026-06-11 — Milestone (Phase-7 pull-forward): QNX Hypervisor (QHV) boots a QNX guest under QEMU-TCG
+
+Brought the Phase-7 QHV exploration forward and got a **real Type-1 hypervisor
+hosting a guest**, entirely on the local Windows build host — no AWS, no KVM.
+Chain of findings: (1) AWS non-metal Graviton exposes **no `/dev/kvm`** (proven
+empirically on a t4g.small probe — EL2 is not passed through by Nitro), so any
+hardware-accelerated hypervisor (KVM *or* QHV) needs `*.metal` or real silicon;
+the accessible path to *demonstrate* QHV is QEMU-TCG emulating an EL2-capable
+CPU. (2) SDP 8.0.4 already ships the QHV host: `qvm` aarch64 binary
+(`target/qnx/aarch64le/sbin/qvm`), `libhyp`, and `target.hypervisor.core` are
+installed. (3) Official build path is mkqnximage: `--type=qvm` builds the guest,
+`--type=qemu --qvm=yes --guest=<dir>` builds the host that embeds it under
+`/data/hypervisor/`. (4) Boot under `qemu-system-aarch64 -machine
+virt,virtualization=on -cpu max -accel tcg` so QHV's `el2-host`/VHE comes up.
+**Result:** host boots as `qnx-qhv` (machine `QEMU_virt`); `qvm @g2.conf` then
+boots a guest that reaches `Startup complete` as `qnx-guest` on machine
+`ARMv8_Foundation_Model` — the *virtual* platform QHV synthesises, i.e. the
+Type-1 partition boundary is real. Curated log:
+[../logs/sample-boot/qhv-tcg-host-and-guest-boot.log](../logs/sample-boot/qhv-tcg-host-and-guest-boot.log).
+Gotchas recorded: the stock `start_guest` wires a virtio-net peer that needs the
+host io-sock stack, which does **not** initialise on this qemu-virt build
+(`network stack down` / `Address family not supported`) — worked around with a
+no-network qvm config auto-started via a custom `post_start.custom` snippet;
+driving the guest start over the TCG serial console interactively drops
+characters, so the start was baked into the image instead. **Honest framing:**
+TCG proves the QHV *software* architecture (qvm config, vdev instantiation, guest
+isolation, EL2/VHE host) — not hardware timing/acceleration (needs metal/Orin).
+Note this supersedes the earlier Track-A framing where the cloud leg ran a QNX
+*Neutrino* guest under QEMU/**KVM** on c7g.large — that KVM-on-cloud assumption is
+now falsified (see finding chain above); KVM acceleration belongs on Orin (Phase 3).
+
+---
+
+## 2026-06-10 — Phase 1 finding: first QNX aarch64 IFS built on the Windows host (missing `target.qemuvirt` package)
+
+First real `mkqnximage --type=qemu --arch=aarch64le --build` on the local
+Windows build host (SDP 8.0.4, install root `C:\Users\andy8\qnx800`) **failed**
+with `Host file 'startup-qemu-virt' not available / Failed to create ifs boot
+image`. Root cause: a default SDP 8.0.4 install carried the aarch64 kernel
+(`procnto-smp-instr`), the `*.boot` prefabs and the aarch64 host toolchain, plus
+the **`com.qnx.qnx800.quickstart.qemu`** prebuilt run-image — but **not**
+**`com.qnx.qnx800.target.qemuvirt`**, which is the package that installs the
+board startup binary `startup-qemu-virt` into
+`target\qnx\aarch64le\boot\sys\`. `mkqnximage`'s `--build` needs that startup
+binary; `quickstart.qemu` (a ready-to-run image) does not provide it. Fix was
+CLI-only, no GUI: `qnxsoftwarecenter_clt.bat -installIU
+com.qnx.qnx800.target.qemuvirt` (use `-list` / `-listInstalledRoots` to
+inspect). After install the build **succeeded**: `ifs.bin` ~9.3 MB plus a raw
+disk. This is a genuine BSP-bring-up flavour finding — an incomplete
+package-dependency selection on the build host, exactly the class of issue real
+BSP integration hits. **Honest framing:** this is build-host tooling, not a port
+— it says nothing about whether the IFS boots on Graviton (still the open
+Phase 1 question below). Secondary finding: `mkqnximage` emits a **split VMDK** —
+`disk-qemu.vmdk` is only a ~169-byte `monolithicFlat` *descriptor* pointing at the
+~150 MB raw extent `disk-qemu`; the repo's scp/README/`twin/sync.sh` instructions
+listed only `ifs.bin` + `disk-qemu.vmdk`, which would fail to boot on the runtime
+host. Corrected across `scripts/` in the same commit (extent now travels with the
+descriptor everywhere; raw-disk alternative documented).
+
+---
+
+## 2026-06-10 — Decision: adopt a two-track hybrid (keep QEMU-IFS BSP track, add QNX-on-AWS AMI runtime)
+
+Triggered by the discovery that AWS Marketplace offers a **QNX OS 8.0 AMI**
+(the "QNX Accelerate" / Graviton path), where QNX runs as the EC2 instance OS
+directly — no QEMU, no custom IFS, no BSP bring-up. Rather than pivot the whole
+project to the AMI (which is far lower-friction but discards the BSP /
+bootloader / dual-VM partition story that is this portfolio's strongest DRIVE OS
+SE differentiator), the project adopts a **hybrid**: **Track A** keeps the
+existing QEMU-guest / self-built-IFS path (dual-VM partition proxy on Graviton +
+Orin hardware twin) for the BSP, bootloader, partition-isolation and twin-diff
+narrative; **Track B** adds the QNX-on-Graviton AMI as a low-friction *single*
+QNX target for the application layer — native IPC / resource-manager / scheduling
+demos, cross-compile→S3→run pipeline, GitHub-Actions CI/CD, and a standalone
+`docs/virtual-target-analysis.md` writeup. Architectural caveat recorded: the AMI
+makes QNX the OS, so the **dual-VM partition model stays on Track A only**; Track B
+is single-QNX by construction. Unexpected upside: Track B adds a **third runtime
+substrate** (QEMU-guest vs AMI-on-Nitro vs Orin), turning the Phase 4 twin diff
+from a 2-point into a 3-point comparison. Build-host decision for Track B: **no
+persistent cloud x86 build host** — use GitHub-Actions hosted runners for CI
+builds plus the existing local Windows SDP for dev iteration (flagged open risk:
+headless SDP install + Everywhere license activation in CI is non-trivial; license
+via secrets/SSM, SDP install cached). Track B infra to be Terraform under
+`infra/` (one c7g.xlarge from the AMI + restricted SG + S3), AMI ID as a
+variable since Marketplace subscription is a human prerequisite; cost estimate
+~$15–20/mo + unknown AMI software fee (verify on listing), well under the €100
+target. **Status:** decision recorded; Terraform not yet written (awaiting
+Marketplace subscribe + software-fee confirmation + explicit apply approval).
+
+---
+
 ## Phase 1 — Cyber-Analysis TARA (TBD: gate review)
 
 > **Study-level only; not 21434 evidence. TARA here is illustrative,

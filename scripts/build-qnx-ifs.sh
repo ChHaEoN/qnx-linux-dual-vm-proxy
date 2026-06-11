@@ -9,7 +9,12 @@
 #
 # Output:
 #   qnx-safety-vm/output/ifs.bin           ← the kernel image fed to qemu -kernel
-#   qnx-safety-vm/output/disk-qemu.vmdk    ← the persistent rootfs disk
+#   qnx-safety-vm/output/disk-qemu.vmdk    ← ~169-byte VMDK descriptor
+#   qnx-safety-vm/output/disk-qemu         ← ~150 MB raw extent (the actual disk)
+#
+# The .vmdk is only a monolithicFlat descriptor pointing by relative name at
+# the raw extent disk-qemu; BOTH must travel to the runtime host together, or
+# QEMU cannot open the disk. (twin/sync.sh already copies both.)
 #
 # These artifacts are gitignored. Do not commit them — the QNX NCEULA
 # forbids redistributing QNX-derived binaries. scp them to the runtime
@@ -56,11 +61,13 @@ mkqnximage \
 
 echo
 echo "Build complete. Artifacts in ${PWD}/output/:"
-ls -lh output/ifs.bin output/disk-qemu.vmdk 2>/dev/null || true
+ls -lh output/ifs.bin output/disk-qemu.vmdk output/disk-qemu 2>/dev/null || true
 
 cat <<'EOF'
 
-Next: scp these two files to the runtime host, then run launch-qnx-vm.sh
-there. Do NOT commit them to git (they are .gitignore'd, but double-check).
+Next: scp ALL THREE files (ifs.bin, disk-qemu.vmdk, disk-qemu) to the runtime
+host, then run launch-qnx-vm.sh there. The .vmdk is only a descriptor — the raw
+extent disk-qemu must travel with it. Do NOT commit them to git (they are
+.gitignore'd, but double-check).
 
 EOF

@@ -9,7 +9,12 @@ REM available as a fallback.
 REM
 REM Output:
 REM   qnx-safety-vm\output\ifs.bin           <- kernel image fed to qemu -kernel
-REM   qnx-safety-vm\output\disk-qemu.vmdk    <- persistent rootfs disk
+REM   qnx-safety-vm\output\disk-qemu.vmdk    <- ~169-byte VMDK *descriptor*
+REM   qnx-safety-vm\output\disk-qemu         <- ~150 MB raw extent (the actual disk)
+REM
+REM The .vmdk is only a monolithicFlat descriptor that points by relative
+REM name at the raw extent disk-qemu; BOTH must be scp'd together or QEMU
+REM on the runtime host cannot open the disk.
 REM
 REM These artifacts are gitignored. Do not commit them -- the QNX NCEULA
 REM forbids redistributing QNX-derived binaries. scp them to the Graviton
@@ -84,13 +89,15 @@ echo.
 echo Build complete. Artifacts in %CD%\output\:
 if exist output\ifs.bin        dir /b output\ifs.bin
 if exist output\disk-qemu.vmdk dir /b output\disk-qemu.vmdk
+if exist output\disk-qemu      dir /b output\disk-qemu
 
 popd
 
 echo.
-echo Next: scp these two files to the Graviton runtime host, then run
-echo launch-qnx-vm.sh there. Do NOT commit them to git (they are gitignored,
-echo but double-check).
+echo Next: scp ALL THREE files (ifs.bin, disk-qemu.vmdk, disk-qemu) to the
+echo Graviton runtime host, then run launch-qnx-vm.sh there. The .vmdk is just
+echo a descriptor -- the raw extent disk-qemu must travel with it. Do NOT commit
+echo them to git (they are gitignored, but double-check).
 
 endlocal
 goto :eof

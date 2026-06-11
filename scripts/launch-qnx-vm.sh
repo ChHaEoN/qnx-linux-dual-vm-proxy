@@ -5,10 +5,16 @@
 # Run on: arm64 runtime host (Graviton), after:
 #   1. ./bootstrap-runtime-host.sh                 (and re-login for kvm group)
 #   2. sudo ./setup-bridge.sh                      (br0 + tap-qnx exist)
-#   3. scp output/ifs.bin and output/disk-qemu.vmdk from the build host
+#   3. scp output/ifs.bin, output/disk-qemu.vmdk AND output/disk-qemu
+#      from the build host
 #
-# Paths assume `output/ifs.bin` and `output/disk-qemu.vmdk` are in the CWD
-# (i.e. you're in the directory you scp'd them into). Adjust if needed.
+# Paths assume `output/ifs.bin`, `output/disk-qemu.vmdk` and `output/disk-qemu`
+# are in the CWD (i.e. you're in the directory you scp'd them into). Adjust if
+# needed. NOTE: mkqnximage emits a split VMDK — `disk-qemu.vmdk` is only a
+# ~169-byte monolithicFlat *descriptor* that points (by relative name) at the
+# ~150 MB raw extent `disk-qemu`. Both must be co-located or QEMU cannot open
+# the disk. (Alternative: drop the descriptor and use the raw extent directly
+# with `-drive file=output/disk-qemu,format=raw`.)
 #
 # QEMU args reference (kept as a here-doc for grep-ability):
 #
@@ -31,6 +37,7 @@ set -euo pipefail
 
 ifs="output/ifs.bin"
 disk="output/disk-qemu.vmdk"
+disk_extent="output/disk-qemu"   # raw extent the .vmdk descriptor points at
 
 if [[ ! -f "${ifs}" ]]; then
   echo "ERROR: ${ifs} not found." >&2
@@ -40,6 +47,12 @@ fi
 if [[ ! -f "${disk}" ]]; then
   echo "ERROR: ${disk} not found." >&2
   echo "       Build it on the x86_64 build host (./build-qnx-ifs.sh) and scp it here." >&2
+  exit 1
+fi
+if [[ ! -f "${disk_extent}" ]]; then
+  echo "ERROR: ${disk_extent} not found — the .vmdk is only a descriptor." >&2
+  echo "       You almost certainly scp'd disk-qemu.vmdk but forgot the raw" >&2
+  echo "       extent disk-qemu. Copy it too, or use -drive file=${disk_extent},format=raw." >&2
   exit 1
 fi
 if ! ip link show tap-qnx >/dev/null 2>&1; then

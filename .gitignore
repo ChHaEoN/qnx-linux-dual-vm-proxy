@@ -10,6 +10,10 @@
 **/ifs*.bin
 **/disk-qemu.*
 output/
+# mkqnximage build trees (QNX-derived guest/host artifacts) — NEVER commit.
+# Root-anchored so they do NOT also match scripts/qhv/ (committed source).
+/qnx-safety-vm/
+/qhv/
 
 # QNX SDP install directories
 qnx800/

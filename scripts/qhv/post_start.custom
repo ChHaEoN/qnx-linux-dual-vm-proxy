@@ -1,0 +1,18 @@
+# post_start.custom — appended to the QHV host's post_startup.sh by mkqnximage.
+#
+# build-qhv.bat pre-places this into <host-build-dir>/local/snippets/ BEFORE the
+# host build so mkqnximage bakes it in (mkqnximage only seeds a default here if
+# one is not already present, so ours wins).
+#
+# It auto-starts the QNX guest under QVM with a NO-NETWORK config, because:
+#   - the stock /data/hypervisor/start_guest wires a virtio-net peer that needs
+#     the host io-sock stack, which does not initialise on this qemu-virt build
+#     ("network stack down" / "Address family not supported"); and
+#   - driving `qvm` interactively over the slow TCG serial console drops chars.
+# Networking is not needed to demonstrate QHV hosting a guest; console + blk are.
+echo "=== AUTO-START QNX GUEST UNDER QVM (no-net) ==="
+devb-loopback loopback blksz=512,prefix=qvmdisk,fd=/data/hypervisor/guest/disk-qvm
+waitfor /dev/qvmdisk0 10
+printf 'system mkqnximage-guest\nram 0x80000000,512M\ncpu\nload /data/hypervisor/guest/ifs.bin\nvdev pl011\n hostdev >-\n loc 0x1c090000\n intr gic:37\nvdev virtio-console\n loc 0x20000000\n intr gic:42\nvdev virtio-blk\n loc 0x1c0d0000\n intr gic:41\n hostdev /dev/qvmdisk0\n name vblk0\n' > /data/hypervisor/guest/g2.conf
+echo "=== launching qvm @g2.conf ==="
+qvm @/data/hypervisor/guest/g2.conf

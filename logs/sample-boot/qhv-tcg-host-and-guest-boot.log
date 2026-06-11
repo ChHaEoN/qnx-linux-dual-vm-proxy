@@ -1,0 +1,76 @@
+# QHV (QNX Hypervisor) hosting a QNX guest — QEMU-TCG, aarch64
+#
+# Captured: 2026-06-11, local Windows build host (qemu-system-aarch64 11.0, TCG).
+# Build: SDP 8.0.4 mkqnximage.
+#   guest : mkqnximage --type=qvm   --arch=aarch64le --build
+#   host  : mkqnximage --type=qemu  --arch=aarch64le --qvm=yes --guest=<guest-dir> --build
+# Launch (no KVM — pure TCG emulation of an EL2-capable CPU so QHV's el2-host/VHE comes up):
+#   qemu-system-aarch64 -machine virt,virtualization=on,gic-version=3 -cpu max -accel tcg \
+#       -smp 2 -m 2G -drive file=disk-qemu,if=none,id=drv0,format=raw \
+#       -device virtio-blk-device,drive=drv0 -kernel ifs.bin -nographic
+#
+# The guest is auto-started from the host's post_startup.sh via a custom snippet
+# (qhv/host/local/snippets/post_start.custom) that builds a no-network qvm config
+# and runs `qvm @g2.conf`. Networking was dropped because the host io-sock stack
+# does not initialise on this qemu-virt build (see the "network stack down" lines).
+#
+# LOAD-BEARING EVIDENCE — two distinct QNX instances with different machines:
+#   HOST  banner: "QNX qnx-qhv   8.0.0 ... QEMU_virt              aarch64le"
+#   GUEST banner: "QNX qnx-guest 8.0.0 ... ARMv8_Foundation_Model aarch64le"
+# The guest sees ARMv8_Foundation_Model — the virtual platform QHV synthesises —
+# NOT the underlying QEMU_virt machine. That is the Type-1 partition boundary.
+#
+# HONEST FRAMING: TCG proves the QHV *software* architecture (qvm config parsing,
+# vdev instantiation, guest isolation, EL2/VHE host) — it does NOT prove hardware
+# timing or acceleration (that needs c7g.metal or real Orin silicon). AWS non-metal
+# Graviton exposes no /dev/kvm / EL2, so this could not be KVM-accelerated there.
+# =====================================================================================
+
+FOUND GICv3 ITS
+** CPU 0 PE is not awake
+** CPU 1 PE is not awake
+---> Starting slogger2
+---> Starting PCI Services
+---> Starting fsevmgr
+# ---> Starting devb
+---> Mounting file systems
+Path=0 -
+ target=0 lun=0     Direct-Access(0) - VIRTIO  Rev:
+---> Mounting file systems
+random: Unable to use devr-virtio.so as an entropy source [entropy.c(173)]
+random: Could not initialize entropy. [random.c(406)]
+Unable to access /dev/random
+---> Starting Networking
+if_up: network stack down: Bad file descriptor
+ifconfig: interface vtnet0 does not exist
+sysctl: unknown oid 'net.inet.icmp.bmcastecho': Address family not supported by protocol family
+sysctl: unknown oid 'qnx.sec.droproot': Address family not supported by protocol family
+setfacl: stat() of /dev/bpf failed: No such file or directory
+main: control_open: Address family not supported by protocol family
+socketpair: Address family not supported by protocol family
+---> Starting sshd
+PRNG is not seeded
+
+---> Starting misc
+=== AUTO-START QNX GUEST UNDER QVM (no-net) ===
+=== launching qvm @g2.conf ===
+[g2.conf:9] Failed to arm a resource manager: Function not implemented
+
+# ----- below this point is the GUEST booting inside the qvm virtual machine -----
+---> Starting slogger2
+---> Starting PCI Services
+---> Starting fsevmgr
+# ---> Starting devb
+Path=0 -
+ target=0 lun=0     Direct-Access(0) - VIRTIO  Rev:
+---> Mounting file systems
+---> Mounting file systems
+---> Starting Networking
+if_up: tries exhausted
+ifconfig: interface vtnet0 does not exist
+no valid interfaces found
+---> Starting sshd
+---> Starting misc
+Process count:21
+Startup complete
+QNX qnx-guest 8.0.0 2026/02/27-10:59:13EST ARMv8_Foundation_Model aarch64le

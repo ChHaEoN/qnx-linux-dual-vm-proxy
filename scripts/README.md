@@ -69,10 +69,17 @@ From the repo root in the same Cmd shell:
 scripts\build-qnx-ifs.bat
 ```
 
-Produces `qnx-safety-vm\output\ifs.bin` and
-`qnx-safety-vm\output\disk-qemu.vmdk`. These are gitignored. **Do
+Produces `qnx-safety-vm\output\ifs.bin`, `qnx-safety-vm\output\disk-qemu.vmdk`
+and `qnx-safety-vm\output\disk-qemu`. These are gitignored. **Do
 not commit them** — the QNX NCEULA forbids redistributing
 QNX-derived binaries.
+
+> ⚠️ **Split VMDK:** `disk-qemu.vmdk` is only a ~169-byte *descriptor*
+> (`monolithicFlat`) that points by relative name at the ~150 MB raw
+> extent `disk-qemu`. **Both files must travel together** or QEMU on the
+> runtime host cannot open the disk. (Alternatively, ignore the
+> descriptor and boot the raw extent directly:
+> `-drive file=output/disk-qemu,format=raw`.)
 
 ### 4. scp the IFS to the runtime host
 
@@ -81,6 +88,7 @@ From the Windows PC (OpenSSH ships with Windows 10/11):
 ```cmd
 scp qnx-safety-vm\output\ifs.bin           ubuntu@<runtime-host>:~/output/
 scp qnx-safety-vm\output\disk-qemu.vmdk    ubuntu@<runtime-host>:~/output/
+scp qnx-safety-vm\output\disk-qemu         ubuntu@<runtime-host>:~/output/
 ```
 
 Then continue with **steps 4–7 of the fallback path below** (provision
@@ -129,9 +137,11 @@ On the build host:
 ./build-qnx-ifs.sh
 ```
 
-Produces `qnx-safety-vm/output/ifs.bin` and
-`qnx-safety-vm/output/disk-qemu.vmdk`. These are the artifacts you
-will scp to the runtime host. **Do not commit them.**
+Produces `qnx-safety-vm/output/ifs.bin`, `qnx-safety-vm/output/disk-qemu.vmdk`
+and `qnx-safety-vm/output/disk-qemu`. These are the artifacts you
+will scp to the runtime host. **Do not commit them.** (`disk-qemu.vmdk`
+is only a descriptor pointing at the raw extent `disk-qemu` — both must
+travel together; see the split-VMDK note in the primary path above.)
 
 ### 4. Provision the runtime host (arm64 Graviton)
 
@@ -154,6 +164,7 @@ From the build host:
 ```bash
 scp qnx-safety-vm/output/ifs.bin           ubuntu@<runtime-host>:~/output/
 scp qnx-safety-vm/output/disk-qemu.vmdk    ubuntu@<runtime-host>:~/output/
+scp qnx-safety-vm/output/disk-qemu         ubuntu@<runtime-host>:~/output/
 ```
 
 ### 6. Set up the host bridge (runtime host)

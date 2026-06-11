@@ -14,7 +14,8 @@
 #
 # This script enforces the twin-sync invariants documented in
 # docs/digital-twin-design.md §3:
-#   - SHA-256 of ifs.bin and disk-qemu.vmdk recorded
+#   - SHA-256 of ifs.bin, disk-qemu.vmdk AND the raw extent disk-qemu recorded
+#     (disk-qemu.vmdk is only a descriptor pointing at disk-qemu; both travel)
 #   - Git SHA of the ipc-test/ source recorded
 #   - Both are verified on each destination after rsync
 # Any mismatch fails the run loudly.
@@ -34,14 +35,14 @@ if [[ -z "${ORIN_HOST}" ]]; then
 fi
 
 ifs_dir="qnx-safety-vm/output"
-if [[ ! -f "${ifs_dir}/ifs.bin" || ! -f "${ifs_dir}/disk-qemu.vmdk" ]]; then
-  echo "ERROR: IFS artefacts not found in ${ifs_dir}/. Run ./build-qnx-ifs.sh first." >&2
+if [[ ! -f "${ifs_dir}/ifs.bin" || ! -f "${ifs_dir}/disk-qemu.vmdk" || ! -f "${ifs_dir}/disk-qemu" ]]; then
+  echo "ERROR: IFS artefacts not found in ${ifs_dir}/ (need ifs.bin, disk-qemu.vmdk, disk-qemu). Run ./build-qnx-ifs.sh first." >&2
   exit 1
 fi
 
 # 1. Record canonical SHA-256
 echo "[1/4] Recording SHA-256 invariants ..."
-( cd "${ifs_dir}" && sha256sum ifs.bin disk-qemu.vmdk ) > "${ifs_dir}/SHA256SUMS"
+( cd "${ifs_dir}" && sha256sum ifs.bin disk-qemu.vmdk disk-qemu ) > "${ifs_dir}/SHA256SUMS"
 cat "${ifs_dir}/SHA256SUMS"
 
 # 2. Record git SHA (for the ipc-test sources)
@@ -52,13 +53,13 @@ echo "git SHA: ${git_sha}" > "${ifs_dir}/GIT_SHA"
 # 3. rsync to both runtime hosts
 echo "[3/4] Distributing to cloud runtime: ${CLOUD_RUNTIME_HOST} ..."
 rsync -avz --progress \
-  "${ifs_dir}/ifs.bin" "${ifs_dir}/disk-qemu.vmdk" \
+  "${ifs_dir}/ifs.bin" "${ifs_dir}/disk-qemu.vmdk" "${ifs_dir}/disk-qemu" \
   "${ifs_dir}/SHA256SUMS" "${ifs_dir}/GIT_SHA" \
   "${CLOUD_RUNTIME_HOST}:~/output/"
 
 echo "[3/4] Distributing to HW twin: ${ORIN_HOST} ..."
 rsync -avz --progress \
-  "${ifs_dir}/ifs.bin" "${ifs_dir}/disk-qemu.vmdk" \
+  "${ifs_dir}/ifs.bin" "${ifs_dir}/disk-qemu.vmdk" "${ifs_dir}/disk-qemu" \
   "${ifs_dir}/SHA256SUMS" "${ifs_dir}/GIT_SHA" \
   "${ORIN_HOST}:~/output/"
 
