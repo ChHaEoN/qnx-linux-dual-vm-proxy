@@ -1,0 +1,31 @@
+# rmgr-policy.table — TSR-RMGR-001 per-resource-manager boot policy.
+#
+# Phase 1 (study-level, dev-twin policy). Maps each manifested resource
+# manager to the action the bring-up verifier takes when that RM fails to
+# arm. '#' comments and blank lines ignored.
+#
+# Field 1: rmgr token (must match an entry in rmgr.manifest)
+# Field 2: policy, one of:
+#            block    -> arm failure BLOCKS bring-up (exit non-zero)
+#            degrade  -> arm failure ANNUNCIATED, bring-up continues (flag set)
+#            ignore   -> arm failure tolerated by explicit reviewed exception
+#
+# Per the FuSa §6 dev-twin policy (TSR-RMGR-001 OQ-A1 disposition):
+# annunciate-and-allow for the dev twin only; the SAME condition is "block"
+# on any leg that asserts a safety claim. The default for an RM not listed
+# here is "block" (fail-loud). Each "ignore"/"degrade" below is an explicit,
+# reviewed dev-twin exception, NOT a silent allowance.
+#
+# Networking is "degrade": the host io-sock stack does not initialise on this
+# qemu-virt build (NF-9 / TSR-NET-001), the net path is inert by design, and
+# the guest is launched no-network on purpose. Recorded loud, allowed for the
+# dev twin. sshd is "degrade" because TCR-ENT-001 fail-secure may itself
+# withhold sshd (entropy gate) — that is a correct outcome, not a bring-up
+# block. slogger2/PCI/fsevmgr are "block": no diagnostics / no storage / no
+# bus = no trustworthy bring-up.
+
+slogger2      block
+PCI Services  block
+fsevmgr       block
+Networking    degrade
+sshd          degrade

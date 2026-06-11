@@ -1,0 +1,25 @@
+# vdev.manifest — TSR-VDEV-001 expected virtual-device set for the QHV guest.
+#
+# Phase 1 (study-level). One vdev id per line; '#' comments and blank lines
+# ignored. These are the vdevs the no-network g2.conf in post_start.custom
+# declares for the guest synthetic platform (ARMv8_Foundation_Model). The
+# verifier reconciles this DECLARED set against what the boot log shows the
+# guest actually instantiated.
+#
+# Field 1: vdev id (matched in g2.conf / boot log)
+# Field 2: guest-side presence token expected in the boot log when the vdev
+#          is live (or "-" if presence cannot be confirmed from the serial
+#          log on this leg — recorded as presence-unknown, not failure).
+#
+# NOTE: the net path is INERT on this leg (host io-sock down). virtio-net is
+# intentionally ABSENT from g2.conf, so it is NOT manifested here — see
+# TCR-HYP-001 least-vdev. If a future build adds it, add it here too.
+
+# pl011 / virtio-console: the guest console is demonstrably live (the guest
+# prints its banner), but the QNX serial log emits no clean per-device token
+# for them, so presence is recorded as UNKNOWN ('-') rather than asserted or
+# false-failed. virtio-blk presence IS evidenced by the guest "Direct-Access
+# ... VIRTIO" devb line, so it carries a real token.
+pl011           -
+virtio-console  -
+virtio-blk      VIRTIO

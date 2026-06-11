@@ -623,3 +623,381 @@ T23 (AV quarantines IFS mid-build) is the most novel addition — it is a *non-m
 - The new Windows-native attack surfaces (OneDrive sync behaviour, Defender quarantine likelihood, SmartScreen submission rate, NTFS ACL drift on `%USERPROFILE%\.ssh\`) have been **enumerated, not measured**. None of T22..T28 has been verified under real Windows-build conditions in this repo. Phase 1 implementation/test work could measure (for example) whether `mkqnximage` outputs actually trigger Defender quarantine on a default-configured Windows 11 host — but until that data exists, the feasibility ratings here are illustrative.
 - The **net security delta vs. the old EC2 topology has NOT been quantified.** This amendment lists removed surfaces (the EC2 IMDS / IAM-role / keypair / snapshot exfiltration) and added surfaces (T22..T28) but it deliberately does not collapse them into a single "the pivot is/is not a security improvement" verdict. That comparison requires a probability-weighted apples-to-apples model the project does not have. The honest framing is: the pivot is a **cost/friction optimisation whose net security effect is non-obvious**, and the asymmetric blast-radius concern in T28 is the single biggest reason a real programme might push back on the pivot regardless of the cost win.
 - The fallback EC2 path has **not** been re-analysed in this amendment. Its Phase 0 ratings (T1..T21) still apply when the user takes the fallback. There is no "merged" rating that combines both paths — the choice of build host changes which threat list is in force.
+
+---
+
+## Phase-1 Gate Addendum (2026-06-11) — TARA reconciliation with the as-built QHV/TCG boundary
+
+> **Study-level only; not 21434 evidence. TARA here is illustrative,
+> not the work-product a real programme would audit.**
+
+This addendum reconciles the Phase-1 TARA with what was **actually
+built** at the Phase-1 gate, recorded in the 2026-06-11 findings entry
+(*"QNX Hypervisor (QHV) boots a QNX guest under QEMU-TCG"*) and
+evidenced in
+[../../logs/sample-boot/qhv-tcg-host-and-guest-boot.log](../../logs/sample-boot/qhv-tcg-host-and-guest-boot.log).
+The TARA body (§1–§9) and the 2026-05-07 amendment (§A–§H) analysed an
+architecture that the as-built leg has **partially falsified**. Per the
+honest-framing and hard rules: this is a Cyber-Analysis (TARA)
+deliverable — it **FINDS threats and rates feasibility**; it does
+**not** propose mitigations (that is Cyber-Design's deliverable).
+
+The prior sections are **preserved verbatim** for audit traceability.
+This addendum describes only the *delta*: which boundary/assets/threats
+the as-built config changes, the **new threat scenarios** it
+introduces, and the new risk rows. New threat IDs continue at **T29**
+in the same rating style. New asset IDs continue at **A12**.
+
+### AA. Item / boundary delta (as-built vs. TARA-body assumption)
+
+The TARA body and §A–§H assumed a **KVM-accelerated dual-VM** item on
+an AWS Graviton runtime host: a QNX guest **and** a Linux guest as two
+co-equal VMs under QEMU/KVM, virtio-net IPC over a Linux bridge `br0` +
+`tap-qnx`/`tap-linux`, with an x86_64 (then Windows) build host
+producing the IFS. The as-built Phase-1 cloud leg is materially
+different:
+
+| Dimension | TARA-body / §A–§H assumption | As-built (2026-06-11) | Consequence for the model |
+|---|---|---|---|
+| Acceleration | QEMU/**KVM** on Graviton (EL2 passthrough) | QEMU-**TCG** pure emulation of an EL2-capable `-cpu max` | The host-kernel-KVM TCB assumption (§1.2) is **not exercised**; the new TCB root is the `qvm` hypervisor process itself. KVM acceleration deferred to Phase 3 (Orin). |
+| Hypervisor model | None ("no Type-1 hypervisor", per CLAUDE.md) — KVM host-mediated | **QHV `qvm` Type-1 hypervisor** synthesising a guest partition | A genuine Type-1 partition boundary (host `QEMU_virt` ↔ guest `ARMv8_Foundation_Model`) now exists **in software** and is the central new attack surface. |
+| Guests | QNX guest **+** Linux guest (peer VMs, not mutually trusted) | **QNX host (`qnx-qhv`) + QNX guest (`qnx-guest`)**; **no Linux guest** | All Linux-guest assets/threats (A2, A4; T6, T7, T8, T9, T10) **defer** — they are not present in the as-built leg. |
+| IPC / network | virtio-net over `br0` + `tap-qnx`/`tap-linux`, live in Phase 2 | **Inert** — host io-sock stack down (`network stack down`, `Address family not supported`); qvm config ran **no-network** | The entire bridge/tap data-path asset+threat cluster (A5, A6; T1, T2, T3, T4, T8, T9, T11, T12, T13, T14, T15) **defers** for this leg. New IPC surface is the **qvm vdev / synthetic-platform** boundary, not `br0`. |
+| Runtime location | AWS cloud (c7g.large Graviton) | **Local Windows build host**, QEMU-TCG; **no AWS in the demonstrated leg** | The build host **is** the runtime host in this leg. The Windows-host asset/threat surface (§A–§H: A11; T22–T28) is **retained and now also hosts execution**, not just the build. |
+| Build host | x86_64 → (§A–§H) Windows | Windows (SDP 8.0.4, `C:\Users\andy8\qnx800`) | Unchanged from §A–§H; T22–T28 remain in force. |
+
+**Honest framing of the boundary delta:** the as-built leg demonstrates
+the **QHV software attack surface** (qvm config parsing, vdev
+instantiation, guest isolation, EL2/VHE host bring-up) — it does **NOT**
+demonstrate a hardware-isolation boundary. TCG emulates EL2 on a laptop;
+there is no real RoT, no fuse-backed measured boot, no hardware
+partitioning, and no timing/acceleration fidelity. A guest→host escape
+found here is a finding about the *qvm software*, not a claim about
+silicon-level isolation. Conversely, the *absence* of an escape here
+proves nothing about hardware behaviour. The threats below are scoped
+strictly to the software surface the as-built config exercises.
+
+### AB. Asset-list delta
+
+Phase-0 assets A1, A8, A9 (IFS binary, SDP install tree, build
+scripts/repo) and §A–§H asset A11 (Windows user-profile) are
+**retained** — they remain in the as-built leg. The following assets
+are **added** (A12+) or **deferred** (present in the model but not
+exercised in this leg).
+
+**New / changed assets:**
+
+| ID | Asset | Owner / Location | C | I | A | Au | Az | NR |
+|----|-------|------------------|---|---|---|----|----|----|
+| A12 | **QHV `qvm` hypervisor process** (the Type-1 host; TCB root for the guest partition) | QNX host `qnx-qhv`; `target/qnx/aarch64le/sbin/qvm` + `libhyp` | M | **H** (its integrity == the partition boundary integrity) | **H** (its availability == guest availability) | **H** | **H** (it authorises every guest vdev access / EL2 trap) | L |
+| A13 | **`g2.conf` qvm configuration file** (defines guest memory map, vdevs, vCPU, image path) | QNX host fs; auto-generated by `post_start.custom` snippet | M | **H** (controls guest isolation & resource grants) | M | **H** | **H** | L |
+| A14 | **Synthetic-platform vdev interface** (the `ARMv8_Foundation_Model` virtual devices qvm presents to the guest: virtio-blk, console, etc.) | qvm-internal; guest↔host shared rings | M | **H** (a malformed vdev access is the classic escape primitive) | **H** | M | **H** | L |
+| A15 | **Guest↔host EL2 boundary** (trap-and-emulate path; the partition boundary itself) | qvm / EL2 (here: TCG-emulated EL2/VHE) | M | **H** | **H** | **H** | **H** | L |
+| A16 | **Embedded guest image under `/data/hypervisor/`** (the guest IFS/disk that `--type=qemu --qvm=yes --guest=<dir>` bakes into the host image) | QNX host fs; staged at build time on the Windows host | M (NCEULA, as A1) | **H** (boot integrity of the guest partition) | M | **H** | M | L |
+| A17 | **Host entropy / PRNG state** (the host RNG that seeds host **and** guest crypto, incl. sshd host keys / session keys at boot) | QNX host kernel `random`/`/dev/random` | **H** (predictable RNG output undermines all derived key material) | **H** | M | **H** | M | L |
+
+A17 is promoted to a first-class asset specifically because the boot log
+shows it **failing** (see T31). It was implicit (inside A3 "guest
+runtime state") in the body; the as-built evidence makes it load-bearing
+on its own.
+
+**Deferred assets (modelled but not exercised in the as-built leg):**
+
+- **A2** Ubuntu cloudimg, **A4** Linux guest runtime state — **no Linux
+  guest** in this leg. Defer to whichever future leg reintroduces a
+  Linux compute partition (Phase 2/3).
+- **A5** virtio-net frames on `br0`, **A6** `br0` configuration — the
+  network path **did not come up**; no bridge/tap exists in this leg.
+  Defer.
+- **A7** SSH keys / **A10** KVM/QEMU process boundary — A7 still applies
+  to the (unused, in this leg) scp-to-Graviton path; A10's *KVM*
+  framing is superseded by A12 (`qvm`) for the as-built leg, though the
+  outer `qemu-system-aarch64 -accel tcg` process boundary on the
+  Windows host is a real (TCG, not KVM) container around the whole stack.
+
+Deferring an asset is **not** retiring it: the moment a future leg
+restores KVM, the Linux guest, or the bridge, the corresponding
+A2/A4/A5/A6 rows and their T-IDs re-activate at their existing ratings.
+
+### AC. New threat scenarios (T29–T34)
+
+Same 5-factor feasibility scheme as §5 (ET / SE / KoT / WoO / Eq, each
+L/M/H; predominantly-L ⇒ High feasibility). Same impact dimensions
+(S/F/O/P) as §4. **[CFI]** = candidate for joint cyber-FuSa interaction
+review. Attacker model, unless stated, is **a process with code
+execution inside the QNX guest partition** (the realistic hypervisor
+threat model: the guest is assumed potentially hostile and the question
+is whether it stays contained) — *plus*, for config/supply-chain
+threats, an attacker who can influence the host filesystem on the
+Windows build/runtime machine (the §A–§H foothold model).
+
+#### QHV hypervisor / partition boundary
+
+- **T29 [T][CFI]** — *Malicious or malformed `g2.conf` (A13) mis-configures
+  the guest partition or compromises the qvm host.* The as-built config
+  is **auto-generated at host boot** by a custom `post_start.custom`
+  snippet, then consumed by `qvm @g2.conf`. A tampered or malformed
+  config can (a) grant the guest a wider memory window / extra vdev than
+  intended (mis-isolation), (b) point the guest-image path at an
+  attacker-substituted image (chains to T33), or (c) trigger a
+  config-parser fault in qvm. The boot log already shows one
+  config-driven host-side fault:
+  `[g2.conf:9] Failed to arm a resource manager: Function not implemented`
+  — evidence that g2.conf directives reach privileged host paths and can
+  fail there (availability angle: see T34).
+  - Path: attacker writes/edits `g2.conf` (or the snippet that emits it)
+    on the host fs → qvm parses attacker-controlled directives at boot →
+    over-broad grant or parser fault.
+  - ET: M, SE: M (must understand qvm config grammar + vdev model), KoT:
+    M, WoO: M (boot-time / host-fs-write window), Eq: L → **Feasibility:
+    Medium**.
+  - Impact: S **H** (CFI: mis-isolated or mis-resourced Safety guest), F
+    M, O **H**, P L → Max **H**.
+  - Risk **4**. CFI: yes.
+
+- **T30 [E][CFI]** — *Guest→host escape across the qvm vdev /
+  synthetic-platform boundary (A14/A15).* The central hypervisor threat.
+  The guest sees the synthetic `ARMv8_Foundation_Model` platform; every
+  device it touches (virtio-blk `disk-qemu`, console, any synthesised
+  vdev) is a trap-and-emulate surface handled by privileged qvm host
+  code. A malformed descriptor ring, an out-of-bounds DMA-like offset, a
+  vdev MMIO access qvm mishandles, or an EL2 trap path bug lets hostile
+  guest code read/write host memory or execute in the host context —
+  collapsing the partition boundary that is the entire point of the
+  Type-1 model.
+  - Path: hostile code in `qnx-guest` → crafts malformed vdev
+    access / descriptor → qvm host-side handler bug → host memory
+    disclosure or code execution at host privilege.
+  - ET: H, SE: H (hypervisor escape-class expertise; vdev internals),
+    KoT: H (need qvm/vdev implementation knowledge — closed source,
+    NCEULA), WoO: M (continuous once guest runs), Eq: M → **Feasibility:
+    Low**.
+  - Impact: S **H** (CFI: host pwn == loss of the partition boundary ==
+    both partitions), F M, O **H**, P M → Max **H**.
+  - Risk **3**. CFI: yes. *This is the highest-impact, lowest-feasibility
+    threat in the addendum — structurally analogous to the deferred
+    KVM-escape threats T5/T10/T15, but now against `qvm` rather than KVM,
+    and now demonstrable as a software surface (not assumed-away TCB).*
+
+#### Entropy / boot-time crypto weakness (concrete as-built finding)
+
+- **T31 [I][S][CFI]** — *PRNG-not-seeded yet sshd-started → predictable
+  host keys / weak session crypto at boot (A17).* This is a **concrete,
+  evidenced** weakness, not a hypothetical. The boot log shows, on **both
+  host and guest**:
+  `random: Could not initialize entropy`, `Unable to access /dev/random`,
+  and `PRNG is not seeded` — immediately followed by `---> Starting sshd`.
+  An sshd that generates or uses host keys / session material while the
+  PRNG is unseeded can produce **low-entropy, predictable, or
+  cross-boot-repeating key material**. The classic damage shape
+  (cf. the 2008 Debian OpenSSL and embedded "factory-default host key"
+  classes): an attacker who can predict or enumerate the key space can
+  impersonate the host (spoofing), or recover/replay session keys to
+  decrypt or MITM the SSH channel (information disclosure). Because the
+  *same* unseeded condition affects host and guest, the weakness is
+  **common-cause** across the partition boundary.
+  - **Damage scenario:** predictable sshd host key on `qnx-qhv` (and
+    `qnx-guest`) → (a) attacker pre-computes / brute-forces the host key
+    and impersonates the management endpoint, harvesting any credential a
+    developer presents; or (b) weak session keying allows passive
+    decryption of the management session, exposing anything that session
+    carries (commands to the host, future scp of NCEULA-restricted
+    images). Safety angle: the SSH channel is the host/guest *management*
+    path; a spoofed or decrypted management channel is a route to
+    influence the Safety partition's host — hence CFI.
+  - Path: boot reaches `Starting sshd` while `PRNG is not seeded` →
+    sshd derives host/session key material from a degenerate RNG →
+    attacker predicts/enumerates/recovers the key → host impersonation or
+    session compromise. No guest-escape needed; reachable from any party
+    who can reach the sshd port once networking exists.
+  - ET: M (key prediction/enumeration depends on how degenerate the seed
+    is — unmeasured here), SE: M, KoT: M, WoO: M (keys fixed at each
+    boot; persistent if keys are persisted to the image), Eq: L →
+    **Feasibility: Medium** (rated conservatively; could be **High** if
+    the unseeded state proves fully deterministic — unmeasured, see
+    honest-framing).
+  - Impact: S M (CFI: management-channel compromise reaches the host of
+    the Safety partition), F M (NCEULA blob exposure if it transits the
+    weak channel), O M, P M → Max **M**.
+  - Risk **3** (Medium impact × Medium feasibility). **Flagged as the
+    most important *concrete* finding in this addendum** — the others are
+    structural/architectural; this one is observed in the as-built log.
+    Note: in the as-built leg networking is inert, so the *remote*
+    exploit path is currently latent; the **defect (unseeded crypto at
+    sshd start)** is nonetheless real and present in the image and
+    becomes live the instant networking comes up. Rated on the
+    networking-up assumption with the latency noted.
+
+#### Supply-chain / integrity of the embedded guest image
+
+- **T32 [T][CFI]** — *Tampered embedded guest image under
+  `/data/hypervisor/` (A16) → the qvm host boots an attacker-controlled
+  guest partition.* The `--type=qemu --qvm=yes --guest=<dir>` build bakes
+  the guest IFS/disk into the host image under `/data/hypervisor/`, on
+  the **Windows build host** (inheriting the full T22–T28 build-host
+  surface). A tampered guest image is booted *trustingly* by qvm — there
+  is no guest-image signature check in this study (cf. security-model.md
+  §3, "Guest IPL signature check: No"). This is the QHV-specific analogue
+  of T17 (tampered IFS) and T33's host-side twin, but it targets the
+  *guest* partition image specifically and rides the existing Windows
+  build-host threats.
+  - Path: any of T22/T23/T25/T26/T28 (or direct edit of the staged guest
+    dir) tampers the guest image before `mkqnximage` bakes it → host
+    image embeds a backdoored guest → qvm boots it as the Safety
+    partition.
+  - ET: M, SE: M, KoT: M, WoO: M (build-time), Eq: L → **Feasibility:
+    Medium**.
+  - Impact: S **H** (CFI: corrupted Safety guest partition), F M, O **H**,
+    P L → Max **H**.
+  - Risk **4**. CFI: yes. *Inherits T23's specific concern: even a
+    non-malicious AV quarantine of the guest blob mid-bake yields a
+    truncated-but-bootable guest partition.*
+
+#### Availability of the qvm host bring-up path
+
+- **T34 [D][CFI]** — *qvm host-side resource-manager arm failure as an
+  availability/DoS surface (A12).* The boot log shows
+  `[g2.conf:9] Failed to arm a resource manager: Function not implemented`
+  on the **host** during `qvm @g2.conf`. This is a concrete evidenced
+  fault on the privileged host bring-up path: a config directive reaches
+  a host resource-manager arm that is not implemented on this build and
+  fails. Generalised: a config-reachable or guest-reachable code path
+  that faults the qvm host (or a vdev backend, or the resource-manager
+  registration) is an availability surface — if it can be driven to abort
+  qvm or wedge a vdev, the guest partition stalls or never starts (the
+  guest *did* reach `Startup complete` here, so this particular failure
+  was non-fatal — but it proves the class of host-bring-up faults exists
+  and is reachable from config).
+  - Path: malformed/edge-case `g2.conf` directive (T29) **or** a
+    guest-driven vdev pattern → host resource-manager / vdev arm fault →
+    qvm host degrades or aborts → loss of guest (Safety) partition
+    availability.
+  - ET: L (a config edge case is cheap to reach), SE: M (need to know
+    which directive faults the arm), KoT: M, WoO: M, Eq: L →
+    **Feasibility: Medium** (toward High for the config-driven variant,
+    given an evidenced fault already exists).
+  - Impact: S **H** (CFI: loss of Safety-partition availability is a
+    hazard pattern, mirroring T4 on the new boundary), F L, O **H**, P L →
+    Max **H**.
+  - Risk **4**. CFI: yes.
+
+### AD. Damage scenarios (T29–T34 summary)
+
+| Threat | S | F | O | P | Notes |
+|--------|---|---|---|---|-------|
+| T29 g2.conf tamper/malformed | **H** (CFI: mis-isolated/mis-resourced Safety guest) | M | **H** | L | Config reaches privileged host paths (evidenced). |
+| T30 guest→host escape (vdev/EL2) | **H** (CFI: partition boundary collapse) | M | **H** | M | Highest impact; lowest feasibility. |
+| T31 PRNG-unseeded + sshd | M (CFI: management-channel compromise) | M (NCEULA blob via weak channel) | M | M | Only *evidenced concrete* crypto defect; common-cause host+guest. |
+| T32 tampered `/data/hypervisor/` guest image | **H** (CFI: corrupted Safety partition) | M | **H** | L | Rides T22–T28; no guest-image signature check. |
+| T34 qvm resource-mgr arm fault (DoS) | **H** (CFI: loss of Safety-partition availability) | L | **H** | L | Evidenced non-fatal fault proves the class. |
+
+### AE. Risk table (T29–T34)
+
+Same coarse 21434-style Impact×Feasibility matrix as §6 (5 = highest).
+
+| Threat | Impact | Feasibility | **Risk** | Cyber-FuSa flag |
+|--------|--------|-------------|----------|-----------------|
+| T29 Malicious/malformed `g2.conf` → mis-isolation or host fault | H | Medium | **4** | YES |
+| T32 Tampered embedded guest image under `/data/hypervisor/` | H | Medium | **4** | YES |
+| T34 qvm resource-manager arm fault → Safety-partition DoS | H | Medium | **4** | YES |
+| T30 Guest→host escape across qvm vdev / EL2 boundary | H | Low | **3** | YES |
+| T31 PRNG-not-seeded + sshd-started → predictable/weak host keys | M | Medium | **3** | YES |
+
+**Top-of-stack for the as-built leg:**
+1. **T29 / T32 / T34** (Risk 4, CFI) — the config-integrity (T29),
+   guest-image-integrity (T32), and host-availability (T34) threats that
+   sit directly on the new qvm partition boundary. T34 and T29 are
+   partly *evidenced* by faults already visible in the boot log.
+2. **T30** (Risk 3, CFI) — the canonical guest→host escape; highest
+   impact, lowest feasibility, and the threat the whole Type-1 framing
+   exists to resist.
+3. **T31** (Risk 3, CFI) — the single **concrete, observed** crypto
+   weakness (PRNG-unseeded sshd start); rated Medium feasibility with an
+   explicit note it could be higher if the unseeded state proves
+   deterministic.
+
+Note on cross-leg comparison: the prior top-of-stack risks (T4 bridge
+flood, T23 AV quarantine, T28 single-machine blast radius) are **not
+retired**. T4 **defers** (no bridge in this leg). T23/T28 **remain
+live** because the Windows build host still builds the IFS *and* the
+embedded guest image (T32 explicitly inherits them). The as-built leg
+therefore *adds* the qvm-boundary risks on top of the still-present
+build-host risks; it does not replace them.
+
+### AF. Cyber-FuSa interaction candidates (addendum additions)
+
+New CFI-flagged threats: **T29, T30, T31, T32, T34** (all of them). The
+strongest cyber-FuSa joins for the parallel FuSa-Analysis HARA:
+- **T34 ↔ T4 / HE-02/03/06** (loss of Safety-partition availability) —
+  the qvm-boundary analogue of the bridge-flood availability hazard.
+- **T32 ↔ K2** (wrong/cached IFS) — now extended to the *guest
+  partition* image baked under `/data/hypervisor/`.
+- **T31** — a corrupted/predictable management-channel crypto state that
+  is *common-cause across host and guest* (both unseeded) is a DFA-style
+  common-cause pattern FuSa should see.
+
+### AG. Honest framing — what this addendum does NOT demonstrate
+
+- **TCG-on-a-laptop is a software surface, not a hardware boundary.**
+  Every qvm-boundary threat (T29, T30, T34) is a finding about the
+  **qvm software** (config parser, vdev backends, EL2/VHE trap paths) as
+  exercised under emulation. It demonstrates the *attack surface exists
+  and is reachable*; it demonstrates **nothing** about real
+  hardware-partition isolation, RoT, fuse-backed secure boot, or timing.
+  A real DRIVE OS hypervisor analysis would run against silicon EL2 with
+  a hardware RoT in scope. (Pairs with CLAUDE.md "no Type-1 partition
+  isolation … KVM-on-Linux is host-mediated, not certified Type-1" — and
+  note QHV here is real *software* Type-1, but **not** hardware-isolated
+  in this leg.)
+- **The entropy finding is evidenced but not characterised.** T31 cites
+  observed log lines (`PRNG is not seeded`, sshd started anyway). It does
+  **not** measure how degenerate the seed actually is, whether host keys
+  are regenerated per boot or persisted, or whether the weak keys are
+  ever exposed (networking is inert in this leg). The Medium feasibility
+  is conservative expert judgement; verification of actual key entropy is
+  Cyber-Verification's job, not done here.
+- **The escape threat T30 is enumerated, not attempted.** No fuzzing of
+  the vdev interface, no exploitation attempt, no qvm source review was
+  performed. The Low feasibility reflects the difficulty *and* the
+  closed-source/NCEULA knowledge barrier — not a demonstrated
+  containment guarantee.
+- **No quantitative likelihood data**, single-developer review, and
+  study-level L/M/H ratings — same caveats as §8 carry forward.
+- **This addendum does not net the as-built leg against the
+  KVM/dual-VM/bridge leg into a single verdict.** It records which
+  assets/threats defer and which are added; it does not claim the
+  as-built leg is "more" or "less" secure than the original design.
+
+### AH. Open questions for Cyber-Design (additions; Cyber-Analysis does NOT answer these)
+
+- **OQ-11**: What integrity binding should `g2.conf` (A13) carry, given
+  it is **auto-generated at host boot** by a custom snippet and then
+  drives privileged qvm host paths (T29/T34)? (Config signing,
+  generation-time validation, a minimal/locked-down config schema —
+  Cyber-Design's call.)
+- **OQ-12**: Should the embedded guest image under `/data/hypervisor/`
+  (A16) be signature-verified by the qvm host before boot (T32), given
+  security-model.md §3 currently records "Guest IPL signature check:
+  No"? Where does the trust anchor live in a no-RoT TCG leg vs. a future
+  Orin silicon leg?
+- **OQ-13**: **Entropy provisioning before sshd start (T31).** What
+  should gate `Starting sshd` on a seeded PRNG, and how is entropy
+  provisioned on a QNX qemu-virt build where `devr-virtio.so` is rejected
+  as an entropy source and `/dev/random` is inaccessible? Is host-key
+  regeneration-per-boot vs. persisted-key the safer posture here?
+- **OQ-14**: How should the **guest→host vdev/EL2 boundary** (T30) be
+  hardened or argued-down for a *study-level* programme — minimal vdev
+  set, locked-down synthetic platform, or accepted as residual TCB risk
+  the way KVM-escape (T5/T10/T15) was accepted in §1.2? Which framing is
+  honest given qvm here is real Type-1 *software* but TCG-emulated EL2?
+- **OQ-15**: Is the `qvm` host the right place to draw a **secure-boot /
+  measured-boot** boundary (the host image embeds and launches the guest
+  partition), and how should that be framed against the existing
+  security-model.md §3 secure-boot gap table, which predates the QHV
+  pull-forward and has no hypervisor row populated for the cloud leg?
+- **OQ-16**: How should Cyber-Design treat the qvm host-bring-up
+  availability surface (T34) — is the `Failed to arm a resource manager`
+  fault a config-robustness requirement on qvm, a build-completeness
+  issue (missing package, cf. the 2026-06-10 `target.qemuvirt`
+  finding), or both? Coordinate with FuSa-Design (loss-of-Safety-partition
+  availability overlaps T4 / HE-02/03/06).

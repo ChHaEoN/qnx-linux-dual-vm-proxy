@@ -85,6 +85,26 @@ if errorlevel 1 (
   exit /b 1
 )
 
+REM ---- TSR-PKG-001(a): package-completeness assertion -----------------------
+REM The aarch64 qemu-virt IFS must include the startup-qemu-virt binary
+REM (via the com.qnx.qnx800.target.qemuvirt package). A missing startup
+REM binary yields an IFS that boots the WRONG / no image (cf. the 2026-06-10
+REM target.qemuvirt finding). Assert presence before declaring success.
+echo Asserting package completeness (startup-qemu-virt present) ...
+set "startup_found="
+if exist "%QNX_TARGET%\aarch64le\sbin\startup-qemu-virt" set "startup_found=1"
+if exist "%QNX_TARGET%\aarch64le\boot\sys\startup-qemu-virt" set "startup_found=1"
+findstr /m /c:"startup-qemu-virt" "%build_dir%\*.build" >nul 2>&1 && set "startup_found=1"
+if not defined startup_found (
+  echo ERROR: TSR-PKG-001 package-completeness check FAILED.
+  echo        startup-qemu-virt not found in the SDP target or build manifest.
+  echo        Install com.qnx.qnx800.target.qemuvirt via QNX Software Center.
+  echo        See scripts\qhv\README.md prerequisites.
+  popd
+  exit /b 1
+)
+echo   OK: startup-qemu-virt present.
+
 echo.
 echo Build complete. Artifacts in %CD%\output\:
 if exist output\ifs.bin        dir /b output\ifs.bin

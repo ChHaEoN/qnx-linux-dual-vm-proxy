@@ -59,6 +59,30 @@ mkqnximage \
   --hostname=qnx-safety \
   --build
 
+# ---- TSR-PKG-001(a): package-completeness assertion --------------------------
+# The aarch64 qemu-virt IFS must include the startup-qemu-virt binary (via the
+# com.qnx.qnx800.target.qemuvirt package). A missing startup binary yields an
+# IFS that boots the WRONG / no image (cf. the 2026-06-10 target.qemuvirt
+# finding). Assert presence before declaring success.
+echo "Asserting package completeness (startup-qemu-virt present) ..."
+startup_found=""
+for cand in \
+    "${QNX_TARGET:-}/aarch64le/sbin/startup-qemu-virt" \
+    "${QNX_TARGET:-}/aarch64le/boot/sys/startup-qemu-virt"; do
+  [ -n "${QNX_TARGET:-}" ] && [ -f "$cand" ] && startup_found=1
+done
+if [ -z "$startup_found" ] && ls ./*.build >/dev/null 2>&1; then
+  grep -lq 'startup-qemu-virt' ./*.build 2>/dev/null && startup_found=1
+fi
+if [ -z "$startup_found" ]; then
+  echo "ERROR: TSR-PKG-001 package-completeness check FAILED." >&2
+  echo "       startup-qemu-virt not found in the SDP target or build manifest." >&2
+  echo "       Install com.qnx.qnx800.target.qemuvirt via QNX Software Center." >&2
+  echo "       See scripts/qhv/README.md prerequisites." >&2
+  exit 1
+fi
+echo "  OK: startup-qemu-virt present."
+
 echo
 echo "Build complete. Artifacts in ${PWD}/output/:"
 ls -lh output/ifs.bin output/disk-qemu.vmdk output/disk-qemu 2>/dev/null || true

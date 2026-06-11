@@ -1,0 +1,42 @@
+# g2.conf.allow — TCR-CFG-001 locked-down allow-list for the auto-generated
+# qvm guest config (g2.conf).
+#
+# Phase 1 (study-level). validate-g2conf.sh validates the g2.conf emitted by
+# post_start.custom against this allow-list BEFORE `qvm @g2.conf` runs, and
+# fails CLOSED on any directive whose leading keyword is not listed here.
+# This is the implementable FLOOR (validate-against-locked-template).
+#
+#   study-only ceiling: in a real programme the config would additionally be
+#   cryptographically SIGNED and the signature verified against a key in a
+#   hardware-backed store before qvm consumes it. No RoT exists on the TCG
+#   leg, so signing is NOT implemented here (see TCR-CFG-001 / TCR-SB-001).
+#
+# Format: one allowed directive keyword per line. A g2.conf line is allowed
+# iff its first whitespace-delimited token (after leading indentation) is in
+# this set. '#' comments and blank lines ignored. Matching is exact on the
+# keyword; this bounds WHICH directives may ever appear, implementing
+# least-vdev (TCR-HYP-001): any vdev/keyword not listed is forbidden.
+#
+# Keywords below are exactly those emitted by the no-network g2.conf in
+# post_start.custom. virtio-net is intentionally NOT allowed (least-vdev /
+# inert net path). Adding a keyword here is a reviewed config-surface change.
+
+# --- allowed directive keywords (first token of a g2.conf line) ---
+system
+ram
+cpu
+load
+vdev
+hostdev
+loc
+intr
+name
+
+# --- allowed vdev TYPES (second token of a 'vdev <type>' line) ---
+# Prefixed 'vdev:' so the validator can enforce least-vdev at the type level,
+# not just the keyword level: 'vdev passthru' is rejected even though 'vdev'
+# is an allowed keyword. virtio-net is intentionally absent (inert net path /
+# TCR-HYP-001 least-vdev).
+vdev:pl011
+vdev:virtio-console
+vdev:virtio-blk

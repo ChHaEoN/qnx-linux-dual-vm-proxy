@@ -1,0 +1,19 @@
+# rmgr.manifest — TSR-RMGR-001 expected host resource managers / bring-up
+# services that must report successful arming before guest auto-start.
+#
+# Phase 1 (study-level). One entry per line; '#' comments and blank lines
+# ignored. Each entry is the start-marker token the QHV host startup emits
+# (matched against the boot log's "---> Starting <X>" lines). The verifier
+# asserts each manifested rmgr both STARTED and did not subsequently report
+# an arm failure ("Failed to arm a resource manager").
+#
+# Tokens match the host-side startup section of the boot log (above the
+# "===== guest booting inside qvm =====" split).
+#
+# Field 1: rmgr token (substring of the host startup line)
+
+slogger2
+PCI Services
+fsevmgr
+Networking
+sshd

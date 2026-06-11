@@ -8,6 +8,45 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 
 ---
 
+## 2026-06-11 — Phase-1 gate: full FuSa + Cyber V-model cycle on the as-built QHV boundary (Analysis → Design → Implementation → Verification)
+
+Ran the Phase-1 phase-gate review against the *as-built* QHV/TCG boundary —
+not the original KVM dual-VM premise, which the QHV pull-forward falsified.
+Both safety and security disciplines completed a full V-model loop and
+pair-reviewed the cyber-FuSa interaction. **Analysis** appended dated
+gate addenda: FuSa added 9 new failure modes (NF-1…NF-9) and deferred ~20
+KVM/br0/Linux-guest rows to Phase 2/3
+([`../skills/fmea/examples/phase1-cloud-bringup-fmea.md`](../skills/fmea/examples/phase1-cloud-bringup-fmea.md));
+Cyber added 6 threats (T29–T34) + 6 assets with `qvm` as the new TCB root
+([`tara/phase1-cloud-tara.md`](tara/phase1-cloud-tara.md)). **Design** wrote
+8 TSRs ([`fusa/phase1-gate-safety-concept.md`](fusa/phase1-gate-safety-concept.md))
+and 9 TCRs ([`cyber/phase1-gate-cybersecurity-concept.md`](cyber/phase1-gate-cybersecurity-concept.md));
+the shared entropy finding (NF-5 ≡ T31, the only *concretely evidenced*
+defect — `PRNG is not seeded` yet `sshd` starts) is owned by Cyber as
+`TCR-ENT-001` and cited by FuSa as a precondition (`AoU-ENTROPY`), not
+double-specified. **Implementation** built 8 host-side gate scripts under
+`scripts/qhv/` (bring-up verifier, entropy fail-secure gate, g2.conf
+validator, per-extent artefact manifest) + a build-host package-completeness
+assertion in `build-qnx-ifs.{bat,sh}`. **Verification** *ran* them against
+the captured boot log: the verifier correctly BLOCKs on the resource-manager
+arm failure and FLAGs dead-PE/net-down; the entropy gate fails secure on the
+unseeded state; the manifest catches tamper/truncation/missing-descriptor
+([`fusa/phase1-gate-verification.md`](fusa/phase1-gate-verification.md),
+[`cyber/phase1-gate-verification.md`](cyber/phase1-gate-verification.md)).
+Verification raised one fail-open finding — **CV-1**: the g2.conf validator
+accepted an *empty* config (it checked forbidden-absence, not
+required-presence), so a truncate-to-empty attack slipped the gate — which
+Implementation then fixed with a required-directive floor (`system`/`ram`/
+`cpu`/`load` + ≥1 `vdev`) and Verification re-confirmed regression-clean.
+**Honest framing:** all of it is study-level on a TCG leg — the gates are
+*bring-up decision* checks parsing a serial log, NOT certified in-operation
+safety/security mechanisms with quantified diagnostic coverage / FTTI; the
+guest→host-escape / FFI / hardware-isolation residuals (NF-3, NF-7,
+TSR-FFI-001, TCR-HYP-001/T30) are explicitly **deferred to Phase 3** (Orin /
+real EL2+SMMU), not discharged.
+
+---
+
 ## 2026-06-11 — Milestone (Phase-7 pull-forward): QNX Hypervisor (QHV) boots a QNX guest under QEMU-TCG
 
 Brought the Phase-7 QHV exploration forward and got a **real Type-1 hypervisor
