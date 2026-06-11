@@ -63,7 +63,7 @@ piggyback that the old EC2-build-host path provided. See the
 - [ ] `sudo apt-get update`
 - [ ] `sudo apt-get install -y qemu-system-arm qemu-utils bridge-utils iproute2 cloud-image-utils`
 - [ ] Verify `qemu-system-aarch64 --version`
-- [ ] Verify `/dev/kvm` exists (Orin Nano L4T should expose KVM out of the box; A78AE supports virt extensions)
+- [ ] Verify `/dev/kvm` exists — **do NOT assume out-of-the-box.** Per the RQ-5 spike ([phase2-research-spike.md](phase2-research-spike.md)): JetPack 6 compiles KVM in (VHE inits in `dmesg`), but KVM-accelerated QEMU on the Orin family empirically needs a **device-tree GICv3 patch** (`tegra234-soc-minimal.dtsi`) + kernel rebuild — proven on AGX Orin, **unconfirmed on Orin Nano**. NVIDIA: EL2 is software-unsupported, not hardware-locked. Expect: `dmesg | grep -i kvm`, `ls /dev/kvm`, then a `qemu -enable-kvm -M virt,gic-version=3` smoke-boot; fall back to `gic-version=2` (≤8 vCPUs) if vGIC creation fails (`Error(19)`).
 - [ ] `sudo usermod -aG kvm $USER` and re-login
 
 ### 3. Set up bridge (Orin variant)
@@ -108,6 +108,7 @@ piggyback that the old EC2-build-host path provided. See the
 | Still does not boot | Switch HW twin to `joexue/qemu-virt` community BSP for source-level visibility | High |
 | **QNX microkernel CPU-feature probe rejects A78AE silently** (MIDR/REVIDR allow-list mismatch — symptom: hang before any boot banner) | First failed boot, capture `qemu -d in_asm,int` trace to distinguish CPU-probe rejection from device-tree mismatch; if confirmed, escalate to "Same IFS still does not boot" branch (rebuild w/ A78AE flags) | Low (just the trace); diagnosis only |
 | JetPack 6 ships QEMU without KVM enabled | Build `qemu-system-aarch64` from source on L4T with KVM enabled | Medium |
+| **KVM vGIC creation fails on Orin under `gic-version=3`** (`VmCreateGIC … Error(19)`) — empirically hit on AGX Orin; **unconfirmed either way on Orin Nano** (RQ-5 spike) | Patch `tegra234-soc-minimal.dtsi` to declare GICv3 interrupts + rebuild kernel (source-available, proven on AGX); interim fallback `gic-version=2` for ≤8 vCPUs. Pull this smoke-test **before Phase 2 closes**, not in Phase 3 | Medium (DTB patch + kernel rebuild); the dual-OS story rests entirely on this path |
 | Orin Nano 8 GB tight on RAM | Reduce QNX guest to 768 MB; benchmark RSS-headroom; if still tight, swap to larger Orin family (Orin NX 16 GB, $599) — narrative cost note | Low if QNX shrinks; doc only otherwise |
 | `vhost-net` not enabled in L4T kernel | Live with userspace virtio (slower); document in twin-diff doc | Low |
 

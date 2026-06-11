@@ -301,6 +301,19 @@ so they do not drift)
 
 ## 5. Open research questions (hand to the Research agent)
 
+> **RESOLVED 2026-06-11 — see [phase2-research-spike.md](phase2-research-spike.md).**
+> Verdicts: **RQ-1 FEASIBLE** (qvm supports a Linux aarch64 guest [vendor]; but
+> `mkqnximage` is QNX-only, so the Linux guest is hand-rolled). **RQ-2 FEASIBLE**
+> (`vdev-shmem`, io-sock-free; no virtio-vsock in SDP 8.0 — shmem is the A-stretch
+> transport). **RQ-3 FEASIBLE** (`vdev-shmem` is guest↔guest and io-sock-free →
+> the Option-B blocker is removed; B is now effort-gated, not feasibility-gated).
+> **RQ-4 FIXABLE-CONFIG** (io-sock + entropy both = missing virtio-net/-rng on the
+> `launch-qhv-tcg.ps1` line; re-frames the NF-5/T31 entropy finding). **RQ-5
+> LIKELY / AT-RISK on the Orin *Nano* SKU** (KVM works on the Orin family with a
+> DTB GICv3 patch, unconfirmed on Nano — schedule a smoke spike before Phase 2
+> closes). **Net: Option B feasibility-GREEN; the committed Option-A deliverable
+> is unaffected and can start now.**
+
 These gate the **Option B stretch** and resolve the **A stretch transport**.
 Implementation can start the committed Option-A/virtio-console deliverable
 **without** waiting on any of these.
