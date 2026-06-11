@@ -18,20 +18,22 @@ qualitatively suggestive, and which are off-limits.
 
 ## Concept-by-concept comparison (cloud twin and HW twin)
 
-The "Cloud twin" column is QEMU/KVM on AWS Graviton; the "HW twin"
-column is QEMU/KVM on Jetson Orin Nano. Verdicts are filled in
-during Phase 4 once both twins have been measured.
+The "Cloud twin" column is QEMU **TCG** on AWS Graviton (no `/dev/kvm`
+on non-metal Graviton — the SDP 8.0 QHV `qvm` hosts a single QNX guest;
+see [ADR-002](phase2-topology-decision.md)); the "HW twin" column is
+QEMU/**KVM** on Jetson Orin Nano. Verdicts are filled in during Phase 4
+once both twins have been measured.
 
 | Concept | DRIVE OS implementation | Cloud twin (AWS) | HW twin (Orin Nano) | Verdict |
 |---|---|---|---|---|
-| **VM partitioning** | NVIDIA Type-1 hypervisor on Tegra SoC | KVM + Linux host on Graviton; two QEMU processes | KVM + L4T host on A78AE; QEMU(QNX) alongside native L4T | **Validates** concept of co-resident OSes; **cannot** validate certified Type-1 isolation. HW twin is structurally closer because L4T = real Tegra-family Linux. |
+| **VM partitioning** | NVIDIA Type-1 hypervisor on Tegra SoC | SDP 8.0 QHV (`qvm`) hosting **one** QNX guest under QEMU **TCG** (no `/dev/kvm` on cloud; [ADR-002](phase2-topology-decision.md)) | KVM + L4T host on A78AE; QEMU(QNX) alongside native L4T | **Validates** a **real `qvm` Type-1 partition boundary** (EL2↔EL1) on cloud, though TCG-emulated; **cannot** validate certified Type-1 isolation. HW twin adds host-mediated KVM on real Tegra-family Linux. |
 | **Same Tegra silicon family** | Yes (Orin / Thor) | No — Graviton is Neoverse-V1 | **Yes** — A78AE is the same family as DRIVE Orin's CCPLEX cores | HW twin **uniquely validates** SoC-family parity that the cloud twin cannot. |
-| **Dual-OS coexistence** | QNX Safety + Linux Compute on one Tegra | QNX in QEMU + Ubuntu in QEMU on one host | QNX in QEMU + L4T native (host) on one Tegra-family SoC | **Validates** in both twins; HW twin is closer to "Linux on real Tegra" reality. |
+| **Dual-OS coexistence** | QNX Safety + Linux Compute on one Tegra | **No Linux on cloud** — QNX host + QNX guest only (heterogeneity moved to Orin per [ADR-002](phase2-topology-decision.md)) | QNX in QEMU + L4T native (host) on one Tegra-family SoC | **Validates dual-OS only on the HW twin (Orin)**; the cloud leg validates the partition *mechanism* (QNX↔QNX), not OS heterogeneity. |
 | **Asymmetric workload** | Safety FuSa monitors / Compute DriveWorks | Same client/server code, no real RT, no accelerators | Same client/server code on real silicon; A78AE has hardware RT support but L4T host is not RT-certified | **Partial** in both twins. Shape reproduced, substance not. |
-| **Inter-VM IPC** | Shared memory + mailbox; sub-µs | virtio-net through `br0`; hundreds of µs to low ms expected | virtio-net through `br0`; **same code path** but host CPU + scheduler differ | Phase 4 **twin diff** is the load-bearing measurement here — what changes when only the host changes? |
-| **Boot sequencing** | HV brings up Safety → Compute with cross-checks | Independent QEMU processes; ordering enforced by launch scripts | Same — L4T is up first (it's the host) and QNX is launched after | **Partial** in both — demonstrates workflow without enforcement primitive. |
+| **Inter-VM IPC** | Shared memory + mailbox; sub-µs | host↔guest over `qvm` virtio-console vdev (TCG-emulated EL2 boundary; not hardware-timed — [ADR-002](phase2-topology-decision.md)) | virtio-net through `br0` under KVM; heterogeneous QNX↔Linux on real silicon | Phase 4 **twin diff** compares **non-identical** IPC paths (console/QNX↔QNX/TCG vs. virtio-net/QNX↔Linux/KVM) — it confounds host, accel, and transport, not host alone. |
+| **Boot sequencing** | HV brings up Safety → Compute with cross-checks | `qvm` host boots, then starts the QNX guest (`qvm @g2.conf`) — a real HV→guest sequence on cloud ([ADR-002](phase2-topology-decision.md)) | Same — L4T is up first (it's the host) and QNX is launched after | **Partial** in both — demonstrates workflow without enforcement primitive. |
 | **Bootloader chain** | SecureBoot → measured boot → HV → guest IPLs | UEFI for Linux guest; QNX IPL via mkqnximage | JetPack UEFI for L4T host; QNX IPL via mkqnximage same as cloud | **Cannot** validate certified chain on either twin. |
-| **Real-time guarantees** | Certified RT on Safety partition | QNX RT inside guest; KVM host scheduler best-effort | QNX RT inside guest; L4T host scheduler best-effort (A78AE silicon does have RT support) | **Cannot** validate end-to-end RT on either twin. |
+| **Real-time guarantees** | Certified RT on Safety partition | QNX RT inside guest; **TCG emulation** dominates timing on cloud (not hardware-timed; [ADR-002](phase2-topology-decision.md)) | QNX RT inside guest; L4T host scheduler best-effort (A78AE silicon does have RT support) | **Cannot** validate end-to-end RT on either twin. |
 
 ---
 

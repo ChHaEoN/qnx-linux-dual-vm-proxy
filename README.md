@@ -1,10 +1,14 @@
 # qnx-linux-dual-vm-proxy
 
-> **Digital Twin** of NVIDIA DRIVE OS dual-VM partitioning. QNX SDP 8.0 +
-> Linux aarch64 run as a co-resident pair under QEMU/KVM on **two** hosts:
-> AWS Graviton (cloud twin) and Jetson Orin Nano (hardware twin). The same
-> QNX IFS and the same IPC code run on both sides; the **twin diff**
-> (what changes when only the host changes) is the deliverable.
+> **Digital Twin** of NVIDIA DRIVE OS dual-VM partitioning, across **two**
+> hosts. On the **cloud twin** (AWS Graviton) the SDP 8.0 QNX Hypervisor
+> (`qvm`) hosts a QNX guest under QEMU TCG — exercising a real EL2/EL1
+> partition boundary, but emulated, not hardware-timed (no `/dev/kvm` on
+> non-metal Graviton). The heterogeneous QNX-Safety / Linux-Compute split
+> is carried by the **hardware twin** (Jetson Orin Nano), where L4T is the
+> native Linux side and KVM works. The same QNX IFS and IPC code run on
+> both sides; the **twin diff** (what changes when the host changes) is the
+> deliverable. Cloud topology set by [ADR-002](docs/phase2-topology-decision.md).
 
 ![Phase](https://img.shields.io/badge/Phase-0%20bootstrap-yellow)
 ![License](https://img.shields.io/badge/License-MIT-blue)
@@ -44,9 +48,9 @@ the resulting binary is reused across both twins.
   │ build: Local       │                       │  host: L4T (Ubuntu)│
   │  Windows PC        │                       │  on A78AE × 6      │
   │  (EC2 fallback)    │                       │                    │
-  │  run:  c7g.large   │ ── compare twin-diff ▶│  QEMU on Tegra;    │
-  │  QEMU/KVM runtime  │   latency, jitter,    │  L4T = Compute side│
-  │  both VMs          │   boot, correctness   │                    │
+  │  run:  c7g.large   │ ── compare twin-diff ▶│  QEMU/KVM on Tegra;│
+  │  QHV/qvm + 1 QNX   │   boot, mechanism,    │  L4T = Compute side│
+  │  guest (TCG, no KVM)│  vs. hardware-timed  │  (heterogeneous IPC)│
   │  purpose: fast     │                       │  purpose: validate │
   │   iterate, sweep   │                       │   on real silicon  │
   └────────────────────┘                       └────────────────────┘
@@ -83,15 +87,15 @@ proxy can and cannot demonstrate. This table is the load-bearing part:
 
 | DRIVE OS feature | QEMU proxy limitation |
 |---|---|
-| NVIDIA Hypervisor (Type-1) | Two QEMU processes on a Linux host — partition isolation is provided by the host kernel + KVM, not a certified Type-1 partitioner. No mixed-criticality guarantees. |
+| NVIDIA Hypervisor (Type-1) | Cloud leg runs the SDP 8.0 QNX Hypervisor (`qvm`) hosting one QNX guest — a *real* EL2/EL1 partition boundary, but TCG-emulated (no `/dev/kvm` on cloud) and **not** certified Type-1; no quantified freedom-from-interference, no mixed-criticality guarantees. Orin uses host-mediated KVM. See [ADR-002](docs/phase2-topology-decision.md). |
 | Orin SoC (Tegra234) | Graviton3 (Neoverse-V1) is the runtime CPU; no Tegra-specific peripherals, no SoC-internal interconnect. |
 | NVDLA / PVA | Not emulated. Deep-learning and vision accelerators have no QEMU model. |
 | MIPI CSI-2 (camera ingest) | Not emulated. No camera serial-link model in QEMU virt machine. |
 | FSI R52 lockstep | Not emulated. No Cortex-R52 lockstep cluster, no Functional Safety Island. |
 | GPU (Ampere CUDA / vGPU) | Graviton has no NVIDIA GPU; no CUDA, no vGPU partitioning. |
-| Real-time guarantees | Best-effort under KVM; jitter from host scheduler is observable. The "Safety VM" framing is POSIX-realtime, not certified RT. |
+| Real-time guarantees | Cloud timing is TCG-emulation-bound (not hardware-timed); Orin is best-effort under KVM with observable host-scheduler jitter. The "Safety VM" framing is POSIX-realtime, not certified RT. |
 | ASIL-D certification | None. SDP 8.0 ≠ QNX OS for Safety (QOS); no safety case, no MISRA-C, no ISO 26262 evidence. |
-| Inter-VM shared memory latency | Cross-VM IPC goes virtio-net → tap → bridge → tap → virtio-net. Orders of magnitude off DRIVE OS shared-memory IPC; profiled honestly in Phase 2. |
+| Inter-VM shared memory latency | Cloud leg: host↔guest over the `qvm` virtio-console vdev (crosses the EL2/EL1 boundary, but TCG-emulated — the latency measures emulation cost, not transport cost). Orin leg (Phase 3): QNX↔Linux virtio-net → tap → bridge → tap → virtio-net, hardware-timed under KVM. Both orders of magnitude off DRIVE OS shared-memory IPC; profiled honestly. See [ADR-002](docs/phase2-topology-decision.md). |
 | Certified bootloader chain | No SecureBoot, no measured boot, no chain-of-trust. |
 
 These are deliberate. Documenting them precisely is the engineering point.
@@ -120,7 +124,7 @@ Other prereqs:
 ## Roadmap
 
 - [x] **Phase 0** — Bootstrap, scaffold, narrative, BSP selection, twin re-scope
-- [ ] **Phase 1** — Cloud twin bring-up (QNX + Linux on AWS QEMU/KVM)
+- [ ] **Phase 1** — Cloud twin bring-up (SDP 8.0 QHV `qvm` + QNX guest on AWS, QEMU TCG — no Linux guest on cloud per [ADR-002](docs/phase2-topology-decision.md))
 - [ ] **Phase 2** — Cloud twin IPC + P50/P99/P99.9 latency benchmark
 - [ ] **Phase 3** — Hardware twin port to Jetson Orin Nano (same IFS, same code)
 - [ ] **Phase 4** — Twin diff + DRIVE OS gap analysis

@@ -36,12 +36,17 @@ camera ingest; the IPC path is shared memory, not a network.
 QNX SDP 8.0 does not have an arm64 host toolchain. The build-side
 tools (`mkqnximage`, `qcc`, the QNX Software Center) only run on
 **x86_64 Linux native** or **Windows native** — no macOS, no arm64
-Linux. The runtime side wants arm64 + KVM so the `mkqnximage
---arch=aarch64le` IFS executes natively under hardware virtualization
-and the project narrative stays on the target architecture
-(Orin / Thor are arm64). Reconciling those two constraints forces
-the cloud twin's toolchain across two hosts: an x86_64 builder and
-an arm64 runtime.
+Linux. The runtime side wants arm64 so the `mkqnximage
+--arch=aarch64le` IFS executes on the target architecture and the
+project narrative stays on-target (Orin / Thor are arm64). Reconciling
+those two constraints forces the cloud twin's toolchain across two
+hosts: an x86_64 builder and an arm64 runtime.
+
+> **Note (per [ADR-002](phase2-topology-decision.md)):** the cloud
+> runtime originally assumed KVM-on-arm64 hardware virtualization, but
+> AWS non-metal Graviton exposes **no `/dev/kvm`** — so the cloud leg
+> runs under QEMU **TCG** emulation, hosting the SDP 8.0 QHV (`qvm`)
+> and a single QNX guest. KVM acceleration moves to Phase 3 (Orin).
 
 Per the 2026-05-07 amendment in [findings.md](findings.md), the
 primary build host is a **local Windows PC** (the same machine that
@@ -49,20 +54,32 @@ serves as the dev driver). The EC2 t3.medium x86_64 Ubuntu instance
 is retained as an **explicit fallback** for users without a local
 x86_64 Windows or Linux box. The runtime host stays on Graviton.
 
+> **As-built per [ADR-002](phase2-topology-decision.md) (Accepted).** The
+> cloud runtime is **not** two co-equal KVM guests over a Linux bridge —
+> that topology is falsified (no `/dev/kvm` on cloud Graviton; no Linux
+> guest; host `io-sock` down). The cloud leg is the SDP 8.0 **QHV** host
+> `qvm` running a **single QNX guest** under `qemu-system-aarch64 -accel
+> tcg` (TCG, **not** KVM), with **no** `br0`/tap. The Linux Compute side
+> moved to **Phase 3 / Orin**.
+
 ```
 ┌──────────────────────────────┐         ┌─────────────────────────────────┐
 │ Build Host (PRIMARY)         │  scp    │ Runtime Host (Graviton arm64)   │
-│ Local Windows PC (x86_64)    │────────▶│ c7g.large, Ubuntu 22.04 + KVM   │
+│ Local Windows PC (x86_64)    │────────▶│ c7g.large, Ubuntu 22.04 (TCG)   │
 │ • QNX SDP 8.0 Windows native │  ifs    │                                 │
-│ • mkqnximage --type=qemu     │         │ • qemu-system-aarch64 (KVM)     │
-│   --arch=aarch64le           │         │ • Bridge br0 + tap-qnx,tap-linux│
-│ • produces output\ifs.bin    │         │                                 │
-│                              │         │ ┌──────────┐  ┌──────────────┐  │
-│ Build Host (FALLBACK)        │         │ │ QNX VM   │  │ Linux aarch64│  │
-│ t3.medium x86_64 Ubuntu EC2  │ ──scp──▶│ │ (Safety  │  │ VM (Compute  │  │
-│ • same QNX SDP 8.0 install   │  ifs    │ │ proxy)   │  │ proxy)       │  │
-│ • same mkqnximage invocation │         │ └────┬─────┘  └──────┬───────┘  │
-└──────────────────────────────┘         │      └────virtio-net┘           │
+│ • mkqnximage --type=qemu     │         │ • qemu-system-aarch64 -accel tcg│
+│   --qvm=yes  (QHV host+guest)│         │   (no /dev/kvm on cloud)        │
+│ • produces output\ifs.bin    │         │ • qvm  (QHV host, EL2)          │
+│                              │         │ • NO br0/tap (io-sock down)     │
+│ Build Host (FALLBACK)        │         │                                 │
+│ t3.medium x86_64 Ubuntu EC2  │ ──scp──▶│ ┌─────────────────────────────┐ │
+│ • same QNX SDP 8.0 install   │  ifs    │ │ qnx-qhv HOST (EL2)          │ │
+│ • same mkqnximage invocation │         │ │  └─ qvm @g2.conf            │ │
+└──────────────────────────────┘         │ │      ┌──────────────────┐   │ │
+                                         │ │      │ qnx-guest (EL1)  │   │ │
+        Linux Compute guest ── moved ──▶ │ │      │ console/blk vdevs│   │ │
+        to Phase 3 / Orin (L4T native)   │ │      └──────────────────┘   │ │
+                                         │ └─────────────────────────────┘ │
                                          └─────────────────────────────────┘
 ```
 
@@ -74,8 +91,11 @@ Build host (fallback): `t3.medium` (2 vCPU, 4 GB) is enough headroom
 for SDP install + IFS build; t3 charges by the hour and can be
 stopped between builds.
 
-Runtime host: `c7g.large` (2 vCPU Graviton3, 4 GB, KVM-on-arm64).
-Both VMs run on this single instance.
+Runtime host: `c7g.large` (2 vCPU Graviton3, 4 GB). Per
+[ADR-002](phase2-topology-decision.md), there is **no `/dev/kvm`** on
+non-metal Graviton, so the QHV host + single QNX guest run under QEMU
+**TCG**. Only the QNX side runs on this instance; the Linux Compute
+guest moved to Phase 3 / Orin.
 
 **Honest framing:** the Windows-primary pivot removes ssh / X11 /
 browser-flow friction and EC2 build-host cost — but it does **not**
@@ -151,10 +171,13 @@ Windows native (no macOS, no arm64 Linux). Running it under
 qemu-user emulation on an arm64 host is unsupported and not worth
 the headache.
 
-**Constraint 2 — runtime should be arm64 + KVM.** The portfolio
-narrative is BSP / customer-port engineering on arm64 silicon (Orin,
-Thor). An x86_64-only run would use QEMU TCG (no hardware
-acceleration on arm64 targets) and would be architecturally off-target.
+**Constraint 2 — runtime should be arm64.** The portfolio narrative is
+BSP / customer-port engineering on arm64 silicon (Orin, Thor). An
+x86_64-only run would be architecturally off-target. Note (per
+[ADR-002](phase2-topology-decision.md)): the cloud runtime *wanted* KVM
+too, but non-metal Graviton has no `/dev/kvm`, so the cloud leg runs
+under TCG and hardware-accelerated KVM moves to the Phase-3 Orin twin;
+the arm64-on-target argument still holds (the IFS is aarch64 either way).
 
 **The IFS is arch-agnostic from the build host's perspective.**
 `mkqnximage --arch=aarch64le` produces a bootable image whose
@@ -168,38 +191,41 @@ exactly the day-to-day shape of customer-port BSP work.
 
 ---
 
-## IPC path detail
+## IPC path detail (cloud leg)
+
+Per [ADR-002](phase2-topology-decision.md), the cloud-leg IPC path is
+**not** a Linux-bridge / virtio-net path between two guests — that
+design is falsified. The cloud leg crosses the `qvm` partition boundary
+between the QNX *host* and the single QNX *guest*, over the
+`virtio-console` vdev already declared in the live `g2.conf`.
 
 ```
-┌──────────────────┐                              ┌──────────────────┐
-│ QNX guest        │                              │ Linux guest      │
-│ ┌──────────────┐ │                              │ ┌──────────────┐ │
-│ │ qnx-server   │ │                              │ │ linux-client │ │
-│ │ (TCP listen) │ │                              │ │ (TCP connect)│ │
-│ └──────┬───────┘ │                              │ └──────┬───────┘ │
-│        │         │                              │        │         │
-│  virtio-net guest│                              │  virtio-net guest│
-│        │         │                              │        │         │
-└────────┼─────────┘                              └────────┼─────────┘
-         │ tap-qnx                                         │ tap-linux
-         │                                                 │
-         └────────────────── br0 (192.168.100.1/24) ───────┘
-                                  │
-                            Linux host kernel (Graviton, Ubuntu 22.04)
+┌─────────────────────────────────┐        ┌──────────────────────────────┐
+│ qnx-qhv  (QHV host, EL2)        │        │ qnx-guest  (EL1 guest)       │
+│ ┌─────────────────────────────┐ │        │ ┌──────────────────────────┐ │
+│ │ qnx-host-client             │ │        │ │ qnx-server               │ │
+│ │ (console initiator + RTT)   │ │        │ │ (console echo endpoint)  │ │
+│ └──────────────┬──────────────┘ │        │ └─────────────┬────────────┘ │
+│                │ console fd      │        │              │ console fd    │
+└────────────────┼────────────────┘        └──────────────┼───────────────┘
+                 │       qvm virtio-console vdev           │
+                 └─────────── (EL2 ↔ EL1 boundary) ────────┘
 ```
 
-**Path summary:** guest userspace → guest virtio-net driver →
-host tap device → host bridge `br0` → host tap device → guest
-virtio-net driver → guest userspace. Six context boundaries plus
-two virtio rings.
+**Path summary:** host userspace → host console fd → `qvm` virtio-console
+vdev (the EL2/EL1 partition boundary) → guest console fd → guest
+userspace, and back. This crosses the **real `qvm` Type-1 partition
+boundary**, not a host network. It does **not** route through host
+`io-sock`, a Linux bridge, or tap devices — all of which are dead on
+this leg (no working host network stack; `io-sock` down).
 
-**MAC addresses:** locally-administered, stable across runs:
-- QNX VM: `52:54:00:11:11:11`
-- Linux VM: `52:54:00:22:22:22`
-
-**Bridge IP `192.168.100.1/24`** is the host side; guests get
-addresses in `192.168.100.0/24` (statically configured per VM
-during Phase 1 to keep the path deterministic).
+**Honest framing:** this demonstrates IPC across a real EL2↔EL1 `qvm`
+boundary, but the cloud leg is **TCG-emulated**, so the latency it
+yields is dominated by TCG emulation cost — it does **not** measure
+hardware-timed hypervisor IPC. Hardware-timed numbers come from the
+Phase-3 Orin twin (KVM). The heterogeneous QNX↔Linux IPC (the bridged
+virtio-net path with `tap`/`br0`) is committed to **Phase 3 / Orin**,
+where it runs natively against L4T — see that twin's section below.
 
 ---
 
@@ -207,9 +233,9 @@ during Phase 1 to keep the path deterministic).
 
 | Aspect | Real DRIVE OS | Cloud twin (AWS Graviton) | HW twin (Jetson Orin Nano) |
 |---|---|---|---|
-| Partitioner | Type-1 NVIDIA Hypervisor | KVM + Linux host kernel scheduling two QEMU processes | KVM-on-L4T scheduling QEMU(QNX) alongside native L4T workload |
+| Partitioner | Type-1 NVIDIA Hypervisor | SDP 8.0 QHV (`qvm`) hosting one QNX guest under QEMU **TCG** (no KVM on cloud; see [ADR-002](phase2-topology-decision.md)) | KVM-on-L4T scheduling QEMU(QNX) alongside native L4T workload |
 | Shared SoC | Yes (Tegra Orin / Thor) | No — pure-virt, no shared peripherals | **Same Tegra family** (A78AE, Ampere) but Jetson SKU; no DRIVE-class FuSa peripherals |
-| Inter-VM IPC | Shared memory + mailbox | virtio-net through host bridge | virtio-net through host bridge (same path; same code) |
+| Inter-VM IPC | Shared memory + mailbox | host↔guest over `qvm` virtio-console vdev (TCG-emulated EL2 partition boundary; not hardware-timed) | virtio-net through host bridge (Phase 3; heterogeneous QNX↔Linux) |
 | VM-aware scheduling | Yes (partition scheduler) | No — host CFS schedules everything | No — L4T CFS schedules QEMU thread alongside L4T processes |
 | Real-time | Certified RT path on Safety guest | Best-effort; jitter from host scheduler is observable | Best-effort; A78AE does have hardware RT support but L4T host doesn't expose certified RT |
 | FSI lockstep | Cortex-R52 lockstep cluster | None | None — Jetson SKU has no FSI exposed to user software |

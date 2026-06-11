@@ -23,9 +23,20 @@ ISO 26262 vocabulary without overclaiming compliance.
 
 Boundary of the system under analysis:
 
+> **Topology note (ADR-002, ratified 2026-06-11):** the bullets below and the
+> STRIDE tables in §2 are a pre-Phase-4 scaffold written against the original
+> two-VM-over-`br0` cloud design, which the QHV pivot **falsified** for the
+> cloud leg. Per [ADR-002](phase2-topology-decision.md) the cloud leg is
+> QNX-host ↔ QNX-guest over the `qvm` `virtio-console` vdev (no `br0`/tap,
+> host `io-sock` down); the `br0`/virtio-net heterogeneous path lives on
+> **Phase 3 / Orin** only. The `br0`-based threats below therefore apply to the
+> Orin leg (Phase 3+); the cloud-leg threat model is reconciled in the Gate
+> Addendum of [tara/phase1-cloud-tara.md](tara/phase1-cloud-tara.md). These
+> tables are re-derived against the measured system when Phase 5 starts.
+
 - The QNX Safety guest (in QEMU)
-- The Linux Compute side (Ubuntu in QEMU on cloud twin; L4T native on HW twin)
-- The IPC channel between them (virtio-net via host bridge `br0`)
+- The Linux Compute side — **Phase 3 / Orin only** (L4T native); there is no Linux guest on the cloud leg (ADR-002)
+- The IPC channel between them: cloud leg = QNX-host ↔ QNX-guest over the `qvm` `virtio-console` vdev; Orin leg = virtio-net via host bridge `br0`
 - The host kernel (Linux on Graviton or L4T on Orin) — included as **trusted base**, not as part of attack surface
 - The QNX IFS build pipeline on the cloud-twin x86_64 build host
 

@@ -47,8 +47,16 @@ the NVIDIA AVOS / DRIVE OS SE role this portfolio targets.
 
 **Common across both twins:**
 - VM0 — Safety proxy: QNX SDP 8.0, aarch64 `virt` machine, NCEULA (Everywhere)
-- VM1 — Compute proxy: Linux aarch64 (Ubuntu 22.04 cloudimg on AWS; L4T on Orin)
-- IPC: virtio-net via host bridge `br0` + tap devices (`tap-qnx` / `tap-linux`)
+- VM1 — Compute proxy: Linux aarch64 — **Phase 3 / Orin only** (L4T native). Per
+  [ADR-002](docs/phase2-topology-decision.md) there is **no Linux guest on the
+  cloud leg** (the cloud Compute-VM premise was falsified — no `/dev/kvm`, host
+  `io-sock` down).
+- IPC (cloud leg): QNX-host (`qnx-qhv`) ↔ QNX-guest (`qnx-guest`) over the `qvm`
+  `virtio-console` vdev — crosses the real EL2/EL1 partition boundary, TCG-emulated,
+  **no** `br0`/tap (host `io-sock` is down). See [ADR-002](docs/phase2-topology-decision.md).
+- IPC (Phase 3 / Orin leg): heterogeneous QNX↔Linux over host bridge `br0` + tap
+  devices (`tap-qnx` / `tap-linux`) + virtio-net under KVM — this bridged path
+  belongs to Orin, **not** the cloud leg.
 - Reference architecture: NVIDIA DRIVE OS dual-VM partition design (public docs)
 
 **Dev driver / build host:** local Windows PC (x86_64) — both the
@@ -140,12 +148,23 @@ The `.claude/agents/` files are intentionally thin and refer back to `agents/<na
 
 **Phase 1 starting sequence (concrete):**
 
+> **Superseded in part by [ADR-002](docs/phase2-topology-decision.md) (Accepted).**
+> Steps 3–5 below assume the falsified cloud topology — KVM + `br0`/tap +
+> a dual QNX/Linux VM launch. The as-built cloud leg is the QHV host
+> `qvm` + a **single** QNX guest under QEMU **TCG** (no KVM, no
+> `br0`/tap, no Linux guest). Treat `setup-bridge.sh` and
+> `launch-linux-vm.sh` on the cloud runtime as **not used on cloud**;
+> they belong to the Phase-3 Orin heterogeneous path. The live cloud
+> bring-up path is `scripts/qhv/` (see [docs/findings.md](docs/findings.md)
+> top entries) and the Phase-2 IPC is QNX-host↔QNX-guest over the `qvm`
+> virtio-console vdev.
+
 ```text
 1. research + architect  → complete (commit 072446c — HARA / TARA / F6 verdicts; 2026-05-07 amendment in findings.md — Windows build-host pivot)
 2. user (manual)         → install QNX SDP 8.0 on local Windows PC via QNX Software Center (primary path is GUI-only; not scripted)
-3. implementation        → scripts/bootstrap-runtime-host.sh on Graviton c7g.large (provision QEMU + KVM + bridge tooling). Fallback only: scripts/bootstrap-build-host.sh on a t3.medium EC2 if no local x86_64 host
-4. implementation        → scripts/build-qnx-ifs.bat on Windows (or build-qnx-ifs.sh on EC2 fallback) → scp ifs.bin to runtime → setup-bridge.sh + launch-{qnx,linux}-vm.sh on the runtime
-5. test                  → capture boot logs into logs/sample-boot/cloud-{qnx,linux}-boot1.log; record QNX boot time
+3. implementation        → scripts/bootstrap-runtime-host.sh on Graviton c7g.large (provision QEMU + bridge tooling). [ADR-002: no KVM on cloud — TCG only] Fallback only: scripts/bootstrap-build-host.sh on a t3.medium EC2 if no local x86_64 host
+4. implementation        → scripts/build-qnx-ifs.bat on Windows (or build-qnx-ifs.sh on EC2 fallback) → scp ifs.bin to runtime → boot QHV host + single QNX guest under TCG via scripts/qhv/. [ADR-002 supersedes the old setup-bridge.sh + launch-{qnx,linux}-vm.sh dual-VM-over-bridge step — that is Phase-3/Orin only]
+5. test                  → capture boot logs into logs/sample-boot/cloud-{qnx,linux}-boot1.log (cloud is QNX-only per ADR-002); record QNX boot time
 6. fusa-analysis         + cyber-analysis (parallel)  →  Phase-1-gate review
 7. docs                  → update findings.md with Phase 1 measured numbers
 ```

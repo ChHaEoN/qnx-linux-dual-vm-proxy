@@ -1,8 +1,10 @@
 # Interview narrative — qnx-linux-dual-vm-proxy
 
-> **Status:** v0 draft (Phase 0). Refine after Phase 1 with real numbers
-> (boot time, virtio-net P99 latency, EC2 cost) and after Phase 3 with
-> the comparison-doc findings.
+> **Status:** v0 draft (Phase 0); cloud topology updated per
+> [ADR-002](phase2-topology-decision.md). Refine after Phase 1 with real
+> numbers (boot time, cloud `qvm` virtio-console P99 — TCG-bound, not a
+> transport benchmark — EC2 cost) and after Phase 3 with the
+> comparison-doc findings (Orin KVM virtio-net is the hardware-timed leg).
 > **Length target:** 2 minutes spoken (~250–280 words).
 > **Audience:** NVIDIA AVOS / DRIVE OS Software Engineer interview.
 
@@ -27,17 +29,26 @@
 > including hands-on experience with QNX on automotive SoC targets.
 > To deepen my understanding of NVIDIA's DRIVE OS architecture —
 > specifically the dual-VM partition model — I built a personal
-> project: QNX SDP 8.0 and Linux aarch64 running as two VMs under
-> QEMU on AWS Graviton, with IPC between them over virtio-net.
+> project across two host substrates. On the cloud leg I run QNX's
+> own Type-1 hypervisor (QHV) hosting a QNX guest on AWS Graviton,
+> with IPC between the hypervisor host and its guest across the
+> partition boundary; the heterogeneous QNX-Safety / Linux-Compute
+> split I carry to a Jetson Orin Nano, where Linux (L4T) is the native
+> host and KVM actually works.
 >
-> I want to be upfront: this isn't a real hypervisor. It's two QEMU
-> processes on a Graviton KVM host, so it's a software-layer proxy
-> for exploring partition and IPC concepts, not for replicating
-> DRIVE OS behaviour. I used it to understand where QEMU can validate
-> architectural ideas and where the hard boundaries are — things like
-> NVDLA, MIPI CSI-2, and FSI R52 lockstep simply cannot be emulated,
-> and the IPC latency is orders of magnitude off from shared-memory
-> between DRIVE OS VMs.
+> I want to be upfront about what each leg does and doesn't show. The
+> cloud leg crosses a *real* `qvm` EL2/EL1 partition boundary — that's
+> the strongest hypervisor artefact in the project — but it runs under
+> QEMU TCG emulation because non-metal Graviton exposes no `/dev/kvm`,
+> so any latency number there is dominated by emulation cost, not a
+> real transport or hardware-timed IPC cost. It also doesn't show OS
+> heterogeneity: both ends are QNX on the cloud leg, and the
+> QNX-to-Linux story lives on Orin. Either way it's a software-layer
+> proxy, not a replica — things like NVDLA, MIPI CSI-2, and FSI R52
+> lockstep simply cannot be emulated, and the IPC latency is orders
+> of magnitude off from shared-memory between real DRIVE OS VMs. (The
+> topology decision and its honest-framing ledger are recorded in
+> docs/phase2-topology-decision.md.)
 >
 > One concrete engineering takeaway from the project setup itself:
 > QNX SDP 8.0 doesn't support ARM hosts, so I designed a hybrid
@@ -89,11 +100,16 @@ architecture. Walk through what I tried, what didn't work, what the
 fix was, and what that taught me about toolchain-constraint discovery
 in customer-port BSP work.
 
-**Section 4 — IPC measurement methodology (1.5 min).** virtio-net via
-host bridge; framed echo protocol; time-base normalisation between
-QNX `ClockCycles()` and Linux `clock_gettime(CLOCK_MONOTONIC)`;
-P50/P99/P99.9 reporting choice; warm-up exclusion. **Insert real
-numbers from `results/cloud/` and `results/hw/` once Phase 2 / 3 land.**
+**Section 4 — IPC measurement methodology (1.5 min).** Cloud leg:
+host↔guest over the `qvm` virtio-console vdev (single-OS QNX↔QNX, both
+ends `ClockCycles()`) — honest caveat that this number is TCG-emulation-
+bound, not a transport cost (per [ADR-002](phase2-topology-decision.md)).
+Orin leg (Phase 3): heterogeneous QNX↔Linux over virtio-net under KVM,
+where the cross-clock time-base normalisation between QNX `ClockCycles()`
+and Linux `clock_gettime(CLOCK_MONOTONIC)` re-enters and the
+hardware-timed number appears. Framed echo protocol; P50/P99/P99.9
+reporting choice; warm-up exclusion. **Insert real numbers from
+`results/cloud/` and `results/hw/` once Phase 2 / 3 land.**
 
 **Section 5 — Twin diff — what actually changes (2 min).** The
 results from Phase 4. **Insert measured cloud-vs-hw delta numbers.**
@@ -122,9 +138,9 @@ inter-SoC IPC. Only mention if asked or if time allows.
 Use these terms once each in any longer-form telling:
 
 - **BSP bring-up** (aarch64 virt machine)
-- **Device driver internals** (virtio-net, virtio-console)
+- **Device driver internals** (virtio-console on cloud; virtio-net on Orin)
 - **Kernel / userspace boundary**
-- **virtio-net IPC** / partition-style isolation
+- **`qvm` vdev IPC across the EL2/EL1 partition boundary** (cloud); virtio-net partition-style isolation (Orin)
 - **POSIX real-time** (QNX side)
 - **Customer port path**
 - **Program KPIs**
@@ -135,7 +151,7 @@ Use these terms once each in any longer-form telling:
 
 ## Refinement checklist (per phase)
 
-- [ ] Phase 1: insert real numbers — boot time for each VM, virtio-net link verified
+- [ ] Phase 1: insert real numbers — QHV host + QNX-guest boot time; `qvm` virtio-console channel verified (no virtio-net link on cloud per ADR-002)
 - [ ] Phase 2: insert real P50 / P99 / P99.9 round-trip latency
 - [ ] Phase 3: insert one-sentence summary of the gap analysis's most-surprising finding
 - [ ] Phase 4: re-time spoken version against a stopwatch; trim to 110 sec

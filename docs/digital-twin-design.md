@@ -18,7 +18,10 @@ The project mirrors the *software-layer behaviour* of an NVIDIA
 DRIVE OS dual-VM partition across two physically distinct host
 substrates:
 
-- **Cloud twin** — AWS Graviton (c7g.large arm64 + KVM, Ubuntu 22.04)
+- **Cloud twin** — AWS Graviton (c7g.large arm64, Ubuntu 22.04). Note
+  per [ADR-002](phase2-topology-decision.md): non-metal Graviton has no
+  `/dev/kvm`, so the cloud leg runs the SDP 8.0 QHV (`qvm`) + a single
+  QNX guest under QEMU **TCG**, not KVM.
 - **Hardware twin** — Jetson Orin Nano Dev Kit (NVIDIA L4T / JetPack 6
   on Cortex-A78AE × 6, Ampere GPU not exercised)
 
@@ -28,35 +31,60 @@ A short table of what crosses the twin boundary:
 |---|---|---|
 | QNX IFS (`output/ifs.bin`) | **Yes — bit-for-bit identical** | Built once on the x86_64 build host (Windows local primary; EC2 fallback); scp'd to both runtime hosts |
 | QNX IPC server (`ipc-test/qnx-server`) source | **Yes** | Same C99; compiled with `qcc` inside QNX guest in both twins |
-| Linux IPC client (`ipc-test/linux-client`) source | **Yes** | Same C99; compiled with `gcc` — on the Linux guest in cloud twin, on L4T natively in HW twin |
+| Linux IPC client (`ipc-test/linux-client`) source | **Phase 3 / Orin only** | Per [ADR-002](phase2-topology-decision.md), there is **no Linux guest on the cloud leg** — the cloud initiator is a QNX-host program (`ipc-test/qnx-host-client`). This client runs on L4T natively on the HW twin only |
 | Wire protocol (sequence + timestamp + payload) | **Yes** | Fixed-width binary frame, version-tagged |
 | Test harness + benchmark scripts | **Yes** | Same `run-bench.sh`; output CSV format is identical |
-| QEMU command line | **Mostly** | `-machine virt,gic-version=3 -cpu host -enable-kvm -m 1G` is the same; **only the host kernel below QEMU differs** |
-| Linux Compute side | **Different by design** | Cloud: Ubuntu cloudimg in QEMU; HW: L4T native (host OS). See §3. |
+| QEMU command line (machine/CPU/mem) | **Mostly** | `-machine virt,gic-version=3 -cpu ... -m 1G` shape is shared; see the accel row for the cloud/Orin split |
+| QEMU acceleration | **Different by design** | Per [ADR-002](phase2-topology-decision.md): cloud = `-accel tcg` (no `/dev/kvm` on non-metal Graviton); Orin = `-enable-kvm` (KVM works on A78AE). This was wrongly listed as an invariant before the QHV pivot |
+| IPC transport | **Different by design** | Cloud: host↔guest `qvm` virtio-console (single-OS QNX↔QNX); Orin: QNX↔Linux virtio-net over KVM bridge. The legs no longer share an identical topology — see §4 |
+| Linux Compute side | **Different by design** | Cloud: **no Linux guest** (single QNX guest under QHV); HW: L4T native (host OS). See §2/§3 |
 | Host kernel | **Different by design** | This is exactly the variable being studied |
 | Host CPU | **Different by design** | Graviton3 Neoverse-V1 vs Tegra A78AE — same ARMv8 ISA, different micro-architecture and scheduler context |
 
-The first six rows are the **invariant set** — anything that differs
-between twin sides in those rows is a bug. The last three rows are the
-**delta set** — they are what the twin diff measures.
+The rows marked **Yes** / **Mostly** are the **invariant set** — the QNX
+IFS, the QNX server source, the wire protocol, the harness, and the
+QEMU machine/CPU/mem shape — and anything that differs between twin
+sides in those rows is a bug. The rows marked **Different by design**
+are the **delta set** — host kernel and host CPU are the variables the
+twin diff was meant to isolate, but per [ADR-002](phase2-topology-decision.md)
+the QEMU-acceleration, IPC-transport, and Linux-Compute-side rows are
+**now also deltas**, not invariants: the cloud leg lost KVM and lost its
+Linux guest. §4 explains why the diff must therefore account for more
+than host difference alone.
 
 ---
 
 ## 2. What is deliberately not twinned
 
-Twinning is asymmetric on the Linux Compute side and that is intentional:
+Twinning is asymmetric on the Linux Compute side and that is intentional.
+Note this section **changed materially** under
+[ADR-002](phase2-topology-decision.md): the earlier claim that the cloud
+twin ran Linux Compute as a *second QEMU VM* is **falsified** and has
+been corrected below.
 
-- **Cloud twin** runs Linux Compute as a *second QEMU VM* alongside the
-  QNX guest. This is closer to the DRIVE OS partition shape (Linux is a
-  guest, not the host) but the host underneath is generic Ubuntu, not
-  Tegra-aware.
-- **Hardware twin** runs Linux Compute as **L4T itself**, the native
-  host. This is closer to "real Tegra Linux runs natively"; QNX is the
-  one thing being virtualised. Putting Linux in its own QEMU VM on
-  Orin Nano would burn 2 GB extra RAM for no narrative benefit.
+- **Cloud twin** runs **no Linux Compute guest at all.** The cloud leg
+  is the SDP 8.0 QHV host `qvm` hosting a **single QNX guest** under
+  QEMU TCG (Phase 1 falsified the original two-co-equal-KVM-guests
+  premise — no `/dev/kvm` on non-metal Graviton, and the host `io-sock`
+  stack needed for a bridged Linux guest is down). The cloud leg
+  therefore demonstrates the **IPC mechanism across a real `qvm` EL2/EL1
+  partition boundary** — but it does **not** demonstrate the QNX-safety
+  ↔ Linux-compute heterogeneity that is the load-bearing mirror of DRIVE
+  OS's dual-OS partitioning. That heterogeneity is twinned on **Orin
+  only**.
+- **Hardware twin (Orin)** runs Linux Compute as **L4T itself**, the
+  native host, and is the **committed home of the heterogeneous QNX↔Linux
+  IPC**. This is closer to "real Tegra Linux runs natively"; QNX is the
+  one thing being virtualised, and KVM actually works on the A78AE.
+  Putting Linux in its own QEMU VM on Orin Nano would burn 2 GB extra
+  RAM for no narrative benefit.
 
 This is a calibrated trade-off, not an accident: each twin side
-optimises for the comparison it can do honestly.
+demonstrates what its host can *actually* do — the cloud leg owns the
+hypervisor-boundary IPC *mechanism*; Orin owns the *heterogeneous*
+dual-OS story. A dual-guest Linux-under-QHV cloud topology (ADR-002
+Option B) is a research-gated **Phase 2.5** stretch only, not a claim
+made today.
 
 The HW twin therefore can **claim**:
 - Real Tegra-family silicon (A78AE matches DRIVE Orin's CCPLEX core family)
@@ -70,8 +98,15 @@ The HW twin **cannot** claim:
 
 The cloud twin can claim none of the above either, but offers in exchange:
 - Fast iteration, regression sweeps, parameter studies
-- Both VMs are guests, which is structurally closer to "two partitions on a hypervisor"
+- A **real `qvm` Type-1 partition boundary** (EL2 host ↔ EL1 guest) — the
+  strongest hypervisor artefact in the project — exercised by the
+  host↔guest IPC, though TCG-emulated, not hardware-timed (per
+  [ADR-002](phase2-topology-decision.md))
 - A scaling path (instance size up to c7g.16xlarge) for stress testing
+
+What the cloud twin **cannot** claim (corrected under ADR-002): two
+co-equal OS guests over KVM — there is one QNX guest under TCG, and the
+Linux Compute side is absent (it lives on Orin).
 
 Neither twin is a real DRIVE OS — they are two complementary
 imperfect mirrors. The Phase 4 comparison doc holds that line.
@@ -116,6 +151,23 @@ just having one canonical artefact.
 > HW); the metrics chosen (boot time, P50 / P99 / P99.9 IPC RTT,
 > jitter envelope, throughput at 1 KB / 4 KB / 16 KB messages); the
 > reporting format; how to interpret a delta._
+
+> **Constraint on the diff design (per [ADR-002](phase2-topology-decision.md)):**
+> the original premise — "hold everything identical, change only the
+> host, measure the delta" — **no longer holds for IPC**. The cloud and
+> Orin legs run **non-identical IPC topologies**: the cloud leg is a
+> single-OS QNX↔QNX exchange over a `qvm` virtio-console vdev under
+> **TCG**, whereas Orin is a heterogeneous QNX↔Linux exchange over
+> virtio-net bridged under **KVM**. The IPC diff therefore confounds at
+> least three variables — host (Graviton vs. A78AE), acceleration (TCG
+> vs. KVM), and transport+OS-pair (console/QNX↔QNX vs. virtio-net/QNX↔Linux)
+> — and the methodology must say so explicitly rather than presenting
+> the IPC delta as a host-only effect. The cloud IPC number is
+> TCG-emulation-bound (a *mechanism-alive* sanity figure), so only the
+> Orin leg yields a hardware-timed transport number; the diff is
+> "mechanism vs. heterogeneity", not a clean host-only comparison. The
+> **boot-time** diff (same IFS, same QEMU machine shape) remains the
+> cleaner near-host-only comparison and is the diff to lead with.
 
 ---
 

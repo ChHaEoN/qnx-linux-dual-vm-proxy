@@ -47,8 +47,16 @@ the NVIDIA AVOS / DRIVE OS SE role this portfolio targets.
 
 **Common across both twins:**
 - VM0 — Safety proxy: QNX SDP 8.0, aarch64 `virt` machine, NCEULA (Everywhere)
-- VM1 — Compute proxy: Linux aarch64 (Ubuntu 22.04 cloudimg on AWS; L4T on Orin)
-- IPC: virtio-net via host bridge `br0` + tap devices (`tap-qnx` / `tap-linux`)
+- VM1 — Compute proxy: Linux aarch64 — **Phase 3 / Orin only** (L4T native). Per
+  [ADR-002](docs/phase2-topology-decision.md) there is **no Linux guest on the
+  cloud leg** (the cloud Compute-VM premise was falsified — no `/dev/kvm`, host
+  `io-sock` down).
+- IPC (cloud leg): QNX-host (`qnx-qhv`) ↔ QNX-guest (`qnx-guest`) over the `qvm`
+  `virtio-console` vdev — crosses the real EL2/EL1 partition boundary, TCG-emulated,
+  **no** `br0`/tap (host `io-sock` is down). See [ADR-002](docs/phase2-topology-decision.md).
+- IPC (Phase 3 / Orin leg): heterogeneous QNX↔Linux over host bridge `br0` + tap
+  devices (`tap-qnx` / `tap-linux`) + virtio-net under KVM — this bridged path
+  belongs to Orin, **not** the cloud leg.
 - Reference architecture: NVIDIA DRIVE OS dual-VM partition design (public docs)
 
 **Dev driver / build host:** local Windows PC (x86_64) — both the
