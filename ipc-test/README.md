@@ -12,11 +12,17 @@ is no `/dev/kvm` on cloud Graviton and no Linux guest on the cloud leg,
 and the host `io-sock` stack is down — so every `br0`/tap/host-TCP
 transport is presumed broken there.
 
-> **Status:** scaffold. Sources live under `qnx-server/`,
-> `qnx-host-client/`, and `linux-client/`; all three directories are
-> placeholders until implemented. No benchmark numbers exist yet
-> (Phase 2 not implemented) — the tables below describe expectations,
-> not measurements.
+> **Status:** the two cloud-leg QNX sides are **implemented and
+> cross-compile clean to aarch64le** with `qcc -Vgcc_ntoaarch64le`
+> (`qnx-server/server.c` + `qnx-host-client/client.c`, sharing
+> `common/frame.h` + `common/console_io.h`). The **runtime measurement
+> is pending the qvm/TCG console-wiring spike** (the `virtio-console`
+> vdev still needs a host-side `hostdev` binding — proposal + gate
+> evidence in `qnx-host-client/README.md`). `linux-client/` stays a
+> Phase-3 placeholder. **No benchmark numbers exist yet** — the latency
+> tables below describe expectations, not measurements, and
+> `../results/cloud/` holds only the CSV schema (`header.csv`), never
+> fabricated samples.
 
 ---
 
@@ -125,13 +131,23 @@ required.
 ```
 ipc-test/
 ├── README.md           # this file
+├── Makefile            # builds both QNX sides (qcc); skips linux-client (Phase 3)
+├── common/             # shared wire contract + IO/timing helpers (both QNX sides)
+│   ├── frame.h         # fixed-width frame (8B seq + 8B tstamp + N-byte payload) + LE pack/unpack
+│   └── console_io.h    # full-frame byte-stream read/write loop + ClockCycles() helpers
 ├── qnx-server/         # Phase 2 (cloud): C99, qcc-built; QNX-guest virtio-console echo endpoint
 ├── qnx-host-client/    # Phase 2 (cloud): C99, qcc-built; qnx-qhv host console initiator + RTT
+│   ├── g2.conf.proposed  # minimal hostdev wiring for the console vdev (passes Phase-1 gate)
+│   └── README.md         # build/run + host<->guest wiring proposal + runtime-spike unknowns
 └── linux-client/       # Phase 3 (Orin): C99, gcc-built; Linux Compute end of QNX↔Linux IPC over KVM/virtio-net
 ```
 
-Each side will land as a single-translation-unit C file with a tiny
-Makefile when implemented. Build instructions will live in their
-respective sub-directories at that point. Note that `linux-client/` is
-**Phase 3 only** — it does not build or run on the cloud leg (there is
-no Linux guest there).
+The shared frame contract lives once in `common/frame.h` so the two ends
+cannot drift; `common/console_io.h` carries the partial-read/partial-write
+loop (virtio-console fds are byte-streams) and the single-OS
+`ClockCycles()` timing. Both QNX sides cross-compile with
+`make` after sourcing the SDP env (`qnxsdp-env.bat` / `. qnxsdp-env.sh`);
+build/run detail and the host<->guest wiring proposal are in
+`qnx-host-client/README.md`. Note that `linux-client/` is **Phase 3
+only** — it does not build or run on the cloud leg (there is no Linux
+guest there).

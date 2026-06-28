@@ -30,6 +30,9 @@ qnx710/
 .aws/
 
 # Build artifacts
+# ipc-test extensionless QNX binaries (NCEULA: never commit compiled QNX code).
+ipc-test/qnx-server/qnx-echo-server
+ipc-test/qnx-host-client/qnx-host-client
 *.o
 *.a
 *.so

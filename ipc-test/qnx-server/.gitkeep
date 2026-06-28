@@ -1,9 +1,0 @@
-# Phase 2 (cloud, QNX-guest virtio-console endpoint)
-# The qnx-guest END of the host<->guest console IPC channel.
-# Per ADR-002 (docs/phase2-topology-decision.md): repurposed from the old
-# "QNX TCP listen on 192.168.100.10:5555" design to a virtio-console endpoint
-# on the QNX guest — it reads/writes the guest-side console device that the qvm
-# vdev exposes across the EL2/EL1 partition boundary. The fixed-width frame
-# (8-byte seq + 8-byte timestamp + N-byte payload) and echo semantics are
-# unchanged; only the transport (console fd, not a TCP socket) changes.
-# It does NOT route through host io-sock (which is down on this leg).

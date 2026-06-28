@@ -1,5 +1,0 @@
-# Phase 2 (cloud, QNX-host -> QNX-guest over qvm virtio-console)
-# The qnx-qhv HOST end of the host<->guest console IPC channel.
-# Per ADR-002 (docs/phase2-topology-decision.md): the cloud-leg initiator is a
-# QNX-host program writing the framed echo across the qvm virtio-console vdev;
-# it does NOT route through host io-sock (which is down on this leg).
