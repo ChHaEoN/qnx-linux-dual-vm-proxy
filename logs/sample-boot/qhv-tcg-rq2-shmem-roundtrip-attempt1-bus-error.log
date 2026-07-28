@@ -1,0 +1,74 @@
+FOUND GICv3 ITS
+** CPU 0 PE is not awake
+** CPU 1 PE is not awake
+---> Starting slogger2
+---> Starting PCI Services
+---> Starting fsevmgr
+# ---> Starting devb
+---> Mounting file systems
+Path=0 - 
+ target=0 lun=0     Direct-Access(0) - VIRTIO  Rev: 
+---> Mounting file systems
+random: Unable to use devr-virtio.so as an entropy source [entropy.c(173)]
+random: Could not initialize entropy. [random.c(406)]
+Unable to access /dev/random
+---> Starting Networking
+if_up: network stack down: Bad file descriptor
+ifconfig: interface vtnet0 does not exist
+sysctl: unknown oid 'net.inet.icmp.bmcastecho': Address family not supported by protocol family
+sysctl: unknown oid 'qnx.sec.droproot': Address family not supported by protocol family
+setfacl: stat() of /dev/bpf failed: No such file or directory
+main: control_open: Address family not supported by protocol family
+socketpair: Address family not supported by protocol family
+---> Starting sshd
+PRNG is not seeded
+---> Starting misc
+=== RQ-2 ROUND TRIP: starting hyp-shm-roundtrip (host half, background) ===
+=== AUTO-START QNX GUEST UNDER QVM (no-net) ===
+roundtrip: hyp_shm_attach_ext rc=0 errno=2
+roundtrip: attached 'phase2-rq2-probe' size=4096 data=53bea7c000
+roundtrip: wrote host pattern "hyp-shm-host-ok" at offset 0
+roundtrip: polling offset 64 for the guest's write-back, up to 180s ...
+=== launching qvm @g2.conf (background) ===
+=== boot-grace sleep for guest devc-virtio + qnx-echo-server startup ===
+---> Starting slogger2
+---> Starting PCI Services
+---> Starting fsevmgr
+---> Starting devb
+Path=0 - 
+ target=0 lun=0     Direct-Access(0) - VIRTIO  Rev: 
+---> Mounting file systems
+---> Mounting file systems
+---> Starting Networking
+if_up: tries exhausted
+ifconfig: interface vtnet0 does not exist
+no valid interfaces found
+---> Starting sshd
+---> Starting misc
+=== starting devc-virtio for virtio-console (0x20000000,42) ===
+=== starting qnx-echo-server on /dev/vcon2 ===
+=== RQ-2 GUEST PROBE: running gshm-probe (shmem vdev @0x1c0f0000,intr gic:43) ===
+servegrp:r oebceh:o  feancdtpooriyn t muappp eodn  @/dev/vcon2p a(dfdrra=m0xe1c0f0000=,64  sbiytgenast)u
+re=0x4d534732474d5651 (expect 0x4d534732474d5651)
+Bus error (core dumped) 
+=== gshm-probe exit=138 ===
+Process count:23
+Startup complete
+QNX qnx-guest 8.0.0 2026/02/27-10:59:13EST ARMv8_Foundation_Model aarch64le
+=== running qnx-host-client (mechanism-alive IPC benchmark, TCG-bound) ===
+client: link up on /dev/ttyp0; cps=1000000000, frame=64 bytes
+client: progress 0/20
+samples=15 payload=48 cps=1000000000
+P50=2429800 ns  P99=3478300 ns  Max=3478300 ns
+(P50 sanity: link alive if non-zero and stable)
+sentinel_recoveries=0 sentinel_bounces=0 (see ipc-test/qnx-host-client/README.md; 0/0 means no stall hit this run)
+client: note: could not open ../../results/cloud/cloud-ipc-latest.csv (No such file or directory); stdout summary stands
+=== qnx-host-client exit=0 ===
+
+To exit QEMU, type <ctrl>a x
+
+Process count:20
+Startup complete
+QNX qnx-qhv 8.0.0 2026/02/27-10:59:13EST QEMU_virt aarch64le
+roundtrip: TIMEOUT after 180s -- offset 64 holds "" (not the expected guest pattern)
+roundtrip: detached, exit=2

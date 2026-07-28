@@ -8,13 +8,20 @@ TARGET  := -Vgcc_ntoaarch64le
 CFLAGS  := -std=gnu99 -Wall -Wextra -Wformat=2 -O2
 LDFLAGS := -lhyp
 
-BIN := hyp-shm-probe
+BINS := hyp-shm-probe hyp-shm-roundtrip
 
 .PHONY: all clean
-all: $(BIN)
+all: $(BINS)
 
-$(BIN): probe.c
+hyp-shm-probe: probe.c
 	$(CC) $(TARGET) $(CFLAGS) -o $@ probe.c $(LDFLAGS)
 
+# hyp-shm-roundtrip continues the guest-side spike (2026-07-28 follow-up):
+# same create/attach/write as probe.c, but polls for a guest write-back
+# instead of detaching immediately. See roundtrip.c and
+# ../qnx-guest-shmem-probe/README.md.
+hyp-shm-roundtrip: roundtrip.c
+	$(CC) $(TARGET) $(CFLAGS) -o $@ roundtrip.c $(LDFLAGS)
+
 clean:
-	rm -f $(BIN)
+	rm -f $(BINS)

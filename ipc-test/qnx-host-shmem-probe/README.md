@@ -62,11 +62,17 @@ guest-only.
 
 ```
 qnxsdp-env.bat            # Windows
-make                      # -> hyp-shm-probe (aarch64le ELF, links -lhyp)
+make                      # -> hyp-shm-probe + hyp-shm-roundtrip (aarch64le ELF, both link -lhyp)
 ```
 
+`hyp-shm-roundtrip` (`roundtrip.c`, added 2026-07-28) is the host-side half
+of the guest-side spike documented in
+[../qnx-guest-shmem-probe/README.md](../qnx-guest-shmem-probe/README.md) —
+same create/attach/write as `probe.c`, but polls for a guest write-back
+instead of detaching immediately.
+
 Build evidence (2026-07-28): `qcc -Vgcc_ntoaarch64le -std=gnu99 -Wall
--Wextra -Wformat=2` (zero warnings).
+-Wextra -Wformat=2` (zero warnings), both binaries.
 
 ## Run
 
@@ -92,5 +98,9 @@ directly so it picks up the manual edits.
 ## Status
 
 Host-side RQ-2: **RESOLVED, proven live.** Guest-side RQ-2 (the true
-host<->guest round trip): **open, not attempted, not ruled out** — the
-concrete next step if this stretch transport is picked back up.
+host<->guest round trip): **RESOLVED, proven live, 2026-07-28 continuation
+session** — see
+[../qnx-guest-shmem-probe/README.md](../qnx-guest-shmem-probe/README.md)
+and this directory's `roundtrip.c`, the host-side half of that later
+session's two-way exchange (this original `probe.c` is left unchanged as
+the historical record of the first, host-only result).

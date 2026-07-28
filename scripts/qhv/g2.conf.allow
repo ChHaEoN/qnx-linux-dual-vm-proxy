@@ -32,6 +32,18 @@ loc
 intr
 name
 
+# 'allow' (2026-07-28, ADR-002 RQ-2 guest-side spike) -- the shmem vdev's
+# restrictions-list directive (see vdev:shmem below). The spike's g2.conf
+# uses 'allow phase2-rq2-probe' to restrict the guest to exactly the one
+# named region it needs, the least-privilege posture the vdev's own
+# allow/deny mechanism is designed for ("we recommend defining either an
+# allow or a deny policy for every named region", vdev shmem doc). 'deny'
+# and the shmem vdev's other directives ('create', 'gid', 'sched', 'subst',
+# 'umask') are NOT added here -- this g2.conf does not use them, and
+# least-directive means only what is actually exercised gets allow-listed;
+# add them in a future reviewed change if a future g2.conf needs them.
+allow
+
 # --- allowed vdev TYPES (second token of a 'vdev <type>' line) ---
 # Prefixed 'vdev:' so the validator can enforce least-vdev at the type level,
 # not just the keyword level: 'vdev passthru' is rejected even though 'vdev'
@@ -40,3 +52,6 @@ name
 vdev:pl011
 vdev:virtio-console
 vdev:virtio-blk
+# vdev:shmem (2026-07-28, ADR-002 RQ-2) -- the shared-memory vdev used for
+# the host<->guest round trip proven in ipc-test/qnx-guest-shmem-probe/.
+vdev:shmem

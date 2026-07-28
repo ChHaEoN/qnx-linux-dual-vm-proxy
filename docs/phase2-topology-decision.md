@@ -336,6 +336,35 @@ so they do not drift)
 > protocol) was not attempted** — a time-boxed stopping point, not a
 > ruled-out wall. `scripts/qhv/g2.conf.allow` has NOT been extended with
 > `vdev:shmem` since no guest-side vdev was actually configured.
+>
+> **RQ-2 FULLY RESOLVED 2026-07-28 (continuation session) — guest side is
+> now RESOLVED YES, proven live, two-way.** A `qnx-guest` process
+> ([ipc-test/qnx-guest-shmem-probe/](../ipc-test/qnx-guest-shmem-probe/))
+> added a `vdev shmem` line to the guest's `g2.conf` (staged, not committed
+> to `scripts/qhv/`) and attached to `phase2-rq2-probe` via
+> `qvm/guest_shm.h`'s raw-MMIO factory-page protocol
+> (`mmap_device_memory()` + `guest_shm_create()`): `guest_shm_create()`
+> returned `GSS_OK`, the guest read the host's `"hyp-shm-host-ok"` pattern
+> byte-exact, and wrote `"hyp-shm-guest-ok"` back; a host-side companion
+> (`ipc-test/qnx-host-shmem-probe/roundtrip.c`) that had been polling since
+> before `qvm` launched the guest saw the write-back 24 seconds later. Both
+> ends resolving to the same underlying region (not two independent
+> registries) is now empirically confirmed, not just inferred from docs. A
+> first attempt hit a real `Bus error` (block `memcpy()` into the factory
+> page's MMIO register file — fixed by switching to byte-at-a-time volatile
+> stores); see [findings.md](findings.md) and
+> [ipc-test/qnx-guest-shmem-probe/README.md](../ipc-test/qnx-guest-shmem-probe/README.md)
+> for the full account, including the fix. `scripts/qhv/g2.conf.allow` **is
+> now extended** with the `allow` keyword and `vdev:shmem` type
+> (least-directive: only what this g2.conf actually uses). **Not attempted:**
+> the interrupt/notify-driven path (`InterruptAttach()` +
+> `guest_shm_control.notify`) — everything proven is pure MMIO polling on
+> both ends; `factory->vector` is read/logged for a future attempt. This
+> stretch transport is now proven end-to-end at the mechanism level, but
+> remains a **spike, not the committed Option-A deliverable** — the
+> committed transport is still virtio-console (§3.1); whether to build a
+> full replacement IPC layer on shmem is left to a future Architect
+> decision.
 
 These gate the **Option B stretch** and resolve the **A stretch transport**.
 Implementation can start the committed Option-A/virtio-console deliverable

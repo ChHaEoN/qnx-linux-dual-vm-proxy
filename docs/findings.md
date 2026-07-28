@@ -8,6 +8,66 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 
 ---
 
+## 2026-07-28 — ADR-002 RQ-2 guest-side shmem round trip: RESOLVED YES, proven live, two-way (continuation session)
+
+Completes the concrete next step the entry below left open: a `qnx-guest`
+process attaching to the same named shared-memory region
+(`phase2-rq2-probe`) the `qnx-qhv` host already proved it could create/attach
+to, and a real byte exchange in both directions. New pieces: a `vdev shmem`
+line (`loc 0x1c0f0000`, `intr gic:43`, `allow phase2-rq2-probe`) added to a
+**staged, not committed** copy of the guest's `g2.conf` generator in
+`post_start.custom`; a new guest-side program,
+[ipc-test/qnx-guest-shmem-probe/probe.c](../ipc-test/qnx-guest-shmem-probe/probe.c),
+using `qvm/guest_shm.h`'s raw-MMIO factory-page protocol
+(`mmap_device_memory()` + `guest_shm_create()`, no library); and a new
+host-side companion, `ipc-test/qnx-host-shmem-probe/roundtrip.c`, that writes
+the host pattern before `qvm` launches the guest and then **polls** (not
+interrupt-driven) for the guest's write-back instead of detaching
+immediately. `scripts/qhv/g2.conf.allow` was extended with the `allow`
+keyword and `vdev:shmem` type (least-directive: only what this g2.conf
+actually uses was added; `create`/`deny`/`gid`/`sched`/`subst`/`umask` were
+deliberately left out).
+
+**First boot attempt crashed** (`Bus error`, log:
+[logs/sample-boot/qhv-tcg-rq2-shmem-roundtrip-attempt1-bus-error.log](../logs/sample-boot/qhv-tcg-rq2-shmem-roundtrip-attempt1-bus-error.log)):
+the factory page's signature read (a scalar load) succeeded, proving the
+`vdev shmem loc/intr` MMIO wiring itself is real, but a block `memcpy()` of
+the 32-byte region name into the factory page's virtual-register file took a
+Bus error immediately after — most likely `qvm`'s MMIO trap decoder
+rejecting whatever wide/vector store instruction the target's `memcpy()`
+picked for that copy size (the same *class* of problem as the unrelated Orin
+`KVM_EXIT_ARM_NISV` GICv3 finding in `docs/orin-port.md` — an MMIO emulator
+that only decodes a subset of real instruction encodings). **Fix:** rewrite
+the name write (and, defensively, the shared-data read/write) as explicit
+byte-at-a-time volatile stores instead of a block copy.
+
+**Second boot attempt succeeded end to end** (log:
+[logs/sample-boot/qhv-tcg-rq2-shmem-roundtrip-success.log](../logs/sample-boot/qhv-tcg-rq2-shmem-roundtrip-success.log)):
+the guest's `guest_shm_create()` returned `GSS_OK`, read the host's
+`"hyp-shm-host-ok"` pattern byte-exact, and wrote back
+`"hyp-shm-guest-ok"`; the still-running host prober saw the write-back 24
+seconds later before detaching. Both ends resolving to the **same**
+underlying named region (not two independent registries that happen to
+share a name) answers the crux question the previous entry left open. The
+existing committed virtio-console IPC benchmark then ran immediately
+afterward in the same boot with no regression (one sentinel-kick recovery —
+the same already-documented, unrelated non-deterministic `qvm`/TCG stall).
+**Not attempted, explicitly:** the interrupt/notify-driven path
+(`InterruptAttach()` + `guest_shm_control.notify`) — the vdev's intr line's
+edge/level and masking semantics were not confirmed in the time available,
+and a wrong guess risks an interrupt storm hanging the guest under TCG with
+no fast iteration loop to debug it; `factory->vector` (`43`, matching
+`gic:43`) is read and logged for a future attempt. Per the project's
+"diagnostic variant, staged, reverted after use" convention (same as the
+host-only probe), the manual `g2.conf`/`post_start.custom` edits were never
+committed to `scripts/qhv/` — `scripts/build-qhv.bat` was re-run afterward to
+regenerate both gitignored build trees from the clean committed sources
+(verified via `diff` showing no drift). See
+[ipc-test/qnx-guest-shmem-probe/README.md](../ipc-test/qnx-guest-shmem-probe/README.md)
+for the full account.
+
+---
+
 ## 2026-07-28 — ADR-002 RQ-2 host<->guest shmem viability: RESOLVED YES (host side, empirically proven live); guest side open, not attempted
 
 Resolved the crux unknown behind ADR-002's RQ-2 stretch transport (see
