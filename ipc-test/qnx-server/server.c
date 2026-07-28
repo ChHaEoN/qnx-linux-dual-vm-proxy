@@ -10,11 +10,12 @@
  * Honest framing: study-level mechanism-alive proxy across a TCG-emulated qvm
  * boundary, not a transport benchmark.
  *
- * RUNTIME-SPIKE UNKNOWN: the exact guest-side device node the qvm
- * virtio-console vdev presents to the guest is not settled from docs alone
- * (see qnx-host-client/README). DEFAULT_DEV below is the conventional guess;
- * pass the real node as argv[1] once the qvm/TCG console-wiring spike resolves
- * it.
+ * RUNTIME-SPIKE (resolved 2026-07-28): the guest sees no device node for the
+ * virtio-console vdev until it starts the devc-virtio driver itself, matching
+ * the vdev's loc/intr from g2.conf: `devc-virtio 0x20000000,42 &`. That
+ * creates /dev/vcon2 (vcon1 is already taken by the guest's pl011 console).
+ * See ../qnx-host-client/README.md and ../../scripts/qhv/guest-post_start.custom
+ * (which starts devc-virtio before this server).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,7 +28,7 @@
 #include "frame.h"
 #include "console_io.h"
 
-#define DEFAULT_DEV "/dev/con1"
+#define DEFAULT_DEV "/dev/vcon2"
 
 static volatile sig_atomic_t g_stop = 0;
 
@@ -50,6 +51,11 @@ int main(int argc, char **argv)
     int fd = open(dev, O_RDWR);
     if (fd < 0) {
         fprintf(stderr, "server: open(%s): %s\n", dev, strerror(errno));
+        return 1;
+    }
+    if (cio_set_raw(fd) < 0) {
+        fprintf(stderr, "server: cio_set_raw(%s): %s\n", dev, strerror(errno));
+        close(fd);
         return 1;
     }
     fprintf(stderr, "server: echo endpoint up on %s (frame=%u bytes)\n",

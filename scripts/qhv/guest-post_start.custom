@@ -1,0 +1,26 @@
+# guest-post_start.custom — appended to the QNX GUEST's post_startup.sh by
+# mkqnximage (staged by build-qhv.bat into <guest-build-dir>/local/snippets/
+# post_start.custom before the guest --type=qvm build).
+#
+# RUNTIME-SPIKE finding (2026-07-28, ipc-test/qnx-host-client/README.md):
+# the guest kernel arms the virtio-console vdev declared in the host's
+# g2.conf (scripts/qhv/post_start.custom: loc 0x20000000, intr gic:42), but
+# generic board bring-up only auto-attaches a console driver to the FIRST
+# console vdev (pl011, -> /dev/vcon1). A second/extra console vdev needs its
+# driver started explicitly, per the devc-virtio usage doc: the location,irq
+# arguments must match the vdev's loc/intr exactly. That creates /dev/vcon2.
+#
+# -E: devc-virtio defaults to EDITED ("cooked") tty mode, not raw -- binary
+# frames with no embedded newline can sit buffered in the line discipline
+# forever (observed empirically as a hard hang before this flag + the
+# matching tcsetattr/cfmakeraw in ipc-test/common/console_io.h were added).
+echo "=== starting devc-virtio for virtio-console (0x20000000,42) ==="
+devc-virtio -E 0x20000000,42 &
+waitfor /dev/vcon2 10
+
+echo "=== starting qnx-echo-server on /dev/vcon2 ==="
+if [ -x /proc/boot/qnx-echo-server ]; then
+  /proc/boot/qnx-echo-server /dev/vcon2 &
+else
+  echo "guest-post_start.custom: /proc/boot/qnx-echo-server not staged; skipping"
+fi

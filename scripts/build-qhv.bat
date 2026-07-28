@@ -9,7 +9,9 @@ REM Two-stage mkqnximage build (per the QNX Hypervisor User's Guide):
 REM   1. guest : mkqnximage --type=qvm  ...                 -> qhv\guest\output
 REM   2. host  : mkqnximage --type=qemu --qvm=yes --guest=  -> qhv\host\output
 REM The host image embeds qvm + the guest under /data/hypervisor/, and our
-REM scripts\qhv\post_start.custom snippet auto-starts the guest under qvm.
+REM scripts\qhv\post_start.custom snippet auto-starts the guest under qvm and
+REM then runs the qnx-host-client <-> qnx-echo-server IPC benchmark (Phase 2,
+REM see ipc-test\qnx-host-client\README.md).
 REM
 REM Output (gitignored; NCEULA forbids redistributing QNX binaries):
 REM   qhv\host\output\ifs.bin     <- QHV host kernel image (qemu -kernel)
@@ -44,10 +46,39 @@ if not exist "%QNX_TARGET%\aarch64le\sbin\qvm" (
 
 set "GUEST_DIR=%REPO_ROOT%\qhv\guest"
 set "HOST_DIR=%REPO_ROOT%\qhv\host"
-REM mkqnximage --guest needs forward slashes (it is Perl-based; backslashes are eaten)
+set "IPC_DIR=%REPO_ROOT%\ipc-test"
+REM mkqnximage --guest and buildfile source= entries need forward slashes
+REM (mkqnximage is Perl-based / mkifs buildfile parser; backslashes are eaten)
 set "GUEST_FWD=%GUEST_DIR:\=/%"
+set "REPO_ROOT_FWD=%REPO_ROOT:\=/%"
+set "GUEST_SERVER_BIN=%REPO_ROOT_FWD%/ipc-test/qnx-server/qnx-echo-server"
+set "HOST_CLIENT_BIN=%REPO_ROOT_FWD%/ipc-test/qnx-host-client/qnx-host-client"
 
-echo [1/3] Building qvm guest in %GUEST_DIR% ...
+echo [1/5] Building ipc-test binaries (qnx-echo-server, qnx-host-client) ...
+pushd "%IPC_DIR%"
+call make || (
+  echo ERROR: ipc-test build failed. & popd & exit /b 1
+)
+popd
+if not exist "%GUEST_SERVER_BIN:/=\%" (
+  echo ERROR: %GUEST_SERVER_BIN% not found after ipc-test build. & exit /b 1
+)
+if not exist "%HOST_CLIENT_BIN:/=\%" (
+  echo ERROR: %HOST_CLIENT_BIN% not found after ipc-test build. & exit /b 1
+)
+
+echo [2/5] Staging guest auto-start snippet + server binary reference ...
+if not exist "%GUEST_DIR%\local\snippets" mkdir "%GUEST_DIR%\local\snippets"
+copy /Y "%SCRIPT_DIR%qhv\guest-post_start.custom" "%GUEST_DIR%\local\snippets\post_start.custom" >nul || (
+  echo ERROR: could not stage guest-post_start.custom & exit /b 1
+)
+(
+  echo [perms=555] qnx-echo-server=%GUEST_SERVER_BIN%
+) > "%GUEST_DIR%\local\snippets\ifs_files.custom" || (
+  echo ERROR: could not stage guest ifs_files.custom & exit /b 1
+)
+
+echo [3/5] Building qvm guest in %GUEST_DIR% ...
 if not exist "%GUEST_DIR%" mkdir "%GUEST_DIR%"
 pushd "%GUEST_DIR%"
 call mkqnximage --type=qvm --arch=aarch64le --hostname=qnx-guest --build || (
@@ -55,13 +86,18 @@ call mkqnximage --type=qvm --arch=aarch64le --hostname=qnx-guest --build || (
 )
 popd
 
-echo [2/3] Staging auto-start snippet into host build tree ...
+echo [4/5] Staging host auto-start snippet + client binary reference ...
 if not exist "%HOST_DIR%\local\snippets" mkdir "%HOST_DIR%\local\snippets"
 copy /Y "%SCRIPT_DIR%qhv\post_start.custom" "%HOST_DIR%\local\snippets\post_start.custom" >nul || (
   echo ERROR: could not stage post_start.custom & exit /b 1
 )
+(
+  echo [perms=555] hypervisor/qnx-host-client=%HOST_CLIENT_BIN%
+) > "%HOST_DIR%\local\snippets\data_files.custom" || (
+  echo ERROR: could not stage host data_files.custom & exit /b 1
+)
 
-echo [3/3] Building QHV host in %HOST_DIR% (qvm + guest) ...
+echo [5/5] Building QHV host in %HOST_DIR% (qvm + guest) ...
 pushd "%HOST_DIR%"
 call mkqnximage --type=qemu --arch=aarch64le --hostname=qnx-qhv --qvm=yes --guest=%GUEST_FWD% --build || (
   echo ERROR: host build failed. & popd & exit /b 1

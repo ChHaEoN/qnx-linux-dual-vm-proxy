@@ -8,6 +8,67 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 
 ---
 
+## 2026-07-28 — Phase 2 runtime spike resolved: first real QNX-host<->QNX-guest IPC numbers (partial)
+
+Resolved the qvm/TCG console-wiring spike blocking Phase 2
+([`../ipc-test/qnx-host-client/README.md`](../ipc-test/qnx-host-client/README.md))
+and captured the **first real measured numbers to exist anywhere in this
+repo** for the cloud-leg IPC benchmark — with one real limitation still
+open. Chain of findings, established via a live interactive host shell
+(TCP-forwarded `qvm` console, driven while the QHV host was actually
+running, rather than guessed from docs): (1) **host-side wiring** —
+`vdev virtio-console` needs `hostdev /dev/ptyp0` or `qvm` fails to arm it
+(`[g2.conf:9] Failed to arm a resource manager: Function not implemented`,
+present even in the *pre-existing*, `hostdev`-less config); `/dev/ptyp0` is
+a `devc-pty` master already running on the image, `qvm` opens it, and the
+paired slave `/dev/ttyp0` is what `qnx-host-client` opens — not the
+`/dev/qhv/con1` placeholder in the milestone-1 proposal, which does not
+exist (`ls: /dev/qhv: No such file or directory`, confirmed live). (2)
+**guest-side wiring** — the guest gets no device node for the vdev at all
+until it explicitly starts `devc-virtio -E 0x20000000,42` (matching the
+vdev's `loc`/`intr`), which creates `/dev/vcon2` (`/dev/vcon1` is already
+pl011's); confirmed via a diagnostic guest boot dumping `ls -la /dev`
+before/after. (3) **two more real bugs found only by running it**: a tty
+canonical-mode deadlock (both `/dev/ttyp0` and `/dev/vcon2` default to
+line-buffered "cooked" mode; a binary frame with no `\n` byte can sit
+unflushed forever — fixed with `cfmakeraw`/`tcsetattr` raw mode on both
+ends, `ipc-test/common/console_io.h`), and a short one-time byte-injection
+artifact ahead of the first echoed frame, reproducible byte-for-byte across
+boots and not originating from the server (whose received frame was
+byte-exact) — almost certainly `qvm` virtio-queue negotiation overhead on
+the first exchange, absorbed by a throwaway "priming" frame + drain before
+the timed loop starts. **Result:** a clean run of 5 warm-up + 15 timed
+iterations completed end to end — `qnx-echo-server` up on `/dev/vcon2`,
+`qnx-host-client` linked on `/dev/ttyp0`, real measured
+**P50=2,002,500 ns, P99=Max=2,332,300 ns** (15 samples, 48-byte payload),
+captured in
+[`../logs/sample-boot/qhv-tcg-ipc-benchmark.log`](../logs/sample-boot/qhv-tcg-ipc-benchmark.log)
+and transcribed by the new `scripts/qhv/extract-ipc-result.sh` into
+[`../results/cloud/cloud-ipc-latest.csv`](../results/cloud/cloud-ipc-latest.csv)
+(the client cannot write that file itself — it runs inside the QNX host
+image's own filesystem, with no path back to this checkout on this leg).
+**What did NOT get resolved:** a fourth, unanticipated finding — repeated
+back-to-back exchanges with no gap hang within single-digit iterations
+under TCG (a real, reproducible hang under a bounded read timeout, not
+framing corruption: every frame up to the stall point was byte-exact). A
+20 ms inter-iteration pacing gap (measured outside the RTT sample window)
+let some runs reach dozens of iterations, but repeated attempts at the
+*same* 20 ms gap stalled anywhere from iteration 2 to iteration 35, and
+neither a larger gap (100 ms, which stalled at iteration 16 and separately
+at iteration 2) nor a much longer read timeout (25 s, no recovery) made it
+reliable — a 10000-iteration attempt also stalled (iteration 35). This
+points to `qvm`/TCG virtio-queue kick/notify timing sensitivity, not a
+protocol defect, but it was not root-caused further within this spike.
+**Honest framing:** the reported ~2 ms P50/P99 is TCG-emulation-bound, not
+a transport-cost measurement (per `ipc-test/README.md`'s existing framing),
+and the *sample count* itself is honestly small — 15, not the
+1000-warm-up/100000-iteration target the client defaults to — because
+larger counts hit the unresolved stall above; treat the 15-sample result
+as proof the mechanism is wired and alive across the real `qvm` EL2/EL1
+boundary, and the stall as a genuinely open finding, not a resolved one.
+
+---
+
 ## 2026-06-11 — Phase-1 gate: full FuSa + Cyber V-model cycle on the as-built QHV boundary (Analysis → Design → Implementation → Verification)
 
 Ran the Phase-1 phase-gate review against the *as-built* QHV/TCG boundary —

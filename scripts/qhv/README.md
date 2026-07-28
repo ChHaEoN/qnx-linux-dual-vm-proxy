@@ -28,9 +28,28 @@ scripts\build-qhv.bat
 powershell -ExecutionPolicy Bypass -File scripts\launch-qhv-tcg.ps1
 ```
 
-`build-qhv.bat` does the two-stage mkqnximage build (guest `--type=qvm`, then
-host `--type=qemu --qvm=yes --guest=...`) and stages `post_start.custom` so the
-guest auto-starts. `launch-qhv-tcg.ps1` boots it and captures the serial log.
+`build-qhv.bat` builds `ipc-test/` (qcc) first, then does the two-stage
+mkqnximage build (guest `--type=qvm`, then host `--type=qemu --qvm=yes
+--guest=...`), staging `guest-post_start.custom` + the compiled
+`qnx-echo-server` into the guest build tree and `post_start.custom` + the
+compiled `qnx-host-client` into the host build tree so both auto-start.
+`launch-qhv-tcg.ps1` boots it and captures the serial log.
+
+## Cross-partition IPC benchmark (Phase 2)
+
+The host's `post_start.custom` also runs the `qnx-host-client` <->
+`qnx-echo-server` echo benchmark automatically, across the `qvm`
+`virtio-console` vdev (host-side endpoint: the `hostdev /dev/ptyp0` pty pair;
+guest-side endpoint: `/dev/vcon2`, brought up by `devc-virtio` in
+`guest-post_start.custom`). See
+[../../ipc-test/qnx-host-client/README.md](../../ipc-test/qnx-host-client/README.md)
+for the full runtime-spike finding chain (tty raw-mode requirement, a
+one-time startup byte-injection artifact, a steady-state TCG/virtio-queue
+stall needing a pacing gap). The client's printed summary line is captured
+verbatim in the serial log; `extract-ipc-result.sh <captured-log>`
+transcribes it into `../../results/cloud/cloud-ipc-latest.csv` (the client
+cannot write that file itself — it runs inside the QNX image's own
+filesystem, with no path back to this checkout).
 
 ## What success looks like
 

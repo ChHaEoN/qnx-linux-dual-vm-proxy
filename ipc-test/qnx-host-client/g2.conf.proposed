@@ -1,3 +1,12 @@
+# SUPERSEDED 2026-07-28: this was the milestone-1 gate-pass PROPOSAL only.
+# /dev/qhv/con1 below does not exist on the built image (confirmed via a
+# live host shell: "ls: /dev/qhv: No such file or directory") -- passing the
+# config gate proved the DIRECTIVE syntax was allowed, not that the path was
+# real. The actual, empirically-confirmed-working config (hostdev
+# /dev/ptyp0, a real devc-pty master already running on this image) is what
+# scripts/qhv/post_start.custom generates; see qnx-host-client/README.md
+# ("Host<->guest wiring — RESOLVED") for the full finding. Kept here only as
+# a record of the milestone-1 proposal, not as something to copy from.
 system mkqnximage-guest
 ram 0x80000000,512M
 cpu

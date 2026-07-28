@@ -12,17 +12,20 @@ is no `/dev/kvm` on cloud Graviton and no Linux guest on the cloud leg,
 and the host `io-sock` stack is down — so every `br0`/tap/host-TCP
 transport is presumed broken there.
 
-> **Status:** the two cloud-leg QNX sides are **implemented and
-> cross-compile clean to aarch64le** with `qcc -Vgcc_ntoaarch64le`
-> (`qnx-server/server.c` + `qnx-host-client/client.c`, sharing
-> `common/frame.h` + `common/console_io.h`). The **runtime measurement
-> is pending the qvm/TCG console-wiring spike** (the `virtio-console`
-> vdev still needs a host-side `hostdev` binding — proposal + gate
-> evidence in `qnx-host-client/README.md`). `linux-client/` stays a
-> Phase-3 placeholder. **No benchmark numbers exist yet** — the latency
-> tables below describe expectations, not measurements, and
-> `../results/cloud/` holds only the CSV schema (`header.csv`), never
-> fabricated samples.
+> **Status (2026-07-28):** the qvm/TCG console-wiring runtime spike is
+> **resolved and running end to end** — `qnx-server/server.c` (guest,
+> `/dev/vcon2`) and `qnx-host-client/client.c` (host, `/dev/ttyp0`) exchange
+> real framed echoes across the `qvm` `virtio-console` vdev on the as-built
+> QHV/TCG boundary, producing this repo's first real measured numbers
+> (P50/P99/Max below). Getting a byte-exact round trip took two more fixes
+> beyond the `hostdev` wiring itself (a tty canonical-mode deadlock, a
+> one-time startup byte-injection artifact); a third finding — a
+> non-deterministic TCG/virtio-queue stall after a small, boot-dependent
+> number of back-to-back iterations — is only partially mitigated, **not
+> resolved**, and bounds the sample count that reliably completes to a
+> small one (15). See `qnx-host-client/README.md` for the full chain of
+> findings and `../docs/findings.md` (2026-07-28 entry) for the honest
+> account. `linux-client/` stays a Phase-3 placeholder.
 
 ---
 
@@ -93,7 +96,7 @@ across a real partition boundary — and nothing more.
 | Mechanism | Approximate P50 RTT |
 |---|---|
 | DRIVE OS shared memory + mailbox interrupt | < 10 µs |
-| This proxy (cloud leg): virtio-console over a **TCG-emulated** `qvm` boundary | _TBD; TCG-emulation-bound, not a transport cost_ |
+| This proxy (cloud leg): virtio-console over a **TCG-emulated** `qvm` boundary | **~2.0 ms measured** (P50=2,002,500 ns, P99=Max=2,332,300 ns, 15 samples — [`results/cloud/cloud-ipc-latest.csv`](../results/cloud/cloud-ipc-latest.csv), captured [`logs/sample-boot/qhv-tcg-ipc-benchmark.log`](../logs/sample-boot/qhv-tcg-ipc-benchmark.log)); TCG-emulation-bound, not a transport cost. A larger sample count hits a non-deterministic `qvm`/TCG stall — see `qnx-host-client/README.md` |
 | This proxy (Phase 3 / Orin): hardware-timed over KVM | _TBD; the real transport-vs-transport number_ |
 
 What the cloud measurement *is* useful for:

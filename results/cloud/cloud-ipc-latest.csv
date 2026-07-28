@@ -1,0 +1,2 @@
+unix_ts,samples,payload_bytes,p50_ns,p99_ns,max_ns,cycles_per_sec,notes
+1785202731,15,48,2002500,2332300,2332300,1000000000,tcg-qvm-virtio-console;transcribed-from-serial-log:qhv-tcg-ipc-benchmark.log

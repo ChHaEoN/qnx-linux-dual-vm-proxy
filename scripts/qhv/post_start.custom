@@ -10,9 +10,42 @@
 #     ("network stack down" / "Address family not supported"); and
 #   - driving `qvm` interactively over the slow TCG serial console drops chars.
 # Networking is not needed to demonstrate QHV hosting a guest; console + blk are.
+#
+# RUNTIME-SPIKE (resolved 2026-07-28, ipc-test/qnx-host-client/README.md): the
+# virtio-console vdev needs a `hostdev` binding or qvm fails to arm it
+# ("Failed to arm a resource manager: Function not implemented", g2.conf line
+# for the vdev). /dev/ptyp0 is a devc-pty master (devc-pty is already running
+# on this image); qvm opens that end itself, so the paired slave /dev/ttyp0 is
+# the endpoint the HOST-side qnx-host-client opens below. qvm is launched in
+# the background (not foreground) so this script can go on to run the client
+# after a fixed boot-grace sleep -- there is no ready signal from the guest,
+# only a wait for the local /dev/ttyp0 node plus a grace period long enough
+# for the guest's own devc-virtio + qnx-echo-server startup (see
+# scripts/qhv/guest-post_start.custom) to have bound its end.
 echo "=== AUTO-START QNX GUEST UNDER QVM (no-net) ==="
 devb-loopback loopback blksz=512,prefix=qvmdisk,fd=/data/hypervisor/guest/disk-qvm
 waitfor /dev/qvmdisk0 10
-printf 'system mkqnximage-guest\nram 0x80000000,512M\ncpu\nload /data/hypervisor/guest/ifs.bin\nvdev pl011\n hostdev >-\n loc 0x1c090000\n intr gic:37\nvdev virtio-console\n loc 0x20000000\n intr gic:42\nvdev virtio-blk\n loc 0x1c0d0000\n intr gic:41\n hostdev /dev/qvmdisk0\n name vblk0\n' > /data/hypervisor/guest/g2.conf
-echo "=== launching qvm @g2.conf ==="
-qvm @/data/hypervisor/guest/g2.conf
+printf 'system mkqnximage-guest\nram 0x80000000,512M\ncpu\nload /data/hypervisor/guest/ifs.bin\nvdev pl011\n hostdev >-\n loc 0x1c090000\n intr gic:37\nvdev virtio-console\n loc 0x20000000\n intr gic:42\n hostdev /dev/ptyp0\nvdev virtio-blk\n loc 0x1c0d0000\n intr gic:41\n hostdev /dev/qvmdisk0\n name vblk0\n' > /data/hypervisor/guest/g2.conf
+echo "=== launching qvm @g2.conf (background) ==="
+qvm @/data/hypervisor/guest/g2.conf &
+
+waitfor /dev/ttyp0 10
+echo "=== boot-grace sleep for guest devc-virtio + qnx-echo-server startup ==="
+sleep 90
+if [ -x /data/hypervisor/qnx-host-client ]; then
+  echo "=== running qnx-host-client (mechanism-alive IPC benchmark, TCG-bound) ==="
+  # NOT the DEFAULT_ITERS=100000/DEFAULT_WARMUP=1000 the binary otherwise
+  # uses with no args. RUNTIME-SPIKE finding (2026-07-28, unresolved): a
+  # non-deterministic qvm/TCG stall can hit anywhere from single-digit to
+  # several-dozen iterations in (see client.c and
+  # ipc-test/qnx-host-client/README.md) -- larger iteration counts and
+  # longer per-iteration pacing gaps were tried and did NOT reliably avoid
+  # it. 15/5 is the smallest configuration that has reproducibly completed
+  # cleanly end to end with real, verified P50/P99/Max; treat a larger count
+  # as a deliberate choice to accept a real risk of an incomplete run, not
+  # as "the real number would need more".
+  /data/hypervisor/qnx-host-client 15 /dev/ttyp0 5
+  echo "=== qnx-host-client exit=$? ==="
+else
+  echo "post_start.custom: /data/hypervisor/qnx-host-client not staged; skipping benchmark"
+fi
