@@ -8,6 +8,67 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 
 ---
 
+## 2026-07-28 — Orin TCG networking root-caused and fixed: a missing virtio-rng device, not a virtio-net one
+
+Root-caused and fixed the `if_up: network stack down: Bad file descriptor` /
+`ifconfig: interface vtnet0 does not exist` failure blocking
+[`docs/orin-port.md`](orin-port.md) step 6, seen on every TCG boot of the
+plain `qnx-safety-vm` build on the real Orin Nano
+([`../logs/sample-boot/orin-tcg-qnx-boot1.log`](../logs/sample-boot/orin-tcg-qnx-boot1.log)).
+**The symptom is misleading — this was never a virtio-net/FDT-discovery bug.**
+Chain of findings, established via a live interactive shell over a QEMU
+chardev unix-socket serial port (not guessed from logs): (1) `pidin` on a
+live boot shows `io-sock` is **not running at all** — it never starts, so
+there is no `/dev/socket` for `if_up`/`ifconfig` to open, which is the actual
+cause of "Bad file descriptor" and "interface does not exist" (both are
+downstream symptoms of io-sock's total absence, not a driver-attach or
+FDT-discovery failure in `devs-vtnet_mmio.so`). (2) Running `/system/bin/io-sock`
+by hand and reading `slog2info` (not `sloginfo`, absent from this minimal
+build) shows the real reason: `Exiting: Cannot open /dev/random: No such
+file or directory` — io-sock hard-requires a working `/dev/random` at
+startup and aborts immediately if it can't get one, before it ever probes
+for a net device. (3) `/dev/random` is unusable because `random`'s
+`devr-virtio.so:mem=0xa003a00` entropy source can't find a virtio-rng
+device at that fixed MMIO address (`devr-virtio: failed to find virtio
+entropy device`, already visible, if under-explained, in the original
+`orin-tcg-qnx-boot1.log`). (4) Comparing against
+`C:\Users\andy8\qnx800\host\common\mkqnximage\qemu\runimage` (the
+canonical qemu launch script `mkqnximage --type=qemu` itself ships)
+confirms this build's `startup.sh` (`devb-virtio ... smem=0xa003e00,irq=79`
+and `random ... devr-virtio.so:mem=0xa003a00`) assumes QEMU is invoked with
+exactly three `-device` entries in a fixed order — `virtio-blk-device`,
+`virtio-net-device`, `virtio-rng-device` — because QEMU's `virt` machine
+assigns its fixed virtio-mmio slots to `-device` args strictly in
+command-line order; slot 1 (`0xa003e00`) → disk, slot 3 (`0xa003a00`) →
+rng. **The Orin TCG boot command used all session used had zero `-device`
+entries beyond the disk — no net, no rng — so the rng slot was empty by
+construction, entropy never initialised, and io-sock refused to start,
+which looks identical to a virtio-net bug until you check what's actually
+running.** **Fix (QEMU command line only — no IFS rebuild, no custom
+startup snippet needed):** add `-netdev user,id=n0 -device
+virtio-net-device,netdev=n0,mac=...` and `-object
+rng-random,filename=/dev/urandom,id=rng0 -device
+virtio-rng-device,rng=rng0` in that order, after the existing
+`-device virtio-blk-device,drive=drv0`. Confirmed working end-to-end on
+real Orin Nano hardware: `io-sock` starts, `vtnet0` comes up, gets a real
+DHCP lease from QEMU's SLIRP (`10.0.2.15/24`, gateway `10.0.2.2`), and both
+`ping 10.0.2.2` (SLIRP gateway) and `ping 10.0.2.15` (self, exercises the
+vtnet0 TX/RX path) succeed with real RTTs and 0% loss — captured in
+[`../logs/sample-boot/orin-tcg-qnx-network1.log`](../logs/sample-boot/orin-tcg-qnx-network1.log).
+**Honest framing:** `-netdev user` (SLIRP) proves the virtio-net driver and
+MMIO wiring work, but it is not the `br0`/tap bridge
+[`docs/orin-port.md`](orin-port.md) step 3 needs for the native-L4T IPC
+test against a real bridge interface — that remains open, though this
+finding makes it look like a straightforward follow-up rather than a
+blocked one. This is also the second time this exact defect class
+(io-sock's networking depending on a working entropy source it silently
+can't get) has surfaced in this repo — the 2026-06-11 QHV entry below hit
+the *same class* of virtio-mmio-slot-order dependency on the QHV guest
+side and was worked around, not root-caused; this entry is the first time
+it has actually been root-caused and fixed rather than routed around.
+
+---
+
 ## 2026-07-28 — Phase 2 runtime spike resolved: first real QNX-host<->QNX-guest IPC numbers (partial)
 
 Resolved the qvm/TCG console-wiring spike blocking Phase 2
