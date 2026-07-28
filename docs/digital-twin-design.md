@@ -238,17 +238,46 @@ comparison in the repo so far** — same IFS, same disk image, same QEMU
 machine/CPU/mem shape, same accelerator (TCG on both, this time by
 genuine symmetry rather than incidental blockage), only the host CPU
 architecture and micro-architecture differ (x86_64 host translating
-aarch64 TCG vs. aarch64 host translating aarch64 TCG). Two honest caveats
-on top of the headline number: (1) this is a **single run per side**, not
-a repeated-measurement average — TCG boot time can plausibly vary
-run-to-run (host scheduler noise, disk cache state), so treat ±a few
-seconds as the likely noise floor rather than reading the 23.1% as
-precise; (2) TCG-on-TCG same-ISA (aarch64 guest on an aarch64 host) still
-does full binary translation — QEMU's TCG does not skip translation just
-because host and guest architectures match, so the Orin result is not
-disadvantaged by an ISA mismatch the Windows result doesn't have; the gap
-is genuinely about host micro-architecture/scheduler/storage differences,
-which is exactly what a twin diff is supposed to isolate.
+aarch64 TCG vs. aarch64 host translating aarch64 TCG). TCG-on-TCG
+same-ISA (aarch64 guest on an aarch64 host) still does full binary
+translation — QEMU's TCG does not skip translation just because host and
+guest architectures match, so the Orin result is not disadvantaged by an
+ISA mismatch the Windows result doesn't have; the gap is genuinely about
+host micro-architecture/scheduler/storage differences, which is exactly
+what a twin diff is supposed to isolate.
+
+**Follow-up, same day: repeated to a real sample (n=5 per side)**, since
+a single run per side is not a measurement, it's an anecdote. Five
+back-to-back boots on each host, same invocation, `boot-timed.log` reset
+between runs:
+
+| Run | Windows (ms) | Orin Nano (ms) |
+|---|---|---|
+| 1 | 26,515 | 31,753 |
+| 2 | 25,445 | 31,758 |
+| 3 | 25,412 | 31,775 |
+| 4 | 25,427 | 31,780 |
+| 5 | 25,425 | 31,446 |
+| **median** | **25,427** | **31,758** |
+| **mean** | 25,644.8 | 31,702.4 |
+
+Median delta: +6,331 ms (**+24.9%**), mean delta: +6,057.6 ms (+23.6%) —
+both close to the original single-run estimate (+23.1%), so that first
+run was not a fluke; the repeated measurement mainly adds *confidence*,
+not a different conclusion. Two things worth noting in the data itself:
+(1) **Orin's five runs are far tighter** (31,446–31,780 ms, a 334 ms
+spread) **than Windows' single wide outlier** (run 1 at 26,515 ms vs.
+25,412–25,445 ms for runs 2–5, a likely one-time disk-cache-cold-start
+effect on the Windows side — excluding run 1, the remaining four Windows
+runs span only 33 ms). This asymmetry is itself a small twin-diff
+finding: Orin's boot time looks more *consistent* run-to-run than
+Windows', even though it's slower on average — worth keeping in mind
+before assuming "faster" and "more predictable" always move together.
+(2) The ~24% gap held up essentially unchanged whether measured by median
+or mean, which is a good sign the sample size (n=5) is already enough to
+trust the headline number — a larger n would tighten the confidence
+interval but is unlikely to move the point estimate much given how tight
+each side's own spread already is.
 
 **Follow-up, same day: a sample-size-matched re-run corrects the P50
 reading above.** The 100k-vs-15 comparison's wildly inconsistent deltas
