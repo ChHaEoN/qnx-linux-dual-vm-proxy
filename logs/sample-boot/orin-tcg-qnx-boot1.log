@@ -1,0 +1,54 @@
+# Phase 3
+# Captured 2026-07-28 on Jetson Orin Nano Dev Kit (JetPack 6 / L4T R36.4.7,
+# qemu-system-aarch64 6.2.0, host kernel 5.15.148-tegra).
+#
+# Command:
+#   sudo qemu-system-aarch64 -machine virt,gic-version=3 -accel tcg -cpu max \
+#     -smp 2 -m 1G -drive file=disk-qemu,if=none,id=drv0,format=raw \
+#     -device virtio-blk-device,drive=drv0 -kernel ifs.bin -nographic \
+#     -serial file:boot-tcg.log -display none -no-reboot -monitor none
+#
+# Same output/ifs.bin + output/disk-qemu as the cloud-twin Phase-1 build
+# (com.qnx.qnx800.target.qemuvirt, mkqnximage --type=qemu --arch=aarch64le).
+# This is a CONTROL run under pure software emulation (-accel tcg), used to
+# isolate a KVM-specific hang (see docs/orin-port.md risk register,
+# "KVM boot hangs silently after FOUND GICv3 ITS" row, 2026-07-28 entry).
+# This log proves the IFS/disk pair itself boots correctly on real Orin
+# Nano hardware when KVM acceleration is not in the loop.
+#
+# Honest framing: this is NOT a KVM boot. It does not exercise real
+# hardware-backed vGICv3, and it is not the Phase-3 success criterion
+# (that requires -enable-kvm per docs/orin-port.md). It is diagnostic
+# evidence only.
+
+FOUND GICv3 ITS
+** CPU 0 PE is not awake
+** CPU 1 PE is not awake
+---> Starting slogger2
+---> Starting PCI Services
+---> Starting fsevmgr
+# ---> Starting devb
+---> Mounting file systems
+Path=0 -
+ target=0 lun=0     Direct-Access(0) - VIRTIO  Rev:
+---> Mounting file systems
+random: Unable to use devr-virtio.so as an entropy source [entropy.c(173)]
+random: Could not initialize entropy. [random.c(406)]
+Unable to access /dev/random
+---> Starting Networking
+if_up: network stack down: Bad file descriptor
+ifconfig: interface vtnet0 does not exist
+sysctl: unknown oid 'net.inet.icmp.bmcastecho': Address family not supported by protocol family
+sysctl: unknown oid 'qnx.sec.droproot': Address family not supported by protocol family
+setfacl: stat() of /dev/bpf failed: No such file or directory
+main: control_open: Address family not supported by protocol family
+socketpair: Address family not supported by protocol family
+---> Starting sshd
+PRNG is not seeded
+---> Starting misc
+
+To exit QEMU, type <ctrl>a x
+
+Process count:17
+Startup complete
+QNX qnx-safety 8.0.0 2026/02/27-10:59:13EST QEMU_virt aarch64le
