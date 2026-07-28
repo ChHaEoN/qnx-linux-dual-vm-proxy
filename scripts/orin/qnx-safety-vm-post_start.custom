@@ -1,0 +1,21 @@
+# Committed source for qnx-safety-vm/local/snippets/post_start.custom
+# (staged there by scripts/build-qnx-ifs-orin.bat). The build tree itself
+# is gitignored (/qnx-safety-vm/, mkqnximage-derived), so this is the
+# actual source of truth for the Phase-3 customisation -- edit here, not
+# in the staged copy, or a rebuild will silently discard your edit.
+#
+# Phase 3 (Orin, docs/orin-port.md): there is no DHCP server on the Orin
+# host's br0 (scripts/orin/setup-bridge-orin.sh), so OPT_IP=dhcp's dhcpcd
+# never gets a lease -- vtnet0 comes up with the driver attached but no
+# address. Force the static IP the Phase-3 IPC benchmark expects, then
+# start the TCP echo endpoint staged into the IFS by the build script's
+# generated ifs_files.custom.
+echo "=== Phase 3: static IP for br0/tap-qnx ==="
+ifconfig vtnet0 192.168.100.10 netmask 255.255.255.0 up
+
+echo "=== Phase 3: starting qnx-echo-server-net on :7000 ==="
+if [ -x /proc/boot/qnx-echo-server-net ]; then
+  /proc/boot/qnx-echo-server-net &
+else
+  echo "post_start.custom: /proc/boot/qnx-echo-server-net not staged; skipping"
+fi

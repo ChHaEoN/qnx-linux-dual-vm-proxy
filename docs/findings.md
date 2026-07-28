@@ -8,6 +8,67 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 
 ---
 
+## 2026-07-28 — Phase 3 IPC benchmark done end-to-end on real Orin Nano hardware: 100 000 clean round trips over a real `br0` bridge, twice
+
+Closed [`docs/orin-port.md`](orin-port.md) steps 3, 5, and 6 with a real,
+measured QNX-guest↔native-Linux TCP exchange on the Jetson Orin Nano,
+building on the same-day networking fix above. New source, both written
+this pass and both actually building and running (not just written):
+[`ipc-test/qnx-server-net/server.c`](../ipc-test/qnx-server-net/server.c)
+(QNX guest, `qcc -Vgcc_ntoaarch64le`, TCP echo on `:7000`; Phase-2's
+`qnx-server/` is untouched — different transport, virtio-console, cloud
+leg only) and
+[`ipc-test/linux-client/client.c`](../ipc-test/linux-client/client.c)
+(native L4T, `gcc 11.4.0`, `clock_gettime(CLOCK_MONOTONIC)`-timed, zero
+warnings on both builds). Getting the server auto-started with a working
+static IP needed a real `qnx-safety-vm` **rebuild** (`mkqnximage
+--type=qemu --arch=aarch64le --build`, same baseline `local/options`, two
+new `local/snippets/{ifs_files,post_start}.custom` files staging the
+compiled server binary and forcing `vtnet0`'s address — `OPT_IP=dhcp`'s
+`dhcpcd` never gets a lease on `br0` since
+[`scripts/orin/setup-bridge-orin.sh`](../scripts/orin/setup-bridge-orin.sh)
+runs no DHCP server there) — the same staging mechanism `build-qhv.bat`
+already uses for the Phase-2 pair, applied to the plain (non-QHV)
+Orin image. One real Windows-tooling gotcha surfaced during the rebuild:
+invoking `cmd.exe /c "..."` from Git Bash silently no-ops (MSYS rewrites
+the bare `/c` into a Windows path before `cmd.exe` sees it — exit code 0,
+zero output, looks like success); `cmd.exe //c "..."` (doubled slash)
+fixes it. Booted on real Orin Nano hardware via the new
+[`scripts/orin/launch-qnx-on-orin-tcg.sh`](../scripts/orin/launch-qnx-on-orin-tcg.sh)
+(TCG + `tap-qnx` + the virtio-rng fix), confirmed reachable at
+`192.168.100.10` over the real `br0` bridge (real ping RTTs, 0% loss —
+not SLIRP this time), then ran the native `linux-client` against it: a
+1 000+1 000 smoke run (clean, ~4.7 s), then the full committed
+**100 000-iteration + 1 000-warm-up measurement twice in a row, both
+clean, zero echo-sequence mismatches, zero I/O errors** (~2 m 40 s each;
+P50≈1.6 ms, P99≈2.55 ms, Max≈3.8–4.1 ms across the two runs — TCG-emulation-
+and-bridge-bound, not a meaningful transport number, same honest framing
+as the cloud leg). The QNX server's own frame counts (`70`, `2000`,
+`101000`, `101000`) match the client's accounting exactly across all four
+connections in one guest boot — see
+[orin-tcg-qnx-ipc-boot1.log](../logs/sample-boot/orin-tcg-qnx-ipc-boot1.log)
+and
+[orin-tcg-qnx-ipc-client1.log](../logs/sample-boot/orin-tcg-qnx-ipc-client1.log).
+**Notably better than the Phase-2 cloud leg**: TCP over `br0`/virtio-net
+under TCG did not reproduce the console leg's non-deterministic
+virtio-queue stall at all — both full 100 000-iteration runs completed
+without incident, where the cloud leg's largest reliable run was 15
+samples. CSV in
+[`results/hw/orin-ipc-latest.csv`](../results/hw/orin-ipc-latest.csv),
+schema-identical to `results/cloud/header.csv`. **Honest gaps left open:**
+this is a rebuilt IFS, not the untouched Phase-1 one (the new code is
+in-scope/additive per this task's brief, but it is a real deviation from
+a strict "zero IFS changes" portability claim); `docs/orin-port.md` step 7
+(`scripts/twin/diff-results.sh`) runs without crashing but is not a
+meaningful sanity check — it assumes a `# ifs_sha256:`-comment-header +
+`metric,p50_us,...`-body schema that neither this CSV nor the existing
+cloud CSV actually use, so it silently misreads the first data row as a
+header and prints nonsense deltas; this is a pre-existing Phase-4 tooling
+gap (predates this entry), not something fixed here. KVM-accelerated
+timing on Orin remains open per the entry below.
+
+---
+
 ## 2026-07-28 — Orin TCG networking root-caused and fixed: a missing virtio-rng device, not a virtio-net one
 
 Root-caused and fixed the `if_up: network stack down: Bad file descriptor` /

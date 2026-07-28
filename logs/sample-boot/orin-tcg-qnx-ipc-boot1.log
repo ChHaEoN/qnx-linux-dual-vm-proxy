@@ -1,0 +1,64 @@
+# Phase 3
+# Captured 2026-07-28 on Jetson Orin Nano Dev Kit (JetPack 6 / L4T R36.4.7,
+# qemu-system-aarch64 6.2.0, host kernel 5.15.148-tegra). Guest-side serial
+# log for the Phase-3 QNX<->Linux TCP IPC benchmark (docs/orin-port.md).
+#
+# ifs.bin + disk-qemu were REBUILT from the qnx-safety-vm/ Phase-1 baseline
+# (mkqnximage --type=qemu --arch=aarch64le --hostname=qnx-safety --build) to
+# stage the new ipc-test/qnx-server-net/qnx-echo-server-net binary into the
+# IFS and auto-start it (see qnx-safety-vm/local/snippets/{ifs_files,post_start}.custom).
+# post_start.custom also forces vtnet0's static IP (192.168.100.10/24) since
+# OPT_IP=dhcp never gets a lease on br0 (no DHCP server there, see
+# scripts/orin/setup-bridge-orin.sh).
+#
+# Command (scripts/orin/launch-qnx-on-orin-tcg.sh):
+#   sudo qemu-system-aarch64 -machine virt,gic-version=3 -accel tcg -cpu max \
+#     -smp 2 -m 1G -drive file=disk-qemu,if=none,id=drv0,format=raw \
+#     -device virtio-blk-device,drive=drv0 \
+#     -netdev tap,id=n0,ifname=tap-qnx,script=no,downscript=no \
+#     -device virtio-net-device,netdev=n0,mac=52:54:00:11:11:11 \
+#     -object rng-random,filename=/dev/urandom,id=rng0 \
+#     -device virtio-rng-device,rng=rng0 \
+#     -kernel ifs.bin -nographic -serial file:boot-ipc.log \
+#     -display none -no-reboot -monitor none
+#
+# Four real client connections are visible below, one per benchmark run
+# during this same guest boot: a 70-frame smoke test (50 timed + 20
+# warm-up), a 2000-frame 1000/1000 run, and two full 101000-frame
+# (100000 timed + 1000 warm-up) runs. Frame counts match the Linux client's
+# own accounting exactly (see orin-tcg-qnx-ipc-client1.log for the second
+# 101000-frame run) -- 100000+ round trips with zero mismatch, zero stall,
+# unlike the Phase-2 cloud leg's non-deterministic virtio-console stall at
+# ~15 samples (ipc-test/qnx-host-client/README.md).
+
+FOUND GICv3 ITS
+** CPU 0 PE is not awake
+** CPU 1 PE is not awake
+---> Starting slogger2
+---> Starting PCI Services
+---> Starting fsevmgr
+# ---> Starting devb
+---> Mounting file systems
+Path=0 - 
+ target=0 lun=0     Direct-Access(0) - VIRTIO  Rev: 
+---> Mounting file systems
+---> Starting Networking
+---> Starting sshd
+---> Starting misc
+=== Phase 3: static IP for br0/tap-qnx ===
+=== Phase 3: starting qnx-echo-server-net on :7000 ===
+server: echo endpoint listening on 0.0.0.0:7000 (frame=64 bytes)
+
+To exit QEMU, type <ctrl>a x
+
+Process count:22
+Startup complete
+QNX qnx-safety 8.0.0 2026/02/27-10:59:13EST QEMU_virt aarch64le
+server: client connected from 192.168.100.1:46126
+server: client EOF after 70 frames
+server: client connected from 192.168.100.1:43646
+server: client EOF after 2000 frames
+server: client connected from 192.168.100.1:45560
+server: client EOF after 101000 frames
+server: client connected from 192.168.100.1:52840
+server: client EOF after 101000 frames

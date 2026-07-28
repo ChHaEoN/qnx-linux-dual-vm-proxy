@@ -1,6 +1,0 @@
-# Phase 3 (Orin, QNX<->Linux over KVM/virtio-net)
-# The Linux Compute END of the heterogeneous QNX-safety <-> Linux-compute IPC.
-# Per ADR-002 (docs/phase2-topology-decision.md): there is NO Linux guest on the
-# cloud leg, so this client does NOT run on cloud. Heterogeneous QNX<->Linux IPC
-# is committed to Phase 3 / Orin, where KVM works and L4T natively IS the Linux
-# side; the cloud-leg initiator is qnx-host-client/ (a QNX-host program) instead.

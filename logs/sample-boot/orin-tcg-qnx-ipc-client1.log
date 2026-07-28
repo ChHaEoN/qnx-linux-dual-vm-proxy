@@ -1,0 +1,123 @@
+# Phase 3
+# Captured 2026-07-28 on Jetson Orin Nano Dev Kit, native-Linux (L4T) side.
+# ipc-test/linux-client/linux-client run against the QNX guest booted in
+# orin-tcg-qnx-ipc-boot1.log (same guest boot, second of two 101000-frame
+# runs -- the first produced the results/hw/orin-ipc-latest.csv row with
+# P50=1597157ns; this is the second row, P50=1636269ns). Built natively with
+# the L4T system gcc (Ubuntu 11.4.0), no cross-compile:
+#
+#   cd ipc-test/linux-client && make && ./linux-client 100000 192.168.100.10 1000
+#
+# 100000 timed iterations (+1000 warm-up, discarded) completed cleanly in
+# ~2m40s with zero echo-seq mismatches and zero I/O errors -- the full
+# committed iteration count from ipc-test/README.md's Phase-2 plan, achieved
+# here on the Phase-3 TCP/br0/virtio-net transport where the Phase-2
+# cloud-leg virtio-console transport could not get past a non-deterministic
+# stall around iteration 15-35 (see docs/findings.md, 2026-07-28).
+
+client: connected to 192.168.100.10:7000; frame=64 bytes
+client: progress 0/101000
+client: progress 1000/101000
+client: progress 2000/101000
+client: progress 3000/101000
+client: progress 4000/101000
+client: progress 5000/101000
+client: progress 6000/101000
+client: progress 7000/101000
+client: progress 8000/101000
+client: progress 9000/101000
+client: progress 10000/101000
+client: progress 11000/101000
+client: progress 12000/101000
+client: progress 13000/101000
+client: progress 14000/101000
+client: progress 15000/101000
+client: progress 16000/101000
+client: progress 17000/101000
+client: progress 18000/101000
+client: progress 19000/101000
+client: progress 20000/101000
+client: progress 21000/101000
+client: progress 22000/101000
+client: progress 23000/101000
+client: progress 24000/101000
+client: progress 25000/101000
+client: progress 26000/101000
+client: progress 27000/101000
+client: progress 28000/101000
+client: progress 29000/101000
+client: progress 30000/101000
+client: progress 31000/101000
+client: progress 32000/101000
+client: progress 33000/101000
+client: progress 34000/101000
+client: progress 35000/101000
+client: progress 36000/101000
+client: progress 37000/101000
+client: progress 38000/101000
+client: progress 39000/101000
+client: progress 40000/101000
+client: progress 41000/101000
+client: progress 42000/101000
+client: progress 43000/101000
+client: progress 44000/101000
+client: progress 45000/101000
+client: progress 46000/101000
+client: progress 47000/101000
+client: progress 48000/101000
+client: progress 49000/101000
+client: progress 50000/101000
+client: progress 51000/101000
+client: progress 52000/101000
+client: progress 53000/101000
+client: progress 54000/101000
+client: progress 55000/101000
+client: progress 56000/101000
+client: progress 57000/101000
+client: progress 58000/101000
+client: progress 59000/101000
+client: progress 60000/101000
+client: progress 61000/101000
+client: progress 62000/101000
+client: progress 63000/101000
+client: progress 64000/101000
+client: progress 65000/101000
+client: progress 66000/101000
+client: progress 67000/101000
+client: progress 68000/101000
+client: progress 69000/101000
+client: progress 70000/101000
+client: progress 71000/101000
+client: progress 72000/101000
+client: progress 73000/101000
+client: progress 74000/101000
+client: progress 75000/101000
+client: progress 76000/101000
+client: progress 77000/101000
+client: progress 78000/101000
+client: progress 79000/101000
+client: progress 80000/101000
+client: progress 81000/101000
+client: progress 82000/101000
+client: progress 83000/101000
+client: progress 84000/101000
+client: progress 85000/101000
+client: progress 86000/101000
+client: progress 87000/101000
+client: progress 88000/101000
+client: progress 89000/101000
+client: progress 90000/101000
+client: progress 91000/101000
+client: progress 92000/101000
+client: progress 93000/101000
+client: progress 94000/101000
+client: progress 95000/101000
+client: progress 96000/101000
+client: progress 97000/101000
+client: progress 98000/101000
+client: progress 99000/101000
+client: progress 100000/101000
+client: appended summary to ../../results/hw/orin-ipc-latest.csv
+samples=100000 payload=48
+P50=1636269 ns  P99=2549813 ns  Max=4127894 ns
+(P50 sanity: link alive if non-zero and stable)

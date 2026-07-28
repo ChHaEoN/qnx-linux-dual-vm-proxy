@@ -25,7 +25,15 @@ transport is presumed broken there.
 > resolved**, and bounds the sample count that reliably completes to a
 > small one (15). See `qnx-host-client/README.md` for the full chain of
 > findings and `../docs/findings.md` (2026-07-28 entry) for the honest
-> account. `linux-client/` stays a Phase-3 placeholder.
+> account.
+>
+> **`linux-client/` is no longer a placeholder.** Phase 3 (Orin) wrote
+> it, plus a new QNX-guest TCP endpoint (`qnx-server-net/`, not a
+> modification of `qnx-server/`), and ran the full committed
+> 100 000-iteration benchmark twice cleanly over a real `br0` bridge, with
+> no repeat of this leg's stall. See `../docs/orin-port.md` and the
+> 2026-07-28 "Phase 3 IPC benchmark done end-to-end" entry in
+> `../docs/findings.md`.
 
 ---
 
@@ -142,15 +150,21 @@ ipc-test/
 ├── qnx-host-client/    # Phase 2 (cloud): C99, qcc-built; qnx-qhv host console initiator + RTT
 │   ├── g2.conf.proposed  # minimal hostdev wiring for the console vdev (passes Phase-1 gate)
 │   └── README.md         # build/run + host<->guest wiring proposal + runtime-spike unknowns
-└── linux-client/       # Phase 3 (Orin): C99, gcc-built; Linux Compute end of QNX↔Linux IPC over KVM/virtio-net
+├── qnx-server-net/     # Phase 3 (Orin): C99, qcc-built; QNX-guest TCP echo endpoint over br0/virtio-net
+└── linux-client/       # Phase 3 (Orin): C99, gcc-built; native-L4T TCP client + RTT, measured end-to-end
 ```
 
-The shared frame contract lives once in `common/frame.h` so the two ends
-cannot drift; `common/console_io.h` carries the partial-read/partial-write
-loop (virtio-console fds are byte-streams) and the single-OS
-`ClockCycles()` timing. Both QNX sides cross-compile with
-`make` after sourcing the SDP env (`qnxsdp-env.bat` / `. qnxsdp-env.sh`);
-build/run detail and the host<->guest wiring proposal are in
-`qnx-host-client/README.md`. Note that `linux-client/` is **Phase 3
-only** — it does not build or run on the cloud leg (there is no Linux
-guest there).
+The shared frame contract lives once in `common/frame.h` so all ends
+cannot drift. `common/console_io.h` carries the Phase-2-only
+partial-read/partial-write loop for virtio-console fds plus the
+single-OS `ClockCycles()` timing; `common/frame_io.h` carries the
+portable (QNX- and Linux-safe) equivalent for the Phase-3 TCP fds used by
+`qnx-server-net/` and `linux-client/`, which need none of `console_io.h`'s
+termios/raw-mode handling. The QNX sides (`qnx-server`, `qnx-host-client`,
+`qnx-server-net`) cross-compile with `make` after sourcing the SDP env
+(`qnxsdp-env.bat` / `. qnxsdp-env.sh`); build/run detail and the
+host<->guest wiring proposal are in `qnx-host-client/README.md`.
+`linux-client/` builds natively with the system `gcc` on L4T — it does
+not build or run on the cloud leg (there is no Linux guest there); see
+`../docs/orin-port.md` for the Phase-3 run instructions and measured
+results.

@@ -1,17 +1,32 @@
 # Phase 3 — hardware-twin port to Jetson Orin Nano
 
-> **Status (2026-07-28):** real-hardware work started. Orin Nano is
-> flashed (JetPack 6 / L4T R36.4.7) and SSH-reachable. The same
-> `qnx-safety-vm/output/ifs.bin` + `disk-qemu` from the cloud-twin
-> Phase-1 build boots cleanly under **TCG** on this hardware
-> ([orin-tcg-qnx-boot1.log](../logs/sample-boot/orin-tcg-qnx-boot1.log)).
-> **KVM-accelerated boot is blocked** by a real, root-caused ARM/KVM
-> limitation (see risk register below) — decision made 2026-07-28 to
-> **accept TCG as this stage's interim transport** and continue the
-> Phase-3 IFS-port + IPC checklist on TCG rather than block further
-> progress on the KVM fix. The success criterion in "What success
-> looks like" below is unaffected (portability, not hardware timing);
-> the *hardware-timed* KVM number remains open and tracked separately.
+> **Status (2026-07-28, updated):** the Phase-3 IPC benchmark is
+> **done end-to-end, on TCG, over a real `br0` bridge.** A new QNX
+> guest-side TCP echo server
+> ([`ipc-test/qnx-server-net/server.c`](../ipc-test/qnx-server-net/server.c))
+> and a new native-Linux client
+> ([`ipc-test/linux-client/client.c`](../ipc-test/linux-client/client.c))
+> were written (the Phase-2 `qnx-server`/`qnx-host-client` stay
+> untouched — they are a different transport, virtio-console, for the
+> cloud leg). `qnx-safety-vm` was **rebuilt** (still `mkqnximage
+> --type=qemu --arch=aarch64le`, same baseline options) with
+> `local/snippets/{ifs_files,post_start}.custom` staging the new server
+> binary and forcing `vtnet0`'s static IP, so the guest comes up with
+> the TCP server already listening, no manual/interactive step needed.
+> Booted via [`scripts/orin/launch-qnx-on-orin-tcg.sh`](../scripts/orin/launch-qnx-on-orin-tcg.sh)
+> (TCG + `tap-qnx` + the virtio-rng fix) on real Orin Nano hardware,
+> bridged to `br0`, with the native L4T `linux-client` completing a
+> full **100 000-iteration + 1 000-warm-up run twice in a row with zero
+> errors** (~2m40s each) — see
+> [orin-tcg-qnx-ipc-boot1.log](../logs/sample-boot/orin-tcg-qnx-ipc-boot1.log) /
+> [orin-tcg-qnx-ipc-client1.log](../logs/sample-boot/orin-tcg-qnx-ipc-client1.log)
+> and [`results/hw/orin-ipc-latest.csv`](../results/hw/orin-ipc-latest.csv).
+> This is a real improvement over the Phase-2 cloud leg's
+> non-deterministic virtio-console stall (~15 samples) — TCP over
+> `br0`/virtio-net under TCG did not stall at all. **KVM-accelerated
+> boot is still blocked** by the same root-caused ARM/KVM limitation
+> below; TCG remains the accepted interim transport, and the
+> *hardware-timed* KVM number stays open and tracked separately.
 
 ---
 
@@ -77,34 +92,38 @@ piggyback that the old EC2-build-host path provided. See the
 
 ### 3. Set up bridge (Orin variant)
 
-- [ ] `sudo scripts/orin/setup-bridge-orin.sh`
-- [ ] Verify `br0` (192.168.100.1/24) and `tap-qnx` exist; on Orin the Linux client runs natively so no `tap-linux` is created
-- [ ] Verify L4T native userspace can reach `192.168.100.1`
+- [x] `sudo scripts/orin/setup-bridge-orin.sh` — ran clean (script needed no changes; only a CRLF-strip on the transferred copy, a Windows-checkout artifact, not a script bug)
+- [x] Verified `br0` (192.168.100.1/24) and `tap-qnx` exist; on Orin the Linux client runs natively so no `tap-linux` is created
+- [x] Verified L4T native userspace can reach the QNX guest at `192.168.100.10` (not `192.168.100.1` — that's the bridge's own address; the guest is the far side) — real `ping` RTTs, 0% loss
 
 ### 4. Transfer the cloud-twin IFS
 
-- [ ] On the Phase 1 build host: `sha256sum output/ifs.bin output/disk-qemu.vmdk > output/SHA256SUMS` (on Windows: use Git Bash, which ships with Git for Windows and provides `sha256sum`; or `Get-FileHash` in PowerShell)
-- [ ] `scp output/ifs.bin output/disk-qemu.vmdk output/SHA256SUMS orin:~/output/`
-- [ ] On Orin: `sha256sum -c ~/output/SHA256SUMS` — must pass
+- [x] **Rebuilt, not the untouched Phase-1 IFS** — see the 2026-07-28 status header: `qnx-safety-vm` was rebuilt from the same baseline `local/options` via `mkqnximage --type=qemu --arch=aarch64le --hostname=qnx-safety --build` (invoked from the Windows build host; had to go through `cmd.exe //c ...`, not plain bash — see the "Windows/MSYS gotcha" note below) with two new `local/snippets/*.custom` files staging `qnx-server-net`'s binary and forcing the static IP. Honest deviation from "same IFS, zero changes": the *code* (`ipc-test/`) is new/additive as scoped, and this rebuild is the config-and-staging mechanism that carries it — not a change to Phase-1's boot/BSP behaviour. **Reproducibility note:** `qnx-safety-vm/` is entirely gitignored (mkqnximage-derived), so the two `local/snippets/*.custom` files staged directly during this pass would NOT survive in git on their own. [`scripts/build-qnx-ifs-orin.bat`](../scripts/build-qnx-ifs-orin.bat) (new, mirrors `build-qhv.bat`'s staging pattern for `build-qnx-ifs.bat`) is the committed, reproducible recipe: it builds `ipc-test`, stages [`scripts/orin/qnx-safety-vm-post_start.custom`](../scripts/orin/qnx-safety-vm-post_start.custom) (the committed source of truth for the static-IP + auto-start logic) plus a freshly-generated `ifs_files.custom` (one line, an absolute host path, regenerated every run — not committed, same as `build-qhv.bat`'s own `ifs_files.custom`/`data_files.custom`), then calls `build-qnx-ifs.bat`. Not re-run after being written (the already-verified rebuild from the manual steps stands); a future session should use this script rather than repeat the manual `local/snippets/` edit.
+- [x] `sha256sum output/ifs.bin output/disk-qemu output/disk-qemu.vmdk > output/SHA256SUMS` (Git Bash on the Windows build host)
+- [x] `scp output/{ifs.bin,disk-qemu,disk-qemu.vmdk,SHA256SUMS} haochen@<orin-ip>:~/qnx-orin-test/`
+- [x] On Orin: `sha256sum -c SHA256SUMS` — **all three OK**, byte-identical transfer confirmed
+
+**Windows/MSYS gotcha hit during the rebuild:** invoking `cmd.exe /c "..."` from Git Bash silently no-ops — Git Bash's MSYS path-mangling rewrites the bare `/c` flag into a Windows path (`C:/`) before `cmd.exe` ever sees it, so the whole command line is swallowed and you get an interactive banner and nothing else, with exit code 0 (looks like success). Fix: `cmd.exe //c "..."` (doubled slash defeats the MSYS rewrite). Cost about 10 minutes of "why did nothing happen" before being caught by explicitly checking `where mkqnximage` output was missing from the log.
 
 ### 5. Boot the QNX guest under QEMU on Orin
 
-- [x] Booted — but via a direct `-accel tcg` invocation, **not** `scripts/orin/launch-qnx-on-orin.sh` (that script assumes KVM + the bridge from step 3, neither of which is in play on the accepted TCG-interim path; it needs a TCG-variant sibling analogous to `scripts/launch-qhv-tcg.ps1` before it's usable here — not yet written)
-- [x] Captured full boot log: [orin-tcg-qnx-boot1.log](../logs/sample-boot/orin-tcg-qnx-boot1.log) — real `Startup complete` / `QNX qnx-safety 8.0.0 ... QEMU_virt aarch64le` banner on real Orin Nano hardware
-- [ ] `pidin sysinfo` cycles_per_sec check — not yet done (log capture was `-serial file:...`, non-interactive; would need an interactive session or a scripted probe like the Phase-2 spike's approach)
-- [x] QNX virtio-net / static IP — **root-caused and fixed 2026-07-28** (see risk register below and [findings.md](findings.md)'s 2026-07-28 "Orin TCG networking root-caused and fixed" entry): the failure was never a virtio-net/FDT problem — `io-sock` was not starting at all because the QEMU command line was missing a `virtio-rng-device` in the fixed slot order `startup.sh` assumes, so `/dev/random` never became usable and `io-sock` aborted before ever touching the network driver. Fixed with a QEMU command-line change only (`-netdev user,... -device virtio-net-device,...` + `-object rng-random,... -device virtio-rng-device,...`, no IFS rebuild): `vtnet0` comes up, gets a real DHCP lease (`10.0.2.15/24` via QEMU SLIRP), and pings succeed — [orin-tcg-qnx-network1.log](../logs/sample-boot/orin-tcg-qnx-network1.log). **Still open:** this used `-netdev user` (SLIRP), which proves the driver/MMIO wiring but is not the `br0`/tap bridge step 3 needs — bridging is the remaining follow-up before step 6 can use a real host-reachable IP
+- [x] Booted via [`scripts/orin/launch-qnx-on-orin-tcg.sh`](../scripts/orin/launch-qnx-on-orin-tcg.sh) (new script, written this pass) — TCG + `tap-qnx` + the virtio-rng fix, superseding the ad hoc direct invocation from the previous entry. `scripts/orin/launch-qnx-on-orin.sh` (the `-enable-kvm` variant) is left untouched/unfixed, still documenting the eventual KVM target once/if the NISV issue is resolved upstream.
+- [x] Captured full boot log: [orin-tcg-qnx-ipc-boot1.log](../logs/sample-boot/orin-tcg-qnx-ipc-boot1.log) — real `Startup complete` / `QNX qnx-safety 8.0.0 ... QEMU_virt aarch64le` banner, plus the new server's `listening on 0.0.0.0:7000` line and four real client-connection records, all on real Orin Nano hardware
+- [ ] `pidin sysinfo` cycles_per_sec check — still not done; not needed for this leg (the Linux client's RTT uses `clock_gettime`, not `ClockCycles()`) but left open for a future QNX-side timing investigation
+- [x] QNX virtio-net / **static IP over the real `br0` bridge** — the SLIRP-only gap noted in the previous entry is now closed: `post_start.custom` runs `ifconfig vtnet0 192.168.100.10 netmask 255.255.255.0 up` unconditionally (OPT_IP=dhcp's `dhcpcd` never gets a lease on `br0` — no DHCP server there — so it doesn't conflict), and the Orin host pings `192.168.100.10` successfully over `br0`/`tap-qnx`
 
 ### 6. Run the IPC test natively on L4T against the QEMU-QNX server
 
-- [ ] Build `ipc-test/linux-client/` natively on L4T (gcc, no cross-compile needed)
-- [ ] Run 1 000-iteration warm-up; record results
-- [ ] Run 100 000-iteration measurement; emit CSV to `results/hw/orin-runN.csv`
-- [ ] Compare CSV header / schema to `results/cloud/awsN.csv` — schema must match exactly
+- [x] Wrote and built `ipc-test/qnx-server-net/server.c` (new, qcc, `-lsocket`; Phase-2's `qnx-server/` is untouched) — TCP echo endpoint on `:7000`, staged into the IFS and auto-started (step 4/5)
+- [x] Wrote and built `ipc-test/linux-client/client.c` natively on L4T (`gcc (Ubuntu 11.4.0)`, zero warnings, no cross-compile) — see [`ipc-test/linux-client/`](../ipc-test/linux-client/)
+- [x] Ran a 1 000-iteration warm-up + 1 000 timed smoke run first (per the pacing guidance from the Phase-2 spike) — completed cleanly in ~4.7s, no stall
+- [x] Ran the full 100 000-iteration + 1 000-warm-up measurement **twice in a row**, both clean, no echo-seq mismatches, no I/O errors (~2m40s each) — a real improvement over the Phase-2 cloud leg's non-deterministic virtio-console stall (~15 samples): TCP over `br0`/virtio-net under TCG did not exhibit the same stall at all. CSV: [`results/hw/orin-ipc-latest.csv`](../results/hw/orin-ipc-latest.csv); client-side log: [orin-tcg-qnx-ipc-client1.log](../logs/sample-boot/orin-tcg-qnx-ipc-client1.log)
+- [x] Compared CSV schema to `results/cloud/header.csv` — **matches exactly** (`unix_ts,samples,payload_bytes,p50_ns,p99_ns,max_ns,cycles_per_sec,notes`); the hw CSV's `cycles_per_sec` column is a nominal `1000000000` placeholder (Linux side times with `clock_gettime`, already in ns, no real hardware cycle rate) — called out in the `notes` field so it's never mistaken for a real cycle rate
 
 ### 7. Twin diff sanity check
 
-- [ ] `scripts/twin/diff-results.sh results/cloud/aws1.csv results/hw/orin1.csv` (Phase 4 script)
-- [ ] No interpretation in Phase 3 — just confirm the diff runs cleanly and the numbers look "physically plausible" (P50 in tens-to-hundreds of µs, P99 within an order of magnitude of P50, no NaN / no negative deltas)
+- [x] `scripts/twin/diff-results.sh results/cloud/cloud-ipc-latest.csv results/hw/orin-ipc-latest.csv` — runs without crashing, exit 0
+- [ ] **Not a real sanity check — the script's assumed schema doesn't match either CSV.** `diff-results.sh` (Phase 4, pre-existing, not written this pass) expects `# ifs_sha256:`/`# git_sha:` comment-header lines and a `metric,p50_us,p99_us,p999_us,max_us,boot_ms` body keyed by metric name; both `cloud-ipc-latest.csv` and `orin-ipc-latest.csv` actually use the flat `header.csv` row schema with no header row of their own. The script silently misreads the first data row as a header and prints nonsense deltas (e.g. "payload_bytes Δ=+48.00") rather than failing loudly. This is a **pre-existing Phase-4 tooling gap** (predates this pass; the cloud CSV had the identical shape already), out of scope to fix here per this task's brief — flagging for Phase 4 rather than silently leaving it looking like a passed check.
 
 ---
 
