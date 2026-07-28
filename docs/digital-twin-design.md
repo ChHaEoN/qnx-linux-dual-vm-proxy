@@ -219,6 +219,45 @@ observations are honestly supportable from this data:
   and the cloud-leg equivalents exist but have not been time-diffed
   against each other in this pass.
 
+**Follow-up, same day: a sample-size-matched re-run corrects the P50
+reading above.** The 100k-vs-15 comparison's wildly inconsistent deltas
+(P50 −18.3%, Max +77.0%) were suspicious on their face — with n=15,
+`P99` and `Max` are mathematically the same sample, so cloud's "tail" was
+never a real tail estimate, and comparing it against a 100,000-sample Max
+compares extreme-value statistics from two wildly different sample sizes
+(Max grows with n for any non-degenerate distribution — more trials, more
+chances to hit a rare slow outlier). Re-ran the HW leg with the exact
+same 15-iteration / 5-warm-up shape as the cloud run
+(`./linux-client 15 192.168.100.10 5`, same guest boot, same bridge) to
+remove that confound. Result, appended as a third row in
+[`results/hw/orin-ipc-latest.csv`](../results/hw/orin-ipc-latest.csv):
+
+| Metric | Cloud (n=15) | HW (n=15, matched) | Δ |
+|---|---|---|---|
+| P50 | 2,002,500 ns | 2,213,370 ns | **+10.5%** |
+| P99 | 2,332,300 ns | 2,596,291 ns | +11.3% |
+| Max | 2,332,300 ns | 2,596,291 ns | +11.3% |
+
+Two things worth being honest about: (1) **the earlier "-18.3% P50, HW is
+faster" reading does not survive a fair, sample-matched comparison** — at
+matched n, HW's P50 is actually ~10% *slower*, not faster; the 100k-sample
+run's lower P50 reflects a different, much larger sample benefiting from
+the law of large numbers, not a directly comparable statistic to cloud's
+15-sample P50. Don't quote the earlier −18.3% figure without this
+correction attached. (2) The three metrics now move together (all
++10–11%) instead of disagreeing wildly, which is itself evidence the
+matched comparison is more trustworthy than the mismatched one — a
+consistent small delta across P50/P99/Max is what a real, modest
+transport-cost difference should look like; three metrics disagreeing by
+an order of magnitude (as in the mismatched comparison) was the tell that
+something other than the transport was driving the numbers. The
+**stability finding from the first pass still stands and is unaffected**
+by any of this: HW ran two clean 100k-iteration passes with zero errors;
+cloud has never exceeded ~35 iterations without the still-unresolved
+`qvm`/TCG virtio-queue stall (see `ipc-test/qnx-host-client/README.md`).
+That asymmetry, not the percentile deltas, remains the most defensible
+finding from this pair of legs.
+
 ---
 
 ## 6. Narrative tie-back
