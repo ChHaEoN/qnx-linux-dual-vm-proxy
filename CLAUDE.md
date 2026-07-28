@@ -300,3 +300,19 @@ Quick summary for context:
 3. Write `docs/drive-os-comparison.md`'s dimension-by-dimension
    verdicts now that Phase 2/3/4 have real numbers to cite instead of
    projections.
+
+**Decision (2026-07-29):** getting a real KVM/hardware-timed number on
+Orin is **deferred, not abandoned** — it genuinely needs either NVIDIA
+DRIVE AGX Orin hardware (gated behind an invitation-only developer
+program, not self-serve) or further paid AWS `c7g.metal` investigation,
+and neither is worth blocking on right now. In its place: (a) a second
+project track opened in [docs/future-multi-soc.md](docs/future-multi-soc.md)
+("Phase 7-alt — Single-SoC domain convergence, NVIDIA-primary") that
+matches validating a DENSO PoC where one NVIDIA SoC family hosts *both*
+ADAS (this project's existing QNX Safety + Linux Compute work) *and*
+IVI/Cockpit as sibling partitions — MVP is a lightweight Linux IVI VM
+first, Android Automotive as a de-risked stretch after; (b) the
+GICv3/NISV finding itself is written up as interview material in
+[docs/interview-narrative.md](docs/interview-narrative.md)'s new Q&A
+section — it is a strong debugging story on its own, not just a
+blocker.

@@ -7,6 +7,12 @@
 > comparison-doc findings (Orin KVM virtio-net is the hardware-timed leg).
 > **Length target:** 2 minutes spoken (~250–280 words).
 > **Audience:** NVIDIA AVOS / DRIVE OS Software Engineer interview.
+>
+> **2026-07-29:** added a dedicated Q&A section for the GICv3/NISV KVM
+> finding (real bug, real root cause, honestly unresolved) and a
+> pivot note for DENSO-PoC-flavored questions pointing at the new
+> single-SoC domain-convergence track in
+> [future-multi-soc.md](future-multi-soc.md).
 
 ---
 
@@ -129,7 +135,78 @@ that's what the customer cares about.
 **Section 7 — Optional Phase 7 / multi-SoC extension (0.5 min).** Mention
 the future-multi-soc.md design exploration as the upgrade path: same
 twin framework, plus a Qualcomm-Cockpit-class proxy on AWS, exercising
-inter-SoC IPC. Only mention if asked or if time allows.
+inter-SoC IPC. Only mention if asked or if time allows. **If the
+conversation is DENSO-PoC-flavored specifically** (interviewer asks
+about a single-vendor / domain-consolidation angle rather than
+multi-vendor inter-SoC integration), pivot to the Phase 7-alt track
+instead: one NVIDIA SoC family hosting both ADAS and IVI as sibling
+partitions — matches the real "fewer, more powerful SoCs" consolidation
+trend better than the multi-vendor story does.
+
+---
+
+## Anticipated technical Q&A — the GICv3/NISV finding (added 2026-07-29)
+
+> This is the strongest "walk me through a real bug" story the project
+> has produced so far. Don't bury it as a weakness — a well-told
+> root-cause narrative with honest, unresolved next steps demonstrates
+> more SE judgment than a clean success would.
+
+**If asked "tell me about a hard technical problem you hit and how you debugged it":**
+
+> On the hardware twin I wanted the QNX guest to boot under
+> KVM-accelerated QEMU on the Jetson Orin Nano, so the IPC numbers
+> would be hardware-timed instead of TCG-emulation-bound. The same IFS
+> that booted cleanly under TCG hung silently after printing "FOUND
+> GICv3 ITS" — no crash, no further output, every time.
+>
+> I traced it with ftrace on the host kernel's `kvm` events and caught
+> the exact exit: `KVM_EXIT_ARM_NISV` — the guest had taken a Data
+> Abort with no valid instruction syndrome. I disassembled the QNX
+> board bring-up code at that PC and found a post-indexed store
+> (`str w3,[x0],#4`) writing a GICv3 distributor priority register.
+> That instruction form is one ARM's architecture explicitly excludes
+> from guaranteeing ISV — it's a real, documented edge case, not
+> something QNX did wrong per se. KVM's own design, confirmed against
+> the upstream kernel patch that added this handling, is to give up and
+> inject a synthetic abort into the guest rather than attempt decode —
+> and QNX's exception vector this early in boot has no handler for it,
+> so the guest parks forever. I confirmed the isolation by booting the
+> identical image under plain TCG on the same hardware — clean boot,
+> because TCG never synthesizes that kind of hardware fault in the
+> first place.
+
+**If asked "how would you actually fix that" / "what's next":**
+
+> There isn't a clean fix available to me directly, and I think that's
+> worth saying plainly rather than inventing one. Three real paths: file
+> it with QNX/BlackBerry, since the defect is in their board bring-up
+> binary and a different instruction encoding would sidestep it
+> entirely; contribute a decode-and-emulate fallback to QEMU's own
+> KVM/ARM backend for this exit class — open source, so it doesn't need
+> vendor cooperation, though it's a real ARM64-instruction-decoding
+> effort, not a quick patch; or spend a bounded amount on AWS
+> Graviton3 `c7g.metal` to find out whether this is Tegra234-specific or
+> a general real-hardware/KVM limitation, which would change how I'd
+> prioritize the other two. Given where the project's time budget
+> actually was, I made the call to defer chasing the hardware-timed
+> number and ship a working TCG-based validation instead, with the
+> finding fully documented. That's the same trade-off call an SE makes
+> constantly when supporting a customer — not every defect blocks the
+> deliverable, and knowing which one you're looking at is the actual
+> skill.
+
+**Why this holds up under follow-up questions:** the finding is
+reproducible (documented across multiple boots, `docs/orin-port.md`'s
+risk register), the root cause is verified at the instruction level
+(not "it just hangs"), and the honest-gap framing — "here's what I
+can't fix alone, here's why, here's what would change my answer" — is
+exactly the posture DRIVE OS customer support work requires. If pushed
+on "why didn't you just patch the QNX binary yourself," the answer is
+license scope: NCEULA covers use, not redistribution, and modifying a
+vendor's proprietary board-bring-up binary — even for personal,
+non-redistributed use — is a line worth not crossing casually; that's
+also a real, intentional engineering-judgment answer, not evasion.
 
 ---
 

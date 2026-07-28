@@ -3,6 +3,13 @@
 > **Status:** design exploration. Frozen here so Phase 7 has a starting
 > point when Phase 1–6 land. Not on the active roadmap; do not work on
 > this until at least Phase 4 (twin diff) is delivered.
+>
+> **2026-07-29 addition:** a second, DENSO-PoC-aligned track — "Phase
+> 7-alt — Single-SoC domain convergence (NVIDIA-primary)" — is now
+> documented just below. It studies a different axis (one SoC, multiple
+> domains) than the original multi-vendor plan (multiple SoCs, one
+> domain each) and can start independently, without needing the
+> multi-vendor plan's `qvm`-nesting/inter-SoC-bridge work done first.
 
 ---
 
@@ -22,6 +29,64 @@ encounters. Phase 7 layers a **second SoC proxy** onto the existing
 cloud twin so the project can exercise inter-SoC IPC, AUTOSAR
 Adaptive / SOME/IP-SD framing, and the integration shape that real
 OEM programmes have.
+
+---
+
+## Phase 7-alt — Single-SoC domain convergence (NVIDIA-primary)
+
+> **Added 2026-07-29, DENSO-PoC-aligned.** This is a **different axis**
+> from the multi-vendor plan below, not a replacement for it. The
+> multi-vendor plan (Qualcomm Cockpit chip + NVIDIA ADAS chip) studies
+> **inter-SoC** integration — two different vendors' silicon talking
+> over Ethernet/PCIe, which is real and common today. This section
+> studies **domain convergence**: one sufficiently powerful SoC family
+> (NVIDIA Orin/Thor) hosting *both* the ADAS/Safety domain (this
+> project's existing QNX Safety + Linux Compute work, Phases 1–4) *and*
+> the IVI/Cockpit domain, as sibling partitions on the same silicon —
+> the real industry trend of consolidating what used to be 2+ ECUs/SoCs
+> onto fewer, more powerful ones as compute density grows. This is the
+> direction that matches "validate a DENSO PoC with NVIDIA as the
+> primary chip, covering both ADAS and IVI."
+
+**Architecture — three peer guests, not nested.** Rather than nesting
+IVI inside `qvm` (which would stack two unresolved unknowns at once —
+whether `qvm` can host a Linux guest at all, ADR-002's still-open RQ-1,
+*and* whether Android Automotive can boot under `qvm` — too much risk
+concentrated in one experiment), the IVI domain is added as a **third
+guest running alongside** the existing QNX Safety guest and Linux
+Compute side, on whichever host substrate (cloud or Orin) is being
+worked on. Each domain's feasibility stays independently testable; a
+stall in one doesn't block the others. This can run on the cloud twin
+(three peer QEMU processes on the Windows/Graviton host) or the Orin
+twin (L4T host + the existing QNX guest + a new third guest) without
+requiring the cloud leg to solve KVM or nested virtualisation first.
+
+**MVP sequencing (deliberately de-risked):**
+
+1. **Lightweight Linux IVI VM** (not Android Automotive yet) — proves
+   the three-peer-domain shape works at all: boot order, inter-domain
+   presence/absence signalling, resource sizing. Low risk — it's the
+   same class of QEMU guest this project already knows how to bring up.
+2. **Android Automotive OS, as a stretch upgrade once (1) is stable** —
+   this is where the real, already-documented risk lives (see "Open
+   empirical questions" below: Google's Cuttlefish tooling targets
+   x86_64; the aarch64 path is known to be rougher). Treat a hang or
+   partial boot here as an expected, informative outcome, not a project
+   failure — the lightweight VM already proved the architecture; this
+   step is validating one specific guest OS's aarch64/QEMU maturity, a
+   narrower and separable question.
+
+**Explicit deferral, same date:** getting a **hardware-timed** (not
+TCG-bound) number for the ADAS domain on Orin is deferred pending either
+(a) actual NVIDIA DRIVE AGX Orin hardware access — gated behind the
+DRIVE AGX SDK Developer Program, not self-serve for an individual — or
+(b) further investigation on AWS `c7g.metal` (~$2.32/hr, bounded-cost,
+same Graviton3 family as the existing cloud leg) to determine whether
+the KVM/GICv3-NISV hang found on Orin (`docs/orin-port.md`'s risk
+register) is Tegra234-specific or a general real-hardware/KVM
+limitation. This is a resourcing decision, not an abandonment — see
+`docs/interview-narrative.md`'s new Q&A section for how to talk about
+this finding on its own terms.
 
 ---
 
