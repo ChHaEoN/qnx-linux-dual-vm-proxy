@@ -162,6 +162,71 @@ both now in `../common/console_io.h`:
    proven cure — see the honest account in `docs/findings.md` (both
    2026-07-28 entries).
 
+## Sentinel-kick recovery — RESOLVED, real evidence at scale (2026-07-28)
+
+The non-deterministic stall above is now **recoverable** rather than fatal,
+via a reserved-value kick-safe sentinel frame
+(`FRAME_SENTINEL_SEQ = UINT64_MAX` in `../common/frame.h`). Design, per the
+mechanistic evidence already gathered by the earlier resend-retry
+experiment (which failed because it resent the REAL in-flight frame): on a
+read timeout, `sentinel_recover()` in `client.c` writes a **sentinel**
+frame instead — the same "new write activity" that reliably unstuck the
+missed notification in the resend experiment, but carrying no request
+semantics either end needs to track. `qnx-server` needs **zero** changes:
+it already echoes any frame verbatim regardless of `seq`, so a sentinel
+bounces back for free. The initiator then reads until it sees the real
+echo (`seq` match — recovered, alignment intact, but this iteration's
+timing is discarded as contaminated) or the sentinel's own harmless bounce
+(discarded, keep waiting), bounded by `SENTINEL_MAX_ROUNDS` /
+`SENTINEL_READS_PER_ROUND` so an unrecoverable link still fails loudly
+instead of hanging forever.
+
+**Real evidence, 4 separate boots, 2026-07-28** (curated logs in
+`../../logs/sample-boot/qhv-tcg-sentinel-recovery-*.log`):
+
+| Boot | Config | Stalls hit | Recovered | Failed | Outcome |
+|---|---|---|---|---|---|
+| regression check | 15 timed + 5 warmup (committed) | 1 | 1 | 0 | clean run, real P50/P99/Max |
+| diagnostic 1 | 300 timed + 5 warmup | 3 | 3 | 0 | clean run, `samples=298` |
+| diagnostic 2 | 300 timed + 5 warmup | 8 | 8 | 0 | clean run, `samples=292` |
+| diagnostic 3 | 300 timed + 5 warmup | 7 | 7 | 0 | clean run, `samples=293` |
+
+**19 real, live-observed missed-notification stalls across 4 boots, 19/19
+recovered cleanly, 0 corrupted-alignment failures, 0 unrecoverable
+timeouts.** In every single case `sentinel_bounces=0` — the real echo was
+always the *first* frame read back after the sentinel write (matching the
+theory: the guest's synchronous echo loop had already produced the real
+reply before the client's notification was missed, so the sentinel's own
+bounce is strictly behind it on the wire) — and the leftover sentinel echo
+was harmlessly swept up by the pre-existing `cio_drain_stray()` call at the
+top of the next iteration (visible in the logs as a benign "discarded 64
+stray byte(s)" warning, not an error). `samples` in each diagnostic run
+equals `300 - recovered` exactly, confirming every recovered iteration was
+correctly excluded from the timing statistics rather than polluting P50/P99
+with contaminated recovery-time samples.
+
+The 300-iteration client invocation was a **diagnostic-only** edit to
+`scripts/qhv/post_start.custom`, used to raise the odds of hitting the
+known ~1-2%/iteration hazard within a single boot, then **reverted in
+full** back to the committed `15 /dev/ttyp0 5` (verified via `git diff`
+showing no changes) before this session ended — same convention as the
+2026-07-28 root-cause session's diagnostic variants. The committed
+15-timed-sample benchmark config is unchanged; this section is evidence
+that the *mechanism* works at a real, much larger scale than the
+committed run exercises, not a claim that the committed config itself
+changed.
+
+**What this does not (yet) claim:** it does not claim the underlying
+`qvm`/TCG missed-notification bug is fixed — the stall still happens at
+the same observed rate. It claims the stall is now a **survivable,
+diagnosable, bounded recovery** instead of a fatal abort or (worse) a
+silent alignment corruption. It also does not claim recovery is provably
+correct in every conceivable interleaving (e.g. a hypothetical case where
+the sentinel's bounce arrives *before* the real echo was never observed
+across 19 real occurrences, but the code defends against it anyway by
+discarding sentinel bounces and continuing to wait rather than assuming
+an ordering).
+
 ## Getting results off the image
 
 `qnx-host-client` runs **inside the QNX host image's own filesystem** (a
@@ -180,12 +245,15 @@ it never invents a number.
 
 The three original RUNTIME-SPIKE unknowns are **resolved** by the live
 experiments above; a fourth, unanticipated one (the non-deterministic
-stall) was found and is **not** resolved, and was root-caused further
-(still not fixed) in a 2026-07-28 follow-up session. See
-`../../docs/findings.md` (both 2026-07-28 entries) for the measured
-baseline and the full honest account, including a resend-retry mitigation
-that was tried and rejected (reverted in full, never shipped) because it
-failed instructively rather than helped.
+stall) was found, root-caused further (not fixed at the `qvm`/TCG level)
+in a 2026-07-28 follow-up session, and then given a working, empirically
+proven **application-level recovery** (the sentinel-kick mechanism, same
+date, see the section above) that turns it from a fatal/corrupting event
+into a survivable one. See `../../docs/findings.md` (all three 2026-07-28
+entries) for the measured baseline and the full honest account, including
+a resend-retry mitigation that was tried and rejected (reverted in full,
+never shipped) because it failed instructively rather than helped — and
+directly motivated the sentinel design that succeeded where it failed.
 
 1. ~~Host-side `hostdev` pathname.~~ **RESOLVED**: **`/dev/ptyp0`** (qvm's
    master); the client opens the slave, **`/dev/ttyp0`**.
@@ -193,23 +261,29 @@ failed instructively rather than helped.
    explicitly starting `devc-virtio -E 0x20000000,42` at guest boot.
 3. ~~Console contention with the boot banner.~~ **RESOLVED (non-issue)**:
    `pl011`'s `hostdev >-` is output-only.
-4. **Non-deterministic per-boot stall — NOT RESOLVED, more precisely
-   root-caused.** A real, reproducible hang after a boot-dependent number
-   of back-to-back iterations (see "Two more things the runtime spike
-   found" above), now known from 24 diagnostic attempts to range from
-   iteration 6 to iteration 180 (not just "single-digit to dozens") with
-   one clean 200-sample run also observed — consistent with a small,
-   roughly constant ~1–2% per-iteration hazard rather than a fixed
-   threshold. Live `pidin` probing rules out a `qvm` process deadlock;
-   `qvm`'s own debug/verbose logging (`use qvm`) produces no extra
-   visibility; `use qvm`'s option list has no relevant config knob; and a
-   resend-on-timeout mitigation reliably (8/8) produces a *stale* echo
-   plus a corrupting orphaned duplicate, which is itself strong evidence
-   for a missed host-side read-ready notification on data the guest
-   already produced (not permanent loss, not a `qvm` hang) — recoverable
-   only by new write activity, not by waiting, and not safely exploitable
-   without a protocol-level change to both ends (not attempted). 5
-   warm-up + 15 timed (20 round trips total, 15 measured samples) remains
-   the largest configuration that has reproducibly completed cleanly
-   across repeated attempts; larger counts are a real risk of an
-   incomplete run, not a guaranteed-longer measurement.
+4. **Non-deterministic per-boot stall — root cause NOT fixed at the
+   `qvm`/TCG level, but application-level RECOVERY is now implemented and
+   proven.** A real, reproducible hang after a boot-dependent number of
+   back-to-back iterations (see "Two more things the runtime spike found"
+   above), known from 24 diagnostic attempts to range from iteration 6 to
+   iteration 180 (not just "single-digit to dozens") with one clean
+   200-sample run also observed — consistent with a small, roughly
+   constant ~1–2% per-iteration hazard rather than a fixed threshold. Live
+   `pidin` probing rules out a `qvm` process deadlock; `qvm`'s own
+   debug/verbose logging (`use qvm`) produces no extra visibility; `use
+   qvm`'s option list has no relevant config knob; and a resend-on-timeout
+   mitigation reliably (8/8) produced a *stale* echo plus a corrupting
+   orphaned duplicate — strong evidence for a missed host-side read-ready
+   notification on data the guest already produced. **2026-07-28
+   follow-up:** a kick-safe sentinel frame (reserved `seq` value, see
+   "Sentinel-kick recovery" above) exploits that exact same "new write
+   activity unsticks it" property *without* injecting a real duplicate
+   request, and was proven across 4 real boots (19 real stalls, 19
+   recoveries, 0 failures) at up to 300 timed iterations — 20x the
+   previous 15-sample reproducibly-clean ceiling. The `qvm`/TCG root cause
+   itself is unchanged and still not fixed; what changed is that the
+   client no longer needs to treat a stall as fatal. The committed
+   benchmark config (5 warm-up + 15 timed) is unchanged by this session —
+   bumping it now that recovery is proven is a reasonable follow-up but
+   was left to a future session/Architect decision rather than actioned
+   unilaterally here.

@@ -313,6 +313,29 @@ so they do not drift)
 > DTB GICv3 patch, unconfirmed on Nano — schedule a smoke spike before Phase 2
 > closes). **Net: Option B feasibility-GREEN; the committed Option-A deliverable
 > is unaffected and can start now.**
+>
+> **RQ-2 REFINED 2026-07-28 — host<->guest (not just guest<->guest) is
+> RESOLVED YES, proven live on the host side; guest side open.** The
+> 2026-06-11 spike above established that `vdev-shmem` exists and is
+> `io-sock`-free but characterised it as "guest↔guest" without directly
+> testing whether the QHV **host**'s own userspace (as opposed to a `qvm`
+> guest) can use it — this mattered because Option A's committed transport
+> is host<->guest, not guest<->guest. A 2026-07-28 follow-up (see
+> [findings.md](findings.md)) fetched the full vendor doc set and found it
+> explicit: shmem works "between guests, or between guests and the
+> hypervisor host," and "Host applications may also create shared memory
+> regions or attach to them if permission allows" via the Virtualization
+> API (`hyp_shm.h`/`libhyp.a`). That API is shipped in the local SDP 8.0
+> install (confirmed via `nm` against `libhyp.a`) despite vendor docs
+> suggesting it needs additional NDA'd documentation, and a new minimal
+> host-only test program
+> ([ipc-test/qnx-host-shmem-probe/](../ipc-test/qnx-host-shmem-probe/))
+> proved `hyp_shm_attach_ext()` succeeds live on `qnx-qhv`, with zero
+> `qvm`/`g2.conf` involvement. **The guest-side half (a `qnx-guest`
+> process attaching to the same region via `qvm/guest_shm.h`'s raw-MMIO
+> protocol) was not attempted** — a time-boxed stopping point, not a
+> ruled-out wall. `scripts/qhv/g2.conf.allow` has NOT been extended with
+> `vdev:shmem` since no guest-side vdev was actually configured.
 
 These gate the **Option B stretch** and resolve the **A stretch transport**.
 Implementation can start the committed Option-A/virtio-console deliverable

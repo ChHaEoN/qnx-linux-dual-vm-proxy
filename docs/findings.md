@@ -8,6 +8,140 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 
 ---
 
+## 2026-07-28 — ADR-002 RQ-2 host<->guest shmem viability: RESOLVED YES (host side, empirically proven live); guest side open, not attempted
+
+Resolved the crux unknown behind ADR-002's RQ-2 stretch transport (see
+[phase2-topology-decision.md](phase2-topology-decision.md) §5 and
+[phase2-research-spike.md](phase2-research-spike.md)'s RQ-2/RQ-3 table,
+which had only established that `vdev-shmem` exists and is
+`io-sock`-free — it had NOT established whether the QHV **host**'s own
+userspace, as opposed to a `qvm` guest, can attach to it). Two evidence
+passes, both today:
+
+1. **Full doc re-fetch** (`share_mem.html`, `share_mem_config.html`,
+   `share_mem_vdevshmem.html`, `share_mem_pages.html`, `guest_shm.html`,
+   `vdev_shmem.html` — all six pages under
+   `com.qnx.doc.hypervisor.user/topic/share/` and `topic/vdev_ref/`,
+   fetched via `curl` since no browser tool is available here) settles
+   the ambiguity the research spike left open: the shmem vdev "provides a
+   simple mechanism for sharing memory regions between guests, **or
+   between guests and the hypervisor host**" and, decisively, "**Host
+   applications may also create shared memory regions or attach to them
+   if permission allows.**" The same page also says the *documented* path
+   for this is "the Virtualization API (`libhyp.a`)... described in the
+   Virtualization API Reference that's not included with the QNX
+   hypervisor documentation... contact your QNX representative" — i.e.
+   vendor docs frame the host-side API as requiring NDA'd documentation
+   this project does not have access to.
+2. **Local SDP 8.0 install inspection contradicts the "need NDA'd docs"
+   framing being a hard wall.** `C:\Users\andy8\qnx800\target\qnx\usr\include\hyp_shm.h`
+   ("Host side QNX hypervisor interface definitions") **is** shipped in
+   the standard install, with a real, if terse, Doxygen-commented API
+   (`hyp_shm_create`, `hyp_shm_attach_ext`, `hyp_shm_data`, `hyp_shm_poke`,
+   `hyp_shm_detach`, ...), and `ntoaarch64-nm.exe` on
+   `target/qnx/aarch64le/lib/libhyp.a` confirms every one of those symbols
+   is a real, defined (`T`) function, not a stub. The guest-side
+   counterpart, `qvm/guest_shm.h` (raw MMIO register layout +
+   `guest_shm_create()`/`guest_shm_find()` inline helpers), is likewise
+   present locally. Neither needs the gated "Virtualization API
+   Reference" to attempt — the shipped headers are enough to try.
+3. **Live empirical confirmation, same day:** a new, minimal **host-only**
+   program (`ipc-test/qnx-host-shmem-probe/probe.c`, no `qvm`/`g2.conf`
+   involvement at all) calling `hyp_shm_create()` +
+   `hyp_shm_attach_ext()` on the already-proven `qnx-qhv` host image
+   succeeded on the first boot tried: `rc=0`, a real mapped
+   `data=4c194fb000` pointer, a successful write + `hyp_shm_poke()` +
+   clean `hyp_shm_detach()`. See
+   [logs/sample-boot/qhv-tcg-rq2-hyp-shm-host-probe.log](../logs/sample-boot/qhv-tcg-rq2-hyp-shm-host-probe.log)
+   and [ipc-test/qnx-host-shmem-probe/README.md](../ipc-test/qnx-host-shmem-probe/README.md).
+   Because this succeeded with **zero** `vdev shmem` declarations
+   anywhere, the underlying named-region registry is a host-OS/kernel-level
+   facility, not something scoped to a specific `qvm` VM — which is why an
+   ordinary host process (not a guest) can reach it directly.
+
+**Net verdict: RQ-2's host-side half is RESOLVED YES, proven live, not
+just claimed from docs.** The guest-side half (a `qnx-guest` process
+attaching to the *same* named region via `qvm/guest_shm.h`'s raw-MMIO
+factory-page protocol, and a full host<->guest byte exchange) was
+**deliberately not attempted this session** — a real, bounded time-box
+decision, not a blocker found. Per this project's honest-framing rule:
+this is a genuine "resolved-but-partially-implemented" stopping point,
+not a claim that host<->guest shmem IPC is working end-to-end. The
+concrete next step, if this stretch transport is picked up again: add a
+`vdev shmem` line (with a new, unused interrupt, e.g. `gic:43`) to the
+guest's `g2.conf` in `scripts/qhv/post_start.custom`, write a guest-side
+program using `guest_shm_create()`/`mmap_device_memory()`/`InterruptAttach()`
+per `qvm/guest_shm.h`, and verify it can see the host's test pattern (or
+vice versa). `scripts/qhv/g2.conf.allow` does **not** yet list
+`vdev:shmem` or the shmem-specific directives (`create`, `allow`, `deny`)
+— that gate extension was correctly identified as a prerequisite by the
+research spike but is likewise not done here, since no guest-side shmem
+vdev was actually wired up this session.
+
+---
+
+## 2026-07-28 — Kick-safe sentinel frame implemented and proven: the `qvm`/TCG virtio-console stall is now a survivable, recoverable event, not a fatal one
+
+Implements the concrete next step the two entries below left open: "a
+kick-safe sentinel frame ... so a 'wake-up' write after a timeout cannot
+leave a corrupting duplicate in the application frame stream." Design: a
+reserved `seq` value, `FRAME_SENTINEL_SEQ = UINT64_MAX`
+(`ipc-test/common/frame.h`), that both ends can treat as a no-op —
+`qnx-server` needs **zero** code changes (it already echoes any frame
+verbatim regardless of `seq`); only the initiator (`qnx-host-client`)
+needs new logic. On a read timeout, `sentinel_recover()`
+(`ipc-test/qnx-host-client/client.c`) writes a **sentinel**, not a resend
+of the real in-flight frame — reusing the exact "new write activity
+unsticks the missed notification" property the resend experiment
+discovered, while avoiding the exact failure mode that made the resend
+unsafe (a stale duplicate REAL echo corrupting the next iteration's
+alignment; a stale sentinel echo is inert and simply discarded). Bounded
+by `SENTINEL_MAX_ROUNDS=5` / `SENTINEL_READS_PER_ROUND=3` so a genuinely
+dead link still fails loudly rather than hanging forever.
+
+**Real evidence, 4 separate boots, same day, real (not simulated) stalls:**
+a regression boot at the committed 15-timed/5-warmup config hit 1 stall
+(recovered), and three diagnostic boots at a temporarily-raised
+300-timed/5-warmup config (to raise the odds of hitting the known
+~1–2%/iteration hazard within one boot; **never committed** — the
+`scripts/qhv/post_start.custom` edit was reverted in full immediately
+after, verified via `git diff` showing zero changes, matching this
+project's established diagnostic-variant convention) hit 3, 8, and 7
+stalls respectively. **19/19 stalls recovered cleanly across all 4
+boots, zero unrecoverable timeouts, zero alignment-corruption failures.**
+Every single recovery showed `sentinel_bounces=0` — the real echo was
+always read back *before* the sentinel's own bounce, exactly matching the
+theory that the guest's synchronous echo loop had already produced the
+real reply before the notification was missed — and the sentinel's own
+now-trailing echo was swept up harmlessly by the pre-existing
+`cio_drain_stray()` call at the top of the next iteration (visible as a
+benign "discarded 64 stray byte(s)" warning). Each run's reported
+`samples` count equals `timed_iters - recoveries_in_timed_window` exactly,
+confirming recovered iterations are correctly excluded from timing stats
+rather than polluting P50/P99 with recovery-contaminated RTTs. Curated
+logs:
+[logs/sample-boot/qhv-tcg-sentinel-recovery-committed15-5-check.log](../logs/sample-boot/qhv-tcg-sentinel-recovery-committed15-5-check.log),
+[...-diag300-run1.log](../logs/sample-boot/qhv-tcg-sentinel-recovery-diag300-run1.log),
+[...-diag300-run2.log](../logs/sample-boot/qhv-tcg-sentinel-recovery-diag300-run2.log),
+[...-diag300-run3.log](../logs/sample-boot/qhv-tcg-sentinel-recovery-diag300-run3.log).
+Full account in
+[ipc-test/qnx-host-client/README.md](../ipc-test/qnx-host-client/README.md)'s
+new "Sentinel-kick recovery" section.
+
+**Honest scope of the claim:** the `qvm`/TCG missed-notification root
+cause is **still not fixed** — the underlying hazard rate is unchanged.
+What changed is that the client no longer needs to treat a stall as
+fatal or risk silent corruption recovering from it. The committed
+benchmark configuration (`scripts/qhv/post_start.custom`'s 5 warm-up + 15
+timed invocation) is **unchanged** by this session — the 300-iteration
+runs were diagnostic-only, reverted, and exist purely as proof the
+mechanism scales well past the old 15-sample ceiling. Whether to raise
+the committed run size now that recovery is proven is a reasonable
+follow-up decision, left open rather than actioned unilaterally in this
+implementation pass.
+
+---
+
 ## 2026-07-28 — `qvm`/TCG virtio-console stall: root-caused further (not fixed) via live interactive probing and a resend-retry experiment that failed instructively
 
 Follow-up root-cause session on the Phase 2 cloud-leg stall left open by the

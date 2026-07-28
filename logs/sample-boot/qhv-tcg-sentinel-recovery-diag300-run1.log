@@ -1,0 +1,72 @@
+FOUND GICv3 ITS
+** CPU 0 PE is not awake
+** CPU 1 PE is not awake
+---> Starting slogger2
+---> Starting PCI Services
+---> Starting fsevmgr
+# ---> Starting devb
+---> Mounting file systems
+Path=0 - 
+ target=0 lun=0     Direct-Access(0) - VIRTIO  Rev: 
+---> Mounting file systems
+random: Unable to use devr-virtio.so as an entropy source [entropy.c(173)]
+random: Could not initialize entropy. [random.c(406)]
+Unable to access /dev/random
+---> Starting Networking
+if_up: network stack down: Bad file descriptor
+ifconfig: interface vtnet0 does not exist
+sysctl: unknown oid 'net.inet.icmp.bmcastecho': Address family not supported by protocol family
+sysctl: unknown oid 'qnx.sec.droproot': Address family not supported by protocol family
+setfacl: stat() of /dev/bpf failed: No such file or directory
+main: control_open: Address family not supported by protocol family
+socketpair: Address family not supported by protocol family
+---> Starting sshd
+PRNG is not seeded
+---> Starting misc
+=== AUTO-START QNX GUEST UNDER QVM (no-net) ===
+=== launching qvm @g2.conf (background) ===
+=== boot-grace sleep for guest devc-virtio + qnx-echo-server startup ===
+---> Starting slogger2
+---> Starting PCI Services
+---> Starting fsevmgr
+---> Starting devb
+Path=0 - 
+ target=0 lun=0     Direct-Access(0) - VIRTIO  Rev: 
+---> Mounting file systems
+---> Mounting file systems
+---> Starting Networking
+if_up: tries exhausted
+ifconfig: interface vtnet0 does not exist
+no valid interfaces found
+---> Starting sshd
+---> Starting misc
+=== starting devc-virtio for virtio-console (0x20000000,42) ===
+=== starting qnx-echo-server on /dev/vcon2 ===
+server: echo endpoint up on /dev/vcon2 (frame=64 bytes)
+Process count:23
+Startup complete
+QNX qnx-guest 8.0.0 2026/02/27-10:59:13EST ARMv8_Foundation_Model aarch64le
+=== running qnx-host-client (mechanism-alive IPC benchmark, TCG-bound) ===
+client: link up on /dev/ttyp0; cps=1000000000, frame=64 bytes
+client: progress 0/305
+client: iter 3: read timeout; sentinel-kick round 1/5
+client: iter 3: recovered real echo via sentinel kick (sample discarded, timing contaminated)
+client: WARNING discarded 64 stray byte(s) before iter 4
+client: iter 241: read timeout; sentinel-kick round 1/5
+client: iter 241: recovered real echo via sentinel kick (sample discarded, timing contaminated)
+client: WARNING discarded 64 stray byte(s) before iter 242
+client: iter 269: read timeout; sentinel-kick round 1/5
+client: iter 269: recovered real echo via sentinel kick (sample discarded, timing contaminated)
+client: WARNING discarded 64 stray byte(s) before iter 270
+samples=298 payload=48 cps=1000000000
+P50=2347800 ns  P99=3703100 ns  Max=24285100 ns
+(P50 sanity: link alive if non-zero and stable)
+sentinel_recoveries=3 sentinel_bounces=0 (see ipc-test/qnx-host-client/README.md; 0/0 means no stall hit this run)
+client: note: could not open ../../results/cloud/cloud-ipc-latest.csv (No such file or directory); stdout summary stands
+=== qnx-host-client exit=0 ===
+
+To exit QEMU, type <ctrl>a x
+
+Process count:19
+Startup complete
+QNX qnx-qhv 8.0.0 2026/02/27-10:59:13EST QEMU_virt aarch64le

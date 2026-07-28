@@ -20,6 +20,13 @@
  * to `hostdev /dev/ptyp0` (a QNX devc-pty master); qvm itself opens that
  * master end, so the host-side initiator opens the paired pty SLAVE,
  * /dev/ttyp0, to reach the same channel. See ../qnx-host-client/README.md.
+ *
+ * SENTINEL-KICK RECOVERY (2026-07-28, docs/findings.md): a read timeout is
+ * recovered by writing a FRAME_SENTINEL_SEQ frame (never a resend of the
+ * real in-flight frame -- an earlier resend experiment reliably corrupted
+ * the next iteration's alignment, see README) and reading until the real
+ * echo (seq match) surfaces or the sentinel's own harmless bounce is seen
+ * and discarded. See sentinel_recover() below.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -47,6 +54,14 @@
  * ordinary idle time waiting for the client as EOF, a real regression
  * caught empirically on this spike). */
 #define CLIENT_READ_TIMEOUT_DS 100
+
+/* Sentinel-kick recovery bounds: a "round" is one sentinel write followed by
+ * up to SENTINEL_READS_PER_ROUND frame reads (each bound by the same
+ * CLIENT_READ_TIMEOUT_DS as normal traffic); SENTINEL_MAX_ROUNDS bounds how
+ * many times we re-kick before giving up. This keeps recovery a diagnosable,
+ * bounded retry rather than an unbounded wait. */
+#define SENTINEL_MAX_ROUNDS        5
+#define SENTINEL_READS_PER_ROUND   3
 
 static int client_set_read_timeout(int fd)
 {
@@ -77,6 +92,83 @@ static uint64_t percentile(const uint64_t *sorted, size_t n, double pct)
         rank = n - 1;
     }
     return sorted[rank];
+}
+
+/* Recover from a read timeout (cio_read_frame() returned 1: zero bytes
+ * arrived before CLIENT_READ_TIMEOUT_DS elapsed) WITHOUT resending the real,
+ * still-in-flight frame -- see the file header and README for why a resend
+ * corrupts the next iteration's alignment while a sentinel does not: the
+ * guest's echo loop is a dumb byte-stream echo, so a resent REAL frame is
+ * indistinguishable from a new request and gets a real, orphaning duplicate
+ * reply; a sentinel carries no request semantics either side needs to care
+ * about, so any number of stray sentinel bounces are safe to discard.
+ *
+ * Returns 0 if the real echo (seq == expected_seq) was recovered (the caller
+ * should discard timing for this iteration -- the RTT is contaminated by
+ * however long recovery took) or -1 if recovery was exhausted/unrecoverable
+ * (caller should treat this the same as any other fatal link error). */
+static int sentinel_recover(int fd, uint64_t expected_seq, unsigned long iter,
+                             unsigned long *sentinel_recoveries,
+                             unsigned long *sentinel_bounces)
+{
+    for (int round = 0; round < SENTINEL_MAX_ROUNDS; ++round) {
+        ipc_frame_t sf;
+        uint8_t swire[FRAME_TOTAL_BYTES];
+        sf.seq = FRAME_SENTINEL_SEQ;
+        sf.tstamp_cycles = cio_now_cycles();
+        memset(sf.payload, 0, sizeof sf.payload);
+        frame_pack(&sf, swire);
+
+        fprintf(stderr,
+                "client: iter %lu: read timeout; sentinel-kick round %d/%d\n",
+                iter, round + 1, SENTINEL_MAX_ROUNDS);
+        if (cio_write_frame(fd, swire) < 0) {
+            fprintf(stderr, "client: sentinel write failed at iter %lu: %s\n",
+                    iter, strerror(errno));
+            return -1;
+        }
+
+        for (int attempt = 0; attempt < SENTINEL_READS_PER_ROUND; ++attempt) {
+            uint8_t rbuf[FRAME_TOTAL_BYTES];
+            int r = cio_read_frame(fd, rbuf);
+            if (r == 1) {
+                /* Timed out waiting even for the sentinel's own bounce;
+                 * try another kick round rather than looping here forever. */
+                break;
+            }
+            if (r < 0) {
+                fprintf(stderr,
+                        "client: sentinel-recovery read error at iter %lu: %s\n",
+                        iter, strerror(errno));
+                return -1;
+            }
+            ipc_frame_t got;
+            frame_unpack(rbuf, &got);
+            if (got.seq == expected_seq) {
+                fprintf(stderr,
+                        "client: iter %lu: recovered real echo via sentinel kick "
+                        "(sample discarded, timing contaminated)\n", iter);
+                (*sentinel_recoveries)++;
+                return 0;
+            }
+            if (frame_is_sentinel(&got)) {
+                fprintf(stderr,
+                        "client: iter %lu: discarded a stale sentinel bounce\n", iter);
+                (*sentinel_bounces)++;
+                continue;
+            }
+            fprintf(stderr,
+                    "client: iter %lu: unexpected seq %llu during sentinel "
+                    "recovery (wanted %llu or the sentinel value)\n",
+                    iter, (unsigned long long)got.seq,
+                    (unsigned long long)expected_seq);
+            return -1;
+        }
+    }
+    fprintf(stderr,
+            "client: iter %lu: sentinel-recovery exhausted after %d round(s)\n",
+            iter, SENTINEL_MAX_ROUNDS);
+    return -1;
 }
 
 static void usage(const char *argv0)
@@ -191,6 +283,8 @@ int main(int argc, char **argv)
 
     unsigned long total = warmup + iters;
     size_t kept = 0;
+    unsigned long sentinel_recoveries = 0;
+    unsigned long sentinel_bounces = 0;
     for (unsigned long i = 0; i < total; ++i) {
         if (i == 0 || (i % 1000ul) == 0) {
             fprintf(stderr, "client: progress %lu/%lu\n", i, total);
@@ -234,9 +328,24 @@ int main(int argc, char **argv)
         }
 
         int r = cio_read_frame(fd, wire);
-        if (r != 0) {
-            fprintf(stderr, "client: %s at iter %lu\n",
-                    (r == 1) ? "unexpected EOF" : strerror(errno), i);
+        if (r == 1) {
+            /* Zero bytes arrived before CLIENT_READ_TIMEOUT_DS elapsed --
+             * the missed-notification stall (docs/findings.md, 2026-07-28).
+             * Recover with a sentinel kick instead of aborting or resending
+             * the real frame; see sentinel_recover()'s header comment. */
+            if (sentinel_recover(fd, f.seq, i, &sentinel_recoveries, &sentinel_bounces) != 0) {
+                fprintf(stderr, "client: unrecoverable stall at iter %lu\n", i);
+                free(samples);
+                close(fd);
+                return 1;
+            }
+            /* Real echo recovered and seq alignment restored; this
+             * iteration's timing is contaminated by recovery time, so it
+             * contributes no RTT sample -- move on to the next iteration. */
+            continue;
+        }
+        if (r < 0) {
+            fprintf(stderr, "client: %s at iter %lu\n", strerror(errno), i);
             free(samples);
             close(fd);
             return 1;
@@ -285,6 +394,9 @@ int main(int argc, char **argv)
            (unsigned long long)p99_ns,
            (unsigned long long)max_ns);
     printf("(P50 sanity: link alive if non-zero and stable)\n");
+    printf("sentinel_recoveries=%lu sentinel_bounces=%lu"
+           " (see ipc-test/qnx-host-client/README.md; 0/0 means no stall hit this run)\n",
+           sentinel_recoveries, sentinel_bounces);
 
     /* Append one CSV row in the results/cloud schema (see header.csv). The path
      * is best-effort; a failure here must not lose the stdout summary above. */

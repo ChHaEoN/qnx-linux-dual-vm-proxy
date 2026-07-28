@@ -34,6 +34,7 @@ qnx710/
 ipc-test/qnx-server/qnx-echo-server
 ipc-test/qnx-host-client/qnx-host-client
 ipc-test/qnx-server-net/qnx-echo-server-net
+ipc-test/qnx-host-shmem-probe/hyp-shm-probe
 # ipc-test extensionless Linux binary (ordinary build artifact, not QNX-derived,
 # but still a compiled binary with no reason to be committed).
 ipc-test/linux-client/linux-client

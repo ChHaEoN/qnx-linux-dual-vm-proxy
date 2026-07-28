@@ -38,6 +38,24 @@ typedef struct {
     uint8_t  payload[FRAME_PAYLOAD_BYTES];
 } ipc_frame_t;
 
+/* Reserved seq value marking a KICK-SAFE SENTINEL frame (2026-07-28,
+ * docs/findings.md): a no-op/keepalive both ends may treat as carrying no
+ * data-correctness meaning. Real traffic's seq space is 0..(warmup+iters-1),
+ * always far below UINT64_MAX, so this value can never collide with a real
+ * frame. The echo side (qnx-server) needs NO special handling -- it already
+ * echoes every frame verbatim regardless of seq, so a sentinel bounces back
+ * unmodified for free. Only an INITIATOR needs to recognise this value: use
+ * it (not a resend of the real in-flight frame) as the write-side "kick" that
+ * recovers from a missed read-ready notification, since a stale sentinel
+ * echo is safe to discard whereas a stale duplicate of a REAL frame corrupts
+ * the next iteration's alignment (see ipc-test/qnx-host-client/README.md). */
+#define FRAME_SENTINEL_SEQ  UINT64_MAX
+
+static inline int frame_is_sentinel(const ipc_frame_t *f)
+{
+    return f->seq == FRAME_SENTINEL_SEQ;
+}
+
 static inline void frame_put_u64(uint8_t *p, uint64_t v)
 {
     p[0] = (uint8_t)(v & 0xffu);
