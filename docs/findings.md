@@ -8,6 +8,108 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 
 ---
 
+## 2026-07-28 — `qvm`/TCG virtio-console stall: root-caused further (not fixed) via live interactive probing and a resend-retry experiment that failed instructively
+
+Follow-up root-cause session on the Phase 2 cloud-leg stall left open by the
+runtime-spike entry below. **Outcome: root-caused further, still NOT
+fixed.** New tooling:
+[`scripts/qhv/launch-qhv-tcg-interactive.ps1`](../scripts/qhv/launch-qhv-tcg-interactive.ps1)
+boots the QHV host with its serial console on a TCP socket instead of a
+plain log file, so commands can be injected into the live root shell
+**while `qnx-host-client` is still running/stalled in the background** (a
+diagnostic-only variant of `post_start.custom` backgrounds the client loop
+so `post_startup.sh` reaches the login-less shell regardless of whether the
+client stalls — never committed; reverted after use). Four things were
+tried, three ruled out, one produced the key new evidence:
+
+1. **`qvm` process-level deadlock — RULED OUT.** `pidin -p qvm` snapshots
+   taken live during 8 separate diagnostic runs (200 iters + 5 warm-up
+   each, no gap beyond the existing 20 ms pacing) always show `qvm`'s 4
+   threads cycling normally among RECEIVE/RUNNING/REPLY/SEM/CONDVAR states
+   — never frozen on the same blocked state across snapshots seconds apart.
+   `qvm` itself is not wedged when the client stalls.
+2. **`qvm`'s own debug/verbose logging — RULED OUT as a visibility path.**
+   `use qvm` (QNX's embedded-usage-text convention; `qvm --help`/`-h`/`-v`
+   are all rejected as unknown options) reveals a real, documented `logger
+   debug stdout` / `logger verbose stdout` facility. Enabling both in
+   `g2.conf` and redirecting `qvm`'s own stdout to a file produced **zero**
+   additional log lines beyond ordinary startup output across a 250 s
+   capture spanning multiple stalls — the virtio-console vdev does not
+   appear to emit any per-transfer/virtqueue-level trace even at debug
+   level, so this avenue gives no additional visibility.
+3. **A config-level ring-size/queue-depth fix — RULED OUT.** The full `use
+   qvm` option reference lists no vdev-specific queue-depth/ring-size
+   tunable for `virtio-console`; the only related knobs are
+   `message-block-timeout` / `vdev-message-block-timeout` (both default
+   10s, unrelated to queue depth) and `slog-buffer`. There is no exposed
+   config knob to mitigate this.
+4. **A resend-on-timeout retry mitigation — TRIED, FAILED, but mechanistically
+   informative.** Client-side change (tested, then fully reverted — never
+   shipped): on a read timeout, resend the same frame (re-stamping
+   `tstamp_cycles`) up to 5 times before giving up. Across 8 independent
+   diagnostic runs this **failed identically every single time**: exactly
+   one retry always returned data (never needed a 2nd–5th attempt), but
+   that data was **always the stale, one-iteration-behind echo** (e.g.
+   timeout at iter 88, resend, echo comes back tagged seq=88 — correct for
+   *that* iteration — but a second, now-orphaned duplicate echo of iter 88
+   is left queued behind it, which the *next* iteration's read then
+   consumes instead of its own reply, producing an immediate, permanent
+   `echo seq mismatch at iter N+1 (got N)`). This is not noise — it is the
+   same exact off-by-one signature in 8/8 runs. It means: **the original
+   echo was never lost — the guest had already produced it, and the host
+   side's read-ready notification for it was missed.** The resend's WRITE
+   is what unstuck the missed notification (a 10 s bounded wait alone,
+   already tried separately per the runtime-spike entry below, does
+   *not* recover it), but because the resend also injects a real duplicate
+   request the synchronous guest echo loop dutifully answers, it corrupts
+   frame alignment one step later — trading a clean, diagnosable abort for
+   a worse, silent-until-next-iteration desync. **Reverted in full**
+   (`ipc-test/qnx-host-client/client.c` and `scripts/qhv/post_start.custom`
+   both restored to the exact committed baseline via `git checkout --`) —
+   this was evaluated and rejected, not shipped.
+5. **Expanded, more precise stall-iteration dataset.** 24 total diagnostic
+   attempts across this session (16 without the retry experiment, 8 with
+   it, all otherwise using the same 20 ms pacing as the committed config):
+   failures at iterations 6, 8, 13, 14, 28, 33, 56, 62, 62, 70, 77, 87, 88,
+   89, 98, 105, 108, 109, 132, 133, 150, 180, 180 — plus **one full, clean
+   200-sample success** (P50=2,346,400 ns P99=6,341,700 ns
+   Max=10,804,400 ns, zero errors). This *refutes* the runtime-spike
+   entry's "single-digit to several-dozen iterations" characterization —
+   the stall demonstrably also happens much later (up to 180) and 200 is
+   achievable. The distribution has no common-divisor/fixed-boundary
+   pattern (rules out a fixed ring-size threshold) and is consistent with
+   a small, roughly constant per-iteration hazard rate (~1–2%): fitting a
+   geometric model to the mean failure iteration (~71) predicts ~6% odds
+   of a clean 200-iteration run, matching the observed 1/16 successes to
+   within noise. This is the signature of a rare, timing-window-dependent
+   missed notification, not a deterministic logic bug or a hard ring-size
+   ceiling.
+
+**Root cause: narrowed, not identified at the code level, not fixed.**
+Best-supported hypothesis, now with a concrete mechanism instead of just a
+label: a rare, TCG-timing-dependent missed wake-up/notify on the host side
+of the `qvm` virtio-console byte stream — the guest-side echo is genuinely
+produced (not lost, not delayed indefinitely, not a guest-side hang), but
+the host-side read doesn't get told data is ready, and nothing *other than
+new write activity* nudges it back to life (a longer passive wait does
+not; see the runtime-spike entry's 25 s-timeout finding). No source access
+to `qvm`/`vdev-virtio-console.so` exists from this environment, `use qvm`'s
+option surface has no relevant tunable, and enabling `qvm`'s own
+debug/verbose logging produced no additional evidence — those are the
+avenues available from outside `qvm`, and they are exhausted. A real next
+step (not attempted here, out of this session's time-box, and requiring a
+protocol/wire-format change to BOTH ends) would be a kick-safe sentinel
+frame — a byte pattern both `qnx-host-client` and `qnx-server` recognise
+and silently discard — so a "wake-up" write after a timeout cannot leave a
+corrupting duplicate in the application frame stream. The committed
+config (`scripts/qhv/post_start.custom`'s 15 timed + 5 warm-up run,
+[`results/cloud/cloud-ipc-latest.csv`](../results/cloud/cloud-ipc-latest.csv))
+is unchanged — nothing here is a real, repeatable improvement over it, so
+per this project's honest-framing rule the existing real 15-sample result
+stands as-is.
+
+---
+
 ## 2026-07-28 — Phase 3 IPC benchmark done end-to-end on real Orin Nano hardware: 100 000 clean round trips over a real `br0` bridge, twice
 
 Closed [`docs/orin-port.md`](orin-port.md) steps 3, 5, and 6 with a real,

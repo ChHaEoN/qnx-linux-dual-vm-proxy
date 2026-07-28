@@ -126,20 +126,41 @@ both now in `../common/console_io.h`:
    `client.c`). The client also does a defensive drain before every write
    and applies a bounded read timeout (`CLIENT_READ_TIMEOUT_DS`) so a
    stalled link is a diagnosable error, not a silent hang.
-3. **A non-deterministic stall, UNRESOLVED.** Back-to-back exchanges with
-   no gap between them hang within single-digit iterations (a real hang
-   under `CLIENT_READ_TIMEOUT_DS`, not a framing bug — every frame up to
-   the stall point was byte-exact). A `usleep(20000)` pacing gap between
-   iterations (measured **outside** the RTT sample window) let some runs
-   reach dozens of clean iterations, but it is **not a reliable fix**:
-   repeated attempts stalled anywhere from iteration 2 to iteration 35
-   with the *same* 20 ms gap, and neither a larger gap (100 ms) nor a much
-   longer read timeout (25 s) made it more reliable — one 100 ms-gap run
-   stalled at iteration 2. This is most consistent with `qvm`/TCG
-   virtio-queue kick/notify timing sensitivity (probabilistic per boot),
-   not something fixable from the client/server application side. The
+3. **A non-deterministic stall, UNRESOLVED but more precisely characterised
+   (2026-07-28 follow-up root-cause session — see `docs/findings.md`).**
+   Back-to-back exchanges with no gap between them hang within a few to a
+   few hundred iterations (a real hang under `CLIENT_READ_TIMEOUT_DS`, not
+   a framing bug — every frame up to the stall point was byte-exact). A
+   `usleep(20000)` pacing gap between iterations (measured **outside** the
+   RTT sample window) does **not** reliably prevent it: 24 diagnostic
+   attempts with the *same* 20 ms gap stalled anywhere from iteration 6 to
+   iteration 180, plus one full clean 200-sample run — a much wider and
+   later range than earlier believed ("single-digit to several-dozen" was
+   an artefact of a small early sample, not a real ceiling). Live `pidin`
+   probing during multiple stalls shows `qvm`'s own threads never
+   deadlocked (they keep cycling RECEIVE/RUNNING/REPLY normally), `qvm`'s
+   documented `logger debug`/`verbose` facility (`use qvm`) produces zero
+   extra output around a stall, and `use qvm`'s full option list has no
+   vdev-level queue-depth/ring-size tunable — so process deadlock, missing
+   debug visibility, and a config-level fix are all ruled out. A resend-
+   on-timeout retry mitigation was implemented and tested, then **fully
+   reverted** after failing identically in 8/8 attempts: the resend's write
+   always unstuck a reply (never permanently lost, but a 25 s passive wait
+   alone, tried separately below, does not recover it either), but that
+   reply was always the *stale*, one-iteration-behind echo, leaving an
+   orphaned duplicate that corrupts frame alignment one iteration later.
+   That failure is itself the most informative result: it points to a
+   missed host-side read-ready notification on data the guest already
+   produced, recoverable only by new write/kick activity — not a permanent
+   loss, not a slow guest, not a `qvm` deadlock, and not fixable by
+   resending without a protocol-level, both-ends change (an explicit
+   kick-safe sentinel frame, not attempted). This is most consistent with
+   `qvm`/TCG virtio-queue kick/notify timing sensitivity (probabilistic per
+   boot, roughly a constant ~1–2% per-iteration hazard), not something
+   fixable from the client/server application side as it stands today. The
    pacing gap is left in as an occasionally-helpful mitigation, not a
-   proven cure — see the honest account in `docs/findings.md` (2026-07-28).
+   proven cure — see the honest account in `docs/findings.md` (both
+   2026-07-28 entries).
 
 ## Getting results off the image
 
@@ -159,9 +180,12 @@ it never invents a number.
 
 The three original RUNTIME-SPIKE unknowns are **resolved** by the live
 experiments above; a fourth, unanticipated one (the non-deterministic
-stall) was found and is **not** resolved. See `../../docs/findings.md`
-(2026-07-28 entry) for the measured baseline this produced and the honest
-account of what still doesn't work reliably.
+stall) was found and is **not** resolved, and was root-caused further
+(still not fixed) in a 2026-07-28 follow-up session. See
+`../../docs/findings.md` (both 2026-07-28 entries) for the measured
+baseline and the full honest account, including a resend-retry mitigation
+that was tried and rejected (reverted in full, never shipped) because it
+failed instructively rather than helped.
 
 1. ~~Host-side `hostdev` pathname.~~ **RESOLVED**: **`/dev/ptyp0`** (qvm's
    master); the client opens the slave, **`/dev/ttyp0`**.
@@ -169,10 +193,23 @@ account of what still doesn't work reliably.
    explicitly starting `devc-virtio -E 0x20000000,42` at guest boot.
 3. ~~Console contention with the boot banner.~~ **RESOLVED (non-issue)**:
    `pl011`'s `hostdev >-` is output-only.
-4. **Non-deterministic per-boot stall — NOT RESOLVED.** A real, reproducible
-   hang after a small, boot-dependent number of back-to-back iterations
-   (see "Two more things the runtime spike found" above). 5 warm-up + 15
-   timed (20 round trips total, 15
-   measured samples) is the largest configuration that has reproducibly
-   completed cleanly across repeated attempts; larger counts are a real
-   risk of an incomplete run, not a guaranteed-longer measurement.
+4. **Non-deterministic per-boot stall — NOT RESOLVED, more precisely
+   root-caused.** A real, reproducible hang after a boot-dependent number
+   of back-to-back iterations (see "Two more things the runtime spike
+   found" above), now known from 24 diagnostic attempts to range from
+   iteration 6 to iteration 180 (not just "single-digit to dozens") with
+   one clean 200-sample run also observed — consistent with a small,
+   roughly constant ~1–2% per-iteration hazard rather than a fixed
+   threshold. Live `pidin` probing rules out a `qvm` process deadlock;
+   `qvm`'s own debug/verbose logging (`use qvm`) produces no extra
+   visibility; `use qvm`'s option list has no relevant config knob; and a
+   resend-on-timeout mitigation reliably (8/8) produces a *stale* echo
+   plus a corrupting orphaned duplicate, which is itself strong evidence
+   for a missed host-side read-ready notification on data the guest
+   already produced (not permanent loss, not a `qvm` hang) — recoverable
+   only by new write activity, not by waiting, and not safely exploitable
+   without a protocol-level change to both ends (not attempted). 5
+   warm-up + 15 timed (20 round trips total, 15 measured samples) remains
+   the largest configuration that has reproducibly completed cleanly
+   across repeated attempts; larger counts are a real risk of an
+   incomplete run, not a guaranteed-longer measurement.
