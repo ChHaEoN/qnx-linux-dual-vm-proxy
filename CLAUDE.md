@@ -43,7 +43,11 @@ the NVIDIA AVOS / DRIVE OS SE role this portfolio targets.
 **Hardware twin (Orin Nano):**
 - Jetson Orin Nano Dev Kit ($499) — Ampere GPU, 6× Cortex-A78AE, 8 GB RAM
 - Host OS: NVIDIA L4T (JetPack 6, Ubuntu 22.04 base) — also plays the "Compute partition" role
-- KVM enabled on A78AE; QEMU runs the QNX guest on bare arm64 silicon
+- `/dev/kvm` is present and initializes (VHE, GICv3) on this hardware, but
+  booting the actual QNX IFS under `-enable-kvm` hangs on a real,
+  root-caused defect (see Phase status below and `docs/orin-port.md`'s
+  risk register) — **TCG is the working transport today**, KVM is not.
+  Do not assume "KVM enabled on A78AE" means QNX boots under it.
 
 **Common across both twins:**
 - VM0 — Safety proxy: QNX SDP 8.0, aarch64 `virt` machine, NCEULA (Everywhere)
@@ -227,20 +231,72 @@ Quick summary for context:
 
 ## Phase status
 
-- **Phase 0** — Bootstrap / scaffold + Digital Twin re-scope ← *current*
-- Phase 1 — Cloud twin bring-up (QNX + Linux booting on AWS QEMU/KVM)
-- Phase 2 — Cloud twin IPC + latency benchmark
-- Phase 3 — Hardware twin port (same IFS / same code on Jetson Orin Nano)
-- Phase 4 — Twin diff + DRIVE OS comparison
-- Phase 5 — FuSa & Cybersecurity overlay (FMEA, ASIL gap, STRIDE threat model)
-- Phase 6 — Polish, public README, demo recording
-- Phase 7 (stretch) — Multi-SoC domain-controller extension: add a
-  Qualcomm-Cockpit-class proxy on AWS, exercise inter-SoC IPC (QC ↔ NV).
-  Feasibility frozen in `docs/future-multi-soc.md`; not started until Phase 6 lands.
+> **Updated 2026-07-28** — this section had drifted badly out of date
+> (it still said "Phase 0 current" after Phases 1–4 had real work and
+> real numbers). Treat `docs/findings.md` as the authoritative,
+> dated ground truth if this section drifts again — it is updated
+> every session real work happens; this section is a summary that can
+> lag.
 
-Next action: install QNX SDP 8.0 on the local Windows PC via the QNX
-Software Center (manual step; user is currently waiting on QNX
-Everywhere verification). Once SDP is installed, implementation runs
-`scripts/bootstrap-runtime-host.sh` on the Graviton c7g.large runtime,
-then `scripts/build-qnx-ifs.bat` on Windows. See the **Phase 1
-starting sequence** above for the full handoff.
+- Phase 0 — Bootstrap / scaffold + Digital Twin re-scope — **done**
+- Phase 1 — Cloud twin bring-up — **done**: QHV host + single QNX
+  guest boot under QEMU-TCG, demonstrated on the local Windows build
+  host (not AWS — Graviton non-metal has no `/dev/kvm`/EL2, see
+  [ADR-002](docs/phase2-topology-decision.md)). Curated log:
+  [logs/sample-boot/qhv-tcg-host-and-guest-boot.log](logs/sample-boot/qhv-tcg-host-and-guest-boot.log).
+- Phase 2 — Cloud twin IPC + latency benchmark — **partial, real
+  numbers, honestly capped**: the `qvm` virtio-console `hostdev`
+  runtime-spike is resolved (host `/dev/ptyp0`↔`/dev/ttyp0` pty pair,
+  guest `devc-virtio`→`/dev/vcon2`); real measured P50/P99/Max exist
+  in [results/cloud/cloud-ipc-latest.csv](results/cloud/cloud-ipc-latest.csv).
+  **Open:** a non-deterministic `qvm`/TCG virtio-queue stall caps
+  reliable runs at ~15–35 iterations, nowhere near the 100k-iteration
+  target — root cause not found, not closed. See
+  [ipc-test/qnx-host-client/README.md](ipc-test/qnx-host-client/README.md).
+- Phase 3 — Hardware twin port to Jetson Orin Nano — **substantial
+  progress, not closed**: Orin Nano flashed (JetPack 6/L4T R36.4.7)
+  and SSH-reachable; the plain `qnx-safety-vm` IFS boots under
+  **TCG** on real hardware. **KVM-accelerated boot is blocked** by a
+  real, root-caused defect — a GICv3 distributor bring-up instruction
+  takes a `KVM_EXIT_ARM_NISV` Data Abort that neither KVM nor QEMU
+  6.2.0 can emulate and QNX's `startup-qemu-virt` has no handler for
+  (see `docs/orin-port.md`'s risk register) — TCG is the accepted
+  interim transport, not a permanent substitute for the hardware-timed
+  KVM number this phase still owes. Networking (`io-sock`/virtio-net)
+  was separately root-caused and fixed (a missing `virtio-rng-device`
+  in the fixed virtio-mmio slot order, not a virtio-net bug) and
+  **heterogeneous QNX↔Linux IPC over a real `br0`/`tap-qnx` bridge is
+  working**: two clean 100,000-iteration runs, zero errors — see
+  [results/hw/orin-ipc-latest.csv](results/hw/orin-ipc-latest.csv).
+  Honest caveat: this used a **rebuilt** IFS (new TCP server code
+  staged in), not the byte-identical Phase-1 image — a real deviation
+  from a strict zero-code-change portability claim.
+- Phase 4 — Twin diff + DRIVE OS comparison — **started**:
+  `scripts/twin/diff-results.sh` was rewritten to match the CSV schema
+  the benchmarks actually produce (the original assumed a shape no
+  real CSV ever had). Two real diffs exist in
+  [docs/digital-twin-design.md](docs/digital-twin-design.md) §5: an
+  IPC delta (explicitly flagged as confounding host+accel+transport,
+  "mechanism-alive vs. heterogeneity" — not a clean host-only
+  comparison) and a boot-time delta (the clean host-only comparison,
+  n=5 per side: Orin +23–25% slower than Windows, but with a *tighter*
+  run-to-run spread). `docs/drive-os-comparison.md` (the broader
+  dimension-by-dimension gap doc) is untouched — still open.
+- Phase 5 — FuSa & Cybersecurity overlay — not started (Phase-1-gate
+  FuSa/Cyber review already happened as a cross-cutting check per the
+  coordination rules above, but the dedicated Phase-5 overlay pass has not)
+- Phase 6 — Polish, public README, demo recording — not started
+- Phase 7 (stretch) — Multi-SoC domain-controller extension — not
+  started; feasibility frozen in `docs/future-multi-soc.md`
+
+**Next actions (pick one, they're independent):**
+1. Root-cause or route around the Phase-2 `qvm`/TCG virtio-console
+   stall (blocks getting past ~35 samples on the cloud leg).
+2. File the GICv3/NISV defect with QNX/BlackBerry support, or test
+   whether a from-source-built newer QEMU improves `KVM_EXIT_ARM_NISV`
+   decode coverage (assessed as unlikely to help — this is the KVM
+   backend's deliberate by-design behavior, not a version bug — but
+   untested).
+3. Write `docs/drive-os-comparison.md`'s dimension-by-dimension
+   verdicts now that Phase 2/3/4 have real numbers to cite instead of
+   projections.
