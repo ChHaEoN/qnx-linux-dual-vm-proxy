@@ -173,9 +173,51 @@ just having one canonical artefact.
 
 ## 5. Results interpretation
 
-> _Section deferred to Phase 4. Will hold the actual measured
-> numbers and the interpretive prose tying them back to DRIVE OS
-> reality._
+**First real numbers (2026-07-28)**, produced by
+[`scripts/twin/diff-results.sh`](../scripts/twin/diff-results.sh)
+(rewritten 2026-07-28 to parse the schema the CSVs actually use — the
+original version predated any real CSV and assumed a shape neither leg
+ever produced) against
+[`results/cloud/cloud-ipc-latest.csv`](../results/cloud/cloud-ipc-latest.csv)
+and [`results/hw/orin-ipc-latest.csv`](../results/hw/orin-ipc-latest.csv):
+
+| Metric | Cloud (QNX↔QNX, `qvm` virtio-console, TCG, 15 samples) | HW (QNX↔Linux, virtio-net/`br0`, TCG, 100 000 samples) | Δ (hw − cloud) |
+|---|---|---|---|
+| P50 | 2,002,500 ns | 1,636,269 ns | −366,231 ns (−18.3%) |
+| P99 | 2,332,300 ns | 2,549,813 ns | +217,513 ns (+9.3%) |
+| Max | 2,332,300 ns | 4,127,894 ns | +1,795,594 ns (+77.0%) |
+
+**Reading these deltas correctly is the whole point of this section.**
+Per §4's constraint, this is not a host-only comparison — it confounds
+host, acceleration (matching only incidentally: HW's KVM path is
+separately blocked by the GICv3/NISV finding in
+[orin-port.md](orin-port.md), not by design), and transport+OS-pair. Two
+observations are honestly supportable from this data:
+
+- **Stability, not raw speed, is the striking difference.** The cloud
+  leg's virtio-console transport hits a non-deterministic `qvm`/TCG
+  virtio-queue stall within single-digit-to-dozens of iterations
+  (documented in
+  [`ipc-test/qnx-host-client/README.md`](../ipc-test/qnx-host-client/README.md)),
+  capping its sample count at 15. The HW leg's virtio-net/`br0` path
+  completed **two clean 100,000-iteration runs in a row** with zero
+  errors. Read as a mechanism-reliability finding (console vdev framing
+  vs. a real socket transport under TCG), not a host-speed finding.
+- **The P50/P99/Max numbers themselves are not meaningfully comparable**
+  across legs, because they measure different things: cloud's number is
+  round-trip time through a `qvm` EL2↔EL1 console vdev between two QNX
+  instances; HW's number is round-trip time through a Linux bridge +
+  virtio-net between a QNX guest and the native Linux host. Both are
+  real, both are TCG-emulation-bound, neither isolates host CPU
+  performance — that specific comparison (same transport, same IFS, only
+  the host differing) does not exist yet in this repo. It would require
+  either a console-based transport on Orin or a virtio-net-based
+  transport on cloud, and cloud's Linux-side is deliberately absent per
+  [ADR-002](phase2-topology-decision.md).
+- **The cleaner host-only comparison remains boot time**, per §4's own
+  guidance, and is still not done — `logs/sample-boot/orin-tcg-qnx-boot1.log`
+  and the cloud-leg equivalents exist but have not been time-diffed
+  against each other in this pass.
 
 ---
 
