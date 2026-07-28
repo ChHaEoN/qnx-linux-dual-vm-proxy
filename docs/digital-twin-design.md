@@ -219,6 +219,37 @@ observations are honestly supportable from this data:
   and the cloud-leg equivalents exist but have not been time-diffed
   against each other in this pass.
 
+**Follow-up, same day: the boot-time comparison, actually run.** No
+plain-`qnx-safety-vm` boot had ever been captured on the local Windows
+build host with wall-clock timing (`logs/sample-boot/` only had QHV-build
+logs for that side). Ran the identical QEMU invocation
+(`-machine virt,gic-version=3 -accel tcg -cpu max -smp 2 -m 1G`, same
+`ifs.bin`+`disk-qemu`) on both hosts, measuring real wall-clock time from
+process launch to the guest's own `Startup complete` line appearing in
+the captured serial log:
+
+| Host | Boot time (launch → `Startup complete`) |
+|---|---|
+| Local Windows (x86_64, TCG) | **26,088 ms** |
+| Jetson Orin Nano (aarch64 A78AE, TCG) | **32,125 ms** |
+
+Δ = +6,037 ms (+23.1%), Orin slower. **This is the cleanest host-only
+comparison in the repo so far** — same IFS, same disk image, same QEMU
+machine/CPU/mem shape, same accelerator (TCG on both, this time by
+genuine symmetry rather than incidental blockage), only the host CPU
+architecture and micro-architecture differ (x86_64 host translating
+aarch64 TCG vs. aarch64 host translating aarch64 TCG). Two honest caveats
+on top of the headline number: (1) this is a **single run per side**, not
+a repeated-measurement average — TCG boot time can plausibly vary
+run-to-run (host scheduler noise, disk cache state), so treat ±a few
+seconds as the likely noise floor rather than reading the 23.1% as
+precise; (2) TCG-on-TCG same-ISA (aarch64 guest on an aarch64 host) still
+does full binary translation — QEMU's TCG does not skip translation just
+because host and guest architectures match, so the Orin result is not
+disadvantaged by an ISA mismatch the Windows result doesn't have; the gap
+is genuinely about host micro-architecture/scheduler/storage differences,
+which is exactly what a twin diff is supposed to isolate.
+
 **Follow-up, same day: a sample-size-matched re-run corrects the P50
 reading above.** The 100k-vs-15 comparison's wildly inconsistent deltas
 (P50 −18.3%, Max +77.0%) were suspicious on their face — with n=15,
