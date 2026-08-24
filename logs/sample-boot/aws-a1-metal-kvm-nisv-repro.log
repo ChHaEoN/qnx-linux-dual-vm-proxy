@@ -1,0 +1,59 @@
+# Phase 3 / cross-vendor validation
+# Captured 2026-07-29 on AWS EC2 a1.metal (i-0627861710c5a5394, eu-central-1,
+# terminated immediately after this capture -- bare-metal Graviton1,
+# Annapurna Labs SoC, 16x Cortex-A72, kernel 6.8.0-1061-aws).
+#
+# Purpose: determine whether the GICv3/NISV KVM boot hang found on Jetson
+# Orin Nano (Tegra234, Cortex-A78AE -- see docs/orin-port.md risk register,
+# docs/findings.md 2026-07-28 "root-cause KVM boot hang" entry) is
+# Tegra234-specific or a general real-hardware/KVM limitation. AWS a1.metal
+# was chosen because it fits this AWS account's 32-vCPU quota (c7g.metal
+# needs 64 vCPU and was quota-blocked); it is a DIFFERENT vendor (Annapurna
+# Labs, not NVIDIA) and a DIFFERENT core generation (Cortex-A72, not
+# Cortex-A78AE) from Orin -- if the same hang reproduces here, that is
+# strong evidence the defect is general, not silicon-specific.
+#
+# Command (identical machine/accel/cpu shape to the Orin Nano KVM attempt
+# in scripts/orin/launch-qnx-on-orin.sh, minus the tap/bridge networking
+# which was not set up for this bare diagnostic run):
+#
+#   sudo timeout 60 qemu-system-aarch64 -machine virt,gic-version=3 \
+#     -cpu host -enable-kvm -smp 2 -m 1G \
+#     -drive file=disk-qemu,if=none,id=drv0,format=raw \
+#     -device virtio-blk-device,drive=drv0 -kernel ifs.bin -nographic \
+#     -serial file:boot-kvm.log -display none -no-reboot -monitor none
+#
+# Same ifs.bin + disk-qemu as the Orin Nano tests (sha256 recorded at
+# transfer time: ifs.bin=92868b2f116f17c06d26585b9618682076913d17491bdeb22c4a0392d43dd745,
+# disk-qemu=fd2ee67d46f5e83fea4648f6eb9530b4dd5c83d83f10d58a12ef6a63f5c07bde
+# -- matches the qnx-safety-vm/output/ artifacts used throughout this repo).
+#
+# Result: QEMU_EXIT=124 (killed by the 60s timeout wrapper, not a QEMU
+# crash/error -- run-kvm.log contained only the timeout-kill SIGTERM
+# message). Serial log below is the ENTIRE captured output for the full
+# 60 seconds.
+#
+# Host dmesg during this run showed a healthy KVM init (for reference,
+# NOT captured from a hang state, this is boot-time host dmesg):
+#   kvm [1]: IPA Size Limit: 44 bits
+#   kvm [1]: vgic-v2@f0020000
+#   kvm [1]: GIC system register CPU interface enabled
+#   kvm [1]: vgic interrupt IRQ9
+#   kvm [1]: Hyp mode initialized successfully
+# Note the host's own physical GIC reports as vgic-v2 in this line -- this
+# describes the Graviton1 host's own interrupt controller init, not
+# necessarily what interface KVM exposes to a gic-version=3 guest (the
+# earlier bare vGIC smoke test on this same instance, -machine
+# virt,gic-version=3,accel=kvm with -kernel /dev/null, ran the full 8s with
+# zero errors -- vGIC creation itself succeeds here, same as on Orin Nano).
+#
+# Honest framing: this is ONE run, not a repeated-measurement series (per
+# this repo's own convention, contrast with the boot-time n=5 series in
+# logs/sample-boot/*-boot-times-n5.txt). It is strong, real evidence for
+# cross-vendor reproduction, not a statistically hardened claim.
+
+=== boot-kvm.log (full content) ===
+FOUND GICv3 ITS
+
+=== run-kvm.log (full content) ===
+qemu-system-aarch64: terminating on signal 15 from pid 4617 (timeout)

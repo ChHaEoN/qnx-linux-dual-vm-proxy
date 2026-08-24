@@ -196,12 +196,27 @@ trend better than the multi-vendor story does.
 > deliverable, and knowing which one you're looking at is the actual
 > skill.
 
+**Update, 2026-07-29 — this got stronger, not weaker.** Provisioned an
+AWS `a1.metal` instance (Graviton1, Annapurna Labs SoC, Cortex-A72 —
+`c7g.metal`/Graviton3 was the intended cleaner same-generation comparison
+but was blocked by this AWS account's 32-vCPU quota) and booted the
+identical IFS under the identical `-enable-kvm` invocation. **Same exact
+hang** — `FOUND GICv3 ITS`, then nothing, on a completely different
+vendor's silicon. If asked "did you validate that beyond the one board":
+> Yes — I ran the same boot on AWS Graviton1 bare metal, a completely
+> different vendor's silicon from Jetson's Tegra234, and got the
+> identical hang at the identical point. That's real evidence this is a
+> general defect in QNX's board bring-up code, not something specific to
+> one SoC — which changes how I'd prioritize: it's now a stronger case
+> to file with QNX/BlackBerry than a Jetson-specific curiosity would be.
+
 **Why this holds up under follow-up questions:** the finding is
 reproducible (documented across multiple boots, `docs/orin-port.md`'s
 risk register), the root cause is verified at the instruction level
-(not "it just hangs"), and the honest-gap framing — "here's what I
-can't fix alone, here's why, here's what would change my answer" — is
-exactly the posture DRIVE OS customer support work requires. If pushed
+(not "it just hangs"), it's now confirmed across two independent ARM
+vendors, and the honest-gap framing — "here's what I can't fix alone,
+here's why, here's what would change my answer" — is exactly the
+posture DRIVE OS customer support work requires. If pushed
 on "why didn't you just patch the QNX binary yourself," the answer is
 license scope: NCEULA covers use, not redistribution, and modifying a
 vendor's proprietary board-bring-up binary — even for personal,

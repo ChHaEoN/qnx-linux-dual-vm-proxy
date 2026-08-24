@@ -8,6 +8,35 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 
 ---
 
+## 2026-07-29 — GICv3/NISV KVM hang reproduced on a second vendor's silicon (AWS `a1.metal`, Graviton1) — no longer Tegra234-specific
+
+Cross-vendor validation of the 2026-07-28 Orin Nano finding (`docs/orin-port.md`
+risk register). Provisioned an AWS EC2 `a1.metal` instance (Graviton1,
+Annapurna Labs SoC, 16× Cortex-A72 — chosen over `c7g.metal`/Graviton3
+because this AWS account's 32-vCPU quota blocked the 64-vCPU `c7g.metal`
+launch outright) and booted the identical `qnx-safety-vm` `ifs.bin`/`disk-qemu`
+under `-machine virt,gic-version=3 -cpu host -enable-kvm`. **Same exact
+symptom**: `FOUND GICv3 ITS` printed, then zero further serial output for
+a full 60s capture, process alive throughout (only the external timeout
+killed it) — byte-for-byte the same hang shape as Orin Nano's Tegra234/
+Cortex-A78AE. A bare vGIC smoke test on the same instance (`-kernel
+/dev/null`) ran clean, same as on Orin — vGIC device creation is not
+where either platform fails. Full capture:
+[logs/sample-boot/aws-a1-metal-kvm-nisv-repro.log](../logs/sample-boot/aws-a1-metal-kvm-nisv-repro.log).
+Instance terminated immediately after capture (no ongoing AWS cost).
+**Honest framing:** one run, not a repeated series — strong single-data-point
+evidence, not a statistically hardened claim. **What this changes:** the
+defect is now evidenced across two independent ARM vendors (NVIDIA Tegra234
+and Annapurna Labs/AWS Graviton1), which meaningfully strengthens the case
+that this is a general `startup-qemu-virt` GICv3-bring-up defect rather
+than a Jetson-specific quirk — relevant to how confidently this can be
+raised with QNX/BlackBerry (see `docs/interview-narrative.md`'s Q&A
+section). A same-generation `c7g.metal` (Graviton3) run remains a real,
+not-yet-executed follow-up, blocked on this account's vCPU quota, not on
+anything technical.
+
+---
+
 ## 2026-07-28 — ADR-002 RQ-2 guest-side shmem round trip: RESOLVED YES, proven live, two-way (continuation session)
 
 Completes the concrete next step the entry below left open: a `qnx-guest`
