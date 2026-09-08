@@ -321,8 +321,16 @@ Quick summary for context:
    sentinel recovery is proven out to 300 iterations — the cheapest
    remaining Phase-2 win, and it needs a decision, not a discovery.
    Root-causing the `qvm`/TCG stall itself stays open behind it.
-2. File the GICv3/NISV defect with QNX/BlackBerry — the cross-vendor
-   `a1.metal` reproduction is the evidence that makes filing worth it.
+2. File the GICv3/NISV defect with QNX/BlackBerry — **now the strongest
+   of the three.** As of 2026-09-08 the filing no longer rests on
+   disassembling their shipped binary: their own BSP source
+   (`gic_v3.c`), built with their own flags, emits `str w3,[x0],#4` at
+   GICD+0x420, and adding `-fno-auto-inc-dec` takes the file's MMIO
+   writeback-store count from 4 to 0 with identical semantics. Still
+   boot-unverified — `startup-qemu-virt` cannot be relinked without the
+   `qemu-virt` board source, which the BSP does not ship. The
+   cross-vendor `a1.metal` reproduction remains the other half of the
+   evidence.
    (A from-source newer QEMU remains untried and is still assessed as
    unlikely to help: this is the KVM backend's deliberate by-design
    behaviour, not a version bug.)

@@ -8,6 +8,119 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 
 ---
 
+## 2026-09-08 — GICv3/NISV: the faulting instruction reproduced from BSP source, and a one-flag change removes it — compile-verified, boot-unverified
+
+Started as a static-analysis lead and ended as a **compile-level
+reproduction** of the defect this repo root-caused from disassembly on
+2026-07-28. The faulting instruction can now be produced, inspected, and
+made to disappear on demand. No rebuilt startup has been booted — the
+boundary between what is proven and what is argued is spelled out at the
+bottom of this entry.
+
+**1. The source ships.** SDP 8.0's QNX Hypervisor guest-ARM BSP
+(`$SDP/bsp/BSP_hyp-guest-arm_be-800_SVN1018940_JBN323.zip`) contains the
+startup *library* source, including
+`src/hardware/startup/lib/aarch64/gic_v3.c`. Its SPI priority-init loop
+(~line 1018) writes `ARM_GICD_IPRIORITYn + reg_idx*4` starting from
+`reg_idx=8`; with `ARM_GICD_IPRIORITYn = 0x400`
+(`lib/public/aarch64/gic_v3.h`) the loop's first iteration targets
+**0x420**. Also settled along the way: SDP ships exactly two aarch64
+startup binaries — `startup-qemu-virt` and `startup-armv8_fm` — so
+"rebuild the IFS with a GICv3 startup" is a no-op. The current startup is
+already GICv3-aware; it prints `FOUND GICv3 ITS` and finishes
+CPU-interface bring-up before dying in the *distributor*.
+
+**2. The BSP builds unmodified**, using the SDP's **Windows** host
+toolchain (`qcc -Vgcc_ntoaarch64`, gcc 12.2.0) — `libstartup.a` and
+`gic_v3.o` produced with zero source changes. Worth noting in the BSP's
+own flag set: `-fno-store-merging` is already there. QNX already suppresses
+one codegen pattern for MMIO-safety reasons; this finding is about a second
+one they did not.
+
+**3. The freshly built object contains the exact faulting instruction.**
+`ntoaarch64-objdump -d gic_v3.o`, inside `gic_v3_initialize`:
+
+```
+1a54:   91108020    add   x0, x1, #0x420        // GICD base + 0x420
+1a58:   72b41403    movk  w3, #0xa0a0, lsl #16  // w3 = 0xA0A0A0A0
+1a68:   b8004403    str   w3, [x0], #4          // post-indexed, writeback
+1a70:   54ffffc1    b.ne  1a68
+```
+
+That is `str w3,[x0],#4` at offset 0x420 — the same instruction form at the
+same offset the 2026-07-28 ftrace + static-disassembly work identified in
+the shipped `startup-qemu-virt` binary. **The induction-variable
+strength-reduction theory is now confirmed rather than inferred.** The
+object holds **four** MMIO writeback stores in total: the GICD SPI priority
+loop (`0x1a68`), a GICD clear loop (`0x1a90`), a GICR priority loop inside
+`gic_v3_gicc_init` (`0x1b0`), and a 64-bit `str x0,[x2],#8` (`0x1af0`). All
+four are the same ISV=0 instruction class; the GICD one is simply the first
+executed, which is why the guest dies exactly there.
+
+**4. A single compiler flag removes all four.** Recompiling the same file
+with `-fno-auto-inc-dec` appended to the BSP's own flags takes the
+writeback-store count from **4 to 0**. The loop becomes:
+
+```
+1a78:   91001000    add   x0, x0, #0x4
+1a7c:   b81fc003    stur  w3, [x0, #-4]         // non-writeback, unscaled offset
+1a84:   54ffffa1    b.ne  1a78
+```
+
+Same addresses, same values, same iteration count — the address arithmetic
+is simply hoisted out of the store. A plain immediate-offset store reports
+a valid ISS, so KVM's in-kernel vgic MMIO path can decode it instead of
+bailing out to userspace with `KVM_EXIT_ARM_NISV`. It is a minimal,
+behaviour-preserving change of exactly the kind QNX already applies via
+`-fno-store-merging`.
+
+**What this does NOT prove — the honest boundary:**
+
+- **Nothing has been booted.** The chain "remove writeback stores → no NISV
+  exit → guest boots under KVM" is argued from the architecture, not
+  observed on hardware. Until a rebuilt startup boots on Orin or
+  `a1.metal`, this is a strong hypothesis with a compile-level proof of its
+  first link only.
+- **`startup-qemu-virt` still cannot be relinked.** The BSP ships
+  `boards/armv8_fm/` but **not** `boards/qemu-virt/`, so there is no board
+  object for the startup this project actually boots. `libstartup.a` can be
+  rebuilt; the binary that consumes it cannot. Getting to a bootable image
+  needs either the qemu-virt board source from QNX, or adapting
+  `armv8_fm` to QEMU `virt`'s memory map (GIC bases, pl011 UART, RAM at
+  0x40000000) — real work, not a recompile.
+- **Only `gic_v3.c` was audited.** Other startup objects may carry
+  writeback MMIO stores of their own; a whole-library sweep was not done,
+  so "four" is four *in this file*, not four in the startup.
+- **The build ran on the local Windows host, not on AWS.** The installed
+  SDP carries Windows host tools only — the installed Linux host packages
+  are just `mkifs`/`mkxfs`/`dumpifs`/`dumpefs`, no `qcc` — so an EC2 Linux
+  build host would first need the NCEULA-interactive QNX Software Center
+  install that
+  [scripts/bootstrap-build-host.sh](../scripts/bootstrap-build-host.sh)
+  deliberately declines to automate. AWS's useful role here is the *test*
+  bed, not the build host: `a1.metal` already reproduces the hang
+  (2026-07-29 entry), so it can verify a fix the moment one is bootable.
+- One correction worth recording, since it nearly became a false finding:
+  an initial `grep -E "\t(str|stp)..."` over the disassembly returned zero
+  writeback stores and briefly looked like a refutation. `grep -E` does not
+  interpret `\t` as a tab, so the pattern could never match. The count is
+  4, not 0.
+
+**Why it matters anyway:** the defect report to QNX/BlackBerry moves from
+"our disassembly suggests your startup uses a writeback store on a device
+register" to "here is your own BSP source, built with your own flags,
+emitting that instruction at that offset — and here is a one-flag change
+that eliminates it without touching semantics." That is a materially
+stronger filing, and it costs QNX almost nothing to verify.
+
+**Next step, in order of cost:** (a) sweep the rest of `libstartup.a` for
+other writeback MMIO stores; (b) ask QNX for the `qemu-virt` board source
+(or file the defect and let them rebuild); (c) if neither, attempt the
+`armv8_fm` → QEMU `virt` memory-map adaptation and boot the result on
+`a1.metal` under KVM.
+
+---
+
 ## 2026-07-29 — GICv3/NISV KVM hang reproduced on a second vendor's silicon (AWS `a1.metal`, Graviton1) — no longer Tegra234-specific
 
 Cross-vendor validation of the 2026-07-28 Orin Nano finding (`docs/orin-port.md`
