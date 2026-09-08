@@ -96,7 +96,7 @@ qnx-linux-dual-vm-proxy/
 ├── results/cloud/             # Phase 2 latency CSVs (AWS twin)
 ├── results/hw/                # Phase 3 latency CSVs (Orin twin)
 ├── logs/sample-boot/          # curated boot logs (Phase 1)
-├── skills/                    # FuSa, ISO 26262, ASPICE, BSP, QOS, twin, jetson, tegra-virt, 21434
+├── skills/                    # FMEA, ISO 26262, ASPICE, BSP-porting, digital-twin, jetson, tegra-virt, 21434
 └── .github/workflows/         # CI (added in Phase 1)
 ```
 
@@ -210,7 +210,7 @@ Quick summary for context:
 | Multicore / heterogeneous SoCs | Graviton3 multi-core; QEMU SMP guest config |
 | Customer-facing AVOS/DRIVE OS support | Framing: this proxy IS the kind of software-layer customer environment an SE helps port |
 | ECU bring-up, profiling, debug | Phase 1 (boot logs, kernel debug) + Phase 2 (latency profiling) |
-| QNX OS for Safety (QOS) — *stand out* | Honest gap: SDP ≠ QOS; framed as "POSIX-realtime proxy" + `skills/qnx-safety/` |
+| QNX OS for Safety (QOS) — *stand out* | Honest gap: SDP ≠ QOS; framed as "POSIX-realtime proxy" + the README limitations table + `docs/architecture.md` (a dedicated `skills/qnx-safety/` note is still **unwritten** — do not link it) |
 | Hypervisors / virtualization — *stand out* | Phase 3 comparison doc: explicit gap analysis vs. real hypervisor |
 | Bootloaders — *stand out* | Phase 1 (U-Boot for Linux guest, IPL for QNX) |
 | ASPICE / ISO 26262 — *stand out* | `skills/iso-26262/` + `skills/aspice/` study notes; applied FMEA in `skills/fmea/examples/` |
@@ -231,10 +231,11 @@ Quick summary for context:
 
 ## Phase status
 
-> **Updated 2026-07-28** — this section had drifted badly out of date
-> (it still said "Phase 0 current" after Phases 1–4 had real work and
-> real numbers). Treat `docs/findings.md` as the authoritative,
-> dated ground truth if this section drifts again — it is updated
+> **Updated 2026-09-08** — refreshed together with README.md and
+> AGENTS.md, both of which had drifted further than this section had
+> (README still announced "Phase 0 — Bootstrap" and claimed KVM worked
+> on Orin). Treat `docs/findings.md` as the authoritative, dated ground
+> truth whenever this section drifts again — findings.md is updated
 > every session real work happens; this section is a summary that can
 > lag.
 
@@ -249,10 +250,23 @@ Quick summary for context:
   runtime-spike is resolved (host `/dev/ptyp0`↔`/dev/ttyp0` pty pair,
   guest `devc-virtio`→`/dev/vcon2`); real measured P50/P99/Max exist
   in [results/cloud/cloud-ipc-latest.csv](results/cloud/cloud-ipc-latest.csv).
-  **Open:** a non-deterministic `qvm`/TCG virtio-queue stall caps
-  reliable runs at ~15–35 iterations, nowhere near the 100k-iteration
-  target — root cause not found, not closed. See
+  **Open:** a non-deterministic `qvm`/TCG virtio-queue stall (~1–2%
+  per iteration) caps reliable runs well short of the 100k-iteration
+  target — root cause still **not** found, not closed. See
   [ipc-test/qnx-host-client/README.md](ipc-test/qnx-host-client/README.md).
+  **Two things changed since that was written, neither of them a
+  root-cause fix:** (a) a kick-safe sentinel frame
+  (`FRAME_SENTINEL_SEQ`, `ipc-test/common/frame.h`) makes the stall
+  *survivable* — 19/19 real stalls recovered across 4 boots, zero
+  alignment corruption, recovered iterations correctly excluded from
+  the timing stats; the underlying hazard rate is unchanged, and the
+  committed run size is still 15 timed iterations (raising it is a
+  deliberate open decision, not an oversight). (b) ADR-002's RQ-2
+  shared-memory transport is **resolved yes, both directions**: host
+  and guest attach to the same `vdev shmem` region and exchange bytes
+  two-way — see
+  [ipc-test/qnx-guest-shmem-probe/README.md](ipc-test/qnx-guest-shmem-probe/README.md).
+  The interrupt/notify-driven path was deliberately not attempted.
 - Phase 3 — Hardware twin port to Jetson Orin Nano — **substantial
   progress, not closed**: Orin Nano flashed (JetPack 6/L4T R36.4.7)
   and SSH-reachable; the plain `qnx-safety-vm` IFS boots under
@@ -262,7 +276,16 @@ Quick summary for context:
   6.2.0 can emulate and QNX's `startup-qemu-virt` has no handler for
   (see `docs/orin-port.md`'s risk register) — TCG is the accepted
   interim transport, not a permanent substitute for the hardware-timed
-  KVM number this phase still owes. Networking (`io-sock`/virtio-net)
+  KVM number this phase still owes. **As of 2026-07-29 that defect is
+  no longer Tegra-specific:** the identical IFS hangs in the identical
+  way (`FOUND GICv3 ITS`, then silence, process alive throughout) on
+  AWS `a1.metal` — Graviton1 / Annapurna Labs, Cortex-A72, a different
+  vendor and core generation. Log:
+  [logs/sample-boot/aws-a1-metal-kvm-nisv-repro.log](logs/sample-boot/aws-a1-metal-kvm-nisv-repro.log).
+  One run, not a repeated series — strong single-data-point evidence,
+  not a hardened claim — but enough to raise it with QNX/BlackBerry as
+  a general `startup-qemu-virt` GICv3 bring-up defect rather than a
+  Jetson quirk. Networking (`io-sock`/virtio-net)
   was separately root-caused and fixed (a missing `virtio-rng-device`
   in the fixed virtio-mmio slot order, not a virtio-net bug) and
   **heterogeneous QNX↔Linux IPC over a real `br0`/`tap-qnx` bridge is
@@ -279,8 +302,12 @@ Quick summary for context:
   IPC delta (explicitly flagged as confounding host+accel+transport,
   "mechanism-alive vs. heterogeneity" — not a clean host-only
   comparison) and a boot-time delta (the clean host-only comparison,
-  n=5 per side: Orin +23–25% slower than Windows, but with a *tighter*
-  run-to-run spread). `docs/drive-os-comparison.md` (the broader
+  n=5 per side: Orin +23–25% slower than Windows). Careful when citing
+  the spread: Orin's full-n=5 range is ~3x tighter, but Windows' range
+  is dominated by a single cold-start outlier — drop it and Windows'
+  other four runs span just 33 ms, so "Orin is more consistent" is
+  **not** a defensible claim; "Orin is slower" is.
+  `docs/drive-os-comparison.md` (the broader
   dimension-by-dimension gap doc) is untouched — still open.
 - Phase 5 — FuSa & Cybersecurity overlay — not started (Phase-1-gate
   FuSa/Cyber review already happened as a cross-cutting check per the
@@ -290,22 +317,29 @@ Quick summary for context:
   started; feasibility frozen in `docs/future-multi-soc.md`
 
 **Next actions (pick one, they're independent):**
-1. Root-cause or route around the Phase-2 `qvm`/TCG virtio-console
-   stall (blocks getting past ~35 samples on the cloud leg).
-2. File the GICv3/NISV defect with QNX/BlackBerry support, or test
-   whether a from-source-built newer QEMU improves `KVM_EXIT_ARM_NISV`
-   decode coverage (assessed as unlikely to help — this is the KVM
-   backend's deliberate by-design behavior, not a version bug — but
-   untested).
+1. Decide whether to raise the committed cloud-leg run size now that
+   sentinel recovery is proven out to 300 iterations — the cheapest
+   remaining Phase-2 win, and it needs a decision, not a discovery.
+   Root-causing the `qvm`/TCG stall itself stays open behind it.
+2. File the GICv3/NISV defect with QNX/BlackBerry — the cross-vendor
+   `a1.metal` reproduction is the evidence that makes filing worth it.
+   (A from-source newer QEMU remains untried and is still assessed as
+   unlikely to help: this is the KVM backend's deliberate by-design
+   behaviour, not a version bug.)
 3. Write `docs/drive-os-comparison.md`'s dimension-by-dimension
    verdicts now that Phase 2/3/4 have real numbers to cite instead of
-   projections.
+   projections. **This is the largest remaining gap in the public
+   story** — Phase 4's boot-diff half is done; this half is untouched.
 
 **Decision (2026-07-29):** getting a real KVM/hardware-timed number on
 Orin is **deferred, not abandoned** — it genuinely needs either NVIDIA
 DRIVE AGX Orin hardware (gated behind an invitation-only developer
 program, not self-serve) or further paid AWS `c7g.metal` investigation,
-and neither is worth blocking on right now. In its place: (a) a second
+and neither is worth blocking on right now. **Partially actioned since:**
+`c7g.metal` is still not run — this account's 32-vCPU quota blocks the
+64-vCPU launch outright — but an `a1.metal` fallback was run and
+reproduced the hang on a second vendor's silicon, which is the more
+valuable half of what that investigation was for. In its place: (a) a second
 project track opened in [docs/future-multi-soc.md](docs/future-multi-soc.md)
 ("Phase 7-alt — Single-SoC domain convergence, NVIDIA-primary") that
 matches validating a DENSO PoC where one NVIDIA SoC family hosts *both*

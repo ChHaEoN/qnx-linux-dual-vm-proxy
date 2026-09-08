@@ -1,16 +1,20 @@
 # qnx-linux-dual-vm-proxy
 
 > **Digital Twin** of NVIDIA DRIVE OS dual-VM partitioning, across **two**
-> hosts. On the **cloud twin** (AWS Graviton) the SDP 8.0 QNX Hypervisor
-> (`qvm`) hosts a QNX guest under QEMU TCG — exercising a real EL2/EL1
-> partition boundary, but emulated, not hardware-timed (no `/dev/kvm` on
-> non-metal Graviton). The heterogeneous QNX-Safety / Linux-Compute split
-> is carried by the **hardware twin** (Jetson Orin Nano), where L4T is the
-> native Linux side and KVM works. The same QNX IFS and IPC code run on
-> both sides; the **twin diff** (what changes when the host changes) is the
-> deliverable. Cloud topology set by [ADR-002](docs/phase2-topology-decision.md).
+> hosts. On the **cloud / x86 twin** the SDP 8.0 QNX Hypervisor (`qvm`) hosts
+> a QNX guest under QEMU TCG — exercising a real EL2/EL1 partition boundary,
+> but emulated, not hardware-timed. *As built, that leg runs on the local
+> Windows build host*: non-metal AWS Graviton exposes no `/dev/kvm`
+> ([ADR-002](docs/phase2-topology-decision.md)). The heterogeneous
+> QNX-Safety / Linux-Compute split is carried by the **hardware twin**
+> (Jetson Orin Nano), where L4T is the native Linux side — also under TCG,
+> because KVM-accelerated boot is blocked by a root-caused GICv3 defect
+> ([docs/orin-port.md](docs/orin-port.md)). The same QNX IFS and IPC code run
+> on both sides; the **twin diff** (what changes when only the host changes)
+> is the deliverable.
 
-![Phase](https://img.shields.io/badge/Phase-0%20bootstrap-yellow)
+![Phase](https://img.shields.io/badge/Phase-4%20twin--diff-blue)
+![Evidence](https://img.shields.io/badge/evidence-committed%20logs%20%2B%20CSVs-brightgreen)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 ![Arch](https://img.shields.io/badge/arch-aarch64-lightgrey)
 
@@ -34,26 +38,27 @@ SDP 8.0 toolchain is x86_64 Linux + Windows; no arm64, no macOS) and
 the resulting binary is reused across both twins.
 
 ```
-                  ┌──────── shared artifacts ────────┐
-                  │ • QNX IFS  (mkqnximage virt)     │
-                  │ • IPC client/server source       │
-                  │ • Wire protocol (framed echo)    │
-                  │ • Test harness + benchmarks      │
-                  └────────────────┬─────────────────┘
-                                   │ same binaries / same code
-            ┌──────────────────────┴──────────────────────┐
-            │                                             │
-  ┌─────────v──────────┐                       ┌──────────v─────────┐
-  │ Cloud twin (AWS)   │                       │ HW twin (Orin Nano)│
-  │ build: Local       │                       │  host: L4T (Ubuntu)│
-  │  Windows PC        │                       │  on A78AE × 6      │
-  │  (EC2 fallback)    │                       │                    │
-  │  run:  c7g.large   │ ── compare twin-diff ▶│  QEMU/KVM on Tegra;│
-  │  QHV/qvm + 1 QNX   │   boot, mechanism,    │  L4T = Compute side│
-  │  guest (TCG, no KVM)│  vs. hardware-timed  │  (heterogeneous IPC)│
-  │  purpose: fast     │                       │  purpose: validate │
-  │   iterate, sweep   │                       │   on real silicon  │
-  └────────────────────┘                       └────────────────────┘
+                        ┌────── shared artifacts ───────┐
+                        │ • QNX IFS  (mkqnximage virt)  │
+                        │ • IPC client/server source    │
+                        │ • Wire protocol (framed echo) │
+                        │ • Test harness + benchmarks   │
+                        └───────────────┬───────────────┘
+                                        │ same binaries / same code
+               ┌────────────────────────┴─────────────────────────┐
+               │                                                  │
+  ┌────────────v───────────┐                         ┌────────────v───────────┐
+  │ Cloud / x86 twin       │                         │ HW twin (Orin Nano)    │
+  │  build: local Windows  │                         │  host: L4T Ubuntu on   │
+  │   PC (x86_64 SDP 8.0)  │                         │   Cortex-A78AE x6      │
+  │  run: QHV qvm + one    │                         │  run: QNX guest +      │
+  │   QNX guest, QEMU TCG  │  ── compare twin-diff ▶ │   native L4T, QEMU TCG │
+  │  as-built host = that  │                         │  KVM boot blocked by   │
+  │   same Windows PC      │                         │   GICv3 / NISV defect  │
+  │   (Graviton: no KVM)   │                         │  heterogeneous IPC     │
+  │  purpose: fast         │                         │   over br0 + tap       │
+  │   iterate, sweep       │                         │  purpose: real silicon │
+  └────────────────────────┘                         └────────────────────────┘
 
 Reference (real hypervisor, not this repo):
   NVIDIA DRIVE OS  →  Type-1 hypervisor (QNX Safety + Linux Compute partitions)
@@ -68,15 +73,91 @@ for why the build/runtime split exists.
 
 ---
 
-## Current Phase: 0 — Bootstrap
+## Status — Phase 4 (twin diff) in progress
 
-| Task | Status |
-|------|--------|
-| Repo scaffold + CLAUDE.md | ✅ |
-| README v1 | ✅ (skeleton; refined per Phase) |
-| Interview narrative draft | ✅ v0 (`docs/interview-narrative.md`) |
-| BSP selection research | ⏳ pending Research Agent |
-| `git init` + first commit | ⏳ (init done; commit pending review) |
+[docs/findings.md](docs/findings.md) is the authoritative, dated ground
+truth; this table is a summary that can lag it.
+
+| Phase | Status | Evidence |
+|---|---|---|
+| **0** — Bootstrap, scaffold, BSP research, twin re-scope | ✅ done | [bsp-selection.md](docs/bsp-selection.md) |
+| **1** — Cloud twin bring-up: QHV `qvm` hosting a QNX guest under TCG | ✅ done | [qhv-tcg-host-and-guest-boot.log](logs/sample-boot/qhv-tcg-host-and-guest-boot.log) |
+| **2** — Cloud twin IPC + latency | 🟡 **partial** — real P50/P99/Max exist; sample count capped by a `qvm`/TCG virtio-queue stall that is **not root-caused**, but is now *recoverable* (19/19 real stalls recovered) | [cloud-ipc-latest.csv](results/cloud/cloud-ipc-latest.csv), [qnx-host-client/README.md](ipc-test/qnx-host-client/README.md) |
+| **3** — Hardware twin port (Jetson Orin Nano) | 🟡 **substantial, not closed** — heterogeneous QNX↔Linux IPC over a real `br0`/tap bridge works (2 × 100 000 iterations, 0 errors) under **TCG**; **KVM boot is blocked** by a root-caused GICv3 / `KVM_EXIT_ARM_NISV` defect, since reproduced on a second ARM vendor | [orin-ipc-latest.csv](results/hw/orin-ipc-latest.csv), [orin-port.md](docs/orin-port.md), [aws-a1-metal-kvm-nisv-repro.log](logs/sample-boot/aws-a1-metal-kvm-nisv-repro.log) |
+| **4** — Twin diff + DRIVE OS comparison | 🟡 **started** — boot-time twin diff done (n=5 per side); [drive-os-comparison.md](docs/drive-os-comparison.md) still open | [digital-twin-design.md](docs/digital-twin-design.md) §5 |
+| **5** — FuSa & Cybersecurity overlay | ⬜ not started as a dedicated phase (a Phase-1-gate FuSa + Cyber pass *did* run) | [docs/fusa/](docs/fusa/), [docs/cyber/](docs/cyber/), [docs/tara/](docs/tara/) |
+| **6** — Polish, public README, demo recording | ⬜ not started | — |
+| **7** _(stretch)_ — Multi-SoC / domain convergence | ⬜ feasibility frozen, not built | [future-multi-soc.md](docs/future-multi-soc.md) |
+
+**Honest note on the word "cloud":** the QHV-hosted QNX guest and its IPC
+benchmark, *as built*, run on the **local Windows host under QEMU TCG** —
+not on the c7g.large Graviton instance the design originally called for,
+because non-metal Graviton exposes no `/dev/kvm` / EL2
+([ADR-002](docs/phase2-topology-decision.md)). AWS still earned its keep
+for one thing: an `a1.metal` instance supplied the cross-vendor
+reproduction of the KVM GICv3 defect below.
+
+---
+
+## Measured results
+
+Project rule: *never write "it works" without a log, a number, or a diff.*
+Every figure below traces to a committed CSV or boot log in this repo.
+
+### Boot time — the clean host-only twin diff
+
+Same IFS, same disk image, same QEMU machine/CPU/memory shape, TCG on both
+sides; n=5 per host, timed from process launch to the guest's own
+`Startup complete` line:
+
+| Host | median | mean | run-to-run spread |
+|---|---|---|---|
+| Local Windows (x86_64, TCG) | **25,427 ms** | 25,644.8 ms | 25,412–26,515 ms (1,103 ms) |
+| Jetson Orin Nano (A78AE, TCG) | **31,758 ms** | 31,702.4 ms | 31,446–31,780 ms (334 ms) |
+
+Δ median **+24.9%** (Orin slower); the mean delta (+23.6%) agrees to within
+1.3 percentage points, so n=5 is already enough to trust the headline. On
+*spread*, be careful: across all five runs Orin looks ~3× tighter, but
+Windows' range is dominated by a single cold-start outlier (run 1) — drop it
+and Windows' remaining four runs span just **33 ms**. The defensible claim
+is that Orin is slower; "more consistent" depends entirely on whether you
+count that cold start. This is the only comparison in the repo where *only
+the host* differs — every other number confounds at least two variables.
+
+### IPC round-trip latency — sample-size-matched (n=15 per side, 48-byte payload)
+
+| Metric | Cloud (QNX↔QNX, `qvm` virtio-console) | HW (QNX↔Linux, virtio-net + `br0`) | Δ |
+|---|---|---|---|
+| P50 | 2,002,500 ns | 2,213,370 ns | +10.5% |
+| P99 | 2,332,300 ns | 2,596,291 ns | +11.3% |
+| Max | 2,332,300 ns | 2,596,291 ns | +11.3% |
+
+⚠️ **Not** a host-only comparison — it confounds host, transport and
+OS-pair. Read it as "both mechanisms are alive and land within ~10% of each
+other", never as a host-speed result. An earlier *unmatched* 15-vs-100,000
+sample comparison read as "HW is 18% **faster**"; that reading did not
+survive sample-size matching and should not be quoted. Full derivation and
+correction: [digital-twin-design.md](docs/digital-twin-design.md) §5.
+
+### Mechanism reliability — where the twins actually diverge
+
+- **HW leg:** two back-to-back **100,000-iteration** runs over a real
+  `br0` / `tap-qnx` bridge, **zero errors**
+  ([orin-ipc-latest.csv](results/hw/orin-ipc-latest.csv)).
+- **Cloud leg:** a non-deterministic `qvm`/TCG virtio-queue stall
+  (~1–2% per iteration) still has **no root-cause fix**. It is now
+  *survivable*: a kick-safe sentinel frame recovered **19/19 real stalls
+  across 4 boots**, zero alignment corruption, recovered iterations
+  correctly excluded from the timing statistics.
+- **Cloud leg, second transport proven:** a `vdev shmem` host↔guest round
+  trip — host writes a pattern, guest reads it byte-exact and writes back,
+  and the still-running host sees the write-back — answering ADR-002's RQ-2
+  *yes*, in both directions, both ends resolving to the same underlying
+  region. Getting there cost one `Bus error`: `qvm`'s MMIO trap decoder
+  rejected the wide store `memcpy()` chose for the factory page, so the
+  writes had to become byte-at-a-time volatile stores — the same *class* of
+  defect as the Orin GICv3 finding, an MMIO emulator that decodes only a
+  subset of real instruction encodings.
 
 ---
 
@@ -87,15 +168,15 @@ proxy can and cannot demonstrate. This table is the load-bearing part:
 
 | DRIVE OS feature | QEMU proxy limitation |
 |---|---|
-| NVIDIA Hypervisor (Type-1) | Cloud leg runs the SDP 8.0 QNX Hypervisor (`qvm`) hosting one QNX guest — a *real* EL2/EL1 partition boundary, but TCG-emulated (no `/dev/kvm` on cloud) and **not** certified Type-1; no quantified freedom-from-interference, no mixed-criticality guarantees. Orin uses host-mediated KVM. See [ADR-002](docs/phase2-topology-decision.md). |
-| Orin SoC (Tegra234) | Graviton3 (Neoverse-V1) is the runtime CPU; no Tegra-specific peripherals, no SoC-internal interconnect. |
+| NVIDIA Hypervisor (Type-1) | Cloud leg runs the SDP 8.0 QNX Hypervisor (`qvm`) hosting one QNX guest — a *real* EL2/EL1 partition boundary, but TCG-emulated (no `/dev/kvm` on cloud) and **not** certified Type-1; no quantified freedom-from-interference, no mixed-criticality guarantees. Orin's leg is host-mediated KVM *by design*, but KVM boot is currently blocked (GICv3/NISV), so that leg runs under TCG too. See [ADR-002](docs/phase2-topology-decision.md). |
+| Orin SoC (Tegra234) | The cloud leg's as-built runtime CPU is the local x86_64 Windows host (Graviton3 was the design intent). The HW leg *does* run on Tegra234 silicon, but the QNX guest sees QEMU's generic `virt` machine — no Tegra-specific peripherals, no SoC-internal interconnect. |
 | NVDLA / PVA | Not emulated. Deep-learning and vision accelerators have no QEMU model. |
 | MIPI CSI-2 (camera ingest) | Not emulated. No camera serial-link model in QEMU virt machine. |
 | FSI R52 lockstep | Not emulated. No Cortex-R52 lockstep cluster, no Functional Safety Island. |
-| GPU (Ampere CUDA / vGPU) | Graviton has no NVIDIA GPU; no CUDA, no vGPU partitioning. |
-| Real-time guarantees | Cloud timing is TCG-emulation-bound (not hardware-timed); Orin is best-effort under KVM with observable host-scheduler jitter. The "Safety VM" framing is POSIX-realtime, not certified RT. |
+| GPU (Ampere CUDA / vGPU) | Neither leg passes a GPU to a guest. The cloud host has no NVIDIA GPU at all; the Orin Nano has an Ampere iGPU but it is never exposed to the QNX guest — no in-guest CUDA, no vGPU partitioning. |
+| Real-time guarantees | Cloud timing is TCG-emulation-bound (not hardware-timed); Orin is TCG-bound as well (its KVM path is blocked), with observable host-scheduler jitter on top. The "Safety VM" framing is POSIX-realtime, not certified RT. |
 | ASIL-D certification | None. SDP 8.0 ≠ QNX OS for Safety (QOS); no safety case, no MISRA-C, no ISO 26262 evidence. |
-| Inter-VM shared memory latency | Cloud leg: host↔guest over the `qvm` virtio-console vdev (crosses the EL2/EL1 boundary, but TCG-emulated — the latency measures emulation cost, not transport cost). Orin leg (Phase 3): QNX↔Linux virtio-net → tap → bridge → tap → virtio-net, hardware-timed under KVM. Both orders of magnitude off DRIVE OS shared-memory IPC; profiled honestly. See [ADR-002](docs/phase2-topology-decision.md). |
+| Inter-VM shared memory latency | Cloud leg: host↔guest over the `qvm` virtio-console vdev (crosses the EL2/EL1 boundary, but TCG-emulated — the latency measures emulation cost, not transport cost). Orin leg (Phase 3): QNX↔Linux virtio-net → tap → bridge → tap → virtio-net — also TCG-emulated, since the KVM path is blocked, so it is **not** hardware-timed either. Both orders of magnitude off DRIVE OS shared-memory IPC; profiled honestly. See [ADR-002](docs/phase2-topology-decision.md). |
 | Certified bootloader chain | No SecureBoot, no measured boot, no chain-of-trust. |
 
 These are deliberate. Documenting them precisely is the engineering point.
@@ -104,8 +185,19 @@ These are deliberate. Documenting them precisely is the engineering point.
 
 ## Setup
 
-Detailed walkthrough is in [scripts/README.md](scripts/README.md). The
-`scripts/bootstrap-*.sh` and `scripts/launch-*.sh` files cover each step.
+Detailed walkthrough is in [scripts/README.md](scripts/README.md). Which
+scripts apply depends on the leg, per [ADR-002](docs/phase2-topology-decision.md):
+
+| Leg | Entry points |
+|---|---|
+| Cloud / x86 (QHV host + QNX guest, TCG) | `scripts/build-qhv.bat` → `scripts/launch-qhv-tcg.ps1`; committed config sources in [`scripts/qhv/`](scripts/qhv/) |
+| Hardware (Orin Nano) | [`scripts/orin/`](scripts/orin/): `bootstrap-orin-l4t.sh` → `setup-bridge-orin.sh` → `launch-qnx-on-orin-tcg.sh` |
+| Twin diff | [`scripts/twin/diff-results.sh`](scripts/twin/diff-results.sh) |
+
+`scripts/setup-bridge.sh` and `scripts/launch-linux-vm.sh` belong to the
+**Orin / heterogeneous** path, not the cloud leg — the cloud
+dual-VM-over-a-bridge topology they were written for was falsified by
+ADR-002 and is kept only for that lineage.
 
 **Hard prerequisite:** the user must obtain their own QNX Everywhere
 license (NCEULA, free for personal use) and install QNX SDP 8.0
@@ -113,24 +205,28 @@ themselves. This repo does not — and per the NCEULA, cannot — ship any
 QNX SDK components or QNX-derived binaries.
 
 Other prereqs:
-- AWS account with EC2 access in a region offering c7g and t3 instances
-- `aws` CLI and SSH key configured
-- ~50 GB disk on the build host for SDP install + IFS output
-- Awareness that the Graviton runtime instance bills by the hour — see
-  the cost note in [scripts/README.md](scripts/README.md)
+- An x86_64 **Windows** build host (primary) or Linux (fallback) for SDP 8.0
+  — there is no arm64 and no macOS SDP 8.0 installer
+- ~50 GB disk on the build host for the SDP install + IFS output
+- A Jetson Orin Nano Dev Kit (JetPack 6 / L4T R36.4.7) for the hardware twin
+- *Optional:* an AWS account + `aws` CLI, only if you want the Graviton
+  runtime leg or to repeat the `a1.metal` KVM probe. The as-built cloud leg
+  runs locally, so AWS is no longer on the critical path — if you do launch
+  an instance, mind the hourly billing and the teardown note in
+  [scripts/README.md](scripts/README.md)
 
 ---
 
 ## Roadmap
 
 - [x] **Phase 0** — Bootstrap, scaffold, narrative, BSP selection, twin re-scope
-- [ ] **Phase 1** — Cloud twin bring-up (SDP 8.0 QHV `qvm` + QNX guest on AWS, QEMU TCG — no Linux guest on cloud per [ADR-002](docs/phase2-topology-decision.md))
-- [ ] **Phase 2** — Cloud twin IPC + P50/P99/P99.9 latency benchmark
-- [ ] **Phase 3** — Hardware twin port to Jetson Orin Nano (same IFS, same code)
-- [ ] **Phase 4** — Twin diff + DRIVE OS gap analysis
+- [x] **Phase 1** — Cloud twin bring-up (SDP 8.0 QHV `qvm` + one QNX guest under QEMU TCG — no Linux guest on this leg, per [ADR-002](docs/phase2-topology-decision.md))
+- [ ] **Phase 2** _(in progress)_ — Cloud twin IPC + latency benchmark: real P50/P99/Max landed; the 100k-iteration target is still blocked by an unfixed — though now recoverable — `qvm`/TCG stall
+- [ ] **Phase 3** _(in progress)_ — Hardware twin on Jetson Orin Nano: heterogeneous QNX↔Linux IPC done under TCG; a hardware-timed KVM number is still owed, blocked on the GICv3/NISV defect
+- [ ] **Phase 4** _(in progress)_ — Twin diff done for boot time; the dimension-by-dimension [drive-os-comparison.md](docs/drive-os-comparison.md) is still open
 - [ ] **Phase 5** — FuSa & Cybersecurity overlay (FMEA, ASIL gap, STRIDE)
 - [ ] **Phase 6** — Polish, demo recording, public release
-- [ ] **Phase 7** _(stretch)_ — Multi-SoC domain-controller extension: add a Qualcomm-Cockpit-class proxy on AWS and exercise inter-SoC IPC (QC ↔ NV). Feasibility doc: [docs/future-multi-soc.md](docs/future-multi-soc.md)
+- [ ] **Phase 7** _(stretch)_ — Domain-controller extension, two tracks in [future-multi-soc.md](docs/future-multi-soc.md): the original **multi-SoC** idea (a Qualcomm-Cockpit-class proxy alongside the NVIDIA one, inter-SoC IPC) and a newer **NVIDIA-primary single-SoC convergence** track (ADAS + IVI/Cockpit as sibling partitions on one SoC family)
 
 ---
 
@@ -138,11 +234,15 @@ Other prereqs:
 
 The `skills/` folder catalogs engineering paradigms studied alongside the build:
 
-- [skills/fmea/](skills/fmea/) — FMEA paradigm + worksheet template
-- [skills/iso-26262/](skills/iso-26262/) — ISO 26262 study scope
+- [skills/fmea/](skills/fmea/) — FMEA paradigm, worksheet template, and a
+  worked [Phase-1 cloud bring-up FMEA](skills/fmea/examples/phase1-cloud-bringup-fmea.md)
+- [skills/iso-26262/](skills/iso-26262/) — ISO 26262 study scope + checklist
+- [skills/cybersecurity-21434/](skills/cybersecurity-21434/) — ISO/SAE 21434 TARA paradigm
 - [skills/aspice/](skills/aspice/) — Automotive SPICE process areas
 - [skills/bsp-porting/](skills/bsp-porting/) — Generic BSP porting workflow
-- [skills/qnx-safety/](skills/qnx-safety/) — QOS vs SDP framing
+- [skills/digital-twin/](skills/digital-twin/) — twin methodology: what a twin diff can and cannot isolate
+- [skills/jetson-platform/](skills/jetson-platform/) — JetPack / L4T platform notes
+- [skills/tegra-virtualization/](skills/tegra-virtualization/) — Tegra virtualization background
 
 These are **study artifacts**, not certification evidence.
 
@@ -160,32 +260,42 @@ A 2-minute spoken version is at [docs/interview-narrative.md](docs/interview-nar
 .
 ├── README.md                       # this file
 ├── CLAUDE.md                       # working guidance for Claude Code sessions
+├── AGENTS.md                       # the same guidance, for non-Claude agents
 ├── LICENSE                         # MIT (repo source only; QNX components excluded)
-├── docs/                           # decision records, narrative, comparison docs
+├── docs/
+│   ├── findings.md                 # append-only, dated — the ground truth
 │   ├── architecture.md
 │   ├── bsp-selection.md
-│   ├── digital-twin-design.md      # twin methodology + sync mechanism
-│   ├── drive-os-comparison.md
-│   ├── findings.md
-│   ├── interview-narrative.md
-│   ├── orin-port.md                # Phase 3 detailed plan
-│   └── security-model.md           # Phase 5 STRIDE + NCEULA audit
-├── agents/                         # sub-prompt templates per agent
-├── scripts/                        # cloud-twin bootstrap + QEMU scripts
-│   ├── README.md
-│   ├── bootstrap-build-host.sh
-│   ├── bootstrap-runtime-host.sh
-│   ├── build-qnx-ifs.sh
-│   ├── setup-bridge.sh
-│   ├── launch-qnx-vm.sh
-│   ├── launch-linux-vm.sh
-│   ├── orin/                       # Phase 3 hardware-twin scripts
-│   └── twin/                       # Phase 4 cloud↔hw sync + diff scripts
-├── ipc-test/                       # Phase 2 cross-VM IPC client/server
-├── logs/sample-boot/               # curated boot logs (Phase 1)
-├── results/cloud/                  # cloud-twin benchmark CSVs (Phase 2)
-├── results/hw/                     # hw-twin benchmark CSVs (Phase 3)
-└── skills/                         # study artefacts (existing 5 + 4 new for twin/jetson/tegra/cyber)
+│   ├── digital-twin-design.md      # twin methodology + the measured twin diffs (§5)
+│   ├── phase2-topology-decision.md # ADR-002 — falsified the cloud dual-VM topology
+│   ├── phase2-research-spike.md
+│   ├── orin-port.md                # Phase 3 plan + KVM/GICv3 risk register
+│   ├── drive-os-comparison.md      # Phase 4 gap doc (still open)
+│   ├── future-multi-soc.md         # Phase 7 / 7-alt feasibility
+│   ├── security-model.md           # STRIDE + NCEULA audit
+│   ├── interview-narrative.md      # spoken version, incl. the GICv3 debugging story
+│   ├── fusa/ cyber/ tara/          # Phase-1-gate FuSa + ISO/SAE 21434 work products
+│   └── jd-mapping.md, onboarding-prompt.md
+├── agents/                         # long-form sub-prompt templates, one per agent role
+├── .claude/agents/                 # the same roles as Claude Code subagent definitions
+├── scripts/
+│   ├── build-qhv.bat               # cloud leg: build the QHV host + QNX guest images
+│   ├── launch-qhv-tcg.ps1          # cloud leg: boot QHV under QEMU TCG
+│   ├── qhv/                        # committed QHV config sources (g2.conf, post_start, gates)
+│   ├── orin/                       # hardware twin: L4T bootstrap, bridge, launch
+│   ├── twin/                       # sync.sh + diff-results.sh (Phase 4)
+│   └── bootstrap-*.sh, setup-bridge.sh, launch-*.sh   # EC2 fallback / pre-ADR-002 lineage
+├── ipc-test/                       # C99: QNX echo servers, QNX host client, Linux client,
+│   │                               #      host + guest vdev-shmem probes, shared frame code
+│   └── common/                     # wire protocol (frame.h) + raw-mode console I/O
+├── logs/sample-boot/               # curated boot + benchmark logs (the evidence)
+├── results/cloud/  results/hw/     # benchmark CSVs, one schema for both twins
+└── skills/                         # study artefacts (FMEA, ISO 26262, 21434, ASPICE, BSP,
+                                    #                 digital twin, Jetson, Tegra virt)
+
+Deliberately absent from git, per the QNX NCEULA: the `qnx-safety-vm/` and
+`qhv/` mkqnximage build trees, `ifs.bin`, disk images, and every compiled
+QNX binary. See `.gitignore` — it is written to make such a commit hard.
 ```
 
 ---

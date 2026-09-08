@@ -92,7 +92,7 @@ qnx-linux-dual-vm-proxy/
 ├── results/cloud/             # Phase 2 latency CSVs (AWS twin)
 ├── results/hw/                # Phase 3 latency CSVs (Orin twin)
 ├── logs/sample-boot/          # curated boot logs (Phase 1)
-├── skills/                    # FuSa, ISO 26262, ASPICE, BSP, QOS, twin, jetson, tegra-virt, 21434
+├── skills/                    # FMEA, ISO 26262, ASPICE, BSP-porting, digital-twin, jetson, tegra-virt, 21434
 └── .github/workflows/         # CI (added in Phase 1)
 ```
 
@@ -195,7 +195,7 @@ Quick summary for context:
 | Multicore / heterogeneous SoCs | Graviton3 multi-core; QEMU SMP guest config |
 | Customer-facing AVOS/DRIVE OS support | Framing: this proxy IS the kind of software-layer customer environment an SE helps port |
 | ECU bring-up, profiling, debug | Phase 1 (boot logs, kernel debug) + Phase 2 (latency profiling) |
-| QNX OS for Safety (QOS) — *stand out* | Honest gap: SDP ≠ QOS; framed as "POSIX-realtime proxy" + `skills/qnx-safety/` |
+| QNX OS for Safety (QOS) — *stand out* | Honest gap: SDP ≠ QOS; framed as "POSIX-realtime proxy" + the README limitations table + `docs/architecture.md` (a dedicated `skills/qnx-safety/` note is still **unwritten** — do not link it) |
 | Hypervisors / virtualization — *stand out* | Phase 3 comparison doc: explicit gap analysis vs. real hypervisor |
 | Bootloaders — *stand out* | Phase 1 (U-Boot for Linux guest, IPL for QNX) |
 | ASPICE / ISO 26262 — *stand out* | `skills/iso-26262/` + `skills/aspice/` study notes; applied FMEA in `skills/fmea/examples/` |
@@ -216,20 +216,46 @@ Quick summary for context:
 
 ## Phase status
 
-- **Phase 0** — Bootstrap / scaffold + Digital Twin re-scope ← *current*
-- Phase 1 — Cloud twin bring-up (QNX + Linux booting on AWS QEMU/KVM)
-- Phase 2 — Cloud twin IPC + latency benchmark
-- Phase 3 — Hardware twin port (same IFS / same code on Jetson Orin Nano)
-- Phase 4 — Twin diff + DRIVE OS comparison
-- Phase 5 — FuSa & Cybersecurity overlay (FMEA, ASIL gap, STRIDE threat model)
-- Phase 6 — Polish, public README, demo recording
-- Phase 7 (stretch) — Multi-SoC domain-controller extension: add a
-  Qualcomm-Cockpit-class proxy on AWS, exercise inter-SoC IPC (QC ↔ NV).
-  Feasibility frozen in `docs/future-multi-soc.md`; not started until Phase 6 lands.
+> **Updated 2026-09-08.** This section had drifted badly — it still said
+> "Phase 0 ← current" long after Phases 1–4 had real work and real
+> numbers. `docs/findings.md` is the authoritative, dated ground truth;
+> `CLAUDE.md`'s Phase-status section carries the same content in more
+> detail. Treat both as summaries that can lag findings.md.
 
-Next action: install QNX SDP 8.0 on the local Windows PC via the QNX
-Software Center (manual step; user is currently waiting on QNX
-Everywhere verification). Once SDP is installed, implementation runs
-`scripts/bootstrap-runtime-host.sh` on the Graviton c7g.large runtime,
-then `scripts/build-qnx-ifs.bat` on Windows. See the **Phase 1
-starting sequence** above for the full handoff.
+- Phase 0 — Bootstrap / scaffold + Digital Twin re-scope — **done**
+- Phase 1 — Cloud twin bring-up — **done**: QHV host + a single QNX
+  guest under QEMU **TCG**, demonstrated on the local Windows build
+  host, *not* AWS — non-metal Graviton has no `/dev/kvm`/EL2
+  (ADR-002, `docs/phase2-topology-decision.md`). There is **no Linux
+  guest on the cloud leg**.
+- Phase 2 — Cloud twin IPC + latency — **partial, real numbers,
+  honestly capped**: measured P50/P99/Max in
+  `results/cloud/cloud-ipc-latest.csv`. A non-deterministic `qvm`/TCG
+  virtio-queue stall is still **not root-caused**; it is now
+  *survivable* via a kick-safe sentinel frame (19/19 real stalls
+  recovered across 4 boots). ADR-002's RQ-2 `vdev shmem` transport is
+  separately resolved **yes**, host to guest and back.
+- Phase 3 — Hardware twin (Jetson Orin Nano) — **substantial, not
+  closed**: heterogeneous QNX to Linux IPC over a real `br0`/`tap-qnx`
+  bridge works — two clean 100,000-iteration runs, zero errors
+  (`results/hw/orin-ipc-latest.csv`). **KVM boot is blocked** by a
+  root-caused GICv3 / `KVM_EXIT_ARM_NISV` defect, since reproduced on
+  AWS `a1.metal` (a second ARM vendor), so TCG is the interim
+  transport. Honest caveat: that IPC run used a **rebuilt** IFS, not
+  the byte-identical Phase-1 image.
+- Phase 4 — Twin diff + DRIVE OS comparison — **started**: boot-time
+  twin diff done (n=5 per side; Orin +23–25% slower than Windows);
+  `docs/drive-os-comparison.md` is still untouched.
+- Phase 5 — FuSa & Cybersecurity overlay — not started as a dedicated
+  phase (a Phase-1-gate FuSa + Cyber pass did run).
+- Phase 6 — Polish, public README, demo recording — not started.
+- Phase 7 (stretch) — Domain-controller extension, two tracks frozen in
+  `docs/future-multi-soc.md`: the original multi-SoC idea (a
+  Qualcomm-Cockpit-class proxy alongside the NVIDIA one) and a newer
+  NVIDIA-primary single-SoC convergence track.
+
+Next actions: see the identically-named list in `CLAUDE.md`'s Phase
+status section — currently (1) decide whether to raise the committed
+cloud-leg run size now that sentinel recovery is proven, (2) file the
+GICv3/NISV defect with QNX/BlackBerry, (3) write
+`docs/drive-os-comparison.md`'s verdicts.
