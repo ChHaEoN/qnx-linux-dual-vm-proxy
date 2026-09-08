@@ -8,6 +8,105 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 
 ---
 
+## 2026-09-08 — QHV leg made host-portable: the twin gets a clean host-only comparison on the *hypervisor* topology (Windows half measured; Orin half blocked on hardware)
+
+An architecture pass, not a feature. Reviewing
+[digital-twin-design.md](digital-twin-design.md) §1 against what the repo
+actually does turned up four claims that were no longer true, three of them in
+the **invariant** set the document itself defines as "anything that differs
+between twin sides in those rows is a bug":
+
+1. *"QEMU acceleration: cloud = tcg; Orin = `-enable-kvm` (KVM works on
+   A78AE)"* — false. Orin's KVM boot is blocked by the GICv3/NISV defect, so
+   the `qnx-safety-vm` leg runs **TCG on both sides**.
+2. *"Orin is a heterogeneous QNX↔Linux exchange … bridged under **KVM**"*
+   (§4) — same error, same cause.
+3. *"QNX IFS — **Yes, bit-for-bit identical**"* — false for the Phase-3 Orin
+   IPC run, which used a **rebuilt** IFS with new TCP server code staged in.
+   The twin's single most load-bearing invariant did not hold for the
+   measurement that most depended on it.
+4. *"Cloud twin — AWS Graviton (c7g.large)"* — as built, every QHV boot and
+   IPC number attributed to "cloud" was produced on the **local Windows
+   host**. Once ADR-002 removed KVM from that leg, nothing was left that
+   required it to be in the cloud.
+
+Add the unlisted one — the two legs run **different server programs**
+(`qnx-server` over a console vdev vs. `qnx-server-net` over TCP) — and the
+surviving invariant set is just **{wire protocol, harness/CSV shape, QEMU
+machine shape}**. A twin diff with almost no invariants is not a twin diff.
+
+**The cheap fix: the QHV leg turns out to be host-agnostic.** Its entire QEMU
+invocation is `-machine virt,virtualization=on,gic-version=3 -cpu max -accel
+tcg -smp 2 -m 2G` plus two image files. Everything that makes the leg
+interesting — `qvm` itself, the guest, the virtio-console and `vdev shmem`
+wiring, even the pty pair (`/dev/ptyp0`↔`/dev/ttyp0`, a **QNX** device inside
+the emulated world, not a host one) — lives *inside* the emulation. Nothing
+crosses to the host but the images and a serial log. So the same images can be
+carried to the Orin and booted unchanged, giving a genuine one-variable
+comparison on the **hypervisor** topology (a real EL2/EL1 boundary) rather
+than on plain boot time alone.
+
+Note carefully *why* this leg is TCG on both sides: **QHV needs EL2 for its
+guest, i.e. nested virtualisation, which ARM KVM does not provide on A78AE.**
+That is a hard architectural requirement, not the GICv3 blockage. For once
+TCG-on-both is genuine symmetry, and the two must not be described the same
+way. See [digital-twin-design.md](digital-twin-design.md) §1a.
+
+**Built:** [`scripts/orin/launch-qhv-on-orin-tcg.sh`](../scripts/orin/launch-qhv-on-orin-tcg.sh)
+(new), `-Runs` / `-StopOnGuestBanner` added to
+[`scripts/launch-qhv-tcg.ps1`](../scripts/launch-qhv-tcg.ps1) (default
+behaviour unchanged), and
+[`scripts/twin/sync-qhv.sh`](../scripts/twin/sync-qhv.sh) to stage the images
+with the checksum invariant enforced on arrival. `sync.sh` was left alone: it
+targets `qnx-safety-vm/output`, demands a `CLOUD_RUNTIME_HOST` that no longer
+exists for this leg, and uses `rsync`, which is absent from Git Bash on the
+Windows build host — i.e. it cannot run from where the images now live.
+
+**A wrong instruction found by building the instrument.** The curation header
+of [qhv-tcg-host-and-guest-boot.log](../logs/sample-boot/qhv-tcg-host-and-guest-boot.log)
+tells the reader to look for **two** banners — a host `QNX qnx-qhv … QEMU_virt`
+and a guest `QNX qnx-guest … ARMv8_Foundation_Model` — and the original launch
+script repeated the same advice. **No host banner exists** in that log's body,
+or in any run reproduced since; only the guest prints one. A check written to
+that instruction reports `host banner=no` on a perfectly healthy boot. Replaced
+with three markers that are actually emitted: `=== AUTO-START QNX GUEST UNDER
+QVM` (host reached post_start), `=== launching qvm @g2.conf` (hypervisor
+invoked), and the guest banner (guest came up across EL2/EL1). They fail
+distinguishably, which the single-banner check did not.
+
+**Windows half, measured, n=5** (launch → guest banner, `-StopOnGuestBanner`):
+
+| Run | ms |
+|---|---|
+| 1 | 49,080 |
+| 2 | 49,165 |
+| 3 | 49,275 |
+| 4 | 49,124 |
+| 5 | 49,300 |
+| **median** | **49,165 ms** |
+| mean | 49,188.8 ms |
+| spread | 220 ms (49,080–49,300) |
+
+That spread is **0.4% of the median** — far tighter than the plain
+`qnx-safety-vm` boot-time measurement on this same host, whose five runs
+spanned 1,103 ms because of a cold-start outlier. Worth knowing before the
+Orin numbers arrive: this instrument is precise enough that a real host
+difference will not be lost in noise.
+
+**Not done, and the reason matters:** the Orin half. The board was
+unreachable — `ssh` to 192.168.178.56 timed out on port 22 — so it is
+presumably powered down or has taken a different DHCP lease. **This entry
+therefore ships the instrument and one side's numbers, not the comparison.**
+Nothing here should be quoted as a twin diff until the Orin column exists.
+
+One measurement detail checked rather than assumed: the host's
+`post_start.custom` holds a hard-coded `sleep 90` boot-grace, but the guest
+banner lands at ~49 s — *inside* that sleep — so it contributes nothing to the
+number. On a slower host a banner past 90 s would change the interleaving, so
+any run reporting much more than that should be inspected, not plotted.
+
+---
+
 ## 2026-09-08 — GICv3/NISV: the faulting instruction reproduced from BSP source, and a one-flag change removes it — compile-verified, boot-unverified
 
 Started as a static-analysis lead and ended as a **compile-level

@@ -18,10 +18,17 @@ The project mirrors the *software-layer behaviour* of an NVIDIA
 DRIVE OS dual-VM partition across two physically distinct host
 substrates:
 
-- **Cloud twin** — AWS Graviton (c7g.large arm64, Ubuntu 22.04). Note
-  per [ADR-002](phase2-topology-decision.md): non-metal Graviton has no
-  `/dev/kvm`, so the cloud leg runs the SDP 8.0 QHV (`qvm`) + a single
-  QNX guest under QEMU **TCG**, not KVM.
+- **Cloud / x86 twin** — *designed* as AWS Graviton (c7g.large arm64,
+  Ubuntu 22.04); **as built, this leg runs on the local Windows host.**
+  Per [ADR-002](phase2-topology-decision.md) non-metal Graviton has no
+  `/dev/kvm`, so the leg runs the SDP 8.0 QHV (`qvm`) + a single QNX
+  guest under QEMU **TCG** — and once KVM was off the table there was
+  nothing left that required the leg to be in the cloud at all. Every
+  QHV boot and IPC number attributed to "cloud" in this repo was
+  produced on the Windows box; the Phase-4 boot-time table names it
+  honestly as "Local Windows (x86_64, TCG)". AWS's remaining real role
+  is the KVM *test bed* (`a1.metal`, see
+  [findings.md](findings.md) 2026-07-29), not the runtime host.
 - **Hardware twin** — Jetson Orin Nano Dev Kit (NVIDIA L4T / JetPack 6
   on Cortex-A78AE × 6, Ampere GPU not exercised)
 
@@ -29,13 +36,13 @@ A short table of what crosses the twin boundary:
 
 | Artefact | Twinned? | Notes |
 |---|---|---|
-| QNX IFS (`output/ifs.bin`) | **Yes — bit-for-bit identical** | Built once on the x86_64 build host (Windows local primary; EC2 fallback); scp'd to both runtime hosts |
+| QNX IFS (`output/ifs.bin`) | **Leg-dependent — was silently broken** | Built once on the x86_64 build host (Windows local primary; EC2 fallback) and scp'd to both runtime hosts. **Honest correction:** this row claimed "bit-for-bit identical" as an unconditional invariant, but the Phase-3 Orin IPC run used a **rebuilt** IFS with new TCP server code staged in — so for that measurement the twin's load-bearing invariant did not hold. It *does* hold for the QHV leg (§1a), where both hosts boot the identical `qhv/host/output/{ifs.bin,disk-qemu}` pair verified by `SHA256SUMS` |
 | QNX IPC server (`ipc-test/qnx-server`) source | **Yes** | Same C99; compiled with `qcc` inside QNX guest in both twins |
 | Linux IPC client (`ipc-test/linux-client`) source | **Phase 3 / Orin only** | Per [ADR-002](phase2-topology-decision.md), there is **no Linux guest on the cloud leg** — the cloud initiator is a QNX-host program (`ipc-test/qnx-host-client`). This client runs on L4T natively on the HW twin only |
 | Wire protocol (sequence + timestamp + payload) | **Yes** | Fixed-width binary frame, version-tagged |
 | Test harness + benchmark scripts | **Yes** | Same `run-bench.sh`; output CSV format is identical |
 | QEMU command line (machine/CPU/mem) | **Mostly** | `-machine virt,gic-version=3 -cpu ... -m 1G` shape is shared; see the accel row for the cloud/Orin split |
-| QEMU acceleration | **Different by design** | Per [ADR-002](phase2-topology-decision.md): cloud = `-accel tcg` (no `/dev/kvm` on non-metal Graviton); Orin = `-enable-kvm` (KVM works on A78AE). This was wrongly listed as an invariant before the QHV pivot |
+| QEMU acceleration | **TCG on both — for two different reasons** | This row previously read "cloud = tcg; Orin = `-enable-kvm` (KVM works on A78AE)". That is **no longer true and should not be quoted**: Orin's KVM boot is blocked by the GICv3 / `KVM_EXIT_ARM_NISV` defect ([orin-port.md](orin-port.md)), so the plain `qnx-safety-vm` leg runs TCG there *because KVM is broken*. On the **QHV leg** TCG is instead a hard architectural requirement on both sides — QHV needs EL2 for its guest, i.e. nested virtualisation, which ARM KVM does not provide on A78AE. Keep the two apart when reporting: only the QHV leg's TCG-on-both is genuine symmetry |
 | IPC transport | **Different by design** | Cloud: host↔guest `qvm` virtio-console (single-OS QNX↔QNX); Orin: QNX↔Linux virtio-net over KVM bridge. The legs no longer share an identical topology — see §4 |
 | Linux Compute side | **Different by design** | Cloud: **no Linux guest** (single QNX guest under QHV); HW: L4T native (host OS). See §2/§3 |
 | Host kernel | **Different by design** | This is exactly the variable being studied |
@@ -51,6 +58,77 @@ the QEMU-acceleration, IPC-transport, and Linux-Compute-side rows are
 **now also deltas**, not invariants: the cloud leg lost KVM and lost its
 Linux guest. §4 explains why the diff must therefore account for more
 than host difference alone.
+
+---
+
+## 1a. The QHV leg — the twin's one clean host-only comparison
+
+*Added 2026-09-08.* By §1's own rule ("anything that differs between twin
+sides in those rows is a bug") the twin was in trouble: the invariant set had
+collapsed to **{wire protocol, harness/CSV shape, QEMU machine shape}**. The
+IFS was rebuilt on one side, the two legs run different server programs
+(`qnx-server` over a console vdev vs. `qnx-server-net` over TCP), the
+accelerators differ, the transports differ, and the "cloud" host is a Windows
+desktop. A twin diff with almost no invariants is not a twin diff.
+
+The fix does not require rebuilding the project. The **QHV leg is
+host-agnostic**, and cheaply so. Its entire QEMU invocation is
+
+```
+-machine virt,virtualization=on,gic-version=3 -cpu max -accel tcg \
+  -smp 2 -m 2G -drive file=disk-qemu,... -device virtio-blk-device,... \
+  -kernel ifs.bin -serial file:<log> -display none -no-reboot
+```
+
+and its only host inputs are two files. Everything that makes the leg
+interesting — the `qvm` hypervisor, the guest, the virtio-console and
+`vdev shmem` wiring, the pty pair (`/dev/ptyp0`↔`/dev/ttyp0`, a *QNX* device
+inside the emulated world, not a host one) — lives **inside** the emulation.
+Nothing crosses to the host but the image files and a serial log.
+
+So the same two images can be copied to the Orin and booted there unchanged:
+
+| | Windows leg | Orin leg |
+|---|---|---|
+| `ifs.bin` + `disk-qemu` | identical (SHA256-verified) | identical |
+| `qvm` config, guest, vdevs | identical (inside the image) | identical |
+| QEMU machine / CPU / mem | identical | identical |
+| Accelerator | TCG | TCG |
+| **Host CPU / kernel** | **x86_64, Windows** | **Cortex-A78AE, L4T** |
+
+That is a genuine one-variable comparison, and it is on the *hypervisor*
+topology — the part of this project that actually resembles a DRIVE OS
+partition boundary — rather than on plain boot time alone. It also restores
+the IFS and the topology to the invariant set.
+
+**Instruments** (same marker, same method, deliberately duplicated arg lists —
+change one, change the other):
+
+- Windows: `scripts/launch-qhv-tcg.ps1 -Runs N -StopOnGuestBanner`
+- Orin: `scripts/orin/launch-qhv-on-orin-tcg.sh N`
+
+Both time **launch → the guest's `QNX qnx-guest … ARMv8_Foundation_Model`
+banner** and emit `run N: NNNNN ms` lines, matching §5's existing n=5
+methodology. Both banners must appear for a run to count: the host banner
+alone means QHV came up but `qvm` never started a guest across the EL2/EL1
+boundary — a different failure from a timeout, and not to be reported as one.
+
+**One measurement detail that has to be checked per host, not assumed.** The
+host's `post_start.custom` contains a hard-coded `sleep 90` boot-grace before
+it goes on to the IPC benchmark. That sleep runs on the *host* while the guest
+boots in the background, so whether it pads the measurement depends entirely
+on where the guest banner lands relative to it. On Windows the banner appears
+at ~49 s — comfortably *inside* the sleep — so the sleep contributes nothing
+to the number. If a slower host pushed the banner past 90 s the host would
+already have moved on and the interleaving would differ, so a run that reports
+much more than ~90 s should be inspected rather than plotted.
+
+**What this leg still cannot show:** it is TCG on both sides, so it measures
+host emulation throughput on the QHV workload, not hardware-timed
+virtualisation cost. No configuration in this repo produces a hardware-timed
+QHV number — that needs nested virt, which the hardware does not offer. The
+comparison is honest about *what changes when the host changes*; it is not a
+performance claim about QHV.
 
 ---
 
@@ -158,7 +236,9 @@ just having one canonical artefact.
 > Orin legs run **non-identical IPC topologies**: the cloud leg is a
 > single-OS QNX↔QNX exchange over a `qvm` virtio-console vdev under
 > **TCG**, whereas Orin is a heterogeneous QNX↔Linux exchange over
-> virtio-net bridged under **KVM**. The IPC diff therefore confounds at
+> virtio-net bridged under **TCG** (this paragraph originally said "under
+> KVM" — wrong; Orin's KVM boot is blocked, see
+> [orin-port.md](orin-port.md)). The IPC diff therefore confounds at
 > least three variables — host (Graviton vs. A78AE), acceleration (TCG
 > vs. KVM), and transport+OS-pair (console/QNX↔QNX vs. virtio-net/QNX↔Linux)
 > — and the methodology must say so explicitly rather than presenting

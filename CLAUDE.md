@@ -309,6 +309,19 @@ Quick summary for context:
   **not** a defensible claim; "Orin is slower" is.
   `docs/drive-os-comparison.md` (the broader
   dimension-by-dimension gap doc) is untouched — still open.
+  **2026-09-08: a second, cleaner twin leg was instrumented.** The QHV
+  leg turns out to be host-agnostic (its whole QEMU invocation is
+  `-machine virt,virtualization=on,...` plus two image files; `qvm`,
+  the guest, the vdevs and even the pty pair live *inside* the
+  emulation), so the identical images can boot on Orin unchanged. That
+  gives a genuine one-variable comparison on the **hypervisor**
+  topology rather than on plain boot time — see
+  [docs/digital-twin-design.md](docs/digital-twin-design.md) §1a.
+  Windows half measured (n=5, median 49,165 ms, 220 ms spread, all
+  markers clean); **Orin half not run — the board was unreachable**, so
+  this is an instrument plus one column, *not* a diff. Note the TCG
+  here is a hard requirement (QHV needs EL2 → nested virt, which ARM
+  KVM lacks on A78AE), not the GICv3 blockage — do not conflate them.
 - Phase 5 — FuSa & Cybersecurity overlay — not started (Phase-1-gate
   FuSa/Cyber review already happened as a cross-cutting check per the
   coordination rules above, but the dedicated Phase-5 overlay pass has not)
@@ -334,7 +347,11 @@ Quick summary for context:
    (A from-source newer QEMU remains untried and is still assessed as
    unlikely to help: this is the KVM backend's deliberate by-design
    behaviour, not a version bug.)
-3. Write `docs/drive-os-comparison.md`'s dimension-by-dimension
+3. Finish the QHV twin diff: power on the Orin, then
+   `ORIN_HOST=user@ip ./scripts/twin/sync-qhv.sh` followed by
+   `./launch-qhv-on-orin-tcg.sh 5` there. Two commands; the Windows
+   column and both instruments already exist.
+4. Write `docs/drive-os-comparison.md`'s dimension-by-dimension
    verdicts now that Phase 2/3/4 have real numbers to cite instead of
    projections. **This is the largest remaining gap in the public
    story** — Phase 4's boot-diff half is done; this half is untouched.

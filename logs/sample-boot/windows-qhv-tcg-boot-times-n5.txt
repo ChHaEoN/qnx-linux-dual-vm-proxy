@@ -1,0 +1,14 @@
+# Phase 4 — QHV twin leg, Windows half, n=5.
+# launch -> guest banner ("QNX qnx-guest ... ARMv8_Foundation_Model"), ms.
+# Instrument: scripts\launch-qhv-tcg.ps1 -Runs 5 -StopOnGuestBanner
+# Orin counterpart (not yet run — board unreachable 2026-09-08):
+#   scripts/orin/launch-qhv-on-orin-tcg.sh 5
+# Same images (SHA256-verified), same qvm config, same QEMU args, same
+# accelerator; only the host differs. Do not present this as a twin diff
+# until the Orin column exists.
+
+run 1: 49080 ms
+run 2: 49165 ms
+run 3: 49275 ms
+run 4: 49124 ms
+run 5: 49300 ms
