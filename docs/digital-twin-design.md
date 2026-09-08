@@ -92,9 +92,24 @@ So the same two images can be copied to the Orin and booted there unchanged:
 |---|---|---|
 | `ifs.bin` + `disk-qemu` | identical (SHA256-verified) | identical |
 | `qvm` config, guest, vdevs | identical (inside the image) | identical |
-| QEMU machine / CPU / mem | identical | identical |
+| QEMU machine / CPU / mem args | identical | identical |
 | Accelerator | TCG | TCG |
+| **QEMU binary version** | **11.0.50** | **6.2.0** ← *not* controlled |
 | **Host CPU / kernel** | **x86_64, Windows** | **Cortex-A78AE, L4T** |
+
+> **This table originally omitted the QEMU version row, and that omission
+> broke the leg's whole premise on first contact with the hardware
+> (2026-09-08).** The argument above — "only the host CPU differs" — was
+> written from the *argument list*, which is identical, and never checked the
+> binary producing it. It is not: Windows runs a QEMU 11.0.50 development
+> build, the Orin runs Ubuntu 22.04's stock 6.2.0. Five major releases apart,
+> and the gap lands squarely on the feature this leg depends on —
+> `virt,virtualization=on`, i.e. TCG emulation of EL2, which is what QHV needs
+> to exist at all and is among the most heavily changed areas of QEMU across
+> those releases. Any number produced from this pairing would confound host
+> with QEMU version, which is precisely the error §4 warns about for the IPC
+> diff. **The leg is not a valid host-only comparison until both sides run the
+> same QEMU.**
 
 That is a genuine one-variable comparison, and it is on the *hypervisor*
 topology — the part of this project that actually resembles a DRIVE OS
@@ -112,6 +127,44 @@ banner** and emit `run N: NNNNN ms` lines, matching §5's existing n=5
 methodology. Both banners must appear for a run to count: the host banner
 alone means QHV came up but `qvm` never started a guest across the EL2/EL1
 boundary — a different failure from a timeout, and not to be reported as one.
+
+**First execution on the Orin: a deterministic hang, cause not yet
+established (2026-09-08).** With the byte-identical images (`sha256sum -c`
+verified on arrival) and the identical argument list, the QHV host boots on
+the Orin — `FOUND GICv3 ITS`, slogger2, PCI, `devb`, file systems all come up
+— and then stops dead at:
+
+```
+random: Could not initialize entropy. [random.c(406)]
+```
+
+On the Windows host the same image walks straight past that same line to
+`Starting Networking` and on to `post_start`, reaching the guest banner at
+~49 s. On the Orin the serial log is **419 bytes at 300 s, at 600 s, and after
+12 minutes of runtime** — byte-for-byte unchanged, process alive throughout.
+That is a hang, not slowness, and the sample-based check was run precisely
+because "the ARM host is simply slower" was the cheaper explanation and had to
+be excluded before anything else was considered.
+
+Two things it is **not**:
+
+- **Not a missing entropy source.** Adding `-device virtio-rng-device` — the
+  fix for the superficially similar `io-sock` entropy starvation on the
+  `qnx-safety-vm` leg (findings.md, 2026-07-28) — changes nothing: ten samples
+  over 600 s, all 419 bytes, same line.
+- **Not (yet) attributable to the host**, which is the important one. The QEMU
+  version is uncontrolled (see the table above), the failing path is EL2
+  emulation, and QEMU 6.2 → 11.x is exactly where that matured. The competing
+  explanations — "A78AE host exposes a QNX/TCG bug that x86 does not" versus
+  "QEMU 6.2 cannot emulate EL2 well enough for QHV" — are **not distinguished
+  by any evidence collected so far**, and the second is the more ordinary one.
+  Supporting it: the plain `qnx-safety-vm` IFS, which does *not* ask for
+  `virtualization=on`, boots fine on this same board under this same QEMU 6.2
+  ([orin-tcg-qnx-boot1.log](../logs/sample-boot/orin-tcg-qnx-boot1.log)).
+
+Resolving it means putting a matching QEMU on the Orin and re-running. Until
+then this leg has **no comparable number**, and the hang must not be written up
+as an Orin finding.
 
 **One measurement detail that has to be checked per host, not assumed.** The
 host's `post_start.custom` contains a hard-coded `sleep 90` boot-grace before

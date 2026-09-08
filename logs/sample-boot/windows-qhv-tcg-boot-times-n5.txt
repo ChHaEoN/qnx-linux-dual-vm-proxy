@@ -1,7 +1,16 @@
 # Phase 4 — QHV twin leg, Windows half, n=5.
 # launch -> guest banner ("QNX qnx-guest ... ARMv8_Foundation_Model"), ms.
 # Instrument: scripts\launch-qhv-tcg.ps1 -Runs 5 -StopOnGuestBanner
-# Orin counterpart (not yet run — board unreachable 2026-09-08):
+# qemu: QEMU emulator version 11.0.50 (v11.0.0-12631-g54e84cdc7a)
+#
+# THAT VERSION LINE IS LOAD-BEARING. When this leg was first run on the Orin
+# the board had Ubuntu 22.04's stock QEMU 6.2.0 -- five major releases back,
+# on the TCG EL2-emulation path QHV depends on -- and the QHV host hung
+# deterministically at "random: Could not initialize entropy". These numbers
+# are only comparable against an Orin run on a matching QEMU. See
+# docs/digital-twin-design.md section 1a.
+#
+# Orin counterpart: NOT YET VALID (2026-09-08 attempt hung; QEMU mismatch):
 #   scripts/orin/launch-qhv-on-orin-tcg.sh 5
 # Same images (SHA256-verified), same qvm config, same QEMU args, same
 # accelerator; only the host differs. Do not present this as a twin diff

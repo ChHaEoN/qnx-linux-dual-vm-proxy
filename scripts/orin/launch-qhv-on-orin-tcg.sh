@@ -107,7 +107,17 @@ echo "QEMU: $(qemu-system-aarch64 --version | head -1)"
 echo
 
 summary="${prefix}-times.txt"
-: > "${summary}"
+# Stamp provenance into the data itself. On 2026-09-08 this leg was run with
+# QEMU 11.0.50 on Windows against 6.2.0 here -- five major releases apart, on
+# the EL2-emulation path QHV depends on -- and the argument lists being
+# identical hid it. Whoever compares two of these files must be able to see
+# that at a glance without re-deriving it.
+{
+  echo "# host: $(uname -srm) / $(awk -F: '/model name/{print $2; exit}' /proc/cpuinfo 2>/dev/null | sed 's/^ *//')"
+  echo "# qemu: $(qemu-system-aarch64 --version | head -1)"
+  echo "# marker: launch -> guest banner (QNX qnx-guest ... ARMv8_Foundation_Model)"
+  echo "# NOTE: only comparable against a run whose 'qemu:' line matches."
+} > "${summary}"
 failures=0
 
 for ((run = 1; run <= runs; run++)); do

@@ -90,7 +90,22 @@ function Read-LogSafe([string]$Path) {
 }
 
 $summaryPath = [System.IO.Path]::ChangeExtension($LogPath, $null).TrimEnd('.') + '-times.txt'
-if ($StopOnGuestBanner) { Set-Content -Path $summaryPath -Value @() -Encoding utf8 }
+# Stamp provenance into the data itself -- see the matching comment in
+# scripts/orin/launch-qhv-on-orin-tcg.sh. Identical argument lists are not
+# the same thing as identical QEMUs, and that difference silently invalidated
+# the first cross-host attempt.
+if ($StopOnGuestBanner) {
+  $qemuVer = (& $qemu --version | Select-Object -First 1)
+  $cpuName = (Get-CimInstance Win32_Processor | Select-Object -First 1 -ExpandProperty Name)
+  $provenance = @(
+    "# host: Windows $([System.Environment]::OSVersion.Version) $env:PROCESSOR_ARCHITECTURE / $cpuName",
+    "# qemu: $qemuVer",
+    "# marker: launch -> guest banner (QNX qnx-guest ... ARMv8_Foundation_Model)",
+    "# NOTE: only comparable against a run whose 'qemu:' line matches."
+  )
+  Set-Content -Path $summaryPath -Value $provenance -Encoding utf8
+  Write-Host "qemu: $qemuVer"
+}
 $failures = 0
 
 for ($run = 1; $run -le $Runs; $run++) {

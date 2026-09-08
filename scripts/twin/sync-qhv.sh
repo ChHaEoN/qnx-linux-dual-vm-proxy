@@ -95,20 +95,66 @@ echo "[3/4] Copying images + launcher ..."
 # of hanging until the TCP timeout.
 xfer_opts=(-C -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
 
+# Send one file, doing the least work that is still provably correct.
+#
+# scp cannot resume, and the 2026-09-08 drop happened at ~66% of a 322 MB
+# image -- restarting from zero would have thrown away 214 MB that had
+# already landed correctly. So: compare what is on the far end first, and if
+# it is a correct *prefix* of what we are sending, stream only the remainder
+# with dd. scp writes sequentially, so a truncated transfer leaves a valid
+# prefix -- but that is verified rather than assumed, by checksumming our own
+# first N bytes against the remote file. A mismatch (a genuinely corrupt or
+# unrelated file) falls back to a full resend.
 copy_one() {
-  local local_path="$1" name
+  local local_path="$1" depth="${2:-0}"
+  local name want local_size remote_size remote_sha prefix_sha
   name="$(basename "${local_path}")"
-  local want
   want="$(sha256sum "${local_path}" | cut -d" " -f1)"
-  local have
-  have="$(ssh "${ssh_opts[@]}" "${ORIN_HOST}" "sha256sum ${remote_dir}/${name} 2>/dev/null | cut -d\" \" -f1" 2>/dev/null || true)"
+  local_size="$(stat -c %s "${local_path}")"
 
-  if [[ "${have}" == "${want}" ]]; then
-    echo "  ${name}: already present and correct — skipping"
-    return 0
+  remote_size="$(ssh "${ssh_opts[@]}" "${ORIN_HOST}" "stat -c %s ${remote_dir}/${name} 2>/dev/null || echo 0" 2>/dev/null || echo 0)"
+  remote_size="${remote_size//[^0-9]/}"
+  : "${remote_size:=0}"
+
+  if [[ "${remote_size}" == "${local_size}" ]]; then
+    remote_sha="$(ssh "${ssh_opts[@]}" "${ORIN_HOST}" "sha256sum ${remote_dir}/${name} 2>/dev/null | cut -d' ' -f1" 2>/dev/null || true)"
+    if [[ "${remote_sha}" == "${want}" ]]; then
+      echo "  ${name}: already present and correct — skipping"
+      return 0
+    fi
+    echo "  ${name}: right size, WRONG checksum — resending in full"
+    remote_size=0
   fi
-  if [[ -n "${have}" ]]; then
-    echo "  ${name}: present but WRONG checksum — resending"
+
+  if (( remote_size > 0 && remote_size < local_size )); then
+    echo "  ${name}: ${remote_size} of ${local_size} bytes already there; verifying that prefix ..."
+    prefix_sha="$(head -c "${remote_size}" "${local_path}" | sha256sum | cut -d" " -f1)"
+    remote_sha="$(ssh "${ssh_opts[@]}" "${ORIN_HOST}" "sha256sum ${remote_dir}/${name} 2>/dev/null | cut -d' ' -f1" 2>/dev/null || true)"
+    if [[ "${prefix_sha}" == "${remote_sha}" ]]; then
+      local remaining=$(( local_size - remote_size ))
+      echo "  ${name}: prefix verified — resuming, ${remaining} bytes to go"
+      # ONE append attempt per call. If it fails the far end may hold a
+      # partially-appended file, so the offset we just used is stale --
+      # reusing it would append from the wrong place and silently corrupt the
+      # image. Recurse instead, which recomputes the size and re-verifies the
+      # prefix from scratch. ${depth} bounds that at 3 tries total.
+      if dd if="${local_path}" bs=1M iflag=skip_bytes skip="${remote_size}" status=none \
+           | ssh "${ssh_opts[@]}" -o Compression=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
+                 "${ORIN_HOST}" "cat >> ${remote_dir}/${name}"; then
+        return 0
+      fi
+      echo "  ${name}: resume attempt $((depth + 1)) failed." >&2
+      if (( depth + 1 < 3 )); then
+        echo "  waiting 20s, then recomputing the offset from scratch ..." >&2
+        sleep 20
+        copy_one "${local_path}" "$((depth + 1))"
+        return $?
+      fi
+      transfer_failed "${name}"
+      return 1
+    fi
+    echo "  ${name}: prefix does NOT match — the partial file is unusable, resending in full"
+    ssh "${ssh_opts[@]}" "${ORIN_HOST}" "rm -f ${remote_dir}/${name}"
   fi
 
   local attempt
@@ -124,13 +170,17 @@ copy_one() {
     fi
   done
 
-  echo "ERROR: ${name} could not be transferred after 3 attempts." >&2
-  echo "       If the board vanished from the network rather than just the" >&2
-  echo "       transfer stalling, suspect power: the Orin Nano browns out on" >&2
-  echo "       an underspecced supply when CPU + network + storage load up" >&2
-  echo "       together. Re-running this script is safe and cheap — files" >&2
-  echo "       that already landed intact are skipped." >&2
+  transfer_failed "${name}"
   return 1
+}
+
+transfer_failed() {
+  echo "ERROR: $1 could not be transferred after 3 attempts." >&2
+  echo "       If the board vanished from the network rather than the transfer" >&2
+  echo "       merely stalling, suspect power: the Orin Nano browns out on an" >&2
+  echo "       underspecced supply when CPU + network + storage load together." >&2
+  echo "       Re-running this script is safe and cheap — complete files are" >&2
+  echo "       skipped and a partial one resumes from where it stopped." >&2
 }
 
 # Small files first, so a failure on the big one does not leave the launcher
