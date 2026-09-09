@@ -308,6 +308,35 @@ image, M1 has not been attempted, and the `hang` mode that would test whether an
 un-petted watchdog recovers the board was not run — this boot reset itself
 deliberately through PSCI, which says nothing about that path.
 
+**The same evening, the `hang` test: the watchdog does not recover the board,
+and the black box does not survive a power cycle.** Two assumptions died in one
+run. The shim was rebuilt in `hang` mode — print, then `wfi` forever with nothing
+petting WDT0 — to test whether the watchdog systemd arms at two minutes brings
+the board back unattended. It sat there for six and a half minutes and came back
+only when the owner pulled the power. Standing at the board they reported the
+green LED lit and the fan stopped, which is what a core parked in `wfi` looks
+like from outside: powered, idle, nothing running, and distinct from a brown-out
+where the LED would be dark. Nothing could have woken it — the shim enters with
+`DAIF` masked and never unmasks. Most likely systemd hands the watchdog back on
+its own shutdown path, which `systemctl kexec` is; that is a hypothesis and one
+boot would settle it.
+
+The second death followed from the recovery. After the cold power cycle
+`/sys/fs/pstore` came back **completely empty**, including `dmesg-ramoops`
+records from days earlier — DRAM losing its contents, not pstore declining to
+surface them. So the black box is bounded rather than general: it carries the
+payload's output through a PSCI reset or through an exception the shim's vectors
+turn into one, and carries nothing at all through a hang.
+
+Together those sharpen the rule for M1 onward beyond "every path must reach a
+reset". A startup that fails into a wait loop is now the *worst* available
+outcome — worse than one that crashes, because crashing prints and hanging costs
+both the evidence and a trip to the board. Anything resembling a spin needs a
+bounded deadline with a reset at the end of it. The remotely switchable mains
+socket also stops being a convenience: it is the only thing that restores the
+recovery path the watchdog was assumed to provide.
+[m0-hang-watchdog.md](../results/orin-native-port/20260909T1100Z/m0-hang-watchdog.md)
+
 
 **Owner decisions (2026-09-09, recorded verbatim in intent, not paraphrased
 into reasons the owner did not give):** (1) ADR-003 → option (B), native
