@@ -318,9 +318,9 @@ Quick summary for context:
   topology rather than on plain boot time — see
   [docs/digital-twin-design.md](docs/digital-twin-design.md) §1a.
   **2026-09-09:** the Orin half was run and first hung under the distro
-  QEMU 6.2.0 (attributed to a QEMU-side EL2/VHE timer defect — the host is
-  excluded as sufficient cause; the mechanism is hypothesised, not
-  verified); with QEMU v11.1.0 built from source on the board
+  QEMU 6.2.0 (a QEMU-side EL2 virtual-timer wiring defect — **verified** by a
+  reverted-wiring build of 11.1.0 that reproduces the hang; the host is
+  excluded); with QEMU v11.1.0 built from source on the board
   (`scripts/orin/build-qemu-on-orin.sh`) **the QHV host and its guest boot
   on real ARM silicon**. A review the same day found the leg's "one
   variable" claim overclaimed and an entropy test invalid; §1a now defines

@@ -1,0 +1,22 @@
+# Curated artefact -- Phase 4, QHV leg, DECISIVE MECHANISM TEST (2026-09-09).
+# QEMU v11.1.0 built from source on the Orin with ONE change: the NS EL2 virtual-timer output left
+# unconnected to the GIC (scripts/orin/patches/qemu-v11.1.0-unwire-ns-el2-virt-timer-irq.patch), i.e.
+# QEMU 6.2's wiring on an otherwise 11.1.0 tree. Same image, same board, blk only, no rng, -snapshot.
+# RESULT: HANGS at the same point as the distro 6.2.0 -- the waitfor timeout never fires.
+# Unpatched 11.1.0 on this board boots to the guest banner (q111-* logs). One wire, one variable,
+# opposite outcome: the missing EL2 virtual-timer IRQ IS the cause of the QHV host hang under 6.2.
+# ---------------------------------------------------------------------------
+
+FOUND GICv3 ITS
+** CPU 0 PE is not awake
+** CPU 1 PE is not awake
+---> Starting slogger2
+---> Starting PCI Services
+---> Starting fsevmgr
+# ---> Starting devb
+Path=0 - 
+ target=0 lun=0     Direct-Access(0) - VIRTIO  Rev: 
+---> Mounting file systems
+---> Mounting file systems
+random: Unable to use devr-virtio.so as an entropy source [entropy.c(173)]
+random: Could not initialize entropy. [random.c(406)]

@@ -108,7 +108,11 @@ $summaryPath = [System.IO.Path]::ChangeExtension($LogPath, $null).TrimEnd('.') +
 # the same thing as identical QEMUs, and that difference silently invalidated
 # the first cross-host attempt.
 if ($StopOnGuestBanner) {
-  $qemuVer = (& $qemu --version | Select-Object -First 1)
+  # Capture the whole output and index it. Piping a native command into
+  # Select-Object -First 1 tears the process down when the pipeline stops
+  # early and leaves $LASTEXITCODE = -1, which surfaced as a bogus exit code
+  # 255 for three otherwise healthy series (2026-09-09).
+  $qemuVer = (@(& $qemu --version))[0]
   $cpuName = (Get-CimInstance Win32_Processor | Select-Object -First 1 -ExpandProperty Name)
   $provenance = @(
     "# host: Windows $([System.Environment]::OSVersion.Version) $env:PROCESSOR_ARCHITECTURE / $cpuName",
@@ -235,3 +239,9 @@ if ($StopOnGuestBanner) {
     Write-Host "No serial log produced."
   }
 }
+
+# Exit code is a deliberate signal, mirroring scripts/orin/launch-qhv-on-orin-tcg.sh:
+# non-zero only when a timed run did not reach the guest banner. (Previously the
+# process exit code was whatever $LASTEXITCODE happened to hold.)
+if ($StopOnGuestBanner -and $failures -gt 0) { exit 1 }
+exit 0
