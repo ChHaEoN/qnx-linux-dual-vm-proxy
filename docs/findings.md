@@ -248,6 +248,67 @@ terminated 2026-07-29) was redacted to honour the CLAUDE.md secrets rule —
 it stays in git history. Six intermediate build/review runs of the script
 were parked outside the repo rather than deleted.
 
+**M0 gate passed on the board, 2026-09-09 evening: kexec accepts the shim and
+places it exactly where the arithmetic said.** The first time any Phase 3b code
+touched the hardware, and deliberately the smallest possible step: the 8 KiB
+probe-mode shim was staged into kernel memory with both kexec syscalls, the
+result read back, and the image unloaded again. **No reboot** — the board stayed
+up throughout. Both paths returned `rc=0` with `kexec_loaded=1`, so nothing
+stands between a non-Linux payload and this kernel: no signature check, no PE
+check, nothing beyond the header. Claim K2 is settled on its acceptance half,
+which source reading alone could not settle. The more valuable half came from
+the `kexec_load` path, which prints its segment map: **segment 0 at
+`0x80080000`, size `0x2000`** — precisely the address the shim's landing check
+expects, and the value the plan had carried as a hypothesis since it was
+written. One correction fell out of the same output: the plan says the device
+tree is placed top-down above the image, which is what the kernel does on the
+`kexec_file_load` path, but `kexec-tools` on the `kexec_load` path placed it
+bottom-up immediately after the image, at `0x80082000` — where the IFS will live
+once there is one. With a real image the payload grows and the DTB moves past
+it, so nothing collides, but the placement should be re-read from `kexec -d`
+rather than assumed when the first shim+IFS image is built. Full record:
+[results/orin-native-port/20260909T1100Z/m0-kexec-acceptance.md](../results/orin-native-port/20260909T1100Z/m0-kexec-acceptance.md).
+**What this does not show:** the shim has still never executed. The exception
+level at entry, whether the SPE drains the TCU mailbox once Linux is gone,
+whether a ramoops write survives a reset, and whether the un-petted watchdog
+returns the board all need the reboot this test deliberately avoided.
+
+**M0 ran, 2026-09-09 23:38: the first native instruction on this hardware, and
+four ranked unknowns closed in one boot.** The owner ran `kexec -s -l` followed
+by `systemctl kexec`; Linux handed over, the shim printed its state bank into
+the ramoops console zone, normalised the timers and HCR, and reset. The board
+was back in about twenty seconds with its boot configuration untouched. The
+whole record is 419 bytes recovered from `/sys/fs/pstore/console-ramoops-0`:
+[m0-first-run.md](../results/orin-native-port/20260909T1100Z/m0-first-run.md).
+
+What it settled, in the plan's own order of risk. **`EL=2`** — unknown #1, the
+one that could have killed the kexec approach outright, since a payload entered
+at EL1 can never host a hypervisor. NVIDIA's kernel fork behaves as upstream
+source said it would. **`TCUDROPS=0`** — unknown #2: the SPE is still draining
+the mailbox after Linux is gone, so the console mechanism this port depends on
+survives the hand-off. Precisely, the SPE consumed the words; whether they
+reached the physical wire is unobserved, because no adapter is attached yet.
+**`PC=0x80080000`** — the placement arithmetic, carried as a hypothesis since
+the plan was written and confirmed by `kexec -d` earlier the same day, is now
+confirmed by the code actually running there. **The black box worked end to
+end** — a non-Linux payload wrote the ramoops zone in a form the kernel accepts
+and pstore surfaced it, which is what makes the USB-TTL adapter a convenience
+rather than a prerequisite.
+
+Two things came back better specified than they went in. `MMFR1=0x10212122`
+puts the VH field at 1, so `-Q enable,el2-host` is feasible on this silicon
+rather than merely expected from the part number. And `CNTHP_CTL_EL2=0x5` shows
+the EL2 physical timer was not just armed at hand-off but had already fired —
+the shim disarms the timers for exactly this reason, and this is the first
+direct evidence that it needed to.
+
+What did not happen: no QNX instruction ran. This was the shim alone in probe
+mode. The board directory written the same day has never been packaged into an
+image, M1 has not been attempted, and the `hang` mode that would test whether an
+un-petted watchdog recovers the board was not run — this boot reset itself
+deliberately through PSCI, which says nothing about that path.
+
+
 **Owner decisions (2026-09-09, recorded verbatim in intent, not paraphrased
 into reasons the owner did not give):** (1) ADR-003 → option (B), native
 Orin Nano port — chosen over the ADR's own Pi 4B recommendation; the Pi

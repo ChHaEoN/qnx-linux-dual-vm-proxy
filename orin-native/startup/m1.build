@@ -1,0 +1,86 @@
+# M1 — the first native QNX image for the Jetson Orin Nano.
+#
+# Phase 3b, docs/orin-native-port-plan.md §6.2. This image has never been built
+# with the real startup and has certainly never run; it is here so the shape of
+# M1 is reviewable before anyone spends a board session on it.
+#
+# Build it:
+#   startup      orin-native/startup/build-board.sh
+#   tools        make -C orin-native/tools
+#   image        mkifs -r <bsp>/src/hardware/startup/boards/t234-orin-nano/aarch64/le \
+#                      -r orin-native/tools m1.build m1.ifs
+#   payload      orin-native/shim/build-shim.sh jump m1.ifs
+#
+# The -r paths matter: startup-t234-orin-nano lives in the BSP build tree, not
+# in the SDP's boot/sys, and mkifs will not find it otherwise. tcu-cat and stamp
+# are ours and live in the tools directory.
+#
+# The base address is not free. kexec places the shim page at 0x80080000 and the
+# shim is exactly 8 KiB, so the image begins one page-pair later. build-shim.sh
+# fails the build if the page is not exactly 8192 bytes, which is what keeps
+# these two numbers from drifting apart.
+
+[image=0x80082000]
+[-compress]
+
+# -vvv           every startup message: this is the whole of M1's evidence
+# -P1            one CPU. SMP is M2; a second core failing to start would only
+#                obscure whether the first one worked.
+# -Q disable     drop to EL1. M1 answers "does QNX run on Tegra234"; M1b re-runs
+#                the identical image with -Q enable,el2-host to answer the
+#                separate question of whether the hypervisor host does.
+# -m992M         the lowest System RAM fragment, stated because the firmware
+#                device tree has no /memory node to read.
+# -Wkeep         leave the watchdog as Linux armed it. It is the only thing that
+#                returns the board unattended, and M1 fits inside two minutes.
+# -Dtcu          console on the Tegra Combined UART mailbox. -Dtegra8250 moves
+#                it to the port Linux left clocked, if the SPE turns out to have
+#                stopped draining the mailbox once Linux is gone.
+[virtual=aarch64le,raw] .bootstrap = {
+    startup-t234-orin-nano -vvv -P1 -Q disable -m992M -Wkeep -Dtcu
+    PATH=/proc/boot LD_LIBRARY_PATH=/proc/boot
+    [+keeplinked] procnto-smp-instr -v
+}
+
+# Every line here is a question with a yes-or-no answer, in the order the
+# answers stop being interesting: did the kernel start, did user space start,
+# does a process list look sane, and does a checksum computed on the board match
+# one computed on the PC — which is the cheapest end-to-end proof that the
+# console is not lying about what ran.
+[+script] .script = {
+    display_msg "T234 M1: procnto up"
+    procmgr_symlink ../../proc/boot/ldqnx-64.so.2 /usr/lib/ldqnx-64.so.2
+    procmgr_symlink /proc/boot/ksh /bin/sh
+
+    devc-pty
+
+    tcu-cat -m "T234 M1: user space up"
+    pidin info | tcu-cat
+    pidin | tcu-cat
+    cksum /proc/boot/.script | tcu-cat
+
+    # M1b, once the console is trusted: an interactive shell on the port Linux
+    # already configured, which costs no new driver code.
+    # devc-ser8250 -e -b115200 0x3100000^2,144
+    # reopen /dev/ser1
+    # [+session] ksh &
+}
+
+[type=link] /usr/lib/ldqnx-64.so.2=/proc/boot/ldqnx-64.so.2
+libc.so.6
+libgcc_s.so.1
+
+# ours
+/proc/boot/tcu-cat=tcu-cat
+/proc/boot/stamp=stamp
+
+/bin/ksh=ksh
+/bin/pidin=pidin
+/bin/cksum=cksum
+/bin/cat=cat
+/bin/ls=ls
+/bin/echo=echo
+/bin/on=on
+/bin/slay=slay
+/bin/shutdown=shutdown
+/sbin/devc-pty=devc-pty
