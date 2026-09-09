@@ -500,10 +500,10 @@ Windows, compile-only (no board):
   0x38, size == 8192). **Drop the WDT-arming code (K9)**; keep the WDT *read* in the register bank.
   **Done 2026-09-09** — `orin-native/shim/t234-shim.S`, all three modes assemble with zero warnings and the
   header checks byte-for-byte; reviewed on four lenses, five findings applied. **Done 2026-09-09** — `orin-native/shim/t234-shim.S`; all three modes assemble with zero warnings under `-Wall -Wa,--fatal-warnings`, the page is exactly 8192 bytes and the header checks field by field. Reviewed on four lenses, five findings applied ([shim-review.md](../results/orin-native-port/20260909T1100Z/shim-review.md)).
-- [ ] **4. Create `boards/t234-orin-nano/`** from the Apache-2.0 `armv8_fm` skeleton (never `armv8_fm/main.c`
+- [x] **4. Create `boards/t234-orin-nano/`** from the Apache-2.0 `armv8_fm` skeleton (never `armv8_fm/main.c`
   or `ls10x6a.h`) with the §5 files stubbed; build; `nm`-check: `gic_v3_set_paddr_range`, `psci_smc`,
   `hyp_enable_el2_host`, `display_char_tcu` present, **exactly one** `psci_cpu_id`, no `efi_entry_point` /
-  `uefi_init` / `acpi_` — **expect and allow the three `uefi_*_f` symbols (K12)**.
+  `uefi_init` / `acpi_` — **expect and allow the three `uefi_*_f` symbols (K12)**. **Done 2026-09-09** — orin-native/startup/t234-orin-nano/, nine files, builds to a 552 KB linked startup with no warnings via build-board.sh, which also runs the symbol gate: every required symbol present, exactly one psci_cpu_id so the board override won, and no EFI or ACPI code beyond the three weak hook pointers the library always carries. The -t probe is stubbed and says so rather than guessing.
 - [x] **5. Compile `tcu-cat.c` and `stamp.c`** with `ntoaarch64-gcc`. **Done 2026-09-09** — `orin-native/tools/{tcu-cat,stamp}.c` plus a Makefile; both compile clean under `-Wall -Wextra -Werror` for `gcc_ntoaarch64le` and link to AArch64 ELF64. Note the target name: `-Vgcc_ntoaarch64le`, not `gcc_ntoaarch64`, which the SDP rejects.
 - [x] **6. Source reads only** (Apache-2.0 / BSD): `gic_v3.c:482-500` `gic_v3_use_mm_reg_callouts()` calling
   form with no GICC; `hypervisor_enable.S` `hyp_enable_el2_host` register expectations (and confirm where it
