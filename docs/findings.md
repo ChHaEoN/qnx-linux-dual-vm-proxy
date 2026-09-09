@@ -155,6 +155,41 @@ b2d875057f25a4cbda69966e553629d445cfa44af62cf4c5e121442c9782300a ifs.bin
 95849168b06e3c5d8e744db8bb8fdf39efd01d77f1b60d33060650292d7192a3 disk-qemu
 ```
 
+**Version × host matrix completed, and the Windows column release-aligned
+(2026-09-09, later the same day).** Two Weilnetz Windows builds were fetched
+from the site qemu.org's download page points to, SHA-512-verified against
+their sidecars, and *extracted* with 7-Zip into `E:\qemu-versions\` (no
+installer executed, no PATH change; the winget 11.0.50 is untouched);
+`launch-qhv-tcg.ps1 -QemuPath` drives them with the same stamped instrument.
+
+| | QEMU 6.2.0 | QEMU 11.x |
+|---|---|---|
+| Windows x86_64 | **HANG** — stops after `random: Could not initialize entropy` exactly as on the Orin; `waitfor`'s timeout never fires (406 bytes at 300 s) | boots (11.0.50: 28,720 ms; 11.1.0: 28,829 ms) |
+| Orin A78AE | **HANG** (distro 6.2.0; both with and without rng) | boots (11.1.0 from source: 62,058 ms) |
+
+**The 6.2 hang reproduces on the x86_64 host.** Same image, same argument list, same behaviour under the Weilnetz 6.2.0 Windows build (`QEMU emulator version 6.2.0 (v6.2.0-11889-g5b72bf03f5-dirty)  [E:\qemu-versions\qemu-6.2.0\qemu-system-aarch64.exe]`): the log stops after the entropy line and `Unable to access /dev/random` never appears. The version effect is therefore host-independent — the last competing explanation (a host × version interaction) is excluded, and "the Orin hang was QEMU 6.2, not the host" no longer rests on the Orin alone.
+
+**Release-aligned pair** (both hosts on upstream 11.1.0 — *different builds
+of it*, which the stamps show: Windows `QEMU emulator version 11.1.0 (v11.1.0-12130-ge470268ff4)  [E:\qemu-versions\qemu-11.1.0\qemu-system-aarch64.exe]`, Orin `QEMU emulator version
+11.1.0 (v11.1.0)` from source; rng in slot 3; `-snapshot`; the same
+`95849168…` disk bytes):
+
+| Segment (medians, ms) | Windows 11.1.0 | Orin 11.1.0 | ratio |
+|---|---|---|---|
+| launch → host post_start | 6,160 | 13,430 | 2.18× |
+| qvm launched → guest banner | 22,613 | 48,452 | 2.14× |
+| **launch → guest banner** | **28,829** | **62,058** | **2.15×** |
+
+Windows n=5: 28,740, 28,756, 28,830, 28,829, 28,850 (spread 110 ms). **Same-host control:** on the same
+Windows box, 11.0.50 (fork dev build) vs 11.1.0 (release build) medians are
+28,720 vs 28,829 ms — a +0.4% shift from the QEMU build/version alone, which
+bounds how much of any cross-host ratio can be blamed on the QEMU binary
+rather than the host. This is the closest thing to a twin diff this leg can
+produce: same images, same guest-visible machine, same accelerator, same
+device set, same disk mode, same upstream release — with the host bundle
+(CPU, OS, TCG backend, QEMU build) as the remaining difference, honestly
+labelled as a bundle.
+
 **Tooling lessons, because they cost real time:** `pgrep -f`/`pkill -f`
 match the calling shell's own command line when the pattern appears in it
 (three separate self-matches: a "still running" false positive that hid a

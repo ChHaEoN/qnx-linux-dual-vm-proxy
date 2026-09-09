@@ -1,0 +1,24 @@
+# Phase 4 -- QHV twin leg, Windows half, n=5, RELEASE-ALIGNED with the Orin column (2026-09-09).
+# QEMU 11.1.0 Weilnetz Windows build (extracted, not installed, from the SHA-512-verified
+# qemu-w64-setup-20260811.exe) -- the same upstream release the Orin runs from source, a DIFFERENT
+# BUILD of it (mingw, fork tag in the version string); rng in slot 3; -snapshot on the 95849168... disk.
+# This is the Windows column to pair with orin-qhv-tcg-q111-rng-snapshot-segments-boot-times-n5.txt.
+# Same-host control: windows-qhv-tcg-rng-snapshot-segments-boot-times-n5.txt is the 11.0.50 fork
+# build under identical stamps -- the delta between the two medians bounds the build/version component.
+#
+# host: Windows 10.0.26200.0 AMD64 / AMD Ryzen 7 9700X 8-Core Processor             
+# qemu: QEMU emulator version 11.1.0 (v11.1.0-12130-ge470268ff4)  [E:\qemu-versions\qemu-11.1.0\qemu-system-aarch64.exe]
+# devices: virtio-blk + virtio-net(slirp) + virtio-rng(builtin)
+# disk: -snapshot (guest writes discarded; every run boots the copy-time bytes, so SHA256SUMS keeps holding)
+# marker: launch -> guest banner (QNX qnx-guest ... ARMv8_Foundation_Model)
+# NOTE: only comparable against a run whose 'qemu:' AND 'devices:' lines both match.
+#   segments run 1: host_post_start=6184 qvm_launched=6184 guest_startup_complete=28740 guest_banner=28740 (ms from launch); if_up_exhausted=1
+run 1: 28740 ms
+#   segments run 2: host_post_start=6118 qvm_launched=6230 guest_startup_complete=28756 guest_banner=28756 (ms from launch); if_up_exhausted=1
+run 2: 28756 ms
+#   segments run 3: host_post_start=6197 qvm_launched=6197 guest_startup_complete=28830 guest_banner=28830 (ms from launch); if_up_exhausted=1
+run 3: 28830 ms
+#   segments run 4: host_post_start=6160 qvm_launched=6160 guest_startup_complete=28829 guest_banner=28829 (ms from launch); if_up_exhausted=1
+run 4: 28829 ms
+#   segments run 5: host_post_start=6128 qvm_launched=6237 guest_startup_complete=28741 guest_banner=28850 (ms from launch); if_up_exhausted=1
+run 5: 28850 ms

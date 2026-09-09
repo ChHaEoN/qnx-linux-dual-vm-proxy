@@ -1,0 +1,22 @@
+# Curated artefact -- Phase 4, QHV leg, the (Windows, QEMU 6.2.0) cell of the version x host matrix (2026-09-09).
+# Weilnetz 6.2.0 Windows build extracted (not installed) from the SHA-512-verified qemu-w64-setup-20211215.exe;
+# blk only, -snapshot, 300 s ceiling. RESULT: HANG -- same shape as the Orin under the distro 6.2.0: the boot
+# stops after "random: Could not initialize entropy" and waitfor's timeout message never prints.
+# This closes the host x version interaction: the 6.2 effect reproduces on x86_64, so it is not an Orin
+# property. Same argument list as every other QHV run (see scripts/launch-qhv-tcg.ps1); the QEMU path is
+# stamped in the sibling times file.
+# ---------------------------------------------------------------------------
+
+FOUND GICv3 ITS
+** CPU 0 PE is not awake
+** CPU 1 PE is not awake
+---> Starting slogger2
+---> Starting PCI Services
+---> Starting fsevmgr
+---> Starting devb
+# Path=0 - 
+ target=0 lun=0     Direct-Access(0) - VIRTIO  Rev: 
+---> Mounting file systems
+---> Mounting file systems
+random: Unable to use devr-virtio.so as an entropy source [entropy.c(173)]
+random: Could not initialize entropy. [random.c(406)]
