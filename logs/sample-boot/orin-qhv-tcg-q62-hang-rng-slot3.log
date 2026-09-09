@@ -1,0 +1,32 @@
+# Curated artefact -- Phase 4, QHV twin leg, 2x2 probe (b) (2026-09-09).
+# RESULT: STILL HANGS. QEMU 6.2.0, rng correctly in slot 3 (+ virtio-net slot filler).
+# Entropy init now SUCCEEDS (no devr-virtio / /dev/random failure lines) and the boot gets to
+# "---> Starting Networking" (314 bytes) -- then hangs there instead. The hang moved to the
+# next step that waits on a timeout (io-sock start-up). This is what showed the 6.2 hang is not
+# about entropy at all: entropy was merely the first timeout the boot hit.
+# Ceiling 240 s; process alive throughout (killed by the probe).
+# QEMU args (identical to scripts/launch-qhv-tcg.ps1 / scripts/orin/launch-qhv-on-orin-tcg.sh
+# at the time): -machine virt,virtualization=on,gic-version=3 -cpu max -accel tcg -smp 2 -m 2G
+#   -drive file=disk-qemu,if=none,id=drv0,format=raw -device virtio-blk-device,drive=drv0
+#   [-netdev user,id=n0 -device virtio-net-device,netdev=n0 -object rng-builtin,id=rng0
+#    -device virtio-rng-device,rng=rng0]   <- only where the header says rng=slot3
+#   -kernel ifs.bin -serial file:<log> -display none -no-reboot
+# Images: ifs.bin b2d875057f25a4cbda69966e553629d445cfa44af62cf4c5e121442c9782300a,
+#         disk-qemu c71b9499353ca4b1d2c4bffbdebbc509bb12492d86cfb6e07e22d79451b7cdfe
+#         (SHA-256 at copy time, verified on the Orin with sha256sum -c; NOTE the raw disk
+#          mutates on every boot without -snapshot, which these runs did not use).
+# Host: Jetson Orin Nano, L4T 5.15.148-tegra, Cortex-A78AE (CPU part 0xd42), 6 cores, 8 GB.
+# ---------------------------------------------------------------------------
+
+FOUND GICv3 ITS
+** CPU 0 PE is not awake
+** CPU 1 PE is not awake
+---> Starting slogger2
+---> Starting PCI Services
+---> Starting fsevmgr
+# ---> Starting devb
+---> Mounting file systems
+Path=0 - 
+ target=0 lun=0     Direct-Access(0) - VIRTIO  Rev: 
+---> Mounting file systems
+---> Starting Networking

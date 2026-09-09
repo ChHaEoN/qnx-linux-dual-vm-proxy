@@ -1,0 +1,43 @@
+# Curated artefact -- Phase 4, QHV twin leg, first execution on the Orin (2026-09-08).
+# RESULT: HANG. QEMU 6.2.0 (Ubuntu 22.04 stock), virtio-blk only. The QHV host boots through
+# GICv3 ITS, slogger2, PCI, devb-virtio, file-system mount, then stops after
+# "random: Could not initialize entropy. [random.c(406)]". Serial log is 419 bytes at 300 s,
+# 600 s and after 12 min (three separate runs) -- a deterministic hang, not slowness.
+# The line that never arrives is "Unable to access /dev/random", the 5-second timeout message
+# of the "waitfor /dev/random" that follows "random ..." in the image's startup.sh (line 40).
+# CAUSE (2026-09-09, see docs/findings.md): a QEMU 6.2 defect in EL2/VHE timer emulation, not
+# the host. Evidence: with the rng correctly presented the hang moves to the NEXT timeout-wait
+# (io-sock start); the same image under QEMU 11.1.0 boots to the guest banner on this same
+# board with and without rng (q111-* logs); upstream history between 6.2 and 11.1 contains
+# both "hw/arm/virt: Wire up non-secure EL2 virtual timer IRQ" (1ec896fe7c, QEMU 9.0) and
+# "target/arm: Don't apply CNTVOFF_EL2 for EL2_VIRT timer" (033367d0af, QEMU 10.0). Which of
+# them is decisive was NOT bisected: on QEMU 11 the versioned "-machine virt-8.2" (which keeps
+# the old board wiring) still boots, so the board wiring alone does not reproduce the hang --
+# the target/arm side is at least necessary. NOT a host finding: the same image on the Windows
+# host ran QEMU 11.0.50 and passed.
+# QEMU args (identical to scripts/launch-qhv-tcg.ps1 / scripts/orin/launch-qhv-on-orin-tcg.sh
+# at the time): -machine virt,virtualization=on,gic-version=3 -cpu max -accel tcg -smp 2 -m 2G
+#   -drive file=disk-qemu,if=none,id=drv0,format=raw -device virtio-blk-device,drive=drv0
+#   [-netdev user,id=n0 -device virtio-net-device,netdev=n0 -object rng-builtin,id=rng0
+#    -device virtio-rng-device,rng=rng0]   <- only where the header says rng=slot3
+#   -kernel ifs.bin -serial file:<log> -display none -no-reboot
+# Images: ifs.bin b2d875057f25a4cbda69966e553629d445cfa44af62cf4c5e121442c9782300a,
+#         disk-qemu c71b9499353ca4b1d2c4bffbdebbc509bb12492d86cfb6e07e22d79451b7cdfe
+#         (SHA-256 at copy time, verified on the Orin with sha256sum -c; NOTE the raw disk
+#          mutates on every boot without -snapshot, which these runs did not use).
+# Host: Jetson Orin Nano, L4T 5.15.148-tegra, Cortex-A78AE (CPU part 0xd42), 6 cores, 8 GB.
+# ---------------------------------------------------------------------------
+
+FOUND GICv3 ITS
+** CPU 0 PE is not awake
+** CPU 1 PE is not awake
+---> Starting slogger2
+---> Starting PCI Services
+---> Starting fsevmgr
+# ---> Starting devb
+Path=0 - 
+ target=0 lun=0     Direct-Access(0) - VIRTIO  Rev: 
+---> Mounting file systems
+---> Mounting file systems
+random: Unable to use devr-virtio.so as an entropy source [entropy.c(173)]
+random: Could not initialize entropy. [random.c(406)]

@@ -77,7 +77,7 @@ the host IFS (built by `mkqnximage --type=qemu`) was provisioned to discover.
 | The launch line presents only `virtio-blk` — no NIC, no RNG | [EMPIRICAL] | `scripts/launch-qhv-tcg.ps1:38-45` (no `-netdev`/`virtio-net-device`/`virtio-rng`) |
 | The host IFS starts `io-sock … -m fdt -d vtnet_mmio`, expecting a virtio-net MMIO NIC discovered via FDT; driver `devs-vtnet_mmio.so` **is present** | [EMPIRICAL] | `…/mkqnximage/inputs/startup.sh:106-108`; `…/snippets/definitions.type_qemu`; driver at `target/qnx/aarch64le/lib/dll/` |
 | No virtio-net node in QEMU's FDT → io-sock comes up but finds no interface → the exact logged symptoms | [EMPIRICAL] | symptom-cause match |
-| Entropy is a **parallel, independent** failure: `startup.sh:92` runs `random … -l devr-virtio.so:mem=0xa003a00` (a virtio-entropy device at fixed MMIO); the launch presents none → `/dev/random` never appears. **io-sock does NOT depend on the PRNG** — both are the same "missing virtio device" class | [EMPIRICAL] | `startup.sh:92`; `qemu/opt_scripts/qemu:35` |
+| Entropy is a **parallel, independent** failure: `startup.sh:92` runs `random … -l devr-virtio.so:mem=0xa003a00` (a virtio-entropy device at fixed MMIO); the launch presents none → `/dev/random` never appears. **io-sock does NOT depend on the PRNG** (*superseded 2026-07-28: measured on the Orin, `io-sock` hard-requires `/dev/random` — see findings.md "Orin TCG networking root-caused and fixed"*) — both are the same "missing virtio device" class | [EMPIRICAL] | `startup.sh:92`; `qemu/opt_scripts/qemu:35` |
 
 **Concrete fix:** add `-netdev user,id=n0 -device virtio-net-device,netdev=n0`
 and a virtio-rng/virtio-entropy device (at the expected MMIO `loc`) to the

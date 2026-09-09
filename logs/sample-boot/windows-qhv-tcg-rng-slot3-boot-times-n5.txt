@@ -1,0 +1,17 @@
+# Phase 4 -- QHV twin leg, Windows half, n=5, WITH the rng device in slot 3 (2026-09-09).
+# Supersedes windows-qhv-tcg-boot-times-n5.txt (blk-only, median 49,165 ms) as the Windows
+# baseline: that series contains ~19-20 s of entropy-timeout artefact per run. NOTE the QEMU
+# is still the 11.0.50 fork build and the disk was NOT run with -snapshot; both launchers now
+# stamp those, and the aligned comparison (both hosts on one release, -snapshot, rng=slot3)
+# is still to be produced. Comparable only against a file whose qemu:/devices:/disk: lines match.
+#
+# host: Windows 10.0.26200.0 AMD64 / AMD Ryzen 7 9700X 8-Core Processor             
+# qemu: QEMU emulator version 11.0.50 (v11.0.0-12631-g54e84cdc7a)
+# devices: virtio-blk + virtio-net(slirp) + virtio-rng(builtin)
+# marker: launch -> guest banner (QNX qnx-guest ... ARMv8_Foundation_Model)
+# NOTE: only comparable against a run whose 'qemu:' AND 'devices:' lines both match.
+run 1: 28951 ms
+run 2: 29352 ms
+run 3: 29324 ms
+run 4: 29311 ms
+run 5: 29333 ms

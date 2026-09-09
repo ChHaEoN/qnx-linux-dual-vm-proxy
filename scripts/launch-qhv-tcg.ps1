@@ -40,7 +40,8 @@ param(
   [int]$CaptureSeconds = 185,
   [string]$LogPath,
   [int]$Runs = 1,
-  [switch]$StopOnGuestBanner
+  [switch]$StopOnGuestBanner,
+  [switch]$WithRng
 )
 
 $ErrorActionPreference = 'Stop'
@@ -100,8 +101,10 @@ if ($StopOnGuestBanner) {
   $provenance = @(
     "# host: Windows $([System.Environment]::OSVersion.Version) $env:PROCESSOR_ARCHITECTURE / $cpuName",
     "# qemu: $qemuVer",
+    ("# devices: " + $(if ($WithRng) { "virtio-blk + virtio-net(slirp) + virtio-rng(builtin)" } else { "virtio-blk only (NO rng: entropy init fails and times out, ~+19 s)" })),
+    "# disk: -snapshot (guest writes discarded; every run boots the copy-time bytes, so SHA256SUMS keeps holding)",
     "# marker: launch -> guest banner (QNX qnx-guest ... ARMv8_Foundation_Model)",
-    "# NOTE: only comparable against a run whose 'qemu:' line matches."
+    "# NOTE: only comparable against a run whose 'qemu:' AND 'devices:' lines both match."
   )
   Set-Content -Path $summaryPath -Value $provenance -Encoding utf8
   Write-Host "qemu: $qemuVer"
@@ -116,11 +119,24 @@ for ($run = 1; $run -le $Runs; $run++) {
     $runLog = $LogPath
   }
 
+  # -WithRng: virtio-net (slot filler, user-mode slirp) + virtio-rng in the
+  # slot order mkqnximage's runimage assembles and the image's startup.sh
+  # binds (rng = slot 3, mem=0xa003a00). Presenting it moved the guest-banner
+  # time from ~49.2 s to 29.7 s on this host (2026-09-09): the entropy-less
+  # boot spends ~19 s timing out. Runs with and without it are not
+  # comparable, so the device set is stamped into the times file.
+  $rngArgs = @()
+  if ($WithRng) {
+    $rngArgs = @('-netdev','user,id=n0','-device','virtio-net-device,netdev=n0',
+                 '-object','rng-builtin,id=rng0','-device','virtio-rng-device,rng=rng0')
+  }
   $qargs = @(
     '-machine','virt,virtualization=on,gic-version=3',  # virtualization=on => emulated EL2 for QHV
     '-cpu','max','-accel','tcg','-smp','2','-m','2G',
+    '-snapshot',   # the raw disk mutates on every boot otherwise (rnd-seed, keys, logs); see the Orin launcher
     '-drive',"file=$diskF,if=none,id=drv0,format=raw",
-    '-device','virtio-blk-device,drive=drv0',
+    '-device','virtio-blk-device,drive=drv0'
+  ) + $rngArgs + @(
     '-kernel',$ifsF,
     '-serial',"file:$($runLog -replace '\\','/')",'-display','none','-no-reboot'
   )

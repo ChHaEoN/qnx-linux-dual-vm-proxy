@@ -56,7 +56,8 @@ filesystem, with no path back to this checkout).
 Two distinct QNX banners in the log — the partition boundary is real:
 
 ```
-QNX qnx-qhv   8.0.0 ... QEMU_virt              aarch64le   <- QHV host
+(no host banner is printed — look for "=== AUTO-START QNX GUEST UNDER QVM"
+ and "=== launching qvm @g2.conf" instead)                <- QHV host
 QNX qnx-guest 8.0.0 ... ARMv8_Foundation_Model aarch64le   <- guest under qvm
 ```
 

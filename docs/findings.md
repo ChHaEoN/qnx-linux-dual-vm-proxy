@@ -8,7 +8,116 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 
 ---
 
-## 2026-09-08 — QHV leg made host-portable: the twin gets a clean host-only comparison on the *hypervisor* topology (Windows half measured; Orin half blocked on hardware)
+## 2026-09-09 — QHV leg on the Orin: the hang was QEMU 6.2, not the host; the leg now boots on real ARM silicon — and a review found what the previous day's write-up got wrong
+
+Two threads, kept together because the second corrects the first. An
+adversarial review of the repo (map + consistency audit + eight refutation
+attempts, two lenses per claim) was run against the previous day's path, and
+the experiments it demanded were then executed. This entry supersedes the
+"Orin half blocked on hardware" ending of the entry below and the
+"cause not yet established" state of §1a in
+[digital-twin-design.md](digital-twin-design.md).
+
+**What actually happened on the Orin (2026-09-08 evening).** The board came
+back, dropped off the network entirely mid-transfer (no ping, no SSH on the
+/24; power-cycled; journald here is volatile so the cause is unrecorded), the
+transfer was made resumable and completed with `sha256sum -c` passing, and
+the leg was run. The QHV host booted — GICv3 ITS, slogger2, PCI, devb-virtio,
+file systems — and stopped after `random: Could not initialize entropy.
+[random.c(406)]`. **419 bytes at 300 s, 600 s and after 12 minutes**, process
+alive: a hang. Curated:
+[orin-qhv-tcg-q62-hang-blk-only.log](../logs/sample-boot/orin-qhv-tcg-q62-hang-blk-only.log).
+
+**What the review found wrong, in order of consequence:**
+
+1. *"Entropy starvation ruled out"* — **false.** The rng device had been
+   added as the second `-device`; the image probes it at the third slot
+   (`0xa003a00`, the 2026-07-28 finding below), and the test's own log still
+   said `Unable to use devr-virtio.so`. Kept as
+   [orin-qhv-tcg-q62-INVALID-rng-in-slot2.log](../logs/sample-boot/orin-qhv-tcg-q62-INVALID-rng-in-slot2.log).
+2. *"A genuine one-variable comparison"* — **overclaimed.** The QEMU binary
+   was never controlled (Windows 11.0.50 fork build vs. Orin stock 6.2.0),
+   and even at equal release the build (compiler, flags, libraries) and the
+   TCG backend (`tcg/i386` vs. `tcg/aarch64`) travel with the host. §1a now
+   defines "host" as that bundle and stamps every controllable part.
+3. *"QEMU 6.2's EL2 emulation is insufficient for QHV"* — **wrong mechanism.**
+   The QHV host *is* the EL2 kernel and it boots eight-odd userspace
+   services under 6.2 before stalling. What never arrives is `waitfor
+   /dev/random`'s 5-second timeout message. The refined hypothesis —
+   timeouts at EL2/VHE never fire — was then confirmed (below).
+4. The authoritative log (this file) and CLAUDE.md still said the Orin half
+   had never been run; §1a contradicted itself between adjacent paragraphs;
+   the June curated log's header, `scripts/qhv/README.md` and §1a all told
+   the reader to look for a **host banner that does not exist**; AGENTS.md
+   still said "KVM enabled on A78AE; QEMU runs the QNX guest on bare arm64
+   silicon". All corrected in this commit.
+5. `disk-qemu` is a writable raw disk booted without `-snapshot`: it mutates
+   on every run (rnd-seed, keys, logs), so `sha256sum -c` fails after the
+   first boot and "byte-identical" held only at copy time. Both launchers
+   now pass `-snapshot` and stamp it. Also found: the shipped `disk-qemu`
+   carries the RQ-2 diagnostic `post_startup.sh` (`vdev shmem`,
+   `hyp-shm-roundtrip` hook) that the committed `scripts/qhv/post_start.custom`
+   does not — the 2026-07-28 claim that the build trees were regenerated
+   from clean sources does not hold for the disk. Both hosts boot the same
+   bytes, so the twin diff is unaffected; **the measured image is not yet
+   reproducible from the repo**, and regenerating it will change every
+   number, so that is a deliberate later step, not a quiet one.
+
+**Experiments the review demanded, and their results:**
+
+- Windows, rng correctly in slot 3 (`-netdev user,id=n0 -device
+  virtio-net-device,netdev=n0 -object rng-builtin,id=rng0 -device
+  virtio-rng-device,rng=rng0`): entropy init succeeds and launch → guest
+  banner drops from ~49.2 s to **29.3 s** (n=5: 28,951 / 29,352 / 29,324 /
+  29,311 / 29,333 ms; median 29,324, spread 401). The earlier Windows n=5
+  therefore contained ~19–20 s of entropy-timeout artefact per run.
+  [windows-qhv-tcg-rng-slot3-boot-times-n5.txt](../logs/sample-boot/windows-qhv-tcg-rng-slot3-boot-times-n5.txt).
+- Orin, QEMU 6.2 + rng in slot 3: entropy succeeds, hang **moves** to
+  `---> Starting Networking` (314 bytes at 240 s). Not entropy.
+  [orin-qhv-tcg-q62-hang-rng-slot3.log](../logs/sample-boot/orin-qhv-tcg-q62-hang-rng-slot3.log).
+- Orin, **QEMU v11.1.0 built from source** (`build-qemu-on-orin.sh`; ~9 min
+  at `-j4`; needed `python3-venv` and `python3-tomli` on Ubuntu 22.04 beyond
+  the obvious): **guest banner at ~78 s without rng, ~63 s with** — the
+  hypervisor and its guest on real ARM silicon for the first time.
+  [orin-qhv-tcg-q111-boot-blk-only.log](../logs/sample-boot/orin-qhv-tcg-q111-boot-blk-only.log),
+  [orin-qhv-tcg-q111-boot-rng-slot3.log](../logs/sample-boot/orin-qhv-tcg-q111-boot-rng-slot3.log).
+- Cause, from upstream history: `v6.2.0`'s `hw/arm/virt.c` has **no
+  `GTIMER_HYPVIRT` wiring** — the NS EL2 virtual-timer IRQ was connected in
+  QEMU 9.0 (`1ec896fe7c`); `target/arm` gained `5709038aa8` "Don't apply
+  CNTVOFF_EL2 for EL2_VIRT timer" in 10.0. A VHE hypervisor's `CNTV_*` is
+  `CNTHV_*`. Not bisected: a `-machine virt-8.2` run on QEMU 11 still boots,
+  but that compat flag only hides the IRQ from the device tree (per the
+  source comment, for an old EDK2 bug) and leaves the wiring — so it was not
+  a valid discriminator. Distinguishing 9.0's from 10.0's fix would need
+  those builds; not needed here.
+
+**State of the leg now.** Orin column: obtainable, with the stamped
+instrument (`WITH_RNG=1 QEMU_BIN=~/qemu-v11.1.0/bin/qemu-system-aarch64
+./launch-qhv-on-orin-tcg.sh 5`, `-snapshot` default). Windows column: needs
+re-measuring under the same three stamps, and the Windows QEMU is still the
+11.0.50 fork build — moving it to the official 11.1.0 release is the
+remaining alignment, with the honest caveat that "same release" is not "same
+build". Image pair at re-sync (copy-time SHA-256, before any `-snapshot`-less
+boot):
+
+```
+b2d875057f25a4cbda69966e553629d445cfa44af62cf4c5e121442c9782300a ifs.bin
+95849168b06e3c5d8e744db8bb8fdf39efd01d77f1b60d33060650292d7192a3 disk-qemu
+```
+
+**Tooling lessons, because they cost real time:** `pgrep -f`/`pkill -f`
+match the calling shell's own command line when the pattern appears in it
+(three separate self-matches: a "still running" false positive that hid a
+failed build for 13 minutes, a `pkill` that killed its own ssh session, and
+one false negative from `pgrep`'s 15-character `comm` truncation that hid a
+QEMU orphan holding the disk lock). Use `pgrep -f '[b]uild-…'` and check for
+side effects (files, exit-code sentinels) rather than process tables. The
+Bash-tool heredoc also mangles backslashes even with a quoted delimiter —
+scripts with line continuations were written via the file tool instead.
+
+---
+
+## 2026-09-08 — QHV leg made host-portable: the twin gets a comparison on the *hypervisor* topology (Windows half measured; Orin half blocked on hardware — **superseded by the 2026-09-09 entry above**)
 
 An architecture pass, not a feature. Reviewing
 [digital-twin-design.md](digital-twin-design.md) §1 against what the repo

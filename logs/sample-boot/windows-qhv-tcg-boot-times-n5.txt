@@ -12,9 +12,11 @@
 #
 # Orin counterpart: NOT YET VALID (2026-09-08 attempt hung; QEMU mismatch):
 #   scripts/orin/launch-qhv-on-orin-tcg.sh 5
-# Same images (SHA256-verified), same qvm config, same QEMU args, same
-# accelerator; only the host differs. Do not present this as a twin diff
-# until the Orin column exists.
+# Same images (SHA256-verified at copy time), same qvm config, same QEMU
+# ARGUMENT LIST, same accelerator -- but NOT the same QEMU binary, device set
+# or disk mode (no rng: ~19 s timeout artefact per run; no -snapshot). This
+# series is superseded by windows-qhv-tcg-rng-slot3-boot-times-n5.txt and is
+# not comparable to any Orin run. Kept as the first instrumented record.
 
 run 1: 49080 ms
 run 2: 49165 ms

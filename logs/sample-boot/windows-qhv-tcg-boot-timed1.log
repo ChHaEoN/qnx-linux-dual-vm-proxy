@@ -1,4 +1,9 @@
 # Curated artefact — Phase 4, QHV twin leg, Windows half.
+# qemu: 11.0.50 (v11.0.0-12631-g54e84cdc7a, fork build); devices: virtio-blk only
+# (no rng: ~19 s of entropy-timeout artefact per run); disk: no -snapshot.
+# Superseded as the Windows baseline by windows-qhv-tcg-rng-slot3-boot-times-n5.txt;
+# kept as the record of the first instrumented series. "Identical invocation"
+# below is true of the argument list only — see docs/digital-twin-design.md §1a.
 #
 # Run 1 of a 5-run timed series produced by:
 #     scripts\launch-qhv-tcg.ps1 -Runs 5 -StopOnGuestBanner -CaptureSeconds 280

@@ -57,7 +57,7 @@ the NVIDIA AVOS / DRIVE OS SE role this portfolio targets.
   `io-sock` down).
 - IPC (cloud leg): QNX-host (`qnx-qhv`) ↔ QNX-guest (`qnx-guest`) over the `qvm`
   `virtio-console` vdev — crosses the real EL2/EL1 partition boundary, TCG-emulated,
-  **no** `br0`/tap (host `io-sock` is down). See [ADR-002](docs/phase2-topology-decision.md).
+  **no** `br0`/tap (host `io-sock` never comes up because the launch line presents no virtio-net/-rng device — a launch-line omission per ADR-002 RQ-4, not an image property; with the devices presented it does). See [ADR-002](docs/phase2-topology-decision.md).
 - IPC (Phase 3 / Orin leg): heterogeneous QNX↔Linux over host bridge `br0` + tap
   devices (`tap-qnx` / `tap-linux`) + virtio-net under KVM — this bridged path
   belongs to Orin, **not** the cloud leg.
@@ -317,11 +317,20 @@ Quick summary for context:
   gives a genuine one-variable comparison on the **hypervisor**
   topology rather than on plain boot time — see
   [docs/digital-twin-design.md](docs/digital-twin-design.md) §1a.
-  Windows half measured (n=5, median 49,165 ms, 220 ms spread, all
-  markers clean); **Orin half not run — the board was unreachable**, so
-  this is an instrument plus one column, *not* a diff. Note the TCG
-  here is a hard requirement (QHV needs EL2 → nested virt, which ARM
-  KVM lacks on A78AE), not the GICv3 blockage — do not conflate them.
+  **2026-09-09:** the Orin half was run and first hung under the distro
+  QEMU 6.2.0 (a QEMU-side EL2/VHE timer defect, root-caused — not the
+  host); with QEMU v11.1.0 built from source on the board
+  (`scripts/orin/build-qemu-on-orin.sh`) **the QHV host and its guest boot
+  on real ARM silicon**. A review the same day found the leg's "one
+  variable" claim overclaimed and an entropy test invalid; §1a now defines
+  "host" as a bundle (CPU, OS, TCG backend, QEMU build) and both
+  instruments stamp QEMU binary, device set (`WITH_RNG`/`-WithRng`: the
+  rng in slot 3 removes ~19 s of timeout artefact) and `-snapshot`.
+  Windows with rng: n=5 median 29,324 ms (QEMU 11.0.50 fork build). The
+  aligned n=5 pair (both hosts, one QEMU release, rng, `-snapshot`) is
+  the next deliverable. TCG here is a hard requirement (QHV needs EL2 →
+  nested virt, which ARM KVM lacks on A78AE), not the GICv3 blockage —
+  do not conflate them.
 - Phase 5 — FuSa & Cybersecurity overlay — not started (Phase-1-gate
   FuSa/Cyber review already happened as a cross-cutting check per the
   coordination rules above, but the dedicated Phase-5 overlay pass has not)
@@ -344,13 +353,20 @@ Quick summary for context:
    `qemu-virt` board source, which the BSP does not ship. The
    cross-vendor `a1.metal` reproduction remains the other half of the
    evidence.
-   (A from-source newer QEMU remains untried and is still assessed as
-   unlikely to help: this is the KVM backend's deliberate by-design
-   behaviour, not a version bug.)
-3. Finish the QHV twin diff: power on the Orin, then
-   `ORIN_HOST=user@ip ./scripts/twin/sync-qhv.sh` followed by
-   `./launch-qhv-on-orin-tcg.sh 5` there. Two commands; the Windows
-   column and both instruments already exist.
+   (A from-source QEMU v11.1.0 with `--enable-kvm` now exists on the Orin
+   for the unrelated TCG/EL2-timer reason; re-running the `qnx-safety-vm`
+   IFS under `-enable-kvm` with it is a near-zero-cost check, still
+   assessed as unlikely to help — NISV is the KVM backend's deliberate
+   behaviour, not a version bug — but no longer untried for want of a
+   binary.)
+3. Finish the QHV twin diff, now that the Orin boots it: on the Orin
+   `WITH_RNG=1 ./launch-qhv-on-orin-tcg.sh 5` (picks `~/qemu-v11.1.0`,
+   stamps everything); on Windows install the official QEMU 11.1.0 (user
+   decision — it is still a different *build* of the same release) and run
+   `launch-qhv-tcg.ps1 -Runs 5 -StopOnGuestBanner -WithRng`; then
+   `diff-results.sh` on two files whose `qemu:`/`devices:`/`disk:` stamps
+   match. Regenerating the QHV images from clean sources (the shipped disk
+   is the RQ-2 diagnostic variant) is a separate, number-changing step.
 4. Write `docs/drive-os-comparison.md`'s dimension-by-dimension
    verdicts now that Phase 2/3/4 have real numbers to cite instead of
    projections. **This is the largest remaining gap in the public

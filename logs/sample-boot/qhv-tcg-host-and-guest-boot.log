@@ -14,8 +14,11 @@
 # and runs `qvm @g2.conf`. Networking was dropped because the host io-sock stack
 # does not initialise on this qemu-virt build (see the "network stack down" lines).
 #
-# LOAD-BEARING EVIDENCE — two distinct QNX instances with different machines:
-#   HOST  banner: "QNX qnx-qhv   8.0.0 ... QEMU_virt              aarch64le"
+# LOAD-BEARING EVIDENCE — two distinct QNX instances with different machines.
+#   CORRECTION (2026-09-08/09): the HOST prints NO banner; an earlier version of
+#   this header said to look for "QNX qnx-qhv ... QEMU_virt" and no such line
+#   exists in the body below. The host is evidenced by "=== AUTO-START QNX
+#   GUEST UNDER QVM" (it reached post_start) and "=== launching qvm @g2.conf".
 #   GUEST banner: "QNX qnx-guest 8.0.0 ... ARMv8_Foundation_Model aarch64le"
 # The guest sees ARMv8_Foundation_Model — the virtual platform QHV synthesises —
 # NOT the underlying QEMU_virt machine. That is the Type-1 partition boundary.

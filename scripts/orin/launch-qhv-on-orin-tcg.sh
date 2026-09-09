@@ -60,6 +60,25 @@ runs="${1:-1}"
 capture="${2:-240}"
 prefix="${3:-qhv-orin-boot}"
 
+# WITH_RNG=1 presents the virtio-net + virtio-rng devices in the virtio-mmio
+# slot order mkqnximage's own runimage assembles (disk, net, ..., rng — see
+# $QNX_HOST/common/mkqnximage/qemu/runimage line 55) and the host image's
+# startup.sh binds ("random ... devr-virtio.so:mem=0xa003a00" is slot 3).
+# The net device is a slot filler; user-mode slirp, no host bridge.
+#
+# This is not cosmetic. On 2026-09-09 presenting the rng device moved the
+# Windows launch->guest-banner time from ~49.2 s to 29.7 s — the 19 s the
+# entropy-less boot spends timing out is 40% of the measurement. A run
+# without it and a run with it are NOT comparable, which is why the device
+# set is stamped into the times file below alongside the QEMU version.
+# rng-builtin, not rng-random, so the identical line works on Windows.
+with_rng="${WITH_RNG:-0}"
+rng_args=()
+if [[ "${with_rng}" == "1" ]]; then
+  rng_args=(-netdev user,id=n0 -device virtio-net-device,netdev=n0
+            -object rng-builtin,id=rng0 -device virtio-rng-device,rng=rng0)
+fi
+
 ifs="ifs.bin"
 disk="disk-qemu"
 
@@ -97,13 +116,30 @@ if [[ ! -f "SHA256SUMS" ]]; then
   echo "         images; an unverified copy makes the diff meaningless." >&2
 fi
 
-if ! command -v qemu-system-aarch64 >/dev/null 2>&1; then
-  echo "ERROR: qemu-system-aarch64 not found. sudo apt-get install qemu-system-arm" >&2
+# WHICH QEMU. The 2026-09-08 confound came from this script silently picking
+# up /usr/bin's distro 6.2.0 while the Windows side ran 11.x -- and 6.2's virt
+# board does not wire the EL2 virtual-timer IRQ at all (added in QEMU 9.0,
+# commit 1ec896fe7c), so a VHE hypervisor host hangs at its first timeout.
+# Selection is therefore explicit and stamped: QEMU_BIN wins; otherwise the
+# from-source build produced by build-qemu-on-orin.sh if present; otherwise
+# PATH, loudly.
+qemu_bin="${QEMU_BIN:-}"
+if [[ -z "${qemu_bin}" ]]; then
+  if [[ -x "${HOME}/qemu-v11.1.0/bin/qemu-system-aarch64" ]]; then
+    qemu_bin="${HOME}/qemu-v11.1.0/bin/qemu-system-aarch64"
+  else
+    qemu_bin="$(command -v qemu-system-aarch64 || true)"
+    echo "WARNING: no from-source QEMU under ~/qemu-v11.1.0; using PATH's ${qemu_bin:-(none)}." >&2
+    echo "         If that is the distro 6.2.0 the QHV host will hang -- see build-qemu-on-orin.sh." >&2
+  fi
+fi
+if [[ -z "${qemu_bin}" || ! -x "${qemu_bin}" ]]; then
+  echo "ERROR: no usable qemu-system-aarch64 (QEMU_BIN='${QEMU_BIN:-}')." >&2
   exit 1
 fi
 
 echo "Host kernel: $(uname -r)  /  CPU part: $(awk '/CPU part/{print $4; exit}' /proc/cpuinfo)"
-echo "QEMU: $(qemu-system-aarch64 --version | head -1)"
+echo "QEMU: ${qemu_bin} -> $("${qemu_bin}" --version | head -1)"
 echo
 
 summary="${prefix}-times.txt"
@@ -114,9 +150,11 @@ summary="${prefix}-times.txt"
 # that at a glance without re-deriving it.
 {
   echo "# host: $(uname -srm) / $(awk -F: '/model name/{print $2; exit}' /proc/cpuinfo 2>/dev/null | sed 's/^ *//')"
-  echo "# qemu: $(qemu-system-aarch64 --version | head -1)"
+  echo "# qemu: $("${qemu_bin}" --version | head -1)  [${qemu_bin}]"
+  echo "# disk: -snapshot (guest writes discarded; every run boots the copy-time bytes, so SHA256SUMS keeps holding)"
+  echo "# devices: virtio-blk$([[ "${with_rng}" == "1" ]] && echo " + virtio-net(slirp) + virtio-rng(builtin)" || echo " only (NO rng: entropy init fails and times out, ~+19 s)")"
   echo "# marker: launch -> guest banner (QNX qnx-guest ... ARMv8_Foundation_Model)"
-  echo "# NOTE: only comparable against a run whose 'qemu:' line matches."
+  echo "# NOTE: only comparable against a run whose 'qemu:' AND 'devices:' lines both match."
 } > "${summary}"
 failures=0
 
@@ -125,14 +163,16 @@ for ((run = 1; run <= runs; run++)); do
   rm -f "${log}"
 
   start_ns=$(date +%s%N)
-  qemu-system-aarch64 \
+  "${qemu_bin}" \
     -machine virt,virtualization=on,gic-version=3 \
     -cpu max \
     -accel tcg \
     -smp 2 \
     -m 2G \
+    -snapshot \
     -drive file="${disk}",if=none,id=drv0,format=raw \
     -device virtio-blk-device,drive=drv0 \
+    "${rng_args[@]}" \
     -kernel "${ifs}" \
     -serial "file:${log}" \
     -display none \

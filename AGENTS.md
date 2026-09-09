@@ -43,7 +43,10 @@ the NVIDIA AVOS / DRIVE OS SE role this portfolio targets.
 **Hardware twin (Orin Nano):**
 - Jetson Orin Nano Dev Kit ($499) — Ampere GPU, 6× Cortex-A78AE, 8 GB RAM
 - Host OS: NVIDIA L4T (JetPack 6, Ubuntu 22.04 base) — also plays the "Compute partition" role
-- KVM enabled on A78AE; QEMU runs the QNX guest on bare arm64 silicon
+- `/dev/kvm` is present on A78AE, but KVM boot of the QNX IFS hangs on the
+  GICv3/NISV defect (`docs/orin-port.md`); QEMU runs the guest under **TCG**
+  on this board — for the QHV leg TCG is a hard requirement anyway (nested
+  virt), and it needs QEMU ≥ 9.0 there (EL2 virtual-timer IRQ; 6.2 hangs)
 
 **Common across both twins:**
 - VM0 — Safety proxy: QNX SDP 8.0, aarch64 `virt` machine, NCEULA (Everywhere)
@@ -53,7 +56,7 @@ the NVIDIA AVOS / DRIVE OS SE role this portfolio targets.
   `io-sock` down).
 - IPC (cloud leg): QNX-host (`qnx-qhv`) ↔ QNX-guest (`qnx-guest`) over the `qvm`
   `virtio-console` vdev — crosses the real EL2/EL1 partition boundary, TCG-emulated,
-  **no** `br0`/tap (host `io-sock` is down). See [ADR-002](docs/phase2-topology-decision.md).
+  **no** `br0`/tap (host `io-sock` never comes up because the launch line presents no virtio-net/-rng device — a launch-line omission per ADR-002 RQ-4, not an image property; with the devices presented it does). See [ADR-002](docs/phase2-topology-decision.md).
 - IPC (Phase 3 / Orin leg): heterogeneous QNX↔Linux over host bridge `br0` + tap
   devices (`tap-qnx` / `tap-linux`) + virtio-net under KVM — this bridged path
   belongs to Orin, **not** the cloud leg.
@@ -244,7 +247,13 @@ Quick summary for context:
   transport. Honest caveat: that IPC run used a **rebuilt** IFS, not
   the byte-identical Phase-1 image.
 - Phase 4 — Twin diff + DRIVE OS comparison — **started**: boot-time
-  twin diff done (n=5 per side; Orin +23–25% slower than Windows);
+  twin diff done (n=5 per side; Orin +23–25% slower than Windows). A
+  second leg on the *hypervisor* topology (QHV host + guest, same images
+  on both hosts) now boots on the Orin under a from-source QEMU 11.1.0
+  (the distro 6.2.0 hangs on an EL2/VHE timer defect — QEMU-side, not
+  host). Windows column with rng: median 29,324 ms; the aligned n=5 pair
+  (one QEMU release, rng, `-snapshot`) is the next deliverable — see
+  CLAUDE.md Phase 4 and `docs/digital-twin-design.md` §1a.
   `docs/drive-os-comparison.md` is still untouched.
 - Phase 5 — FuSa & Cybersecurity overlay — not started as a dedicated
   phase (a Phase-1-gate FuSa + Cyber pass did run).

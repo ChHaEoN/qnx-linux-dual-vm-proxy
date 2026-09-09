@@ -66,9 +66,23 @@ echo "source=${src}  build=${build}"
 echo
 
 echo "[1/5] Build dependencies ..."
+# Ubuntu 22.04 needs more here than "python3 is installed" suggests, and each
+# gap only surfaces at configure time, one at a time:
+#   python3-venv   -- Ubuntu splits ensurepip out of python3; without it
+#                     configure dies "Python's ensurepip module is not found /
+#                     ERROR: python venv creation failed".
+#   python3-tomli  -- QEMU's build tooling parses TOML; tomllib is only stdlib
+#                     from Python 3.11 and this board runs 3.10.12, so
+#                     configure dies "found no usable tomli, please install it".
+#                     mkvenv builds a NON-isolated venv, so the apt package is
+#                     visible to it and pip is not required.
+# The rest are listed pre-emptively rather than discovered one failed configure
+# at a time -- two rounds of that was enough.
 sudo -n apt-get install -y -q \
-  git build-essential ninja-build meson pkg-config python3 \
-  libglib2.0-dev libpixman-1-dev zlib1g-dev libslirp-dev >/dev/null
+  git build-essential ninja-build meson pkg-config \
+  python3 python3-venv python3-tomli python3-setuptools python3-pip \
+  flex bison \
+  libglib2.0-dev libpixman-1-dev zlib1g-dev libslirp-dev libfdt-dev >/dev/null
 echo "  ok"
 
 echo "[2/5] Source tree ..."
