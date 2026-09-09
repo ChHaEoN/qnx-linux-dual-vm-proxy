@@ -369,7 +369,15 @@ Quick summary for context:
    CSVs, not boot-time files) after checking their `qemu:`/`devices:`/`disk:`
    stamps match. Regenerating the QHV images from clean sources (the shipped disk
    is the RQ-2 diagnostic variant) is a separate, number-changing step.
-4. Write `docs/drive-os-comparison.md`'s dimension-by-dimension
+4. **Decide ADR-003** ([docs/adr-003-hardware-timed-qhv.md](docs/adr-003-hardware-timed-qhv.md),
+   Status: Proposed): where a hardware-timed QNX Hypervisor number can come
+   from. Research-backed inputs are in; the choice between a Raspberry Pi
+   4B (vendor-documented, Everywhere-licensed, non-VHE), an AWS Graviton
+   metal route (quota + licence gates), and a native Orin port (weeks, no
+   vendor path) is the owner's. Two licence clauses flagged there
+   (NC QDL v7 4.6(c) disassembly, 4.6(i) publishing evaluation results)
+   need an owner decision before more numbers are published.
+5. Write `docs/drive-os-comparison.md`'s dimension-by-dimension
    verdicts now that Phase 2/3/4 have real numbers to cite instead of
    projections. **This is the largest remaining gap in the public
    story** — Phase 4's boot-diff half is done; this half is untouched.
