@@ -179,11 +179,19 @@ for ((run = 1; run <= runs; run++)); do
     -no-reboot &
   qpid=$!
 
-  elapsed_ms=""
+  elapsed_ms=""; t_host=""; t_qvm=""; t_sc=""
   deadline=$(( $(date +%s) + capture ))
   while [[ $(date +%s) -lt ${deadline} ]]; do
+    # Per-marker wall times. The headline number contains fixed waits that are
+    # identical on both hosts (the guest's if_up retries with no net vdev, the
+    # host's waitfor /dev/random without rng), which dilute the host ratio; the
+    # segments let a reader separate compute-bound time from timeouts.
+    now_ms=$(( ( $(date +%s%N) - start_ns ) / 1000000 ))
+    [[ -z "${t_host}" ]] && grep -qF "${marker_host}" "${log}" 2>/dev/null && t_host=${now_ms}
+    [[ -z "${t_qvm}"  ]] && grep -qF "${marker_qvm}"  "${log}" 2>/dev/null && t_qvm=${now_ms}
+    [[ -z "${t_sc}"   ]] && grep -qF "Startup complete" "${log}" 2>/dev/null && t_sc=${now_ms}
     if grep -qF "${marker_guest}" "${log}" 2>/dev/null; then
-      elapsed_ms=$(( ( $(date +%s%N) - start_ns ) / 1000000 ))
+      elapsed_ms=${now_ms}
       break
     fi
     # QEMU died early — stop waiting on a log that will never grow.
@@ -201,6 +209,9 @@ for ((run = 1; run <= runs; run++)); do
 
   if [[ -n "${elapsed_ms}" ]]; then
     echo "run ${run}: ${elapsed_ms} ms" | tee -a "${summary}"
+    ifup=$(grep -c "if_up: tries exhausted" "${log}" 2>/dev/null || true)
+    echo "#   segments run ${run}: host_post_start=${t_host:-?} qvm_launched=${t_qvm:-?} guest_startup_complete=${t_sc:-?} guest_banner=${elapsed_ms} (ms from launch); if_up_exhausted=${ifup}" \
+      | tee -a "${summary}"
   else
     failures=$((failures + 1))
     echo "run ${run}: TIMEOUT after ${capture}s (host=${host_seen} qvm=${qvm_seen} guest=${guest_seen})" \

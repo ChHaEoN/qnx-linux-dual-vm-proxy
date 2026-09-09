@@ -1,0 +1,25 @@
+# Phase 4 -- QHV twin leg, Windows half, n=5, timestamped instrument (2026-09-09).
+# QEMU 11.0.50 (Weilnetz fork build) -- NOT yet the aligned release; rng in slot 3; -snapshot on the
+# 95849168... disk (the same bytes the Orin n=5 booted). Supersedes windows-qhv-tcg-rng-slot3-boot-
+# times-n5.txt (no -snapshot, mutating disk, no segments).
+# The '#   segments' lines give wall time from launch to each marker. qvm_launched -> guest_startup_
+# complete contains the guest's fixed "if_up -p -r 20 vtnet0" retry burn (no net vdev in g2.conf;
+# if_up default is 5 walks, the image asks for 20) -- a wait that is the same on both hosts and
+# therefore dilutes any host ratio computed from the headline number alone.
+#
+# host: Windows 10.0.26200.0 AMD64 / AMD Ryzen 7 9700X 8-Core Processor             
+# qemu: QEMU emulator version 11.0.50 (v11.0.0-12631-g54e84cdc7a)
+# devices: virtio-blk + virtio-net(slirp) + virtio-rng(builtin)
+# disk: -snapshot (guest writes discarded; every run boots the copy-time bytes, so SHA256SUMS keeps holding)
+# marker: launch -> guest banner (QNX qnx-guest ... ARMv8_Foundation_Model)
+# NOTE: only comparable against a run whose 'qemu:' AND 'devices:' lines both match.
+#   segments run 1: host_post_start=6083 qvm_launched=6193 guest_startup_complete=28734 guest_banner=28734 (ms from launch); if_up_exhausted=1
+run 1: 28734 ms
+#   segments run 2: host_post_start=6093 qvm_launched=6203 guest_startup_complete=28723 guest_banner=28723 (ms from launch); if_up_exhausted=1
+run 2: 28723 ms
+#   segments run 3: host_post_start=6118 qvm_launched=6228 guest_startup_complete=28688 guest_banner=28688 (ms from launch); if_up_exhausted=1
+run 3: 28688 ms
+#   segments run 4: host_post_start=6095 qvm_launched=6206 guest_startup_complete=28609 guest_banner=28720 (ms from launch); if_up_exhausted=1
+run 4: 28720 ms
+#   segments run 5: host_post_start=6076 qvm_launched=6185 guest_startup_complete=28692 guest_banner=28692 (ms from launch); if_up_exhausted=1
+run 5: 28692 ms

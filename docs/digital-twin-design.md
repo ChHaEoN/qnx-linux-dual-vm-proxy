@@ -160,8 +160,8 @@ every times file by both instruments (`# qemu:`, `# devices:`, `# disk:`):
   first run and "byte-identical images" holds only at copy time. With it,
   every run boots the copy-time bytes.
 
-**First execution on the Orin: a deterministic hang — root-caused to QEMU
-6.2, not the host (2026-09-08/09).** With the byte-identical images (`sha256sum -c`
+**First execution on the Orin: a deterministic hang — attributed to QEMU
+6.2, not the host; mechanism hypothesised, not verified (2026-09-08/09).** With the byte-identical images (`sha256sum -c`
 verified on arrival) and the identical argument list, the QHV host boots on
 the Orin — `FOUND GICv3 ITS`, slogger2, PCI, `devb`, file systems all come up
 — and then stops dead at:
@@ -210,7 +210,8 @@ that was wrong for a day:
   [orin-qhv-tcg-q111-boot-blk-only.log](../logs/sample-boot/orin-qhv-tcg-q111-boot-blk-only.log),
   [orin-qhv-tcg-q111-boot-rng-slot3.log](../logs/sample-boot/orin-qhv-tcg-q111-boot-rng-slot3.log).
   First time the hypervisor and a guest under it ran on real ARM silicon.
-- **Cause: QEMU 6.2's EL2/VHE timer emulation.** In `v6.2.0`,
+- **Attributed cause — a hypothesis from upstream history, not an
+  observation.** In `v6.2.0`,
   `hw/arm/virt.c` contains no `GTIMER_HYPVIRT` wiring at all — the
   non-secure EL2 *virtual* timer interrupt is simply not connected to the
   GIC; it was added in QEMU 9.0 (`1ec896fe7c`, "hw/arm/virt: Wire up

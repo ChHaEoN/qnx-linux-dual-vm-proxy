@@ -5,15 +5,16 @@
 # 600 s and after 12 min (three separate runs) -- a deterministic hang, not slowness.
 # The line that never arrives is "Unable to access /dev/random", the 5-second timeout message
 # of the "waitfor /dev/random" that follows "random ..." in the image's startup.sh (line 40).
-# CAUSE (2026-09-09, see docs/findings.md): a QEMU 6.2 defect in EL2/VHE timer emulation, not
-# the host. Evidence: with the rng correctly presented the hang moves to the NEXT timeout-wait
-# (io-sock start); the same image under QEMU 11.1.0 boots to the guest banner on this same
-# board with and without rng (q111-* logs); upstream history between 6.2 and 11.1 contains
-# both "hw/arm/virt: Wire up non-secure EL2 virtual timer IRQ" (1ec896fe7c, QEMU 9.0) and
-# "target/arm: Don't apply CNTVOFF_EL2 for EL2_VIRT timer" (033367d0af, QEMU 10.0). Which of
-# them is decisive was NOT bisected: on QEMU 11 the versioned "-machine virt-8.2" (which keeps
-# the old board wiring) still boots, so the board wiring alone does not reproduce the hang --
-# the target/arm side is at least necessary. NOT a host finding: the same image on the Windows
+# ATTRIBUTED CAUSE (2026-09-09, see docs/findings.md): the QEMU 6.2 *version*, not the host.
+# Evidence: with the rng correctly presented the hang moves to the NEXT timeout-wait (io-sock
+# start); the same image under QEMU 11.1.0 boots to the guest banner on this same board with
+# and without rng (q111-* logs). MECHANISM, hypothesised and NOT verified: v6.2.0's
+# hw/arm/virt.c has no NS-EL2 virtual-timer IRQ wiring (added in QEMU 9.0, 1ec896fe7c) and a
+# VHE hypervisor's CNTV_* timers are CNTHV_*; target/arm also gained 5709038aa8 ("Don't apply
+# CNTVOFF_EL2 for EL2_VIRT timer", QEMU 10.0). Not bisected. A "-machine virt-8.2" run on
+# QEMU 11 booting proves nothing either way: that compat flag only hides the IRQ from the
+# device tree and leaves the wiring, so it is not a discriminator. NOT a host finding: the same
+# image on the Windows host ran QEMU 11.0.50 and passed.
 # host ran QEMU 11.0.50 and passed.
 # QEMU args (identical to scripts/launch-qhv-tcg.ps1 / scripts/orin/launch-qhv-on-orin-tcg.sh
 # at the time): -machine virt,virtualization=on,gic-version=3 -cpu max -accel tcg -smp 2 -m 2G

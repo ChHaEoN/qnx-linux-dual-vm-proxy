@@ -318,8 +318,9 @@ Quick summary for context:
   topology rather than on plain boot time — see
   [docs/digital-twin-design.md](docs/digital-twin-design.md) §1a.
   **2026-09-09:** the Orin half was run and first hung under the distro
-  QEMU 6.2.0 (a QEMU-side EL2/VHE timer defect, root-caused — not the
-  host); with QEMU v11.1.0 built from source on the board
+  QEMU 6.2.0 (attributed to a QEMU-side EL2/VHE timer defect — the host is
+  excluded as sufficient cause; the mechanism is hypothesised, not
+  verified); with QEMU v11.1.0 built from source on the board
   (`scripts/orin/build-qemu-on-orin.sh`) **the QHV host and its guest boot
   on real ARM silicon**. A review the same day found the leg's "one
   variable" claim overclaimed and an entropy test invalid; §1a now defines
@@ -364,8 +365,9 @@ Quick summary for context:
    stamps everything); on Windows install the official QEMU 11.1.0 (user
    decision — it is still a different *build* of the same release) and run
    `launch-qhv-tcg.ps1 -Runs 5 -StopOnGuestBanner -WithRng`; then
-   `diff-results.sh` on two files whose `qemu:`/`devices:`/`disk:` stamps
-   match. Regenerating the QHV images from clean sources (the shipped disk
+   compare the two times files directly (`diff-results.sh` parses the IPC
+   CSVs, not boot-time files) after checking their `qemu:`/`devices:`/`disk:`
+   stamps match. Regenerating the QHV images from clean sources (the shipped disk
    is the RQ-2 diagnostic variant) is a separate, number-changing step.
 4. Write `docs/drive-os-comparison.md`'s dimension-by-dimension
    verdicts now that Phase 2/3/4 have real numbers to cite instead of

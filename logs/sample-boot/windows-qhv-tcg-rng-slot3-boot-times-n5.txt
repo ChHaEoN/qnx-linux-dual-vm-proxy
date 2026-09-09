@@ -3,7 +3,10 @@
 # baseline: that series contains ~19-20 s of entropy-timeout artefact per run. NOTE the QEMU
 # is still the 11.0.50 fork build and the disk was NOT run with -snapshot; both launchers now
 # stamp those, and the aligned comparison (both hosts on one release, -snapshot, rng=slot3)
-# is still to be produced. Comparable only against a file whose qemu:/devices:/disk: lines match.
+# is still to be produced. This file carries NO 'disk:' stamp -- it predates the stamp and ran
+# WITHOUT -snapshot on the then-mutating disk (c71b9499...), so by the launchers' own rule it
+# can never be paired with an Orin series; it is superseded by the -snapshot series on the
+# 95849168... disk. Comparable only against a file whose qemu:/devices:/disk: lines match.
 #
 # host: Windows 10.0.26200.0 AMD64 / AMD Ryzen 7 9700X 8-Core Processor             
 # qemu: QEMU emulator version 11.0.50 (v11.0.0-12631-g54e84cdc7a)

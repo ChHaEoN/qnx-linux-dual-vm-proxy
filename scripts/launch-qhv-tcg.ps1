@@ -152,12 +152,19 @@ for ($run = 1; $run -le $Runs; $run++) {
   $sw = [System.Diagnostics.Stopwatch]::StartNew()
   $p  = Start-Process -FilePath $qemu -ArgumentList $qargs -PassThru -NoNewWindow
 
-  $elapsedMs = $null
+  $elapsedMs = $null; $tHost = $null; $tQvm = $null; $tSc = $null
   if ($StopOnGuestBanner) {
     $deadline = (Get-Date).AddSeconds($CaptureSeconds)
     while ((Get-Date) -lt $deadline) {
-      if ((Read-LogSafe $runLog) -match [regex]::Escape($markerGuest)) {
-        $elapsedMs = [int]$sw.Elapsed.TotalMilliseconds
+      # Per-marker wall times -- see the matching comment in the Orin launcher:
+      # fixed timeouts common to both hosts dilute the headline ratio.
+      $txt = Read-LogSafe $runLog
+      $nowMs = [int]$sw.Elapsed.TotalMilliseconds
+      if ($null -eq $tHost -and $txt -match [regex]::Escape($markerHost)) { $tHost = $nowMs }
+      if ($null -eq $tQvm  -and $txt -match [regex]::Escape($markerQvm))  { $tQvm  = $nowMs }
+      if ($null -eq $tSc   -and $txt -match 'Startup complete')           { $tSc   = $nowMs }
+      if ($txt -match [regex]::Escape($markerGuest)) {
+        $elapsedMs = $nowMs
         break
       }
       if ($p.HasExited) { break }   # QEMU died early; the log will never grow
@@ -178,6 +185,10 @@ for ($run = 1; $run -le $Runs; $run++) {
   if ($StopOnGuestBanner) {
     if ($null -ne $elapsedMs) {
       $line = "run ${run}: $elapsedMs ms"
+      $ifup = ([regex]::Matches($logText, 'if_up: tries exhausted')).Count
+      $seg  = "#   segments run ${run}: host_post_start=$(if ($null -ne $tHost) { $tHost } else { '?' }) qvm_launched=$(if ($null -ne $tQvm) { $tQvm } else { '?' }) guest_startup_complete=$(if ($null -ne $tSc) { $tSc } else { '?' }) guest_banner=$elapsedMs (ms from launch); if_up_exhausted=$ifup"
+      Add-Content -Path $summaryPath -Value $seg -Encoding utf8
+      Write-Host $seg
     } else {
       $failures++
       $line = "run ${run}: TIMEOUT after ${CaptureSeconds}s (host=$hostSeen qvm=$qvmSeen guest=$guestSeen)"

@@ -81,7 +81,8 @@ alive: a hang. Curated:
   hypervisor and its guest on real ARM silicon for the first time.
   [orin-qhv-tcg-q111-boot-blk-only.log](../logs/sample-boot/orin-qhv-tcg-q111-boot-blk-only.log),
   [orin-qhv-tcg-q111-boot-rng-slot3.log](../logs/sample-boot/orin-qhv-tcg-q111-boot-rng-slot3.log).
-- Cause, from upstream history: `v6.2.0`'s `hw/arm/virt.c` has **no
+- Attributed cause, hypothesised from upstream history and **not observed**
+  (no register dump, no reverted-wiring build): `v6.2.0`'s `hw/arm/virt.c` has **no
   `GTIMER_HYPVIRT` wiring** — the NS EL2 virtual-timer IRQ was connected in
   QEMU 9.0 (`1ec896fe7c`); `target/arm` gained `5709038aa8` "Don't apply
   CNTVOFF_EL2 for EL2_VIRT timer" in 10.0. A VHE hypervisor's `CNTV_*` is
@@ -97,9 +98,18 @@ stamped; rng in slot 3; `-snapshot`; `sha256sum -c` passed before and after
 the series): **n=5 = 63,676, 63,045, 63,107, 62,007, 62,673 ms, median 63,045, mean 62,901.6, spread 1,669 ms (2.6%)**.
 [orin-qhv-tcg-q111-rng-snapshot-boot-times-n5.txt](../logs/sample-boot/orin-qhv-tcg-q111-rng-snapshot-boot-times-n5.txt),
 [orin-qhv-tcg-q111-rng-snapshot-boot1.log](../logs/sample-boot/orin-qhv-tcg-q111-rng-snapshot-boot1.log).
-Against the closest Windows series (rng in slot 3, median 29,324 ms) that is
-roughly 2.2× — **but that pairing is not yet a twin diff**: the Windows series
-ran on the 11.0.50 fork build without `-snapshot`. Windows column: needs
+Windows re-measured under the same device set and disk mode with the
+timestamped instrument (still the 11.0.50 fork build): **n=5 = 28,734, 28,723, 28,688, 28,720, 28,692 ms, median
+28,720, spread 46 ms** —
+[windows-qhv-tcg-rng-snapshot-segments-boot-times-n5.txt](../logs/sample-boot/windows-qhv-tcg-rng-snapshot-segments-boot-times-n5.txt).
+Headline ratio Orin/Windows ≈ 2.20×. **Read the segments before quoting that
+ratio**: both guests burn a fixed `if_up -p -r 20 vtnet0` retry loop (no net
+vdev in `g2.conf`), which sits inside the `qvm_launched → guest_startup_complete`
+segment on both hosts and is host-independent; the review that demanded the
+timestamps estimated it could halve the apparent ratio. The Orin series above
+predates the segment stamps and should be re-run with them before the
+segments are compared. **Still not a twin diff**: the Windows QEMU is a
+different build of a different (dev) version. Windows column: needs
 re-measuring under the same three stamps, and moving its QEMU to the
 official 11.1.0 release is the remaining alignment, with the honest caveat
 that "same release" is not "same build". Image pair at re-sync (copy-time SHA-256, before any `-snapshot`-less

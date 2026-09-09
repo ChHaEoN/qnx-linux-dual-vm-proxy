@@ -1,0 +1,8 @@
+# QHV twin leg image pair, copy-time SHA-256 (values only; the images are QNX-derived and stay
+# out of git). This is the manifest docs/digital-twin-design.md section 3 promised; every
+# series recorded against it must have been booted with -snapshot or the base has moved.
+# 2026-09-09 re-sync (Windows -> Orin, verified on arrival, verified again after the Orin n=5):
+b2d875057f25a4cbda69966e553629d445cfa44af62cf4c5e121442c9782300a ifs.bin
+95849168b06e3c5d8e744db8bb8fdf39efd01d77f1b60d33060650292d7192a3 disk-qemu
+# Earlier pair (2026-09-08, before the disk mutated under -snapshot-less boots):
+#   c71b9499353ca4b1d2c4bffbdebbc509bb12492d86cfb6e07e22d79451b7cdfe  disk-qemu
