@@ -139,6 +139,43 @@ sample comparison read as "HW is 18% **faster**"; that reading did not
 survive sample-size matching and should not be quoted. Full derivation and
 correction: [digital-twin-design.md](docs/digital-twin-design.md) §5.
 
+### The hypervisor leg — same QHV images on both hosts
+
+The QNX Hypervisor (`qvm`) host image and its guest are host-agnostic: two
+image files, everything else inside the emulation. The identical pair
+(SHA-256-verified, booted with `-snapshot` so the bytes never drift) runs on
+both hosts under the same upstream QEMU release, same accelerator, same
+device set — the closest this repo gets to "only the host changes":
+
+| launch → guest banner (n=5, median) | Windows x86_64 | Jetson Orin Nano | ratio |
+|---|---|---|---|
+| QEMU 11.1.0, rng in slot 3, `-snapshot` | **28,829 ms** (spread 110) | **62,058 ms** (spread 1,231) | **2.15×** |
+| host-only segment (no fixed waits) | 6,160 ms | 13,430 ms | 2.18× |
+
+Honest labels, because the review that produced these numbers insisted on
+them: "host" is a *bundle* — CPU, OS, TCG code-generation backend
+(`tcg/i386` vs `tcg/aarch64`) and the QEMU *build* (a mingw release build vs
+a from-source build of the same tag) all change together, and every one of
+those is stamped into the times files. Same-host control: on the Windows box
+alone, the 11.0.50 dev build vs the 11.1.0 release differ by +0.4%, which
+bounds the build component. It is a comparison of TCG emulation throughput
+on the hypervisor workload, not a hardware-timed virtualisation number —
+QHV needs EL2 for its guest, i.e. nested virt, which ARM KVM does not offer
+on A78AE, so TCG is a hard requirement on both sides.
+
+**What moving the leg found — a real QEMU-version defect, not a host one.**
+Ubuntu 22.04's stock QEMU 6.2.0 hangs the QHV host on the Orin at its first
+timeout-wait (`waitfor /dev/random` never times out; with an rng presented,
+`io-sock` start instead). The same 6.2.0 (Weilnetz Windows build) **hangs identically on the x86_64 host**, so the effect is host-independent.
+Under QEMU 11.1.0 the same image boots on the Orin with and without rng.
+Attributed cause, supported by a non-VHE control but not observed in
+registers: `v6.2.0`'s `virt` board never wires the EL2 *virtual* timer IRQ
+(added in QEMU 9.0), and a VHE hypervisor host's timers are exactly that.
+Along the way the leg's own instrument was corrected twice — an rng test in
+the wrong virtio-mmio slot, and a "one-variable comparison" claim that the
+QEMU version quietly falsified — both recorded in
+[docs/findings.md](docs/findings.md) rather than tidied away.
+
 ### Mechanism reliability — where the twins actually diverge
 
 - **HW leg:** two back-to-back **100,000-iteration** runs over a real
@@ -224,7 +261,7 @@ Other prereqs:
 - [x] **Phase 1** — Cloud twin bring-up (SDP 8.0 QHV `qvm` + one QNX guest under QEMU TCG — no Linux guest on this leg, per [ADR-002](docs/phase2-topology-decision.md))
 - [ ] **Phase 2** _(in progress)_ — Cloud twin IPC + latency benchmark: real P50/P99/Max landed; the 100k-iteration target is still blocked by an unfixed — though now recoverable — `qvm`/TCG stall
 - [ ] **Phase 3** _(in progress)_ — Hardware twin on Jetson Orin Nano: heterogeneous QNX↔Linux IPC done under TCG; a hardware-timed KVM number is still owed, blocked on the GICv3/NISV defect
-- [ ] **Phase 4** _(in progress)_ — Twin diff done for boot time; the dimension-by-dimension [drive-os-comparison.md](docs/drive-os-comparison.md) is still open
+- [ ] **Phase 4** _(in progress)_ — Twin diff done for boot time **and for the QHV hypervisor leg** (same images on both hosts, one QEMU release, 2.15× Orin/Windows; the stock QEMU 6.2 hang it uncovered is a QEMU-side EL2-timer defect, written up honestly); the dimension-by-dimension [drive-os-comparison.md](docs/drive-os-comparison.md) is still open
 - [ ] **Phase 5** — FuSa & Cybersecurity overlay (FMEA, ASIL gap, STRIDE)
 - [ ] **Phase 6** — Polish, demo recording, public release
 - [ ] **Phase 7** _(stretch)_ — Domain-controller extension, two tracks in [future-multi-soc.md](docs/future-multi-soc.md): the original **multi-SoC** idea (a Qualcomm-Cockpit-class proxy alongside the NVIDIA one, inter-SoC IPC) and a newer **NVIDIA-primary single-SoC convergence** track (ADAS + IVI/Cockpit as sibling partitions on one SoC family)
