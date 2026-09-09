@@ -266,7 +266,7 @@ Other prereqs:
 - [x] **Phase 0** — Bootstrap, scaffold, narrative, BSP selection, twin re-scope
 - [x] **Phase 1** — Cloud twin bring-up (SDP 8.0 QHV `qvm` + one QNX guest under QEMU TCG — no Linux guest on this leg, per [ADR-002](docs/phase2-topology-decision.md))
 - [ ] **Phase 2** _(in progress)_ — Cloud twin IPC + latency benchmark: real P50/P99/Max landed; the 100k-iteration target is still blocked by an unfixed — though now recoverable — `qvm`/TCG stall
-- [ ] **Phase 3** _(in progress)_ — Hardware twin on Jetson Orin Nano: heterogeneous QNX↔Linux IPC done under TCG; a hardware-timed KVM number is still owed, blocked on the GICv3/NISV defect. What the defect filing still lacks (a numerically recorded fault PC/IPA, one logged run per QEMU variant) is pinned down by the read-only collector [scripts/diagnose-gicv3-nisv.sh](scripts/diagnose-gicv3-nisv.sh) and its reviewed report in [results/gicv3-nisv-debug/](results/gicv3-nisv-debug/20260909T101030Z/summary.md); the routes to a *genuinely* hardware-timed hypervisor number (Raspberry Pi 4B, AWS metal, a native Orin port — each with its licence and cost caveats) are laid out in [ADR-003](docs/adr-003-hardware-timed-qhv.md) (Proposed, owner decision pending)
+- [ ] **Phase 3** _(in progress)_ — Hardware twin on Jetson Orin Nano: heterogeneous QNX↔Linux IPC done under TCG; a hardware-timed KVM number is still owed, blocked on the GICv3/NISV defect. What the defect filing still lacks (a numerically recorded fault PC/IPA, one logged run per QEMU variant) is pinned down by the read-only collector [scripts/diagnose-gicv3-nisv.sh](scripts/diagnose-gicv3-nisv.sh) and its reviewed report in [results/gicv3-nisv-debug/](results/gicv3-nisv-debug/20260909T101030Z/summary.md); the route to a *genuinely* hardware-timed hypervisor number was chosen in [ADR-003](docs/adr-003-hardware-timed-qhv.md) (Accepted 2026-09-09): a **native QNX port to the Orin Nano**, tracked as Phase 3b in [orin-native-port-plan.md](docs/orin-native-port-plan.md) — kicked off, nothing booted natively yet; two compile-only results are verified and a read-only board pass already refuted four of the plan's own load-bearing claims
 - [ ] **Phase 4** _(in progress)_ — Twin diff done for boot time **and for the QHV hypervisor leg** (same images on both hosts, one QEMU release, 2.15× Orin/Windows; the stock QEMU 6.2 hang it uncovered is a QEMU-side EL2-timer defect, written up honestly); the dimension-by-dimension [drive-os-comparison.md](docs/drive-os-comparison.md) is still open
 - [ ] **Phase 5** — FuSa & Cybersecurity overlay (FMEA, ASIL gap, STRIDE)
 - [ ] **Phase 6** — Polish, demo recording, public release
@@ -314,7 +314,8 @@ A 2-minute spoken version is at [docs/interview-narrative.md](docs/interview-nar
 │   ├── phase2-topology-decision.md # ADR-002 — falsified the cloud dual-VM topology
 │   ├── phase2-research-spike.md
 │   ├── orin-port.md                # Phase 3 plan + KVM/GICv3 risk register
-│   ├── adr-003-hardware-timed-qhv.md # ADR-003 (Proposed) — routes to a hardware-timed QHV number
+│   ├── adr-003-hardware-timed-qhv.md # ADR-003 (Accepted) — route to a hardware-timed QHV number
+│   ├── orin-native-port-plan.md    # Phase 3b — native QNX on Orin Nano: plan, claims register, M0-M4
 │   ├── drive-os-comparison.md      # Phase 4 gap doc (still open)
 │   ├── future-multi-soc.md         # Phase 7 / 7-alt feasibility
 │   ├── security-model.md           # STRIDE + NCEULA audit
@@ -339,6 +340,7 @@ A 2-minute spoken version is at [docs/interview-narrative.md](docs/interview-nar
 ├── results/cloud/  results/hw/     # benchmark CSVs, one schema for both twins
 ├── results/qhv-images-SHA256SUMS.txt  # copy-time SHA-256 of the QHV image pair (values only; images stay out of git)
 ├── results/gicv3-nisv-debug/       # diagnose-gicv3-nisv.sh runs: PASS/FAIL/BLOCKED matrix, decoded ESR, next commands
+├── results/orin-native-port/        # Phase 3b harvest, research and compile-only verifications
 └── skills/                         # study artefacts (FMEA, ISO 26262, 21434, ASPICE, BSP,
                                     #                 digital twin, Jetson, Tegra virt)
 
