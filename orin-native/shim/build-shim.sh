@@ -20,6 +20,12 @@ set -euo pipefail
 
 MODE="${1:-probe}"
 IFS_BIN="${2:-}"
+# Resolve now, while we are still in the caller's directory: the script cds
+# into the output directory later, and a relative path would then miss.
+if [ -n "$IFS_BIN" ]; then
+  [ -f "$IFS_BIN" ] || { echo "no such IFS: $IFS_BIN" >&2; exit 1; }
+  IFS_BIN="$(cd "$(dirname "$IFS_BIN")" && pwd)/$(basename "$IFS_BIN")"
+fi
 LINK_ADDR=0x80080000
 PAYLOAD_OFF=0x2000            # 8 KiB shim page
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -49,7 +55,9 @@ if [ -z "${QNX_HOST:-}" ] || [ -z "${QNX_TARGET:-}" ]; then
     export QNX_HOST="$qhost"
     export QNX_TARGET="$qtgt"
   fi
-  export PATH="$qhost/usr/bin:$PATH"
+  # Append, never prepend: this directory ships its own cat/cp/mkdir, and a
+  # Windows-native cat cannot open the MSYS-style paths used below.
+  export PATH="$PATH:$qhost/usr/bin"
   echo "== using SDP at $QNX_BASE"
 fi
 
@@ -60,17 +68,19 @@ done
 mkdir -p "$OUT"
 cd "$OUT"
 
-# image_size must cover shim + payload; kexec reserves image_size + text_offset.
+# image_size is how many bytes the image needs from its own start; kexec
+# reserves image_size + text_offset for it.  The 2 MiB figure in the kernel is
+# the alignment of the *base address* it picks, not a size granularity, so
+# round to a page and no further — over-reserving here would silently take
+# memory the plan accounts for elsewhere.
 if [ -n "$IFS_BIN" ]; then
-  [ -f "$IFS_BIN" ] || { echo "no such IFS: $IFS_BIN" >&2; exit 1; }
   ifs_sz=$(stat -c %s "$IFS_BIN")
   total=$(( 0x2000 + ifs_sz ))
 else
   ifs_sz=0
   total=$(( 0x2000 ))
 fi
-# round up to 2 MiB, the alignment kexec places at
-image_size=$(( (total + 0x1fffff) / 0x200000 * 0x200000 ))
+image_size=$(( (total + 0xfff) / 0x1000 * 0x1000 ))
 
 echo "== assembling (mode=$MODE, image_size=$(printf 0x%x "$image_size"))"
 ntoaarch64-gcc -c -x assembler-with-cpp \

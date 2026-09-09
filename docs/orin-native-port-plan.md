@@ -103,7 +103,7 @@ mkifs 8.0 wants `[virtual=aarch64le,raw] .bootstrap = {`, not `boot = {`; and `[
 
 ## 3. Loader
 
-### 3.1 Primary: `kexec_file_load` from the running L4T, 4 KiB shim + raw IFS
+### 3.1 Primary: `kexec_file_load` from the running L4T, 8 KiB shim + raw IFS
 
 Everything it raises is inside code we write; nothing persistent is touched (no ESP, no UEFI variables, no
 extlinux, no QSPI, no `/boot`); recovery is a power cycle to an untouched L4T; iteration is `scp` + two
@@ -113,7 +113,12 @@ commands. Board preconditions VERIFIED in `raw/orin-kexec.txt`: `CONFIG_KEXEC=y`
 
 ### 3.2 Payload layout
 
-`t234-qnx.kimg` = `[4 KiB shim page]` ‖ `[ifs.bin built with [image=0x80081000] [virtual=aarch64le,raw]]`.
+`t234-qnx.kimg` = `[8 KiB shim page]` ‖ `[ifs.bin built with [image=0x80082000] [virtual=aarch64le,raw]]`.
+
+**Sized 2026-09-09, once the shim was written:** the page is 8 KiB, not 4. `VBAR_EL2` needs a 2 KiB-aligned
+vector table that is itself 2 KiB, and the common exception handler has to live clear of all sixteen slots;
+with the header, the state-bank printer and its strings that does not fit in 4 KiB. `build-shim.sh` fails
+the build if the page is not exactly 8192 bytes, so the two cannot drift apart.
 
 Shim byte 0 is the 64-byte arm64 Image header: `code0 = b shim_body`, `code1 = nop`,
 `text_offset = 0x80000`, `image_size` = file size rounded to 2 MiB, `flags = 0`, magic `ARM\x64` at 0x38.
@@ -122,9 +127,9 @@ bytes 0x00-0x0B, so its third instruction sits exactly where the header's `text_
 shipped IFS carries the magic (VERIFIED `raw/ifs-first-64-bytes.txt`; opcodes withheld — the repo does not publish machine code of QNX-shipped binaries, QDL v7 4.6(c) — the same rule
 applied to the GICv3 report earlier today).
 
-Placement arithmetic per K2 lands the header at `0x80080000`, the shim body in the same page, the IFS at
-`0x80081000` — **HYPOTHESIS on this board until the `kexec -d` check runs.** The IFS half is VERIFIED: at
-that base `dumpifs` reports `*.boot` at `0x80081000`, `startup_vaddr = 0x80082800` (a 32-bit value, so the stub's word-sized load of it still works), whole image ending `0x802b1000` — well inside the window with room for M3.
+Placement arithmetic per K2 lands the header at `0x80080000`, the shim body and vectors in the same 8 KiB
+page, the IFS at `0x80082000` — **HYPOTHESIS on this board until the `kexec -d` check runs.** The IFS half is VERIFIED: at
+that base `dumpifs` reports `*.boot` at `0x80082000`, `startup_vaddr = 0x80083800` (a 32-bit value, so the stub's word-sized load of it still works), whole image ending `0x802b1000` — well inside the window with room for M3.
 
 ### 3.3 Entry contract and shim duties
 
@@ -151,7 +156,8 @@ position-independent, no stack, `x0` preserved in `x20`), in order:
    overlap the shim page or `[x0, x0+fdt_totalsize)`) is a labelled fallback only.
 7. Modes (`shim.mode=probe|hang|jump`, from a reserved header byte or `/chosen/bootargs`): `probe` = bank +
    reset; `hang` = bank + `wfi` loop (this is now the **watchdog** test: does the un-petted WDT0 return the
-   board on its own?); `jump` = `mov x0,x20; x1=x2=x3=0; br 0x80081000`.
+   board on its own?); `jump` = `mov x0,x20; x1=x2=x3=0; br` the IFS at the shim's own address + 0x2000, which the landing check
+   has just confirmed is `0x80082000`.
 
 ### 3.4 Owner command sequence
 
@@ -258,7 +264,7 @@ copied.
 
 | file | purpose | correction applied |
 |---|---|---|
-| `main.c` | `fdt_init(boot_regs[0])`; **`psci_call = psci_smc; in_hvc = 0;` unconditionally** (K7); getopt `COMMON_OPTIONS_STRING "m:W:t"` — **corrected 2026-09-09:** the plan first wrote `"D:W:T"`, but `COMMON_OPTIONS_STRING` is `CPU_COMMON_OPTIONS_STRING "ACc:D:F:f:I:i:K:M:N:o:P:R:S:Tvr:j:ZH"` with `CPU_COMMON_OPTIONS_STRING` = `"Q:E:X:Uu:"` (both VERIFIED in `lib/public/startup.h:163` and `lib/public/aarch64/cpu_startup.h:55`), so **`D` and `T` are already taken** — `-D` is the debug-device selector we want anyway and `-Q` is the hypervisor option. Free letters are `abdeghklmnpqstwxyzBGJLOVWY`; the board takes `-m` (RAM size, as `armv8_fm` does), `-W` (watchdog policy) and lowercase `-t` (the EL2 virtual-timer PPI probe, formerly `-T`); `select_debug()`; **`wdt_report()` then the `-W` policy — now mandatory, not advisory (K9)**; `init_raminfo()`; `avoid_ram(fdt)`; `avoid_ram(0x80080000, 4096)`; `hypervisor_init(0)`; `init_smp()`; `init_mmu()`; `init_intrinfo()`; `init_qtime()`; the `-t` probe; `add_typed_string(_CS_MACHINE, …)`; `add_callout_array(callouts_reboot_psci_smc)`; `init_system_private()`; `print_syspage()` | K7, K9 |
+| `main.c` | `fdt_init(boot_regs[0])`; **`psci_call = psci_smc; in_hvc = 0;` unconditionally** (K7); getopt `COMMON_OPTIONS_STRING "m:W:t"` — **corrected 2026-09-09:** the plan first wrote `"D:W:T"`, but `COMMON_OPTIONS_STRING` is `CPU_COMMON_OPTIONS_STRING "ACc:D:F:f:I:i:K:M:N:o:P:R:S:Tvr:j:ZH"` with `CPU_COMMON_OPTIONS_STRING` = `"Q:E:X:Uu:"` (both VERIFIED in `lib/public/startup.h:163` and `lib/public/aarch64/cpu_startup.h:55`), so **`D` and `T` are already taken** — `-D` is the debug-device selector we want anyway and `-Q` is the hypervisor option. Free letters are `abdeghklmnpqstwxyzBGJLOVWY`; the board takes `-m` (RAM size, as `armv8_fm` does), `-W` (watchdog policy) and lowercase `-t` (the EL2 virtual-timer PPI probe, formerly `-T`); `select_debug()`; **`wdt_report()` then the `-W` policy — now mandatory, not advisory (K9)**; `init_raminfo()`; `avoid_ram(fdt)`; `avoid_ram(0x80080000, 8192)` — the whole shim page, or QNX's allocator could reclaim the live vector table and handler at 0x80081000-0x80081fff, which stay resident through startup; `avoid_ram(x)`; `hypervisor_init(0)`; `init_smp()`; `init_mmu()`; `init_intrinfo()`; `init_qtime()`; the `-t` probe; `add_typed_string(_CS_MACHINE, …)`; `add_callout_array(callouts_reboot_psci_smc)`; `init_system_private()`; `print_syspage()` | K7, K9 |
 | `init_raminfo.c` | **Hard-coded, not DTB** (no `/memory` node). M0-M2: `add_ram(0x80000000, 0x3E000000)` only. **M3+: the second window must be re-derived from a fresh `/proc/iomem` read after the `rmmod` step, not hard-coded from the synthesis' single 5.4 GiB line (K5).** Never `0xBE000000-0xC1FFFFFF`, never `0x40000000` SysRAM, never the carveouts | K5 |
 | `aarch64/init_intrinfo.c` | Pre-quiesce (adds the `ICACTIVER` clearing the library omits); **`gic_v3_set_paddr_range(0x0F400000, 0x0F440000, 0x200000, NULL_PADDR)`** — *not* the auto-sizing `gic_v3_set_paddr()` the `armv8_fm` template uses (K6); `gic_v3_use_mm_reg_callouts(<gicc>, 0)` for sysreg callouts; `gic_v3_initialize()`; one SPI intrinfo for 960 SPIs | K6 |
 | `board_smp.c` | `board_smp_num_cpu() = fdt_num_cpu()` capped by `-P`; records MPIDRs from `/cpus` reg cells; `board_smp_start() = psci_smp_start()` | |
@@ -289,7 +295,8 @@ is gone; measure what Linux left; prove the board comes back.
 ✓; WDT/TCU register peek ✓; governor ✓. **Still needed:** the
 `kexec -s -l` acceptance test (K2). **The pmsg retention test is dropped** — no `/dev/pmsg0`.
 
-**Steps.** (1) Build `t234-shim.kimg`; `od` check (magic at 0x38, `text_offset` at 0x08, size = 4096).
+**Steps.** (1) Build `t234-shim.kimg`; `od` check (magic at 0x38, `text_offset` at 0x08, size = 8192 —
+`build-shim.sh` does this check itself and fails the build on a mismatch).
 (2) `probe` mode: quiesce, load, `systemctl kexec` under `setsid nohup`. Expect the bank line within ~2 s of
 Linux's "Bye!", then reset, L4T back in ~60 s. (3) **`hang` mode with no shim WDT code at all** — this now
 tests whether the *already-armed* WDT0 returns the board unattended (K9). (4) A deliberate `brk` variant to
@@ -484,13 +491,15 @@ Windows, compile-only (no board):
   the output. **Done — K12's toolchain half VERIFIED**, both `make install` steps exit 0, `startup-armv8_fm`
   = 632,224 B. Order matters: lib **install** (not just `hinstall`) before the board.
   → [`build-armv8_fm.md`](../results/orin-native-port/20260909T1100Z/build-armv8_fm.md)
-- [x] **3. `mkifs` a placeholder M1 buildfile** at `[image=0x80081000]`; `dumpifs -v`. **Done — layout
-  VERIFIED**, `*.boot` at `0x80081000`, `startup_vaddr = 0x80082800` (32-bit), image ends `0x802b1000`. Two
+- [x] **3. `mkifs` a placeholder M1 buildfile** at `[image=0x80082000]`; `dumpifs -v`. **Done — layout
+  VERIFIED** (re-run at the 8 KiB base), `*.boot` at `0x80082000`, `startup_vaddr = 0x80083800` (32-bit). Two
   syntax fixes found: `.bootstrap = {`, and per-file `[+keeplinked]`.
   → [`build-m1-placeholder-ifs.md`](../results/orin-native-port/20260909T1100Z/build-m1-placeholder-ifs.md)
 - [ ] **2. Write and assemble the M0 shim** (`probe` mode first) with `ntoaarch64-as` / `ntoaarch64-ld
   -Ttext=0x80080000` / `ntoaarch64-objcopy -O binary`, plus the 20-line header checker (`od` at 0x08 / 0x10 /
-  0x38, size == 4096). **Drop the WDT-arming code (K9)**; keep the WDT *read* in the register bank.
+  0x38, size == 8192). **Drop the WDT-arming code (K9)**; keep the WDT *read* in the register bank.
+  **Done 2026-09-09** — `orin-native/shim/t234-shim.S`, all three modes assemble with zero warnings and the
+  header checks byte-for-byte; reviewed on four lenses, five findings applied.
 - [ ] **4. Create `boards/t234-orin-nano/`** from the Apache-2.0 `armv8_fm` skeleton (never `armv8_fm/main.c`
   or `ls10x6a.h`) with the §5 files stubbed; build; `nm`-check: `gic_v3_set_paddr_range`, `psci_smc`,
   `hyp_enable_el2_host`, `display_char_tcu` present, **exactly one** `psci_cpu_id`, no `efi_entry_point` /

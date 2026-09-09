@@ -29,8 +29,9 @@
  *   - where kexec actually placed us                                   (#6)
  *
  * OUTPUT — two channels, both written for every byte:
- *   1. Tegra Combined UART, one byte per HSP mailbox word, bounded poll so a
- *      dead SPE degrades to silence instead of a hang.
+ *   1. Tegra Combined UART, one byte per HSP mailbox word.  The poll is bounded
+ *      by a system-counter deadline, so a dead SPE degrades to silence instead
+ *      of a hang, and the bytes it swallowed are counted and reported.
  *   2. The ramoops console zone at 0x2_72770000.  We keep the DBGC signature
  *      word and maintain start/size as we go, so whatever was printed before a
  *      fault still surfaces as /sys/fs/pstore/console-ramoops-0 after the
@@ -49,7 +50,8 @@
  *   x23 black-box zone base            x24 CurrentEL, already shifted
  *   x25 TCU mailbox word sampled before our first write / exception index
  *   x26 puthex64 nibble counter        x27 puthex64 return
- *   x28 puts return                    x9-x12 clobbered by putc
+ *   x28 puts return                    x16 TCU bytes dropped
+ *   x9-x14 clobbered by putc
  *
  * BUILD    see build-shim.sh; assemble with ntoaarch64-gcc -c (it runs cpp).
  */
@@ -96,6 +98,7 @@ _start:
 shim_body:
 	mov	x20, x0				/* DTB physical address        */
 	adr	x19, _start			/* where we really landed      */
+	mov	x16, xzr			/* TCU bytes dropped so far    */
 
 	/* TCU TX mailbox = AON HSP shared mailbox 1 = 0x0C168000 */
 	movz	x21, #0x8000
@@ -300,6 +303,16 @@ landing_ok:
 	adr	x1, s_norm
 	bl	puts
 
+	/* How many bytes the TCU swallowed.  Zero means the SPE is alive; a
+	 * count equal to everything printed means the console is dead and only
+	 * the black box carries this run — which is a result, not a failure. */
+	adr	x1, s_drops
+	bl	puts
+	mov	x2, x16
+	bl	puthex64
+	mov	w0, #'\n'
+	bl	putc
+
 /* ---- what to do next --------------------------------------------- */
 #if SHIM_MODE == 'j'
 	adr	x1, s_jump
@@ -342,6 +355,16 @@ reset:
  * the TCU second (it can).  Clobbers x9-x12; advances x22.
  * ------------------------------------------------------------------ */
 putc:
+	/* Black box first — it cannot fail — but never past the zone's data
+	 * capacity (console-size 0x80000 less the 12-byte header).  Nothing
+	 * this shim prints comes close, but the same routine is meant to stay
+	 * live through QNX startup, and running off the end would write into
+	 * memory outside the reserved carveout. */
+	sub	x9, x22, x23
+	movz	x10, #0xfff0
+	movk	x10, #0x0007, lsl #16		/* 0x0007fff0                   */
+	cmp	x9, x10
+	b.hs	13f				/* zone full: stop mirroring    */
 	strb	w0, [x22], #1
 	sub	x9, x22, x23
 	sub	w9, w9, #12			/* bytes of payload so far      */
@@ -349,13 +372,22 @@ putc:
 	str	w9, [x23, #8]			/* size  */
 	dsb	sy
 
-	mov	x10, #0x100000			/* bounded: never hang on a     */
-4:	ldr	w11, [x21]			/* dead SPE                     */
-	tbz	w11, #31, 5f
-	subs	x10, x10, #1
-	b.ne	4b
-	ret					/* drop the byte, keep going    */
-5:	and	w11, w0, #0xff
+	/* TCU second — it can fail.  The bound is a real deadline read off the
+	 * system counter, not an instruction count: if the SPE has stopped
+	 * draining the mailbox, an uncalibrated spin per byte could eat a
+	 * meaningful slice of WDT0's two minutes over a whole bank line. */
+13:	mrs	x13, cntfrq_el0
+	lsr	x13, x13, #6			/* ~15.6 ms at 31.25 MHz        */
+	mrs	x14, cntpct_el0
+	add	x13, x13, x14			/* deadline                     */
+11:	ldr	w11, [x21]
+	tbz	w11, #31, 12f
+	mrs	x14, cntpct_el0
+	cmp	x14, x13
+	b.lo	11b
+	add	x16, x16, #1			/* the SPE is not draining:     */
+	ret					/* counted, not silently lost   */
+12:	and	w11, w0, #0xff
 	movz	w12, #0x8500, lsl #16		/* FULL | Flush | count=1       */
 	orr	w11, w11, w12
 	str	w11, [x21]
@@ -405,7 +437,8 @@ s_x0:		.asciz	" X0="
 s_dtbmagic:	.asciz	" DTBMAGIC="
 s_badland:	.asciz	"BAD-LANDING pc="
 s_expect:	.asciz	" expect="
-s_norm:		.asciz	"NORMALISED\n"
+s_norm:		.asciz	"NORMALISED"
+s_drops:	.asciz	" TCUDROPS="
 s_probe:	.asciz	"PROBE-RESET\n"
 s_hang:		.asciz	"HANG (waiting on WDT0)\n"
 s_jump:		.asciz	"JUMP\n"
