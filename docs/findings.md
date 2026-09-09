@@ -248,6 +248,32 @@ terminated 2026-07-29) was redacted to honour the CLAUDE.md secrets rule —
 it stays in git history. Six intermediate build/review runs of the script
 were parked outside the repo rather than deleted.
 
+**M0 gate passed on the board, 2026-09-09 evening: kexec accepts the shim and
+places it exactly where the arithmetic said.** The first time any Phase 3b code
+touched the hardware, and deliberately the smallest possible step: the 8 KiB
+probe-mode shim was staged into kernel memory with both kexec syscalls, the
+result read back, and the image unloaded again. **No reboot** — the board stayed
+up throughout. Both paths returned `rc=0` with `kexec_loaded=1`, so nothing
+stands between a non-Linux payload and this kernel: no signature check, no PE
+check, nothing beyond the header. Claim K2 is settled on its acceptance half,
+which source reading alone could not settle. The more valuable half came from
+the `kexec_load` path, which prints its segment map: **segment 0 at
+`0x80080000`, size `0x2000`** — precisely the address the shim's landing check
+expects, and the value the plan had carried as a hypothesis since it was
+written. One correction fell out of the same output: the plan says the device
+tree is placed top-down above the image, which is what the kernel does on the
+`kexec_file_load` path, but `kexec-tools` on the `kexec_load` path placed it
+bottom-up immediately after the image, at `0x80082000` — where the IFS will live
+once there is one. With a real image the payload grows and the DTB moves past
+it, so nothing collides, but the placement should be re-read from `kexec -d`
+rather than assumed when the first shim+IFS image is built. Full record:
+[results/orin-native-port/20260909T1100Z/m0-kexec-acceptance.md](../results/orin-native-port/20260909T1100Z/m0-kexec-acceptance.md).
+**What this does not show:** the shim has still never executed. The exception
+level at entry, whether the SPE drains the TCU mailbox once Linux is gone,
+whether a ramoops write survives a reset, and whether the un-petted watchdog
+returns the board all need the reboot this test deliberately avoided.
+
+
 **Owner decisions (2026-09-09, recorded verbatim in intent, not paraphrased
 into reasons the owner did not give):** (1) ADR-003 → option (B), native
 Orin Nano port — chosen over the ADR's own Pi 4B recommendation; the Pi
