@@ -57,7 +57,11 @@
     tcu-cat -m "T234 M1: user space up"
     pidin info | tcu-cat
     pidin | tcu-cat
-    cksum /proc/boot/.script | tcu-cat
+    # A checksum of a known file would have been the cheapest end-to-end proof
+    # that the console reports what actually ran, but this SDP ships no cksum:
+    # cat, ls, echo and cksum are ksh built-ins in QNX 8, not separate
+    # binaries. pidin's output serves the same purpose less neatly.
+    waitfor /dev/ptyp0 5
 
     # M1b, once the console is trusted: an interactive shell on the port Linux
     # already configured, which costs no new driver code.
@@ -74,13 +78,11 @@ libgcc_s.so.1
 /proc/boot/tcu-cat=tcu-cat
 /proc/boot/stamp=stamp
 
+# cat, ls, echo and cksum are ksh built-ins here, so only real binaries are listed.
 /bin/ksh=ksh
 /bin/pidin=pidin
-/bin/cksum=cksum
-/bin/cat=cat
-/bin/ls=ls
-/bin/echo=echo
 /bin/on=on
 /bin/slay=slay
-/bin/shutdown=shutdown
+/bin/waitfor=waitfor
+/sbin/shutdown=shutdown
 /sbin/devc-pty=devc-pty
