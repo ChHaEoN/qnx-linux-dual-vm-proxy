@@ -495,21 +495,21 @@ Windows, compile-only (no board):
   VERIFIED** (re-run at the 8 KiB base), `*.boot` at `0x80082000`, `startup_vaddr = 0x80083800` (32-bit). Two
   syntax fixes found: `.bootstrap = {`, and per-file `[+keeplinked]`.
   → [`build-m1-placeholder-ifs.md`](../results/orin-native-port/20260909T1100Z/build-m1-placeholder-ifs.md)
-- [ ] **2. Write and assemble the M0 shim** (`probe` mode first) with `ntoaarch64-as` / `ntoaarch64-ld
+- [x] **2. Write and assemble the M0 shim** (`probe` mode first) with `ntoaarch64-as` / `ntoaarch64-ld
   -Ttext=0x80080000` / `ntoaarch64-objcopy -O binary`, plus the 20-line header checker (`od` at 0x08 / 0x10 /
   0x38, size == 8192). **Drop the WDT-arming code (K9)**; keep the WDT *read* in the register bank.
   **Done 2026-09-09** — `orin-native/shim/t234-shim.S`, all three modes assemble with zero warnings and the
-  header checks byte-for-byte; reviewed on four lenses, five findings applied.
+  header checks byte-for-byte; reviewed on four lenses, five findings applied. **Done 2026-09-09** — `orin-native/shim/t234-shim.S`; all three modes assemble with zero warnings under `-Wall -Wa,--fatal-warnings`, the page is exactly 8192 bytes and the header checks field by field. Reviewed on four lenses, five findings applied ([shim-review.md](../results/orin-native-port/20260909T1100Z/shim-review.md)).
 - [ ] **4. Create `boards/t234-orin-nano/`** from the Apache-2.0 `armv8_fm` skeleton (never `armv8_fm/main.c`
   or `ls10x6a.h`) with the §5 files stubbed; build; `nm`-check: `gic_v3_set_paddr_range`, `psci_smc`,
   `hyp_enable_el2_host`, `display_char_tcu` present, **exactly one** `psci_cpu_id`, no `efi_entry_point` /
   `uefi_init` / `acpi_` — **expect and allow the three `uefi_*_f` symbols (K12)**.
-- [ ] **5. Compile `tcu-cat.c` and `stamp.c`** with `ntoaarch64-gcc`.
+- [x] **5. Compile `tcu-cat.c` and `stamp.c`** with `ntoaarch64-gcc`. **Done 2026-09-09** — `orin-native/tools/{tcu-cat,stamp}.c` plus a Makefile; both compile clean under `-Wall -Wextra -Werror` for `gcc_ntoaarch64le` and link to AArch64 ELF64. Note the target name: `-Vgcc_ntoaarch64le`, not `gcc_ntoaarch64`, which the SDP rejects.
 - [ ] **6. Source reads only** (Apache-2.0 / BSD): `gic_v3.c:482-500` `gic_v3_use_mm_reg_callouts()` calling
   form with no GICC; `hypervisor_enable.S` `hyp_enable_el2_host` register expectations (and confirm where it
   re-asserts E2H/TGE — K3); edk2-nvidia `TegraCombinedSerialPortLib.c` at r36.4.4 for the RX release
   semantics already VERIFIED on `main`.
-- [ ] **7. Generate the no-blk `g2.conf`** and record the guest sha256 (`968029…7cf4f`).
+- [x] **7. Generate the no-blk `g2.conf`** and record the guest sha256 (`968029…7cf4f`). **Done 2026-09-09** — `orin-native/qhv/g2-noblk.conf`, diffed against the configuration the cloud leg generates at boot (`scripts/qhv/post_start.custom`): it differs in exactly the two intended ways, the guest image path and the removed `virtio-blk` vdev, and is otherwise identical line for line. The guest sha256 was re-checked against the local image and matches K11's value.
 - [ ] **7b. Run the M4 recipe inside the existing Windows-TCG QHV host image** — confirm Class-10 IDs 0/1/7
   appear, count the filtered lines, and compare `ClockCycles()` with `clock_gettime()` over 1 s.
   **This unblocks M4 (K11) and costs nothing.**
