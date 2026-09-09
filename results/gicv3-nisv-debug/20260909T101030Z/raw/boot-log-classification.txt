@@ -1,0 +1,28 @@
+file|topic|accel|classification|ESR/exit-reason tokens (non-comment lines)|QEMU_EXIT
+aws-a1-metal-kvm-nisv-repro.log|in-topic|kvm|HANG-AFTER-ITS-DISCOVERY signature (no 'PE is not awake', no 'Startup complete')|no — symptom-only|QEMU_EXIT=124
+orin-qhv-tcg-q111-boot-blk-only.log|EXCLUDED (QHV/TCG leg, different defect)|tcg|boots (Startup complete)|no — symptom-only|—
+orin-qhv-tcg-q111-boot-rng-slot3.log|EXCLUDED (QHV/TCG leg, different defect)|tcg|boots (Startup complete)|no — symptom-only|—
+orin-qhv-tcg-q111-nohypvirt-control.log|EXCLUDED (QHV/TCG leg, different defect)|tcg (from filename)|partial (past ITS discovery and PE wake; no 'Startup complete' in capture)|no — symptom-only|—
+orin-qhv-tcg-q111-rng-snapshot-boot1.log|EXCLUDED (QHV/TCG leg, different defect)|tcg (from filename)|boots (Startup complete)|no — symptom-only|—
+orin-qhv-tcg-q62-INVALID-rng-in-slot2.log|EXCLUDED (QHV/TCG leg, different defect)|tcg|partial (past ITS discovery and PE wake; no 'Startup complete' in capture)|no — symptom-only|—
+orin-qhv-tcg-q62-a57-control.log|EXCLUDED (QHV/TCG leg, different defect)|tcg (from filename)|partial (past ITS discovery and PE wake; no 'Startup complete' in capture)|no — symptom-only|—
+orin-qhv-tcg-q62-hang-blk-only.log|EXCLUDED (QHV/TCG leg, different defect)|tcg|partial (past ITS discovery and PE wake; no 'Startup complete' in capture)|no — symptom-only|—
+orin-qhv-tcg-q62-hang-rng-slot3.log|EXCLUDED (QHV/TCG leg, different defect)|tcg|partial (past ITS discovery and PE wake; no 'Startup complete' in capture)|no — symptom-only|—
+orin-tcg-qnx-boot-timed1.log|in-topic|tcg (from filename)|boots (Startup complete)|no — symptom-only|—
+orin-tcg-qnx-boot1.log|in-topic|tcg|boots (Startup complete)|no — symptom-only|—
+orin-tcg-qnx-ipc-boot1.log|in-topic|tcg|boots (Startup complete)|no — symptom-only|—
+orin-tcg-qnx-ipc-client1.log|in-topic|tcg (from filename)|no startup markers|no — symptom-only|—
+orin-tcg-qnx-network1.log|in-topic|tcg|boots (Startup complete)|no — symptom-only|—
+qhv-tcg-host-and-guest-boot.log|EXCLUDED (QHV/TCG leg, different defect)|tcg|boots (Startup complete)|no — symptom-only|—
+qhv-tcg-ipc-benchmark.log|EXCLUDED (QHV/TCG leg, different defect)|tcg (from filename)|boots (Startup complete)|no — symptom-only|—
+qhv-tcg-rq2-hyp-shm-host-probe.log|EXCLUDED (QHV/TCG leg, different defect)|tcg (from filename)|boots (Startup complete)|no — symptom-only|—
+qhv-tcg-rq2-shmem-roundtrip-attempt1-bus-error.log|EXCLUDED (QHV/TCG leg, different defect)|tcg (from filename)|boots (Startup complete)|no — symptom-only|—
+qhv-tcg-rq2-shmem-roundtrip-success.log|EXCLUDED (QHV/TCG leg, different defect)|tcg (from filename)|boots (Startup complete)|no — symptom-only|—
+qhv-tcg-sentinel-recovery-committed15-5-check.log|EXCLUDED (QHV/TCG leg, different defect)|tcg (from filename)|boots (Startup complete)|no — symptom-only|—
+qhv-tcg-sentinel-recovery-diag300-run1.log|EXCLUDED (QHV/TCG leg, different defect)|tcg (from filename)|boots (Startup complete)|no — symptom-only|—
+qhv-tcg-sentinel-recovery-diag300-run2.log|EXCLUDED (QHV/TCG leg, different defect)|tcg (from filename)|boots (Startup complete)|no — symptom-only|—
+qhv-tcg-sentinel-recovery-diag300-run3.log|EXCLUDED (QHV/TCG leg, different defect)|tcg (from filename)|boots (Startup complete)|no — symptom-only|—
+windows-qhv-tcg-boot-timed1.log|EXCLUDED (QHV/TCG leg, different defect)|tcg|boots (Startup complete)|no — symptom-only|—
+windows-qhv-tcg-q62-cell.log|EXCLUDED (QHV/TCG leg, different defect)|tcg (from filename)|partial (past ITS discovery and PE wake; no 'Startup complete' in capture)|no — symptom-only|—
+windows-tcg-qnx-boot-timed1.log|in-topic|tcg (from filename)|boots (Startup complete)|no — symptom-only|—
+aws-a1-metal-kvm-nisv-repro.log|in-topic|kvm|HANG-AFTER-ITS-DISCOVERY signature (no 'PE is not awake', no 'Startup complete')|no — symptom-only|QEMU_EXIT=124

@@ -210,6 +210,44 @@ side effects (files, exit-code sentinels) rather than process tables. The
 Bash-tool heredoc also mangles backslashes even with a quoted delimiter —
 scripts with line continuations were written via the file tool instead.
 
+**Diagnostic collector for the KVM/NISV hang (2026-09-09, same day).** A
+user-supplied four-stage investigation plan (inspect → decode → classify →
+report; read-only, no package installs, no QNX binaries copied, every test
+marked PASS/FAIL/BLOCKED/NOT APPLICABLE/NOT RUN, facts kept apart from
+hypotheses) was implemented as
+[scripts/diagnose-gicv3-nisv.sh](../scripts/diagnose-gicv3-nisv.sh) and run
+twice: an unedited script run
+([results/gicv3-nisv-debug/20260909T100704Z](../results/gicv3-nisv-debug/20260909T100704Z/summary.md))
+and a report run whose thin sections were rewritten by hand and then put
+through a second, adversarial honesty review
+([results/gicv3-nisv-debug/20260909T101030Z](../results/gicv3-nisv-debug/20260909T101030Z/summary.md)).
+What it pinned down without touching a board: the sha256-identical `ifs.bin`
+holds exactly one `str w3,[x0],#4` opcode in its startup blob, at VA
+0x40085978 inside the `GICD_IPRIORITYR` loop; every vector slot at
+`VBAR_EL1`=0x4008d800 is `b .`; the shipped startup carries the same four
+writeback MMIO stores as the rebuilt `gic_v3.o`; `dumpifs -x` does not
+extract `startup.*` (recipe corrected); and a Windows QEMU 6.2.0 TCG boot of
+the same IFS reaches the banner (control only — TCG never synthesises the
+Data Abort). What the honesty review forced into the open: the **only**
+data-backed NISV in the repo is the Orin ftrace `hsr=0x92000045` (EC=0x24,
+ISV=0, WnR=1, DFSC=0x05); the `a1.metal` run is symptom-only (no exit reason
+was logged there); the 2026-07-28 note claims the traced PC matched the
+static candidate but no numeric `pc=`/`ipa=`/`hxfar=` was ever written down,
+so 0x40085978 stays a candidate; the `-smp 1` / `gic-version=host` /
+`its=off` variants are asserted without a single logged run; and the
+from-source 11.1.0 on the Orin was *configured* with `--enable-kvm` but never
+tried under KVM. The report ends with the exact commands that would settle
+each of those (ftrace re-run capturing `pc=`/`ipa=`, one logged run per
+variant, the 11.1.0 KVM re-check) — that list is now the concrete to-do
+behind next action 2 in CLAUDE.md. Two housekeeping decisions made while
+landing it: the objdump windows of the SDP-shipped startup that the report
+run had produced were replaced by fact summaries before commit (the repo has
+withheld such listings since 2026-07-28; QDL v7 §4.6(c) remains an open
+owner decision), and the `a1.metal` log header's EC2 instance id (instance
+terminated 2026-07-29) was redacted to honour the CLAUDE.md secrets rule —
+it stays in git history. Six intermediate build/review runs of the script
+were parked outside the repo rather than deleted.
+
 ---
 
 ## 2026-09-08 — QHV leg made host-portable: the twin gets a comparison on the *hypervisor* topology (Windows half measured; Orin half blocked on hardware — **superseded by the 2026-09-09 entry above**)

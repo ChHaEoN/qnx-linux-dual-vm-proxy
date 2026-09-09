@@ -1,0 +1,52 @@
+# Static probe of the local qnx-safety-vm/output/ifs.bin (read-only; bytes read by file offset, image base 0x40080000 per dumpifs)
+# Added by hand after the script run, 2026-09-09. Derived/static evidence, NOT a hardware capture.
+# Tool: python 3.12 probe (scratchpad/ifs_static_probe.py) + ntoaarch64-objdump 2.43.0 -D -b binary -m aarch64 --adjust-vma=0x40080000
+
+size 9771456 sha256 92868b2f116f17c06d26585b9618682076913d17491bdeb22c4a0392d43dd745
+startup blob file range 0x10a0..0x2c0e8 (VA 0x400810a0..0x400ac0e8)
+str w3,[x0],#4 (b8004403) hits in startup blob: ['VA 0x40085978 (file 0x5978)']
+b8004403 hits in the whole IFS (aligned): 3 ['0x40085978', '0x402eaaf8', '0x40375e08']
+window around VA 0x40085978:
+   0x40085960: 52941403
+   0x40085964: 91108020
+   0x40085968: 72b41403
+   0x4008596c: 8b224882
+   0x40085970: 8b010042
+   0x40085974: d503201f
+   0x40085978: b8004403
+   0x4008597c: eb00005f
+   0x40085980: 54ffffc1
+VBAR_EL1 0x4008d800 -> file offset 0xd800 (inside startup blob: True)
+   slot +0x000 cur-EL SP0 sync      14000000 b . (self-branch)
+   slot +0x080 cur-EL SP0 irq       14000000 b . (self-branch)
+   slot +0x100 cur-EL SP0 fiq       14000000 b . (self-branch)
+   slot +0x180 cur-EL SP0 serr      14000000 b . (self-branch)
+   slot +0x200 cur-EL SPx sync      14000000 b . (self-branch)
+   slot +0x280 cur-EL SPx irq       14000000 b . (self-branch)
+   slot +0x300 cur-EL SPx fiq       14000000 b . (self-branch)
+   slot +0x380 cur-EL SPx serr      14000000 b . (self-branch)
+   slot +0x400 lower-EL a64 sync    14000000 b . (self-branch)
+   slot +0x480 lower-EL a64 irq     14000000 b . (self-branch)
+   slot +0x500 lower-EL a64 fiq     14000000 b . (self-branch)
+   slot +0x580 lower-EL a64 serr    14000000 b . (self-branch)
+   slot +0x600 lower-EL a32 sync    14000000 b . (self-branch)
+   slot +0x680 lower-EL a32 irq     14000000 b . (self-branch)
+   slot +0x700 lower-EL a32 fiq     14000000 b . (self-branch)
+   slot +0x780 lower-EL a32 serr    14000000 b . (self-branch)
+words in 2KiB table region equal to 0x14000000: 16 of 512
+
+# objdump window around the single b8004403 in the startup blob (VA 0x40085958..0x40085984):
+#   LISTING WITHHELD (repo stance: no disassembly of the SDP-shipped binary committed; NCEULA / QDL v7 4.6(c)).
+#   Facts: 12 instructions; x0 = x1 + 0x420 (GICD_IPRIORITYR<8>); w3 = 0xA0A0A0A0 via mov/movk;
+#   0x40085978: b8004403 = str w3, [x0], #4 (post-indexed); then cmp x2, x0 / b.ne 0x40085978.
+
+# objdump of vector slots +0x000 and +0x200 at VBAR_EL1=0x4008d800 and of the startup entry 0x40081da8:
+#   LISTING WITHHELD (same stance). Facts: 0x4008d800 and 0x4008da00 each hold 14000000 = b . (self-branch);
+#   entry 0x40081da8 holds 140004a0 = b 0x40083028.
+
+# SDP REL object <sdp-root>/target/qnx/aarch64le/boot/sys/startup-qemu-virt (ELF64 REL, 1,599,632 bytes) -> IFS address mapping (nm symbols; .text linked at VA 0x40081800 = blob 0x400810a0 + 0x760):
+#   _start            0x5a8  -> 0x40081da8 (== dumpifs startup entry)
+#   gic_v3_initialize 0x4064 -> 0x40085864
+#   str w3,[x0],#4    0x4178 -> 0x40085978 (== the single b8004403 above; gic_v3_initialize+0x114)
+#   vbar_default      0xc000 -> 0x4008d800 (== the VBAR_EL1 value transcribed in docs/orin-port.md)
+# note: dumpifs -x -d <dir> ifs.bin extracts proc/boot/* only; it does NOT write the startup.* blob as a file (checked this session) — read the blob by file offset (0x10a0..0x2c0e8) or pass --elf ifs.bin --elf-base 0x40080000 to the script instead.

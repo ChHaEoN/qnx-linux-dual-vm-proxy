@@ -1,0 +1,43 @@
+# Curated evidence -- the Orin Nano's OWN boot record for the claims in docs/orin-port.md and ADR-003
+# (captured 2026-09-09 over ssh, read-only: dmesg, /proc/device-tree, /sys/firmware). Previously the
+# repo asserted "UEFI hands off at EL2 / VHE" for this board from a public AGX Orin dmesg -- a
+# test-before-claim gap the ADR-003 research flagged. This is the board itself. Hostname/IP redacted.
+#
+# What it shows: EDK II UEFI (EFI v2.70), PSCI 1.1 via SMC, every CPU entered at EL2, ACPI interpreter
+# DISABLED (device-tree boot; /sys/firmware/acpi/tables absent), /sys/firmware/efi present, machine
+# model "Orin Nano ... Developer Kit Super", Tegra234 compatible string. KVM lines are included for the
+# GICv3 story: note "GICv3: no GICV resource entry" and "disabling GICv2 emulation".
+# ---------------------------------------------------------------------------
+## uname
+Linux 5.15.148-tegra aarch64
+## /proc/device-tree/model
+NVIDIA Jetson Orin Nano Engineering Reference Developer Kit Super
+## /proc/device-tree/compatible
+nvidia,p3768-0000+p3767-0005-super nvidia,p3767-0005 nvidia,tegra234 
+## /sys/firmware/efi
+efivars
+esrt
+fw_platform_size
+systab
+## /sys/firmware/acpi/tables
+(absent)
+## dmesg (boot lines: EL2 / EFI / PSCI / ACPI / VHE / kvm)
+[    0.000000] Booting Linux on physical CPU 0x0000000000 [0x410fd421]
+[    0.000000] Machine model: NVIDIA Jetson Orin Nano Engineering Reference Developer Kit Super
+[    0.000000] efi: EFI v2.70 by EDK II
+[    0.000000] efi: RTPROP=0x26d82f198 TPMFinalLog=0x25e3f0000 SMBIOS=0xffff0000 SMBIOS 3.0=0x26d220000 MEMATTR=0x2671a6018 ESRT=0x2671e4d98 TPMEventLog=0x25e408018 RNG=0x25a900018 MEMRESERVE=0x25e40ac18 
+[    0.000000] psci: probing for conduit method from DT.
+[    0.000000] psci: PSCIv1.1 detected in firmware.
+[    0.000000] psci: Using standard PSCI v0.2 function IDs
+[    0.000000] psci: Trusted OS migration not required
+[    0.000000] psci: SMC Calling Convention v1.2
+[    0.044618] CPU: All CPU(s) started at EL2
+[    0.118915] ACPI: Interpreter disabled.
+[    0.160878] pnp: PnP ACPI: disabled
+[    0.175552] kvm [1]: IPA Size Limit: 48 bits
+[    0.175590] kvm [1]: GICv3: no GICV resource entry
+[    0.175597] kvm [1]: disabling GICv2 emulation
+[    0.175618] kvm [1]: GIC system register CPU interface enabled
+[    0.175689] kvm [1]: vgic interrupt IRQ9
+[    0.175837] kvm [1]: VHE mode initialized successfully
+[    0.208202] EINJ: ACPI disabled.

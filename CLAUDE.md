@@ -353,7 +353,11 @@ Quick summary for context:
    boot-unverified — `startup-qemu-virt` cannot be relinked without the
    `qemu-virt` board source, which the BSP does not ship. The
    cross-vendor `a1.metal` reproduction remains the other half of the
-   evidence.
+   evidence. The read-only collector `scripts/diagnose-gicv3-nisv.sh` and
+   its reviewed report (`results/gicv3-nisv-debug/20260909T101030Z/summary.md`)
+   list exactly which trace fields the filing still lacks (numeric
+   `pc=`/`ipa=`, one logged run per `-smp`/`gic-version`/`its` variant) and
+   the commands that would capture them.
    (A from-source QEMU v11.1.0 with `--enable-kvm` now exists on the Orin
    for the unrelated TCG/EL2-timer reason; re-running the `qnx-safety-vm`
    IFS under `-enable-kvm` with it is a near-zero-cost check, still
@@ -369,7 +373,15 @@ Quick summary for context:
    CSVs, not boot-time files) after checking their `qemu:`/`devices:`/`disk:`
    stamps match. Regenerating the QHV images from clean sources (the shipped disk
    is the RQ-2 diagnostic variant) is a separate, number-changing step.
-4. Write `docs/drive-os-comparison.md`'s dimension-by-dimension
+4. **Decide ADR-003** ([docs/adr-003-hardware-timed-qhv.md](docs/adr-003-hardware-timed-qhv.md),
+   Status: Proposed): where a hardware-timed QNX Hypervisor number can come
+   from. Research-backed inputs are in; the choice between a Raspberry Pi
+   4B (vendor-documented, Everywhere-licensed, non-VHE), an AWS Graviton
+   metal route (quota + licence gates), and a native Orin port (weeks, no
+   vendor path) is the owner's. Two licence clauses flagged there
+   (NC QDL v7 4.6(c) disassembly, 4.6(i) publishing evaluation results)
+   need an owner decision before more numbers are published.
+5. Write `docs/drive-os-comparison.md`'s dimension-by-dimension
    verdicts now that Phase 2/3/4 have real numbers to cite instead of
    projections. **This is the largest remaining gap in the public
    story** — Phase 4's boot-diff half is done; this half is untouched.

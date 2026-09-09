@@ -1,0 +1,15 @@
+HEAD: 93cd778386569a80954a1993f54aa6f9af848f3f
+branch: main
+describe: 93cd778
+--- status --short
+?? results/gicv3-nisv-debug/
+?? scripts/diagnose-gicv3-nisv.sh
+--- last 8 commits (no author fields on purpose)
+93cd778 2026-09-09 docs: CLAUDE.md next actions point at ADR-003 (decision pending) and its licence flags
+61ada03 2026-09-09 docs: ADR-003 inputs -- where a hardware-timed QNX Hypervisor number could come from
+60786ae 2026-09-09 phase-4: the QEMU 6.2 QHV hang is the unwired EL2 virtual-timer IRQ -- verified by a reverted-wiring build
+42ab34e 2026-09-09 phase-4: launch-qhv-tcg.ps1 -- stop leaking a bogus exit code 255 from the version stamp
+32a4aad 2026-09-09 phase-4: version x host matrix closed; Windows column release-aligned to QEMU 11.1.0
+243a98f 2026-09-09 docs: put the stray sentence back into the QHV risk cell of the orin-port register
+fe31e53 2026-09-09 phase-4: remaining consistency items from the review; -QemuPath for the Windows launcher
+7d2a2a1 2026-09-09 phase-4: Orin QHV column re-measured with segment stamps; the headline ratio is not timeout-dominated
