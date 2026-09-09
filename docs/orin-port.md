@@ -77,7 +77,7 @@ piggyback that the old EC2-build-host path provided. See the
 ### 1. Flash and first boot
 
 - [x] Flash JetPack 6.x to the Orin Nano — already done (pre-existing, shared with another project)
-- [x] First boot / hostname / ssh — already done, reachable at `haochen@<orin-ip>` with a dedicated key
+- [x] First boot / hostname / ssh — already done, reachable at `<user>@<orin-ip>` with a dedicated key
 - [x] `uname -a` reports `aarch64` (`Linux ... 5.15.148-tegra ... aarch64`)
 - [x] `lscpu` shows 6 × Cortex-A78AE cores
 - [x] `free -h` shows ~7.4 GB total, ~6.1 GB available
@@ -100,7 +100,7 @@ piggyback that the old EC2-build-host path provided. See the
 
 - [x] **Rebuilt, not the untouched Phase-1 IFS** — see the 2026-07-28 status header: `qnx-safety-vm` was rebuilt from the same baseline `local/options` via `mkqnximage --type=qemu --arch=aarch64le --hostname=qnx-safety --build` (invoked from the Windows build host; had to go through `cmd.exe //c ...`, not plain bash — see the "Windows/MSYS gotcha" note below) with two new `local/snippets/*.custom` files staging `qnx-server-net`'s binary and forcing the static IP. Honest deviation from "same IFS, zero changes": the *code* (`ipc-test/`) is new/additive as scoped, and this rebuild is the config-and-staging mechanism that carries it — not a change to Phase-1's boot/BSP behaviour. **Reproducibility note:** `qnx-safety-vm/` is entirely gitignored (mkqnximage-derived), so the two `local/snippets/*.custom` files staged directly during this pass would NOT survive in git on their own. [`scripts/build-qnx-ifs-orin.bat`](../scripts/build-qnx-ifs-orin.bat) (new, mirrors `build-qhv.bat`'s staging pattern for `build-qnx-ifs.bat`) is the committed, reproducible recipe: it builds `ipc-test`, stages [`scripts/orin/qnx-safety-vm-post_start.custom`](../scripts/orin/qnx-safety-vm-post_start.custom) (the committed source of truth for the static-IP + auto-start logic) plus a freshly-generated `ifs_files.custom` (one line, an absolute host path, regenerated every run — not committed, same as `build-qhv.bat`'s own `ifs_files.custom`/`data_files.custom`), then calls `build-qnx-ifs.bat`. Not re-run after being written (the already-verified rebuild from the manual steps stands); a future session should use this script rather than repeat the manual `local/snippets/` edit.
 - [x] `sha256sum output/ifs.bin output/disk-qemu output/disk-qemu.vmdk > output/SHA256SUMS` (Git Bash on the Windows build host)
-- [x] `scp output/{ifs.bin,disk-qemu,disk-qemu.vmdk,SHA256SUMS} haochen@<orin-ip>:~/qnx-orin-test/`
+- [x] `scp output/{ifs.bin,disk-qemu,disk-qemu.vmdk,SHA256SUMS} <user>@<orin-ip>:~/qnx-orin-test/`
 - [x] On Orin: `sha256sum -c SHA256SUMS` — **all three OK**, byte-identical transfer confirmed
 
 **Windows/MSYS gotcha hit during the rebuild:** invoking `cmd.exe /c "..."` from Git Bash silently no-ops — Git Bash's MSYS path-mangling rewrites the bare `/c` flag into a Windows path (`C:/`) before `cmd.exe` ever sees it, so the whole command line is swallowed and you get an interactive banner and nothing else, with exit code 0 (looks like success). Fix: `cmd.exe //c "..."` (doubled slash defeats the MSYS rewrite). Cost about 10 minutes of "why did nothing happen" before being caught by explicitly checking `where mkqnximage` output was missing from the log.
@@ -145,6 +145,292 @@ piggyback that the old EC2-build-host path provided. See the
 | **COMPILE-VERIFIED (2026-09-08): the faulting instruction is reproducible from SDP's own BSP source, and one flag removes it** — `$SDP/bsp/BSP_hyp-guest-arm_be-800_SVN1018940_JBN323.zip` ships `src/hardware/startup/lib/aarch64/gic_v3.c`. Built unmodified with the SDP Windows toolchain (`qcc -Vgcc_ntoaarch64`, gcc 12.2.0), `gic_v3.o` contains `str w3,[x0],#4` at GICD base **+0x420** inside `gic_v3_initialize` — the same instruction form at the same offset this row's neighbour root-caused from ftrace + disassembly of the shipped binary, so the strength-reduction theory is **confirmed, not inferred**. Four MMIO writeback stores exist in that object (GICD priority `0x1a68`, GICD clear `0x1a90`, GICR priority `0x1b0`, 64-bit `0x1af0`); recompiling with `-fno-auto-inc-dec` takes that count to **zero**, the loop becoming `add x0,x0,#4` + `stur w3,[x0,#-4]` — identical addresses/values/iterations, non-writeback, so ISS is valid and KVM's vgic MMIO path can decode it. QNX already ships `-fno-store-merging` in these flags for the same class of reason. | **Still boot-unverified:** nothing has been booted, and `startup-qemu-virt` cannot be relinked because the BSP ships `boards/armv8_fm/` but **not** `boards/qemu-virt/` — `libstartup.a` rebuilds, the binary that consumes it does not. Only `gic_v3.c` was audited, not the whole library. Routes forward: (a) file with QNX/BlackBerry — this makes the report concrete enough for them to verify cheaply; (b) request the `qemu-virt` board source; (c) adapt `armv8_fm` to QEMU `virt`'s memory map and boot the result under KVM on `a1.metal`, which already reproduces the hang. | Low to reproduce (done); High to reach a bootable rebuilt startup |
 | **QHV host image hangs on the Orin under the distro QEMU 6.2.0 TCG** (2026-09-08): boots to file-system mount, then never returns from the first timeout-wait (`waitfor /dev/random`; with an rng presented, `io-sock` start instead). **Attributed to the QEMU version, not the host** (2026-09-09; the host is excluded as a sufficient cause by the 11.1.0 boot on the same board — the timer mechanism below is hypothesised, not observed): `v6.2.0`'s `hw/arm/virt.c` has no NS-EL2 virtual-timer IRQ wiring (added in 9.0, `1ec896fe7c`); a VHE hypervisor's timers are `CNTHV_*`. `target/arm` also gained `5709038aa8` (10.0). Not bisected between them. A `-cpu cortex-a57` (no VHE) control on the same 6.2 gets past the host hang point (timeouts fire, `qvm` launches), supporting the VHE/EL2-virtual-timer mechanism for the host; the guest then aborts on a PAUTH feature check the A57 model cannot pass — unrelated. **Verified 2026-09-09:** 11.1.0 rebuilt with only that wire removed hangs identically; the wire is the cause. The plain EL1 IFS is unaffected (`CNTV`, INTID 27, always wired). | `scripts/orin/build-qemu-on-orin.sh` builds a tagged QEMU (v11.1.0) into its own prefix — the QHV host **and guest boot** with it (~63–78 s to guest banner). Distro 6.2.0 kept intact for every prior `qnx-safety-vm` result. `launch-qhv-on-orin-tcg.sh` now selects the binary explicitly and stamps it. | Low (done); the from-source build also gives a `--enable-kvm` QEMU for a cheap NISV re-check |
 | **Board dropped off the network entirely mid-scp and needed a power cycle** (2026-09-08: no ping, no SSH anywhere on the /24; back ~19 min later with a fresh boot). Cause **unknown** — journald on this L4T image is volatile, so the previous boot left no record. Suspected but unproven: supply brown-out under CPU + Wi-Fi + storage load (the Dev Kit's USB-C path is marginal under sustained draw). | Transfers are now resumable and checksum-gated (`sync-qhv.sh`); the QEMU build was run at `-j4` rather than `-j6` for this reason; every measurement re-verifies `SHA256SUMS` before and after. To close it: enable persistent journald (`mkdir /var/log/journal`) so the *next* drop leaves a record, and check the supply against the Dev Kit's 5 V/4 A barrel-jack recommendation. | Medium while unexplained — a drop mid-series would produce plausible-looking garbage rather than a failure |
+
+## Research sweep B (2026-09-09) — native QNX on the Orin Nano (Tegra234): verdict and citations
+
+> Input to **ADR-003** (where a hardware-timed *hypervisor* number could
+> come from). Research-agent output: findings and citations, **not a
+> decision** — the Architect arbitrates. Evidence tags: **[local]** =
+> inspected in the SDP 8.0.4 install on this machine or built with its
+> toolchain this session; **[vendor]** = primary NVIDIA / QNX / upstream
+> source; **[community]** = forum or blog; **[inference]** = reasoned from
+> the above, not observed.
+
+### Verdict (one paragraph)
+
+A native QNX port to the Orin Nano is **technically plausible but is a
+from-scratch BSP bring-up with no vendor path**. (1) The JetPack 6 UEFI is
+a standard edk2 build that boots arbitrary AArch64 EFI applications, hands
+the OS off at **EL2**, and (for the "general" T23x build) is configured
+with both Device Tree and ACPI. (2) Every register-level fact a first-cut
+startup needs is in upstream `tegra234.dtsi` — but the only debug
+console on the Orin Nano is the SPE-owned Tegra Combined UART, not a
+CPU-drivable 8250, and NVIDIA says re-purposing it is unsupported.
+(3) NVIDIA has said three times (2020, 2024, 2025) that QNX on Jetson is
+not supported and not planned; QNX exists only on DRIVE, behind NVONLINE
+and an invitation-only partner program. (4) The public SDP 8.0 startup
+library and the Apache-2.0 BSP source shipped with it already contain a
+UEFI entry (`efi_entry_point`), an ACPI/SPCR path, a Tegra 8250-style
+debug callout, T18x PCIe/MSI callouts and a Cortex-A78AE cpuid, and
+`mkifs` emits an AArch64 PE image today (toolchain-verified) even though
+the 8.0 docs list `uefi.boot` as x86_64-only. (5) The governing licence
+for Everywhere users is the **Non-Commercial QDL v7 (2025-12-10)**: it
+grants the right to modify source-delivered Software for a Non-Commercial
+Target System with **no hardware restriction**, forbids modifying or
+reverse-engineering binary-delivered Software, and — a project-wide
+finding — forbids publishing "the results of any performance or
+functional evaluation of the Software" without written approval from
+BlackBerry (4.6(i)). What a port would *not* remove: the hypervisor host
+(`qvm`, EL2 `procnto`) is prebuilt and board-agnostic, so the missing
+piece is exactly a board startup plus storage/network drivers — weeks of
+BSP work with no vendor support, and the result is still a
+personal-licence experiment.
+
+### (1) JetPack 6 / L4T R36 boot chain on the Orin Nano
+
+- **Chain:** BootROM → PSCROM → MB1 → MB2 → UEFI → kernel; "UEFI ...
+  replaces CBoot in the Jetson boot flow as the CPUBL for Jetson Linux
+  devices." The page names no TF-A/EL stages. **[vendor]**
+  https://docs.nvidia.com/jetson/archives/r36.4.4/DeveloperGuide/AR/BootArchitecture/JetsonOrinSeriesBootFlow.html
+- **UEFI behaviour (R36.4.3 "UEFI Adaptation"):** "L4tLauncher ... the
+  default OS Loader for the UEFI"; the kernel is loaded through its EFI
+  stub ("EFI stub: Booting Linux Kernel..."); "OS boot is supported from
+  eMMC/SD/UFS/NvME/USB (T234 only)"; Boot Manager via ESC; the UEFI shell
+  is on by default (Kconfig `default y`; "We strongly recommend that you
+  disable the UEFI shell for production devices"); GRUB may replace
+  `BOOTAA64.efi` via `grub-install --target=arm64-efi` — i.e. an
+  arbitrary EFI application can be the OS loader. **[vendor]**
+  https://docs.nvidia.com/jetson/archives/r36.4.3/DeveloperGuide/SD/Bootloader/UEFI.html
+- **Exception level at hand-off = EL2.** TF-A: BL31 jumps to BL33 "at
+  the highest available Exception Level (EL2 if available, otherwise
+  EL1)" **[vendor]**
+  https://trustedfirmware-a.readthedocs.io/en/latest/design/firmware-design.html ;
+  Linux `booting.rst`: "The CPU must be in non-secure state, either in
+  EL2 (RECOMMENDED ...) or in EL1" **[vendor]**
+  https://raw.githubusercontent.com/torvalds/linux/master/Documentation/arch/arm64/booting.rst ;
+  a public AGX Orin dmesg (5.10.120-tegra) shows `efi: EFI v2.70 by EDK
+  II`, `CPU: All CPU(s) started at EL2`, `psci: PSCIv1.1 detected in
+  firmware`, `kvm [1]: VHE mode initialized successfully`, `console
+  [ttyTCU0] enabled` **[community log]**
+  https://linux-hardware.org/?log=dmesg&probe=d1de28c1b6 . Kernel source
+  ties the strings to the mode: `smp.c` prints "All CPU(s) started at
+  EL2" iff `is_hyp_mode_available()`; v5.15 `arm.c` prints "VHE mode
+  initialized successfully" only when `in_hyp_mode`. The dmesg of this
+  board already shows the VHE line (step 2 above), so **EL2 entry on this
+  Orin Nano is verified, not assumed** **[local + vendor source]**.
+- **DT vs ACPI:** edk2-nvidia `Platform/NVIDIA/Kconfig` defines `config
+  ACPI bool "ACPI support"` (and `TEGRA_ACPI depends on SOC_GENERAL ||
+  SOC_DATACENTER`); `KconfigIncludes/BuildGeneral.conf` — the build type
+  chosen by `Tegra/DefConfigs/t23x_general.defconfig` (`CONFIG_SOC_T23X=y`,
+  `CONFIG_BUILD_GENERAL=y`) — does `imply ACPI`, `imply DEVICETREE`,
+  `imply DEFAULT_SMBIOS_ARM`, `imply SELECT_ALL_SHELL_COMMANDS`,
+  `imply DEFAULT_SERIAL_PORT_CONSOLE_TEGRA`. **[vendor source]**
+  https://github.com/NVIDIA/edk2-nvidia/blob/main/Platform/NVIDIA/Kconfig ,
+  https://github.com/NVIDIA/edk2-nvidia/blob/main/Platform/NVIDIA/KconfigIncludes/BuildGeneral.conf ,
+  https://github.com/NVIDIA/edk2-nvidia/blob/main/Platform/NVIDIA/Tegra/DefConfigs/t23x_general.defconfig .
+  The NVIDIA UEFI readme documents the "O/S Hardware Description Selection"
+  menu (Device Tree / ACPI) for the Xavier-era mainline UEFI and notes
+  that an ACPI serial console needs the `8250_tegra` driver. **[vendor,
+  Xavier]** https://developer.nvidia.com/w/embedded/L4T/UEFI_Readme.html .
+  Community: Windows 11 ARM installed on AGX Orin from USB with ACPI
+  enabled in UEFI (Mar 2023; Hyper-V works, no GPU; NVIDIA: "We have not
+  tried this yet") **[community]**
+  https://forums.developer.nvidia.com/t/nvidia-jetson-orin-agx-can-boot-windows-out-of-the-box-in-the-latest-uefi/246176 ;
+  the Fedora ARM maintainer on JetPack 6 UEFI: "In ACPI you get compute
+  (cpu/memory/virt etc), PCIe, USB, network ... no display or accelerator
+  support as yet. The Device-Tree mode is more feature full." **[community]**
+  https://nullr0ute.com/tag/jetson/ .
+
+### (2) Tegra234 facts a board startup needs
+
+All from upstream `arch/arm64/boot/dts/nvidia/tegra234.dtsi` and
+`tegra234-p3768-0000+p3767.dtsi` (Orin Nano Developer Kit), fetched and
+grepped this session **[vendor source]**
+https://github.com/torvalds/linux/blob/master/arch/arm64/boot/dts/nvidia/tegra234.dtsi
+https://github.com/torvalds/linux/blob/master/arch/arm64/boot/dts/nvidia/tegra234-p3768-0000%2Bp3767.dtsi
+
+| Block | Upstream DT fact | QNX-side note |
+|---|---|---|
+| CPU | `compatible = "arm,cortex-a78ae"` | `cpuid_a78ae.c`: MIDR `0x4100D420`, "Cortex-A78ae" **[local]** |
+| GICv3 | GICD `0x0f400000` (64 KiB), GICR `0x0f440000` (2 MiB, one region), maintenance PPI 9; **no ITS node upstream** | `gic_v3.c` / `gic_v3_its.c` in libstartup.a; the NISV writeback-store issue above is irrelevant natively (no KVM trap) |
+| Generic timer | `arm,armv8-timer` PPIs 13/14/11/10, `always-on`; Tegra TKE at `0x02080000` (`nvidia,tegra234-timer`) | `armv8_fm/main.c` reads `cntfrq_el0` for `timer_freq` |
+| PSCI | `arm,psci-1.0`, `method = "smc"` (dmesg: PSCIv1.1) | `fdt_psci_configure()`, `psci_smc`, `reboot_psci_smc`, `psci_smp.o` all present |
+| UARTs | `uarta` `0x03100000` and `uarte` `0x03140000` — `nvidia,tegra234-uart`,`nvidia,tegra20-uart` (8250-class, SPI 112 / 116), both `okay` on the devkit; `uarti` `0x031d0000` `arm,sbsa-uart` (SPI 285), `okay`, 115200 | `callout_debug_tegra.S` = "Similar to 8250 uart with 32-bit registers" (2015); `hw_serpl011` / `acpi_spcr_parse` handle SBSA/PL011 |
+| Console | `aliases { serial0 = &tcu }`, `stdout-path = "serial0:115200n8"`; `tcu` is `nvidia,tegra234-tcu` over HSP **mailboxes** — no MMIO UART | Not drivable by a polled callout. NVIDIA (KevinFFF, Apr 2024): ttyTCU0 on the Orin Nano is backed by `uartc@c280000`; "we don’t suggest and support for this use case" of using it as a normal UART; the attempt by the user gave no TX signal **[vendor forum]** https://forums.developer.nvidia.com/t/enabling-ttytcu0-as-regular-uart-on-orin-nano/287340 . TCU muxing runs "in the Sensor Processing Engine (SPE) for Jetson Orin" **[vendor]** https://docs.nvidia.com/jetson/archives/r36.4.4/DeveloperGuide/AT/JetsonLinuxDevelopmentTools/TegraCombinedUART.html |
+| SD | `mmc@3460000` `nvidia,tegra234-sdhci`,`nvidia,tegra186-sdhci` (SPI 65) | no QNX driver for it known in the Everywhere install (not checked) |
+| NVMe / PCIe | C4 `pcie@14160000` (M.2 Key-M, x4), C7 `pcie@141e0000` (Key-M, x2), C1 `pcie@14100000` (Key-E), C8 `pcie@140a0000` (Ethernet) | `callout_interrupt_t18x_{pcie,pcie_ic6,msi}.S` are **T18x** (Parker) callouts — fit for T234 unverified |
+| TRM | "Jetson Orin Series SoC Technical Reference Manual" (~7,100 pp) via the Jetson Download Center; developer registration may be required **[community]** https://jetsonhacks.com/2022/03/23/jetson-orin-documents-available/ — the direct page returned HTTP 403 to this agent | — |
+
+### (3) Prior art
+
+- **NVIDIA position, three times, staff-authored [vendor forum]:**
+  kayccc, 2020-07-27 (Xavier NX): "We do not have QNX support for Jetson
+  Xavier NX platform, and no plan to do."
+  https://forums.developer.nvidia.com/t/qnx-board-support-package-for-jetson-xavier-nx/144240 ;
+  DaveYYY, 2024-02-29 (AGX Orin): "We don’t support QNX on Jetson. It’s
+  only available on DRIVE platforms." / "L4T ... is the only OS supported
+  on Jetson."
+  https://forums.developer.nvidia.com/t/board-support-package-for-qnx-os/284463 ;
+  kayccc, 2025-07-17: "There is no plan to support QNX OS on Jetson" —
+  use DRIVE AGX Orin.
+  https://forums.developer.nvidia.com/t/is-it-possible-to-port-qnx-os-to-nvidia-jetson-orin/339232 .
+  Third-party hypervisors are "not supported on Jetpack release. You may
+  see if there is a method to enable it" — unsupported, not hardware-locked
+  (DaneLLL, 2025-10-30)
+  https://forums.developer.nvidia.com/t/clarification-on-jetson-orin-hypervisor-support-hardware-lock-or-only-unsupported/348348 .
+- **DRIVE OS QNX, who gets it [vendor]:** "import the qpkg corresponding
+  to SDP 7.1 and QOS 2.2.2 EA required for DRIVE OS 6.0.6"; "Log into
+  NVONLINE (partners.nvidia.com), and find the DRIVE OS 6.0.6 QNX SDK
+  group"
+  https://developer.nvidia.com/docs/drive/drive-os/6.0.6/public/drive-os-qnx-installation/common/topics/installation/debian-packages/install-drive-os-qnx.html .
+  The DRIVE AGX SDK Developer Program is "available to companies and
+  research institutions who have the appropriate agreements on file with
+  NVIDIA and have been invited to participate"; "Login with a corporate
+  or university email address"
+  https://developer.nvidia.com/drive/agx-sdk-program — consistent with
+  the CLAUDE.md "invitation-only" wording. (The 2022 blog says "generally
+  available" but still requires program membership:
+  https://developer.nvidia.com/blog/now-available-drive-agx-orin-with-drive-os-6/ .)
+- **QNX on any Jetson generation:** none found. The QNX public startup
+  library carries Tegra *DRIVE* lineage — `callout_debug_tegra.S` (2015),
+  `callout_interrupt_t18x_*.S`, `cpuid_a78ae.c` (2023) — which is
+  evidence of the T18x/Orin BSP heritage, not of a Jetson port **[local]**.
+- **Non-Linux OSes on Orin via UEFI:** Windows 11 ARM on AGX Orin (ACPI,
+  community, 2023); Fedora / RHEL 9.3 on AGX Orin (JetPack 6 UEFI,
+  community). seL4 lists only Jetson TK1; the only Xen Jetson attempt is
+  Nano (2020, no dom0 console); a 2023 freebsd-arm post reports that an
+  ACPI-mode boot attempt did not go well — nothing conclusive for Orin.
+  **[community]**
+
+### (4) SDP 8.0 startup-library evidence
+
+- **Docs say no:** the 8.0 `mkifs` page lists `uefi.boot` under x86_64
+  only; the KB "How to boot in UEFI mode" is x86_64 (SDP 7.0/7.1); the
+  8.0 building guide says "The BIOS or UEFI (x86) or the ROM monitor
+  (ARM)"; the `startup-*` options page has no UEFI/ACPI option for
+  AArch64. **[vendor]**
+  https://www.qnx.com/developers/docs/8.0/com.qnx.doc.neutrino.utilities/topic/m/mkifs.html ,
+  https://www.qnx.com/support/knowledgebase.html?id=5015Y0000017eFi ,
+  https://www.qnx.com/developers/docs/8.0/com.qnx.doc.neutrino.building/topic/startup/startup_about.html ,
+  https://www.qnx.com/developers/docs/8.0/com.qnx.doc.neutrino.utilities/topic/s/startup_options.html .
+- **The install says otherwise [local]:**
+  `target/qnx/aarch64le/boot/sys/uefi.boot` exists (239 bytes:
+  `filter="mkifsf_uefi %a %s %i"`, `vboot=0xffffff8060000000`, "The
+  build file MUST specify load address via the [image=] attribute");
+  `mkifsf_uefi.exe` is in `host/win64/x86_64/usr/bin`;
+  `aarch64le/usr/lib/libstartup.a` (246 members) contains
+  `efi_entry_point.o uefi.o uefi_init.o uefi_io.o is_uefi_boot.o
+  init_raminfo_uefi.o init_raminfo_efi.o efi_tweak_cmdline.o acpi.o
+  acpi_spcr_parse.o board_find_acpi_rsdp.o board_find_acpi_rsdp_uefi.o
+  board_find_efi_smbios.o` plus 20+ `fdt_*.o`, `psci_*.o`, `gic_v3*.o`,
+  `callout_debug_tegra.o`, `callout_interrupt_t18x_*.o`, `cpuid_a78ae.o`,
+  `hw_ser8250*.o`, `hw_serpl011.o`.
+- **Source for all of it ships [local]:** the hypervisor-guest BSP zip
+  (`BSP_hyp-guest-arm_be-800_SVN1018940_JBN323.zip`, 452 files) carries
+  `src/hardware/startup/lib/` with **Apache-2.0** headers (BlackBerry
+  2022/2023; older QNX files under the QNXLicenseC Apache-2.0 header),
+  public headers `lib/public/hw/uefi.h`, `hw/acpi.h`, `aarch64/gic_v3.h`,
+  `arm/psci.h`, `startup.h`, and one board, `boards/armv8_fm/` (ARM FVP;
+  its `main.c` is under the older "written license" QNX header). No
+  `qemu-virt`, no Tegra board.
+- **How the UEFI path works (from source) [local]:**
+  `efi_entry_point(ImageHandle, SystemTable)` takes LoadOptions as the
+  command line, `GetMemoryMap`, `ExitBootServices`, then `cstart()`;
+  alternatively `is_uefi_boot()` validates `boot_regs[0..1]` as
+  ImageHandle/EFI_SYSTEM_TABLE, `uefi_init()` keeps Boot Services alive
+  until `uefi_exit_init()`; `init_raminfo_uefi()` builds the RAM map from
+  the EFI memory map; `board_find_acpi_rsdp_uefi()` finds the RSDP via the
+  EFI configuration table; `acpi_spcr_parse()` picks the debug device from
+  SPCR — **PL011/SBSA interface types only** on aarch64 (no 8250/Tegra
+  case). `_start.S` only branches to `cstart`, preserving x0–x3 into
+  `boot_regs[]`. `hypervisor_init(0)` in `armv8_fm/main.c` "may switch the
+  CPU to EL2&0 for VHE" — the hook a native QHV host needs, which is why
+  EL2 hand-off in (1) matters.
+- **Toolchain check (this session) [local]:** a minimal buildfile
+  `[image=0x80000000] [virtual=aarch64le,uefi]` with `startup-armv8_fm`
+  and `procnto-smp-instr` built with SDP 8.0.4 `mkifs` into a 1.77 MB
+  file beginning `4d 5a` (`MZ`), `e_lfanew = 0x80`, then `50 45 00 00`
+  (`PE`) and machine `64 aa` = **0xAA64 (AArch64)**. So the toolchain
+  produces an AArch64 PE32+ container despite the x86_64-only table in the
+  docs. **Not verified:** that its entry point reaches `efi_entry_point`
+  (`armv8_fm/main.c` never calls `is_uefi_boot()`; it treats x0 as an FDT
+  pointer) — nothing was booted.
+- **AWS corroboration [vendor + inference]:** EC2 docs: "Default boot
+  modes for instance types: Graviton instance types: UEFI"
+  https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ami-boot.html — so
+  the QNX OS 8.0 AMI (Graviton2) must enter via UEFI, matching the
+  `efi_entry_point`/ACPI objects; whether it then uses ACPI or an FDT is
+  unknown (the AMI release-notes page returned 404 / connection refused),
+  and that startup is not in the public BSP list.
+
+### (5) Licence: is personal-use porting to unsupported hardware permitted?
+
+- **Governing document [vendor]:** the licence matrix
+  (https://www.qnx.com/legal/licensing/document_archive/current_matrix.pdf)
+  lists for SDP 8.0 a "Development License Agreement
+  (Non-commercial/Academic)" → http://www.qnx.com/nc_qdl → **"QNX
+  Development License Agreement (Non-Commercial License)", v7,
+  2025-12-10**
+  (https://www.qnx.com/download/download/51624/BB_QNX_Development_License_Non-Commercial_License_Class_v7_2025-12-10.pdf).
+  The older NCEULA v.019 (2018) is superseded but states the intent
+  plainly: non-commercial developers may use the Software for "extending
+  hardware or peripheral support for the QNX Neutrino RTOS" (4.2(a)).
+- **v7 grant, clause (iii):** "access, use, link and compile the Software
+  (including Runtime Subsystems and authorized derivative works of
+  Software) on Developer Systems solely in order to develop, evaluate,
+  research, experiment with, test, debug, profile, maintain, support,
+  demonstrate and discuss uses of Non-Commercial Applications and/or
+  Non-Commercial Target System(s), **which includes rights to modify the
+  Software supplied as Source Code** and to install and use Runtime
+  Subsystems on or in connection with the ... Non-Commercial Target
+  System(s) developed". "Non-Commercial Target System(s)" is "any
+  product, device, component, or system (containing software or software
+  and hardware components) in which Runtime Subsystems operate ...
+  provided the target system is built for Non-Commercial Purpose(s)" —
+  **no hardware list, no supported-board restriction.** Custom code is
+  "Experimental Software", provided as-is.
+- **v7 restrictions, 4.6:** (c) no reverse engineering, decompiling,
+  disassembly "except and only to the extent any foregoing restriction is
+  prohibited by applicable law"; (d) do not "modify any Software delivered
+  in binary code"; (g) no distribution to third parties; (b) only on
+  systems owned or controlled by the Developer; **(i) do not "release,
+  publish, and/or otherwise make available to any third party the results
+  of any performance or functional evaluation of the Software without the
+  prior written approval of BlackBerry"**. The BSP startup sources
+  additionally carry their own Apache-2.0 headers **[local]**.
+- **Precedent [vendor]:** the BlackBerry-owned
+  https://github.com/qnx/bsp_raspberrypi-bcm2711-rpi4 — a source-only SDP
+  8.0 BSP for driver development, "Experimental Software (SQML 1)"; the
+  QNX Everywhere page names only Raspberry Pi as ready-made hardware
+  (https://qnx.software/en/developers/get-started/qnx-everywhere); the
+  licensing page permits hobbyist/maker builds "provided you do not make a
+  commercial product"
+  (https://qnx.software/en/developers/get-started/qnx-everywhere/licensing).
+- **Two flags for the Architect / Cyber / Docs agents, not decided here:**
+  the 2026-07-28 root cause disassembled the shipped `startup-qemu-virt`
+  binary (4.6(c)); the 2026-09-08 move to the Apache-2.0 `gic_v3.c` source
+  is the cleaner footing. And 4.6(i) reads on every published latency and
+  boot-time number in this repo.
+
+### Looked for and not found
+
+- Any NVIDIA statement that the **Orin Nano** UEFI exposes the ACPI /
+  "O/S Hardware Description" toggle (evidence is AGX Orin community
+  reports plus the Kconfig `imply ACPI` for the T23x general build); the
+  `KconfigIncludes/SocT23X.conf` file (404 at the guessed paths), so
+  whether `SOC_T23X` satisfies the `SOC_GENERAL` gate on `TEGRA_ACPI` is open.
+- Any QNX port to any Jetson generation; any working seL4 / Xen / Zephyr /
+  FreeBSD port to Orin.
+- A documented AArch64 UEFI startup in 8.0 (docs say `uefi.boot` is
+  x86_64-only); the QNX OS 8.0 AMI release notes (404 / refused); how the
+  AMI startup enters.
+- Tegra234 TRM contents (login-gated, HTTP 403); which physical UART is on
+  the Orin Nano 40-pin header; whether `callout_interrupt_t18x_*` fits
+  T234 PCIe/MSI; UEFI spec 2.3.6 text (uefi.org 403 — TF-A and Linux
+  `booting.rst` used instead).
+- **Requires running/booting to confirm:** that the `mkifsf_uefi` AArch64
+  image entry point reaches `efi_entry_point`; that a Tegra234 startup
+  written against `armv8_fm` boots at all.
 
 ---
 
