@@ -84,7 +84,7 @@ truth; this table is a summary that can lag it.
 | **1** — Cloud twin bring-up: QHV `qvm` hosting a QNX guest under TCG | ✅ done | [qhv-tcg-host-and-guest-boot.log](logs/sample-boot/qhv-tcg-host-and-guest-boot.log) |
 | **2** — Cloud twin IPC + latency | 🟡 **partial** — real P50/P99/Max exist; sample count capped by a `qvm`/TCG virtio-queue stall that is **not root-caused**, but is now *recoverable* (19/19 real stalls recovered) | [cloud-ipc-latest.csv](results/cloud/cloud-ipc-latest.csv), [qnx-host-client/README.md](ipc-test/qnx-host-client/README.md) |
 | **3** — Hardware twin port (Jetson Orin Nano) | 🟡 **substantial, not closed** — heterogeneous QNX↔Linux IPC over a real `br0`/tap bridge works (2 × 100 000 iterations, 0 errors) under **TCG**; **KVM boot is blocked** by a root-caused GICv3 / `KVM_EXIT_ARM_NISV` defect, since reproduced on a second ARM vendor **and reproduced from QNX's own BSP source**: the faulting `str w3,[x0],#4` at GICD+0x420 falls out of `gic_v3.c` built with QNX's own flags, and `-fno-auto-inc-dec` removes all four MMIO writeback stores (compile-verified, boot-unverified — the `qemu-virt` board source is not shipped) | [orin-ipc-latest.csv](results/hw/orin-ipc-latest.csv), [orin-port.md](docs/orin-port.md), [aws-a1-metal-kvm-nisv-repro.log](logs/sample-boot/aws-a1-metal-kvm-nisv-repro.log) |
-| **4** — Twin diff + DRIVE OS comparison | 🟡 **started** — boot-time twin diff done (n=5 per side); the QHV hypervisor leg now boots on the Orin under a from-source QEMU 11.1.0 (the distro 6.2.0 hangs it — a QEMU EL2-timer defect, not the host), aligned n=5 pair still owed; [drive-os-comparison.md](docs/drive-os-comparison.md) still open | [digital-twin-design.md](docs/digital-twin-design.md) §1a, §5 |
+| **4** — Twin diff + DRIVE OS comparison | 🟡 **started** — boot-time twin diff done (n=5 per side); the QHV hypervisor leg now boots on the Orin under a from-source QEMU 11.1.0 (the distro 6.2.0 hangs it — a QEMU EL2-timer defect, verified by a reverted-wiring build, not the host); the release-aligned n=5 pair is measured (2.15× Orin/Windows, TCG throughput, not a hardware-timed number — routes to one are in [ADR-003](docs/adr-003-hardware-timed-qhv.md), Proposed); [drive-os-comparison.md](docs/drive-os-comparison.md) still open | [digital-twin-design.md](docs/digital-twin-design.md) §1a, §5 |
 | **5** — FuSa & Cybersecurity overlay | ⬜ not started as a dedicated phase (a Phase-1-gate FuSa + Cyber pass *did* run) | [docs/fusa/](docs/fusa/), [docs/cyber/](docs/cyber/), [docs/tara/](docs/tara/) |
 | **6** — Polish, public README, demo recording | ⬜ not started | — |
 | **7** _(stretch)_ — Multi-SoC / domain convergence | ⬜ feasibility frozen, not built | [future-multi-soc.md](docs/future-multi-soc.md) |
@@ -266,7 +266,7 @@ Other prereqs:
 - [x] **Phase 0** — Bootstrap, scaffold, narrative, BSP selection, twin re-scope
 - [x] **Phase 1** — Cloud twin bring-up (SDP 8.0 QHV `qvm` + one QNX guest under QEMU TCG — no Linux guest on this leg, per [ADR-002](docs/phase2-topology-decision.md))
 - [ ] **Phase 2** _(in progress)_ — Cloud twin IPC + latency benchmark: real P50/P99/Max landed; the 100k-iteration target is still blocked by an unfixed — though now recoverable — `qvm`/TCG stall
-- [ ] **Phase 3** _(in progress)_ — Hardware twin on Jetson Orin Nano: heterogeneous QNX↔Linux IPC done under TCG; a hardware-timed KVM number is still owed, blocked on the GICv3/NISV defect
+- [ ] **Phase 3** _(in progress)_ — Hardware twin on Jetson Orin Nano: heterogeneous QNX↔Linux IPC done under TCG; a hardware-timed KVM number is still owed, blocked on the GICv3/NISV defect. What the defect filing still lacks (a numerically recorded fault PC/IPA, one logged run per QEMU variant) is pinned down by the read-only collector [scripts/diagnose-gicv3-nisv.sh](scripts/diagnose-gicv3-nisv.sh) and its reviewed report in [results/gicv3-nisv-debug/](results/gicv3-nisv-debug/20260909T101030Z/summary.md); the routes to a *genuinely* hardware-timed hypervisor number (Raspberry Pi 4B, AWS metal, a native Orin port — each with its licence and cost caveats) are laid out in [ADR-003](docs/adr-003-hardware-timed-qhv.md) (Proposed, owner decision pending)
 - [ ] **Phase 4** _(in progress)_ — Twin diff done for boot time **and for the QHV hypervisor leg** (same images on both hosts, one QEMU release, 2.15× Orin/Windows; the stock QEMU 6.2 hang it uncovered is a QEMU-side EL2-timer defect, written up honestly); the dimension-by-dimension [drive-os-comparison.md](docs/drive-os-comparison.md) is still open
 - [ ] **Phase 5** — FuSa & Cybersecurity overlay (FMEA, ASIL gap, STRIDE)
 - [ ] **Phase 6** — Polish, demo recording, public release
@@ -314,6 +314,7 @@ A 2-minute spoken version is at [docs/interview-narrative.md](docs/interview-nar
 │   ├── phase2-topology-decision.md # ADR-002 — falsified the cloud dual-VM topology
 │   ├── phase2-research-spike.md
 │   ├── orin-port.md                # Phase 3 plan + KVM/GICv3 risk register
+│   ├── adr-003-hardware-timed-qhv.md # ADR-003 (Proposed) — routes to a hardware-timed QHV number
 │   ├── drive-os-comparison.md      # Phase 4 gap doc (still open)
 │   ├── future-multi-soc.md         # Phase 7 / 7-alt feasibility
 │   ├── security-model.md           # STRIDE + NCEULA audit
@@ -325,6 +326,7 @@ A 2-minute spoken version is at [docs/interview-narrative.md](docs/interview-nar
 ├── scripts/
 │   ├── build-qhv.bat               # cloud leg: build the QHV host + QNX guest images
 │   ├── launch-qhv-tcg.ps1          # cloud leg: boot QHV under QEMU TCG
+│   ├── diagnose-gicv3-nisv.sh      # read-only evidence collector + report for the KVM/NISV boot hang
 │   ├── qhv/                        # committed QHV config sources (g2.conf, post_start, gates)
 │   ├── orin/                       # hardware twin: L4T bootstrap, bridge, launch; build-qemu-on-orin.sh; launch-qhv-on-orin-tcg.sh
 │   ├── twin/                       # sync.sh + diff-results.sh; sync-qhv.sh (QHV images -> Orin, resumable, checksum-gated)
@@ -336,6 +338,7 @@ A 2-minute spoken version is at [docs/interview-narrative.md](docs/interview-nar
 ├── logs/sample-boot/               # curated boot + benchmark logs (the evidence)
 ├── results/cloud/  results/hw/     # benchmark CSVs, one schema for both twins
 ├── results/qhv-images-SHA256SUMS.txt  # copy-time SHA-256 of the QHV image pair (values only; images stay out of git)
+├── results/gicv3-nisv-debug/       # diagnose-gicv3-nisv.sh runs: PASS/FAIL/BLOCKED matrix, decoded ESR, next commands
 └── skills/                         # study artefacts (FMEA, ISO 26262, 21434, ASPICE, BSP,
                                     #                 digital twin, Jetson, Tegra virt)
 
