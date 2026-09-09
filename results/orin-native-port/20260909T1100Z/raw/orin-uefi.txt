@@ -1,0 +1,93 @@
+# orin-uefi.txt -- H3 live harvest of the Jetson Orin Nano over ssh, 2026-09-09 (board local time ~15:36, uptime 16h). READ-ONLY; sudo -n used only for dmesg/iomem/blkid/efibootmgr/ESP listing/ESRT/fuser.
+# Redacted: login/hostname -> <user>, LAN IPs -> <orin-ip>/<lan-ip>, ssh key -> <orin-key>, MAC -> <mac>, NVMe serial/EUI -> <nvme-serial>/<nvme-eui>. NUL bytes stripped.
+# Producing scripts: h3-a.sh / h3-c.sh / h3-f.sh / h3-d.sh (scratchpad); section markers === [x] === are the script sections.
+
+=== [i] JetPack/L4T UEFI ===
+--- sudo -n dmesg | head -60
+[    0.000000] Booting Linux on physical CPU 0x0000000000 [0x410fd421]
+[    0.000000] Linux version 5.15.148-tegra (buildbrain@mobile-u64-6354-d6000) (aarch64-buildroot-linux-gnu-gcc.br_real (Buildroot 2022.08) 11.3.0, GNU ld (GNU Binutils) 2.38) #1 SMP PREEMPT Thu Sep 18 15:08:33 PDT 2025 ()
+[    0.000000] Machine model: NVIDIA Jetson Orin Nano Engineering Reference Developer Kit Super
+[    0.000000] efi: EFI v2.70 by EDK II
+[    0.000000] efi: RTPROP=0x26d82f198 TPMFinalLog=0x25e3f0000 SMBIOS=0xffff0000 SMBIOS 3.0=0x26d220000 MEMATTR=0x2671a6018 ESRT=0x2671e4d98 TPMEventLog=0x25e408018 RNG=0x25a900018 MEMRESERVE=0x25e40ac18 
+[    0.000000] random: crng init done
+[    0.000000] secureboot: Secure boot disabled
+[    0.000000] esrt: Reserving ESRT space from 0x00000002671e4d98 to 0x00000002671e4dd0.
+[    0.000000] Reserved memory: created CMA memory pool at 0x000000024a000000, size 256 MiB
+[    0.000000] OF: reserved mem: initialized node linux,cma, compatible id shared-dma-pool
+[    0.000000] NUMA: No NUMA configuration found
+[    0.000000] NUMA: Faking a node at [mem 0x0000000080000000-0x0000000277ffffff]
+[    0.000000] NUMA: NODE_DATA [mem 0x271307800-0x271309fff]
+[    0.000000] Zone ranges:
+[    0.000000]   DMA      [mem 0x0000000080000000-0x00000000ffffffff]
+[    0.000000]   DMA32    empty
+[    0.000000]   Normal   [mem 0x0000000100000000-0x0000000277ffffff]
+[    0.000000] Movable zone start for each node
+[    0.000000] Early memory node ranges
+[    0.000000]   node   0: [mem 0x0000000080000000-0x00000000bdffffff]
+[    0.000000]   node   0: [mem 0x00000000c2000000-0x00000000fffdffff]
+[    0.000000]   node   0: [mem 0x00000000fffe0000-0x00000000ffffffff]
+[    0.000000]   node   0: [mem 0x0000000100000000-0x000000025e20dfff]
+[    0.000000]   node   0: [mem 0x000000025e20e000-0x000000025e3fffff]
+[    0.000000]   node   0: [mem 0x000000025e400000-0x000000025e40afff]
+[    0.000000]   node   0: [mem 0x000000025e40b000-0x000000025e40bfff]
+[    0.000000]   node   0: [mem 0x000000025e40c000-0x000000026b8effff]
+[    0.000000]   node   0: [mem 0x000000026b8f0000-0x000000026d82ffff]
+[    0.000000]   node   0: [mem 0x000000026d830000-0x0000000271dfffff]
+[    0.000000]   node   0: [mem 0x0000000271e00000-0x0000000271ffffff]
+[    0.000000]   node   0: [mem 0x0000000272000000-0x000000027259ffff]
+[    0.000000]   node   0: [mem 0x0000000272f00000-0x0000000272ffffff]
+[    0.000000]   node   0: [mem 0x0000000276000000-0x0000000277ffffff]
+[    0.000000] mminit::pageflags_layout_widths Section 0 Node 4 Zone 2 Lastcpupid 16 Kasantag 0 Flags 24
+[    0.000000] mminit::pageflags_layout_shifts Section 21 Node 4 Zone 2 Lastcpupid 16 Kasantag 0
+[    0.000000] mminit::pageflags_layout_pgshifts Section 0 Node 60 Zone 58 Lastcpupid 42 Kasantag 0
+[    0.000000] mminit::pageflags_layout_nodezoneid Node/Zone ID: 64 -> 58
+[    0.000000] mminit::pageflags_layout_usage location: 64 -> 42 layout 42 -> 24 unused 24 -> 0 page-flags
+[    0.000000] Initmem setup node 0 [mem 0x0000000080000000-0x0000000277ffffff]
+[    0.000000] mminit::memmap_init Initialising map node 0 zone 0 pfns 524288 -> 1048576
+[    0.000000] mminit::memmap_init Initialising map node 0 zone 2 pfns 1048576 -> 2588672
+[    0.000000] On node 0, zone DMA: 16384 pages in unavailable ranges
+[    0.000000] On node 0, zone Normal: 2400 pages in unavailable ranges
+[    0.000000] On node 0, zone Normal: 12288 pages in unavailable ranges
+[    0.000000] psci: probing for conduit method from DT.
+[    0.000000] psci: PSCIv1.1 detected in firmware.
+[    0.000000] psci: Using standard PSCI v0.2 function IDs
+[    0.000000] psci: Trusted OS migration not required
+[    0.000000] psci: SMC Calling Convention v1.2
+[    0.000000] percpu: Embedded 29 pages/cpu s80408 r8192 d30184 u118784
+[    0.000000] pcpu-alloc: s80408 r8192 d30184 u118784 alloc=29*4096
+[    0.000000] pcpu-alloc: [0] 0 [0] 1 [0] 2 [0] 3 [0] 4 [0] 5 
+[    0.000000] Detected PIPT I-cache on CPU0
+[    0.000000] CPU features: detected: Address authentication (architected algorithm)
+[    0.000000] CPU features: detected: GIC system register CPU interface
+[    0.000000] CPU features: detected: Virtualization Host Extensions
+[    0.000000] CPU features: detected: Hardware dirty bit management
+[    0.000000] CPU features: detected: Spectre-v4
+[    0.000000] CPU features: detected: Spectre-BHB
+[    0.000000] CPU features: kernel page table isolation forced ON by KASLR
+--- /sys/class/dmi/id (serial/uuid files skipped)
+bios_date: 06/16/2025
+bios_release: 0.0
+bios_vendor: EDK II
+bios_version: 36.4.4-gcid-41062509
+board_asset_tag: 699-13767-0005-300 T.1
+board_name: Jetson
+board_vendor: NVIDIA
+board_version: Not Specified
+chassis_asset_tag: 699-13767-0005-300 T.1
+chassis_type: 1
+chassis_vendor: NVIDIA
+chassis_version: Unknown
+ec_firmware_release: 0.0
+modalias: dmi:bvnEDKII:bvr36.4.4-gcid-41062509:bd06/16/2025:br0.0:efr0.0:svnNVIDIA:pnNVIDIAJetsonOrinNanoEngineeringReferenceDeveloperKitSuper:pvrNotSpecified:rvnNVIDIA:rnJetson:rvrNotSpecified:cvnNVIDIA:ct1:cvrUnknown:skuUnknown:
+product_family: Unknown
+product_name: NVIDIA Jetson Orin Nano Engineering Reference Developer Kit Super
+product_sku: Unknown
+product_version: Not Specified
+sys_vendor: NVIDIA
+--- /sys/firmware/dmi/tables
+total 0
+drwxr-xr-x 2 root root   0 Sep  9 09:38 .
+drwxr-xr-x 3 root root   0 Jun  5 17:40 ..
+-r-------- 1 root root 815 Sep  9 09:38 DMI
+-r-------- 1 root root  24 Sep  9 09:38 smbios_entry_point
+=== end A ===

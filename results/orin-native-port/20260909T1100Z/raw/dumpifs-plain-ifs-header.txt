@@ -1,0 +1,29 @@
+# dumpifs -v qnx-safety-vm/output/ifs.bin  (header portion only)
+  Offset     Size    Entry Name
+40080000      fa0        0 *.boot
+40080fa0      100     ---- Startup-header flags1=0x21 flags2=0 paddr_bias=0
+                           virtual
+                           little-endian
+                           compress=0 (none)
+                           preboot_size=0xfa0
+                           image_paddr=0x40080fa0 stored_size=0x950a20
+                           startup_size=0x2b148 imagefs_size=0x9258d8
+                           ram_paddr=0x40080fa0 ram_size=0x950a20
+                           startup_vaddr=0x40081da8
+                           addr_off=0
+400810a0    2b048 40081da8 startup.*
+400ac0e8       5c     ---- Image-header mountpoint=/
+
+# build-file image attributes (grep of output/build/ifs.build)
+== qnx-safety-vm
+15:[image=0x40080000]
+16:[virtual=aarch64le,raw ] boot = {
+17:    startup-qemu-virt  
+== qhv/host
+15:[image=0x40080000]
+16:[virtual=aarch64le,raw ] boot = {
+17:    startup-qemu-virt  -Q enable
+== qhv/guest
+15:[image=0x80000000]
+16:[virtual=aarch64le,elf ] boot = {
+17:    startup-armv8_fm -H  

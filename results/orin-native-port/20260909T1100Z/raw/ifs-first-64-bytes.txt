@@ -1,0 +1,27 @@
+# od -A x -t x1z -N 64 of the three IFS images the repo builds (gitignored output dirs)
+
+== qnx-safety-vm/output/ifs.bin  (9771456 bytes)
+000000 <12 bytes withheld: three shipped raw.boot stub instructions> 1f 20 03 d5
+000010 1f 20 03 d5 1f 20 03 d5 1f 20 03 d5 1f 20 03 d5   (NOP padding, d503201f)
+*
+000040
+# Opcodes of the stub withheld per the repo's practice of not publishing machine code of QNX-shipped
+# binaries (QDL v7 4.6(c)); what matters here is only that bytes 0x00-0x0B are occupied and 0x38 is not.
+
+== qhv/host/output/ifs.bin  (9761056 bytes)
+000000 <12 bytes withheld: three shipped raw.boot stub instructions> 1f 20 03 d5
+000010 1f 20 03 d5 1f 20 03 d5 1f 20 03 d5 1f 20 03 d5   (NOP padding, d503201f)
+*
+000040
+# Opcodes of the stub withheld per the repo's practice of not publishing machine code of QNX-shipped
+# binaries (QDL v7 4.6(c)); what matters here is only that bytes 0x00-0x0B are occupied and 0x38 is not.
+
+== qhv/guest/output/ifs.bin  (9783916 bytes)
+000000 7f 45 4c 46 02 01 01 00 00 00 00 00 00 00 00 00  >.ELF............<
+000010 02 00 b7 00 01 00 00 00 00 08 00 80 00 00 00 00  >................<
+000020 40 00 00 00 00 00 00 00 78 00 00 00 00 00 00 00  >@.......x.......<
+000030 00 00 00 00 40 00 38 00 01 00 40 00 03 00 02 00  >....@.8...@.....<
+000040
+
+# Linux arm64 Image header check: magic 'ARM\x64' (41 52 4d 64) would sit at offset 0x38. None of the three carries it.
+# qnx-safety-vm + qhv/host: raw binary (raw.boot preboot jump stub occupying bytes 0x00-0x0B, then NOP padding d503201f). qhv/guest: ELF64 (7f 45 4c 46, e_machine 0xb7 = AArch64) from elf.boot.

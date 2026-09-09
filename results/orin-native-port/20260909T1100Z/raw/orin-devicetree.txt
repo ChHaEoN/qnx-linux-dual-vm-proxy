@@ -1,0 +1,475 @@
+# orin-devicetree.txt -- H3 live harvest of the Jetson Orin Nano over ssh, 2026-09-09 (board local time ~15:36, uptime 16h). READ-ONLY; sudo -n used only for dmesg/iomem/blkid/efibootmgr/ESP listing/ESRT/fuser.
+# Redacted: login/hostname -> <user>, LAN IPs -> <orin-ip>/<lan-ip>, ssh key -> <orin-key>, MAC -> <mac>, NVMe serial/EUI -> <nvme-serial>/<nvme-eui>. NUL bytes stripped.
+# Producing scripts: h3-a.sh / h3-c.sh / h3-f.sh / h3-d.sh (scratchpad); section markers === [x] === are the script sections.
+
+=== root ===
+NODE 
+  model = "NVIDIA Jetson Orin Nano Engineering Reference Developer Kit Super|"
+  compatible = "nvidia,p3768-0000+p3767-0005-super|nvidia,p3767-0005|nvidia,tegra234|"
+  #address-cells = (4 bytes, be32 cells)  00000002 
+  #size-cells = (4 bytes, be32 cells)  00000002 
+  interrupt-parent = (4 bytes, be32 cells)  00000001 
+--- top-level nodes
+#address-cells aliases bpmp bus@0 camera-ivc-channels chosen compatible cpus cpu-throttle-alert cv0-throttle-alert cv1-throttle-alert cv2-throttle-alert dce@d800000 display@13800000 dsu-pmu0 dsu-pmu1 dsu-pmu2 firmware gpio-keys gpu-throttle-alert hot-surface-alert interrupt-parent mgbe-vm-irq-config model name nvpmodel opp-table-cluster0 opp-table-cluster1 opp-table-cluster2 pmu psci pwm-fan regulator-vdd-1v1-hub regulator-vdd-1v8-ao regulator-vdd-1v8-hs regulator-vdd-1v8-sys regulator-vdd-3v3-ao regulator-vdd-3v3-pcie regulator-vdd-3v3-sd regulator-vdd-3v3-sys regulator-vdd-5v0-sys reserved-memory rtcpu@bc00000 scf-pmu serial serial-number #size-cells soc0-throttle-alert soc1-throttle-alert soc2-throttle-alert soctherm-oc-event sound sram@40000000 __symbols__ tegra-capture-vi tegra-carveouts tegra-hsp@b950000 tegra_mce@e100000 tegra-rtcpu-trace thermal-zones timer tsc_sig_gen@c6a0000 vm-irq-config 
+--- bus@0 (if present)
+NODE /bus@0
+  compatible = "simple-bus|"
+  #address-cells = (4 bytes, be32 cells)  00000002 
+  #size-cells = (4 bytes, be32 cells)  00000002 
+  ranges = (24 bytes, be32 cells)  00000000 00000000 00000000 00000000 00000100 00000000 
+aconnect@2900000 actmon@d230000 #address-cells aon@c000000 aon_echo aon-fabric@c600000 bpmp-fabric@d600000 cbb-fabric@13a00000 ccplex@e000000 compatible dce-fabric@de00000 dma-controller@2600000 ethernet@2310000 ethernet@6800000 ethernet@6900000 ethernet@6a00000 ethernet@6b00000 fuse@3810000 gpio@2200000 gpio@c2f0000 gpu@17000000 hardware-timestamp@3aa0000 hardware-timestamp@c1e0000 hda@3510000 host1x@13e00000 hsp@1600000 hsp@3c00000 hsp@3d00000 hsp@c150000 hwpm@f100000 i2c@3160000 i2c@3180000 i2c@3190000 i2c@31b0000 i2c@31c0000 i2c@31e0000 i2c@c240000 i2c@c250000 interrupt-controller@f400000 iommu@10000000 iommu@12000000 iommu@8000000 mc-hwpm@2c10000 memory-controller@2c00000 misc@100000 mmc@3400000 mmc@3460000 mttcan@c310000 mttcan@c320000 name padctl@3520000 pcie@140a0000 pcie@140c0000 pcie@140e0000 pcie@14100000 pcie@14120000 pcie@14140000 pcie@14160000 pcie@14180000 pcie@141a0000 pcie@141c0000 pcie@141e0000 pcie-ep@140e0000 pcie-ep@14160000 pcie-ep@141a0000 pcie-ep@141c0000 pcie-ep@141e0000 phy@3e00000 phy@3e10000 phy@3e20000 phy@3e30000 phy@3e40000 phy@3e50000 phy@3e60000 phy@3e70000 phy@3e90000 phy@3ea0000 phy@3eb0000 phy@3ec0000 phy@3ed0000 phy@3ee0000 phy@3ef0000 phy@3f00000 phy@3f20000 phy@3f30000 phy@3f40000 phy@3f50000 phy@3f60000 phy@3f70000 phy@3f80000 phy@3f90000 pinmux@2430000 pinmux@c300000 pmc@c360000 pwm@3280000 pwm@3290000 pwm@32a0000 pwm@32c0000 pwm@32d0000 pwm@32e0000 pwm@32f0000 pwm@c340000 ranges rce-fabric@be00000 rtc@c2a0000 sce-fabric@b600000 serial@3100000 serial@3110000 serial@3140000 serial@31d0000 #size-cells smmu_test spi@3210000 spi@3230000 spi@3240000 spi@3250000 spi@3300000 spi@c260000 tachometer@39c0000 timer@2080000 ufshci@2500000 usb@3550000 usb@3610000 watchdog@2190000 xusb_padctl@3520000 
+
+=== chosen ===
+NODE /chosen
+  bootargs = "root=/dev/mmcblk0p1 rw rootwait rootfstype=ext4 mminit_loglevel=4 console=ttyTCU0,115200 firmware_class.path=/etc/firmware fbcon=map:0 video=efifb:off console=tty0 bl_prof_dataptr=2031616@0x271E10000 bl_prof_ro_ptr=65536@0x271E00000 |"
+  stdout-path = "serial0:115200n8|"
+  linux,initrd-start = (8 bytes, be32 cells)  00000002 5a910000 
+  linux,initrd-end = (8 bytes, be32 cells)  00000002 5b830611 
+  linux,uefi-mmap-start = (8 bytes, be32 cells)  00000002 5e406018 
+  linux,uefi-mmap-size = (4 bytes, be32 cells)  00000840 
+  linux,uefi-system-table = (8 bytes, be32 cells)  00000002 6d820018 
+  kaslr-seed = (8 bytes, be32 cells)  00000000 00000000 
+  rng-seed: (absent)
+  nvidia,tegra-joint_xpu_rail = (present, empty/boolean)
+  all props:
+bootargs framebuffer ids kaslr-seed linux,initrd-end linux,initrd-start linux,uefi-mmap-desc-size linux,uefi-mmap-desc-ver linux,uefi-mmap-size linux,uefi-mmap-start linux,uefi-secure-boot linux,uefi-system-table name nvidia,sku nvidia,tegra-joint_xpu_rail odm-data stdout-path 
+  subnode: /chosen/framebuffer/
+clocks compatible format height memory-region name power-domains status stride width 
+  subnode: /chosen/odm-data/
+gbe-uphy-config-8 hsio-uphy-config-0 hsstp-lane-map-3 name 
+
+=== aliases ===
+  i2c0 = "/bus@0/i2c@3160000|"
+  i2c1 = "/bus@0/i2c@c240000|"
+  i2c2 = "/bus@0/i2c@3180000|"
+  i2c3 = "/bus@0/i2c@3190000|"
+  i2c4 = "/bpmp/i2c|"
+  i2c5 = "/bus@0/i2c@31b0000|"
+  i2c6 = "/bus@0/i2c@31c0000|"
+  i2c7 = "/bus@0/i2c@c250000|"
+  i2c8 = "/bus@0/i2c@31e0000|"
+  mmc0 = "/bus@0/mmc@3400000|"
+  nvdla0 = "/bus@0/host1x@13e00000/nvdla0@15880000|"
+  nvdla1 = "/bus@0/host1x@13e00000/nvdla1@158c0000|"
+  qspi0 = "/bus@0/spi@3270000|"
+  rtc0 = "/bpmp/i2c/vrs@3c|"
+  rtc1 = "/bus@0/rtc@c2a0000|"
+  serial0 = "/serial|"
+  serial1 = "/bus@0/serial@3100000|"
+  serial2 = "/bus@0/serial@3140000|"
+  tegra-camera-rtcpu = "/rtcpu@bc00000|"
+
+=== psci ===
+NODE /psci
+  compatible = "arm,psci-1.0|"
+  method = "smc|"
+  cpu_on: (absent)
+  cpu_off: (absent)
+  cpu_suspend: (absent)
+  migrate: (absent)
+  status = "okay|"
+
+=== interrupt-controller (gic) ===
+NODE /bus@0/aconnect@2900000/interrupt-controller@2a40000
+  compatible = "nvidia,tegra234-agic|nvidia,tegra210-agic|"
+  reg = (32 bytes, be32 cells)  00000000 02a41000 00000000 00001000 00000000 02a42000 00000000 00002000 
+  #redistributor-regions: (absent)
+  redistributor-stride: (absent)
+  #interrupt-cells = (4 bytes, be32 cells)  00000003 
+  interrupt-controller = (present, empty/boolean)
+  msi-controller: (absent)
+  interrupts = (12 bytes, be32 cells)  00000000 00000091 00000f04 
+  interrupt-parent: (absent)
+  #address-cells: (absent)
+  #size-cells: (absent)
+  ranges: (absent)
+  status = "okay|"
+  subnodes:
+NODE /bus@0/interrupt-controller@f400000
+  compatible = "arm,gic-v3|"
+  reg = (32 bytes, be32 cells)  00000000 0f400000 00000000 00010000 00000000 0f440000 00000000 00200000 
+  #redistributor-regions = (4 bytes, be32 cells)  00000001 
+  redistributor-stride: (absent)
+  #interrupt-cells = (4 bytes, be32 cells)  00000003 
+  interrupt-controller = (present, empty/boolean)
+  msi-controller: (absent)
+  interrupts = (12 bytes, be32 cells)  00000001 00000009 00000f04 
+  interrupt-parent = (4 bytes, be32 cells)  00000001 
+  #address-cells: (absent)
+  #size-cells: (absent)
+  ranges: (absent)
+  status: (absent)
+  subnodes:
+--- any node whose compatible mentions gic or its:
+  /bus@0/aconnect@2900000/interrupt-controller@2a40000 = "nvidia,tegra234-agic|nvidia,tegra210-agic|"
+  /bus@0/interrupt-controller@f400000 = "arm,gic-v3|"
+
+=== timer nodes ===
+NODE /bus@0/timer@2080000
+  compatible = "nvidia,tegra234-timer|"
+  interrupts = (192 bytes, be32 cells)  00000000 00000000 00000004 00000000 00000001 00000004 00000000 00000002 00000004 00000000 00000003 00000004 00000000 00000004 00000004 00000000 00000005 00000004 00000000 00000006 00000004 00000000 00000007 00000004 00000000 00000008 00000004 00000000 00000009 00000004 00000000 00000100 00000004 00000000 00000101 00000004 00000000 00000102 00000004 00000000 00000103 00000004 00000000 00000104 00000004 00000000 00000105 00000004 
+  interrupt-names: (absent)
+  reg = (16 bytes, be32 cells)  00000000 02080000 00000000 00121000 
+  status = "okay|"
+  always-on: (absent)
+  interrupt-parent: (absent)
+  clock-frequency: (absent)
+NODE /timer
+  compatible = "arm,armv8-timer|"
+  interrupts = (48 bytes, be32 cells)  00000001 0000000d 00000f08 00000001 0000000e 00000f08 00000001 0000000b 00000f08 00000001 0000000a 00000f08 
+  interrupt-names: (absent)
+  reg: (absent)
+  status: (absent)
+  always-on = (present, empty/boolean)
+  interrupt-parent = (4 bytes, be32 cells)  00000001 
+  clock-frequency: (absent)
+--- any node whose compatible mentions armv8-timer / arch-timer:
+  /bus@0/timer@2080000 = "nvidia,tegra234-timer|"
+  /timer = "arm,armv8-timer|"
+
+=== memory@* (any depth<=3) ===
+
+=== reserved-memory ===
+NODE /reserved-memory
+  #address-cells = (4 bytes, be32 cells)  00000002 
+  #size-cells = (4 bytes, be32 cells)  00000002 
+  ranges = (present, empty/boolean)
+NODE /reserved-memory/camdbg_carveout
+  compatible = "nvidia,camdbg_carveout|"
+  reg: (absent)
+  size = (8 bytes, be32 cells)  00000000 03200000 
+  alignment = (8 bytes, be32 cells)  00000000 00100000 
+  alloc-ranges = (16 bytes, be32 cells)  00000001 00000000 00000001 00000000 
+  no-map: (absent)
+  reusable: (absent)
+  status = "disabled|"
+  iommu-addresses: (absent)
+NODE /reserved-memory/framebuffer@0,0
+  compatible = "framebuffer|"
+  reg = (16 bytes, be32 cells)  00000000 00000000 00000000 00000000 
+  size: (absent)
+  alignment: (absent)
+  alloc-ranges: (absent)
+  no-map = (present, empty/boolean)
+  reusable: (absent)
+  status = "disabled|"
+  iommu-addresses = (20 bytes, be32 cells)  000001f6 00000000 00000000 00000000 00000000 
+NODE /reserved-memory/linux,cma
+  compatible = "shared-dma-pool|"
+  reg: (absent)
+  size = (8 bytes, be32 cells)  00000000 10000000 
+  alignment = (8 bytes, be32 cells)  00000000 00010000 
+  alloc-ranges: (absent)
+  no-map: (absent)
+  reusable = (present, empty/boolean)
+  status = "okay|"
+  iommu-addresses: (absent)
+NODE /reserved-memory/pva-carveout
+  compatible = "nvidia,pva-carveout|"
+  reg = (16 bytes, be32 cells)  00000002 73180000 00000000 00280000 
+  size: (absent)
+  alignment: (absent)
+  alloc-ranges: (absent)
+  no-map: (absent)
+  reusable: (absent)
+  status = "okay|"
+  iommu-addresses: (absent)
+NODE /reserved-memory/ramoops_carveout
+  compatible = "ramoops|"
+  reg = (16 bytes, be32 cells)  00000002 725f0000 00000000 00200000 
+  size = (8 bytes, be32 cells)  00000000 00200000 
+  alignment = (8 bytes, be32 cells)  00000000 00010000 
+  alloc-ranges = (16 bytes, be32 cells)  00000000 00000000 00000001 00000000 
+  no-map = (present, empty/boolean)
+  reusable: (absent)
+  status = "okay|"
+  iommu-addresses: (absent)
+NODE /reserved-memory/rce-reservation
+  compatible: (absent)
+  reg: (absent)
+  size: (absent)
+  alignment: (absent)
+  alloc-ranges: (absent)
+  no-map: (absent)
+  reusable: (absent)
+  status: (absent)
+  iommu-addresses = (40 bytes, be32 cells)  000001f7 00000000 00000000 00000000 a0000000 000001f7 00000000 c0000000 ffffffff 3fffffff 
+NODE /reserved-memory/vpr-carveout
+  compatible = "nvidia,vpr-carveout|"
+  reg: (absent)
+  size: (absent)
+  alignment: (absent)
+  alloc-ranges: (absent)
+  no-map = (present, empty/boolean)
+  reusable: (absent)
+  status = "disabled|"
+  iommu-addresses: (absent)
+
+=== serial@* / uart nodes ===
+NODE /bus@0/serial@3100000
+  compatible = "nvidia,tegra194-hsuart|"
+  reg = (16 bytes, be32 cells)  00000000 03100000 00000000 00010000 
+  reg-names: (absent)
+  status = "okay|"
+  interrupts = (12 bytes, be32 cells)  00000000 00000070 00000004 
+  interrupt-parent: (absent)
+  clocks = (8 bytes, be32 cells)  00000003 0000009b 
+  clock-names: (absent)
+  resets = (8 bytes, be32 cells)  00000003 00000064 
+  reset-names = "serial|"
+  mboxes: (absent)
+  mbox-names: (absent)
+  current-speed: (absent)
+  dma-names: (absent)
+  nvidia,uart-type: (absent)
+  nvidia,adjust-baud-rates: (absent)
+NODE /bus@0/serial@3110000
+  compatible = "nvidia,tegra234-uart|nvidia,tegra20-uart|"
+  reg = (16 bytes, be32 cells)  00000000 03110000 00000000 00010000 
+  reg-names: (absent)
+  status = "disabled|"
+  interrupts = (12 bytes, be32 cells)  00000000 00000071 00000004 
+  interrupt-parent: (absent)
+  clocks = (8 bytes, be32 cells)  00000003 0000009c 
+  clock-names: (absent)
+  resets = (8 bytes, be32 cells)  00000003 00000065 
+  reset-names: (absent)
+  mboxes: (absent)
+  mbox-names: (absent)
+  current-speed: (absent)
+  dma-names: (absent)
+  nvidia,uart-type: (absent)
+  nvidia,adjust-baud-rates: (absent)
+NODE /bus@0/serial@3140000
+  compatible = "nvidia,tegra194-hsuart|"
+  reg = (16 bytes, be32 cells)  00000000 03140000 00000000 00010000 
+  reg-names: (absent)
+  status = "okay|"
+  interrupts = (12 bytes, be32 cells)  00000000 00000074 00000004 
+  interrupt-parent: (absent)
+  clocks = (8 bytes, be32 cells)  00000003 0000009f 
+  clock-names: (absent)
+  resets = (8 bytes, be32 cells)  00000003 00000068 
+  reset-names = "serial|"
+  mboxes: (absent)
+  mbox-names: (absent)
+  current-speed: (absent)
+  dma-names = "rx|tx|"
+  nvidia,uart-type: (absent)
+  nvidia,adjust-baud-rates: (absent)
+NODE /bus@0/serial@31d0000
+  compatible = "arm,sbsa-uart|"
+  reg = (16 bytes, be32 cells)  00000000 031d0000 00000000 00010000 
+  reg-names: (absent)
+  status = "okay|"
+  interrupts = (12 bytes, be32 cells)  00000000 0000011d 00000004 
+  interrupt-parent: (absent)
+  clocks: (absent)
+  clock-names: (absent)
+  resets: (absent)
+  reset-names: (absent)
+  mboxes: (absent)
+  mbox-names: (absent)
+  current-speed = (4 bytes, be32 cells)  0001c200 
+  dma-names: (absent)
+  nvidia,uart-type: (absent)
+  nvidia,adjust-baud-rates: (absent)
+NODE /serial
+  compatible = "nvidia,tegra234-tcu|nvidia,tegra194-tcu|"
+  reg: (absent)
+  reg-names: (absent)
+  status = "okay|"
+  interrupts: (absent)
+  interrupt-parent: (absent)
+  clocks: (absent)
+  clock-names: (absent)
+  resets: (absent)
+  reset-names: (absent)
+  mboxes = (24 bytes, be32 cells)  00000121 00000001 00000000 00000143 00000001 80000001 
+  mbox-names = "rx|tx|"
+  current-speed: (absent)
+  dma-names: (absent)
+  nvidia,uart-type: (absent)
+  nvidia,adjust-baud-rates: (absent)
+--- any node whose compatible mentions uart/tcu/hsuart/serial:
+  /bus@0/serial@3100000 = "nvidia,tegra194-hsuart|"
+  /bus@0/serial@3110000 = "nvidia,tegra234-uart|nvidia,tegra20-uart|"
+  /bus@0/serial@3140000 = "nvidia,tegra194-hsuart|"
+  /bus@0/serial@31d0000 = "arm,sbsa-uart|"
+  /serial = "nvidia,tegra234-tcu|nvidia,tegra194-tcu|"
+
+=== hsp@* ===
+NODE /bus@0/hsp@1600000
+  compatible = "nvidia,tegra234-hsp|"
+  reg = (16 bytes, be32 cells)  00000000 01600000 00000000 00090000 
+  status = "disabled|"
+  interrupts = (12 bytes, be32 cells)  00000000 00000109 00000004 
+  interrupt-names = "shared0|"
+  #mbox-cells = (4 bytes, be32 cells)  00000002 
+NODE /bus@0/hsp@3c00000
+  compatible = "nvidia,tegra234-hsp|nvidia,tegra194-hsp|"
+  reg = (16 bytes, be32 cells)  00000000 03c00000 00000000 000a0000 
+  status: (absent)
+  interrupts = (108 bytes, be32 cells)  00000000 000000b0 00000004 00000000 00000078 00000004 00000000 00000079 00000004 00000000 0000007a 00000004 00000000 0000007b 00000004 00000000 0000007c 00000004 00000000 0000007d 00000004 00000000 0000007e 00000004 00000000 0000007f 00000004 
+  interrupt-names = "doorbell|shared0|shared1|shared2|shared3|shared4|shared5|shared6|shared7|"
+  #mbox-cells = (4 bytes, be32 cells)  00000002 
+NODE /bus@0/hsp@3d00000
+  compatible = "nvidia,tegra234-hsp|nvidia,tegra194-hsp|"
+  reg = (16 bytes, be32 cells)  00000000 03d00000 00000000 000a0000 
+  status = "okay|"
+  interrupts = (48 bytes, be32 cells)  00000000 00000080 00000004 00000000 00000081 00000004 00000000 00000082 00000004 00000000 00000083 00000004 
+  interrupt-names = "shared0|shared1|shared2|shared3|"
+  #mbox-cells = (4 bytes, be32 cells)  00000002 
+NODE /bus@0/hsp@c150000
+  compatible = "nvidia,tegra234-hsp|nvidia,tegra194-hsp|"
+  reg = (16 bytes, be32 cells)  00000000 0c150000 00000000 00090000 
+  status: (absent)
+  interrupts = (48 bytes, be32 cells)  00000000 00000085 00000004 00000000 00000086 00000004 00000000 00000087 00000004 00000000 00000088 00000004 
+  interrupt-names = "shared1|shared2|shared3|shared4|"
+  #mbox-cells = (4 bytes, be32 cells)  00000002 
+
+=== cpus ===
+NODE /cpus
+  #address-cells = (4 bytes, be32 cells)  00000001 
+  #size-cells = (4 bytes, be32 cells)  00000000 
+  cpu@ node count: 6
+NODE /cpus/cpu@0
+  compatible = "arm,cortex-a78|"
+  device_type = "cpu|"
+  enable-method = "psci|"
+  reg = (4 bytes, be32 cells)  00000000 
+  status: (absent)
+  cpu-idle-states = (4 bytes, be32 cells)  00000126 
+NODE /cpus/cpu@100
+  compatible = "arm,cortex-a78|"
+  device_type = "cpu|"
+  enable-method = "psci|"
+  reg = (4 bytes, be32 cells)  00000100 
+  status: (absent)
+  cpu-idle-states = (4 bytes, be32 cells)  00000126 
+NODE /cpus/cpu@10200
+  compatible = "arm,cortex-a78|"
+  device_type = "cpu|"
+  enable-method = "psci|"
+  reg = (4 bytes, be32 cells)  00010200 
+  status: (absent)
+  cpu-idle-states = (4 bytes, be32 cells)  00000126 
+NODE /cpus/cpu@10300
+  compatible = "arm,cortex-a78|"
+  device_type = "cpu|"
+  enable-method = "psci|"
+  reg = (4 bytes, be32 cells)  00010300 
+  status: (absent)
+  cpu-idle-states = (4 bytes, be32 cells)  00000126 
+NODE /cpus/cpu@200
+  compatible = "arm,cortex-a78|"
+  device_type = "cpu|"
+  enable-method = "psci|"
+  reg = (4 bytes, be32 cells)  00000200 
+  status: (absent)
+  cpu-idle-states = (4 bytes, be32 cells)  00000126 
+NODE /cpus/cpu@300
+  compatible = "arm,cortex-a78|"
+  device_type = "cpu|"
+  enable-method = "psci|"
+  reg = (4 bytes, be32 cells)  00000300 
+  status: (absent)
+  cpu-idle-states = (4 bytes, be32 cells)  00000126 
+  cpus subnodes:
+/cpus/cpu@0/ /cpus/cpu@100/ /cpus/cpu@10200/ /cpus/cpu@10300/ /cpus/cpu@200/ /cpus/cpu@300/ /cpus/cpu-map/ /cpus/idle-states/ /cpus/l2-cache00/ /cpus/l2-cache01/ /cpus/l2-cache02/ /cpus/l2-cache03/ /cpus/l2-cache12/ /cpus/l2-cache13/ /cpus/l3-cache0/ /cpus/l3-cache1/ 
+
+=== firmware / bpmp / tegra-hsp / sram / optee (compatible only) ===
+NODE /bpmp
+  compatible = "nvidia,tegra234-bpmp|nvidia,tegra186-bpmp|"
+  status: (absent)
+NODE /bpmp/i2c
+  compatible = "nvidia,tegra186-bpmp-i2c|"
+  status: (absent)
+NODE /bpmp/thermal
+  compatible = "nvidia,tegra186-bpmp-thermal|"
+  status: (absent)
+NODE /bus@0/bpmp-fabric@d600000
+  compatible = "nvidia,tegra234-bpmp-fabric|"
+  status = "okay|"
+NODE /firmware
+  compatible: (absent)
+  status: (absent)
+NODE /firmware/ftpm
+  compatible = "microsoft,ftpm|"
+  status = "okay|"
+NODE /firmware/optee
+  compatible = "linaro,optee-tz|"
+  status = "okay|"
+NODE /firmware/uefi
+  compatible: (absent)
+  status: (absent)
+NODE /firmware/optee
+  compatible = "linaro,optee-tz|"
+  status = "okay|"
+NODE /sram@40000000
+  compatible = "nvidia,tegra234-sysram|mmio-sram|"
+  status: (absent)
+NODE /sram@40000000/sram@70000
+  compatible: (absent)
+  status: (absent)
+NODE /sram@40000000/sram@71000
+  compatible: (absent)
+  status: (absent)
+NODE /sram@40000000/sram@70000
+  compatible: (absent)
+  status: (absent)
+NODE /sram@40000000/sram@71000
+  compatible: (absent)
+  status: (absent)
+NODE /tegra-hsp@b950000
+  compatible = "nvidia,tegra186-hsp|"
+  status = "okay|"
+
+=== pmc / reset (compatible only) ===
+NODE /bus@0/pmc@c360000
+  compatible = "nvidia,tegra234-pmc|"
+  status: (absent)
+NODE /bus@0/watchdog@2190000
+  compatible = "nvidia,tegra-wdt-t234|"
+  status = "disabled|"
+
+=== 40-pin header / pinmux related node names ===
+/bus@0/pinmux@2430000
+/bus@0/pinmux@c300000
+NODE /bus@0/pinmux@2430000
+  compatible = "nvidia,tegra234-pinmux|"
+  reg = (16 bytes, be32 cells)  00000000 02430000 00000000 00019100 
+  status = "okay|"
+  subnodes:
+/bus@0/pinmux@2430000/eqos_rx_disable/ /bus@0/pinmux@2430000/eqos_rx_enable/ /bus@0/pinmux@2430000/pex_rst_c10_in/ /bus@0/pinmux@2430000/pex_rst_c4_in/ /bus@0/pinmux@2430000/pex_rst_c5_in/ /bus@0/pinmux@2430000/pex_rst_c6_in/ /bus@0/pinmux@2430000/pex_rst_c7_in/ 
+NODE /bus@0/pinmux@c300000
+  compatible = "nvidia,tegra234-pinmux-aon|"
+  reg = (16 bytes, be32 cells)  00000000 0c300000 00000000 00004000 
+  status: (absent)
+  subnodes:
+
+
+=== gpio / i2c / spi nodes on the header path (names only, status) ===
+  /bus@0/gpio@2200000 status=(absent=okay) compatible=nvidia,tegra234-gpio|
+  /bus@0/gpio@c2f0000 status=(absent=okay) compatible=nvidia,tegra234-gpio-aon|
+  /bus@0/i2c@3160000 status=okay| compatible=nvidia,tegra194-i2c|
+  /bus@0/i2c@3180000 status=okay| compatible=nvidia,tegra194-i2c|
+  /bus@0/i2c@3190000 status=disabled| compatible=nvidia,tegra194-i2c|
+  /bus@0/i2c@31b0000 status=okay| compatible=nvidia,tegra194-i2c|
+  /bus@0/i2c@31c0000 status=disabled| compatible=nvidia,tegra194-i2c|
+  /bus@0/i2c@31e0000 status=disabled| compatible=nvidia,tegra194-i2c|
+  /bus@0/i2c@c240000 status=okay| compatible=nvidia,tegra194-i2c|
+  /bus@0/i2c@c250000 status=okay| compatible=nvidia,tegra194-i2c|
+  /bus@0/spi@3210000 status=okay| compatible=nvidia,tegra210-spi|nvidia,tegra114-spi|
+  /bus@0/spi@3210000/spi@0 status=(absent=okay) compatible=tegra-spidev|
+  /bus@0/spi@3210000/spi@1 status=(absent=okay) compatible=tegra-spidev|
+  /bus@0/spi@3230000 status=okay| compatible=nvidia,tegra210-spi|nvidia,tegra114-spi|
+  /bus@0/spi@3230000/spi@0 status=(absent=okay) compatible=tegra-spidev|
+  /bus@0/spi@3230000/spi@1 status=(absent=okay) compatible=tegra-spidev|
+  /bus@0/spi@3240000 status=(absent=okay) compatible=
+main: line 4: /sys/firmware/devicetree/base/bus@0/spi@3240000/compatible: No such file or directory
+main: line 4: /sys/firmware/devicetree/base/bus@0/spi@3250000/compatible: No such file or directory
+  /bus@0/spi@3250000 status=(absent=okay) compatible=
+  /bus@0/spi@3300000 status=disabled| compatible=nvidia,tegra234-qspi|
+  /bus@0/spi@c260000 status=disabled| compatible=nvidia,tegra210-spi|nvidia,tegra114-spi|
+=== end C ===

@@ -1,0 +1,383 @@
+# orin-boot-config.txt -- H3 live harvest of the Jetson Orin Nano over ssh, 2026-09-09 (board local time ~15:36, uptime 16h). READ-ONLY; sudo -n used only for dmesg/iomem/blkid/efibootmgr/ESP listing/ESRT/fuser.
+# Redacted: login/hostname -> <user>, LAN IPs -> <orin-ip>/<lan-ip>, ssh key -> <orin-key>, MAC -> <mac>, NVMe serial/EUI -> <nvme-serial>/<nvme-eui>. NUL bytes stripped.
+# Producing scripts: h3-a.sh / h3-c.sh / h3-f.sh / h3-d.sh (scratchpad); section markers === [x] === are the script sections.
+
+=== [f] boot config ===
+--- /boot/extlinux/extlinux.conf
+TIMEOUT 30
+DEFAULT primary
+
+MENU TITLE L4T boot options
+
+LABEL primary
+      MENU LABEL primary kernel
+      LINUX /boot/Image
+      INITRD /boot/initrd
+      APPEND ${cbootargs} root=/dev/mmcblk0p1 rw rootwait rootfstype=ext4 mminit_loglevel=4 console=ttyTCU0,115200 firmware_class.path=/etc/firmware fbcon=map:0 video=efifb:off console=tty0
+
+# When testing a custom kernel, it is recommended that you create a backup of
+# the original kernel and add a new entry to this file so that the device can
+# fallback to the original kernel. To do this:
+#
+# 1, Make a backup of the original kernel
+#      sudo cp /boot/Image /boot/Image.backup
+#
+# 2, Copy your custom kernel into /boot/Image
+#
+# 3, Uncomment below menu setting lines for the original kernel
+#
+# 4, Reboot
+
+# LABEL backup
+#    MENU LABEL backup kernel
+#    LINUX /boot/Image.backup
+#    INITRD /boot/initrd
+#    APPEND ${cbootargs}
+
+--- ls -la /boot
+total 82289
+drwxr-xr-x  5 root root    24576 Jul 28 08:22 .
+drwxr-xr-x 20 root root     4096 Jul 23 15:52 ..
+drwxr-xr-x  2 root root     4096 Jun 18  2025 dtb
+drwxr-xr-x  3 root root      512 Jan  1  1970 efi
+drwxr-xr-x  2 root root     4096 Jul 28 08:21 extlinux
+-rw-r--r--  1 root root 43090432 Sep 19  2025 Image
+-rw-r--r--  1 root root 15861265 Jul 28 08:22 initrd
+lrwxrwxrwx  1 root root       25 Jul 23 15:54 initrd.img -> initrd.img-5.15.148-tegra
+-rw-r--r--  1 root root 19025757 Jul 28 08:22 initrd.img-5.15.148-tegra
+-rw-r--r--  1 root root   249353 Jun 18  2025 kernel_tegra234-p3768-0000+p3767-0005-nv-super.dtb
+-rw-r--r--  1 root root        0 Sep 19  2025 oot-stub
+-rw-r--r--  1 root root     1317 Sep 19  2025 tegra234-carveouts.dtbo
+-rw-r--r--  1 root root      442 Sep 19  2025 tegra234-p3737-0000+p3701-0000-as-p3701-0004.dtbo
+-rw-r--r--  1 root root      727 Sep 19  2025 tegra234-p3737-0000+p3701-0000-as-p3767-0000.dtbo
+-rw-r--r--  1 root root      822 Sep 19  2025 tegra234-p3737-0000+p3701-0000-as-p3767-0001.dtbo
+-rw-r--r--  1 root root     1225 Sep 19  2025 tegra234-p3737-0000+p3701-0000-as-p3767-0003.dtbo
+-rw-r--r--  1 root root     1225 Sep 19  2025 tegra234-p3737-0000+p3701-0000-as-p3767-0004.dtbo
+-rw-r--r--  1 root root     1143 Sep 19  2025 tegra234-p3737-0000+p3701-0000-audio-adafruit-sph0645lm4h.dtbo
+-rw-r--r--  1 root root     1139 Sep 19  2025 tegra234-p3737-0000+p3701-0000-audio-adafruit-uda1334a.dtbo
+-rw-r--r--  1 root root     4043 Sep 19  2025 tegra234-p3737-0000+p3701-0000-audio-fe-pi.dtbo
+-rw-r--r--  1 root root     3239 Sep 19  2025 tegra234-p3737-0000+p3701-0000-audio-respeaker-4-mic-array.dtbo
+-rw-r--r--  1 root root     3275 Sep 19  2025 tegra234-p3737-0000+p3701-0000-audio-respeaker-4-mic-lin-array.dtbo
+-rw-r--r--  1 root root     2414 Sep 19  2025 tegra234-p3737-0000+p3701-0000-csi.dtbo
+-rw-r--r--  1 root root   144962 Sep 19  2025 tegra234-p3737-0000+p3701-0000.dtb
+-rw-r--r--  1 root root    71348 Sep 19  2025 tegra234-p3737-0000+p3701-0000-dynamic.dtbo
+-rw-r--r--  1 root root     4343 Sep 19  2025 tegra234-p3737-0000+p3701-0000-hdr40.dtbo
+-rw-r--r--  1 root root     1605 Sep 19  2025 tegra234-p3737-0000+p3701-0000-m2ke.dtbo
+-rw-r--r--  1 root root   254662 Sep 19  2025 tegra234-p3737-0000+p3701-0000-nv.dtb
+-rw-r--r--  1 root root   144962 Sep 19  2025 tegra234-p3737-0000+p3701-0004.dtb
+-rw-r--r--  1 root root   254662 Sep 19  2025 tegra234-p3737-0000+p3701-0004-nv.dtb
+-rw-r--r--  1 root root   144962 Sep 19  2025 tegra234-p3737-0000+p3701-0005.dtb
+-rw-r--r--  1 root root   254662 Sep 19  2025 tegra234-p3737-0000+p3701-0005-nv.dtb
+-rw-r--r--  1 root root   144962 Sep 19  2025 tegra234-p3737-0000+p3701-0008.dtb
+-rw-r--r--  1 root root   254842 Sep 19  2025 tegra234-p3737-0000+p3701-0008-nv.dtb
+-rw-r--r--  1 root root    12014 Sep 19  2025 tegra234-p3737-camera-dual-hawk-ar0234-e3653-overlay.dtbo
+-rw-r--r--  1 root root     7793 Sep 19  2025 tegra234-p3737-camera-dual-imx274-overlay.dtbo
+-rw-r--r--  1 root root     3589 Sep 19  2025 tegra234-p3737-camera-e3331-overlay.dtbo
+-rw-r--r--  1 root root    14557 Sep 19  2025 tegra234-p3737-camera-e3333-overlay.dtbo
+-rw-r--r--  1 root root    28647 Sep 19  2025 tegra234-p3737-camera-eCAM130A-overlay.dtbo
+-rw-r--r--  1 root root     5161 Sep 19  2025 tegra234-p3737-camera-imx185-overlay.dtbo
+-rw-r--r--  1 root root     3734 Sep 19  2025 tegra234-p3737-camera-imx390-addr-0x21-overlay.dtbo
+-rw-r--r--  1 root root     3722 Sep 19  2025 tegra234-p3737-camera-imx390-overlay.dtbo
+-rw-r--r--  1 root root    47483 Sep 19  2025 tegra234-p3737-camera-p3762-a00-1Hawk-overlay.dtbo
+-rw-r--r--  1 root root    47459 Sep 19  2025 tegra234-p3737-camera-p3762-a00-2Hawk-overlay.dtbo
+-rw-r--r--  1 root root    47399 Sep 19  2025 tegra234-p3737-camera-p3762-a00-3Hawk-3Owl-overlay.dtbo
+-rw-r--r--  1 root root    47411 Sep 19  2025 tegra234-p3737-camera-p3762-a00-4Hawk-overlay.dtbo
+-rw-r--r--  1 root root    47467 Sep 19  2025 tegra234-p3737-camera-p3762-a00-4Owl-overlay.dtbo
+-rw-r--r--  1 root root    46259 Sep 19  2025 tegra234-p3737-camera-p3762-a00-overlay.dtbo
+-rw-r--r--  1 root root   142066 Sep 19  2025 tegra234-p3740-0002+p3701-0008.dtb
+-rw-r--r--  1 root root     1362 Sep 19  2025 tegra234-p3740-0002+p3701-0008-hdr20.dtbo
+-rw-r--r--  1 root root     1566 Sep 19  2025 tegra234-p3740-0002+p3701-0008-m2kb.dtbo
+-rw-r--r--  1 root root     1525 Sep 19  2025 tegra234-p3740-0002+p3701-0008-m2ke.dtbo
+-rw-r--r--  1 root root   259463 Sep 19  2025 tegra234-p3740-0002+p3701-0008-nv.dtb
+-rw-r--r--  1 root root    46235 Sep 19  2025 tegra234-p3740-camera-p3783-a00-overlay.dtbo
+-rw-r--r--  1 root root     1495 Sep 19  2025 tegra234-p3767-0000+p3509-a02-audio-adafruit-sph0645lm4h.dtbo
+-rw-r--r--  1 root root     1491 Sep 19  2025 tegra234-p3767-0000+p3509-a02-audio-adafruit-uda1334a.dtbo
+-rw-r--r--  1 root root     4395 Sep 19  2025 tegra234-p3767-0000+p3509-a02-audio-fe-pi.dtbo
+-rw-r--r--  1 root root     3591 Sep 19  2025 tegra234-p3767-0000+p3509-a02-audio-respeaker-4-mic-array.dtbo
+-rw-r--r--  1 root root     3627 Sep 19  2025 tegra234-p3767-0000+p3509-a02-audio-respeaker-4-mic-lin-array.dtbo
+-rw-r--r--  1 root root      876 Sep 19  2025 tegra234-p3767-0000+p3509-a02-csi.dtbo
+-rw-r--r--  1 root root     4626 Sep 19  2025 tegra234-p3767-0000+p3509-a02-hdr40.dtbo
+-rw-r--r--  1 root root     1949 Sep 19  2025 tegra234-p3767-0000+p3509-a02-m2ke.dtbo
+-rw-r--r--  1 root root     1048 Sep 19  2025 tegra234-p3767-0000+p3768-0000-csi.dtbo
+-rw-r--r--  1 root root     9247 Sep 19  2025 tegra234-p3767-camera-p3768-imx219-A.dtbo
+-rw-r--r--  1 root root     9153 Sep 19  2025 tegra234-p3767-camera-p3768-imx219-C.dtbo
+-rw-r--r--  1 root root    16107 Sep 19  2025 tegra234-p3767-camera-p3768-imx219-dual.dtbo
+-rw-r--r--  1 root root    12368 Sep 19  2025 tegra234-p3767-camera-p3768-imx219-imx477.dtbo
+-rw-r--r--  1 root root     6006 Sep 19  2025 tegra234-p3767-camera-p3768-imx477-A.dtbo
+-rw-r--r--  1 root root     6006 Sep 19  2025 tegra234-p3767-camera-p3768-imx477-C.dtbo
+-rw-r--r--  1 root root     9291 Sep 19  2025 tegra234-p3767-camera-p3768-imx477-dual-4lane.dtbo
+-rw-r--r--  1 root root     9303 Sep 19  2025 tegra234-p3767-camera-p3768-imx477-dual.dtbo
+-rw-r--r--  1 root root    12456 Sep 19  2025 tegra234-p3767-camera-p3768-imx477-imx219.dtbo
+-rw-r--r--  1 root root   141469 Sep 19  2025 tegra234-p3768-0000+p3767-0000.dtb
+-rw-r--r--  1 root root     2775 Sep 19  2025 tegra234-p3768-0000+p3767-0000-dynamic.dtbo
+-rw-r--r--  1 root root   249505 Sep 19  2025 tegra234-p3768-0000+p3767-0000-nv.dtb
+-rw-r--r--  1 root root   249517 Sep 19  2025 tegra234-p3768-0000+p3767-0000-nv-super.dtb
+-rw-r--r--  1 root root   141469 Sep 19  2025 tegra234-p3768-0000+p3767-0001.dtb
+-rw-r--r--  1 root root   249505 Sep 19  2025 tegra234-p3768-0000+p3767-0001-nv.dtb
+-rw-r--r--  1 root root   249517 Sep 19  2025 tegra234-p3768-0000+p3767-0001-nv-super.dtb
+-rw-r--r--  1 root root   141469 Sep 19  2025 tegra234-p3768-0000+p3767-0003.dtb
+-rw-r--r--  1 root root   249517 Sep 19  2025 tegra234-p3768-0000+p3767-0003-nv.dtb
+-rw-r--r--  1 root root   249353 Sep 19  2025 tegra234-p3768-0000+p3767-0003-nv-super.dtb
+-rw-r--r--  1 root root   141469 Sep 19  2025 tegra234-p3768-0000+p3767-0004.dtb
+-rw-r--r--  1 root root   249517 Sep 19  2025 tegra234-p3768-0000+p3767-0004-nv.dtb
+-rw-r--r--  1 root root   249353 Sep 19  2025 tegra234-p3768-0000+p3767-0004-nv-super.dtb
+-rw-r--r--  1 root root   141369 Sep 19  2025 tegra234-p3768-0000+p3767-0005.dtb
+-rw-r--r--  1 root root   249497 Sep 19  2025 tegra234-p3768-0000+p3767-0005-nv.dtb
+-rw-r--r--  1 root root   249353 Sep 19  2025 tegra234-p3768-0000+p3767-0005-nv-super.dtb
+-rw-r--r--  1 root root      461 Sep 19  2025 tegra-optee.dtbo
+--- ls -la /boot/extlinux
+total 40
+drwxr-xr-x 2 root root  4096 Jul 28 08:21 .
+drwxr-xr-x 5 root root 24576 Jul 28 08:22 ..
+-rw-r--r-- 1 root root   892 Jul 28 08:21 extlinux.conf
+-rw-r--r-- 1 root root   893 Jul 28 08:21 extlinux.conf.nv-update-extlinux-backup
+--- ls -la /boot/dtb
+total 276
+drwxr-xr-x 2 root root   4096 Jun 18  2025 .
+drwxr-xr-x 5 root root  24576 Jul 28 08:22 ..
+-rw-r--r-- 1 root root 249353 Jul 28 08:22 kernel_tegra234-p3768-0000+p3767-0005-nv-super.dtb
+--- ls -la /boot/efi (if any)
+total 29
+drwxr-xr-x 3 root root   512 Jan  1  1970 .
+drwxr-xr-x 5 root root 24576 Jul 28 08:22 ..
+drwxr-xr-x 4 root root   512 Jul 23 16:01 EFI
+--- lsblk -f
+NAME         FSTYPE FSVER LABEL UUID                                 FSAVAIL FSUSE% MOUNTPOINTS
+loop0                                                                               
+mmcblk0                                                                             
+├─mmcblk0p1  ext4   1.0         752d27c0-5370-43a2-9666-6f6c7e937dce  197,8G    11% /
+├─mmcblk0p2                                                                         
+├─mmcblk0p3                                                                         
+├─mmcblk0p4                                                                         
+├─mmcblk0p5                                                                         
+├─mmcblk0p6                                                                         
+├─mmcblk0p7                                                                         
+├─mmcblk0p8                                                                         
+├─mmcblk0p9                                                                         
+├─mmcblk0p10 vfat   FAT32       4EA2-9257                              62,9M     0% /boot/efi
+├─mmcblk0p11                                                                        
+├─mmcblk0p12                                                                        
+├─mmcblk0p13                                                                        
+├─mmcblk0p14                                                                        
+└─mmcblk0p15                                                                        
+zram0                                                                               [SWAP]
+zram1                                                                               [SWAP]
+zram2                                                                               [SWAP]
+zram3                                                                               [SWAP]
+zram4                                                                               [SWAP]
+zram5                                                                               [SWAP]
+nvme0n1                                                                             
+├─nvme0n1p1  ext4   1.0         a258b2d4-ed10-4ca5-9400-5ef2e8aa7ea2                
+├─nvme0n1p2                                                                         
+├─nvme0n1p3                                                                         
+├─nvme0n1p4                                                                         
+├─nvme0n1p5                                                                         
+├─nvme0n1p6                                                                         
+├─nvme0n1p7                                                                         
+├─nvme0n1p8                                                                         
+├─nvme0n1p9                                                                         
+├─nvme0n1p10 vfat   FAT32       1110-BD51                                           
+├─nvme0n1p11                                                                        
+├─nvme0n1p12                                                                        
+├─nvme0n1p13                                                                        
+├─nvme0n1p14                                                                        
+└─nvme0n1p15                                                                        
+--- lsblk -o NAME,SIZE,TYPE,FSTYPE,PARTLABEL,PARTUUID,MOUNTPOINT
+NAME           SIZE TYPE FSTYPE PARTLABEL          PARTUUID                             MOUNTPOINT
+loop0           16M loop                                                                
+mmcblk0      238,4G disk                                                                
+├─mmcblk0p1    237G part ext4   APP                365c9438-2077-4022-a86d-078cd42f5e1b /
+├─mmcblk0p2    128M part        A_kernel           264b1543-9443-42ee-bed5-ecde98e9aea8 
+├─mmcblk0p3    768K part        A_kernel-dtb       b4c144fd-14b5-4538-9513-71b2f0e32b8d 
+├─mmcblk0p4   31,6M part        A_reserved_on_user a6f6c57e-bbc6-4234-b118-d72618bafb87 
+├─mmcblk0p5    128M part        B_kernel           53b42a62-a921-447f-9f3f-0566afc16cfb 
+├─mmcblk0p6    768K part        B_kernel-dtb       1fcb6ce6-c7b0-44d2-a86e-b33aa6460801 
+├─mmcblk0p7   31,6M part        B_reserved_on_user 75a481a0-f4a6-4ac3-859c-1ca9e9d8a940 
+├─mmcblk0p8     80M part        recovery           6962e2dc-4f02-4134-ab6c-e114e450821d 
+├─mmcblk0p9    512K part        recovery-dtb       9199be78-15b5-42e7-bb56-40e41b07b2a9 
+├─mmcblk0p10    64M part vfat   esp                32afd553-d238-4471-80e3-50a174e0f985 /boot/efi
+├─mmcblk0p11    80M part        recovery_alt       1e6f708a-4286-42c8-9fb2-eeac51a71787 
+├─mmcblk0p12   512K part        recovery-dtb_alt   3997123c-cf75-4a2e-9b35-ddf279c58dd1 
+├─mmcblk0p13    64M part        esp_alt            a07a0ac8-5851-49fb-9b37-4ae718503e20 
+├─mmcblk0p14   400M part        UDA                21533c0a-e54a-4c96-a00b-05899098747b 
+└─mmcblk0p15 479,5M part        reserved           fc65943b-105e-42b6-b5e3-8a0c69fbb493 
+zram0          635M disk                                                                [SWAP]
+zram1          635M disk                                                                [SWAP]
+zram2          635M disk                                                                [SWAP]
+zram3          635M disk                                                                [SWAP]
+zram4          635M disk                                                                [SWAP]
+zram5          635M disk                                                                [SWAP]
+nvme0n1      238,5G disk                                                                
+├─nvme0n1p1    237G part ext4   APP                5ba99b2c-cfa3-49da-a10c-851833c4aa84 
+├─nvme0n1p2    128M part        A_kernel           d0945cec-2766-47dc-936d-652dbdbc6e43 
+├─nvme0n1p3    768K part        A_kernel-dtb       2f38bb6b-e3ae-45a4-b579-85e6858fa171 
+├─nvme0n1p4   31,6M part        A_reserved_on_user cb8dad8e-03db-486c-b7ba-863c7149f12d 
+├─nvme0n1p5    128M part        B_kernel           2937e886-cbf8-4763-ad48-eb1231072367 
+├─nvme0n1p6    768K part        B_kernel-dtb       71de0768-1b93-419f-94f5-14fc81843cfe 
+├─nvme0n1p7   31,6M part        B_reserved_on_user aff191c0-4035-4f3a-b868-08f6144410af 
+├─nvme0n1p8     80M part        recovery           458d7914-53b0-44a2-ad8a-e6a85736dda9 
+├─nvme0n1p9    512K part        recovery-dtb       4b934968-93ec-43fd-a401-f49137131f2a 
+├─nvme0n1p10    64M part vfat   esp                a0c12799-ca31-4dc3-801e-15f0e5e161ed 
+├─nvme0n1p11    80M part        recovery_alt       5f7d17bb-a949-42ed-bf8a-b8ad79446a77 
+├─nvme0n1p12   512K part        recovery-dtb_alt   dd32ee83-5976-484a-8faf-10e903f5f855 
+├─nvme0n1p13    64M part        esp_alt            6d48e0aa-77e1-418a-aff7-5ed5b6a7e857 
+├─nvme0n1p14   400M part        UDA                e26fdf12-4032-45e9-ad11-03cf6f4b8e64 
+└─nvme0n1p15 479,5M part        reserved           da779a33-ecf0-4225-af7d-00859a35b8ad 
+--- /proc/partitions
+major minor  #blocks  name
+
+   7        0      16384 loop0
+ 179        0  250003456 mmcblk0
+ 179        1  248473600 mmcblk0p1
+ 179        2     131072 mmcblk0p2
+ 179        3        768 mmcblk0p3
+ 179        4      32384 mmcblk0p4
+ 179        5     131072 mmcblk0p5
+ 179        6        768 mmcblk0p6
+ 179        7      32384 mmcblk0p7
+ 179        8      81920 mmcblk0p8
+ 179        9        512 mmcblk0p9
+ 179       10      65536 mmcblk0p10
+ 179       11      81920 mmcblk0p11
+ 179       12        512 mmcblk0p12
+ 179       13      65536 mmcblk0p13
+ 179       14     409600 mmcblk0p14
+ 179       15     491008 mmcblk0p15
+ 259        0  250059096 nvme0n1
+ 259        1  248473600 nvme0n1p1
+ 259        2     131072 nvme0n1p2
+ 259        3        768 nvme0n1p3
+ 259        4      32384 nvme0n1p4
+ 259        5     131072 nvme0n1p5
+ 259        6        768 nvme0n1p6
+ 259        7      32384 nvme0n1p7
+ 259        8      81920 nvme0n1p8
+ 259        9        512 nvme0n1p9
+ 259       10      65536 nvme0n1p10
+ 259       11      81920 nvme0n1p11
+ 259       12        512 nvme0n1p12
+ 259       13      65536 nvme0n1p13
+ 259       14     409600 nvme0n1p14
+ 259       15     491008 nvme0n1p15
+ 252        0     650220 zram0
+ 252        1     650220 zram1
+ 252        2     650220 zram2
+ 252        3     650220 zram3
+ 252        4     650220 zram4
+ 252        5     650220 zram5
+--- mount | grep -iE 'efi|boot'
+efivarfs on /sys/firmware/efi/efivars type efivarfs (rw,nosuid,nodev,noexec,relatime)
+/dev/mmcblk0p10 on /boot/efi type vfat (rw,relatime,fmask=0022,dmask=0022,codepage=437,iocharset=iso8859-1,shortname=mixed,errors=remount-ro)
+(rc=0)
+--- /etc/fstab
+# /etc/fstab: static file system information.
+#
+# These are the filesystems that are always mounted on boot, you can
+# override any of these by copying the appropriate line from this file into
+# /etc/fstab and tweaking it as you see fit.  See fstab(5).
+#
+# <file system> <mount point>             <type>          <options>                               <dump> <pass>
+/dev/root            /                     ext4           defaults                                     0 1
+UUID=4EA2-9257 /boot/efi vfat defaults 0 1
+--- sudo -n blkid
+/dev/nvme0n1p1: UUID="a258b2d4-ed10-4ca5-9400-5ef2e8aa7ea2" BLOCK_SIZE="4096" TYPE="ext4" PARTLABEL="APP" PARTUUID="5ba99b2c-cfa3-49da-a10c-851833c4aa84"
+/dev/nvme0n1p10: UUID="1110-BD51" BLOCK_SIZE="512" TYPE="vfat" PARTLABEL="esp" PARTUUID="a0c12799-ca31-4dc3-801e-15f0e5e161ed"
+/dev/zram5: UUID="7f1e984a-ac57-4ee4-bfe3-953b248403bd" TYPE="swap"
+/dev/zram3: UUID="fcef531d-ba43-43dc-9c8a-d37a48eb6de9" TYPE="swap"
+/dev/mmcblk0p10: UUID="4EA2-9257" BLOCK_SIZE="512" TYPE="vfat" PARTLABEL="esp" PARTUUID="32afd553-d238-4471-80e3-50a174e0f985"
+/dev/mmcblk0p1: UUID="752d27c0-5370-43a2-9666-6f6c7e937dce" BLOCK_SIZE="4096" TYPE="ext4" PARTLABEL="APP" PARTUUID="365c9438-2077-4022-a86d-078cd42f5e1b"
+/dev/zram1: UUID="91e9c90b-2b73-4a6e-a7df-d1c3225f9502" TYPE="swap"
+/dev/loop0: SEC_TYPE="msdos" LABEL_FATBOOT="L4T-README" LABEL="L4T-README" UUID="1234-ABCD" BLOCK_SIZE="512" TYPE="vfat"
+/dev/zram4: UUID="d58d712c-5d58-4023-958d-f79edac842f4" TYPE="swap"
+/dev/zram2: UUID="f938bafb-f095-426c-a5c2-29dee2c80d3c" TYPE="swap"
+/dev/zram0: UUID="a19b9d46-e4cb-47eb-89c6-13fc77261f14" TYPE="swap"
+/dev/nvme0n1p9: PARTLABEL="recovery-dtb" PARTUUID="4b934968-93ec-43fd-a401-f49137131f2a"
+/dev/nvme0n1p11: PARTLABEL="recovery_alt" PARTUUID="5f7d17bb-a949-42ed-bf8a-b8ad79446a77"
+/dev/nvme0n1p7: PARTLABEL="B_reserved_on_user" PARTUUID="aff191c0-4035-4f3a-b868-08f6144410af"
+/dev/nvme0n1p5: PARTLABEL="B_kernel" PARTUUID="2937e886-cbf8-4763-ad48-eb1231072367"
+/dev/nvme0n1p3: PARTLABEL="A_kernel-dtb" PARTUUID="2f38bb6b-e3ae-45a4-b579-85e6858fa171"
+/dev/nvme0n1p14: PARTLABEL="UDA" PARTUUID="e26fdf12-4032-45e9-ad11-03cf6f4b8e64"
+/dev/nvme0n1p12: PARTLABEL="recovery-dtb_alt" PARTUUID="dd32ee83-5976-484a-8faf-10e903f5f855"
+/dev/nvme0n1p8: PARTLABEL="recovery" PARTUUID="458d7914-53b0-44a2-ad8a-e6a85736dda9"
+/dev/nvme0n1p6: PARTLABEL="B_kernel-dtb" PARTUUID="71de0768-1b93-419f-94f5-14fc81843cfe"
+/dev/nvme0n1p4: PARTLABEL="A_reserved_on_user" PARTUUID="cb8dad8e-03db-486c-b7ba-863c7149f12d"
+/dev/nvme0n1p2: PARTLABEL="A_kernel" PARTUUID="d0945cec-2766-47dc-936d-652dbdbc6e43"
+/dev/nvme0n1p15: PARTLABEL="reserved" PARTUUID="da779a33-ecf0-4225-af7d-00859a35b8ad"
+/dev/nvme0n1p13: PARTLABEL="esp_alt" PARTUUID="6d48e0aa-77e1-418a-aff7-5ed5b6a7e857"
+/dev/mmcblk0p12: PARTLABEL="recovery-dtb_alt" PARTUUID="3997123c-cf75-4a2e-9b35-ddf279c58dd1"
+/dev/mmcblk0p9: PARTLABEL="recovery-dtb" PARTUUID="9199be78-15b5-42e7-bb56-40e41b07b2a9"
+/dev/mmcblk0p7: PARTLABEL="B_reserved_on_user" PARTUUID="75a481a0-f4a6-4ac3-859c-1ca9e9d8a940"
+/dev/mmcblk0p5: PARTLABEL="B_kernel" PARTUUID="53b42a62-a921-447f-9f3f-0566afc16cfb"
+/dev/mmcblk0p3: PARTLABEL="A_kernel-dtb" PARTUUID="b4c144fd-14b5-4538-9513-71b2f0e32b8d"
+/dev/mmcblk0p15: PARTLABEL="reserved" PARTUUID="fc65943b-105e-42b6-b5e3-8a0c69fbb493"
+/dev/mmcblk0p13: PARTLABEL="esp_alt" PARTUUID="a07a0ac8-5851-49fb-9b37-4ae718503e20"
+/dev/mmcblk0p11: PARTLABEL="recovery_alt" PARTUUID="1e6f708a-4286-42c8-9fb2-eeac51a71787"
+/dev/mmcblk0p8: PARTLABEL="recovery" PARTUUID="6962e2dc-4f02-4134-ab6c-e114e450821d"
+/dev/mmcblk0p6: PARTLABEL="B_kernel-dtb" PARTUUID="1fcb6ce6-c7b0-44d2-a86e-b33aa6460801"
+/dev/mmcblk0p4: PARTLABEL="A_reserved_on_user" PARTUUID="a6f6c57e-bbc6-4234-b118-d72618bafb87"
+/dev/mmcblk0p2: PARTLABEL="A_kernel" PARTUUID="264b1543-9443-42ee-bed5-ecde98e9aea8"
+/dev/mmcblk0p14: PARTLABEL="UDA" PARTUUID="21533c0a-e54a-4c96-a00b-05899098747b"
+--- ESP listing
+vfat mounted at: /boot/efi
+/boot/efi/EFI:
+total 2
+drwxr-xr-x 4 root root 512 Jul 23 16:01 .
+drwxr-xr-x 3 root root 512 Jan  1  1970 ..
+drwxr-xr-x 2 root root 512 Jun 18  2025 BOOT
+drwxr-xr-x 2 root root 512 Jul 23 16:01 UpdateCapsule
+
+/boot/efi/EFI/BOOT:
+total 109
+drwxr-xr-x 2 root root    512 Jun 18  2025 .
+drwxr-xr-x 4 root root    512 Jul 23 16:01 ..
+-rwxr-xr-x 1 root root 110592 Sep  8 23:33 BOOTAA64.efi
+
+/boot/efi/EFI/UpdateCapsule:
+total 1
+drwxr-xr-x 2 root root 512 Jul 23 16:01 .
+drwxr-xr-x 4 root root 512 Jul 23 16:01 ..
+--- efibootmgr -v
+BootCurrent: 0001
+Timeout: 30 seconds
+BootOrder: 0001,0008,0004,0003,0002,0005,0007,0000,0006
+Boot0000* Enter Setup	FvVol(49a79a15-8f69-4be7-a30c-a172f44abce7)/FvFile(462caa21-7614-4503-836e-8ab6f4662331)
+Boot0001* UEFI SD Device	VenHw(1e5a432c-0466-4d31-b009-d4d9239271d3)/MemoryMapped(11,0x3400000,0x341ffff)/SD(0)N.....YM....R,Y.
+Boot0002* UEFI PXEv4 (MAC:<mac>)	VenHw(1e5a432c-0466-4d31-b009-d4d9239271d3)/MemoryMapped(11,0x140a0000,0x140bffff)/PciRoot(0x0)/Pci(0x0,0x0)/Pci(0x0,0x0)/MAC(<mac>,0)/IPv4(0.0.0.00.0.0.0,0,0)N.....YM....R,Y.
+Boot0003* UEFI PXEv6 (MAC:<mac>)	VenHw(1e5a432c-0466-4d31-b009-d4d9239271d3)/MemoryMapped(11,0x140a0000,0x140bffff)/PciRoot(0x0)/Pci(0x0,0x0)/Pci(0x0,0x0)/MAC(<mac>,0)/IPv6([::]:<->[::]:,0,0)N.....YM....R,Y.
+Boot0004* UEFI HTTPv4 (MAC:<mac>)	VenHw(1e5a432c-0466-4d31-b009-d4d9239271d3)/MemoryMapped(11,0x140a0000,0x140bffff)/PciRoot(0x0)/Pci(0x0,0x0)/Pci(0x0,0x0)/MAC(<mac>,0)/IPv4(0.0.0.00.0.0.0,0,0)/Uri()N.....YM....R,Y.
+Boot0005* UEFI HTTPv6 (MAC:<mac>)	VenHw(1e5a432c-0466-4d31-b009-d4d9239271d3)/MemoryMapped(11,0x140a0000,0x140bffff)/PciRoot(0x0)/Pci(0x0,0x0)/Pci(0x0,0x0)/MAC(<mac>,0)/IPv6([::]:<->[::]:,0,0)/Uri()N.....YM....R,Y.
+Boot0006* BootManagerMenuApp	FvVol(49a79a15-8f69-4be7-a30c-a172f44abce7)/FvFile(eec25bdc-67f2-4d95-b1d5-f81b2039d11d)
+Boot0007* UEFI Shell	FvVol(49a79a15-8f69-4be7-a30c-a172f44abce7)/FvFile(7c04a583-9e3e-4f1c-ad65-e05268d0b4d1)
+Boot0008* UEFI Micron 2300 NVMe 256GB <nvme-serial> 1	VenHw(1e5a432c-0466-4d31-b009-d4d9239271d3)/MemoryMapped(11,0x14160000,0x1417ffff)/PciRoot(0x0)/Pci(0x0,0x0)/Pci(0x0,0x0)/NVMe(0x1,<nvme-eui>)N.....YM....R,Y.
+--- /proc/cmdline
+root=/dev/mmcblk0p1 rw rootwait rootfstype=ext4 mminit_loglevel=4 console=ttyTCU0,115200 firmware_class.path=/etc/firmware fbcon=map:0 video=efifb:off console=tty0 bl_prof_dataptr=2031616@0x271E10000 bl_prof_ro_ptr=65536@0x271E00000 
+--- /boot/Image and initrd sizes
+-rw-r--r-- 1 root root 43090432 Sep 19  2025 /boot/Image
+-rw-r--r-- 1 root root 15861265 Jul 28 08:22 /boot/initrd
+lrwxrwxrwx 1 root root       25 Jul 23 15:54 /boot/initrd.img -> initrd.img-5.15.148-tegra
+-rw-r--r-- 1 root root 19025757 Jul 28 08:22 /boot/initrd.img-5.15.148-tegra
+--- /boot/dtb/*.dtb names
+kernel_tegra234-p3768-0000+p3767-0005-nv-super.dtb
+--- /etc/nv_boot_control.conf
+TNSPEC 3767-300-0005-T.1-1-0-jetson-orin-nano-devkit-super-
+COMPATIBLE_SPEC 3767--0005--1--jetson-orin-nano-devkit-super-
+TEGRA_BOOT_STORAGE mmcblk0
+TEGRA_CHIPID 0x23
+TEGRA_OTA_BOOT_DEVICE /dev/mtdblock0
+TEGRA_OTA_GPT_DEVICE /dev/mtdblock0
+--- nvbootctrl (if present, read-only queries)
+Current version: 36.4.4
+Capsule update status: 1
+Current bootloader slot: B
+Active bootloader slot: B
+num_slots: 2
+slot: 0,             status: normal
+slot: 1,             status: normal
+Current version: 36.4.4
+Capsule update status: 1
+Current bootloader slot: B
+Active bootloader slot: B
+num_slots: 2
+slot: 0,             status: normal
+slot: 1,             status: normal
+

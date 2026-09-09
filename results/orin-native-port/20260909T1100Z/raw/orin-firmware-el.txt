@@ -1,0 +1,291 @@
+# orin-firmware-el.txt -- H3 live harvest of the Jetson Orin Nano over ssh, 2026-09-09 (board local time ~15:36, uptime 16h). READ-ONLY; sudo -n used only for dmesg/iomem/blkid/efibootmgr/ESP listing/ESRT/fuser.
+# Redacted: login/hostname -> <user>, LAN IPs -> <orin-ip>/<lan-ip>, ssh key -> <orin-key>, MAC -> <mac>, NVMe serial/EUI -> <nvme-serial>/<nvme-eui>. NUL bytes stripped.
+# Producing scripts: h3-a.sh / h3-c.sh / h3-f.sh / h3-d.sh (scratchpad); section markers === [x] === are the script sections.
+
+=== [b] firmware/EL ===
+--- sudo -n dmesg | grep -iE 'EL2|EL1|VHE|nVHE|EFI v|EDK|efi:|esrt|kexec|psci|gic|ITS|arch_timer|Architected|hyp|kvm'
+[    0.000000] efi: EFI v2.70 by EDK II
+[    0.000000] efi: RTPROP=0x26d82f198 TPMFinalLog=0x25e3f0000 SMBIOS=0xffff0000 SMBIOS 3.0=0x26d220000 MEMATTR=0x2671a6018 ESRT=0x2671e4d98 TPMEventLog=0x25e408018 RNG=0x25a900018 MEMRESERVE=0x25e40ac18 
+[    0.000000] esrt: Reserving ESRT space from 0x00000002671e4d98 to 0x00000002671e4dd0.
+[    0.000000] psci: probing for conduit method from DT.
+[    0.000000] psci: PSCIv1.1 detected in firmware.
+[    0.000000] psci: Using standard PSCI v0.2 function IDs
+[    0.000000] psci: Trusted OS migration not required
+[    0.000000] psci: SMC Calling Convention v1.2
+[    0.000000] CPU features: detected: Address authentication (architected algorithm)
+[    0.000000] CPU features: detected: GIC system register CPU interface
+[    0.000000] GICv3: GIC: Using split EOI/Deactivate mode
+[    0.000000] GICv3: 960 SPIs implemented
+[    0.000000] GICv3: 0 Extended SPIs implemented
+[    0.000000] GICv3: Distributor has no Range Selector support
+[    0.000000] Root IRQ handler: gic_handle_irq
+[    0.000000] GICv3: 16 PPIs implemented
+[    0.000000] GICv3: CPU0: found redistributor 0 region 0:0x000000000f440000
+[    0.000000] arch_timer: cp15 timer(s) running at 31.25MHz (phys).
+[    0.000001] sched_clock: 56 bits at 31MHz, resolution 32ns, wraps every 4398046511088ns
+[    0.005445] GICv3: CPU1: found redistributor 100 region 0:0x000000000f460000
+[    0.005944] GICv3: CPU2: found redistributor 200 region 0:0x000000000f480000
+[    0.006377] GICv3: CPU3: found redistributor 300 region 0:0x000000000f4a0000
+[    0.008866] GICv3: CPU4: found redistributor 10200 region 0:0x000000000f500000
+[    0.009393] GICv3: CPU5: found redistributor 10300 region 0:0x000000000f520000
+[    0.009481] CPU features: detected: Generic authentication (architected algorithm)
+[    0.044618] CPU: All CPU(s) started at EL2
+[    0.175552] kvm [1]: IPA Size Limit: 48 bits
+[    0.175590] kvm [1]: GICv3: no GICV resource entry
+[    0.175597] kvm [1]: disabling GICv2 emulation
+[    0.175618] kvm [1]: GIC system register CPU interface enabled
+[    0.175689] kvm [1]: vgic interrupt IRQ9
+[    0.175837] kvm [1]: VHE mode initialized successfully
+[    0.179176] workingset: timestamp_bits=42 max_order=21 bucket_order=0
+[   10.329455] systemd[1]: Reached target Slice Units.
+[   11.753307] gic 2a41000.interrupt-controller: GIC IRQ controller registered
+--- /proc/interrupts (arch_timer / GICv3 / ITS lines)
+  9:          0          0          0          0          0          0     GICv3  25 Level     vgic
+ 11:          0          0          0          0          0          0     GICv3  30 Level     kvm guest ptimer
+ 12:          0          0          0          0          0          0     GICv3  27 Level     kvm guest vtimer
+ 13:    2039943   14599126    2483495    1953610    1633048    1680969     GICv3  26 Level     arch_timer
+ 79:          0          0          0          0          0          0     GICv3 108 Level     gpcdma.1
+ 80:          0          0          0          0          0          0     GICv3 109 Level     gpcdma.2
+ 81:          0          0          0          0          0          0     GICv3 110 Level     gpcdma.3
+ 82:          0          0          0          0          0          0     GICv3 111 Level     gpcdma.4
+ 83:          0          0          0          0          0          0     GICv3 112 Level     gpcdma.5
+ 84:          0          0          0          0          0          0     GICv3 113 Level     gpcdma.6
+ 85:          0          0          0          0          0          0     GICv3 114 Level     gpcdma.7
+ 86:          0          0          0          0          0          0     GICv3 115 Level     gpcdma.8
+ 87:          0          0          0          0          0          0     GICv3 116 Level     gpcdma.9
+ 88:          0          0          0          0          0          0     GICv3 117 Level     gpcdma.10
+ 89:          0          0          0          0          0          0     GICv3 118 Level     gpcdma.11
+ 90:          0          0          0          0          0          0     GICv3 119 Level     gpcdma.12
+ 91:          0          0          0          0          0          0     GICv3 120 Level     gpcdma.13
+ 92:          0          0          0          0          0          0     GICv3 121 Level     gpcdma.14
+110:          0          0          0          0          0          0     GICv3 255 Level     2c00000.memory-controller
+114:         76          0          0          0          0          0     GICv3  57 Level     3160000.i2c
+115:          0          0          0          0          0          0     GICv3  59 Level     3180000.i2c
+116:          0          0          0          0          0          0     GICv3  62 Level     31b0000.i2c
+118:          0          0          0          0          0          0     GICv3  68 Level     3210000.spi
+119:          0          0          0          0          0          0     GICv3  70 Level     3230000.spi
+120:     244199          0          0          0          0          0     GICv3  94 Level     mmc0
+121:     180712          0          0          0          0          0     GICv3  92 Level     snd_hda_tegra
+122:          0          0          0          0          0          0     GICv3 199 Level     3610000.usb
+123:          0          0          0          0          0          0     GICv3 198 Level     3550000.usb
+124:        644          0          0          0          0          0     GICv3 195 Level     xhci-hcd:usb1
+125:          0          0          0          0          0          0     GICv3 196 Level     3610000.usb
+126:     909983          0          0          0          0          0     GICv3 208 Level     3c00000.hsp
+127:          0          0          0          0          0          0     GICv3 152 Level     3c00000.hsp
+128:          0          0          0          0          0          0     GICv3 153 Level     3c00000.hsp
+129:          0          0          0          0          0          0     GICv3 154 Level     3c00000.hsp
+130:          0          0          0          0          0          0     GICv3 155 Level     3c00000.hsp
+131:          0          0          0          0          0          0     GICv3 156 Level     3c00000.hsp
+132:          0          0          0          0          0          0     GICv3 157 Level     3c00000.hsp
+133:          0          0          0          0          0          0     GICv3 158 Level     3c00000.hsp
+134:          0          0          0          0          0          0     GICv3 159 Level     3c00000.hsp
+135:          0          0          0          0          0          0     GICv3 368 Level     tegra-p2u-intr
+136:          0          0          0          0          0          0     GICv3 369 Level     tegra-p2u-intr
+137:          0          0          0          0          0          0     GICv3 370 Level     tegra-p2u-intr
+138:          0          0          0          0          0          0     GICv3 371 Level     tegra-p2u-intr
+139:          0          0          0          0          0          0     GICv3 372 Level     tegra-p2u-intr
+140:          0          0          0          0          0          0     GICv3 373 Level     tegra-p2u-intr
+141:          0          0          0          0          0          0     GICv3 374 Level     tegra-p2u-intr
+142:          0          0          0          0          0          0     GICv3 375 Level     tegra-p2u-intr
+143:          0          0          0          0          0          0     GICv3 376 Level     tegra-p2u-intr
+144:          0          0          0          0          0          0     GICv3 377 Level     tegra-p2u-intr
+145:          0          0          0          0          0          0     GICv3 378 Level     tegra-p2u-intr
+146:          0          0          0          0          0          0     GICv3 379 Level     tegra-p2u-intr
+147:          0          0          0          0          0          0     GICv3 380 Level     tegra-p2u-intr
+148:          0          0          0          0          0          0     GICv3 381 Level     tegra-p2u-intr
+149:          0          0          0          0          0          0     GICv3 382 Level     tegra-p2u-intr
+150:          0          0          0          0          0          0     GICv3 383 Level     tegra-p2u-intr
+151:          0          0          0          0          0          0     GICv3 235 Level     tegra-p2u-intr
+152:          0          0          0          0          0          0     GICv3 252 Level     tegra-p2u-intr
+153:          0          0          0          0          0          0     GICv3 253 Level     tegra-p2u-intr
+154:          0          0          0          0          0          0     GICv3 254 Level     tegra-p2u-intr
+155:          0          0          0          0          0          0     GICv3 140 Level     tegra-p2u-intr
+156:          0          0          0          0          0          0     GICv3 141 Level     tegra-p2u-intr
+157:          0          0          0          0          0          0     GICv3 142 Level     tegra-p2u-intr
+158:          0          0          0          0          0          0     GICv3 143 Level     tegra-p2u-intr
+159:          0          0          0          0          0          0     GICv3 270 Level     arm-smmu global fault, arm-smmu-context-fault, arm-smmu-context-fault, arm-smmu-context-fault, arm-smmu-c
+160:          0          0          0          0          0          0     GICv3 274 Level     arm-smmu global fault, arm-smmu-context-fault
+161:          0          0          0          0          0          0     GICv3 207 Level     be00000.rce-fabric
+162:       7063          0          0          0          0          0     GICv3 165 Level     c150000.hsp
+163:          0          0          0          0          0          0     GICv3 166 Level     c150000.hsp
+164:          0          0          0          0          0          0     GICv3 167 Level     c150000.hsp
+165:          0          0          0          0          0          0     GICv3 168 Level     c150000.hsp
+166:          0          0          0          0          0          0     GICv3  45 Level     c1e0000.hardware-timestamp
+167:         64          0          0          0          0          0     GICv3  58 Level     c240000.i2c
+168:          0          0          0          0          0          0     GICv3  64 Level     c250000.i2c
+173:          0          0          0          0          0          0     GICv3 204 Level     c600000.aon-fabric
+174:          0          0          0          0          0          0     GICv3 206 Level     d600000.bpmp-fabric
+175:          0          0          0          0          0          0     GICv3 413 Level     de00000.dce-fabric
+176:          0          0          0          0          0          0     GICv3 272 Level     arm-smmu global fault, arm-smmu-context-fault, arm-smmu-context-fault, arm-smmu-context-fault
+177:          0          0          0          0          0          0     GICv3 202 Level     arm-smmu global fault, arm-smmu-context-fault, arm-smmu-context-fault, arm-smmu-context-fault, arm-smmu-c
+178:          0          0          0          0          0          0     GICv3 264 Level     arm-smmu global fault, arm-smmu-context-fault
+179:          0          0          0          0          0          0     GICv3 263 Level     13a00000.cbb-fabric
+180:        746          0          0          0          0          0     GICv3 480 Level     host1x_syncpt
+181:          0          0          0          0          0          0     GICv3 481 Level     host1x_syncpt
+182:          0          0          0          0          0          0     GICv3 482 Level     host1x_syncpt
+183:          0          0          0          0          0          0     GICv3 483 Level     host1x_syncpt
+184:          0          0          0          0          0          0     GICv3 484 Level     host1x_syncpt
+185:          0          0          0          0          0          0     GICv3 485 Level     host1x_syncpt
+186:          0          0          0          0          0          0     GICv3 486 Level     host1x_syncpt
+187:          0          0          0          0          0          0     GICv3 487 Level     host1x_syncpt
+188:          0          0          0          0          0          0     GICv3 295 Level     host1x_general
+189:          1          0          0          0          0          0     GICv3 388 Level     tegra-pcie-intr, PCIe PME, aerdrv
+191:          1          0          0          0          0          0     GICv3  77 Level     tegra-pcie-intr, PCIe PME, aerdrv
+193:          1          0          0          0          0          0     GICv3  83 Level     tegra-pcie-intr, PCIe PME, aerdrv
+195:          0          0          0          0          0          0     GICv3 386 Level     tegra-pcie-intr
+197:          0          0          0          0          0          0     GICv3 100 Level     gk20a_stall
+198:         59          0          0          0          0          0     GICv3 102 Level     gk20a_stall
+199:          6          0          0          0          0          0     GICv3 103 Level     gk20a_stall
+200:          0          0          0          0          0          0     GICv3  99 Level     gk20a_nonstall
+202:          1          0          0          0          0          0     GICv3 160 Level     3d00000.hsp
+203:          0          0          0          0          0          0     GICv3 161 Level     3d00000.hsp
+204:          0          0          0          0          0          0     GICv3 162 Level     3d00000.hsp
+205:          0          0          0          0          0          0     GICv3 163 Level     3d00000.hsp
+209:          0          0          0          0          0          0     GICv3  23 Level     arm-pmu
+210:        125          0          0          0          0          0     GICv3 214 Level     b950000.tegra-hsp
+211:          0          0          0          0          0          0     GICv3 215 Level     b950000.tegra-hsp
+212:          0          0          0          0          0          0     GICv3 216 Level     b950000.tegra-hsp
+213:          0          0          0          0          0          0     GICv3 217 Level     b950000.tegra-hsp
+214:          0          0          0          0          0          0     GICv3 408 Level     tegra_dce_isr
+215:        137          0          0          0          0          0     GICv3 409 Level     tegra_dce_isr
+219:          0          0          0          0          0          0     GICv3  51 Level     bc00000.rtcpu
+IPI0:     26893      26314      53992      24301      14048       8750       Rescheduling interrupts
+IPI1:   1103827    1281172    1089541    1041770     936627    1157084       Function call interrupts
+IPI2:         0          0          0          0          0          0       CPU stop interrupts
+IPI3:         0          0          0          0          0          0       CPU stop (for crash dump) interrupts
+IPI4:         0          0          0          0          0          0       Timer broadcast interrupts
+IPI5:     31187      35804      26590      25679      13564      18490       IRQ work interrupts
+IPI6:         0          0          0          0          0          0       CPU wake-up interrupts
+--- /sys/module/kvm/parameters
+halt_poll_ns=500000
+halt_poll_ns_grow=2
+halt_poll_ns_grow_start=10000
+halt_poll_ns_shrink=0
+--- /dev/kvm
+crw-rw----+ 1 root kvm 10, 232 Jun  5 17:40 /dev/kvm
+--- ls /sys/firmware/efi/
+efivars
+esrt
+fw_platform_size
+systab
+--- ls /sys/firmware/efi/efivars | head -40
+BoardRecoveryBoot-781e084c-a330-417c-b678-38e696380cb9
+Boot0000-8be4df61-93ca-11d2-aa0d-00e098032b8c
+Boot0001-8be4df61-93ca-11d2-aa0d-00e098032b8c
+Boot0002-8be4df61-93ca-11d2-aa0d-00e098032b8c
+Boot0003-8be4df61-93ca-11d2-aa0d-00e098032b8c
+Boot0004-8be4df61-93ca-11d2-aa0d-00e098032b8c
+Boot0005-8be4df61-93ca-11d2-aa0d-00e098032b8c
+Boot0006-8be4df61-93ca-11d2-aa0d-00e098032b8c
+Boot0007-8be4df61-93ca-11d2-aa0d-00e098032b8c
+Boot0008-8be4df61-93ca-11d2-aa0d-00e098032b8c
+BootChainFwCurrent-781e084c-a330-417c-b678-38e696380cb9
+BootChainOsCurrent-781e084c-a330-417c-b678-38e696380cb9
+BootCurrent-8be4df61-93ca-11d2-aa0d-00e098032b8c
+BootOptionSupport-8be4df61-93ca-11d2-aa0d-00e098032b8c
+BootOrder-8be4df61-93ca-11d2-aa0d-00e098032b8c
+CapsuleMax-39b68c46-f7fb-441b-b6ec-16b0f69821f3
+certdb-d9bee56e-75dc-49d9-b4d7-b534210f637a
+certdbv-d9bee56e-75dc-49d9-b4d7-b534210f637a
+ConIn-8be4df61-93ca-11d2-aa0d-00e098032b8c
+ConInDev-8be4df61-93ca-11d2-aa0d-00e098032b8c
+ConOut-8be4df61-93ca-11d2-aa0d-00e098032b8c
+ConOutDev-8be4df61-93ca-11d2-aa0d-00e098032b8c
+DgpuDtEfifbSupport-781e084c-a330-417c-b678-38e696380cb9
+ErrOut-8be4df61-93ca-11d2-aa0d-00e098032b8c
+ErrOutDev-8be4df61-93ca-11d2-aa0d-00e098032b8c
+ExposeRtRtcService-781e084c-a330-417c-b678-38e696380cb9
+IpmiNetworkBootMode-781e084c-a330-417c-b678-38e696380cb9
+Key0000-8be4df61-93ca-11d2-aa0d-00e098032b8c
+Key0001-8be4df61-93ca-11d2-aa0d-00e098032b8c
+L4TDefaultBootMode-781e084c-a330-417c-b678-38e696380cb9
+Lang-8be4df61-93ca-11d2-aa0d-00e098032b8c
+LangCodes-8be4df61-93ca-11d2-aa0d-00e098032b8c
+MemoryTestControl-781e084c-a330-417c-b678-38e696380cb9
+MTC-eb704011-1402-11d3-8e77-00a0c969723b
+NewDeviceHierarchy-781e084c-a330-417c-b678-38e696380cb9
+OsIndications-8be4df61-93ca-11d2-aa0d-00e098032b8c
+OsIndicationsSupported-8be4df61-93ca-11d2-aa0d-00e098032b8c
+PlatformLang-8be4df61-93ca-11d2-aa0d-00e098032b8c
+PlatformLangCodes-8be4df61-93ca-11d2-aa0d-00e098032b8c
+PlatformRecovery0000-8be4df61-93ca-11d2-aa0d-00e098032b8c
+--- efivars count
+56
+--- /sys/firmware/efi/fw_platform_size
+64
+--- /sys/firmware/efi/fw_vendor systab runtime (readable ones)
+fw_vendor: (unreadable)
+runtime: (unreadable)
+config_table: (unreadable)
+--- /sys/firmware/efi/esrt
+entries
+fw_resource_count
+fw_resource_count_max
+fw_resource_version
+--- ls /sys/firmware/devicetree/base | head -80
+#address-cells
+aliases
+bpmp
+bus@0
+camera-ivc-channels
+chosen
+compatible
+cpus
+cpu-throttle-alert
+cv0-throttle-alert
+cv1-throttle-alert
+cv2-throttle-alert
+dce@d800000
+display@13800000
+dsu-pmu0
+dsu-pmu1
+dsu-pmu2
+firmware
+gpio-keys
+gpu-throttle-alert
+hot-surface-alert
+interrupt-parent
+mgbe-vm-irq-config
+model
+name
+nvpmodel
+opp-table-cluster0
+opp-table-cluster1
+opp-table-cluster2
+pmu
+psci
+pwm-fan
+regulator-vdd-1v1-hub
+regulator-vdd-1v8-ao
+regulator-vdd-1v8-hs
+regulator-vdd-1v8-sys
+regulator-vdd-3v3-ao
+regulator-vdd-3v3-pcie
+regulator-vdd-3v3-sd
+regulator-vdd-3v3-sys
+regulator-vdd-5v0-sys
+reserved-memory
+rtcpu@bc00000
+scf-pmu
+serial
+serial-number
+#size-cells
+soc0-throttle-alert
+soc1-throttle-alert
+soc2-throttle-alert
+soctherm-oc-event
+sound
+sram@40000000
+__symbols__
+tegra-capture-vi
+tegra-carveouts
+tegra-hsp@b950000
+tegra_mce@e100000
+tegra-rtcpu-trace
+thermal-zones
+timer
+tsc_sig_gen@c6a0000
+vm-irq-config
+--- ls /sys/firmware/devicetree/base | wc -l
+63
+

@@ -248,6 +248,24 @@ terminated 2026-07-29) was redacted to honour the CLAUDE.md secrets rule —
 it stays in git history. Six intermediate build/review runs of the script
 were parked outside the repo rather than deleted.
 
+**Owner decisions (2026-09-09, recorded verbatim in intent, not paraphrased
+into reasons the owner did not give):** (1) ADR-003 → option (B), native
+Orin Nano port — chosen over the ADR's own Pi 4B recommendation; the Pi
+route stays documented as the cheaper alternative. (2) Licence flags: the
+work proceeds; the supervising professor is consulted before any
+evaluation results are published (4.6(i)); 4.6(c) stays clean by using
+source and documentation only. (3) The git history is to be cleaned of
+the a1.metal instance id and, with it, the LAN address, key filename and
+account names the repo's own conventions redact. A full-history bundle
+and two `backup/pre-history-rewrite-2026-09-09*` branches were taken
+first; the rewrite itself (`git filter-branch` over `main` and the README
+branch, then a force-push with lease) is handed to the owner to run —
+the session's tool policy declines history rewrites, which is the right
+default for an action that cannot be undone remotely. Until it runs, the
+old id is still reachable in the pushed history. (4) Start the port —
+kicked off the same day as Phase 3b, see
+[orin-native-port-plan.md](orin-native-port-plan.md).
+
 ---
 
 ## 2026-09-08 — QHV leg made host-portable: the twin gets a comparison on the *hypervisor* topology (Windows half measured; Orin half blocked on hardware — **superseded by the 2026-09-09 entry above**)

@@ -1,0 +1,10 @@
+# SDP usr/include word-match -wi 'tegra|t23x|t19x|t18x|t234|t194|nvidia|xavier|hsp|tcu' (names)
+usr/include/devs/qnx-gen/usbdevs.h
+usr/include/elfdefinitions.h
+
+# matching lines
+usr/include/devs/qnx-gen/usbdevs.h:3563:/* NVIDIA products */
+usr/include/devs/qnx-gen/usbdevs.h:473:#define	USB_VENDOR_NVIDIA	0x0955		/* NVIDIA Corporation */
+usr/include/elfdefinitions.h:786:_ELF_DEFINE_EM(EM_CUDA,             190, "NVIDIA CUDA architecture")	\
+
+# note: plain 'tegra' substring grep is dominated by 'integral' false positives (c++ headers) and was discarded

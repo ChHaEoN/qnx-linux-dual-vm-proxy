@@ -1,0 +1,69 @@
+# orin-ttys.txt -- H3 live harvest of the Jetson Orin Nano over ssh, 2026-09-09 (board local time ~15:36, uptime 16h). READ-ONLY; sudo -n used only for dmesg/iomem/blkid/efibootmgr/ESP listing/ESRT/fuser.
+# Redacted: login/hostname -> <user>, LAN IPs -> <orin-ip>/<lan-ip>, ssh key -> <orin-key>, MAC -> <mac>, NVMe serial/EUI -> <nvme-serial>/<nvme-eui>. NUL bytes stripped.
+# Producing scripts: h3-a.sh / h3-c.sh / h3-f.sh / h3-d.sh (scratchpad); section markers === [x] === are the script sections.
+
+=== [d] ttys ===
+--- ls -la /dev/ttyTHS* /dev/ttyS* /dev/ttyTCU* /dev/ttyAMA*
+crw-rw---- 1 root dialout 204, 64 Jun  5 17:40 /dev/ttyAMA0
+crw-rw---- 1 root dialout   4, 64 Jun  5 17:40 /dev/ttyS0
+crw-rw---- 1 root dialout   4, 65 Jun  5 17:40 /dev/ttyS1
+crw-rw---- 1 root dialout   4, 66 Jun  5 17:40 /dev/ttyS2
+crw-rw---- 1 root dialout   4, 67 Jun  5 17:40 /dev/ttyS3
+crw--w---- 1 root tty     239,  0 Sep  8 23:33 /dev/ttyTCU0
+crw-rw---- 1 root dialout 240,  1 Jun  5 17:40 /dev/ttyTHS1
+crw-rw---- 1 root dialout 240,  2 Jun  5 17:40 /dev/ttyTHS2
+--- /proc/tty/drivers
+/dev/tty             /dev/tty        5       0 system:/dev/tty
+/dev/console         /dev/console    5       1 system:console
+/dev/ptmx            /dev/ptmx       5       2 system
+/dev/vc/0            /dev/vc/0       4       0 system:vtmaster
+g_serial             /dev/ttyGS    491 0-7 serial
+rfcomm               /dev/rfcomm   216 0-255 serial
+owl-uart             /dev/ttyOWL   236 0-6 serial
+fsl-linflexuart      /dev/ttyLF    237 0-3 serial
+fsl-lpuart           /dev/ttyLP    238 0-5 serial
+tegra-tcu            /dev/ttyTCU   239       0 serial
+tegra_hsuart         /dev/ttyTHS   240 0-7 serial
+qcom_geni_uart       /dev/ttyHS    241 0-2 serial
+qcom_geni_console    /dev/ttyMSM   242       0 serial
+msm_serial           /dev/ttyMSM   243 0-2 serial
+meson_uart           /dev/ttyAML   244 0-11 serial
+IMX-uart             /dev/ttymxc   207 16-23 serial
+serial               /dev/ttyS       4 64-67 serial
+pty_slave            /dev/pts      136 0-1048575 pty:slave
+pty_master           /dev/ptm      128 0-1048575 pty:master
+pty_slave            /dev/ttyp       3 0-15 pty:slave
+pty_master           /dev/pty        2 0-15 pty:master
+unknown              /dev/tty        4 1-63 console
+ttyAMA               /dev/ttyAMA   204 64-77 serial
+mvebu_serial         /dev/ttyMV    253 0-1 serial
+--- /sys/class/tty/tty*/device/of_node/compatible
+ttyAMA0: compatible="arm,sbsa-uart|" of_node=/bus@0/serial@31d0000
+ttyTCU0: compatible="nvidia,tegra234-tcu|nvidia,tegra194-tcu|" of_node=/serial
+ttyTHS1: compatible="nvidia,tegra194-hsuart|" of_node=/bus@0/serial@3100000
+ttyTHS2: compatible="nvidia,tegra194-hsuart|" of_node=/bus@0/serial@3140000
+--- /sys/class/tty/console/active
+ttyTCU0 tty0
+--- /sys/class/tty/ttyTCU0/device (readlink)
+/sys/devices/platform/serial
+--- sudo -n dmesg | grep -iE 'serial|uart|tcu|tegra-hsuart|8250|console'
+[    0.000000] Kernel command line: root=/dev/mmcblk0p1 rw rootwait rootfstype=ext4 mminit_loglevel=4 console=ttyTCU0,115200 firmware_class.path=/etc/firmware fbcon=map:0 video=efifb:off console=tty0 bl_prof_dataptr=2031616@0x271E10000 bl_prof_ro_ptr=65536@0x271E00000 
+[    0.000362] Console: colour dummy device 80x25
+[    0.000370] printk: console [tty0] enabled
+[    0.084285] Serial: AMBA PL011 UART driver
+[    0.095167] 31d0000.serial: ttyAMA0 at MMIO 0x31d0000 (irq = 117, base_baud = 0) is a SBSA
+[    0.219938] Serial: 8250/16550 driver, 4 ports, IRQ sharing enabled
+[    0.222078] msm_serial: driver initialized
+[    0.222798] printk: console [ttyTCU0] enabled
+[    3.611335] printk: console [tty0]: printing thread started
+[    3.612205] printk: console [ttyTCU0]: printing thread started
+[    3.653241] serial-tegra 3100000.serial: RX in PIO mode
+[    3.653245] serial-tegra 3100000.serial: TX in PIO mode
+[    3.653361] 3100000.serial: ttyTHS1 at MMIO 0x3100000 (irq = 112, base_baud = 0) is a TEGRA_UART
+[    3.654035] 3140000.serial: ttyTHS2 at MMIO 0x3140000 (irq = 113, base_baud = 0) is a TEGRA_UART
+[   10.327654] systemd[1]: Created slice Slice /system/serial-getty.
+[   10.401511] systemd[1]: Starting Set the console keyboard layout...
+[   11.346149] [RCE] TCU debug prints will be routed to traces.
+[   17.878543] printk: console [ramoops-1]: printing thread started
+[   17.878564] printk: console [ramoops-1] enabled
+
