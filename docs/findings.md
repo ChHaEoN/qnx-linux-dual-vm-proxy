@@ -91,6 +91,17 @@ alive: a hang. Curated:
   source comment, for an old EDK2 bug) and leaves the wiring — so it was not
   a valid discriminator. Distinguishing 9.0's from 10.0's fix would need
   those builds; not needed here.
+- **Non-VHE control (2026-09-09), supporting the host-side mechanism:** the
+  same image under the same QEMU 6.2 on the same board with `-cpu cortex-a57`
+  (ARMv8.0: EL2 but no VHE) gets *past* the hang point — `waitfor`'s timeout
+  fires, networking and post_start run, `qvm` is launched
+  ([orin-qhv-tcg-q62-a57-control.log](../logs/sample-boot/orin-qhv-tcg-q62-a57-control.log)).
+  Without VHE the host cannot use the E2H timer redirection, which is exactly
+  the path an unwired EL2 virtual-timer IRQ would break. The guest then aborts
+  with `PE does not support PAUTH feature` — Cortex-A57 lacks Pointer
+  Authentication, which the guest's `startup-armv8_fm` requires — a
+  CPU-feature mismatch unrelated to timers. One run; it supports the
+  mechanism for the host hang, it does not observe register state.
 
 **State of the leg now.** Orin column measured with the stamped instrument
 (`WITH_RNG=1 ./launch-qhv-on-orin-tcg.sh 5`; QEMU 11.1.0 selected and

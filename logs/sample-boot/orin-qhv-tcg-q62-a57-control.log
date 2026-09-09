@@ -1,0 +1,50 @@
+# Curated artefact -- Phase 4, QHV leg, MECHANISM CONTROL (2026-09-09).
+# QEMU 6.2.0 (distro), -cpu cortex-a57 (ARMv8.0: EL2 present, NO VHE, no PAuth), blk only,
+# no rng, -snapshot; one run, 240 s ceiling.
+# RESULT, two parts:
+#   HOST: gets PAST the point where "-cpu max" hangs on this same QEMU/image/board. The
+#         waitfor timeout message ("Unable to access /dev/random") fires, networking starts,
+#         post_start runs, qvm is launched. Same QEMU, same bytes, same board -- the only
+#         change is that the CPU model has no VHE, so QNX's EL2 host cannot take the E2H=1
+#         path whose timer (the EL2 *virtual* timer) 6.2's virt board never wires to the GIC.
+#         This is the non-VHE control the review asked for; it SUPPORTS the mechanism for
+#         the host hang. It does not observe register state and is a single run.
+#   GUEST: does not come up -- "PE does not support PAUTH feature". The guest's startup
+#         (startup-armv8_fm) requires Pointer Authentication (ARMv8.3); Cortex-A57 is v8.0.
+#         A CPU-feature mismatch of the control's own making, unrelated to timers, and a
+#         useful fact on its own: any named CPU model used instead of "-cpu max" must carry
+#         PAuth (QNX's own runimage preset 9 is cortex-a710; 6.2 has no such model).
+# ---------------------------------------------------------------------------
+
+FOUND GICv3 ITS
+** CPU 0 PE is not awake
+** CPU 1 PE is not awake
+---> Starting slogger2
+---> Starting PCI Services
+---> Starting fsevmgr
+# ---> Starting devb
+---> Mounting file systems
+Path=0 - 
+ target=0 lun=0     Direct-Access(0) - VIRTIO  Rev: 
+---> Mounting file systems
+random: Unable to use devr-virtio.so as an entropy source [entropy.c(173)]
+random: Could not initialize entropy. [random.c(406)]
+Unable to access /dev/random
+---> Starting Networking
+if_up: network stack down: Bad file descriptor
+ifconfig: interface vtnet0 does not exist
+sysctl: unknown oid 'net.inet.icmp.bmcastecho': Address family not supported by protocol family
+sysctl: unknown oid 'qnx.sec.droproot': Address family not supported by protocol family
+setfacl: stat() of /dev/bpf failed: No such file or directory
+main: control_open: Address family not supported by protocol family
+socketpair: Address family not supported by protocol family
+---> Starting sshd
+PRNG is not seeded
+
+---> Starting misc
+post_start.custom: /data/hypervisor/hyp-shm-roundtrip not staged; skipping RQ-2 round trip
+=== AUTO-START QNX GUEST UNDER QVM (no-net) ===
+=== launching qvm @g2.conf (background) ===
+=== boot-grace sleep for guest devc-virtio + qnx-echo-server startup ===
+PE does not support PAUTH feature
+

@@ -226,6 +226,17 @@ that was wrong for a day:
   bug) — the wiring stays, so the test could not reproduce 6.2. A real
   bisect means building 8.2 vs 9.0 vs 10.0; it is not needed for the twin's
   purpose and was not done.
+- **Non-VHE control (2026-09-09), supporting the host-side mechanism:** the
+  same image under the same QEMU 6.2 on the same board with `-cpu cortex-a57`
+  (ARMv8.0: EL2 but no VHE) gets *past* the hang point — `waitfor`'s timeout
+  fires, networking and post_start run, `qvm` is launched
+  ([orin-qhv-tcg-q62-a57-control.log](../logs/sample-boot/orin-qhv-tcg-q62-a57-control.log)).
+  Without VHE the host cannot use the E2H timer redirection, which is exactly
+  the path an unwired EL2 virtual-timer IRQ would break. The guest then aborts
+  with `PE does not support PAUTH feature` — Cortex-A57 lacks Pointer
+  Authentication, which the guest's `startup-armv8_fm` requires — a
+  CPU-feature mismatch unrelated to timers. One run; it supports the
+  mechanism for the host hang, it does not observe register state.
 
 The conclusion that matters for this leg: **the hang is a QEMU-version effect
 and is not attributable to the host.** With a modern QEMU the Orin column
