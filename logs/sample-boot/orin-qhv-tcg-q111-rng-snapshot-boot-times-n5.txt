@@ -1,0 +1,20 @@
+# Phase 4 -- QHV twin leg, Orin half, n=5 (2026-09-09).
+# Instrument: scripts/orin/launch-qhv-on-orin-tcg.sh 5 (WITH_RNG=1; QEMU binary auto-selected
+# and stamped; -snapshot). Stamps below are the instrument's own. sha256sum -c passed before
+# the series and again after it (-snapshot: the base image did not change).
+# Windows counterpart with the SAME device set and disk mode is still owed; the closest
+# existing Windows series (windows-qhv-tcg-rng-slot3-boot-times-n5.txt, median 29,324 ms) was
+# run on the 11.0.50 fork build WITHOUT -snapshot -- so this is not yet a twin diff.
+# Comparable only against a file whose qemu:/devices:/disk: lines match.
+#
+# host: Linux 5.15.148-tegra aarch64 / ARMv8 Processor rev 1 (v8l)
+# qemu: QEMU emulator version 11.1.0 (v11.1.0)  [/home/haochen/qemu-v11.1.0/bin/qemu-system-aarch64]
+# disk: -snapshot (guest writes discarded; every run boots the copy-time bytes, so SHA256SUMS keeps holding)
+# devices: virtio-blk + virtio-net(slirp) + virtio-rng(builtin)
+# marker: launch -> guest banner (QNX qnx-guest ... ARMv8_Foundation_Model)
+# NOTE: only comparable against a run whose 'qemu:' AND 'devices:' lines both match.
+run 1: 63676 ms
+run 2: 63045 ms
+run 3: 63107 ms
+run 4: 62007 ms
+run 5: 62673 ms

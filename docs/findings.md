@@ -91,13 +91,18 @@ alive: a hang. Curated:
   a valid discriminator. Distinguishing 9.0's from 10.0's fix would need
   those builds; not needed here.
 
-**State of the leg now.** Orin column: obtainable, with the stamped
-instrument (`WITH_RNG=1 QEMU_BIN=~/qemu-v11.1.0/bin/qemu-system-aarch64
-./launch-qhv-on-orin-tcg.sh 5`, `-snapshot` default). Windows column: needs
-re-measuring under the same three stamps, and the Windows QEMU is still the
-11.0.50 fork build — moving it to the official 11.1.0 release is the
-remaining alignment, with the honest caveat that "same release" is not "same
-build". Image pair at re-sync (copy-time SHA-256, before any `-snapshot`-less
+**State of the leg now.** Orin column measured with the stamped instrument
+(`WITH_RNG=1 ./launch-qhv-on-orin-tcg.sh 5`; QEMU 11.1.0 selected and
+stamped; rng in slot 3; `-snapshot`; `sha256sum -c` passed before and after
+the series): **n=5 = 63,676, 63,045, 63,107, 62,007, 62,673 ms, median 63,045, mean 62,901.6, spread 1,669 ms (2.6%)**.
+[orin-qhv-tcg-q111-rng-snapshot-boot-times-n5.txt](../logs/sample-boot/orin-qhv-tcg-q111-rng-snapshot-boot-times-n5.txt),
+[orin-qhv-tcg-q111-rng-snapshot-boot1.log](../logs/sample-boot/orin-qhv-tcg-q111-rng-snapshot-boot1.log).
+Against the closest Windows series (rng in slot 3, median 29,324 ms) that is
+roughly 2.2× — **but that pairing is not yet a twin diff**: the Windows series
+ran on the 11.0.50 fork build without `-snapshot`. Windows column: needs
+re-measuring under the same three stamps, and moving its QEMU to the
+official 11.1.0 release is the remaining alignment, with the honest caveat
+that "same release" is not "same build". Image pair at re-sync (copy-time SHA-256, before any `-snapshot`-less
 boot):
 
 ```

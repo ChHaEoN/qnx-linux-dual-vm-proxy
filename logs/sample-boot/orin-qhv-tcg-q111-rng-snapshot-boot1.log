@@ -1,0 +1,67 @@
+# Curated artefact -- Phase 4, QHV twin leg, Orin half, run 1 of the n=5 series (2026-09-09).
+# QEMU 11.1.0 (from source, ~/qemu-v11.1.0), rng in slot 3, -snapshot. All three markers
+# present: host post_start, qvm launched, guest banner. See the sibling *-times-n5.txt for
+# the series and its provenance stamps; docs/digital-twin-design.md section 1a for framing.
+# ---------------------------------------------------------------------------
+
+FOUND GICv3 ITS
+** CPU 0 PE is not awake
+** CPU 1 PE is not awake
+---> Starting slogger2
+---> Starting PCI Services
+---> Starting fsevmgr
+# ---> Starting devb
+---> Mounting file systems
+Path=0 - 
+ target=0 lun=0     Direct-Access(0) - VIRTIO  Rev: 
+---> Mounting file systems
+---> Starting Networking
+---> Starting sshd
+---> Starting misc
+post_start.custom: /data/hypervisor/hyp-shm-roundtrip not staged; skipping RQ-2 round trip
+=== AUTO-START QNX GUEST UNDER QVM (no-net) ===
+=== launching qvm @g2.conf (background) ===
+=== boot-grace sleep for guest devc-virtio + qnx-echo-server startup ===
+---> Starting slogger2
+
+---> Starting PCI Services
+
+---> Starting fsevmgr
+
+---> Starting devb
+
+---> Mounting file systems
+
+Path=0 - 
+
+ target=0 lun=0     Direct-Access(0) - VIRTIO  Rev: 
+
+---> Mounting file systems
+
+---> Starting Networking
+
+if_up: tries exhausted
+
+ifconfig: interface vtnet0 does not exist
+
+no valid interfaces found
+
+---> Starting sshd
+
+---> Starting misc
+
+=== starting devc-virtio for virtio-console (0x20000000,42) ===
+
+=== starting qnx-echo-server on /dev/vcon2 ===
+
+server: echo endpoint up on /dev/vcon2 (frame=64 bytes)
+
+=== RQ-2 GUEST PROBE: running gshm-probe (shmem vdev @0x1c0f0000,intr gic:43) ===
+
+guest-post_start.custom: /proc/boot/gshm-probe not staged; skipping RQ-2 guest probe
+
+Process count:23
+
+Startup complete
+
+QNX qnx-guest 8.0.0 2026/0
