@@ -160,8 +160,9 @@ every times file by both instruments (`# qemu:`, `# devices:`, `# disk:`):
   first run and "byte-identical images" holds only at copy time. With it,
   every run boots the copy-time bytes.
 
-**First execution on the Orin: a deterministic hang — attributed to QEMU
-6.2, not the host; mechanism hypothesised, not verified (2026-09-08/09).** With the byte-identical images (`sha256sum -c`
+**First execution on the Orin: a deterministic hang — caused by QEMU 6.2's
+unwired EL2 virtual-timer IRQ, not the host; verified by a reverted-wiring
+build (2026-09-08/09).** With the byte-identical images (`sha256sum -c`
 verified on arrival) and the identical argument list, the QHV host boots on
 the Orin — `FOUND GICv3 ITS`, slogger2, PCI, `devb`, file systems all come up
 — and then stops dead at:
@@ -237,6 +238,19 @@ that was wrong for a day:
   Authentication, which the guest's `startup-armv8_fm` requires — a
   CPU-feature mismatch unrelated to timers. One run; it supports the
   mechanism for the host hang, it does not observe register state.
+- **Decisive test (2026-09-09): the wire is the cause.** QEMU 11.1.0 rebuilt
+  on the Orin with exactly one change — the NS EL2 virtual-timer output left
+  unconnected to the GIC
+  ([patch](../scripts/orin/patches/qemu-v11.1.0-unwire-ns-el2-virt-timer-irq.patch)),
+  i.e. 6.2's wiring on an otherwise 11.1.0 tree — **hangs at the same point
+  as 6.2**, while the unpatched 11.1.0 boots the same image on the same
+  board
+  ([orin-qhv-tcg-q111-nohypvirt-control.log](../logs/sample-boot/orin-qhv-tcg-q111-nohypvirt-control.log)).
+  With the a57 control (no VHE → no hang) this closes the chain: the QHV
+  host at EL2 with VHE depends on the EL2 *virtual* timer interrupt, which
+  QEMU's `virt` board did not connect before 9.0 (`1ec896fe7c`). The
+  mechanism is now **verified by a reverted-wiring build**, not merely
+  attributed; the `target/arm` CNTVOFF fix is not required to explain it.
 
 The conclusion that matters for this leg: **the hang is a QEMU-version effect
 and is not attributable to the host.** With a modern QEMU the Orin column

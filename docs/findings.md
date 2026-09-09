@@ -102,6 +102,16 @@ alive: a hang. Curated:
   Authentication, which the guest's `startup-armv8_fm` requires — a
   CPU-feature mismatch unrelated to timers. One run; it supports the
   mechanism for the host hang, it does not observe register state.
+- **Reverted-wiring build (2026-09-09), decisive:** QEMU 11.1.0 rebuilt on
+  the Orin with the single change of leaving the NS EL2 virtual-timer output
+  unconnected to the GIC
+  ([patch](../scripts/orin/patches/qemu-v11.1.0-unwire-ns-el2-virt-timer-irq.patch))
+  **hangs at the same point as 6.2**; unpatched 11.1.0 boots the same image
+  on the same board. One wire, one variable, opposite outcome
+  ([orin-qhv-tcg-q111-nohypvirt-control.log](../logs/sample-boot/orin-qhv-tcg-q111-nohypvirt-control.log)).
+  The mechanism is verified, not attributed: a VHE hypervisor host's
+  timeouts ride on the EL2 *virtual* timer interrupt, which `virt` did not
+  wire before QEMU 9.0 (`1ec896fe7c`).
 
 **State of the leg now.** Orin column measured with the stamped instrument
 (`WITH_RNG=1 ./launch-qhv-on-orin-tcg.sh 5`; QEMU 11.1.0 selected and

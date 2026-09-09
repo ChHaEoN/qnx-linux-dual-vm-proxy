@@ -1,0 +1,40 @@
+Experiment patch -- qnx-linux-dual-vm-proxy, Phase 4, 2026-09-09.
+
+Reproduce ONE property of QEMU 6.2.0's "virt" board on top of v11.1.0: the
+non-secure EL2 *virtual* timer output of each CPU is left unconnected to the
+GIC. In v6.2.0 hw/arm/virt.c the timer_irq[] table has no GTIMER_HYPVIRT entry
+at all (git grep on the tag: 0 matches); the wiring arrived in QEMU 9.0 with
+commit 1ec896fe7c "hw/arm/virt: Wire up non-secure EL2 virtual timer IRQ".
+
+Purpose: test the hypothesis that this missing wiring is what makes the QNX
+Hypervisor host (which runs at EL2 with VHE, so its CNTV_* accesses land on the
+EL2 virtual timer) hang at its first timeout-wait under 6.2 -- see
+docs/digital-twin-design.md section 1a and docs/findings.md 2026-09-09.
+Everything else in 11.1.0 stays, including the target/arm CNTVOFF_EL2 fix
+(5709038aa8) and the device-tree description of the IRQ, so the variable is
+the wiring alone. The versioned "-machine virt-8.2" type is NOT a substitute:
+its compat flag only suppresses the DT node (used at fdt_add_timer_nodes),
+the loop below wires the table unconditionally.
+
+Apply on a clean v11.1.0 checkout:  git apply scripts/orin/patches/qemu-v11.1.0-unwire-ns-el2-virt-timer-irq.patch
+Build:  same configure flags as scripts/orin/build-qemu-on-orin.sh, into its own prefix.
+
+diff --git a/hw/arm/virt.c b/hw/arm/virt.c
+index 219597cabd..1c8fc9e9b2 100644
+--- a/hw/arm/virt.c
++++ b/hw/arm/virt.c
+@@ -1307,6 +1307,14 @@ static void gic_connect_ppis(VirtMachineState *vms)
+         };
+ 
+         for (unsigned irq = 0; irq < ARRAY_SIZE(timer_irq); irq++) {
++            /*
++             * EXPERIMENT (qnx-linux-dual-vm-proxy, 2026-09-09): leave the NS EL2
++             * virtual timer unconnected, as QEMU 6.2's virt board did. Removes
++             * exactly one wire; see scripts/orin/patches/ in the project repo.
++             */
++            if (irq == GTIMER_HYPVIRT) {
++                continue;
++            }
+             qdev_connect_gpio_out(cpudev, irq,
+                                   qdev_get_gpio_in(vms->gic,
+                                                    intidbase + timer_irq[irq]));
