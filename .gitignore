@@ -85,3 +85,6 @@ orin-native/startup/**/*.o
 orin-native/startup/**/*.dep
 orin-native/**/startup-t234-orin-nano
 *.kimg
+# the two user-space tools are source here; the built binaries are outputs
+orin-native/tools/tcu-cat
+orin-native/tools/stamp
