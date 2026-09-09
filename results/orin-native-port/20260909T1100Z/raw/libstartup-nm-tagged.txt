@@ -1,0 +1,2655 @@
+__main.o	0000000000000000 T __main
+_main.o	0000000000000200 T __get_errno_ptr
+_main.o	                 U __stack_chk_fail
+_main.o	                 U __stack_chk_guard
+_main.o	0000000000000204 T __stackavail
+_main.o	0000000000000160 B _argc
+_main.o	0000000000000168 B _argv
+_main.o	0000000000000004 T _main
+_main.o	0000000000000198 B _syspage_ptr
+_main.o	0000000000000000 T abort
+_main.o	0000000000000020 b argv
+_main.o	                 U avoid_ram
+_main.o	                 U board_init
+_main.o	                 U boot_args
+_main.o	0000000000000200 B cpu_freq
+_main.o	                 U cpu_startup
+_main.o	                 U crash
+_main.o	00000000000001f8 B cycles_freq
+_main.o	00000000000001c8 B dbg_device
+_main.o	0000000000000210 B debug_flag
+_main.o	00000000000000c0 b envv
+_main.o	0000000000000008 D first_bootstrap_start_vaddr
+_main.o	0000000000000008 B full_image_paddr
+_main.o	0000000000000018 B full_imagefs_paddr
+_main.o	0000000000000010 B full_ram_paddr
+_main.o	0000000000000000 t hook_dummy
+_main.o	                 U init_syspage_memory
+_main.o	                 U main
+_main.o	0000000000000018 D max_cpus
+_main.o	                 U memcpy
+_main.o	0000000000000194 B misc_flags
+_main.o	000000000000001c D paddr_bits
+_main.o	00000000000001c0 B patch_channel
+_main.o	0000000000000208 B reserved_ram_list
+_main.o	0000000000000190 B secure_system
+_main.o	0000000000000000 B shdr
+_main.o	0000000000000000 D smp_hook_rtn
+_main.o	0000000000000170 b stack_addr
+_main.o	                 U stack_addr_lo
+_main.o	                 U startnext
+_main.o	0000000000000010 D system_dcache_idx
+_main.o	0000000000000014 D system_icache_idx
+_main.o	00000000000001b0 B timer_chip
+_main.o	00000000000001a0 B timer_diff
+_main.o	00000000000001f0 B timer_freq
+_main.o	00000000000001e8 B timer_prog_time
+_main.o	00000000000001a8 B timer_start
+_main.o	                 U tweak_cmdline
+_main.o	0000000000000178 B uefi_exit_boot_services_f
+_main.o	0000000000000180 B uefi_io_resume_f
+_main.o	0000000000000188 B uefi_io_suspend_f
+_main.o	                 U write_syspage_memory
+_main.o	                 U ws_alloc
+_start.o	0000000000000000 T _start
+_start.o	0000000000000001 a BUILDENV_qss
+_start.o	                 U cstart
+_start.o	0000000000000001 a VARIANT_a
+_start.o	0000000000000001 a VARIANT_le
+_start_el1.o	0000000000000114 T _start_el1
+_start_el1.o	0000000000000000 T _start_el2_or_el1
+_start_el1.o	                 U aarch64_cache_flush
+_start_el1.o	0000000000000088 t at_el2
+_start_el1.o	0000000000000028 t at_el3
+_start_el1.o	0000000000000001 a BUILDENV_qss
+_start_el1.o	0000000000000002 a BUS_ADRERR
+_start_el1.o	0000000000000003 a BUS_OBJERR
+_start_el1.o	0000000000000004 a CA_LINE_SIZE
+_start_el1.o	0000000000000008 a CA_NUM_LINES
+_start_el1.o	0000000000000000 a DDI_BASE
+_start_el1.o	0000000000000008 a DDI_SHIFT
+_start_el1.o	0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+_start_el1.o	0000000000000002 a DEBUG_WATCHDOG_FEED
+_start_el1.o	0000000000000000 a DEBUG_WATCHDOG_STOP
+_start_el1.o	00000000000000fc T drop_to_el1
+_start_el1.o	0000000000000074 t el2_is_supported
+_start_el1.o	0000000000000005 a FLTACCESS
+_start_el1.o	0000000000000006 a FLTBOUNDS
+_start_el1.o	0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+_start_el1.o	0000000000000004 a INTR_CONFIG_FLAG_IPI
+_start_el1.o	0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+_start_el1.o	0000000000000008 a INTR_CONFIG_FLAG_SYS
+_start_el1.o	0000000000000134 t is_pauth_supported
+_start_el1.o	0000000000000010 a LSR_BI
+_start_el1.o	0000000000000001 a LSR_RXRDY
+_start_el1.o	0000000000000020 a LSR_TXRDY
+_start_el1.o	0000000000000001 a MS_ASYNC
+_start_el1.o	0000000000000004 a MS_INVALIDATE
+_start_el1.o	0000000001000000 a MS_INVALIDATE_ICACHE
+_start_el1.o	0000000000000002 a MS_SYNC
+_start_el1.o	0000000000000020 a QT_TIMER_PERIOD
+_start_el1.o	0000000000000005 a REG_LS
+_start_el1.o	000000000000000a a SIGBUS
+_start_el1.o	0000000000000010 a SIZEOF_DDI
+_start_el1.o	0000000000000000 a SMP_PENDING
+_start_el1.o	0000000000000010 a SMP_START_ADDR
+_start_el1.o	0000000000000004 a SP_PRIVATE_FLAGS
+_start_el1.o	0000000000000006 a SYSPAGE_NUM_CPU
+_start_el1.o	0000000000000024 a SYSPAGE_SMP
+_start_el1.o	0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+_start_el1.o	0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+_start_el1.o	0000000000000001 a VARIANT_a
+_start_el1.o	0000000000000001 a VARIANT_le
+aarch64_cache_flush.o	0000000000000000 T aarch64_cache_flush
+aarch64_cache_flush.o	0000000000000001 a BUILDENV_qss
+aarch64_cache_flush.o	000000000000008c t done
+aarch64_cache_flush.o	0000000000000018 t loop1
+aarch64_cache_flush.o	0000000000000050 t loop2
+aarch64_cache_flush.o	000000000000005c t loop3
+aarch64_cache_flush.o	0000000000000078 t skip
+aarch64_cache_flush.o	0000000000000001 a VARIANT_a
+aarch64_cache_flush.o	0000000000000001 a VARIANT_le
+aarch64_cpuid.o	0000000000000000 D aarch64_cpuid
+aarch64_cpuid.o	                 U cpuid_a35
+aarch64_cpuid.o	                 U cpuid_a53
+aarch64_cpuid.o	                 U cpuid_a55
+aarch64_cpuid.o	                 U cpuid_a57
+aarch64_cpuid.o	                 U cpuid_a72
+aarch64_cpuid.o	                 U cpuid_a720
+aarch64_cpuid.o	                 U cpuid_a75
+aarch64_cpuid.o	                 U cpuid_a76
+aarch64_cpuid.o	                 U cpuid_a78ae
+aarch64_cpuid.o	                 U cpuid_d15
+aarch64_cpuid.o	                 U cpuid_d20
+aarch64_cpuid.o	                 U cpuid_n1
+aarch64_cpuid.o	                 U cpuid_neo_v1
+aarch64_cpuid.o	                 U cpuid_neo_v2
+aarch64_cpuid.o	                 U cpuid_v8_aem
+aarch64_cpuid.o	                 U cpuid_v8_fm
+aarch64_cpuid.o	                 U cpuid_x2
+aarch64_cpuid.o	                 U cpuid_x4
+aarch64_cpuid.o	                 U cpuid_x925
+aarch64_cpuspeed.o	0000000000000000 T aarch64_cpuspeed
+aarch64_hwi_add_ppi.o	0000000000000000 T aarch64_hwi_add_ppi
+aarch64_hwi_add_ppi.o	                 U hwi_alloc_item
+aarch64_hwi_add_ppi.o	                 U hwi_find_item
+aarch64_hwi_add_ppi.o	                 U hwi_tag2off
+aarch64_hwi_add_ppi.o	                 U hwitag_add_irq
+aarch64_map.o	                 U __page_size
+aarch64_map.o	0000000000000560 T aarch64_map
+aarch64_map.o	0000000000000070 t aarch64_map.part.0
+aarch64_map.o	0000000000000440 T aarch64_map_init
+aarch64_map.o	                 U calloc_ram
+aarch64_map.o	                 U crash
+aarch64_map.o	0000000000000580 T elf_vaddr_to_paddr
+aarch64_map.o	0000000000000000 b free_vaddr
+aarch64_map.o	0000000000000018 B L0_vaddr
+aarch64_map.o	0000000000000008 b L1_ttbr0
+aarch64_map.o	0000000000000010 b L1_ttbr1
+aarch64_map.o	                 U lsp
+aarch64_map.o	                 U meltdown_active
+aarch64_map.o	0000000000000000 t pt_alloc
+aarch64_map.o	                 U shdr
+aarch64_map.o	                 U ttbr0
+aarch64_map.o	                 U ttbr1
+aarch64_sysctl.o	0000000000000048 T aarch64_alignment_check_disable
+aarch64_sysctl.o	000000000000002c T aarch64_alignment_check_enable
+aarch64_sysctl.o	                 U aarch64_cache_flush
+aarch64_sysctl.o	0000000000000094 T aarch64_dcache_disable
+aarch64_sysctl.o	0000000000000064 T aarch64_dcache_enable
+aarch64_sysctl.o	0000000000000000 T aarch64_dcache_flush_va
+aarch64_sysctl.o	0000000000000188 T aarch64_disable_mmu
+aarch64_sysctl.o	0000000000000124 T aarch64_enable_mmu
+aarch64_sysctl.o	0000000000000130 T aarch64_enable_mmu_4k
+aarch64_sysctl.o	0000000000000124 T aarch64_enable_mmu_64k
+aarch64_sysctl.o	00000000000000f4 T aarch64_icache_disable
+aarch64_sysctl.o	00000000000000c4 T aarch64_icache_enable
+aarch64_sysctl.o	0000000000000001 a BUILDENV_qss
+aarch64_sysctl.o	00000000000001bc t done
+aarch64_sysctl.o	0000000000000001 a VARIANT_a
+aarch64_sysctl.o	0000000000000001 a VARIANT_le
+acpi.o	                 U __stack_chk_fail
+acpi.o	                 U __stack_chk_guard
+acpi.o	0000000000000594 T acpi_find_table
+acpi.o	0000000000000000 T acpi_find_table_next
+acpi.o	0000000000000410 T add_acpi_table
+acpi.o	                 U as_add
+acpi.o	                 U as_find
+acpi.o	                 U board_find_acpi_rsdp
+acpi.o	                 U debug_flag
+acpi.o	                 U kprintf
+acpi.o	                 U memset
+acpi.o	0000000000000000 d num_tbls
+acpi.o	                 U startup_memory_map
+acpi.o	                 U startup_memory_unmap
+acpi.o	0000000000000000 b tbl_array
+acpi.o	                 U ws_alloc
+acpi_spcr_parse.o	                 U __stack_chk_fail
+acpi_spcr_parse.o	                 U __stack_chk_guard
+acpi_spcr_parse.o	                 U acpi_find_table
+acpi_spcr_parse.o	0000000000000000 T acpi_spcr_parse
+acpi_spcr_parse.o	                 U break_detect_pl011
+acpi_spcr_parse.o	                 U display_char_pl011
+acpi_spcr_parse.o	                 U init_pl011
+acpi_spcr_parse.o	                 U ksprintf
+acpi_spcr_parse.o	                 U poll_key_pl011
+acpi_spcr_parse.o	                 U put_pl011
+acpi_spcr_parse.o	                 U startup_memory_map
+acpi_spcr_parse.o	                 U startup_memory_unmap
+acpi_spcr_parse.o	                 U ws_alloc
+add_cache.o	0000000000000190 T add_cache
+add_cache.o	0000000000000070 T add_cache_ways
+add_cache.o	0000000000000000 b cache_prev_output_rtn
+add_cache.o	0000000000000000 t callout_output_cache
+add_cache.o	                 U callout_output_one
+add_cache.o	                 U callout_output_rtn
+add_cache.o	                 U grow_syspage_section
+add_cache.o	                 U lsp
+add_interrupt.o	00000000000000b0 T add_interrupt
+add_interrupt.o	00000000000001b0 T add_interrupt_array
+add_interrupt.o	0000000000000000 t callout_output_intr
+add_interrupt.o	                 U callout_output_one
+add_interrupt.o	                 U callout_output_rtn
+add_interrupt.o	                 U callout_register_data
+add_interrupt.o	                 U grow_syspage_section
+add_interrupt.o	0000000000000000 b intr_prev_output_rtn
+add_interrupt.o	                 U lsp
+add_interrupt.o	0000000000000000 r offsets
+alloc_qtime.o	0000000000000000 T alloc_qtime
+alloc_qtime.o	                 U find_startup_info
+alloc_qtime.o	                 U lsp
+alloc_qtime.o	                 U misc_flags
+alloc_qtime.o	                 U rtc_time
+alloc_qtime.o	                 U set_syspage_section
+ap_fail.o	0000000000000000 T ap_fail
+ap_fail.o	                 U crash
+as_add.o	0000000000000000 T as_add
+as_add.o	                 U as_add64
+as_add64.o	                 U add_string
+as_add64.o	                 U as_add
+as_add64.o	0000000000000000 T as_add64
+as_add64.o	                 U grow_syspage_section
+as_add64.o	                 U lsp
+as_add_containing.o	0000000000000000 r __FUNCTION__.0
+as_add_containing.o	                 U __stack_chk_fail
+as_add_containing.o	                 U __stack_chk_guard
+as_add_containing.o	                 U __stackavail
+as_add_containing.o	                 U as_add
+as_add_containing.o	0000000000000000 T as_add_containing
+as_add_containing.o	                 U as_find_containing
+as_add_containing.o	                 U as_off2info
+as_add_containing.o	                 U crash
+as_default.o	                 U as_add
+as_default.o	0000000000000000 T as_default
+as_default.o	0000000000000000 r bits.0
+as_find.o	0000000000000000 r __FUNCTION__.0
+as_find.o	                 U __hwi_find_string
+as_find.o	                 U __stack_chk_fail
+as_find.o	                 U __stack_chk_guard
+as_find.o	                 U __stackavail
+as_find.o	0000000000000000 T as_find
+as_find.o	                 U crash
+as_find.o	                 U lsp
+as_find.o	                 U strcmp
+as_find_containing.o	                 U __hwi_find_string
+as_find_containing.o	0000000000000000 T as_find_containing
+as_find_containing.o	                 U lsp
+as_find_containing.o	                 U strcmp
+as_info2off.o	0000000000000000 T as_info2off
+as_info2off.o	                 U lsp
+as_off2info.o	0000000000000000 T as_off2info
+as_off2info.o	                 U lsp
+as_set_priority.o	                 U as_off2info
+as_set_priority.o	0000000000000000 T as_set_priority
+bcd2bin.o	0000000000000000 T bcd2bin
+board_cpuconfig1.o	0000000000000000 T board_cpuconfig1
+board_cpuconfig2.o	0000000000000000 T board_cpuconfig2
+board_find_acpi_rsdp.o	0000000000000000 T board_find_acpi_rsdp
+board_find_acpi_rsdp.o	                 U board_find_acpi_rsdp_uefi
+board_find_acpi_rsdp.o	                 U is_uefi_boot
+board_find_acpi_rsdp_uefi.o	0000000000000000 r acpi_guids
+board_find_acpi_rsdp_uefi.o	                 U as_add
+board_find_acpi_rsdp_uefi.o	                 U as_find
+board_find_acpi_rsdp_uefi.o	0000000000000000 T board_find_acpi_rsdp_uefi
+board_find_acpi_rsdp_uefi.o	0000000000000000 b recorded_table.0
+board_find_acpi_rsdp_uefi.o	                 U uefi_find_config_tbl
+board_find_efi_smbios.o	                 U as_add
+board_find_efi_smbios.o	                 U as_find
+board_find_efi_smbios.o	00000000000004d0 T board_find_efi_smbios_by_type
+board_find_efi_smbios.o	0000000000000070 T board_find_efi_smbios_table
+board_find_efi_smbios.o	                 U debug_flag
+board_find_efi_smbios.o	0000000000000000 T get_smbios_string
+board_find_efi_smbios.o	0000000000000008 b guid_str.0
+board_find_efi_smbios.o	                 U kprintf
+board_find_efi_smbios.o	                 U ksprintf
+board_find_efi_smbios.o	0000000000000000 r smbios_guids
+board_find_efi_smbios.o	0000000000000000 d smbios_table
+board_find_efi_smbios.o	                 U strlen
+board_find_efi_smbios.o	                 U uefi_find_config_tbl
+board_find_efi_smbios.o	0000000000000000 b use_smbios_3
+board_init.o	0000000000000000 T board_init
+board_sysctl.o	0000000000000014 T board_alignment_check_disable
+board_sysctl.o	0000000000000010 T board_alignment_check_enable
+board_sysctl.o	0000000000000024 T board_dcache_disable
+board_sysctl.o	0000000000000020 T board_dcache_enable
+board_sysctl.o	0000000000000044 T board_disable_caches
+board_sysctl.o	0000000000000040 T board_enable_caches
+board_sysctl.o	0000000000000034 T board_icache_disable
+board_sysctl.o	0000000000000030 T board_icache_enable
+board_sysctl.o	0000000000000004 T board_mmu_disable
+board_sysctl.o	0000000000000000 T board_mmu_enable
+boot_regs.o	0000000000000000 B boot_regs
+bootstrap_cmdline.o	0000000000000180 T bootstrap_arg_adjust
+bootstrap_cmdline.o	0000000000000190 T bootstrap_env_adjust
+bootstrap_cmdline.o	0000000000000000 t do_adjust
+bootstrap_cmdline.o	                 U memcpy
+bootstrap_cmdline.o	                 U memmove
+bootstrap_cmdline.o	                 U strcmp
+bootstrap_cmdline.o	                 U strlen
+calc_cksum.o	0000000000000000 T calc_cksum
+calc_time_t.o	0000000000000060 r __FUNCTION__.0
+calc_time_t.o	0000000000000000 T calc_time_t
+calc_time_t.o	                 U crash
+calc_time_t.o	0000000000000000 r month_sec.1
+callout_cache_armv8.o	0000000000000001 a BUILDENV_qss
+callout_cache_armv8.o	0000000000000002 a BUS_ADRERR
+callout_cache_armv8.o	0000000000000003 a BUS_OBJERR
+callout_cache_armv8.o	0000000000000004 a CA_LINE_SIZE
+callout_cache_armv8.o	0000000000000008 a CA_NUM_LINES
+callout_cache_armv8.o	0000000000000068 T cache_armv8_dcache
+callout_cache_armv8.o	0000000000000000 T cache_armv8_icache
+callout_cache_armv8.o	0000000000000000 a DDI_BASE
+callout_cache_armv8.o	0000000000000008 a DDI_SHIFT
+callout_cache_armv8.o	0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+callout_cache_armv8.o	0000000000000002 a DEBUG_WATCHDOG_FEED
+callout_cache_armv8.o	0000000000000000 a DEBUG_WATCHDOG_STOP
+callout_cache_armv8.o	00000000000000d4 t end_cache_armv8_dcache
+callout_cache_armv8.o	0000000000000064 t end_cache_armv8_icache
+callout_cache_armv8.o	0000000000000005 a FLTACCESS
+callout_cache_armv8.o	0000000000000006 a FLTBOUNDS
+callout_cache_armv8.o	0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+callout_cache_armv8.o	0000000000000004 a INTR_CONFIG_FLAG_IPI
+callout_cache_armv8.o	0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+callout_cache_armv8.o	0000000000000008 a INTR_CONFIG_FLAG_SYS
+callout_cache_armv8.o	0000000000000010 a LSR_BI
+callout_cache_armv8.o	0000000000000001 a LSR_RXRDY
+callout_cache_armv8.o	0000000000000020 a LSR_TXRDY
+callout_cache_armv8.o	0000000000000001 a MS_ASYNC
+callout_cache_armv8.o	0000000000000004 a MS_INVALIDATE
+callout_cache_armv8.o	0000000001000000 a MS_INVALIDATE_ICACHE
+callout_cache_armv8.o	0000000000000002 a MS_SYNC
+callout_cache_armv8.o	0000000000000020 a QT_TIMER_PERIOD
+callout_cache_armv8.o	0000000000000005 a REG_LS
+callout_cache_armv8.o	000000000000000a a SIGBUS
+callout_cache_armv8.o	0000000000000010 a SIZEOF_DDI
+callout_cache_armv8.o	0000000000000000 a SMP_PENDING
+callout_cache_armv8.o	0000000000000010 a SMP_START_ADDR
+callout_cache_armv8.o	0000000000000004 a SP_PRIVATE_FLAGS
+callout_cache_armv8.o	000000000000007c t start_cache_armv8_dcache
+callout_cache_armv8.o	0000000000000014 t start_cache_armv8_icache
+callout_cache_armv8.o	0000000000000006 a SYSPAGE_NUM_CPU
+callout_cache_armv8.o	0000000000000024 a SYSPAGE_SMP
+callout_cache_armv8.o	0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+callout_cache_armv8.o	0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+callout_cache_armv8.o	0000000000000001 a VARIANT_a
+callout_cache_armv8.o	0000000000000001 a VARIANT_le
+callout_debug_8250.o	00000000000000e0 T break_detect_8250
+callout_debug_8250.o	0000000000000001 a BUILDENV_qss
+callout_debug_8250.o	0000000000000002 a BUS_ADRERR
+callout_debug_8250.o	0000000000000003 a BUS_OBJERR
+callout_debug_8250.o	0000000000000004 a CA_LINE_SIZE
+callout_debug_8250.o	0000000000000008 a CA_NUM_LINES
+callout_debug_8250.o	                 U callout_io_map
+callout_debug_8250.o	0000000000000000 a DDI_BASE
+callout_debug_8250.o	0000000000000008 a DDI_SHIFT
+callout_debug_8250.o	0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+callout_debug_8250.o	0000000000000002 a DEBUG_WATCHDOG_FEED
+callout_debug_8250.o	0000000000000000 a DEBUG_WATCHDOG_STOP
+callout_debug_8250.o	0000000000000058 T display_char_8250
+callout_debug_8250.o	0000000000000120 t end_break_detect_8250
+callout_debug_8250.o	00000000000000a0 t end_display_char_8250
+callout_debug_8250.o	00000000000000e0 t end_poll_key_8250
+callout_debug_8250.o	0000000000000005 a FLTACCESS
+callout_debug_8250.o	0000000000000006 a FLTBOUNDS
+callout_debug_8250.o	0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+callout_debug_8250.o	0000000000000004 a INTR_CONFIG_FLAG_IPI
+callout_debug_8250.o	0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+callout_debug_8250.o	0000000000000008 a INTR_CONFIG_FLAG_SYS
+callout_debug_8250.o	0000000000000010 a LSR_BI
+callout_debug_8250.o	0000000000000001 a LSR_RXRDY
+callout_debug_8250.o	0000000000000020 a LSR_TXRDY
+callout_debug_8250.o	0000000000000001 a MS_ASYNC
+callout_debug_8250.o	0000000000000004 a MS_INVALIDATE
+callout_debug_8250.o	0000000001000000 a MS_INVALIDATE_ICACHE
+callout_debug_8250.o	0000000000000002 a MS_SYNC
+callout_debug_8250.o	0000000000000000 t patch_debug
+callout_debug_8250.o	00000000000000a0 T poll_key_8250
+callout_debug_8250.o	0000000000000020 a QT_TIMER_PERIOD
+callout_debug_8250.o	0000000000000005 a REG_LS
+callout_debug_8250.o	000000000000000a a SIGBUS
+callout_debug_8250.o	0000000000000010 a SIZEOF_DDI
+callout_debug_8250.o	0000000000000000 a SMP_PENDING
+callout_debug_8250.o	0000000000000010 a SMP_START_ADDR
+callout_debug_8250.o	0000000000000004 a SP_PRIVATE_FLAGS
+callout_debug_8250.o	00000000000000f4 t start_break_detect_8250
+callout_debug_8250.o	000000000000006c t start_display_char_8250
+callout_debug_8250.o	00000000000000b4 t start_poll_key_8250
+callout_debug_8250.o	0000000000000006 a SYSPAGE_NUM_CPU
+callout_debug_8250.o	0000000000000024 a SYSPAGE_SMP
+callout_debug_8250.o	0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+callout_debug_8250.o	0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+callout_debug_8250.o	0000000000000001 a VARIANT_a
+callout_debug_8250.o	0000000000000001 a VARIANT_le
+callout_debug_8250_32b.o	00000000000000e0 T break_detect_8250_32b
+callout_debug_8250_32b.o	0000000000000001 a BUILDENV_qss
+callout_debug_8250_32b.o	0000000000000002 a BUS_ADRERR
+callout_debug_8250_32b.o	0000000000000003 a BUS_OBJERR
+callout_debug_8250_32b.o	0000000000000004 a CA_LINE_SIZE
+callout_debug_8250_32b.o	0000000000000008 a CA_NUM_LINES
+callout_debug_8250_32b.o	                 U callout_io_map
+callout_debug_8250_32b.o	0000000000000000 a DDI_BASE
+callout_debug_8250_32b.o	0000000000000008 a DDI_SHIFT
+callout_debug_8250_32b.o	0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+callout_debug_8250_32b.o	0000000000000002 a DEBUG_WATCHDOG_FEED
+callout_debug_8250_32b.o	0000000000000000 a DEBUG_WATCHDOG_STOP
+callout_debug_8250_32b.o	0000000000000058 T display_char_8250_32b
+callout_debug_8250_32b.o	0000000000000120 t end_break_detect_8250_32b
+callout_debug_8250_32b.o	00000000000000a0 t end_display_char_8250_32b
+callout_debug_8250_32b.o	00000000000000e0 t end_poll_key_8250_32b
+callout_debug_8250_32b.o	0000000000000005 a FLTACCESS
+callout_debug_8250_32b.o	0000000000000006 a FLTBOUNDS
+callout_debug_8250_32b.o	0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+callout_debug_8250_32b.o	0000000000000004 a INTR_CONFIG_FLAG_IPI
+callout_debug_8250_32b.o	0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+callout_debug_8250_32b.o	0000000000000008 a INTR_CONFIG_FLAG_SYS
+callout_debug_8250_32b.o	0000000000000010 a LSR_BI
+callout_debug_8250_32b.o	0000000000000001 a LSR_RXRDY
+callout_debug_8250_32b.o	0000000000000020 a LSR_TXRDY
+callout_debug_8250_32b.o	0000000000000001 a MS_ASYNC
+callout_debug_8250_32b.o	0000000000000004 a MS_INVALIDATE
+callout_debug_8250_32b.o	0000000001000000 a MS_INVALIDATE_ICACHE
+callout_debug_8250_32b.o	0000000000000002 a MS_SYNC
+callout_debug_8250_32b.o	0000000000000000 t patch_debug
+callout_debug_8250_32b.o	00000000000000a0 T poll_key_8250_32b
+callout_debug_8250_32b.o	0000000000000020 a QT_TIMER_PERIOD
+callout_debug_8250_32b.o	0000000000000005 a REG_LS
+callout_debug_8250_32b.o	000000000000000a a SIGBUS
+callout_debug_8250_32b.o	0000000000000010 a SIZEOF_DDI
+callout_debug_8250_32b.o	0000000000000000 a SMP_PENDING
+callout_debug_8250_32b.o	0000000000000010 a SMP_START_ADDR
+callout_debug_8250_32b.o	0000000000000004 a SP_PRIVATE_FLAGS
+callout_debug_8250_32b.o	00000000000000f4 t start_break_detect_8250_32b
+callout_debug_8250_32b.o	000000000000006c t start_display_char_8250_32b
+callout_debug_8250_32b.o	00000000000000b4 t start_poll_key_8250_32b
+callout_debug_8250_32b.o	0000000000000006 a SYSPAGE_NUM_CPU
+callout_debug_8250_32b.o	0000000000000024 a SYSPAGE_SMP
+callout_debug_8250_32b.o	0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+callout_debug_8250_32b.o	0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+callout_debug_8250_32b.o	0000000000000001 a VARIANT_a
+callout_debug_8250_32b.o	0000000000000001 a VARIANT_le
+callout_debug_dummy.o	0000000000000038 T break_detect_dummy
+callout_debug_dummy.o	0000000000000001 a BUILDENV_qss
+callout_debug_dummy.o	0000000000000002 a BUS_ADRERR
+callout_debug_dummy.o	0000000000000003 a BUS_OBJERR
+callout_debug_dummy.o	0000000000000004 a CA_LINE_SIZE
+callout_debug_dummy.o	0000000000000008 a CA_NUM_LINES
+callout_debug_dummy.o	0000000000000000 a DDI_BASE
+callout_debug_dummy.o	0000000000000008 a DDI_SHIFT
+callout_debug_dummy.o	0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+callout_debug_dummy.o	0000000000000002 a DEBUG_WATCHDOG_FEED
+callout_debug_dummy.o	0000000000000000 a DEBUG_WATCHDOG_STOP
+callout_debug_dummy.o	0000000000000000 T display_char_dummy
+callout_debug_dummy.o	0000000000000054 t end_break_detect_dummy
+callout_debug_dummy.o	0000000000000018 t end_display_char_dummy
+callout_debug_dummy.o	0000000000000034 t end_poll_key_dummy
+callout_debug_dummy.o	0000000000000005 a FLTACCESS
+callout_debug_dummy.o	0000000000000006 a FLTBOUNDS
+callout_debug_dummy.o	0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+callout_debug_dummy.o	0000000000000004 a INTR_CONFIG_FLAG_IPI
+callout_debug_dummy.o	0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+callout_debug_dummy.o	0000000000000008 a INTR_CONFIG_FLAG_SYS
+callout_debug_dummy.o	0000000000000010 a LSR_BI
+callout_debug_dummy.o	0000000000000001 a LSR_RXRDY
+callout_debug_dummy.o	0000000000000020 a LSR_TXRDY
+callout_debug_dummy.o	0000000000000001 a MS_ASYNC
+callout_debug_dummy.o	0000000000000004 a MS_INVALIDATE
+callout_debug_dummy.o	0000000001000000 a MS_INVALIDATE_ICACHE
+callout_debug_dummy.o	0000000000000002 a MS_SYNC
+callout_debug_dummy.o	0000000000000018 T poll_key_dummy
+callout_debug_dummy.o	0000000000000020 a QT_TIMER_PERIOD
+callout_debug_dummy.o	0000000000000005 a REG_LS
+callout_debug_dummy.o	000000000000000a a SIGBUS
+callout_debug_dummy.o	0000000000000010 a SIZEOF_DDI
+callout_debug_dummy.o	0000000000000000 a SMP_PENDING
+callout_debug_dummy.o	0000000000000010 a SMP_START_ADDR
+callout_debug_dummy.o	0000000000000004 a SP_PRIVATE_FLAGS
+callout_debug_dummy.o	000000000000004c t start_break_detect_dummy
+callout_debug_dummy.o	0000000000000014 t start_display_char_dummy
+callout_debug_dummy.o	000000000000002c t start_poll_key_dummy
+callout_debug_dummy.o	0000000000000006 a SYSPAGE_NUM_CPU
+callout_debug_dummy.o	0000000000000024 a SYSPAGE_SMP
+callout_debug_dummy.o	0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+callout_debug_dummy.o	0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+callout_debug_dummy.o	0000000000000001 a VARIANT_a
+callout_debug_dummy.o	0000000000000001 a VARIANT_le
+callout_debug_linflexd.o	00000000000000c8 T break_detect_linflexd
+callout_debug_linflexd.o	0000000000000001 a BUILDENV_qss
+callout_debug_linflexd.o	0000000000000002 a BUS_ADRERR
+callout_debug_linflexd.o	0000000000000003 a BUS_OBJERR
+callout_debug_linflexd.o	0000000000000004 a CA_LINE_SIZE
+callout_debug_linflexd.o	0000000000000008 a CA_NUM_LINES
+callout_debug_linflexd.o	                 U callout_io_map
+callout_debug_linflexd.o	0000000000000000 a DDI_BASE
+callout_debug_linflexd.o	0000000000000008 a DDI_SHIFT
+callout_debug_linflexd.o	0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+callout_debug_linflexd.o	0000000000000002 a DEBUG_WATCHDOG_FEED
+callout_debug_linflexd.o	0000000000000000 a DEBUG_WATCHDOG_STOP
+callout_debug_linflexd.o	0000000000000040 T display_char_linflexd
+callout_debug_linflexd.o	00000000000000f4 t end_break_detect_linflexd
+callout_debug_linflexd.o	0000000000000088 t end_display_char_linflexd
+callout_debug_linflexd.o	00000000000000c8 t end_poll_key_linflexd
+callout_debug_linflexd.o	0000000000000005 a FLTACCESS
+callout_debug_linflexd.o	0000000000000006 a FLTBOUNDS
+callout_debug_linflexd.o	0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+callout_debug_linflexd.o	0000000000000004 a INTR_CONFIG_FLAG_IPI
+callout_debug_linflexd.o	0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+callout_debug_linflexd.o	0000000000000008 a INTR_CONFIG_FLAG_SYS
+callout_debug_linflexd.o	0000000000000010 a LSR_BI
+callout_debug_linflexd.o	0000000000000001 a LSR_RXRDY
+callout_debug_linflexd.o	0000000000000020 a LSR_TXRDY
+callout_debug_linflexd.o	0000000000000001 a MS_ASYNC
+callout_debug_linflexd.o	0000000000000004 a MS_INVALIDATE
+callout_debug_linflexd.o	0000000001000000 a MS_INVALIDATE_ICACHE
+callout_debug_linflexd.o	0000000000000002 a MS_SYNC
+callout_debug_linflexd.o	0000000000000000 t patch_debug
+callout_debug_linflexd.o	0000000000000088 T poll_key_linflexd
+callout_debug_linflexd.o	0000000000000020 a QT_TIMER_PERIOD
+callout_debug_linflexd.o	0000000000000005 a REG_LS
+callout_debug_linflexd.o	000000000000000a a SIGBUS
+callout_debug_linflexd.o	0000000000000010 a SIZEOF_DDI
+callout_debug_linflexd.o	0000000000000000 a SMP_PENDING
+callout_debug_linflexd.o	0000000000000010 a SMP_START_ADDR
+callout_debug_linflexd.o	0000000000000004 a SP_PRIVATE_FLAGS
+callout_debug_linflexd.o	00000000000000dc t start_break_detect_linflexd
+callout_debug_linflexd.o	0000000000000054 t start_display_char_linflexd
+callout_debug_linflexd.o	000000000000009c t start_poll_key_linflexd
+callout_debug_linflexd.o	0000000000000006 a SYSPAGE_NUM_CPU
+callout_debug_linflexd.o	0000000000000024 a SYSPAGE_SMP
+callout_debug_linflexd.o	0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+callout_debug_linflexd.o	0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+callout_debug_linflexd.o	0000000000000001 a VARIANT_a
+callout_debug_linflexd.o	0000000000000001 a VARIANT_le
+callout_debug_pl011.o	00000000000000c0 T break_detect_pl011
+callout_debug_pl011.o	0000000000000001 a BUILDENV_qss
+callout_debug_pl011.o	0000000000000002 a BUS_ADRERR
+callout_debug_pl011.o	0000000000000003 a BUS_OBJERR
+callout_debug_pl011.o	0000000000000004 a CA_LINE_SIZE
+callout_debug_pl011.o	0000000000000008 a CA_NUM_LINES
+callout_debug_pl011.o	                 U callout_io_map
+callout_debug_pl011.o	0000000000000000 a DDI_BASE
+callout_debug_pl011.o	0000000000000008 a DDI_SHIFT
+callout_debug_pl011.o	0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+callout_debug_pl011.o	0000000000000002 a DEBUG_WATCHDOG_FEED
+callout_debug_pl011.o	0000000000000000 a DEBUG_WATCHDOG_STOP
+callout_debug_pl011.o	0000000000000040 T display_char_pl011
+callout_debug_pl011.o	00000000000000ec t end_break_detect_pl011
+callout_debug_pl011.o	000000000000007c t end_display_char_pl011
+callout_debug_pl011.o	00000000000000c0 t end_poll_key_pl011
+callout_debug_pl011.o	0000000000000005 a FLTACCESS
+callout_debug_pl011.o	0000000000000006 a FLTBOUNDS
+callout_debug_pl011.o	0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+callout_debug_pl011.o	0000000000000004 a INTR_CONFIG_FLAG_IPI
+callout_debug_pl011.o	0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+callout_debug_pl011.o	0000000000000008 a INTR_CONFIG_FLAG_SYS
+callout_debug_pl011.o	0000000000000010 a LSR_BI
+callout_debug_pl011.o	0000000000000001 a LSR_RXRDY
+callout_debug_pl011.o	0000000000000020 a LSR_TXRDY
+callout_debug_pl011.o	0000000000000001 a MS_ASYNC
+callout_debug_pl011.o	0000000000000004 a MS_INVALIDATE
+callout_debug_pl011.o	0000000001000000 a MS_INVALIDATE_ICACHE
+callout_debug_pl011.o	0000000000000002 a MS_SYNC
+callout_debug_pl011.o	0000000000000000 t patch_debug
+callout_debug_pl011.o	0000000000000080 T poll_key_pl011
+callout_debug_pl011.o	0000000000000020 a QT_TIMER_PERIOD
+callout_debug_pl011.o	0000000000000005 a REG_LS
+callout_debug_pl011.o	000000000000000a a SIGBUS
+callout_debug_pl011.o	0000000000000010 a SIZEOF_DDI
+callout_debug_pl011.o	0000000000000000 a SMP_PENDING
+callout_debug_pl011.o	0000000000000010 a SMP_START_ADDR
+callout_debug_pl011.o	0000000000000004 a SP_PRIVATE_FLAGS
+callout_debug_pl011.o	00000000000000d4 t start_break_detect_pl011
+callout_debug_pl011.o	0000000000000054 t start_display_char_pl011
+callout_debug_pl011.o	0000000000000094 t start_poll_key_pl011
+callout_debug_pl011.o	0000000000000006 a SYSPAGE_NUM_CPU
+callout_debug_pl011.o	0000000000000024 a SYSPAGE_SMP
+callout_debug_pl011.o	0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+callout_debug_pl011.o	0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+callout_debug_pl011.o	0000000000000001 a VARIANT_a
+callout_debug_pl011.o	0000000000000001 a VARIANT_le
+callout_debug_tegra.o	00000000000000c0 T break_detect_tegra
+callout_debug_tegra.o	0000000000000001 a BUILDENV_qss
+callout_debug_tegra.o	0000000000000002 a BUS_ADRERR
+callout_debug_tegra.o	0000000000000003 a BUS_OBJERR
+callout_debug_tegra.o	0000000000000004 a CA_LINE_SIZE
+callout_debug_tegra.o	0000000000000008 a CA_NUM_LINES
+callout_debug_tegra.o	                 U callout_io_map
+callout_debug_tegra.o	0000000000000000 a DDI_BASE
+callout_debug_tegra.o	0000000000000008 a DDI_SHIFT
+callout_debug_tegra.o	0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+callout_debug_tegra.o	0000000000000002 a DEBUG_WATCHDOG_FEED
+callout_debug_tegra.o	0000000000000000 a DEBUG_WATCHDOG_STOP
+callout_debug_tegra.o	0000000000000040 T display_char_tegra
+callout_debug_tegra.o	00000000000000f0 t end_break_detect_tegra
+callout_debug_tegra.o	000000000000007c t end_display_char_tegra
+callout_debug_tegra.o	00000000000000c0 t end_poll_key_tegra
+callout_debug_tegra.o	0000000000000005 a FLTACCESS
+callout_debug_tegra.o	0000000000000006 a FLTBOUNDS
+callout_debug_tegra.o	0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+callout_debug_tegra.o	0000000000000004 a INTR_CONFIG_FLAG_IPI
+callout_debug_tegra.o	0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+callout_debug_tegra.o	0000000000000008 a INTR_CONFIG_FLAG_SYS
+callout_debug_tegra.o	0000000000000010 a LSR_BI
+callout_debug_tegra.o	0000000000000001 a LSR_RXRDY
+callout_debug_tegra.o	0000000000000020 a LSR_TXRDY
+callout_debug_tegra.o	0000000000000001 a MS_ASYNC
+callout_debug_tegra.o	0000000000000004 a MS_INVALIDATE
+callout_debug_tegra.o	0000000001000000 a MS_INVALIDATE_ICACHE
+callout_debug_tegra.o	0000000000000002 a MS_SYNC
+callout_debug_tegra.o	0000000000000000 t patch_debug
+callout_debug_tegra.o	0000000000000080 T poll_key_tegra
+callout_debug_tegra.o	0000000000000020 a QT_TIMER_PERIOD
+callout_debug_tegra.o	0000000000000005 a REG_LS
+callout_debug_tegra.o	000000000000000a a SIGBUS
+callout_debug_tegra.o	0000000000000010 a SIZEOF_DDI
+callout_debug_tegra.o	0000000000000000 a SMP_PENDING
+callout_debug_tegra.o	0000000000000010 a SMP_START_ADDR
+callout_debug_tegra.o	0000000000000004 a SP_PRIVATE_FLAGS
+callout_debug_tegra.o	00000000000000d4 t start_break_detect_tegra
+callout_debug_tegra.o	0000000000000054 t start_display_char_tegra
+callout_debug_tegra.o	0000000000000094 t start_poll_key_tegra
+callout_debug_tegra.o	0000000000000006 a SYSPAGE_NUM_CPU
+callout_debug_tegra.o	0000000000000024 a SYSPAGE_SMP
+callout_debug_tegra.o	0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+callout_debug_tegra.o	0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+callout_debug_tegra.o	0000000000000001 a VARIANT_a
+callout_debug_tegra.o	0000000000000001 a VARIANT_le
+callout_interrupt_gic_v2.o	0000000000000001 a BUILDENV_qss
+callout_interrupt_gic_v2.o	0000000000000002 a BUS_ADRERR
+callout_interrupt_gic_v2.o	0000000000000003 a BUS_OBJERR
+callout_interrupt_gic_v2.o	0000000000000004 a CA_LINE_SIZE
+callout_interrupt_gic_v2.o	0000000000000008 a CA_NUM_LINES
+callout_interrupt_gic_v2.o	0000000000000000 a DDI_BASE
+callout_interrupt_gic_v2.o	0000000000000008 a DDI_SHIFT
+callout_interrupt_gic_v2.o	0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+callout_interrupt_gic_v2.o	0000000000000002 a DEBUG_WATCHDOG_FEED
+callout_interrupt_gic_v2.o	0000000000000000 a DEBUG_WATCHDOG_STOP
+callout_interrupt_gic_v2.o	0000000000000234 t end_interrupt_config_gic_v2_ppi
+callout_interrupt_gic_v2.o	00000000000000ec t end_interrupt_eoi_gic_v2
+callout_interrupt_gic_v2.o	0000000000000094 t end_interrupt_id_gic_v2_ppi
+callout_interrupt_gic_v2.o	00000000000000bc t end_interrupt_id_gic_v2_spi
+callout_interrupt_gic_v2.o	0000000000000134 t end_interrupt_mask_gic_v2_ppi
+callout_interrupt_gic_v2.o	00000000000001c8 t end_interrupt_mask_gic_v2_spi
+callout_interrupt_gic_v2.o	000000000000017c t end_interrupt_unmask_gic_v2_ppi
+callout_interrupt_gic_v2.o	0000000000000210 t end_interrupt_unmask_gic_v2_spi
+callout_interrupt_gic_v2.o	0000000000000005 a FLTACCESS
+callout_interrupt_gic_v2.o	0000000000000006 a FLTBOUNDS
+callout_interrupt_gic_v2.o	                 U gic_gicc_vaddr
+callout_interrupt_gic_v2.o	                 U gic_gicd_vaddr
+callout_interrupt_gic_v2.o	0000000000000000 t gicc_patch
+callout_interrupt_gic_v2.o	0000000000000028 t gicd_patch
+callout_interrupt_gic_v2.o	0000000000000210 T interrupt_config_gic_v2_ppi
+callout_interrupt_gic_v2.o	00000000000000c0 T interrupt_eoi_gic_v2
+callout_interrupt_gic_v2.o	0000000000000050 T interrupt_id_gic_v2_ppi
+callout_interrupt_gic_v2.o	0000000000000098 T interrupt_id_gic_v2_spi
+callout_interrupt_gic_v2.o	00000000000000f0 T interrupt_mask_gic_v2_ppi
+callout_interrupt_gic_v2.o	0000000000000180 T interrupt_mask_gic_v2_spi
+callout_interrupt_gic_v2.o	0000000000000138 T interrupt_unmask_gic_v2_ppi
+callout_interrupt_gic_v2.o	00000000000001c8 T interrupt_unmask_gic_v2_spi
+callout_interrupt_gic_v2.o	0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+callout_interrupt_gic_v2.o	0000000000000004 a INTR_CONFIG_FLAG_IPI
+callout_interrupt_gic_v2.o	0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+callout_interrupt_gic_v2.o	0000000000000008 a INTR_CONFIG_FLAG_SYS
+callout_interrupt_gic_v2.o	0000000000000010 a LSR_BI
+callout_interrupt_gic_v2.o	0000000000000001 a LSR_RXRDY
+callout_interrupt_gic_v2.o	0000000000000020 a LSR_TXRDY
+callout_interrupt_gic_v2.o	0000000000000001 a MS_ASYNC
+callout_interrupt_gic_v2.o	0000000000000004 a MS_INVALIDATE
+callout_interrupt_gic_v2.o	0000000001000000 a MS_INVALIDATE_ICACHE
+callout_interrupt_gic_v2.o	0000000000000002 a MS_SYNC
+callout_interrupt_gic_v2.o	0000000000000020 a QT_TIMER_PERIOD
+callout_interrupt_gic_v2.o	0000000000000005 a REG_LS
+callout_interrupt_gic_v2.o	000000000000000a a SIGBUS
+callout_interrupt_gic_v2.o	0000000000000010 a SIZEOF_DDI
+callout_interrupt_gic_v2.o	0000000000000000 a SMP_PENDING
+callout_interrupt_gic_v2.o	0000000000000010 a SMP_START_ADDR
+callout_interrupt_gic_v2.o	0000000000000004 a SP_PRIVATE_FLAGS
+callout_interrupt_gic_v2.o	0000000000000224 t start_interrupt_config_gic_v2_ppi
+callout_interrupt_gic_v2.o	00000000000000d4 t start_interrupt_eoi_gic_v2
+callout_interrupt_gic_v2.o	0000000000000064 t start_interrupt_id_gic_v2_ppi
+callout_interrupt_gic_v2.o	00000000000000ac t start_interrupt_id_gic_v2_spi
+callout_interrupt_gic_v2.o	0000000000000104 t start_interrupt_mask_gic_v2_ppi
+callout_interrupt_gic_v2.o	0000000000000194 t start_interrupt_mask_gic_v2_spi
+callout_interrupt_gic_v2.o	000000000000014c t start_interrupt_unmask_gic_v2_ppi
+callout_interrupt_gic_v2.o	00000000000001dc t start_interrupt_unmask_gic_v2_spi
+callout_interrupt_gic_v2.o	0000000000000006 a SYSPAGE_NUM_CPU
+callout_interrupt_gic_v2.o	0000000000000024 a SYSPAGE_SMP
+callout_interrupt_gic_v2.o	0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+callout_interrupt_gic_v2.o	0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+callout_interrupt_gic_v2.o	0000000000000001 a VARIANT_a
+callout_interrupt_gic_v2.o	0000000000000001 a VARIANT_le
+callout_interrupt_gic_v3.o	0000000000000001 a BUILDENV_qss
+callout_interrupt_gic_v3.o	0000000000000002 a BUS_ADRERR
+callout_interrupt_gic_v3.o	0000000000000003 a BUS_OBJERR
+callout_interrupt_gic_v3.o	0000000000000004 a CA_LINE_SIZE
+callout_interrupt_gic_v3.o	0000000000000008 a CA_NUM_LINES
+callout_interrupt_gic_v3.o	0000000000000000 a DDI_BASE
+callout_interrupt_gic_v3.o	0000000000000008 a DDI_SHIFT
+callout_interrupt_gic_v3.o	0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+callout_interrupt_gic_v3.o	0000000000000002 a DEBUG_WATCHDOG_FEED
+callout_interrupt_gic_v3.o	0000000000000000 a DEBUG_WATCHDOG_STOP
+callout_interrupt_gic_v3.o	00000000000001fc t end_interrupt_config_gic_v3_ppi
+callout_interrupt_gic_v3.o	00000000000003d0 t end_interrupt_eoi_gic_v3_lpi_mm
+callout_interrupt_gic_v3.o	00000000000003a4 t end_interrupt_eoi_gic_v3_lpi_sr
+callout_interrupt_gic_v3.o	00000000000000d0 t end_interrupt_eoi_gic_v3_ppi_mm
+callout_interrupt_gic_v3.o	00000000000000a4 t end_interrupt_eoi_gic_v3_ppi_sr
+callout_interrupt_gic_v3.o	0000000000000270 t end_interrupt_eoi_gic_v3_spi_mm
+callout_interrupt_gic_v3.o	0000000000000244 t end_interrupt_eoi_gic_v3_spi_sr
+callout_interrupt_gic_v3.o	0000000000000384 t end_interrupt_id_gic_v3_lpi
+callout_interrupt_gic_v3.o	0000000000000084 t end_interrupt_id_gic_v3_ppi_mm
+callout_interrupt_gic_v3.o	000000000000004c t end_interrupt_id_gic_v3_ppi_sr
+callout_interrupt_gic_v3.o	0000000000000224 t end_interrupt_id_gic_v3_spi
+callout_interrupt_gic_v3.o	00000000000004c8 t end_interrupt_mask_gic_v3_lpi_direct
+callout_interrupt_gic_v3.o	0000000000000780 t end_interrupt_mask_gic_v3_lpi_its
+callout_interrupt_gic_v3.o	000000000000017c t end_interrupt_mask_gic_v3_ppi
+callout_interrupt_gic_v3.o	000000000000030c t end_interrupt_mask_gic_v3_spi
+callout_interrupt_gic_v3.o	0000000000000538 t end_interrupt_unmask_gic_v3_lpi_direct
+callout_interrupt_gic_v3.o	00000000000008a0 t end_interrupt_unmask_gic_v3_lpi_its
+callout_interrupt_gic_v3.o	00000000000001d8 t end_interrupt_unmask_gic_v3_ppi
+callout_interrupt_gic_v3.o	000000000000035c t end_interrupt_unmask_gic_v3_spi
+callout_interrupt_gic_v3.o	0000000000000005 a FLTACCESS
+callout_interrupt_gic_v3.o	0000000000000006 a FLTBOUNDS
+callout_interrupt_gic_v3.o	0000000000000000 t gicc_patch
+callout_interrupt_gic_v3.o	00000000000001d8 T interrupt_config_gic_v3_ppi
+callout_interrupt_gic_v3.o	00000000000003a8 T interrupt_eoi_gic_v3_lpi_mm
+callout_interrupt_gic_v3.o	0000000000000388 T interrupt_eoi_gic_v3_lpi_sr
+callout_interrupt_gic_v3.o	00000000000000a8 T interrupt_eoi_gic_v3_ppi_mm
+callout_interrupt_gic_v3.o	0000000000000088 T interrupt_eoi_gic_v3_ppi_sr
+callout_interrupt_gic_v3.o	0000000000000248 T interrupt_eoi_gic_v3_spi_mm
+callout_interrupt_gic_v3.o	0000000000000228 T interrupt_eoi_gic_v3_spi_sr
+callout_interrupt_gic_v3.o	0000000000000360 T interrupt_id_gic_v3_lpi
+callout_interrupt_gic_v3.o	0000000000000050 T interrupt_id_gic_v3_ppi_mm
+callout_interrupt_gic_v3.o	0000000000000028 T interrupt_id_gic_v3_ppi_sr
+callout_interrupt_gic_v3.o	0000000000000200 T interrupt_id_gic_v3_spi
+callout_interrupt_gic_v3.o	0000000000000458 T interrupt_mask_gic_v3_lpi_direct
+callout_interrupt_gic_v3.o	0000000000000660 T interrupt_mask_gic_v3_lpi_its
+callout_interrupt_gic_v3.o	0000000000000118 T interrupt_mask_gic_v3_ppi
+callout_interrupt_gic_v3.o	00000000000002b8 T interrupt_mask_gic_v3_spi
+callout_interrupt_gic_v3.o	00000000000004c8 T interrupt_unmask_gic_v3_lpi_direct
+callout_interrupt_gic_v3.o	0000000000000780 T interrupt_unmask_gic_v3_lpi_its
+callout_interrupt_gic_v3.o	0000000000000180 T interrupt_unmask_gic_v3_ppi
+callout_interrupt_gic_v3.o	0000000000000310 T interrupt_unmask_gic_v3_spi
+callout_interrupt_gic_v3.o	0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+callout_interrupt_gic_v3.o	0000000000000004 a INTR_CONFIG_FLAG_IPI
+callout_interrupt_gic_v3.o	0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+callout_interrupt_gic_v3.o	0000000000000008 a INTR_CONFIG_FLAG_SYS
+callout_interrupt_gic_v3.o	00000000000003d0 t lpi_direct_patch
+callout_interrupt_gic_v3.o	0000000000000538 t lpi_its_patch
+callout_interrupt_gic_v3.o	0000000000000010 a LSR_BI
+callout_interrupt_gic_v3.o	0000000000000001 a LSR_RXRDY
+callout_interrupt_gic_v3.o	0000000000000020 a LSR_TXRDY
+callout_interrupt_gic_v3.o	00000000000006dc t mask_lock
+callout_interrupt_gic_v3.o	000000000000070c t mask_loop
+callout_interrupt_gic_v3.o	0000000000000001 a MS_ASYNC
+callout_interrupt_gic_v3.o	0000000000000004 a MS_INVALIDATE
+callout_interrupt_gic_v3.o	0000000001000000 a MS_INVALIDATE_ICACHE
+callout_interrupt_gic_v3.o	0000000000000002 a MS_SYNC
+callout_interrupt_gic_v3.o	00000000000000d0 t ppi_patch
+callout_interrupt_gic_v3.o	0000000000000020 a QT_TIMER_PERIOD
+callout_interrupt_gic_v3.o	0000000000000005 a REG_LS
+callout_interrupt_gic_v3.o	000000000000000a a SIGBUS
+callout_interrupt_gic_v3.o	0000000000000010 a SIZEOF_DDI
+callout_interrupt_gic_v3.o	0000000000000000 a SMP_PENDING
+callout_interrupt_gic_v3.o	0000000000000010 a SMP_START_ADDR
+callout_interrupt_gic_v3.o	0000000000000004 a SP_PRIVATE_FLAGS
+callout_interrupt_gic_v3.o	0000000000000270 t spi_patch
+callout_interrupt_gic_v3.o	00000000000001ec t start_interrupt_config_gic_v3_ppi
+callout_interrupt_gic_v3.o	00000000000003bc t start_interrupt_eoi_gic_v3_lpi_mm
+callout_interrupt_gic_v3.o	000000000000039c t start_interrupt_eoi_gic_v3_lpi_sr
+callout_interrupt_gic_v3.o	00000000000000bc t start_interrupt_eoi_gic_v3_ppi_mm
+callout_interrupt_gic_v3.o	000000000000009c t start_interrupt_eoi_gic_v3_ppi_sr
+callout_interrupt_gic_v3.o	000000000000025c t start_interrupt_eoi_gic_v3_spi_mm
+callout_interrupt_gic_v3.o	000000000000023c t start_interrupt_eoi_gic_v3_spi_sr
+callout_interrupt_gic_v3.o	0000000000000374 t start_interrupt_id_gic_v3_lpi
+callout_interrupt_gic_v3.o	0000000000000064 t start_interrupt_id_gic_v3_ppi_mm
+callout_interrupt_gic_v3.o	000000000000003c t start_interrupt_id_gic_v3_ppi_sr
+callout_interrupt_gic_v3.o	0000000000000214 t start_interrupt_id_gic_v3_spi
+callout_interrupt_gic_v3.o	000000000000046c t start_interrupt_mask_gic_v3_lpi_direct
+callout_interrupt_gic_v3.o	0000000000000674 t start_interrupt_mask_gic_v3_lpi_its
+callout_interrupt_gic_v3.o	000000000000012c t start_interrupt_mask_gic_v3_ppi
+callout_interrupt_gic_v3.o	00000000000002cc t start_interrupt_mask_gic_v3_spi
+callout_interrupt_gic_v3.o	00000000000004dc t start_interrupt_unmask_gic_v3_lpi_direct
+callout_interrupt_gic_v3.o	0000000000000794 t start_interrupt_unmask_gic_v3_lpi_its
+callout_interrupt_gic_v3.o	0000000000000194 t start_interrupt_unmask_gic_v3_ppi
+callout_interrupt_gic_v3.o	0000000000000324 t start_interrupt_unmask_gic_v3_spi
+callout_interrupt_gic_v3.o	0000000000000006 a SYSPAGE_NUM_CPU
+callout_interrupt_gic_v3.o	0000000000000024 a SYSPAGE_SMP
+callout_interrupt_gic_v3.o	0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+callout_interrupt_gic_v3.o	0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+callout_interrupt_gic_v3.o	00000000000007fc t unmask_lock
+callout_interrupt_gic_v3.o	000000000000082c t unmask_loop
+callout_interrupt_gic_v3.o	0000000000000001 a VARIANT_a
+callout_interrupt_gic_v3.o	0000000000000001 a VARIANT_le
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000001 a BUILDENV_qss
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000002 a BUS_ADRERR
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000003 a BUS_OBJERR
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000004 a CA_LINE_SIZE
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000008 a CA_NUM_LINES
+callout_interrupt_qoriq_lsx_msi_v1.o	                 U callout_io_map
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000000 a DDI_BASE
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000008 a DDI_SHIFT
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000002 a DEBUG_WATCHDOG_FEED
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000000 a DEBUG_WATCHDOG_STOP
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000114 t end_interrupt_eoi_qoriq_lsx_msi_v1
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000100 t end_interrupt_id_qoriq_lsx_msi_v1
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000134 t end_interrupt_mask_qoriq_lsx_msi_v1
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000154 t end_interrupt_unmask_qoriq_lsx_msi_v1
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000005 a FLTACCESS
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000006 a FLTBOUNDS
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000100 T interrupt_eoi_qoriq_lsx_msi_v1
+callout_interrupt_qoriq_lsx_msi_v1.o	00000000000000a0 T interrupt_id_qoriq_lsx_msi_v1
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000118 T interrupt_mask_qoriq_lsx_msi_v1
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000138 T interrupt_unmask_qoriq_lsx_msi_v1
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000004 a INTR_CONFIG_FLAG_IPI
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000008 a INTR_CONFIG_FLAG_SYS
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000028 d Lmsir_size
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000020 d Lpaddr_first
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000010 a LSR_BI
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000001 a LSR_RXRDY
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000020 a LSR_TXRDY
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000000 d Lvaddr
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000001 a MS_ASYNC
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000004 a MS_INVALIDATE
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000001000000 a MS_INVALIDATE_ICACHE
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000002 a MS_SYNC
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000000 t patch_intr
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000020 a QT_TIMER_PERIOD
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000005 a REG_LS
+callout_interrupt_qoriq_lsx_msi_v1.o	000000000000000a a SIGBUS
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000010 a SIZEOF_DDI
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000000 a SMP_PENDING
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000010 a SMP_START_ADDR
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000004 a SP_PRIVATE_FLAGS
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000114 t start_interrupt_eoi_qoriq_lsx_msi_v1
+callout_interrupt_qoriq_lsx_msi_v1.o	00000000000000b4 t start_interrupt_id_qoriq_lsx_msi_v1
+callout_interrupt_qoriq_lsx_msi_v1.o	000000000000012c t start_interrupt_mask_qoriq_lsx_msi_v1
+callout_interrupt_qoriq_lsx_msi_v1.o	000000000000014c t start_interrupt_unmask_qoriq_lsx_msi_v1
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000006 a SYSPAGE_NUM_CPU
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000024 a SYSPAGE_SMP
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000001 a VARIANT_a
+callout_interrupt_qoriq_lsx_msi_v1.o	0000000000000001 a VARIANT_le
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000001 a BUILDENV_qss
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000002 a BUS_ADRERR
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000003 a BUS_OBJERR
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000004 a CA_LINE_SIZE
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000008 a CA_NUM_LINES
+callout_interrupt_qoriq_lsx_msi_v2.o	                 U callout_io_map
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000000 a DDI_BASE
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000008 a DDI_SHIFT
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000002 a DEBUG_WATCHDOG_FEED
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000000 a DEBUG_WATCHDOG_STOP
+callout_interrupt_qoriq_lsx_msi_v2.o	000000000000012c t end_interrupt_eoi_qoriq_lsx_msi_v2
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000118 t end_interrupt_id_qoriq_lsx_msi_v2
+callout_interrupt_qoriq_lsx_msi_v2.o	000000000000014c t end_interrupt_mask_qoriq_lsx_msi_v2
+callout_interrupt_qoriq_lsx_msi_v2.o	000000000000016c t end_interrupt_unmask_qoriq_lsx_msi_v2
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000005 a FLTACCESS
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000006 a FLTBOUNDS
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000118 T interrupt_eoi_qoriq_lsx_msi_v2
+callout_interrupt_qoriq_lsx_msi_v2.o	00000000000000a0 T interrupt_id_qoriq_lsx_msi_v2
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000130 T interrupt_mask_qoriq_lsx_msi_v2
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000150 T interrupt_unmask_qoriq_lsx_msi_v2
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000004 a INTR_CONFIG_FLAG_IPI
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000008 a INTR_CONFIG_FLAG_SYS
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000028 d Lmsir_size
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000020 d Lpaddr_first
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000010 a LSR_BI
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000001 a LSR_RXRDY
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000020 a LSR_TXRDY
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000000 d Lvaddr
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000001 a MS_ASYNC
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000004 a MS_INVALIDATE
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000001000000 a MS_INVALIDATE_ICACHE
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000002 a MS_SYNC
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000000 t patch_intr
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000020 a QT_TIMER_PERIOD
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000005 a REG_LS
+callout_interrupt_qoriq_lsx_msi_v2.o	000000000000000a a SIGBUS
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000010 a SIZEOF_DDI
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000000 a SMP_PENDING
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000010 a SMP_START_ADDR
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000004 a SP_PRIVATE_FLAGS
+callout_interrupt_qoriq_lsx_msi_v2.o	000000000000012c t start_interrupt_eoi_qoriq_lsx_msi_v2
+callout_interrupt_qoriq_lsx_msi_v2.o	00000000000000b4 t start_interrupt_id_qoriq_lsx_msi_v2
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000144 t start_interrupt_mask_qoriq_lsx_msi_v2
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000164 t start_interrupt_unmask_qoriq_lsx_msi_v2
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000006 a SYSPAGE_NUM_CPU
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000024 a SYSPAGE_SMP
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000001 a VARIANT_a
+callout_interrupt_qoriq_lsx_msi_v2.o	0000000000000001 a VARIANT_le
+callout_interrupt_t18x_msi.o	0000000000000001 a BUILDENV_qss
+callout_interrupt_t18x_msi.o	0000000000000002 a BUS_ADRERR
+callout_interrupt_t18x_msi.o	0000000000000003 a BUS_OBJERR
+callout_interrupt_t18x_msi.o	0000000000000004 a CA_LINE_SIZE
+callout_interrupt_t18x_msi.o	0000000000000008 a CA_NUM_LINES
+callout_interrupt_t18x_msi.o	                 U callout_io_map
+callout_interrupt_t18x_msi.o	0000000000000000 a DDI_BASE
+callout_interrupt_t18x_msi.o	0000000000000008 a DDI_SHIFT
+callout_interrupt_t18x_msi.o	0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+callout_interrupt_t18x_msi.o	0000000000000002 a DEBUG_WATCHDOG_FEED
+callout_interrupt_t18x_msi.o	0000000000000000 a DEBUG_WATCHDOG_STOP
+callout_interrupt_t18x_msi.o	0000000000000110 t end_interrupt_eoi_t18x_msi
+callout_interrupt_t18x_msi.o	00000000000000c8 t end_interrupt_id_t18x_msi
+callout_interrupt_t18x_msi.o	000000000000015c t end_interrupt_mask_t18x_msi
+callout_interrupt_t18x_msi.o	00000000000001ac t end_interrupt_unmask_t18x_msi
+callout_interrupt_t18x_msi.o	0000000000000005 a FLTACCESS
+callout_interrupt_t18x_msi.o	0000000000000006 a FLTBOUNDS
+callout_interrupt_t18x_msi.o	00000000000000c8 T interrupt_eoi_t18x_msi
+callout_interrupt_t18x_msi.o	0000000000000058 T interrupt_id_t18x_msi
+callout_interrupt_t18x_msi.o	0000000000000110 T interrupt_mask_t18x_msi
+callout_interrupt_t18x_msi.o	0000000000000160 T interrupt_unmask_t18x_msi
+callout_interrupt_t18x_msi.o	0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+callout_interrupt_t18x_msi.o	0000000000000004 a INTR_CONFIG_FLAG_IPI
+callout_interrupt_t18x_msi.o	0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+callout_interrupt_t18x_msi.o	0000000000000008 a INTR_CONFIG_FLAG_SYS
+callout_interrupt_t18x_msi.o	0000000000000010 a LSR_BI
+callout_interrupt_t18x_msi.o	0000000000000001 a LSR_RXRDY
+callout_interrupt_t18x_msi.o	0000000000000020 a LSR_TXRDY
+callout_interrupt_t18x_msi.o	0000000000000000 d Lvaddr
+callout_interrupt_t18x_msi.o	0000000000000001 a MS_ASYNC
+callout_interrupt_t18x_msi.o	0000000000000004 a MS_INVALIDATE
+callout_interrupt_t18x_msi.o	0000000001000000 a MS_INVALIDATE_ICACHE
+callout_interrupt_t18x_msi.o	0000000000000002 a MS_SYNC
+callout_interrupt_t18x_msi.o	0000000000000000 t patch_intr
+callout_interrupt_t18x_msi.o	0000000000000020 a QT_TIMER_PERIOD
+callout_interrupt_t18x_msi.o	0000000000000005 a REG_LS
+callout_interrupt_t18x_msi.o	000000000000000a a SIGBUS
+callout_interrupt_t18x_msi.o	0000000000000010 a SIZEOF_DDI
+callout_interrupt_t18x_msi.o	0000000000000000 a SMP_PENDING
+callout_interrupt_t18x_msi.o	0000000000000010 a SMP_START_ADDR
+callout_interrupt_t18x_msi.o	0000000000000004 a SP_PRIVATE_FLAGS
+callout_interrupt_t18x_msi.o	00000000000000dc t start_interrupt_eoi_t18x_msi
+callout_interrupt_t18x_msi.o	000000000000006c t start_interrupt_id_t18x_msi
+callout_interrupt_t18x_msi.o	0000000000000124 t start_interrupt_mask_t18x_msi
+callout_interrupt_t18x_msi.o	0000000000000174 t start_interrupt_unmask_t18x_msi
+callout_interrupt_t18x_msi.o	0000000000000006 a SYSPAGE_NUM_CPU
+callout_interrupt_t18x_msi.o	0000000000000024 a SYSPAGE_SMP
+callout_interrupt_t18x_msi.o	0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+callout_interrupt_t18x_msi.o	0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+callout_interrupt_t18x_msi.o	0000000000000001 a VARIANT_a
+callout_interrupt_t18x_msi.o	0000000000000001 a VARIANT_le
+callout_interrupt_t18x_pcie.o	0000000000000001 a BUILDENV_qss
+callout_interrupt_t18x_pcie.o	0000000000000002 a BUS_ADRERR
+callout_interrupt_t18x_pcie.o	0000000000000003 a BUS_OBJERR
+callout_interrupt_t18x_pcie.o	0000000000000004 a CA_LINE_SIZE
+callout_interrupt_t18x_pcie.o	0000000000000008 a CA_NUM_LINES
+callout_interrupt_t18x_pcie.o	                 U callout_io_map
+callout_interrupt_t18x_pcie.o	0000000000000000 a DDI_BASE
+callout_interrupt_t18x_pcie.o	0000000000000008 a DDI_SHIFT
+callout_interrupt_t18x_pcie.o	0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+callout_interrupt_t18x_pcie.o	0000000000000002 a DEBUG_WATCHDOG_FEED
+callout_interrupt_t18x_pcie.o	0000000000000000 a DEBUG_WATCHDOG_STOP
+callout_interrupt_t18x_pcie.o	0000000000000128 t end_interrupt_eoi_t18x_pcie
+callout_interrupt_t18x_pcie.o	00000000000000c0 t end_interrupt_id_t18x_pcie
+callout_interrupt_t18x_pcie.o	0000000000000180 t end_interrupt_mask_t18x_pcie
+callout_interrupt_t18x_pcie.o	00000000000001d8 t end_interrupt_unmask_t18x_pcie
+callout_interrupt_t18x_pcie.o	0000000000000005 a FLTACCESS
+callout_interrupt_t18x_pcie.o	0000000000000006 a FLTBOUNDS
+callout_interrupt_t18x_pcie.o	00000000000000c0 T interrupt_eoi_t18x_pcie
+callout_interrupt_t18x_pcie.o	0000000000000058 T interrupt_id_t18x_pcie
+callout_interrupt_t18x_pcie.o	0000000000000128 T interrupt_mask_t18x_pcie
+callout_interrupt_t18x_pcie.o	0000000000000180 T interrupt_unmask_t18x_pcie
+callout_interrupt_t18x_pcie.o	0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+callout_interrupt_t18x_pcie.o	0000000000000004 a INTR_CONFIG_FLAG_IPI
+callout_interrupt_t18x_pcie.o	0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+callout_interrupt_t18x_pcie.o	0000000000000008 a INTR_CONFIG_FLAG_SYS
+callout_interrupt_t18x_pcie.o	0000000000000010 a LSR_BI
+callout_interrupt_t18x_pcie.o	0000000000000001 a LSR_RXRDY
+callout_interrupt_t18x_pcie.o	0000000000000020 a LSR_TXRDY
+callout_interrupt_t18x_pcie.o	0000000000000000 d Lvaddr
+callout_interrupt_t18x_pcie.o	0000000000000001 a MS_ASYNC
+callout_interrupt_t18x_pcie.o	0000000000000004 a MS_INVALIDATE
+callout_interrupt_t18x_pcie.o	0000000001000000 a MS_INVALIDATE_ICACHE
+callout_interrupt_t18x_pcie.o	0000000000000002 a MS_SYNC
+callout_interrupt_t18x_pcie.o	0000000000000000 t patch_intr
+callout_interrupt_t18x_pcie.o	0000000000000020 a QT_TIMER_PERIOD
+callout_interrupt_t18x_pcie.o	0000000000000005 a REG_LS
+callout_interrupt_t18x_pcie.o	000000000000000a a SIGBUS
+callout_interrupt_t18x_pcie.o	0000000000000010 a SIZEOF_DDI
+callout_interrupt_t18x_pcie.o	0000000000000000 a SMP_PENDING
+callout_interrupt_t18x_pcie.o	0000000000000010 a SMP_START_ADDR
+callout_interrupt_t18x_pcie.o	0000000000000004 a SP_PRIVATE_FLAGS
+callout_interrupt_t18x_pcie.o	00000000000000d4 t start_interrupt_eoi_t18x_pcie
+callout_interrupt_t18x_pcie.o	000000000000006c t start_interrupt_id_t18x_pcie
+callout_interrupt_t18x_pcie.o	000000000000013c t start_interrupt_mask_t18x_pcie
+callout_interrupt_t18x_pcie.o	0000000000000194 t start_interrupt_unmask_t18x_pcie
+callout_interrupt_t18x_pcie.o	0000000000000006 a SYSPAGE_NUM_CPU
+callout_interrupt_t18x_pcie.o	0000000000000024 a SYSPAGE_SMP
+callout_interrupt_t18x_pcie.o	0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+callout_interrupt_t18x_pcie.o	0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+callout_interrupt_t18x_pcie.o	0000000000000001 a VARIANT_a
+callout_interrupt_t18x_pcie.o	0000000000000001 a VARIANT_le
+callout_interrupt_t18x_pcie_ic6.o	0000000000000001 a BUILDENV_qss
+callout_interrupt_t18x_pcie_ic6.o	0000000000000002 a BUS_ADRERR
+callout_interrupt_t18x_pcie_ic6.o	0000000000000003 a BUS_OBJERR
+callout_interrupt_t18x_pcie_ic6.o	0000000000000004 a CA_LINE_SIZE
+callout_interrupt_t18x_pcie_ic6.o	0000000000000008 a CA_NUM_LINES
+callout_interrupt_t18x_pcie_ic6.o	                 U callout_io_map
+callout_interrupt_t18x_pcie_ic6.o	0000000000000000 a DDI_BASE
+callout_interrupt_t18x_pcie_ic6.o	0000000000000008 a DDI_SHIFT
+callout_interrupt_t18x_pcie_ic6.o	0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+callout_interrupt_t18x_pcie_ic6.o	0000000000000002 a DEBUG_WATCHDOG_FEED
+callout_interrupt_t18x_pcie_ic6.o	0000000000000000 a DEBUG_WATCHDOG_STOP
+callout_interrupt_t18x_pcie_ic6.o	000000000000018c t end_interrupt_eoi_t18x_pcie_ic6
+callout_interrupt_t18x_pcie_ic6.o	0000000000000138 t end_interrupt_id_t18x_pcie_ic6
+callout_interrupt_t18x_pcie_ic6.o	00000000000001e4 t end_interrupt_mask_t18x_pcie_ic6
+callout_interrupt_t18x_pcie_ic6.o	000000000000023c t end_interrupt_unmask_t18x_pcie_ic6
+callout_interrupt_t18x_pcie_ic6.o	0000000000000005 a FLTACCESS
+callout_interrupt_t18x_pcie_ic6.o	0000000000000006 a FLTBOUNDS
+callout_interrupt_t18x_pcie_ic6.o	0000000000000138 T interrupt_eoi_t18x_pcie_ic6
+callout_interrupt_t18x_pcie_ic6.o	0000000000000058 T interrupt_id_t18x_pcie_ic6
+callout_interrupt_t18x_pcie_ic6.o	0000000000000190 T interrupt_mask_t18x_pcie_ic6
+callout_interrupt_t18x_pcie_ic6.o	00000000000001e8 T interrupt_unmask_t18x_pcie_ic6
+callout_interrupt_t18x_pcie_ic6.o	0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+callout_interrupt_t18x_pcie_ic6.o	0000000000000004 a INTR_CONFIG_FLAG_IPI
+callout_interrupt_t18x_pcie_ic6.o	0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+callout_interrupt_t18x_pcie_ic6.o	0000000000000008 a INTR_CONFIG_FLAG_SYS
+callout_interrupt_t18x_pcie_ic6.o	0000000000000010 a LSR_BI
+callout_interrupt_t18x_pcie_ic6.o	0000000000000001 a LSR_RXRDY
+callout_interrupt_t18x_pcie_ic6.o	0000000000000020 a LSR_TXRDY
+callout_interrupt_t18x_pcie_ic6.o	0000000000000000 d Lvaddr
+callout_interrupt_t18x_pcie_ic6.o	0000000000000001 a MS_ASYNC
+callout_interrupt_t18x_pcie_ic6.o	0000000000000004 a MS_INVALIDATE
+callout_interrupt_t18x_pcie_ic6.o	0000000001000000 a MS_INVALIDATE_ICACHE
+callout_interrupt_t18x_pcie_ic6.o	0000000000000002 a MS_SYNC
+callout_interrupt_t18x_pcie_ic6.o	0000000000000000 t patch_intr
+callout_interrupt_t18x_pcie_ic6.o	0000000000000020 a QT_TIMER_PERIOD
+callout_interrupt_t18x_pcie_ic6.o	0000000000000005 a REG_LS
+callout_interrupt_t18x_pcie_ic6.o	000000000000000a a SIGBUS
+callout_interrupt_t18x_pcie_ic6.o	0000000000000010 a SIZEOF_DDI
+callout_interrupt_t18x_pcie_ic6.o	0000000000000000 a SMP_PENDING
+callout_interrupt_t18x_pcie_ic6.o	0000000000000010 a SMP_START_ADDR
+callout_interrupt_t18x_pcie_ic6.o	0000000000000004 a SP_PRIVATE_FLAGS
+callout_interrupt_t18x_pcie_ic6.o	000000000000014c t start_interrupt_eoi_t18x_pcie_ic6
+callout_interrupt_t18x_pcie_ic6.o	000000000000006c t start_interrupt_id_t18x_pcie_ic6
+callout_interrupt_t18x_pcie_ic6.o	00000000000001a4 t start_interrupt_mask_t18x_pcie_ic6
+callout_interrupt_t18x_pcie_ic6.o	00000000000001fc t start_interrupt_unmask_t18x_pcie_ic6
+callout_interrupt_t18x_pcie_ic6.o	0000000000000006 a SYSPAGE_NUM_CPU
+callout_interrupt_t18x_pcie_ic6.o	0000000000000024 a SYSPAGE_SMP
+callout_interrupt_t18x_pcie_ic6.o	0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+callout_interrupt_t18x_pcie_ic6.o	0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+callout_interrupt_t18x_pcie_ic6.o	0000000000000001 a VARIANT_a
+callout_interrupt_t18x_pcie_ic6.o	0000000000000001 a VARIANT_le
+callout_io_map_indirect.o	                 U callout_io_map
+callout_io_map_indirect.o	0000000000000000 T callout_io_map_indirect
+callout_memory_map_indirect.o	                 U callout_memory_map
+callout_memory_map_indirect.o	0000000000000000 T callout_memory_map_indirect
+callout_reboot_psci.o	0000000000000001 a BUILDENV_qss
+callout_reboot_psci.o	0000000000000002 a BUS_ADRERR
+callout_reboot_psci.o	0000000000000003 a BUS_OBJERR
+callout_reboot_psci.o	0000000000000004 a CA_LINE_SIZE
+callout_reboot_psci.o	0000000000000008 a CA_NUM_LINES
+callout_reboot_psci.o	0000000000000000 a DDI_BASE
+callout_reboot_psci.o	0000000000000008 a DDI_SHIFT
+callout_reboot_psci.o	0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+callout_reboot_psci.o	0000000000000002 a DEBUG_WATCHDOG_FEED
+callout_reboot_psci.o	0000000000000000 a DEBUG_WATCHDOG_STOP
+callout_reboot_psci.o	000000000000002c t do_reboot_hvc
+callout_reboot_psci.o	0000000000000070 t do_reboot_smc
+callout_reboot_psci.o	000000000000003c t end_reboot_psci_hvc
+callout_reboot_psci.o	0000000000000080 t end_reboot_psci_smc
+callout_reboot_psci.o	0000000000000005 a FLTACCESS
+callout_reboot_psci.o	0000000000000006 a FLTBOUNDS
+callout_reboot_psci.o	0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+callout_reboot_psci.o	0000000000000004 a INTR_CONFIG_FLAG_IPI
+callout_reboot_psci.o	0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+callout_reboot_psci.o	0000000000000008 a INTR_CONFIG_FLAG_SYS
+callout_reboot_psci.o	0000000000000010 a LSR_BI
+callout_reboot_psci.o	0000000000000001 a LSR_RXRDY
+callout_reboot_psci.o	0000000000000020 a LSR_TXRDY
+callout_reboot_psci.o	0000000000000001 a MS_ASYNC
+callout_reboot_psci.o	0000000000000004 a MS_INVALIDATE
+callout_reboot_psci.o	0000000001000000 a MS_INVALIDATE_ICACHE
+callout_reboot_psci.o	0000000000000002 a MS_SYNC
+callout_reboot_psci.o	0000000000000020 a QT_TIMER_PERIOD
+callout_reboot_psci.o	0000000000000000 T reboot_psci_hvc
+callout_reboot_psci.o	0000000000000040 T reboot_psci_smc
+callout_reboot_psci.o	0000000000000005 a REG_LS
+callout_reboot_psci.o	000000000000000a a SIGBUS
+callout_reboot_psci.o	0000000000000010 a SIZEOF_DDI
+callout_reboot_psci.o	0000000000000000 a SMP_PENDING
+callout_reboot_psci.o	0000000000000010 a SMP_START_ADDR
+callout_reboot_psci.o	0000000000000004 a SP_PRIVATE_FLAGS
+callout_reboot_psci.o	0000000000000038 t spin_hvc
+callout_reboot_psci.o	000000000000007c t spin_smc
+callout_reboot_psci.o	0000000000000014 t start_reboot_psci_hvc
+callout_reboot_psci.o	0000000000000054 t start_reboot_psci_smc
+callout_reboot_psci.o	0000000000000006 a SYSPAGE_NUM_CPU
+callout_reboot_psci.o	0000000000000024 a SYSPAGE_SMP
+callout_reboot_psci.o	0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+callout_reboot_psci.o	0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+callout_reboot_psci.o	0000000000000001 a VARIANT_a
+callout_reboot_psci.o	0000000000000001 a VARIANT_le
+callout_sendipi_gic_v2.o	0000000000000001 a BUILDENV_qss
+callout_sendipi_gic_v2.o	0000000000000002 a BUS_ADRERR
+callout_sendipi_gic_v2.o	0000000000000003 a BUS_OBJERR
+callout_sendipi_gic_v2.o	0000000000000004 a CA_LINE_SIZE
+callout_sendipi_gic_v2.o	0000000000000008 a CA_NUM_LINES
+callout_sendipi_gic_v2.o	0000000000000000 a DDI_BASE
+callout_sendipi_gic_v2.o	0000000000000008 a DDI_SHIFT
+callout_sendipi_gic_v2.o	0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+callout_sendipi_gic_v2.o	0000000000000002 a DEBUG_WATCHDOG_FEED
+callout_sendipi_gic_v2.o	0000000000000000 a DEBUG_WATCHDOG_STOP
+callout_sendipi_gic_v2.o	0000000000000080 t end_sendipi_gic_v2
+callout_sendipi_gic_v2.o	0000000000000005 a FLTACCESS
+callout_sendipi_gic_v2.o	0000000000000006 a FLTBOUNDS
+callout_sendipi_gic_v2.o	                 U gic_gicd_vaddr
+callout_sendipi_gic_v2.o	0000000000000000 t gicd_patch
+callout_sendipi_gic_v2.o	0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+callout_sendipi_gic_v2.o	0000000000000004 a INTR_CONFIG_FLAG_IPI
+callout_sendipi_gic_v2.o	0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+callout_sendipi_gic_v2.o	0000000000000008 a INTR_CONFIG_FLAG_SYS
+callout_sendipi_gic_v2.o	0000000000000010 a LSR_BI
+callout_sendipi_gic_v2.o	0000000000000001 a LSR_RXRDY
+callout_sendipi_gic_v2.o	0000000000000020 a LSR_TXRDY
+callout_sendipi_gic_v2.o	0000000000000001 a MS_ASYNC
+callout_sendipi_gic_v2.o	0000000000000004 a MS_INVALIDATE
+callout_sendipi_gic_v2.o	0000000001000000 a MS_INVALIDATE_ICACHE
+callout_sendipi_gic_v2.o	0000000000000002 a MS_SYNC
+callout_sendipi_gic_v2.o	0000000000000020 a QT_TIMER_PERIOD
+callout_sendipi_gic_v2.o	0000000000000005 a REG_LS
+callout_sendipi_gic_v2.o	0000000000000028 T sendipi_gic_v2
+callout_sendipi_gic_v2.o	000000000000000a a SIGBUS
+callout_sendipi_gic_v2.o	0000000000000010 a SIZEOF_DDI
+callout_sendipi_gic_v2.o	0000000000000000 a SMP_PENDING
+callout_sendipi_gic_v2.o	0000000000000010 a SMP_START_ADDR
+callout_sendipi_gic_v2.o	0000000000000004 a SP_PRIVATE_FLAGS
+callout_sendipi_gic_v2.o	000000000000003c t start_sendipi_gic_v2
+callout_sendipi_gic_v2.o	0000000000000006 a SYSPAGE_NUM_CPU
+callout_sendipi_gic_v2.o	0000000000000024 a SYSPAGE_SMP
+callout_sendipi_gic_v2.o	0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+callout_sendipi_gic_v2.o	0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+callout_sendipi_gic_v2.o	0000000000000001 a VARIANT_a
+callout_sendipi_gic_v2.o	0000000000000001 a VARIANT_le
+callout_sendipi_gic_v3.o	0000000000000001 a BUILDENV_qss
+callout_sendipi_gic_v3.o	0000000000000002 a BUS_ADRERR
+callout_sendipi_gic_v3.o	0000000000000003 a BUS_OBJERR
+callout_sendipi_gic_v3.o	0000000000000004 a CA_LINE_SIZE
+callout_sendipi_gic_v3.o	0000000000000008 a CA_NUM_LINES
+callout_sendipi_gic_v3.o	0000000000000000 a DDI_BASE
+callout_sendipi_gic_v3.o	0000000000000008 a DDI_SHIFT
+callout_sendipi_gic_v3.o	0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+callout_sendipi_gic_v3.o	0000000000000002 a DEBUG_WATCHDOG_FEED
+callout_sendipi_gic_v3.o	0000000000000000 a DEBUG_WATCHDOG_STOP
+callout_sendipi_gic_v3.o	00000000000000c4 t end_sendipi_gic_v3_mm
+callout_sendipi_gic_v3.o	0000000000000044 t end_sendipi_gic_v3_sr
+callout_sendipi_gic_v3.o	0000000000000005 a FLTACCESS
+callout_sendipi_gic_v3.o	0000000000000006 a FLTBOUNDS
+callout_sendipi_gic_v3.o	                 U gic_gicr_vaddr
+callout_sendipi_gic_v3.o	0000000000000044 t gicr_patch
+callout_sendipi_gic_v3.o	0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+callout_sendipi_gic_v3.o	0000000000000004 a INTR_CONFIG_FLAG_IPI
+callout_sendipi_gic_v3.o	0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+callout_sendipi_gic_v3.o	0000000000000008 a INTR_CONFIG_FLAG_SYS
+callout_sendipi_gic_v3.o	0000000000000010 a LSR_BI
+callout_sendipi_gic_v3.o	0000000000000001 a LSR_RXRDY
+callout_sendipi_gic_v3.o	0000000000000020 a LSR_TXRDY
+callout_sendipi_gic_v3.o	0000000000000001 a MS_ASYNC
+callout_sendipi_gic_v3.o	0000000000000004 a MS_INVALIDATE
+callout_sendipi_gic_v3.o	0000000001000000 a MS_INVALIDATE_ICACHE
+callout_sendipi_gic_v3.o	0000000000000002 a MS_SYNC
+callout_sendipi_gic_v3.o	0000000000000020 a QT_TIMER_PERIOD
+callout_sendipi_gic_v3.o	0000000000000005 a REG_LS
+callout_sendipi_gic_v3.o	0000000000000070 T sendipi_gic_v3_mm
+callout_sendipi_gic_v3.o	0000000000000000 T sendipi_gic_v3_sr
+callout_sendipi_gic_v3.o	000000000000000a a SIGBUS
+callout_sendipi_gic_v3.o	0000000000000010 a SIZEOF_DDI
+callout_sendipi_gic_v3.o	0000000000000000 a SMP_PENDING
+callout_sendipi_gic_v3.o	0000000000000010 a SMP_START_ADDR
+callout_sendipi_gic_v3.o	0000000000000004 a SP_PRIVATE_FLAGS
+callout_sendipi_gic_v3.o	0000000000000084 t start_sendipi_gic_v3_mm
+callout_sendipi_gic_v3.o	0000000000000014 t start_sendipi_gic_v3_sr
+callout_sendipi_gic_v3.o	0000000000000006 a SYSPAGE_NUM_CPU
+callout_sendipi_gic_v3.o	0000000000000024 a SYSPAGE_SMP
+callout_sendipi_gic_v3.o	0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+callout_sendipi_gic_v3.o	0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+callout_sendipi_gic_v3.o	0000000000000001 a VARIANT_a
+callout_sendipi_gic_v3.o	0000000000000001 a VARIANT_le
+callout_smp_spin.o	0000000000000001 a BUILDENV_qss
+callout_smp_spin.o	0000000000000002 a BUS_ADRERR
+callout_smp_spin.o	0000000000000003 a BUS_OBJERR
+callout_smp_spin.o	0000000000000004 a CA_LINE_SIZE
+callout_smp_spin.o	0000000000000008 a CA_NUM_LINES
+callout_smp_spin.o	0000000000000000 a DDI_BASE
+callout_smp_spin.o	0000000000000008 a DDI_SHIFT
+callout_smp_spin.o	0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+callout_smp_spin.o	0000000000000002 a DEBUG_WATCHDOG_FEED
+callout_smp_spin.o	0000000000000000 a DEBUG_WATCHDOG_STOP
+callout_smp_spin.o	0000000000000068 t end_smp_spin
+callout_smp_spin.o	0000000000000005 a FLTACCESS
+callout_smp_spin.o	0000000000000006 a FLTBOUNDS
+callout_smp_spin.o	0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+callout_smp_spin.o	0000000000000004 a INTR_CONFIG_FLAG_IPI
+callout_smp_spin.o	0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+callout_smp_spin.o	0000000000000008 a INTR_CONFIG_FLAG_SYS
+callout_smp_spin.o	0000000000000010 a LSR_BI
+callout_smp_spin.o	0000000000000001 a LSR_RXRDY
+callout_smp_spin.o	0000000000000020 a LSR_TXRDY
+callout_smp_spin.o	0000000000000001 a MS_ASYNC
+callout_smp_spin.o	0000000000000004 a MS_INVALIDATE
+callout_smp_spin.o	0000000001000000 a MS_INVALIDATE_ICACHE
+callout_smp_spin.o	0000000000000002 a MS_SYNC
+callout_smp_spin.o	0000000000000020 a QT_TIMER_PERIOD
+callout_smp_spin.o	0000000000000005 a REG_LS
+callout_smp_spin.o	000000000000000a a SIGBUS
+callout_smp_spin.o	0000000000000010 a SIZEOF_DDI
+callout_smp_spin.o	0000000000000000 a SMP_PENDING
+callout_smp_spin.o	0000000000000000 T smp_spin
+callout_smp_spin.o	0000000000000010 a SMP_START_ADDR
+callout_smp_spin.o	0000000000000004 a SP_PRIVATE_FLAGS
+callout_smp_spin.o	0000000000000014 t start_smp_spin
+callout_smp_spin.o	0000000000000006 a SYSPAGE_NUM_CPU
+callout_smp_spin.o	0000000000000024 a SYSPAGE_SMP
+callout_smp_spin.o	0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+callout_smp_spin.o	0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+callout_smp_spin.o	0000000000000001 a VARIANT_a
+callout_smp_spin.o	0000000000000001 a VARIANT_le
+callouts.o	                 U __page_size
+callouts.o	                 U _syspage_ptr
+callouts.o	00000000000003f0 T add_callout
+callouts.o	0000000000000470 T add_callout_array
+callouts.o	00000000000000e0 T callout_output_one
+callouts.o	0000000000000000 D callout_output_rtn
+callouts.o	00000000000002a4 t callout_output_section
+callouts.o	0000000000000320 T callout_register_data
+callouts.o	00000000000003b0 T callout_reloc_data
+callouts.o	0000000000000000 b co_free_list
+callouts.o	                 U crash
+callouts.o	                 U dbg_device
+callouts.o	0000000000000000 t get_co_info
+callouts.o	                 U lsp
+callouts.o	                 U memmove
+callouts.o	                 U memset
+callouts.o	0000000000000070 T output_callouts
+callouts.o	                 U patch_channel
+callouts.o	0000000000000018 b patch_data
+callouts.o	000000000000000c b rtn_size
+callouts.o	0000000000000010 b rw_addrs
+callouts.o	0000000000000008 b rw_size
+callouts.o	                 U syspage_paddr
+callouts.o	                 U ws_alloc
+chip_access.o	0000000000000000 T chip_access
+chip_access.o	0000000000000008 b chip_base
+chip_access.o	0000000000000050 T chip_done
+chip_access.o	0000000000000004 b chip_mmap
+chip_access.o	00000000000000c0 T chip_read16
+chip_access.o	0000000000000110 T chip_read32
+chip_access.o	0000000000000070 T chip_read8
+chip_access.o	0000000000000000 b chip_shift
+chip_access.o	00000000000000f0 T chip_write16
+chip_access.o	0000000000000130 T chip_write32
+chip_access.o	00000000000000a0 T chip_write8
+chip_access.o	                 U startup_io_map
+chip_access.o	                 U startup_io_unmap
+chip_access.o	                 U startup_memory_map
+chip_access.o	                 U startup_memory_unmap
+common_options.o	                 U __stack_chk_fail
+common_options.o	                 U __stack_chk_guard
+common_options.o	                 U add_callout
+common_options.o	                 U add_typed_string
+common_options.o	                 U avoid_ram
+common_options.o	                 U cpu_cluster_add
+common_options.o	                 U cpu_freq
+common_options.o	                 U cpu_handle_common_option
+common_options.o	                 U crash
+common_options.o	                 U cycles_freq
+common_options.o	                 U debug_flag
+common_options.o	0000000000000000 b debug_opt
+common_options.o	0000000000000000 t get_freq
+common_options.o	                 U getsize
+common_options.o	0000000000000100 T handle_common_option
+common_options.o	                 U hwi_add_nanospin
+common_options.o	                 U ifs2_paddr_dst
+common_options.o	                 U ifs2_paddr_src
+common_options.o	                 U ifs2_size
+common_options.o	0000000000000010 B in_hvc
+common_options.o	                 U max_cpus
+common_options.o	                 U memcmp
+common_options.o	                 U misc_flags
+common_options.o	                 U optarg
+common_options.o	                 U reserved_ram_list
+common_options.o	                 U rifs_flag
+common_options.o	                 U secure_system
+common_options.o	0000000000000750 T select_debug
+common_options.o	0000000000000600 t select_one
+common_options.o	0000000000000580 T set_debug
+common_options.o	                 U set_print_char
+common_options.o	                 U strchr
+common_options.o	                 U strlen
+common_options.o	                 U strtoul
+common_options.o	                 U timer_freq
+common_options.o	                 U timer_prog_time
+common_options.o	                 U ws_alloc
+cpu_cluster_add.o	                 U add_string
+cpu_cluster_add.o	0000000000000000 T cpu_cluster_add
+cpu_cluster_add.o	                 U grow_syspage_section
+cpu_cluster_add.o	                 U lsp
+cpu_common_options.o	                 U __page_size
+cpu_common_options.o	                 U __stack_chk_fail
+cpu_common_options.o	                 U __stack_chk_guard
+cpu_common_options.o	                 U cache_snooped
+cpu_common_options.o	0000000000000000 T cpu_handle_common_option
+cpu_common_options.o	                 U crash
+cpu_common_options.o	0000000000000018 d erra_opts
+cpu_common_options.o	                 U fdt_boot_option
+cpu_common_options.o	                 U fdt_init_bootopt
+cpu_common_options.o	                 U getsubopt
+cpu_common_options.o	                 U hypervisor_set_options
+cpu_common_options.o	                 U meltdown_active
+cpu_common_options.o	                 U optarg
+cpu_common_options.o	                 U pauth_active
+cpu_common_options.o	                 U spectre_v2_active
+cpu_common_options.o	                 U ssbs_active
+cpu_common_options.o	                 U strcmp
+cpu_common_options.o	                 U strtoul
+cpu_common_options.o	                 U sve_requested
+cpu_common_options.o	0000000000000000 d xopts
+cpu_startnext.o	0000000000000000 T cpu_startnext
+cpu_startnext.o	                 U lsp
+cpu_startnext.o	                 U shdr
+cpu_startnext.o	                 U vstart
+cpu_startup.o	0000000000000000 D __page_size
+cpu_startup.o	                 U aarch64_cpuid
+cpu_startup.o	0000000000000000 T aarch64_cpuid_find
+cpu_startup.o	0000000000000004 B cache_snooped
+cpu_startup.o	0000000000000040 T cpu_startup
+cpu_startup.o	0000000000000010 D meltdown_active
+cpu_startup.o	0000000000000008 B pauth_active
+cpu_startup.o	000000000000000c D spectre_v2_active
+cpu_startup.o	0000000000000008 D ssbs_active
+cpu_startup.o	0000000000000000 B sve_requested
+cpu_syspage_memory.o	                 U aarch64_map
+cpu_syspage_memory.o	                 U calloc_ram
+cpu_syspage_memory.o	0000000000000010 T cpu_alloc_syspage_memory
+cpu_syspage_memory.o	0000000000000000 T cpu_init_syspage_memory
+cpu_syspage_memory.o	0000000000000150 T cpu_syspage_remap
+cpu_syspage_memory.o	0000000000000144 T cpu_write_syspage_memory
+cpu_syspage_memory.o	                 U crash
+cpu_syspage_memory.o	                 U elf_map
+cpu_syspage_memory.o	                 U L0_vaddr
+cpu_syspage_memory.o	                 U lsp
+cpu_syspage_memory.o	                 U set_syspage_section
+cpu_syspage_memory.o	0000000000000000 D syspage_roundup
+cpu_tweak_cmdline.o	0000000000000000 T cpu_tweak_cmdline
+cpuid_a35.o	0000000000000000 D cpuid_a35
+cpuid_a53.o	0000000000000000 D cpuid_a53
+cpuid_a55.o	0000000000000000 D cpuid_a55
+cpuid_a57.o	0000000000000000 D cpuid_a57
+cpuid_a72.o	0000000000000000 D cpuid_a72
+cpuid_a720.o	0000000000000000 D cpuid_a720
+cpuid_a75.o	0000000000000000 t a75_setup
+cpuid_a75.o	0000000000000000 D cpuid_a75
+cpuid_a76.o	0000000000000000 t a76_setup
+cpuid_a76.o	0000000000000000 D cpuid_a76
+cpuid_a78ae.o	0000000000000000 D cpuid_a78ae
+cpuid_d15.o	0000000000000000 D cpuid_d15
+cpuid_d20.o	0000000000000000 D cpuid_d20
+cpuid_d20.o	0000000000000000 t d20_setup
+cpuid_d20.o	                 U syspage_roundup
+cpuid_n1.o	0000000000000000 D cpuid_n1
+cpuid_neo_v1.o	0000000000000000 D cpuid_neo_v1
+cpuid_neo_v2.o	0000000000000000 D cpuid_neo_v2
+cpuid_v8_aem.o	0000000000000000 D cpuid_v8_aem
+cpuid_v8_fm.o	0000000000000000 D cpuid_v8_fm
+cpuid_x2.o	0000000000000000 D cpuid_x2
+cpuid_x4.o	0000000000000000 D cpuid_x4
+cpuid_x925.o	0000000000000000 D cpuid_x925
+crash_done.o	0000000000000000 T crash_done
+cstart.o	                 U _main
+cstart.o	                 U _start_el2_or_el1
+cstart.o	                 U aarch64_cache_flush
+cstart.o	0000000000000000 D boot_args
+cstart.o	                 U boot_regs
+cstart.o	0000000000000001 a BUILDENV_qss
+cstart.o	0000000000000000 T cstart
+cstart.o	0000000000000c10 D stack
+cstart.o	0000000000000c10 D stack_addr_hi
+cstart.o	0000000000000010 D stack_addr_lo
+cstart.o	0000000000000001 a VARIANT_a
+cstart.o	0000000000000001 a VARIANT_le
+cstart.o	                 U vbar_default
+debug.o	                 U _argc
+debug.o	                 U _argv
+debug.o	                 U debug_flag
+debug.o	                 U getopt
+debug.o	                 U optarg
+debug.o	                 U optind
+debug.o	0000000000000000 T print_syspage
+debug.o	                 U print_syspage_enable
+debug.o	                 U print_syspage_sections
+dummy_print_char.o	0000000000000000 T dummy_print_char
+efi_entry_point.o	                 U __stack_chk_fail
+efi_entry_point.o	                 U __stack_chk_guard
+efi_entry_point.o	                 U cstart
+efi_entry_point.o	0000000000000018 b efi_command_line
+efi_entry_point.o	0000000000000010 b efi_command_line_size
+efi_entry_point.o	00000000000003f0 T efi_convert_command_line
+efi_entry_point.o	00000000000000b0 T efi_entry_point
+efi_entry_point.o	0000000000000374 T efi_get_table
+efi_entry_point.o	0000000000000000 b efi_map
+efi_entry_point.o	0000000000000008 b efi_map_desc_size
+efi_entry_point.o	0000000000000020 b efi_map_size
+efi_entry_point.o	                 U efi_system_table
+efi_entry_point.o	00000000000002b4 T efi_walk_map
+efi_entry_point.o	0000000000000000 t heapify
+efi_entry_point.o	                 U memcmp
+efi_entry_point.o	0000000000000028 b sorted.0
+efi_tweak_cmdline.o	                 U bootstrap_arg_adjust
+efi_tweak_cmdline.o	                 U efi_convert_command_line
+efi_tweak_cmdline.o	0000000000000000 T efi_tweak_cmdline
+efi_tweak_cmdline.o	0000000000000000 b next_arg.0
+elf.o	                 U __stack_chk_fail
+elf.o	                 U __stack_chk_guard
+elf.o	0000000000000154 T is_elf
+elf.o	00000000000000b0 T is_elf32
+elf.o	0000000000000000 T is_elf64
+elf.o	0000000000000190 T load_elf
+elf.o	                 U load_elf32
+elf.o	                 U load_elf64
+elf.o	                 U memcpy
+elf.o	                 U startup_memory_map
+elf.o	                 U startup_memory_unmap
+elf32.o	                 U __page_size
+elf32.o	                 U __stack_chk_fail
+elf32.o	                 U __stack_chk_guard
+elf32.o	                 U alloc_ram
+elf32.o	                 U boot_vaddr_base
+elf32.o	                 U boot_vaddr_end
+elf32.o	                 U calloc_ram
+elf32.o	                 U copy_memory
+elf32.o	                 U elf_map
+elf32.o	0000000000000000 T load_elf32
+elf32.o	                 U memcpy
+elf32.o	                 U memmove
+elf32.o	                 U memset
+elf32.o	                 U shdr
+elf32.o	                 U startup_memory_map
+elf32.o	                 U startup_memory_unmap
+elf64.o	                 U __page_size
+elf64.o	                 U __stack_chk_fail
+elf64.o	                 U __stack_chk_guard
+elf64.o	                 U alloc_ram
+elf64.o	                 U boot_vaddr_base
+elf64.o	                 U boot_vaddr_end
+elf64.o	                 U calloc_ram
+elf64.o	                 U copy_memory
+elf64.o	                 U elf_map
+elf64.o	0000000000000000 T load_elf64
+elf64.o	                 U memcpy
+elf64.o	                 U memmove
+elf64.o	                 U memset
+elf64.o	                 U shdr
+elf64.o	                 U startup_memory_map
+elf64.o	                 U startup_memory_unmap
+elf_map.o	                 U aarch64_map
+elf_map.o	0000000000000000 T elf_map
+fdt_find_node.o	                 U __stack_chk_fail
+fdt_find_node.o	                 U __stack_chk_guard
+fdt_find_node.o	0000000000000000 T fdt_find_node
+fdt_find_node.o	                 U fdt_get_str
+fdt_find_node.o	                 U fdt_next_node
+fdt_find_node.o	                 U fdt_node_offset_by_compatible
+fdt_find_node.o	                 U fdt_node_offset_by_prop_value
+fdt_find_node.o	                 U strcasecmp
+fdt_find_node.o	                 U strlen
+fdt_get_cpu_freq.o	                 U __stack_chk_fail
+fdt_get_cpu_freq.o	                 U __stack_chk_guard
+fdt_get_cpu_freq.o	                 U debug_flag
+fdt_get_cpu_freq.o	                 U fdt
+fdt_get_cpu_freq.o	0000000000000000 T fdt_get_cpu_freq
+fdt_get_cpu_freq.o	                 U fdt_get_property
+fdt_get_cpu_freq.o	                 U fdt_node_offset_by_prop_value
+fdt_get_cpu_freq.o	                 U kprintf
+fdt_get_int.o	0000000000000000 T fdt_get_int
+fdt_get_int.o	                 U fdt_get_u32
+fdt_get_intr.o	                 U __stack_chk_fail
+fdt_get_intr.o	                 U __stack_chk_guard
+fdt_get_intr.o	0000000000000000 T fdt_get_intr
+fdt_get_intr.o	                 U fdt_get_intr_cells
+fdt_get_intr.o	                 U fdt_getprop
+fdt_get_intr.o	                 U memset
+fdt_get_intr_cells.o	                 U __stack_chk_fail
+fdt_get_intr_cells.o	                 U __stack_chk_guard
+fdt_get_intr_cells.o	0000000000000000 b cache_fdt.3
+fdt_get_intr_cells.o	0000000000000010 b cache_intr_cells.0
+fdt_get_intr_cells.o	000000000000000c b cache_parent.1
+fdt_get_intr_cells.o	0000000000000008 b cache_phandle.2
+fdt_get_intr_cells.o	                 U fdt_get_int
+fdt_get_intr_cells.o	0000000000000000 T fdt_get_intr_cells
+fdt_get_intr_cells.o	                 U fdt_get_u32
+fdt_get_intr_cells.o	                 U fdt_node_offset_by_phandle
+fdt_get_intr_cells.o	                 U fdt_parent_offset
+fdt_get_num64.o	                 U __stack_chk_fail
+fdt_get_num64.o	                 U __stack_chk_guard
+fdt_get_num64.o	0000000000000000 T fdt_get_num64
+fdt_get_num64.o	                 U fdt_getprop
+fdt_get_reg32.o	                 U __stack_chk_fail
+fdt_get_reg32.o	                 U __stack_chk_guard
+fdt_get_reg32.o	0000000000000000 T fdt_get_reg32
+fdt_get_reg32.o	                 U fdt_get_reg64_cells
+fdt_get_reg64.o	0000000000000000 T fdt_get_reg64
+fdt_get_reg64.o	                 U fdt_get_reg64_cells
+fdt_get_reg64_cells.o	                 U __stack_chk_fail
+fdt_get_reg64_cells.o	                 U __stack_chk_guard
+fdt_get_reg64_cells.o	                 U fdt_address_cells
+fdt_get_reg64_cells.o	0000000000000000 T fdt_get_reg64_cells
+fdt_get_reg64_cells.o	                 U fdt_getprop
+fdt_get_reg64_cells.o	                 U fdt_parent_offset
+fdt_get_reg64_cells.o	                 U fdt_size_cells
+fdt_get_reg_addr.o	                 U __stack_chk_fail
+fdt_get_reg_addr.o	                 U __stack_chk_guard
+fdt_get_reg_addr.o	                 U fdt_get_name
+fdt_get_reg_addr.o	0000000000000000 T fdt_get_reg_addr
+fdt_get_reg_addr.o	                 U fdt_get_reg64_cells
+fdt_get_reg_addr.o	                 U memchr
+fdt_get_reg_addr.o	                 U strtoull
+fdt_get_reg_int.o	                 U __stack_chk_fail
+fdt_get_reg_int.o	                 U __stack_chk_guard
+fdt_get_reg_int.o	                 U fdt_get_reg_addr
+fdt_get_reg_int.o	0000000000000000 T fdt_get_reg_int
+fdt_get_str.o	                 U __stack_chk_fail
+fdt_get_str.o	                 U __stack_chk_guard
+fdt_get_str.o	0000000000000000 T fdt_get_str
+fdt_get_str.o	                 U fdt_getprop
+fdt_get_u32.o	                 U __stack_chk_fail
+fdt_get_u32.o	                 U __stack_chk_guard
+fdt_get_u32.o	0000000000000000 T fdt_get_u32
+fdt_get_u32.o	                 U fdt_getprop
+fdt_get_u64.o	                 U __stack_chk_fail
+fdt_get_u64.o	                 U __stack_chk_guard
+fdt_get_u64.o	0000000000000000 T fdt_get_u64
+fdt_get_u64.o	                 U fdt_getprop
+fdt_init.o	                 U alloc_ram
+fdt_init.o	                 U as_add_containing
+fdt_init.o	                 U fdt
+fdt_init.o	00000000000000b0 T fdt_asinfo
+fdt_init.o	                 U fdt_check_header
+fdt_init.o	0000000000000000 T fdt_init
+fdt_init.o	                 U fdt_paddr
+fdt_init.o	                 U fdt_size
+fdt_init.o	                 U startup_memory_map
+fdt_init.o	                 U startup_memory_unmap
+fdt_init_bootopt.o	                 U boot_regs
+fdt_init_bootopt.o	                 U crash
+fdt_init_bootopt.o	                 U debug_flag
+fdt_init_bootopt.o	                 U fdt
+fdt_init_bootopt.o	                 U fdt_boot_option
+fdt_init_bootopt.o	                 U fdt_check_header
+fdt_init_bootopt.o	0000000000000000 T fdt_init_bootopt
+fdt_init_bootopt.o	                 U fdt_paddr
+fdt_init_bootopt.o	                 U fdt_size
+fdt_init_bootopt.o	                 U kprintf
+fdt_init_bootopt.o	                 U startup_memory_map
+fdt_init_bootopt.o	                 U strtoul
+fdt_node_offset_by_nodename.o	                 U fdt_check_header
+fdt_node_offset_by_nodename.o	                 U fdt_next_node
+fdt_node_offset_by_nodename.o	0000000000000000 T fdt_node_offset_by_nodename
+fdt_node_offset_by_nodename.o	                 U fdt_offset_ptr
+fdt_node_offset_by_nodename.o	                 U memchr
+fdt_node_offset_by_nodename.o	                 U memcmp
+fdt_node_offset_by_nodename.o	                 U strlen
+fdt_num_cpu.o	                 U fdt
+fdt_num_cpu.o	                 U fdt_node_offset_by_prop_value
+fdt_num_cpu.o	0000000000000000 T fdt_num_cpu
+fdt_psci_configure.o	                 U fdt
+fdt_psci_configure.o	                 U fdt_get_property
+fdt_psci_configure.o	                 U fdt_node_offset_by_compatible
+fdt_psci_configure.o	0000000000000000 T fdt_psci_configure
+fdt_psci_configure.o	                 U psci_call
+fdt_psci_configure.o	                 U psci_cpu_on_cmd
+fdt_psci_configure.o	                 U psci_hvc
+fdt_psci_configure.o	                 U psci_smc
+fdt_psci_configure.o	                 U strcmp
+fdt_qtime.o	                 U __stack_chk_fail
+fdt_qtime.o	                 U __stack_chk_guard
+fdt_qtime.o	                 U crash
+fdt_qtime.o	                 U fdt
+fdt_qtime.o	                 U fdt_get_property
+fdt_qtime.o	                 U fdt_node_offset_by_compatible
+fdt_qtime.o	0000000000000000 T fdt_qtime
+fdt_smp_spin_start.o	                 U __stack_chk_fail
+fdt_smp_spin_start.o	                 U __stack_chk_guard
+fdt_smp_spin_start.o	                 U crash
+fdt_smp_spin_start.o	                 U fdt
+fdt_smp_spin_start.o	                 U fdt_get_property
+fdt_smp_spin_start.o	                 U fdt_node_offset_by_prop_value
+fdt_smp_spin_start.o	0000000000000000 T fdt_smp_spin_start
+fdt_smp_spin_start.o	0000000000000008 B spin_shim_id
+fdt_smp_spin_start.o	                 U spin_shim_rtn
+fdt_smp_spin_start.o	0000000000000000 B spin_shim_start
+fdt_tweak_cmdline.o	                 U __stack_chk_fail
+fdt_tweak_cmdline.o	                 U __stack_chk_guard
+fdt_tweak_cmdline.o	                 U bootstrap_arg_adjust
+fdt_tweak_cmdline.o	                 U fdt
+fdt_tweak_cmdline.o	                 U fdt_get_property
+fdt_tweak_cmdline.o	                 U fdt_init
+fdt_tweak_cmdline.o	                 U fdt_path_offset
+fdt_tweak_cmdline.o	0000000000000000 T fdt_tweak_cmdline
+fdt_tweak_cmdline.o	                 U memcpy
+fdt_tweak_cmdline.o	0000000000000000 b next_arg.0
+fdt_tweak_cmdline.o	                 U ws_alloc
+fdt_vars.o	0000000000000018 B fdt
+fdt_vars.o	0000000000000000 B fdt_boot_option
+fdt_vars.o	0000000000000010 B fdt_paddr
+fdt_vars.o	0000000000000008 B fdt_size
+getopt.o	0000000000000010 b cp.0
+getopt.o	0000000000000000 T getopt
+getopt.o	000000000000000c b last_optind.1
+getopt.o	0000000000000018 B optarg
+getopt.o	0000000000000008 B optind
+getopt.o	0000000000000000 b opts_str.2
+getsize.o	0000000000000000 T getsize
+getsize.o	                 U strtopaddr
+gic.o	0000000000000040 B gic_cpu_init
+gic.o	0000000000000030 B gic_gicc
+gic.o	0000000000000010 B gic_gicc_vaddr
+gic.o	0000000000000038 B gic_gicd
+gic.o	0000000000000018 B gic_gicd_vaddr
+gic.o	0000000000000028 B gic_gicr
+gic.o	0000000000000008 B gic_gicr_shift
+gic.o	0000000000000000 B gic_gicr_vaddr
+gic.o	0000000000000020 B gic_sendipi
+gic_v2.o	0000000000000000 r __FUNCTION__.0
+gic_v2.o	                 U add_interrupt
+gic_v2.o	                 U as_add64
+gic_v2.o	                 U as_find
+gic_v2.o	                 U callout_io_map
+gic_v2.o	                 U crash
+gic_v2.o	                 U debug_flag
+gic_v2.o	                 U gic_cpu_init
+gic_v2.o	                 U gic_gicc
+gic_v2.o	                 U gic_gicc_vaddr
+gic_v2.o	                 U gic_gicd
+gic_v2.o	                 U gic_gicd_vaddr
+gic_v2.o	                 U gic_sendipi
+gic_v2.o	0000000000000000 t gic_v2_cpunum
+gic_v2.o	0000000000000080 t gic_v2_gicc_init
+gic_v2.o	0000000000000150 T gic_v2_init
+gic_v2.o	0000000000000384 T gic_v2_num_spis
+gic_v2.o	0000000000000000 d gic_v2_ppi
+gic_v2.o	00000000000003a0 T gic_v2_set_intr_trig_mode
+gic_v2.o	0000000000000060 d gic_v2_spi
+gic_v2.o	                 U interrupt_config_gic_v2_ppi
+gic_v2.o	                 U interrupt_eoi_gic_v2
+gic_v2.o	                 U interrupt_id_gic_v2_ppi
+gic_v2.o	                 U interrupt_id_gic_v2_spi
+gic_v2.o	                 U interrupt_mask_gic_v2_ppi
+gic_v2.o	                 U interrupt_mask_gic_v2_spi
+gic_v2.o	                 U interrupt_unmask_gic_v2_ppi
+gic_v2.o	                 U interrupt_unmask_gic_v2_spi
+gic_v2.o	                 U kprintf
+gic_v2.o	                 U lsp
+gic_v2.o	                 U sendipi_gic_v2
+gic_v3.o	0000000000000028 r .LC2
+gic_v3.o	0000000000000020 r __FUNCTION__.1
+gic_v3.o	0000000000000000 r __FUNCTION__.2
+gic_v3.o	                 U __stack_chk_fail
+gic_v3.o	                 U __stack_chk_guard
+gic_v3.o	                 U add_interrupt
+gic_v3.o	                 U alloc_ram
+gic_v3.o	0000000000000090 d arm_gic_id
+gic_v3.o	                 U as_add64
+gic_v3.o	                 U as_find
+gic_v3.o	0000000000000008 b base_addresses_initialized
+gic_v3.o	                 U board_smp_num_cpu
+gic_v3.o	                 U calloc_ram
+gic_v3.o	                 U callout_io_map
+gic_v3.o	                 U callout_memory_map
+gic_v3.o	                 U crash
+gic_v3.o	                 U debug_flag
+gic_v3.o	                 U gic_cpu_init
+gic_v3.o	00000000000006c4 T gic_get_arch_version
+gic_v3.o	0000000000000000 t gic_get_arch_version.part.0
+gic_v3.o	0000000000000774 T gic_get_impl_id
+gic_v3.o	0000000000000730 T gic_get_impl_productid
+gic_v3.o	00000000000006e4 T gic_get_impl_version
+gic_v3.o	                 U gic_gicr_vaddr
+gic_v3.o	0000000000000098 d gic_id_str.3
+gic_v3.o	                 U gic_sendipi
+gic_v3.o	                 U gic_v3_dcache_flush_for_its
+gic_v3.o	0000000000000090 t gic_v3_gicc_init
+gic_v3.o	0000000000001954 T gic_v3_initialize
+gic_v3.o	00000000000000a8 d gic_v3_intr_ppi
+gic_v3.o	0000000000000108 d gic_v3_intr_spi
+gic_v3.o	                 U gic_v3_its_base_vaddr
+gic_v3.o	                 U gic_v3_its_cmd_q_last_slot_offset
+gic_v3.o	                 U gic_v3_its_cmd_q_lock_vaddr
+gic_v3.o	                 U gic_v3_its_cmd_q_vaddr
+gic_v3.o	                 U gic_v3_its_initialize
+gic_v3.o	                 U gic_v3_its_mapc
+gic_v3.o	                 U gic_v3_its_set_paddr
+gic_v3.o	00000000000012d0 T gic_v3_lpi_add_entry
+gic_v3.o	0000000000000ee0 T gic_v3_lpi_uses_its
+gic_v3.o	0000000000000060 t gic_v3_lpi_uses_its.part.0
+gic_v3.o	0000000000000d50 T gic_v3_num_lpis
+gic_v3.o	0000000000000d20 T gic_v3_num_spis
+gic_v3.o	0000000000000030 t gic_v3_num_spis.part.0
+gic_v3.o	0000000000000dd0 T gic_v3_set_intr_trig_mode
+gic_v3.o	0000000000001710 T gic_v3_set_lpi_cfgtbl_params
+gic_v3.o	0000000000001834 T gic_v3_set_lpi_pendtbl_params
+gic_v3.o	0000000000000c70 T gic_v3_set_paddr
+gic_v3.o	0000000000000960 T gic_v3_set_paddr_range
+gic_v3.o	0000000000000f14 T gic_v3_spi_add_entry
+gic_v3.o	0000000000000c80 T gic_v3_use_mm_reg_callouts
+gic_v3.o	0000000000000080 d gicc_paddr_base
+gic_v3.o	0000000000000088 d gicd_paddr_base
+gic_v3.o	0000000000000004 b gicr_index_limit
+gic_v3.o	0000000000000000 b gicr_offset_shift_val
+gic_v3.o	0000000000000000 d gicr_paddr_base
+gic_v3.o	000000000000000c b init_done.4
+gic_v3.o	                 U interrupt_config_gic_v3_ppi
+gic_v3.o	                 U interrupt_eoi_gic_v3_lpi_mm
+gic_v3.o	                 U interrupt_eoi_gic_v3_lpi_sr
+gic_v3.o	                 U interrupt_eoi_gic_v3_ppi_mm
+gic_v3.o	                 U interrupt_eoi_gic_v3_ppi_sr
+gic_v3.o	                 U interrupt_eoi_gic_v3_spi_mm
+gic_v3.o	                 U interrupt_eoi_gic_v3_spi_sr
+gic_v3.o	                 U interrupt_id_gic_v3_lpi
+gic_v3.o	                 U interrupt_id_gic_v3_ppi_mm
+gic_v3.o	                 U interrupt_id_gic_v3_ppi_sr
+gic_v3.o	                 U interrupt_id_gic_v3_spi
+gic_v3.o	                 U interrupt_mask_gic_v3_lpi_direct
+gic_v3.o	                 U interrupt_mask_gic_v3_lpi_its
+gic_v3.o	                 U interrupt_mask_gic_v3_ppi
+gic_v3.o	                 U interrupt_mask_gic_v3_spi
+gic_v3.o	                 U interrupt_unmask_gic_v3_lpi_direct
+gic_v3.o	                 U interrupt_unmask_gic_v3_lpi_its
+gic_v3.o	                 U interrupt_unmask_gic_v3_ppi
+gic_v3.o	                 U interrupt_unmask_gic_v3_spi
+gic_v3.o	                 U kprintf
+gic_v3.o	0000000000000220 b lpi_intrinfo
+gic_v3.o	0000000000000008 d lpi_params
+gic_v3.o	                 U lsp
+gic_v3.o	                 U memset
+gic_v3.o	00000000000006a8 b ppi_patch_data.0
+gic_v3.o	                 U sendipi_gic_v3_mm
+gic_v3.o	                 U sendipi_gic_v3_sr
+gic_v3.o	                 U set_syspage_section
+gic_v3.o	                 U shdr
+gic_v3.o	0000000000000018 b spi_intrinfo
+gic_v3.o	0000000000000010 b use_memory_mapped_callouts
+gic_v3_dcache_flush_for_its.o	0000000000000000 T gic_v3_dcache_flush_for_its
+gic_v3_its.o	0000000000000040 r .LC2
+gic_v3_its.o	                 U calloc_ram
+gic_v3_its.o	                 U callout_io_map
+gic_v3_its.o	                 U callout_memory_map
+gic_v3_its.o	0000000000000060 d cmd_q_lock_base_paddr
+gic_v3_its.o	0000000000000000 b cmd_q_lock_base_vaddr
+gic_v3_its.o	                 U crash
+gic_v3_its.o	                 U debug_flag
+gic_v3_its.o	                 U gic_v3_dcache_flush_for_its
+gic_v3_its.o	0000000000000cb0 T gic_v3_its_base_vaddr
+gic_v3_its.o	0000000000000d70 T gic_v3_its_cmd_q_last_slot_offset
+gic_v3_its.o	0000000000000d30 T gic_v3_its_cmd_q_lock_vaddr
+gic_v3_its.o	0000000000000cf0 T gic_v3_its_cmd_q_vaddr
+gic_v3_its.o	0000000000000040 T gic_v3_its_initialize
+gic_v3_its.o	00000000000012b0 T gic_v3_its_mapc
+gic_v3_its.o	0000000000001270 T gic_v3_its_set_cmd_q_num_pages
+gic_v3_its.o	0000000000001150 T gic_v3_its_set_cmd_q_params
+gic_v3_its.o	0000000000001110 T gic_v3_its_set_ct_num_ids
+gic_v3_its.o	0000000000001090 T gic_v3_its_set_ct_page_size
+gic_v3_its.o	0000000000000f80 T gic_v3_its_set_ct_params
+gic_v3_its.o	0000000000000f00 T gic_v3_its_set_dt_page_size
+gic_v3_its.o	0000000000000df0 T gic_v3_its_set_dt_params
+gic_v3_its.o	0000000000000000 T gic_v3_its_set_paddr
+gic_v3_its.o	                 U hwidev_add
+gic_v3_its.o	                 U hwitag_add_location
+gic_v3_its.o	0000000000000000 d its_params
+gic_v3_its.o	                 U kprintf
+gic_v3_its.o	                 U lsp
+gic_v3_its.o	                 U shdr
+gicv_asinfo.o	                 U __stack_chk_fail
+gicv_asinfo.o	                 U __stack_chk_guard
+gicv_asinfo.o	                 U as_add64
+gicv_asinfo.o	                 U as_find
+gicv_asinfo.o	0000000000000000 T gicv_asinfo
+gicv_asinfo.o	                 U ksprintf
+gmtime.o	0000000000000000 T _gmtime
+gmtime.o	0000000000000000 r mdays.0
+hw_rtc_ds1386.o	                 U __stack_chk_fail
+hw_rtc_ds1386.o	                 U __stack_chk_guard
+hw_rtc_ds1386.o	                 U bcd2bin
+hw_rtc_ds1386.o	                 U calc_time_t
+hw_rtc_ds1386.o	                 U chip_access
+hw_rtc_ds1386.o	                 U chip_done
+hw_rtc_ds1386.o	                 U chip_read8
+hw_rtc_ds1386.o	                 U hwi_add_rtc
+hw_rtc_ds1386.o	0000000000000000 T rtc_time_ds1386
+hw_rtc_ds15x1.o	                 U __stack_chk_fail
+hw_rtc_ds15x1.o	                 U __stack_chk_guard
+hw_rtc_ds15x1.o	                 U bcd2bin
+hw_rtc_ds15x1.o	                 U calc_time_t
+hw_rtc_ds15x1.o	                 U chip_access
+hw_rtc_ds15x1.o	                 U chip_done
+hw_rtc_ds15x1.o	                 U chip_read8
+hw_rtc_ds15x1.o	                 U chip_write8
+hw_rtc_ds15x1.o	                 U hwi_add_rtc
+hw_rtc_ds15x1.o	0000000000000000 T rtc_time_ds15x1
+hw_rtc_ds1743.o	                 U __stack_chk_fail
+hw_rtc_ds1743.o	                 U __stack_chk_guard
+hw_rtc_ds1743.o	                 U bcd2bin
+hw_rtc_ds1743.o	                 U calc_time_t
+hw_rtc_ds1743.o	                 U chip_access
+hw_rtc_ds1743.o	                 U chip_done
+hw_rtc_ds1743.o	                 U chip_read8
+hw_rtc_ds1743.o	                 U chip_write8
+hw_rtc_ds1743.o	                 U hwi_add_rtc
+hw_rtc_ds1743.o	0000000000000000 T rtc_time_ds1743
+hw_rtc_m48t37.o	                 U __stack_chk_fail
+hw_rtc_m48t37.o	                 U __stack_chk_guard
+hw_rtc_m48t37.o	                 U bcd2bin
+hw_rtc_m48t37.o	                 U calc_time_t
+hw_rtc_m48t37.o	                 U chip_access
+hw_rtc_m48t37.o	                 U chip_done
+hw_rtc_m48t37.o	                 U chip_read8
+hw_rtc_m48t37.o	                 U hwi_add_rtc
+hw_rtc_m48t37.o	0000000000000000 T rtc_time_m48t37
+hw_rtc_m48t5x.o	                 U __stack_chk_fail
+hw_rtc_m48t5x.o	                 U __stack_chk_guard
+hw_rtc_m48t5x.o	                 U bcd2bin
+hw_rtc_m48t5x.o	                 U calc_time_t
+hw_rtc_m48t5x.o	                 U chip_access
+hw_rtc_m48t5x.o	                 U chip_done
+hw_rtc_m48t5x.o	                 U chip_read8
+hw_rtc_m48t5x.o	                 U chip_write8
+hw_rtc_m48t5x.o	                 U hwi_add_rtc
+hw_rtc_m48t5x.o	0000000000000000 T rtc_time_m48t5x
+hw_rtc_mc146818.o	                 U __stack_chk_fail
+hw_rtc_mc146818.o	                 U __stack_chk_guard
+hw_rtc_mc146818.o	                 U bcd2bin
+hw_rtc_mc146818.o	                 U calc_time_t
+hw_rtc_mc146818.o	                 U chip_access
+hw_rtc_mc146818.o	                 U chip_done
+hw_rtc_mc146818.o	                 U chip_read8
+hw_rtc_mc146818.o	                 U chip_write8
+hw_rtc_mc146818.o	                 U hwi_add_rtc
+hw_rtc_mc146818.o	0000000000000000 T rtc_time_mc146818
+hw_rtc_none.o	                 U hwi_add_device
+hw_rtc_none.o	0000000000000000 T rtc_time_none
+hw_rtc_rtc72423.o	                 U __stack_chk_fail
+hw_rtc_rtc72423.o	                 U __stack_chk_guard
+hw_rtc_rtc72423.o	                 U bcd2bin
+hw_rtc_rtc72423.o	                 U calc_time_t
+hw_rtc_rtc72423.o	                 U chip_access
+hw_rtc_rtc72423.o	                 U chip_done
+hw_rtc_rtc72423.o	                 U chip_read8
+hw_rtc_rtc72423.o	                 U hwi_add_rtc
+hw_rtc_rtc72423.o	0000000000000000 T rtc_time_rtc72423
+hw_ser8250.o	                 U __stack_chk_fail
+hw_ser8250.o	                 U __stack_chk_guard
+hw_ser8250.o	0000000000000000 b aspace
+hw_ser8250.o	                 U chip_access
+hw_ser8250.o	                 U chip_done
+hw_ser8250.o	                 U chip_read8
+hw_ser8250.o	                 U chip_write8
+hw_ser8250.o	                 U dbg_device
+hw_ser8250.o	00000000000002d0 T init_8250
+hw_ser8250.o	00000000000001e4 T init_8250_common
+hw_ser8250.o	0000000000000000 t parse_line
+hw_ser8250.o	0000000000000360 T put_8250
+hw_ser8250.o	                 U strtopaddr
+hw_ser8250.o	                 U strtoul
+hw_ser8250_32b.o	                 U __stack_chk_fail
+hw_ser8250_32b.o	                 U __stack_chk_guard
+hw_ser8250_32b.o	0000000000000000 b aspace
+hw_ser8250_32b.o	                 U chip_access
+hw_ser8250_32b.o	                 U chip_done
+hw_ser8250_32b.o	                 U chip_read32
+hw_ser8250_32b.o	                 U chip_write32
+hw_ser8250_32b.o	                 U dbg_device
+hw_ser8250_32b.o	00000000000001e4 T init_8250_32b
+hw_ser8250_32b.o	0000000000000000 t parse_line
+hw_ser8250_32b.o	0000000000000340 T put_8250_32b
+hw_ser8250_32b.o	                 U strtopaddr
+hw_ser8250_32b.o	                 U strtoul
+hw_ser8250_pci.o	                 U __stack_chk_fail
+hw_ser8250_pci.o	                 U __stack_chk_guard
+hw_ser8250_pci.o	                 U dbg_device
+hw_ser8250_pci.o	                 U init_8250_common
+hw_ser8250_pci.o	00000000000002a0 T init_8250_pci
+hw_ser8250_pci.o	0000000000000000 t parse_line
+hw_ser8250_pci.o	                 U pci_read_cfg16
+hw_ser8250_pci.o	                 U pci_read_cfg32
+hw_ser8250_pci.o	                 U pci_write_cfg16
+hw_ser8250_pci.o	                 U strtoul
+hw_serdummy.o	0000000000000000 T init_dummy
+hw_serdummy.o	0000000000000004 T put_dummy
+hw_serlinflex.o	                 U __stack_chk_fail
+hw_serlinflex.o	                 U __stack_chk_guard
+hw_serlinflex.o	                 U dbg_device
+hw_serlinflex.o	0000000000000144 T init_linflexd
+hw_serlinflex.o	0000000000000000 t parse_line
+hw_serlinflex.o	00000000000001b4 T put_linflexd
+hw_serlinflex.o	                 U strtoul
+hw_serpl011.o	                 U __stack_chk_fail
+hw_serpl011.o	                 U __stack_chk_guard
+hw_serpl011.o	                 U dbg_device
+hw_serpl011.o	0000000000000144 T init_pl011
+hw_serpl011.o	0000000000000000 t parse_line
+hw_serpl011.o	0000000000000230 T put_pl011
+hw_serpl011.o	                 U strtopaddr
+hw_serpl011.o	                 U strtoul
+hwi_add_device.o	0000000000000000 T hwi_add_device
+hwi_add_device.o	                 U hwi_alloc_item
+hwi_add_device.o	                 U hwi_find_item
+hwi_add_device.o	                 U hwi_tag2off
+hwi_add_inputclk.o	0000000000000000 T hwi_add_inputclk
+hwi_add_inputclk.o	                 U hwitag_add_inputclk
+hwi_add_irq.o	0000000000000000 T hwi_add_irq
+hwi_add_irq.o	                 U hwitag_add_irq
+hwi_add_location.o	0000000000000000 T hwi_add_location
+hwi_add_location.o	                 U hwitag_add_location
+hwi_add_nanospin.o	                 U hwi_add_device
+hwi_add_nanospin.o	0000000000000000 T hwi_add_nanospin
+hwi_add_nanospin.o	                 U hwi_alloc_tag
+hwi_add_nicaddr.o	0000000000000000 T hwi_add_nicaddr
+hwi_add_nicaddr.o	                 U hwitag_add_nicaddr
+hwi_add_nicphyaddr.o	0000000000000000 T hwi_add_nicphyaddr
+hwi_add_nicphyaddr.o	                 U hwitag_add_nicphyaddr
+hwi_add_rtc.o	                 U hwi_add_device
+hwi_add_rtc.o	                 U hwi_add_location
+hwi_add_rtc.o	0000000000000000 T hwi_add_rtc
+hwi_add_rtc.o	                 U hwi_alloc_tag
+hwi_add_rtc.o	                 U hwi_find_as
+hwi_add_synonym.o	0000000000000000 T hwi_add_synonym
+hwi_add_synonym.o	                 U hwi_alloc_item
+hwi_add_synonym.o	                 U hwi_find_item
+hwi_add_synonym.o	                 U hwi_tag2off
+hwi_alloc.o	0000000000000010 T __hwi_base
+hwi_alloc.o	0000000000000000 T __hwi_find_string
+hwi_alloc.o	                 U add_string
+hwi_alloc.o	                 U grow_syspage_section
+hwi_alloc.o	0000000000000100 T hwi_alloc_item
+hwi_alloc.o	0000000000000020 T hwi_alloc_tag
+hwi_alloc.o	00000000000001c0 T hwi_grow_tag
+hwi_alloc.o	                 U hwi_off2tag
+hwi_alloc.o	0000000000000004 b last_item
+hwi_alloc.o	                 U lsp
+hwi_alloc.o	0000000000000000 b offset
+hwi_default.o	                 U hwi_alloc_item
+hwi_default.o	0000000000000000 T hwi_default
+hwi_default.o	                 U hwi_tag2off
+hwi_find_as.o	                 U as_find_containing
+hwi_find_as.o	0000000000000000 T hwi_find_as
+hwibus_add.o	                 U hwi_alloc_item
+hwibus_add.o	                 U hwi_find_item
+hwibus_add.o	                 U hwi_tag2off
+hwibus_add.o	0000000000000000 T hwibus_add
+hwibus_add_can.o	                 U hwibus_add
+hwibus_add_can.o	0000000000000000 T hwibus_add_can
+hwibus_add_can.o	                 U hwitag_add_common
+hwibus_add_can.o	                 U hwitag_add_inputclk
+hwibus_add_can.o	                 U hwitag_add_location
+hwibus_add_i2c.o	                 U hwibus_add
+hwibus_add_i2c.o	0000000000000000 T hwibus_add_i2c
+hwibus_add_i2c.o	                 U hwitag_add_busattr
+hwibus_add_i2c.o	                 U hwitag_add_common
+hwibus_add_i2c.o	                 U hwitag_add_inputclk
+hwibus_add_pci.o	                 U hwibus_add
+hwibus_add_pci.o	0000000000000000 T hwibus_add_pci
+hwibus_add_pci.o	                 U hwitag_add_busattr
+hwibus_add_pci.o	                 U hwitag_add_common
+hwibus_add_pci.o	                 U hwitag_add_irqrange
+hwibus_add_sdio.o	                 U hwibus_add
+hwibus_add_sdio.o	0000000000000000 T hwibus_add_sdio
+hwibus_add_sdio.o	                 U hwitag_add_busattr
+hwibus_add_sdio.o	                 U hwitag_add_common
+hwibus_add_sdio.o	                 U hwitag_add_inputclk
+hwibus_add_spi.o	                 U hwibus_add
+hwibus_add_spi.o	0000000000000000 T hwibus_add_spi
+hwibus_add_spi.o	                 U hwitag_add_busattr
+hwibus_add_spi.o	                 U hwitag_add_common
+hwibus_add_spi.o	                 U hwitag_add_inputclk
+hwibus_add_usb.o	                 U hwibus_add
+hwibus_add_usb.o	0000000000000000 T hwibus_add_usb
+hwibus_add_usb.o	                 U hwitag_add_common
+hwidev_add.o	                 U hwi_alloc_item
+hwidev_add.o	                 U hwi_find_item
+hwidev_add.o	                 U hwi_tag2off
+hwidev_add.o	0000000000000000 T hwidev_add
+hwidev_add_dma.o	                 U hwidev_add
+hwidev_add_dma.o	0000000000000000 T hwidev_add_dma
+hwidev_add_dma.o	                 U hwitag_add_common
+hwidev_add_enet.o	                 U __stack_chk_fail
+hwidev_add_enet.o	                 U __stack_chk_guard
+hwidev_add_enet.o	                 U hwidev_add
+hwidev_add_enet.o	0000000000000000 T hwidev_add_enet
+hwidev_add_enet.o	                 U hwitag_add_common
+hwidev_add_enet.o	                 U hwitag_add_inputclk
+hwidev_add_enet.o	                 U hwitag_add_nicaddr
+hwidev_add_enet.o	                 U hwitag_add_nicphyaddr
+hwidev_add_enet.o	                 U memcmp
+hwidev_add_rtc.o	                 U hwidev_add
+hwidev_add_rtc.o	0000000000000000 T hwidev_add_rtc
+hwidev_add_rtc.o	                 U hwitag_add_common
+hwidev_add_rtc.o	                 U hwitag_add_regname
+hwidev_add_timer.o	                 U hwidev_add
+hwidev_add_timer.o	0000000000000000 T hwidev_add_timer
+hwidev_add_timer.o	                 U hwitag_add_common
+hwidev_add_timer.o	                 U hwitag_add_inputclk
+hwidev_add_uart.o	                 U hwidev_add
+hwidev_add_uart.o	0000000000000000 T hwidev_add_uart
+hwidev_add_uart.o	                 U hwitag_add_common
+hwidev_add_uart.o	                 U hwitag_add_inputclk
+hwitag_add_busattr.o	                 U hwi_alloc_tag
+hwitag_add_busattr.o	0000000000000000 T hwitag_add_busattr
+hwitag_add_common.o	                 U add_string
+hwitag_add_common.o	                 U hwi_alloc_tag
+hwitag_add_common.o	0000000000000000 T hwitag_add_common
+hwitag_add_common.o	                 U hwitag_add_irq
+hwitag_add_common.o	                 U hwitag_add_location
+hwitag_add_common.o	0000000000000114 T hwitag_add_optstr
+hwitag_add_inputclk.o	                 U hwi_alloc_tag
+hwitag_add_inputclk.o	0000000000000000 T hwitag_add_inputclk
+hwitag_add_irq.o	                 U hwi_alloc_tag
+hwitag_add_irq.o	0000000000000000 T hwitag_add_irq
+hwitag_add_irqrange.o	                 U hwi_alloc_tag
+hwitag_add_irqrange.o	0000000000000000 T hwitag_add_irqrange
+hwitag_add_location.o	                 U hwi_alloc_tag
+hwitag_add_location.o	0000000000000000 T hwitag_add_location
+hwitag_add_nicaddr.o	                 U hwi_alloc_tag
+hwitag_add_nicaddr.o	0000000000000000 T hwitag_add_nicaddr
+hwitag_add_nicaddr.o	                 U memmove
+hwitag_add_nicphyaddr.o	                 U hwi_alloc_tag
+hwitag_add_nicphyaddr.o	0000000000000000 T hwitag_add_nicphyaddr
+hwitag_add_regname.o	                 U add_string
+hwitag_add_regname.o	                 U hwi_alloc_tag
+hwitag_add_regname.o	0000000000000000 T hwitag_add_regname
+hwitag_set_avail_ivec.o	                 U __hwi_find_string
+hwitag_set_avail_ivec.o	                 U __stack_chk_fail
+hwitag_set_avail_ivec.o	                 U __stack_chk_guard
+hwitag_set_avail_ivec.o	                 U debug_flag
+hwitag_set_avail_ivec.o	                 U hwi_find_unit
+hwitag_set_avail_ivec.o	                 U hwi_off2tag
+hwitag_set_avail_ivec.o	                 U hwi_tag_find
+hwitag_set_avail_ivec.o	0000000000000000 T hwitag_set_avail_ivec
+hwitag_set_avail_ivec.o	                 U kprintf
+hwitag_set_busattr.o	                 U hwi_tag_find
+hwitag_set_busattr.o	0000000000000000 T hwitag_set_busattr
+hwitag_set_dma.o	                 U hwi_tag_find
+hwitag_set_dma.o	0000000000000000 T hwitag_set_dma
+hwitag_set_errata.o	                 U hwi_tag_find
+hwitag_set_errata.o	0000000000000000 T hwitag_set_errata
+hwitag_set_inputclk.o	                 U hwi_tag_find
+hwitag_set_inputclk.o	0000000000000000 T hwitag_set_inputclk
+hwitag_set_ivec.o	                 U __hwi_find_string
+hwitag_set_ivec.o	                 U debug_flag
+hwitag_set_ivec.o	                 U hwi_find_unit
+hwitag_set_ivec.o	                 U hwi_off2tag
+hwitag_set_ivec.o	                 U hwi_tag_find
+hwitag_set_ivec.o	0000000000000000 T hwitag_set_ivec
+hwitag_set_ivec.o	                 U kprintf
+hwitag_set_ivecrange.o	                 U hwi_tag_find
+hwitag_set_ivecrange.o	0000000000000000 T hwitag_set_ivecrange
+hwitag_set_nicaddr.o	                 U hwi_tag_find
+hwitag_set_nicaddr.o	0000000000000000 T hwitag_set_nicaddr
+hwitag_set_nicaddr.o	                 U memcpy
+hwitag_set_phyaddr.o	                 U hwi_tag_find
+hwitag_set_phyaddr.o	0000000000000000 T hwitag_set_phyaddr
+hypervisor.o	                 U alloc_ram
+hypervisor.o	0000000000000090 T arch_hypervisor_init
+hypervisor.o	00000000000001c0 T arch_hypervisor_syspage_init
+hypervisor.o	0000000000000000 T arch_hypervisor_validate_flags
+hypervisor.o	                 U as_add
+hypervisor.o	                 U as_find
+hypervisor.o	                 U crash
+hypervisor.o	                 U debug_flag
+hypervisor.o	                 U drop_to_el1
+hypervisor.o	                 U hyp_enable_el1_host
+hypervisor.o	                 U hyp_enable_el2_host
+hypervisor.o	                 U kprintf
+hypervisor.o	0000000000000000 b transfer_vector_table
+hypervisor_enable.o	0000000000000001 a BUILDENV_qss
+hypervisor_enable.o	000000000000001c T hyp_enable_el1_host
+hypervisor_enable.o	0000000000000000 T hyp_enable_el2_host
+hypervisor_enable.o	0000000000000001 a VARIANT_a
+hypervisor_enable.o	0000000000000001 a VARIANT_le
+hypervisor_setup.o	                 U arch_hypervisor_init
+hypervisor_setup.o	                 U arch_hypervisor_syspage_init
+hypervisor_setup.o	                 U arch_hypervisor_validate_flags
+hypervisor_setup.o	                 U crash
+hypervisor_setup.o	0000000000000060 T hypervisor_get_required_flags
+hypervisor_setup.o	0000000000000010 T hypervisor_init
+hypervisor_setup.o	0000000000000000 T hypervisor_set_options
+hypervisor_setup.o	0000000000000070 T hypervisor_syspage_init
+hypervisor_setup.o	                 U lsp
+hypervisor_setup.o	0000000000000000 b option_flags
+hypervisor_setup.o	0000000000000004 b required_flags
+hypervisor_setup.o	                 U set_syspage_section
+init_cacheattr.o	0000000000000000 T init_cacheattr
+init_cpuinfo.o	                 U aarch64_cpuid_find
+init_cpuinfo.o	                 U aarch64_cpuspeed
+init_cpuinfo.o	                 U add_cache_ways
+init_cpuinfo.o	                 U add_string
+init_cpuinfo.o	                 U cache_armv8_dcache
+init_cpuinfo.o	                 U cache_armv8_icache
+init_cpuinfo.o	                 U cache_snooped
+init_cpuinfo.o	                 U cpu_freq
+init_cpuinfo.o	                 U cpuid_a57
+init_cpuinfo.o	                 U cpuid_a72
+init_cpuinfo.o	                 U debug_flag
+init_cpuinfo.o	                 U gic_cpu_init
+init_cpuinfo.o	00000000000007d4 T init_cpuinfo
+init_cpuinfo.o	0000000000000000 T init_one_cpuinfo
+init_cpuinfo.o	                 U kprintf
+init_cpuinfo.o	0000000000000000 r l1ip.0
+init_cpuinfo.o	                 U lsp
+init_cpuinfo.o	                 U pauth_active
+init_cpuinfo.o	                 U set_syspage_section
+init_cpuinfo.o	                 U shdr
+init_cpuinfo.o	                 U spectre_v2_active
+init_cpuinfo.o	                 U ssbs_active
+init_cpuinfo.o	                 U sve_requested
+init_cpuinfo.o	                 U system_dcache_idx
+init_cpuinfo.o	                 U system_icache_idx
+init_hwinfo.o	0000000000000000 T init_hwinfo
+init_mitigation_mem.o	                 U alloc_ram
+init_mitigation_mem.o	                 U as_add_containing
+init_mitigation_mem.o	                 U crash
+init_mitigation_mem.o	                 U find_top_ram_aligned_limit
+init_mitigation_mem.o	0000000000000000 T init_mitigation_mem
+init_mitigation_mem.o	                 U lsp
+init_mmu.o	                 U __page_size
+init_mmu.o	                 U aarch64_map
+init_mmu.o	                 U aarch64_map_init
+init_mmu.o	                 U debug_flag
+init_mmu.o	                 U full_image_paddr
+init_mmu.o	0000000000000000 T init_mmu
+init_mmu.o	                 U kprintf
+init_mmu.o	0000000000000010 D mair_el1
+init_mmu.o	0000000000000000 r par.0
+init_mmu.o	0000000000000008 D sctlr_el1
+init_mmu.o	                 U shdr
+init_mmu.o	0000000000000000 D tcr_el1
+init_mmu.o	0000000000000200 B ttbr0
+init_mmu.o	0000000000000000 B ttbr1
+init_qtime.o	0000000000000000 T init_qtime
+init_qtime.o	                 U init_qtime_v8gt
+init_qtime_v8gt.o	                 U alloc_qtime
+init_qtime_v8gt.o	                 U hypervisor_get_required_flags
+init_qtime_v8gt.o	0000000000000020 T init_qtime_v8gt
+init_qtime_v8gt.o	                 U invert_timer_freq
+init_qtime_v8gt.o	                 U timer_diff
+init_qtime_v8gt.o	0000000000000010 t timer_diff_v8gt
+init_qtime_v8gt.o	                 U timer_freq
+init_qtime_v8gt.o	                 U timer_start
+init_qtime_v8gt.o	0000000000000000 t timer_start_v8gt
+init_raminfo_efi.o	                 U add_ram
+init_raminfo_efi.o	                 U alloc_ram
+init_raminfo_efi.o	                 U avoid_ram
+init_raminfo_efi.o	                 U efi_walk_map
+init_raminfo_efi.o	0000000000000000 T init_raminfo_efi
+init_raminfo_fdt.o	                 U __stack_chk_fail
+init_raminfo_fdt.o	                 U __stack_chk_guard
+init_raminfo_fdt.o	                 U add_ram
+init_raminfo_fdt.o	                 U alloc_ram
+init_raminfo_fdt.o	                 U avoid_ram
+init_raminfo_fdt.o	                 U fdt
+init_raminfo_fdt.o	                 U fdt_get_mem_rsv
+init_raminfo_fdt.o	                 U fdt_get_reg64_cells
+init_raminfo_fdt.o	                 U fdt_node_offset_by_prop_value
+init_raminfo_fdt.o	                 U fdt_num_mem_rsv
+init_raminfo_fdt.o	0000000000000000 T init_raminfo_fdt
+init_raminfo_uefi.o	                 U __stack_chk_fail
+init_raminfo_uefi.o	                 U __stack_chk_guard
+init_raminfo_uefi.o	                 U add_ram
+init_raminfo_uefi.o	                 U alloc_ram
+init_raminfo_uefi.o	                 U avoid_ram
+init_raminfo_uefi.o	                 U crash
+init_raminfo_uefi.o	                 U debug_flag
+init_raminfo_uefi.o	                 U efi_system_table
+init_raminfo_uefi.o	0000000000000000 T init_raminfo_uefi
+init_raminfo_uefi.o	                 U kprintf
+init_raminfo_uefi.o	                 U uefi_exit_boot_services_f
+init_smp.o	                 U _syspage_ptr
+init_smp.o	                 U ap_fail
+init_smp.o	                 U board_smp_init
+init_smp.o	                 U board_smp_num_cpu
+init_smp.o	                 U board_smp_start
+init_smp.o	                 U callout_output_one
+init_smp.o	                 U callout_output_rtn
+init_smp.o	0000000000000070 t callout_output_smp
+init_smp.o	0000000000000018 B cpu_starting
+init_smp.o	00000000000001a0 T init_smp
+init_smp.o	                 U lsp
+init_smp.o	                 U max_cpus
+init_smp.o	                 U set_syspage_section
+init_smp.o	                 U smp_hook_rtn
+init_smp.o	0000000000000010 B smp_prev_output_rtn
+init_smp.o	                 U smp_spin
+init_smp.o	0000000000000008 B smp_spin_vaddr
+init_smp.o	                 U smp_start
+init_smp.o	00000000000000c0 t start_aps
+init_smp.o	0000000000000000 B syspage_available
+init_smp.o	0000000000000000 t transfer_aps
+init_smp.o	                 U uefi_io_resume_f
+init_smp.o	                 U uefi_io_suspend_f
+init_system_private.o	                 U __page_size
+init_system_private.o	                 U __stack_chk_fail
+init_system_private.o	                 U __stack_chk_guard
+init_system_private.o	                 U _argc
+init_system_private.o	                 U _argv
+init_system_private.o	                 U add_ram
+init_system_private.o	                 U add_sysram
+init_system_private.o	                 U add_typed_string
+init_system_private.o	                 U alloc_ram
+init_system_private.o	                 U alloc_syspage_memory
+init_system_private.o	                 U as_add
+init_system_private.o	                 U as_find
+init_system_private.o	0000000000000008 B boot_vaddr_base
+init_system_private.o	0000000000000000 B boot_vaddr_end
+init_system_private.o	                 U crash
+init_system_private.o	                 U elf_vaddr_to_paddr
+init_system_private.o	                 U fdt
+init_system_private.o	                 U fdt_boot_option
+init_system_private.o	                 U fdt_paddr
+init_system_private.o	                 U fdt_size
+init_system_private.o	                 U find_typed_string
+init_system_private.o	                 U first_bootstrap_start_vaddr
+init_system_private.o	                 U full_image_paddr
+init_system_private.o	                 U full_ram_paddr
+init_system_private.o	                 U getopt
+init_system_private.o	                 U getsize
+init_system_private.o	                 U hypervisor_syspage_init
+init_system_private.o	                 U ifs2_paddr_dst
+init_system_private.o	                 U ifs2_size
+init_system_private.o	                 U init_mitigation_mem
+init_system_private.o	0000000000000000 T init_system_private
+init_system_private.o	                 U jtag_reserve_memory
+init_system_private.o	                 U jtag_reserve_syspage_addr
+init_system_private.o	                 U jtag_store_syspage_addr
+init_system_private.o	                 U kprintf
+init_system_private.o	                 U load_elf
+init_system_private.o	                 U load_ifs
+init_system_private.o	                 U load_ifs2_nonbootable
+init_system_private.o	                 U lsp
+init_system_private.o	                 U optarg
+init_system_private.o	                 U optind
+init_system_private.o	                 U reserve_ram
+init_system_private.o	                 U reserved_ram_list
+init_system_private.o	                 U rifs_flag
+init_system_private.o	                 U rifs_restore_ifs
+init_system_private.o	                 U rifs_save_elf32data
+init_system_private.o	                 U rifs_set_cksum
+init_system_private.o	                 U set_syspage_section
+init_system_private.o	                 U shdr
+init_system_private.o	                 U smp_hook_rtn
+init_system_private.o	                 U startup_memory_map
+init_system_private.o	                 U startup_memory_unmap
+init_system_private.o	                 U strtoul
+init_system_private.o	                 U tweak_cmdline
+interrupt_valid.o	0000000000000000 T interrupt_valid
+interrupt_valid.o	                 U lsp
+invert_timer_freq.o	                 U crash
+invert_timer_freq.o	0000000000000000 T invert_timer_freq
+is_uefi_boot.o	                 U boot_regs
+is_uefi_boot.o	                 U efi_image_handle
+is_uefi_boot.o	                 U efi_system_table
+is_uefi_boot.o	0000000000000000 T is_uefi_boot
+is_uefi_boot.o	0000000000000000 d uefi.0
+jtag.o	                 U alloc_ram
+jtag.o	0000000000000000 T jtag_reserve_memory
+jtag.o	0000000000000050 T jtag_reserve_syspage_addr
+jtag.o	0000000000000064 T jtag_store_syspage_addr
+jtag.o	0000000000000000 d jtag_syspage_address
+jtag.o	                 U memset
+jtag.o	                 U startup_memory_map
+jtag.o	                 U startup_memory_unmap
+jtag.o	                 U syspage_paddr
+kprintf.o	                 U __stack_chk_fail
+kprintf.o	                 U __stack_chk_guard
+kprintf.o	0000000000000000 r c
+kprintf.o	0000000000000690 T crash
+kprintf.o	                 U crash_done
+kprintf.o	                 U dummy_print_char
+kprintf.o	0000000000000700 T get_print_char
+kprintf.o	0000000000000490 T kprintf
+kprintf.o	0000000000000008 b ksnprinf_len
+kprintf.o	00000000000005c0 T ksnprintf
+kprintf.o	0000000000000010 b ksnprintf_max_len
+kprintf.o	0000000000000510 T ksprintf
+kprintf.o	0000000000000000 d print_char
+kprintf.o	00000000000006f0 T set_print_char
+kprintf.o	0000000000000000 t string_print_char
+kprintf.o	0000000000000020 t string_print_n_char
+kprintf.o	0000000000000000 b string_ptr
+kprintf.o	0000000000000050 t vmsg
+load_ifs.o	                 U board_disable_caches
+load_ifs.o	                 U board_enable_caches
+load_ifs.o	                 U copy_memory
+load_ifs.o	                 U crash
+load_ifs.o	                 U debug_flag
+load_ifs.o	                 U find_ram
+load_ifs.o	                 U full_image_paddr
+load_ifs.o	                 U full_imagefs_paddr
+load_ifs.o	                 U kprintf
+load_ifs.o	0000000000000000 T load_ifs
+load_ifs.o	                 U shdr
+load_ifs.o	                 U uncompress
+map_callout_io.o	                 U aarch64_map
+map_callout_io.o	0000000000000000 T callout_io_map
+map_callout_mem.o	                 U aarch64_map
+map_callout_mem.o	0000000000000000 T callout_memory_map
+map_startup_io.o	0000000000000000 T startup_io_map
+map_startup_io.o	0000000000000010 T startup_io_unmap
+map_startup_mem.o	0000000000000000 T startup_memory_map
+map_startup_mem.o	0000000000000010 T startup_memory_unmap
+memcpy.o	0000000000000000 T memcpy
+memfuncs.o	0000000000000000 T copy_memory
+memfuncs.o	                 U memmove
+memfuncs.o	                 U shdr
+memfuncs.o	                 U startup_memory_map
+memfuncs.o	                 U startup_memory_unmap
+memmove.o	                 U memcpy
+memmove.o	0000000000000000 T memmove
+pci_read_cfg16.o	                 U crash
+pci_read_cfg16.o	0000000000000000 T pci_read_cfg16
+pci_read_cfg16.o	                 U pci_read_cfg32
+pci_read_cfg8.o	                 U pci_read_cfg32
+pci_read_cfg8.o	0000000000000000 T pci_read_cfg8
+pci_write_cfg16.o	                 U crash
+pci_write_cfg16.o	                 U pci_read_cfg32
+pci_write_cfg16.o	0000000000000000 T pci_write_cfg16
+pci_write_cfg16.o	                 U pci_write_cfg32
+pci_write_cfg8.o	                 U pci_read_cfg32
+pci_write_cfg8.o	                 U pci_write_cfg32
+pci_write_cfg8.o	0000000000000000 T pci_write_cfg8
+print_sysp.o	                 U __stack_chk_fail
+print_sysp.o	                 U __stack_chk_guard
+print_sysp.o	0000000000000274 t aarch64_print_gic_map
+print_sysp.o	0000000000000200 t aarch64_print_gicr_map
+print_sysp.o	0000000000000000 t aarch64_print_idreg_dump
+print_sysp.o	                 U debug_flag
+print_sysp.o	                 U hwi_tag2off
+print_sysp.o	                 U kprintf
+print_sysp.o	                 U ksnprintf
+print_sysp.o	                 U lsp
+print_sysp.o	0000000000000944 t print_asinfo
+print_sysp.o	0000000000000830 t print_cacheattr
+print_sysp.o	0000000000000404 t print_callout
+print_sysp.o	00000000000002e0 t print_cluster
+print_sysp.o	00000000000008b0 t print_cpuinfo
+print_sysp.o	00000000000006d4 t print_hwinfo
+print_sysp.o	0000000000000370 t print_hypinfo
+print_sysp.o	00000000000009e0 t print_intrinfo
+print_sysp.o	0000000000000470 t print_qtime
+print_sysp.o	00000000000003e4 t print_smp
+print_sysp.o	0000000000000550 t print_strings
+print_sysp.o	0000000000000af0 T print_syspage_enable
+print_sysp.o	0000000000000b94 T print_syspage_sections
+print_sysp.o	00000000000004d4 t print_system_private
+print_sysp.o	0000000000000660 t print_typed_strings
+print_sysp.o	0000000000000000 d sp_section
+print_sysp.o	                 U strcmp
+print_sysp.o	                 U strlen
+psci_call.o	0000000000000001 a BUILDENV_qss
+psci_call.o	0000000000000000 D psci_call
+psci_call.o	0000000000000000 T psci_hvc
+psci_call.o	0000000000000008 T psci_smc
+psci_call.o	0000000000000001 a VARIANT_a
+psci_call.o	0000000000000001 a VARIANT_le
+psci_cpu_id.o	0000000000000000 T psci_cpu_id
+psci_smp.o	                 U psci_call
+psci_smp.o	                 U psci_cpu_id
+psci_smp.o	0000000000000000 D psci_cpu_on_cmd
+psci_smp.o	0000000000000000 T psci_smp_start
+ram.o	                 U __page_size
+ram.o	0000000000000000 t add_mem.isra.0
+ram.o	0000000000000914 T add_ram
+ram.o	00000000000006c0 T add_sysram
+ram.o	0000000000000400 T alloc_ram
+ram.o	                 U as_add
+ram.o	                 U as_add_containing
+ram.o	                 U as_default
+ram.o	                 U as_find_containing
+ram.o	                 U as_off2info
+ram.o	0000000000000010 b avoid_list
+ram.o	0000000000000030 b avoid_list_size
+ram.o	0000000000000880 T avoid_ram
+ram.o	0000000000000660 T calloc_ram
+ram.o	                 U crash
+ram.o	00000000000003e0 T find_ram
+ram.o	00000000000002b0 T find_ram_in_range
+ram.o	0000000000000290 T find_top_ram
+ram.o	0000000000000280 T find_top_ram_aligned
+ram.o	0000000000000140 T find_top_ram_aligned_limit
+ram.o	                 U full_ram_paddr
+ram.o	                 U init_asinfo
+ram.o	                 U lsp
+ram.o	                 U memmove
+ram.o	                 U memset
+ram.o	0000000000000000 b ram_list
+ram.o	0000000000000008 b ram_list_size
+ram.o	                 U reloc_syspage_memory
+ram.o	0000000000000aa0 T reserve_ram
+ram.o	                 U secure_system
+ram.o	                 U shdr
+ram.o	0000000000000018 b sysram_added
+ram.o	0000000000000000 d temp_syspage
+ram.o	0000000000000a60 T watch_add_ram
+ram.o	0000000000000020 b watch_list
+ram.o	0000000000000754 T ws_alloc
+ram.o	0000000000000028 b ws_early_next
+ram.o	00000000000007f0 t ws_init
+restore_ifs.o	                 U __stack_chk_fail
+restore_ifs.o	                 U __stack_chk_guard
+restore_ifs.o	                 U alloc_ram
+restore_ifs.o	0000000000000000 t check_ifs_signature
+restore_ifs.o	                 U copy_memory
+restore_ifs.o	                 U debug_flag
+restore_ifs.o	                 U full_image_paddr
+restore_ifs.o	                 U full_imagefs_paddr
+restore_ifs.o	0000000000000008 B ifs2_paddr_dst
+restore_ifs.o	0000000000000018 B ifs2_paddr_src
+restore_ifs.o	0000000000000020 B ifs2_size
+restore_ifs.o	                 U kprintf
+restore_ifs.o	0000000000000404 T load_ifs2_nonbootable
+restore_ifs.o	                 U memcpy
+restore_ifs.o	0000000000000010 B rifs_flag
+restore_ifs.o	0000000000000028 B rifs_info
+restore_ifs.o	00000000000002a0 T rifs_load_ifs2
+restore_ifs.o	0000000000000474 T rifs_restore_ifs
+restore_ifs.o	00000000000000e0 T rifs_restore_ifs2
+restore_ifs.o	00000000000009f4 T rifs_save_elf32data
+restore_ifs.o	0000000000000c64 T rifs_set_cksum
+restore_ifs.o	0000000000000000 B rifs2_info
+restore_ifs.o	                 U shdr
+rtc_time.o	0000000000000000 T rtc_time
+smp_start.o	                 U _start_el2_or_el1
+smp_start.o	                 U aarch64_cache_flush
+smp_start.o	                 U board_smp_adjust_num
+smp_start.o	0000000000000001 a BUILDENV_qss
+smp_start.o	                 U cpu_starting
+smp_start.o	                 U cpu_startnext
+smp_start.o	                 U cpu_startup
+smp_start.o	                 U hypervisor_init
+smp_start.o	                 U init_one_cpuinfo
+smp_start.o	                 U smp_spin_vaddr
+smp_start.o	0000000000000000 T smp_start
+smp_start.o	0000000000002000 d stack
+smp_start.o	                 U syspage_available
+smp_start.o	0000000000000001 a VARIANT_a
+smp_start.o	0000000000000001 a VARIANT_le
+smp_start.o	                 U vbar_default
+spin_bootstrap_id.o	0000000000000000 B spin_bootstrap_id
+spin_shim_rtn.o	0000000000000001 a BUILDENV_qss
+spin_shim_rtn.o	                 U spin_shim_id
+spin_shim_rtn.o	0000000000000000 T spin_shim_rtn
+spin_shim_rtn.o	                 U spin_shim_start
+spin_shim_rtn.o	0000000000000001 a VARIANT_a
+spin_shim_rtn.o	0000000000000001 a VARIANT_le
+spin_smp.o	0000000000000000 D spin_num_cpu
+spin_smp.o	0000000000000000 T spin_smp_num_cpu
+spin_smp.o	0000000000000010 T spin_smp_start
+spin_smp.o	0000000000000000 B spin_start_addr
+spin_smp_init.o	0000000000000054 t bootstrap
+spin_smp_init.o	0000000000000001 a BUILDENV_qss
+spin_smp_init.o	                 U spin_bootstrap_id
+spin_smp_init.o	                 U spin_num_cpu
+spin_smp_init.o	0000000000000000 T spin_smp_init
+spin_smp_init.o	                 U spin_start_addr
+spin_smp_init.o	0000000000000001 a VARIANT_a
+spin_smp_init.o	0000000000000001 a VARIANT_le
+ssp.o	                 U __progname
+ssp.o	0000000000000000 T __ssp_fail
+ssp.o	                 U crash
+startnext.o	                 U cpu_startnext
+startnext.o	                 U crash
+startnext.o	                 U debug_flag
+startnext.o	                 U first_bootstrap_start_vaddr
+startnext.o	                 U kprintf
+startnext.o	                 U lsp
+startnext.o	0000000000000000 T startnext
+startnext.o	                 U syspage_paddr
+startnext.o	                 U uefi_exit_boot_services_f
+startup_info.o	0000000000000000 T find_startup_info
+startup_info.o	                 U shdr
+strings.o	00000000000002b0 T add_string
+strings.o	00000000000001d0 T add_typed_string
+strings.o	0000000000000084 T del_typed_string
+strings.o	0000000000000000 T find_typed_string
+strings.o	                 U grow_syspage_section
+strings.o	                 U lsp
+strings.o	                 U memset
+strings.o	                 U strcmp
+strings.o	                 U strlcpy
+strings.o	                 U strlen
+strtoul.o	0000000000000000 T strtopaddr
+strtoul.o	00000000000000f0 T strtoul
+syspage_memory.o	                 U __page_size
+syspage_memory.o	                 U __stack_chk_fail
+syspage_memory.o	                 U __stack_chk_guard
+syspage_memory.o	                 U _syspage_ptr
+syspage_memory.o	0000000000000294 T alloc_syspage_memory
+syspage_memory.o	                 U callout_reloc_data
+syspage_memory.o	0000000000000114 b callouts_size
+syspage_memory.o	                 U cpu_alloc_syspage_memory
+syspage_memory.o	                 U cpu_init_syspage_memory
+syspage_memory.o	                 U cpu_syspage_remap
+syspage_memory.o	                 U cpu_write_syspage_memory
+syspage_memory.o	                 U crash
+syspage_memory.o	0000000000000110 b fixed_size
+syspage_memory.o	0000000000000000 T grow_syspage_section
+syspage_memory.o	                 U hwi_default
+syspage_memory.o	0000000000000130 T init_syspage_memory
+syspage_memory.o	0000000000000000 B lsp
+syspage_memory.o	                 U memcpy
+syspage_memory.o	                 U memmove
+syspage_memory.o	                 U memset
+syspage_memory.o	                 U output_callouts
+syspage_memory.o	0000000000000220 T reloc_syspage_memory
+syspage_memory.o	0000000000000100 T set_syspage_section
+syspage_memory.o	                 U startup_memory_map
+syspage_memory.o	                 U startup_memory_unmap
+syspage_memory.o	0000000000000118 B syspage_paddr
+syspage_memory.o	0000000000000540 T write_syspage_memory
+timer_ns2tick.o	                 U kprintf
+timer_ns2tick.o	0000000000000000 T timer_ns2tick
+timer_ns2tick.o	                 U timer_tick2ns
+timer_tick2ns.o	                 U lsp
+timer_tick2ns.o	0000000000000000 T timer_tick2ns
+tweak_cmdline.o	                 U cpu_tweak_cmdline
+tweak_cmdline.o	0000000000000000 T tweak_cmdline
+uefi.o	0000000000000020 r .LC2
+uefi.o	0000000000000000 r __FUNCTION__.0
+uefi.o	                 U __stack_chk_fail
+uefi.o	                 U __stack_chk_guard
+uefi.o	0000000000000000 t _uefi_exit_boot_services
+uefi.o	                 U crash
+uefi.o	                 U debug_flag
+uefi.o	0000000000000018 B efi_boot_services
+uefi.o	0000000000000010 B efi_image_handle
+uefi.o	0000000000000020 B efi_runtime_services
+uefi.o	0000000000000008 B efi_system_table
+uefi.o	                 U kprintf
+uefi.o	                 U memcmp
+uefi.o	                 U uefi_exit_boot_services_f
+uefi.o	00000000000002b4 T uefi_exit_init
+uefi.o	0000000000000240 T uefi_find_config_tbl
+uefi.o	0000000000000000 b uefi_init_cnt
+uefi.o	                 U uefi_io_flush
+uefi_init.o	0000000000000020 r .LC2
+uefi_init.o	                 U boot_regs
+uefi_init.o	                 U crash
+uefi_init.o	                 U efi_boot_services
+uefi_init.o	                 U efi_image_handle
+uefi_init.o	                 U efi_runtime_services
+uefi_init.o	                 U efi_system_table
+uefi_init.o	                 U uefi_exit_init
+uefi_init.o	0000000000000000 T uefi_init
+uefi_init.o	0000000000000000 b uefi_init_done.0
+uefi_io.o	                 U __stack_chk_fail
+uefi_io.o	                 U __stack_chk_guard
+uefi_io.o	                 U __stackavail
+uefi_io.o	0000000000000000 t _uefi_io_resume
+uefi_io.o	0000000000000200 t _uefi_io_suspend
+uefi_io.o	0000000000000008 b cur_ConOut
+uefi_io.o	0000000000000010 b cur_pos.1
+uefi_io.o	                 U efi_system_table
+uefi_io.o	                 U strlen
+uefi_io.o	                 U strstr
+uefi_io.o	0000000000000000 b suspend_cnt
+uefi_io.o	                 U uefi_exit_init
+uefi_io.o	0000000000000244 T uefi_io_flush
+uefi_io.o	00000000000002a0 T uefi_io_init
+uefi_io.o	                 U uefi_io_resume_f
+uefi_io.o	                 U uefi_io_suspend_f
+uefi_io.o	0000000000000190 T uefi_print_char
+uefi_io.o	0000000000000030 T uefi_print_str
+uefi_io.o	0000000000000018 b uefi_str.0
+ultoa_end.o	0000000000000000 b b.1
+ultoa_end.o	0000000000000000 r c.0
+ultoa_end.o	0000000000000000 T ultoa_end
+uncompress.o	                 U crash
+uncompress.o	                 U debug_flag
+uncompress.o	                 U kprintf
+uncompress.o	                 U shdr
+uncompress.o	                 U startup_memory_map
+uncompress.o	                 U startup_memory_unmap
+uncompress.o	0000000000000000 T uncompress
+uncompress.o	                 U uncompress_ucl
+uncompress_lzo.o	                 U __lzo_init_v2
+uncompress_lzo.o	                 U __stack_chk_fail
+uncompress_lzo.o	                 U __stack_chk_guard
+uncompress_lzo.o	                 U crash
+uncompress_lzo.o	                 U lzo1x_decompress
+uncompress_lzo.o	0000000000000000 T uncompress_lzo
+uncompress_ucl.o	                 U __stack_chk_fail
+uncompress_ucl.o	                 U __stack_chk_guard
+uncompress_ucl.o	                 U crash
+uncompress_ucl.o	                 U ucl_nrv2b_decompress_8
+uncompress_ucl.o	0000000000000000 T uncompress_ucl
+vbar_default.o	0000000000000001 a BUILDENV_qss
+vbar_default.o	0000000000000002 a BUS_ADRERR
+vbar_default.o	0000000000000003 a BUS_OBJERR
+vbar_default.o	0000000000000004 a CA_LINE_SIZE
+vbar_default.o	0000000000000008 a CA_NUM_LINES
+vbar_default.o	0000000000000000 a DDI_BASE
+vbar_default.o	0000000000000008 a DDI_SHIFT
+vbar_default.o	0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+vbar_default.o	0000000000000002 a DEBUG_WATCHDOG_FEED
+vbar_default.o	0000000000000000 a DEBUG_WATCHDOG_STOP
+vbar_default.o	0000000000000005 a FLTACCESS
+vbar_default.o	0000000000000006 a FLTBOUNDS
+vbar_default.o	0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+vbar_default.o	0000000000000004 a INTR_CONFIG_FLAG_IPI
+vbar_default.o	0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+vbar_default.o	0000000000000008 a INTR_CONFIG_FLAG_SYS
+vbar_default.o	0000000000000010 a LSR_BI
+vbar_default.o	0000000000000001 a LSR_RXRDY
+vbar_default.o	0000000000000020 a LSR_TXRDY
+vbar_default.o	0000000000000001 a MS_ASYNC
+vbar_default.o	0000000000000004 a MS_INVALIDATE
+vbar_default.o	0000000001000000 a MS_INVALIDATE_ICACHE
+vbar_default.o	0000000000000002 a MS_SYNC
+vbar_default.o	0000000000000020 a QT_TIMER_PERIOD
+vbar_default.o	0000000000000005 a REG_LS
+vbar_default.o	000000000000000a a SIGBUS
+vbar_default.o	0000000000000010 a SIZEOF_DDI
+vbar_default.o	0000000000000000 a SMP_PENDING
+vbar_default.o	0000000000000010 a SMP_START_ADDR
+vbar_default.o	0000000000000004 a SP_PRIVATE_FLAGS
+vbar_default.o	0000000000000006 a SYSPAGE_NUM_CPU
+vbar_default.o	0000000000000024 a SYSPAGE_SMP
+vbar_default.o	0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+vbar_default.o	0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+vbar_default.o	0000000000000001 a VARIANT_a
+vbar_default.o	0000000000000001 a VARIANT_le
+vbar_default.o	0000000000000000 T vbar_default
+vstart.o	0000000000000001 a BUILDENV_qss
+vstart.o	                 U mair_el1
+vstart.o	                 U sctlr_el1
+vstart.o	                 U tcr_el1
+vstart.o	                 U ttbr0
+vstart.o	                 U ttbr1
+vstart.o	0000000000000001 a VARIANT_a
+vstart.o	0000000000000001 a VARIANT_le
+vstart.o	0000000000000000 T vstart

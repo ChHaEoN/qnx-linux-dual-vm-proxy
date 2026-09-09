@@ -1,6 +1,12 @@
 # ADR-003 — 硬體計時的 QNX Hypervisor 數字能從哪裡來？
 
-**Status: Proposed — decision pending.** 本文的事實部分由 2026-09-09 的研究 workflow
+**Status: Accepted (2026-09-09) — 選項 (B)，Orin Nano 原生移植。** 擁有者於 2026-09-09 選定 (B)；
+同日對授權旗標的決定：**先做，發表任何評估結果前先徵詢指導教授**（4.6(i)）；4.6(c) 以「只用源碼與文件、不反組譯」維持乾淨。
+這與 §4 的建議（先以 Pi 4B 取得第一個硬體 EL2 讀數）不同——Pi 4B 路線仍是文件化的便宜替代，未被否決。
+執行計畫（Phase 3b）：[orin-native-port-plan.md](orin-native-port-plan.md)；
+零成本事實蒐集結果：`results/orin-native-port/`。決定時尚無任何原生開機證據；「Accepted」指的是路線，不是可行性。
+
+本文的事實部分由 2026-09-09 的研究 workflow
 產出（三個獨立 sweep，各附一個 skeptic 逐條重抓來源核對；被推翻的項目已剔除）。
 它是決策的**輸入**，不是決策：選項的取捨、預算與授權問題由專案擁有者決定。
 相關脈絡：[ADR-002](phase2-topology-decision.md)、[digital-twin-design.md §1a](digital-twin-design.md)、

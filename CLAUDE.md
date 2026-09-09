@@ -332,6 +332,22 @@ Quick summary for context:
   the next deliverable. TCG here is a hard requirement (QHV needs EL2 →
   nested virt, which ARM KVM lacks on A78AE), not the GICv3 blockage —
   do not conflate them.
+- Phase 3b — **Native QNX on the Orin Nano — kicked off 2026-09-09, nothing
+  booted yet.** ADR-003 option (B) accepted by the owner: get a hardware-timed
+  QHV number from the board itself rather than a Pi 4B or AWS metal. Plan,
+  claims register and milestone ladder M0-M4 in
+  [docs/orin-native-port-plan.md](docs/orin-native-port-plan.md); the harvest,
+  research and compile-only results under `results/orin-native-port/`. Two
+  things are VERIFIED so far, both compile-only: the BSP zip's startup lib and
+  the `armv8_fm` board build unmodified under the win64 SDP tooling (lib
+  `make install` first, then the board), and an IFS at `[image=0x80081000]`
+  lays out correctly for a kexec-placed payload. Four of the plan's own twelve
+  load-bearing claims came back wrong or unproven under adversarial review —
+  most importantly a CCPLEX watchdog **is** armed at hand-off (systemd, 2 min),
+  which both gives free unattended recovery and caps every experiment at ~2
+  minutes unless startup disables or kicks it. Every log this phase produces is
+  evaluation output under NC QDL v7 4.6(i): private until the supervising
+  professor is consulted.
 - Phase 5 — FuSa & Cybersecurity overlay — not started (Phase-1-gate
   FuSa/Cyber review already happened as a cross-cutting check per the
   coordination rules above, but the dedicated Phase-5 overlay pass has not)
@@ -373,14 +389,16 @@ Quick summary for context:
    CSVs, not boot-time files) after checking their `qemu:`/`devices:`/`disk:`
    stamps match. Regenerating the QHV images from clean sources (the shipped disk
    is the RQ-2 diagnostic variant) is a separate, number-changing step.
-4. **Decide ADR-003** ([docs/adr-003-hardware-timed-qhv.md](docs/adr-003-hardware-timed-qhv.md),
-   Status: Proposed): where a hardware-timed QNX Hypervisor number can come
-   from. Research-backed inputs are in; the choice between a Raspberry Pi
-   4B (vendor-documented, Everywhere-licensed, non-VHE), an AWS Graviton
-   metal route (quota + licence gates), and a native Orin port (weeks, no
-   vendor path) is the owner's. Two licence clauses flagged there
-   (NC QDL v7 4.6(c) disassembly, 4.6(i) publishing evaluation results)
-   need an owner decision before more numbers are published.
+4. **ADR-003 is decided (2026-09-09): option (B), a native QNX port to
+   the Orin Nano** ([docs/adr-003-hardware-timed-qhv.md](docs/adr-003-hardware-timed-qhv.md),
+   Status: Accepted). Licence stance, also decided by the owner: proceed;
+   consult the supervising professor before publishing any evaluation
+   results (NC QDL v7 4.6(i)); keep 4.6(c) clean — source and docs only,
+   never disassembly of a QNX-shipped binary. The port is tracked as
+   **Phase 3b** in [docs/orin-native-port-plan.md](docs/orin-native-port-plan.md)
+   (kick-off plan + claims register; nothing has booted natively yet) with
+   the zero-cost harvest under `results/orin-native-port/`. The Pi 4B
+   route in the ADR stays the documented cheaper alternative, not rejected.
 5. Write `docs/drive-os-comparison.md`'s dimension-by-dimension
    verdicts now that Phase 2/3/4 have real numbers to cite instead of
    projections. **This is the largest remaining gap in the public

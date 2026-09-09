@@ -1,0 +1,1444 @@
+# ntoaarch64-nm symbol NAMES only (no code) for selected libstartup.a members; generated with awk filter over 'nm libstartup.a'
+# columns: value type name ; 'U' = undefined (imported), T/t = text, D/B/R = data/bss/rodata
+== __main.o
+   0000000000000000 T __main
+== _main.o
+   0000000000000200 T __get_errno_ptr
+                    U __stack_chk_fail
+                    U __stack_chk_guard
+   0000000000000204 T __stackavail
+   0000000000000160 B _argc
+   0000000000000168 B _argv
+   0000000000000004 T _main
+   0000000000000198 B _syspage_ptr
+   0000000000000000 T abort
+   0000000000000020 b argv
+                    U avoid_ram
+                    U board_init
+                    U boot_args
+   0000000000000200 B cpu_freq
+                    U cpu_startup
+                    U crash
+   00000000000001f8 B cycles_freq
+   00000000000001c8 B dbg_device
+   0000000000000210 B debug_flag
+   00000000000000c0 b envv
+   0000000000000008 D first_bootstrap_start_vaddr
+   0000000000000008 B full_image_paddr
+   0000000000000018 B full_imagefs_paddr
+   0000000000000010 B full_ram_paddr
+   0000000000000000 t hook_dummy
+                    U init_syspage_memory
+                    U main
+   0000000000000018 D max_cpus
+                    U memcpy
+   0000000000000194 B misc_flags
+   000000000000001c D paddr_bits
+   00000000000001c0 B patch_channel
+   0000000000000208 B reserved_ram_list
+   0000000000000190 B secure_system
+   0000000000000000 B shdr
+   0000000000000000 D smp_hook_rtn
+   0000000000000170 b stack_addr
+                    U stack_addr_lo
+                    U startnext
+   0000000000000010 D system_dcache_idx
+   0000000000000014 D system_icache_idx
+   00000000000001b0 B timer_chip
+   00000000000001a0 B timer_diff
+   00000000000001f0 B timer_freq
+   00000000000001e8 B timer_prog_time
+   00000000000001a8 B timer_start
+                    U tweak_cmdline
+   0000000000000178 B uefi_exit_boot_services_f
+   0000000000000180 B uefi_io_resume_f
+   0000000000000188 B uefi_io_suspend_f
+                    U write_syspage_memory
+                    U ws_alloc
+== _start.o
+   0000000000000000 T _start
+   0000000000000001 a BUILDENV_qss
+                    U cstart
+   0000000000000001 a VARIANT_a
+   0000000000000001 a VARIANT_le
+== _start_el1.o
+   0000000000000114 T _start_el1
+   0000000000000000 T _start_el2_or_el1
+                    U aarch64_cache_flush
+   0000000000000088 t at_el2
+   0000000000000028 t at_el3
+   0000000000000001 a BUILDENV_qss
+   0000000000000002 a BUS_ADRERR
+   0000000000000003 a BUS_OBJERR
+   0000000000000004 a CA_LINE_SIZE
+   0000000000000008 a CA_NUM_LINES
+   0000000000000000 a DDI_BASE
+   0000000000000008 a DDI_SHIFT
+   0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+   0000000000000002 a DEBUG_WATCHDOG_FEED
+   0000000000000000 a DEBUG_WATCHDOG_STOP
+   00000000000000fc T drop_to_el1
+   0000000000000074 t el2_is_supported
+   0000000000000005 a FLTACCESS
+   0000000000000006 a FLTBOUNDS
+   0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+   0000000000000004 a INTR_CONFIG_FLAG_IPI
+   0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+   0000000000000008 a INTR_CONFIG_FLAG_SYS
+   0000000000000134 t is_pauth_supported
+   0000000000000010 a LSR_BI
+   0000000000000001 a LSR_RXRDY
+   0000000000000020 a LSR_TXRDY
+   0000000000000001 a MS_ASYNC
+   0000000000000004 a MS_INVALIDATE
+   0000000001000000 a MS_INVALIDATE_ICACHE
+   0000000000000002 a MS_SYNC
+   0000000000000020 a QT_TIMER_PERIOD
+   0000000000000005 a REG_LS
+   000000000000000a a SIGBUS
+   0000000000000010 a SIZEOF_DDI
+   0000000000000000 a SMP_PENDING
+   0000000000000010 a SMP_START_ADDR
+   0000000000000004 a SP_PRIVATE_FLAGS
+   0000000000000006 a SYSPAGE_NUM_CPU
+   0000000000000024 a SYSPAGE_SMP
+   0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+   0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+   0000000000000001 a VARIANT_a
+   0000000000000001 a VARIANT_le
+== aarch64_cpuid.o
+   0000000000000000 D aarch64_cpuid
+                    U cpuid_a35
+                    U cpuid_a53
+                    U cpuid_a55
+                    U cpuid_a57
+                    U cpuid_a72
+                    U cpuid_a720
+                    U cpuid_a75
+                    U cpuid_a76
+                    U cpuid_a78ae
+                    U cpuid_d15
+                    U cpuid_d20
+                    U cpuid_n1
+                    U cpuid_neo_v1
+                    U cpuid_neo_v2
+                    U cpuid_v8_aem
+                    U cpuid_v8_fm
+                    U cpuid_x2
+                    U cpuid_x4
+                    U cpuid_x925
+== acpi.o
+                    U __stack_chk_fail
+                    U __stack_chk_guard
+   0000000000000594 T acpi_find_table
+   0000000000000000 T acpi_find_table_next
+   0000000000000410 T add_acpi_table
+                    U as_add
+                    U as_find
+                    U board_find_acpi_rsdp
+                    U debug_flag
+                    U kprintf
+                    U memset
+   0000000000000000 d num_tbls
+                    U startup_memory_map
+                    U startup_memory_unmap
+   0000000000000000 b tbl_array
+                    U ws_alloc
+== acpi_spcr_parse.o
+                    U __stack_chk_fail
+                    U __stack_chk_guard
+                    U acpi_find_table
+   0000000000000000 T acpi_spcr_parse
+                    U break_detect_pl011
+                    U display_char_pl011
+                    U init_pl011
+                    U ksprintf
+                    U poll_key_pl011
+                    U put_pl011
+                    U startup_memory_map
+                    U startup_memory_unmap
+                    U ws_alloc
+== board_cpuconfig1.o
+   0000000000000000 T board_cpuconfig1
+== board_cpuconfig2.o
+   0000000000000000 T board_cpuconfig2
+== board_find_acpi_rsdp.o
+   0000000000000000 T board_find_acpi_rsdp
+                    U board_find_acpi_rsdp_uefi
+                    U is_uefi_boot
+== board_find_acpi_rsdp_uefi.o
+   0000000000000000 r acpi_guids
+                    U as_add
+                    U as_find
+   0000000000000000 T board_find_acpi_rsdp_uefi
+   0000000000000000 b recorded_table.0
+                    U uefi_find_config_tbl
+== board_find_efi_smbios.o
+                    U as_add
+                    U as_find
+   00000000000004d0 T board_find_efi_smbios_by_type
+   0000000000000070 T board_find_efi_smbios_table
+                    U debug_flag
+   0000000000000000 T get_smbios_string
+   0000000000000008 b guid_str.0
+                    U kprintf
+                    U ksprintf
+   0000000000000000 r smbios_guids
+   0000000000000000 d smbios_table
+                    U strlen
+                    U uefi_find_config_tbl
+   0000000000000000 b use_smbios_3
+== board_init.o
+   0000000000000000 T board_init
+== callout_debug_8250.o
+   00000000000000e0 T break_detect_8250
+   0000000000000001 a BUILDENV_qss
+   0000000000000002 a BUS_ADRERR
+   0000000000000003 a BUS_OBJERR
+   0000000000000004 a CA_LINE_SIZE
+   0000000000000008 a CA_NUM_LINES
+                    U callout_io_map
+   0000000000000000 a DDI_BASE
+   0000000000000008 a DDI_SHIFT
+   0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+   0000000000000002 a DEBUG_WATCHDOG_FEED
+   0000000000000000 a DEBUG_WATCHDOG_STOP
+   0000000000000058 T display_char_8250
+   0000000000000120 t end_break_detect_8250
+   00000000000000a0 t end_display_char_8250
+   00000000000000e0 t end_poll_key_8250
+   0000000000000005 a FLTACCESS
+   0000000000000006 a FLTBOUNDS
+   0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+   0000000000000004 a INTR_CONFIG_FLAG_IPI
+   0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+   0000000000000008 a INTR_CONFIG_FLAG_SYS
+   0000000000000010 a LSR_BI
+   0000000000000001 a LSR_RXRDY
+   0000000000000020 a LSR_TXRDY
+   0000000000000001 a MS_ASYNC
+   0000000000000004 a MS_INVALIDATE
+   0000000001000000 a MS_INVALIDATE_ICACHE
+   0000000000000002 a MS_SYNC
+   0000000000000000 t patch_debug
+   00000000000000a0 T poll_key_8250
+   0000000000000020 a QT_TIMER_PERIOD
+   0000000000000005 a REG_LS
+   000000000000000a a SIGBUS
+   0000000000000010 a SIZEOF_DDI
+   0000000000000000 a SMP_PENDING
+   0000000000000010 a SMP_START_ADDR
+   0000000000000004 a SP_PRIVATE_FLAGS
+   00000000000000f4 t start_break_detect_8250
+   000000000000006c t start_display_char_8250
+   00000000000000b4 t start_poll_key_8250
+   0000000000000006 a SYSPAGE_NUM_CPU
+   0000000000000024 a SYSPAGE_SMP
+   0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+   0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+   0000000000000001 a VARIANT_a
+   0000000000000001 a VARIANT_le
+== callout_debug_8250_32b.o
+   00000000000000e0 T break_detect_8250_32b
+   0000000000000001 a BUILDENV_qss
+   0000000000000002 a BUS_ADRERR
+   0000000000000003 a BUS_OBJERR
+   0000000000000004 a CA_LINE_SIZE
+   0000000000000008 a CA_NUM_LINES
+                    U callout_io_map
+   0000000000000000 a DDI_BASE
+   0000000000000008 a DDI_SHIFT
+   0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+   0000000000000002 a DEBUG_WATCHDOG_FEED
+   0000000000000000 a DEBUG_WATCHDOG_STOP
+   0000000000000058 T display_char_8250_32b
+   0000000000000120 t end_break_detect_8250_32b
+   00000000000000a0 t end_display_char_8250_32b
+   00000000000000e0 t end_poll_key_8250_32b
+   0000000000000005 a FLTACCESS
+   0000000000000006 a FLTBOUNDS
+   0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+   0000000000000004 a INTR_CONFIG_FLAG_IPI
+   0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+   0000000000000008 a INTR_CONFIG_FLAG_SYS
+   0000000000000010 a LSR_BI
+   0000000000000001 a LSR_RXRDY
+   0000000000000020 a LSR_TXRDY
+   0000000000000001 a MS_ASYNC
+   0000000000000004 a MS_INVALIDATE
+   0000000001000000 a MS_INVALIDATE_ICACHE
+   0000000000000002 a MS_SYNC
+   0000000000000000 t patch_debug
+   00000000000000a0 T poll_key_8250_32b
+   0000000000000020 a QT_TIMER_PERIOD
+   0000000000000005 a REG_LS
+   000000000000000a a SIGBUS
+   0000000000000010 a SIZEOF_DDI
+   0000000000000000 a SMP_PENDING
+   0000000000000010 a SMP_START_ADDR
+   0000000000000004 a SP_PRIVATE_FLAGS
+   00000000000000f4 t start_break_detect_8250_32b
+   000000000000006c t start_display_char_8250_32b
+   00000000000000b4 t start_poll_key_8250_32b
+   0000000000000006 a SYSPAGE_NUM_CPU
+   0000000000000024 a SYSPAGE_SMP
+   0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+   0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+   0000000000000001 a VARIANT_a
+   0000000000000001 a VARIANT_le
+== callout_debug_pl011.o
+   00000000000000c0 T break_detect_pl011
+   0000000000000001 a BUILDENV_qss
+   0000000000000002 a BUS_ADRERR
+   0000000000000003 a BUS_OBJERR
+   0000000000000004 a CA_LINE_SIZE
+   0000000000000008 a CA_NUM_LINES
+                    U callout_io_map
+   0000000000000000 a DDI_BASE
+   0000000000000008 a DDI_SHIFT
+   0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+   0000000000000002 a DEBUG_WATCHDOG_FEED
+   0000000000000000 a DEBUG_WATCHDOG_STOP
+   0000000000000040 T display_char_pl011
+   00000000000000ec t end_break_detect_pl011
+   000000000000007c t end_display_char_pl011
+   00000000000000c0 t end_poll_key_pl011
+   0000000000000005 a FLTACCESS
+   0000000000000006 a FLTBOUNDS
+   0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+   0000000000000004 a INTR_CONFIG_FLAG_IPI
+   0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+   0000000000000008 a INTR_CONFIG_FLAG_SYS
+   0000000000000010 a LSR_BI
+   0000000000000001 a LSR_RXRDY
+   0000000000000020 a LSR_TXRDY
+   0000000000000001 a MS_ASYNC
+   0000000000000004 a MS_INVALIDATE
+   0000000001000000 a MS_INVALIDATE_ICACHE
+   0000000000000002 a MS_SYNC
+   0000000000000000 t patch_debug
+   0000000000000080 T poll_key_pl011
+   0000000000000020 a QT_TIMER_PERIOD
+   0000000000000005 a REG_LS
+   000000000000000a a SIGBUS
+   0000000000000010 a SIZEOF_DDI
+   0000000000000000 a SMP_PENDING
+   0000000000000010 a SMP_START_ADDR
+   0000000000000004 a SP_PRIVATE_FLAGS
+   00000000000000d4 t start_break_detect_pl011
+   0000000000000054 t start_display_char_pl011
+   0000000000000094 t start_poll_key_pl011
+   0000000000000006 a SYSPAGE_NUM_CPU
+   0000000000000024 a SYSPAGE_SMP
+   0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+   0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+   0000000000000001 a VARIANT_a
+   0000000000000001 a VARIANT_le
+== callout_debug_tegra.o
+   00000000000000c0 T break_detect_tegra
+   0000000000000001 a BUILDENV_qss
+   0000000000000002 a BUS_ADRERR
+   0000000000000003 a BUS_OBJERR
+   0000000000000004 a CA_LINE_SIZE
+   0000000000000008 a CA_NUM_LINES
+                    U callout_io_map
+   0000000000000000 a DDI_BASE
+   0000000000000008 a DDI_SHIFT
+   0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+   0000000000000002 a DEBUG_WATCHDOG_FEED
+   0000000000000000 a DEBUG_WATCHDOG_STOP
+   0000000000000040 T display_char_tegra
+   00000000000000f0 t end_break_detect_tegra
+   000000000000007c t end_display_char_tegra
+   00000000000000c0 t end_poll_key_tegra
+   0000000000000005 a FLTACCESS
+   0000000000000006 a FLTBOUNDS
+   0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+   0000000000000004 a INTR_CONFIG_FLAG_IPI
+   0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+   0000000000000008 a INTR_CONFIG_FLAG_SYS
+   0000000000000010 a LSR_BI
+   0000000000000001 a LSR_RXRDY
+   0000000000000020 a LSR_TXRDY
+   0000000000000001 a MS_ASYNC
+   0000000000000004 a MS_INVALIDATE
+   0000000001000000 a MS_INVALIDATE_ICACHE
+   0000000000000002 a MS_SYNC
+   0000000000000000 t patch_debug
+   0000000000000080 T poll_key_tegra
+   0000000000000020 a QT_TIMER_PERIOD
+   0000000000000005 a REG_LS
+   000000000000000a a SIGBUS
+   0000000000000010 a SIZEOF_DDI
+   0000000000000000 a SMP_PENDING
+   0000000000000010 a SMP_START_ADDR
+   0000000000000004 a SP_PRIVATE_FLAGS
+   00000000000000d4 t start_break_detect_tegra
+   0000000000000054 t start_display_char_tegra
+   0000000000000094 t start_poll_key_tegra
+   0000000000000006 a SYSPAGE_NUM_CPU
+   0000000000000024 a SYSPAGE_SMP
+   0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+   0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+   0000000000000001 a VARIANT_a
+   0000000000000001 a VARIANT_le
+== callout_interrupt_gic_v3.o
+   0000000000000001 a BUILDENV_qss
+   0000000000000002 a BUS_ADRERR
+   0000000000000003 a BUS_OBJERR
+   0000000000000004 a CA_LINE_SIZE
+   0000000000000008 a CA_NUM_LINES
+   0000000000000000 a DDI_BASE
+   0000000000000008 a DDI_SHIFT
+   0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+   0000000000000002 a DEBUG_WATCHDOG_FEED
+   0000000000000000 a DEBUG_WATCHDOG_STOP
+   00000000000001fc t end_interrupt_config_gic_v3_ppi
+   00000000000003d0 t end_interrupt_eoi_gic_v3_lpi_mm
+   00000000000003a4 t end_interrupt_eoi_gic_v3_lpi_sr
+   00000000000000d0 t end_interrupt_eoi_gic_v3_ppi_mm
+   00000000000000a4 t end_interrupt_eoi_gic_v3_ppi_sr
+   0000000000000270 t end_interrupt_eoi_gic_v3_spi_mm
+   0000000000000244 t end_interrupt_eoi_gic_v3_spi_sr
+   0000000000000384 t end_interrupt_id_gic_v3_lpi
+   0000000000000084 t end_interrupt_id_gic_v3_ppi_mm
+   000000000000004c t end_interrupt_id_gic_v3_ppi_sr
+   0000000000000224 t end_interrupt_id_gic_v3_spi
+   00000000000004c8 t end_interrupt_mask_gic_v3_lpi_direct
+   0000000000000780 t end_interrupt_mask_gic_v3_lpi_its
+   000000000000017c t end_interrupt_mask_gic_v3_ppi
+   000000000000030c t end_interrupt_mask_gic_v3_spi
+   0000000000000538 t end_interrupt_unmask_gic_v3_lpi_direct
+   00000000000008a0 t end_interrupt_unmask_gic_v3_lpi_its
+   00000000000001d8 t end_interrupt_unmask_gic_v3_ppi
+   000000000000035c t end_interrupt_unmask_gic_v3_spi
+   0000000000000005 a FLTACCESS
+   0000000000000006 a FLTBOUNDS
+   0000000000000000 t gicc_patch
+   00000000000001d8 T interrupt_config_gic_v3_ppi
+   00000000000003a8 T interrupt_eoi_gic_v3_lpi_mm
+   0000000000000388 T interrupt_eoi_gic_v3_lpi_sr
+   00000000000000a8 T interrupt_eoi_gic_v3_ppi_mm
+   0000000000000088 T interrupt_eoi_gic_v3_ppi_sr
+   0000000000000248 T interrupt_eoi_gic_v3_spi_mm
+   0000000000000228 T interrupt_eoi_gic_v3_spi_sr
+   0000000000000360 T interrupt_id_gic_v3_lpi
+   0000000000000050 T interrupt_id_gic_v3_ppi_mm
+   0000000000000028 T interrupt_id_gic_v3_ppi_sr
+   0000000000000200 T interrupt_id_gic_v3_spi
+   0000000000000458 T interrupt_mask_gic_v3_lpi_direct
+   0000000000000660 T interrupt_mask_gic_v3_lpi_its
+   0000000000000118 T interrupt_mask_gic_v3_ppi
+   00000000000002b8 T interrupt_mask_gic_v3_spi
+   00000000000004c8 T interrupt_unmask_gic_v3_lpi_direct
+   0000000000000780 T interrupt_unmask_gic_v3_lpi_its
+   0000000000000180 T interrupt_unmask_gic_v3_ppi
+   0000000000000310 T interrupt_unmask_gic_v3_spi
+   0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+   0000000000000004 a INTR_CONFIG_FLAG_IPI
+   0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+   0000000000000008 a INTR_CONFIG_FLAG_SYS
+   00000000000003d0 t lpi_direct_patch
+   0000000000000538 t lpi_its_patch
+   0000000000000010 a LSR_BI
+   0000000000000001 a LSR_RXRDY
+   0000000000000020 a LSR_TXRDY
+   00000000000006dc t mask_lock
+   000000000000070c t mask_loop
+   0000000000000001 a MS_ASYNC
+   0000000000000004 a MS_INVALIDATE
+   0000000001000000 a MS_INVALIDATE_ICACHE
+   0000000000000002 a MS_SYNC
+   00000000000000d0 t ppi_patch
+   0000000000000020 a QT_TIMER_PERIOD
+   0000000000000005 a REG_LS
+   000000000000000a a SIGBUS
+   0000000000000010 a SIZEOF_DDI
+   0000000000000000 a SMP_PENDING
+   0000000000000010 a SMP_START_ADDR
+   0000000000000004 a SP_PRIVATE_FLAGS
+   0000000000000270 t spi_patch
+   00000000000001ec t start_interrupt_config_gic_v3_ppi
+   00000000000003bc t start_interrupt_eoi_gic_v3_lpi_mm
+   000000000000039c t start_interrupt_eoi_gic_v3_lpi_sr
+   00000000000000bc t start_interrupt_eoi_gic_v3_ppi_mm
+   000000000000009c t start_interrupt_eoi_gic_v3_ppi_sr
+   000000000000025c t start_interrupt_eoi_gic_v3_spi_mm
+   000000000000023c t start_interrupt_eoi_gic_v3_spi_sr
+   0000000000000374 t start_interrupt_id_gic_v3_lpi
+   0000000000000064 t start_interrupt_id_gic_v3_ppi_mm
+   000000000000003c t start_interrupt_id_gic_v3_ppi_sr
+   0000000000000214 t start_interrupt_id_gic_v3_spi
+   000000000000046c t start_interrupt_mask_gic_v3_lpi_direct
+   0000000000000674 t start_interrupt_mask_gic_v3_lpi_its
+   000000000000012c t start_interrupt_mask_gic_v3_ppi
+   00000000000002cc t start_interrupt_mask_gic_v3_spi
+   00000000000004dc t start_interrupt_unmask_gic_v3_lpi_direct
+   0000000000000794 t start_interrupt_unmask_gic_v3_lpi_its
+   0000000000000194 t start_interrupt_unmask_gic_v3_ppi
+   0000000000000324 t start_interrupt_unmask_gic_v3_spi
+   0000000000000006 a SYSPAGE_NUM_CPU
+   0000000000000024 a SYSPAGE_SMP
+   0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+   0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+   00000000000007fc t unmask_lock
+   000000000000082c t unmask_loop
+   0000000000000001 a VARIANT_a
+   0000000000000001 a VARIANT_le
+== callout_interrupt_t18x_msi.o
+   0000000000000001 a BUILDENV_qss
+   0000000000000002 a BUS_ADRERR
+   0000000000000003 a BUS_OBJERR
+   0000000000000004 a CA_LINE_SIZE
+   0000000000000008 a CA_NUM_LINES
+                    U callout_io_map
+   0000000000000000 a DDI_BASE
+   0000000000000008 a DDI_SHIFT
+   0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+   0000000000000002 a DEBUG_WATCHDOG_FEED
+   0000000000000000 a DEBUG_WATCHDOG_STOP
+   0000000000000110 t end_interrupt_eoi_t18x_msi
+   00000000000000c8 t end_interrupt_id_t18x_msi
+   000000000000015c t end_interrupt_mask_t18x_msi
+   00000000000001ac t end_interrupt_unmask_t18x_msi
+   0000000000000005 a FLTACCESS
+   0000000000000006 a FLTBOUNDS
+   00000000000000c8 T interrupt_eoi_t18x_msi
+   0000000000000058 T interrupt_id_t18x_msi
+   0000000000000110 T interrupt_mask_t18x_msi
+   0000000000000160 T interrupt_unmask_t18x_msi
+   0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+   0000000000000004 a INTR_CONFIG_FLAG_IPI
+   0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+   0000000000000008 a INTR_CONFIG_FLAG_SYS
+   0000000000000010 a LSR_BI
+   0000000000000001 a LSR_RXRDY
+   0000000000000020 a LSR_TXRDY
+   0000000000000000 d Lvaddr
+   0000000000000001 a MS_ASYNC
+   0000000000000004 a MS_INVALIDATE
+   0000000001000000 a MS_INVALIDATE_ICACHE
+   0000000000000002 a MS_SYNC
+   0000000000000000 t patch_intr
+   0000000000000020 a QT_TIMER_PERIOD
+   0000000000000005 a REG_LS
+   000000000000000a a SIGBUS
+   0000000000000010 a SIZEOF_DDI
+   0000000000000000 a SMP_PENDING
+   0000000000000010 a SMP_START_ADDR
+   0000000000000004 a SP_PRIVATE_FLAGS
+   00000000000000dc t start_interrupt_eoi_t18x_msi
+   000000000000006c t start_interrupt_id_t18x_msi
+   0000000000000124 t start_interrupt_mask_t18x_msi
+   0000000000000174 t start_interrupt_unmask_t18x_msi
+   0000000000000006 a SYSPAGE_NUM_CPU
+   0000000000000024 a SYSPAGE_SMP
+   0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+   0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+   0000000000000001 a VARIANT_a
+   0000000000000001 a VARIANT_le
+== callout_interrupt_t18x_pcie.o
+   0000000000000001 a BUILDENV_qss
+   0000000000000002 a BUS_ADRERR
+   0000000000000003 a BUS_OBJERR
+   0000000000000004 a CA_LINE_SIZE
+   0000000000000008 a CA_NUM_LINES
+                    U callout_io_map
+   0000000000000000 a DDI_BASE
+   0000000000000008 a DDI_SHIFT
+   0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+   0000000000000002 a DEBUG_WATCHDOG_FEED
+   0000000000000000 a DEBUG_WATCHDOG_STOP
+   0000000000000128 t end_interrupt_eoi_t18x_pcie
+   00000000000000c0 t end_interrupt_id_t18x_pcie
+   0000000000000180 t end_interrupt_mask_t18x_pcie
+   00000000000001d8 t end_interrupt_unmask_t18x_pcie
+   0000000000000005 a FLTACCESS
+   0000000000000006 a FLTBOUNDS
+   00000000000000c0 T interrupt_eoi_t18x_pcie
+   0000000000000058 T interrupt_id_t18x_pcie
+   0000000000000128 T interrupt_mask_t18x_pcie
+   0000000000000180 T interrupt_unmask_t18x_pcie
+   0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+   0000000000000004 a INTR_CONFIG_FLAG_IPI
+   0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+   0000000000000008 a INTR_CONFIG_FLAG_SYS
+   0000000000000010 a LSR_BI
+   0000000000000001 a LSR_RXRDY
+   0000000000000020 a LSR_TXRDY
+   0000000000000000 d Lvaddr
+   0000000000000001 a MS_ASYNC
+   0000000000000004 a MS_INVALIDATE
+   0000000001000000 a MS_INVALIDATE_ICACHE
+   0000000000000002 a MS_SYNC
+   0000000000000000 t patch_intr
+   0000000000000020 a QT_TIMER_PERIOD
+   0000000000000005 a REG_LS
+   000000000000000a a SIGBUS
+   0000000000000010 a SIZEOF_DDI
+   0000000000000000 a SMP_PENDING
+   0000000000000010 a SMP_START_ADDR
+   0000000000000004 a SP_PRIVATE_FLAGS
+   00000000000000d4 t start_interrupt_eoi_t18x_pcie
+   000000000000006c t start_interrupt_id_t18x_pcie
+   000000000000013c t start_interrupt_mask_t18x_pcie
+   0000000000000194 t start_interrupt_unmask_t18x_pcie
+   0000000000000006 a SYSPAGE_NUM_CPU
+   0000000000000024 a SYSPAGE_SMP
+   0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+   0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+   0000000000000001 a VARIANT_a
+   0000000000000001 a VARIANT_le
+== callout_interrupt_t18x_pcie_ic6.o
+   0000000000000001 a BUILDENV_qss
+   0000000000000002 a BUS_ADRERR
+   0000000000000003 a BUS_OBJERR
+   0000000000000004 a CA_LINE_SIZE
+   0000000000000008 a CA_NUM_LINES
+                    U callout_io_map
+   0000000000000000 a DDI_BASE
+   0000000000000008 a DDI_SHIFT
+   0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+   0000000000000002 a DEBUG_WATCHDOG_FEED
+   0000000000000000 a DEBUG_WATCHDOG_STOP
+   000000000000018c t end_interrupt_eoi_t18x_pcie_ic6
+   0000000000000138 t end_interrupt_id_t18x_pcie_ic6
+   00000000000001e4 t end_interrupt_mask_t18x_pcie_ic6
+   000000000000023c t end_interrupt_unmask_t18x_pcie_ic6
+   0000000000000005 a FLTACCESS
+   0000000000000006 a FLTBOUNDS
+   0000000000000138 T interrupt_eoi_t18x_pcie_ic6
+   0000000000000058 T interrupt_id_t18x_pcie_ic6
+   0000000000000190 T interrupt_mask_t18x_pcie_ic6
+   00000000000001e8 T interrupt_unmask_t18x_pcie_ic6
+   0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+   0000000000000004 a INTR_CONFIG_FLAG_IPI
+   0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+   0000000000000008 a INTR_CONFIG_FLAG_SYS
+   0000000000000010 a LSR_BI
+   0000000000000001 a LSR_RXRDY
+   0000000000000020 a LSR_TXRDY
+   0000000000000000 d Lvaddr
+   0000000000000001 a MS_ASYNC
+   0000000000000004 a MS_INVALIDATE
+   0000000001000000 a MS_INVALIDATE_ICACHE
+   0000000000000002 a MS_SYNC
+   0000000000000000 t patch_intr
+   0000000000000020 a QT_TIMER_PERIOD
+   0000000000000005 a REG_LS
+   000000000000000a a SIGBUS
+   0000000000000010 a SIZEOF_DDI
+   0000000000000000 a SMP_PENDING
+   0000000000000010 a SMP_START_ADDR
+   0000000000000004 a SP_PRIVATE_FLAGS
+   000000000000014c t start_interrupt_eoi_t18x_pcie_ic6
+   000000000000006c t start_interrupt_id_t18x_pcie_ic6
+   00000000000001a4 t start_interrupt_mask_t18x_pcie_ic6
+   00000000000001fc t start_interrupt_unmask_t18x_pcie_ic6
+   0000000000000006 a SYSPAGE_NUM_CPU
+   0000000000000024 a SYSPAGE_SMP
+   0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+   0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+   0000000000000001 a VARIANT_a
+   0000000000000001 a VARIANT_le
+== callout_reboot_psci.o
+   0000000000000001 a BUILDENV_qss
+   0000000000000002 a BUS_ADRERR
+   0000000000000003 a BUS_OBJERR
+   0000000000000004 a CA_LINE_SIZE
+   0000000000000008 a CA_NUM_LINES
+   0000000000000000 a DDI_BASE
+   0000000000000008 a DDI_SHIFT
+   0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+   0000000000000002 a DEBUG_WATCHDOG_FEED
+   0000000000000000 a DEBUG_WATCHDOG_STOP
+   000000000000002c t do_reboot_hvc
+   0000000000000070 t do_reboot_smc
+   000000000000003c t end_reboot_psci_hvc
+   0000000000000080 t end_reboot_psci_smc
+   0000000000000005 a FLTACCESS
+   0000000000000006 a FLTBOUNDS
+   0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+   0000000000000004 a INTR_CONFIG_FLAG_IPI
+   0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+   0000000000000008 a INTR_CONFIG_FLAG_SYS
+   0000000000000010 a LSR_BI
+   0000000000000001 a LSR_RXRDY
+   0000000000000020 a LSR_TXRDY
+   0000000000000001 a MS_ASYNC
+   0000000000000004 a MS_INVALIDATE
+   0000000001000000 a MS_INVALIDATE_ICACHE
+   0000000000000002 a MS_SYNC
+   0000000000000020 a QT_TIMER_PERIOD
+   0000000000000000 T reboot_psci_hvc
+   0000000000000040 T reboot_psci_smc
+   0000000000000005 a REG_LS
+   000000000000000a a SIGBUS
+   0000000000000010 a SIZEOF_DDI
+   0000000000000000 a SMP_PENDING
+   0000000000000010 a SMP_START_ADDR
+   0000000000000004 a SP_PRIVATE_FLAGS
+   0000000000000038 t spin_hvc
+   000000000000007c t spin_smc
+   0000000000000014 t start_reboot_psci_hvc
+   0000000000000054 t start_reboot_psci_smc
+   0000000000000006 a SYSPAGE_NUM_CPU
+   0000000000000024 a SYSPAGE_SMP
+   0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+   0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+   0000000000000001 a VARIANT_a
+   0000000000000001 a VARIANT_le
+== callout_sendipi_gic_v3.o
+   0000000000000001 a BUILDENV_qss
+   0000000000000002 a BUS_ADRERR
+   0000000000000003 a BUS_OBJERR
+   0000000000000004 a CA_LINE_SIZE
+   0000000000000008 a CA_NUM_LINES
+   0000000000000000 a DDI_BASE
+   0000000000000008 a DDI_SHIFT
+   0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+   0000000000000002 a DEBUG_WATCHDOG_FEED
+   0000000000000000 a DEBUG_WATCHDOG_STOP
+   00000000000000c4 t end_sendipi_gic_v3_mm
+   0000000000000044 t end_sendipi_gic_v3_sr
+   0000000000000005 a FLTACCESS
+   0000000000000006 a FLTBOUNDS
+                    U gic_gicr_vaddr
+   0000000000000044 t gicr_patch
+   0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+   0000000000000004 a INTR_CONFIG_FLAG_IPI
+   0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+   0000000000000008 a INTR_CONFIG_FLAG_SYS
+   0000000000000010 a LSR_BI
+   0000000000000001 a LSR_RXRDY
+   0000000000000020 a LSR_TXRDY
+   0000000000000001 a MS_ASYNC
+   0000000000000004 a MS_INVALIDATE
+   0000000001000000 a MS_INVALIDATE_ICACHE
+   0000000000000002 a MS_SYNC
+   0000000000000020 a QT_TIMER_PERIOD
+   0000000000000005 a REG_LS
+   0000000000000070 T sendipi_gic_v3_mm
+   0000000000000000 T sendipi_gic_v3_sr
+   000000000000000a a SIGBUS
+   0000000000000010 a SIZEOF_DDI
+   0000000000000000 a SMP_PENDING
+   0000000000000010 a SMP_START_ADDR
+   0000000000000004 a SP_PRIVATE_FLAGS
+   0000000000000084 t start_sendipi_gic_v3_mm
+   0000000000000014 t start_sendipi_gic_v3_sr
+   0000000000000006 a SYSPAGE_NUM_CPU
+   0000000000000024 a SYSPAGE_SMP
+   0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+   0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+   0000000000000001 a VARIANT_a
+   0000000000000001 a VARIANT_le
+== callout_smp_spin.o
+   0000000000000001 a BUILDENV_qss
+   0000000000000002 a BUS_ADRERR
+   0000000000000003 a BUS_OBJERR
+   0000000000000004 a CA_LINE_SIZE
+   0000000000000008 a CA_NUM_LINES
+   0000000000000000 a DDI_BASE
+   0000000000000008 a DDI_SHIFT
+   0000000000000001 a DEBUG_WATCHDOG_CONTINUE
+   0000000000000002 a DEBUG_WATCHDOG_FEED
+   0000000000000000 a DEBUG_WATCHDOG_STOP
+   0000000000000068 t end_smp_spin
+   0000000000000005 a FLTACCESS
+   0000000000000006 a FLTBOUNDS
+   0000000000000002 a INTR_CONFIG_FLAG_DISALLOWED
+   0000000000000004 a INTR_CONFIG_FLAG_IPI
+   0000000000000001 a INTR_CONFIG_FLAG_PREATTACH
+   0000000000000008 a INTR_CONFIG_FLAG_SYS
+   0000000000000010 a LSR_BI
+   0000000000000001 a LSR_RXRDY
+   0000000000000020 a LSR_TXRDY
+   0000000000000001 a MS_ASYNC
+   0000000000000004 a MS_INVALIDATE
+   0000000001000000 a MS_INVALIDATE_ICACHE
+   0000000000000002 a MS_SYNC
+   0000000000000020 a QT_TIMER_PERIOD
+   0000000000000005 a REG_LS
+   000000000000000a a SIGBUS
+   0000000000000010 a SIZEOF_DDI
+   0000000000000000 a SMP_PENDING
+   0000000000000000 T smp_spin
+   0000000000000010 a SMP_START_ADDR
+   0000000000000004 a SP_PRIVATE_FLAGS
+   0000000000000014 t start_smp_spin
+   0000000000000006 a SYSPAGE_NUM_CPU
+   0000000000000024 a SYSPAGE_SMP
+   0000000000000008 a SYSPAGE_SYSTEM_PRIVATE
+   0000000000000001 a SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT
+   0000000000000001 a VARIANT_a
+   0000000000000001 a VARIANT_le
+== cpu_startnext.o
+   0000000000000000 T cpu_startnext
+                    U lsp
+                    U shdr
+                    U vstart
+== cpu_startup.o
+   0000000000000000 D __page_size
+                    U aarch64_cpuid
+   0000000000000000 T aarch64_cpuid_find
+   0000000000000004 B cache_snooped
+   0000000000000040 T cpu_startup
+   0000000000000010 D meltdown_active
+   0000000000000008 B pauth_active
+   000000000000000c D spectre_v2_active
+   0000000000000008 D ssbs_active
+   0000000000000000 B sve_requested
+== cpuid_a78ae.o
+   0000000000000000 D cpuid_a78ae
+== cstart.o
+                    U _main
+                    U _start_el2_or_el1
+                    U aarch64_cache_flush
+   0000000000000000 D boot_args
+                    U boot_regs
+   0000000000000001 a BUILDENV_qss
+   0000000000000000 T cstart
+   0000000000000c10 D stack
+   0000000000000c10 D stack_addr_hi
+   0000000000000010 D stack_addr_lo
+   0000000000000001 a VARIANT_a
+   0000000000000001 a VARIANT_le
+                    U vbar_default
+== efi_entry_point.o
+                    U __stack_chk_fail
+                    U __stack_chk_guard
+                    U cstart
+   0000000000000018 b efi_command_line
+   0000000000000010 b efi_command_line_size
+   00000000000003f0 T efi_convert_command_line
+   00000000000000b0 T efi_entry_point
+   0000000000000374 T efi_get_table
+   0000000000000000 b efi_map
+   0000000000000008 b efi_map_desc_size
+   0000000000000020 b efi_map_size
+                    U efi_system_table
+   00000000000002b4 T efi_walk_map
+   0000000000000000 t heapify
+                    U memcmp
+   0000000000000028 b sorted.0
+== efi_tweak_cmdline.o
+                    U bootstrap_arg_adjust
+                    U efi_convert_command_line
+   0000000000000000 T efi_tweak_cmdline
+   0000000000000000 b next_arg.0
+== fdt_find_node.o
+                    U __stack_chk_fail
+                    U __stack_chk_guard
+   0000000000000000 T fdt_find_node
+                    U fdt_get_str
+                    U fdt_next_node
+                    U fdt_node_offset_by_compatible
+                    U fdt_node_offset_by_prop_value
+                    U strcasecmp
+                    U strlen
+== fdt_get_cpu_freq.o
+                    U __stack_chk_fail
+                    U __stack_chk_guard
+                    U debug_flag
+                    U fdt
+   0000000000000000 T fdt_get_cpu_freq
+                    U fdt_get_property
+                    U fdt_node_offset_by_prop_value
+                    U kprintf
+== fdt_get_int.o
+   0000000000000000 T fdt_get_int
+                    U fdt_get_u32
+== fdt_get_intr.o
+                    U __stack_chk_fail
+                    U __stack_chk_guard
+   0000000000000000 T fdt_get_intr
+                    U fdt_get_intr_cells
+                    U fdt_getprop
+                    U memset
+== fdt_get_intr_cells.o
+                    U __stack_chk_fail
+                    U __stack_chk_guard
+   0000000000000000 b cache_fdt.3
+   0000000000000010 b cache_intr_cells.0
+   000000000000000c b cache_parent.1
+   0000000000000008 b cache_phandle.2
+                    U fdt_get_int
+   0000000000000000 T fdt_get_intr_cells
+                    U fdt_get_u32
+                    U fdt_node_offset_by_phandle
+                    U fdt_parent_offset
+== fdt_get_num64.o
+                    U __stack_chk_fail
+                    U __stack_chk_guard
+   0000000000000000 T fdt_get_num64
+                    U fdt_getprop
+== fdt_get_reg32.o
+                    U __stack_chk_fail
+                    U __stack_chk_guard
+   0000000000000000 T fdt_get_reg32
+                    U fdt_get_reg64_cells
+== fdt_get_reg64.o
+   0000000000000000 T fdt_get_reg64
+                    U fdt_get_reg64_cells
+== fdt_get_reg64_cells.o
+                    U __stack_chk_fail
+                    U __stack_chk_guard
+                    U fdt_address_cells
+   0000000000000000 T fdt_get_reg64_cells
+                    U fdt_getprop
+                    U fdt_parent_offset
+                    U fdt_size_cells
+== fdt_get_reg_addr.o
+                    U __stack_chk_fail
+                    U __stack_chk_guard
+                    U fdt_get_name
+   0000000000000000 T fdt_get_reg_addr
+                    U fdt_get_reg64_cells
+                    U memchr
+                    U strtoull
+== fdt_get_reg_int.o
+                    U __stack_chk_fail
+                    U __stack_chk_guard
+                    U fdt_get_reg_addr
+   0000000000000000 T fdt_get_reg_int
+== fdt_get_str.o
+                    U __stack_chk_fail
+                    U __stack_chk_guard
+   0000000000000000 T fdt_get_str
+                    U fdt_getprop
+== fdt_get_u32.o
+                    U __stack_chk_fail
+                    U __stack_chk_guard
+   0000000000000000 T fdt_get_u32
+                    U fdt_getprop
+== fdt_get_u64.o
+                    U __stack_chk_fail
+                    U __stack_chk_guard
+   0000000000000000 T fdt_get_u64
+                    U fdt_getprop
+== fdt_init.o
+                    U alloc_ram
+                    U as_add_containing
+                    U fdt
+   00000000000000b0 T fdt_asinfo
+                    U fdt_check_header
+   0000000000000000 T fdt_init
+                    U fdt_paddr
+                    U fdt_size
+                    U startup_memory_map
+                    U startup_memory_unmap
+== fdt_init_bootopt.o
+                    U boot_regs
+                    U crash
+                    U debug_flag
+                    U fdt
+                    U fdt_boot_option
+                    U fdt_check_header
+   0000000000000000 T fdt_init_bootopt
+                    U fdt_paddr
+                    U fdt_size
+                    U kprintf
+                    U startup_memory_map
+                    U strtoul
+== fdt_node_offset_by_nodename.o
+                    U fdt_check_header
+                    U fdt_next_node
+   0000000000000000 T fdt_node_offset_by_nodename
+                    U fdt_offset_ptr
+                    U memchr
+                    U memcmp
+                    U strlen
+== fdt_num_cpu.o
+                    U fdt
+                    U fdt_node_offset_by_prop_value
+   0000000000000000 T fdt_num_cpu
+== fdt_psci_configure.o
+                    U fdt
+                    U fdt_get_property
+                    U fdt_node_offset_by_compatible
+   0000000000000000 T fdt_psci_configure
+                    U psci_call
+                    U psci_cpu_on_cmd
+                    U psci_hvc
+                    U psci_smc
+                    U strcmp
+== fdt_qtime.o
+                    U __stack_chk_fail
+                    U __stack_chk_guard
+                    U crash
+                    U fdt
+                    U fdt_get_property
+                    U fdt_node_offset_by_compatible
+   0000000000000000 T fdt_qtime
+== fdt_smp_spin_start.o
+                    U __stack_chk_fail
+                    U __stack_chk_guard
+                    U crash
+                    U fdt
+                    U fdt_get_property
+                    U fdt_node_offset_by_prop_value
+   0000000000000000 T fdt_smp_spin_start
+   0000000000000008 B spin_shim_id
+                    U spin_shim_rtn
+   0000000000000000 B spin_shim_start
+== fdt_tweak_cmdline.o
+                    U __stack_chk_fail
+                    U __stack_chk_guard
+                    U bootstrap_arg_adjust
+                    U fdt
+                    U fdt_get_property
+                    U fdt_init
+                    U fdt_path_offset
+   0000000000000000 T fdt_tweak_cmdline
+                    U memcpy
+   0000000000000000 b next_arg.0
+                    U ws_alloc
+== fdt_vars.o
+   0000000000000018 B fdt
+   0000000000000000 B fdt_boot_option
+   0000000000000010 B fdt_paddr
+   0000000000000008 B fdt_size
+== gic.o
+   0000000000000040 B gic_cpu_init
+   0000000000000030 B gic_gicc
+   0000000000000010 B gic_gicc_vaddr
+   0000000000000038 B gic_gicd
+   0000000000000018 B gic_gicd_vaddr
+   0000000000000028 B gic_gicr
+   0000000000000008 B gic_gicr_shift
+   0000000000000000 B gic_gicr_vaddr
+   0000000000000020 B gic_sendipi
+== gic_v3.o
+   0000000000000028 r .LC2
+   0000000000000020 r __FUNCTION__.1
+   0000000000000000 r __FUNCTION__.2
+                    U __stack_chk_fail
+                    U __stack_chk_guard
+                    U add_interrupt
+                    U alloc_ram
+   0000000000000090 d arm_gic_id
+                    U as_add64
+                    U as_find
+   0000000000000008 b base_addresses_initialized
+                    U board_smp_num_cpu
+                    U calloc_ram
+                    U callout_io_map
+                    U callout_memory_map
+                    U crash
+                    U debug_flag
+                    U gic_cpu_init
+   00000000000006c4 T gic_get_arch_version
+   0000000000000000 t gic_get_arch_version.part.0
+   0000000000000774 T gic_get_impl_id
+   0000000000000730 T gic_get_impl_productid
+   00000000000006e4 T gic_get_impl_version
+                    U gic_gicr_vaddr
+   0000000000000098 d gic_id_str.3
+                    U gic_sendipi
+                    U gic_v3_dcache_flush_for_its
+   0000000000000090 t gic_v3_gicc_init
+   0000000000001954 T gic_v3_initialize
+   00000000000000a8 d gic_v3_intr_ppi
+   0000000000000108 d gic_v3_intr_spi
+                    U gic_v3_its_base_vaddr
+                    U gic_v3_its_cmd_q_last_slot_offset
+                    U gic_v3_its_cmd_q_lock_vaddr
+                    U gic_v3_its_cmd_q_vaddr
+                    U gic_v3_its_initialize
+                    U gic_v3_its_mapc
+                    U gic_v3_its_set_paddr
+   00000000000012d0 T gic_v3_lpi_add_entry
+   0000000000000ee0 T gic_v3_lpi_uses_its
+   0000000000000060 t gic_v3_lpi_uses_its.part.0
+   0000000000000d50 T gic_v3_num_lpis
+   0000000000000d20 T gic_v3_num_spis
+   0000000000000030 t gic_v3_num_spis.part.0
+   0000000000000dd0 T gic_v3_set_intr_trig_mode
+   0000000000001710 T gic_v3_set_lpi_cfgtbl_params
+   0000000000001834 T gic_v3_set_lpi_pendtbl_params
+   0000000000000c70 T gic_v3_set_paddr
+   0000000000000960 T gic_v3_set_paddr_range
+   0000000000000f14 T gic_v3_spi_add_entry
+   0000000000000c80 T gic_v3_use_mm_reg_callouts
+   0000000000000080 d gicc_paddr_base
+   0000000000000088 d gicd_paddr_base
+   0000000000000004 b gicr_index_limit
+   0000000000000000 b gicr_offset_shift_val
+   0000000000000000 d gicr_paddr_base
+   000000000000000c b init_done.4
+                    U interrupt_config_gic_v3_ppi
+                    U interrupt_eoi_gic_v3_lpi_mm
+                    U interrupt_eoi_gic_v3_lpi_sr
+                    U interrupt_eoi_gic_v3_ppi_mm
+                    U interrupt_eoi_gic_v3_ppi_sr
+                    U interrupt_eoi_gic_v3_spi_mm
+                    U interrupt_eoi_gic_v3_spi_sr
+                    U interrupt_id_gic_v3_lpi
+                    U interrupt_id_gic_v3_ppi_mm
+                    U interrupt_id_gic_v3_ppi_sr
+                    U interrupt_id_gic_v3_spi
+                    U interrupt_mask_gic_v3_lpi_direct
+                    U interrupt_mask_gic_v3_lpi_its
+                    U interrupt_mask_gic_v3_ppi
+                    U interrupt_mask_gic_v3_spi
+                    U interrupt_unmask_gic_v3_lpi_direct
+                    U interrupt_unmask_gic_v3_lpi_its
+                    U interrupt_unmask_gic_v3_ppi
+                    U interrupt_unmask_gic_v3_spi
+                    U kprintf
+   0000000000000220 b lpi_intrinfo
+   0000000000000008 d lpi_params
+                    U lsp
+                    U memset
+   00000000000006a8 b ppi_patch_data.0
+                    U sendipi_gic_v3_mm
+                    U sendipi_gic_v3_sr
+                    U set_syspage_section
+                    U shdr
+   0000000000000018 b spi_intrinfo
+   0000000000000010 b use_memory_mapped_callouts
+== gic_v3_dcache_flush_for_its.o
+   0000000000000000 T gic_v3_dcache_flush_for_its
+== gic_v3_its.o
+   0000000000000040 r .LC2
+                    U calloc_ram
+                    U callout_io_map
+                    U callout_memory_map
+   0000000000000060 d cmd_q_lock_base_paddr
+   0000000000000000 b cmd_q_lock_base_vaddr
+                    U crash
+                    U debug_flag
+                    U gic_v3_dcache_flush_for_its
+   0000000000000cb0 T gic_v3_its_base_vaddr
+   0000000000000d70 T gic_v3_its_cmd_q_last_slot_offset
+   0000000000000d30 T gic_v3_its_cmd_q_lock_vaddr
+   0000000000000cf0 T gic_v3_its_cmd_q_vaddr
+   0000000000000040 T gic_v3_its_initialize
+   00000000000012b0 T gic_v3_its_mapc
+   0000000000001270 T gic_v3_its_set_cmd_q_num_pages
+   0000000000001150 T gic_v3_its_set_cmd_q_params
+   0000000000001110 T gic_v3_its_set_ct_num_ids
+   0000000000001090 T gic_v3_its_set_ct_page_size
+   0000000000000f80 T gic_v3_its_set_ct_params
+   0000000000000f00 T gic_v3_its_set_dt_page_size
+   0000000000000df0 T gic_v3_its_set_dt_params
+   0000000000000000 T gic_v3_its_set_paddr
+                    U hwidev_add
+                    U hwitag_add_location
+   0000000000000000 d its_params
+                    U kprintf
+                    U lsp
+                    U shdr
+== gicv_asinfo.o
+                    U __stack_chk_fail
+                    U __stack_chk_guard
+                    U as_add64
+                    U as_find
+   0000000000000000 T gicv_asinfo
+                    U ksprintf
+== hw_ser8250.o
+                    U __stack_chk_fail
+                    U __stack_chk_guard
+   0000000000000000 b aspace
+                    U chip_access
+                    U chip_done
+                    U chip_read8
+                    U chip_write8
+                    U dbg_device
+   00000000000002d0 T init_8250
+   00000000000001e4 T init_8250_common
+   0000000000000000 t parse_line
+   0000000000000360 T put_8250
+                    U strtopaddr
+                    U strtoul
+== hw_serpl011.o
+                    U __stack_chk_fail
+                    U __stack_chk_guard
+                    U dbg_device
+   0000000000000144 T init_pl011
+   0000000000000000 t parse_line
+   0000000000000230 T put_pl011
+                    U strtopaddr
+                    U strtoul
+== hypervisor.o
+                    U alloc_ram
+   0000000000000090 T arch_hypervisor_init
+   00000000000001c0 T arch_hypervisor_syspage_init
+   0000000000000000 T arch_hypervisor_validate_flags
+                    U as_add
+                    U as_find
+                    U crash
+                    U debug_flag
+                    U drop_to_el1
+                    U hyp_enable_el1_host
+                    U hyp_enable_el2_host
+                    U kprintf
+   0000000000000000 b transfer_vector_table
+== hypervisor_enable.o
+   0000000000000001 a BUILDENV_qss
+   000000000000001c T hyp_enable_el1_host
+   0000000000000000 T hyp_enable_el2_host
+   0000000000000001 a VARIANT_a
+   0000000000000001 a VARIANT_le
+== hypervisor_setup.o
+                    U arch_hypervisor_init
+                    U arch_hypervisor_syspage_init
+                    U arch_hypervisor_validate_flags
+                    U crash
+   0000000000000060 T hypervisor_get_required_flags
+   0000000000000010 T hypervisor_init
+   0000000000000000 T hypervisor_set_options
+   0000000000000070 T hypervisor_syspage_init
+                    U lsp
+   0000000000000000 b option_flags
+   0000000000000004 b required_flags
+                    U set_syspage_section
+== init_cpuinfo.o
+                    U aarch64_cpuid_find
+                    U aarch64_cpuspeed
+                    U add_cache_ways
+                    U add_string
+                    U cache_armv8_dcache
+                    U cache_armv8_icache
+                    U cache_snooped
+                    U cpu_freq
+                    U cpuid_a57
+                    U cpuid_a72
+                    U debug_flag
+                    U gic_cpu_init
+   00000000000007d4 T init_cpuinfo
+   0000000000000000 T init_one_cpuinfo
+                    U kprintf
+   0000000000000000 r l1ip.0
+                    U lsp
+                    U pauth_active
+                    U set_syspage_section
+                    U shdr
+                    U spectre_v2_active
+                    U ssbs_active
+                    U sve_requested
+                    U system_dcache_idx
+                    U system_icache_idx
+== init_qtime.o
+   0000000000000000 T init_qtime
+                    U init_qtime_v8gt
+== init_qtime_v8gt.o
+                    U alloc_qtime
+                    U hypervisor_get_required_flags
+   0000000000000020 T init_qtime_v8gt
+                    U invert_timer_freq
+                    U timer_diff
+   0000000000000010 t timer_diff_v8gt
+                    U timer_freq
+                    U timer_start
+   0000000000000000 t timer_start_v8gt
+== init_raminfo_efi.o
+                    U add_ram
+                    U alloc_ram
+                    U avoid_ram
+                    U efi_walk_map
+   0000000000000000 T init_raminfo_efi
+== init_raminfo_fdt.o
+                    U __stack_chk_fail
+                    U __stack_chk_guard
+                    U add_ram
+                    U alloc_ram
+                    U avoid_ram
+                    U fdt
+                    U fdt_get_mem_rsv
+                    U fdt_get_reg64_cells
+                    U fdt_node_offset_by_prop_value
+                    U fdt_num_mem_rsv
+   0000000000000000 T init_raminfo_fdt
+== init_raminfo_uefi.o
+                    U __stack_chk_fail
+                    U __stack_chk_guard
+                    U add_ram
+                    U alloc_ram
+                    U avoid_ram
+                    U crash
+                    U debug_flag
+                    U efi_system_table
+   0000000000000000 T init_raminfo_uefi
+                    U kprintf
+                    U uefi_exit_boot_services_f
+== init_smp.o
+                    U _syspage_ptr
+                    U ap_fail
+                    U board_smp_init
+                    U board_smp_num_cpu
+                    U board_smp_start
+                    U callout_output_one
+                    U callout_output_rtn
+   0000000000000070 t callout_output_smp
+   0000000000000018 B cpu_starting
+   00000000000001a0 T init_smp
+                    U lsp
+                    U max_cpus
+                    U set_syspage_section
+                    U smp_hook_rtn
+   0000000000000010 B smp_prev_output_rtn
+                    U smp_spin
+   0000000000000008 B smp_spin_vaddr
+                    U smp_start
+   00000000000000c0 t start_aps
+   0000000000000000 B syspage_available
+   0000000000000000 t transfer_aps
+                    U uefi_io_resume_f
+                    U uefi_io_suspend_f
+== is_uefi_boot.o
+                    U boot_regs
+                    U efi_image_handle
+                    U efi_system_table
+   0000000000000000 T is_uefi_boot
+   0000000000000000 d uefi.0
+== kprintf.o
+                    U __stack_chk_fail
+                    U __stack_chk_guard
+   0000000000000000 r c
+   0000000000000690 T crash
+                    U crash_done
+                    U dummy_print_char
+   0000000000000700 T get_print_char
+   0000000000000490 T kprintf
+   0000000000000008 b ksnprinf_len
+   00000000000005c0 T ksnprintf
+   0000000000000010 b ksnprintf_max_len
+   0000000000000510 T ksprintf
+   0000000000000000 d print_char
+   00000000000006f0 T set_print_char
+   0000000000000000 t string_print_char
+   0000000000000020 t string_print_n_char
+   0000000000000000 b string_ptr
+   0000000000000050 t vmsg
+== load_ifs.o
+                    U board_disable_caches
+                    U board_enable_caches
+                    U copy_memory
+                    U crash
+                    U debug_flag
+                    U find_ram
+                    U full_image_paddr
+                    U full_imagefs_paddr
+                    U kprintf
+   0000000000000000 T load_ifs
+                    U shdr
+                    U uncompress
+== psci_call.o
+   0000000000000001 a BUILDENV_qss
+   0000000000000000 D psci_call
+   0000000000000000 T psci_hvc
+   0000000000000008 T psci_smc
+   0000000000000001 a VARIANT_a
+   0000000000000001 a VARIANT_le
+== psci_cpu_id.o
+   0000000000000000 T psci_cpu_id
+== psci_smp.o
+                    U psci_call
+                    U psci_cpu_id
+   0000000000000000 D psci_cpu_on_cmd
+   0000000000000000 T psci_smp_start
+== smp_start.o
+                    U _start_el2_or_el1
+                    U aarch64_cache_flush
+                    U board_smp_adjust_num
+   0000000000000001 a BUILDENV_qss
+                    U cpu_starting
+                    U cpu_startnext
+                    U cpu_startup
+                    U hypervisor_init
+                    U init_one_cpuinfo
+                    U smp_spin_vaddr
+   0000000000000000 T smp_start
+   0000000000002000 d stack
+                    U syspage_available
+   0000000000000001 a VARIANT_a
+   0000000000000001 a VARIANT_le
+                    U vbar_default
+== spin_bootstrap_id.o
+   0000000000000000 B spin_bootstrap_id
+== spin_smp.o
+   0000000000000000 D spin_num_cpu
+   0000000000000000 T spin_smp_num_cpu
+   0000000000000010 T spin_smp_start
+   0000000000000000 B spin_start_addr
+== spin_smp_init.o
+   0000000000000054 t bootstrap
+   0000000000000001 a BUILDENV_qss
+                    U spin_bootstrap_id
+                    U spin_num_cpu
+   0000000000000000 T spin_smp_init
+                    U spin_start_addr
+   0000000000000001 a VARIANT_a
+   0000000000000001 a VARIANT_le
+== startnext.o
+                    U cpu_startnext
+                    U crash
+                    U debug_flag
+                    U first_bootstrap_start_vaddr
+                    U kprintf
+                    U lsp
+   0000000000000000 T startnext
+                    U syspage_paddr
+                    U uefi_exit_boot_services_f
+== uefi.o
+   0000000000000020 r .LC2
+   0000000000000000 r __FUNCTION__.0
+                    U __stack_chk_fail
+                    U __stack_chk_guard
+   0000000000000000 t _uefi_exit_boot_services
+                    U crash
+                    U debug_flag
+   0000000000000018 B efi_boot_services
+   0000000000000010 B efi_image_handle
+   0000000000000020 B efi_runtime_services
+   0000000000000008 B efi_system_table
+                    U kprintf
+                    U memcmp
+                    U uefi_exit_boot_services_f
+   00000000000002b4 T uefi_exit_init
+   0000000000000240 T uefi_find_config_tbl
+   0000000000000000 b uefi_init_cnt
+                    U uefi_io_flush
+== uefi_init.o
+   0000000000000020 r .LC2
+                    U boot_regs
+                    U crash
+                    U efi_boot_services
+                    U efi_image_handle
+                    U efi_runtime_services
+                    U efi_system_table
+                    U uefi_exit_init
+   0000000000000000 T uefi_init
+   0000000000000000 b uefi_init_done.0
+== uefi_io.o
+                    U __stack_chk_fail
+                    U __stack_chk_guard
+                    U __stackavail
+   0000000000000000 t _uefi_io_resume
+   0000000000000200 t _uefi_io_suspend
+   0000000000000008 b cur_ConOut
+   0000000000000010 b cur_pos.1
+                    U efi_system_table
+                    U strlen
+                    U strstr
+   0000000000000000 b suspend_cnt
+                    U uefi_exit_init
+   0000000000000244 T uefi_io_flush
+   00000000000002a0 T uefi_io_init
+                    U uefi_io_resume_f
+                    U uefi_io_suspend_f
+   0000000000000190 T uefi_print_char
+   0000000000000030 T uefi_print_str
+   0000000000000018 b uefi_str.0
+== vstart.o
+   0000000000000001 a BUILDENV_qss
+                    U mair_el1
+                    U sctlr_el1
+                    U tcr_el1
+                    U ttbr0
+                    U ttbr1
+   0000000000000001 a VARIANT_a
+   0000000000000001 a VARIANT_le
+   0000000000000000 T vstart

@@ -1,0 +1,190 @@
+# orin-followup.txt -- TASK H3 live Orin Nano harvest, 2026-09-09 11:02-11:09 UTC (board local 13:02-13:09)
+# Source: ssh <user>@<orin-ip>, bash -s < s4_followup.sh + inline session 5, READ-ONLY. sudo -n used only for: dmesg, /proc/iomem, efibootmgr -v, blkid, od/md5sum of /sys/firmware/fdt, 1-8 sector dd reads of mmcblk0p2/p3.
+# Redacted: login name -> <user>; LAN IP -> <orin-ip>; ssh key -> <orin-key>; Ethernet MAC -> <mac>; NVMe serial/EUI -> <nvme-serial>/<nvme-eui>.
+# Section: follow-ups: phandle resolution, __symbols__ labels, ITS presence, firmware node, per-tty port regs, DTB provenance, ESP launcher identity, HSP dt-binding header
+
+##### SESSION 4 follow-ups #####
+--- phandle of each HSP / GIC / serial node
+bus@0/hsp@c150000                             phandle=0x00000143
+bus@0/hsp@3c00000                             phandle=0x00000121
+bus@0/hsp@3d00000                             phandle=0x00000120
+bus@0/hsp@1600000                             phandle=0x00000252
+tegra-hsp@b950000                             phandle=0x000001fb
+bus@0/aon@c000000                             phandle=0x0000011e
+bus@0/interrupt-controller@f400000            phandle=0x00000001
+bus@0/serial@3100000                          phandle=0x0000021f
+bus@0/serial@3140000                          phandle=0x00000220
+bus@0/serial@31d0000                          phandle=0x00000226
+serial                                        phandle=0x00000254
+bpmp                                          phandle=0x00000003
+--- resolve phandles 0x120 0x121 0x143 0x1fb 0x03 (search all phandle files)
+0x0143 -> /sys/firmware/devicetree/base/bus@0/hsp@c150000
+0x0120 -> /sys/firmware/devicetree/base/bus@0/hsp@3d00000
+0x0121 -> /sys/firmware/devicetree/base/bus@0/hsp@3c00000
+0x01fb -> /sys/firmware/devicetree/base/tegra-hsp@b950000
+0x0003 -> /sys/firmware/devicetree/base/bpmp
+--- __symbols__ labels matching uart|tcu|hsp|gic|serial|intc|psci|timer|pmc|mce|bpmp
+agic                         = /bus@0/aconnect@2900000/interrupt-controller@2a40000 
+bpmp                         = /bpmp 
+bpmp_i2c                     = /bpmp/i2c 
+bpmp_thermal                 = /bpmp/thermal 
+cpu_bpmp_rx                  = /sram@40000000/sram@71000 
+cpu_bpmp_tx                  = /sram@40000000/sram@70000 
+gic                          = /bus@0/interrupt-controller@f400000 
+hsp_aon                      = /bus@0/hsp@c150000 
+hsp_rce                      = /tegra-hsp@b950000 
+hsp_top0                     = /bus@0/hsp@3c00000 
+hsp_top1                     = /bus@0/hsp@3d00000 
+hsp_top2                     = /bus@0/hsp@1600000 
+pmc                          = /bus@0/pmc@c360000 
+tcu                          = /serial 
+uarta                        = /bus@0/serial@3100000 
+uarte                        = /bus@0/serial@3140000 
+uarti                        = /bus@0/serial@31d0000 
+--- TCU node mboxes / mbox-names (raw hex)
+mboxes = 000001210000000100000000000001430000000180000001
+mbox-names = rx|tx|
+--- children of the GICv3 node (expect none / no ITS)
+total 0
+-r--r--r--   1 root root  4 Sep  9 13:04 #interrupt-cells
+-r--r--r--   1 root root  4 Sep  9 13:04 #redistributor-regions
+drwxr-xr-x   2 root root  0 Sep  9 13:04 .
+drwxr-xr-x 122 root root  0 Sep  9 13:04 ..
+-r--r--r--   1 root root 11 Sep  9 13:04 compatible
+-r--r--r--   1 root root  0 Sep  9 13:04 interrupt-controller
+-r--r--r--   1 root root  4 Sep  9 13:04 interrupt-parent
+-r--r--r--   1 root root 12 Sep  9 13:04 interrupts
+-r--r--r--   1 root root 21 Sep  9 13:04 name
+-r--r--r--   1 root root  4 Sep  9 13:04 phandle
+-r--r--r--   1 root root 32 Sep  9 13:04 reg
+--- any its / msi-controller nodes in the whole DT?
+find_rc=0
+--- sudo -n dmesg | grep -E 'ITS|LPI|MSI' (case-sensitive)
+--- firmware/{optee,uefi,ftpm} compatible / method / status
+== firmware/optee
+compatible
+method
+name
+status
+compatible = linaro,optee-tz|
+method = smc|
+status = okay|
+== firmware/uefi
+firmware-media-overlays-applied
+name
+== firmware/ftpm
+compatible
+name
+status
+compatible = microsoft,ftpm|
+status = okay|
+--- tsc_sig_gen@c6a0000 / timer@2080000 compatible
+tsc_sig_gen compatible = nvidia,tegra234-cam-cdi-tsc|
+timer@2080000 compatible = nvidia,tegra234-timer|
+timer@2080000 status = okay|
+--- tegra_mce@e100000 reg (hex)
+000000000e1000000000000000010000000000000e1100000000000000010000000000000e1200000000000000010000000000000e1300000000000000010000000000000e1400000000000000010000000000000e1500000000000000010000000000000e1600000000000000010000000000000e1700000000000000010000000000000e1800000000000000010000000000000e1900000000000000010000000000000e1a00000000000000010000000000000e1b00000000000000010000
+--- sram@40000000 reg (hex)
+00000000400000000000000000080000
+--- per-tty port info: iomem_base irq type port uartclk io_type line
+ttyS0    iomem_base=0x0 irq=0 type=0 port=0x0 uartclk=0 io_type=0 line=0 console=N
+ttyS1    iomem_base=0x0 irq=0 type=0 port=0x0 uartclk=0 io_type=0 line=1 console=N
+ttyS2    iomem_base=0x0 irq=0 type=0 port=0x0 uartclk=0 io_type=0 line=2 console=N
+ttyS3    iomem_base=0x0 irq=0 type=0 port=0x0 uartclk=0 io_type=0 line=3 console=N
+ttyTHS1  iomem_base=0x3100000 irq=112 type=20 port=0x0 uartclk=0 io_type=3 line=1 console=N
+ttyTHS2  iomem_base=0x3140000 irq=113 type=20 port=0x0 uartclk=0 io_type=3 line=2 console=N
+ttyAMA0  iomem_base=0x31D0000 irq=117 type=32 port=0x0 uartclk=0 io_type=3 line=0 console=N
+ttyTCU0  iomem_base=0x0 irq=0 type=41 port=0x0 uartclk=0 io_type=2 line=0 console=Y
+--- DTB provenance: sizes + md5 of /boot DTBs vs /sys/firmware/fdt (the blob the kernel received)
+-r-------- 1 root root 250785 Sep  9 13:07 /sys/firmware/fdt
+1a0491162c859e3dc239b12cbb2a0da3  /sys/firmware/fdt
+250785 /sys/firmware/fdt
+7b2489e9f13dc9384038a9198b5bcaaf  /boot/dtb/kernel_tegra234-p3768-0000+p3767-0005-nv-super.dtb
+7b2489e9f13dc9384038a9198b5bcaaf  /boot/kernel_tegra234-p3768-0000+p3767-0005-nv-super.dtb
+7b2489e9f13dc9384038a9198b5bcaaf  /boot/tegra234-p3768-0000+p3767-0005-nv-super.dtb
+--- fdt blob header (first 16 bytes) of /sys/firmware/fdt and of the DTB file, and the A_kernel-dtb partition (mmcblk0p3, 1 sector, read-only dd)
+ d0 0d fe ed 00 03 d3 a1 00 00 00 38 00 03 8e 60
+ d0 0d fe ed 00 03 ce 09 00 00 00 38 00 03 8a 50
+ d0 0d fe ed 00 03 ce 09 00 00 00 38 00 03 8a 50
+ 00 00 00 28 00 00 00 11 00 00 00 10 00 00 00 00
+ 00 00 43 b9 00 03 8a 18 00 00 00 00 00 00 00 00
+nvidia,p3768-0000+p3767-0005-super
+nvidia,p3767-0005
+nvidia,tegra234
+7NVIDIA Jetson Orin Nano Engineering Reference Developer Kit Super
+simple-bus
+misc@100000
+nvidia,tegra234-misc
+timer@2080000
+nvidia,tegra234-timer
+gpio@2200000
+--- A_kernel partition (mmcblk0p2) first sector header (read-only)
+ 41 4e 44 52 4f 49 44 21 00 82 91 02 00 80 00 10
+ 08 7a e3 00 00 00 00 11 00 00 00 00 00 00 f0 10
+ANDROID!
+mmcblk0p1
+root=/dev/mmcblk0p1 rw rootwait rootfstype=ext4 mminit_loglevel=4 console=ttyTCU0,115200 firmware_class.path=/etc/firmware fbcon=map:0 video=efifb:off console=tty0 
+`.data
+--- BOOTAA64.efi identity (size, md5, version strings)
+-rwxr-xr-x 1 root root 110592 2026-09-08 23:33:56.000000000 +0200 /boot/efi/EFI/BOOT/BOOTAA64.efi
+f53904c81b19dabf034525f224fb9284  /boot/efi/EFI/BOOT/BOOTAA64.efi
+L4TLauncher
+/out/nvidia/bootloader/uefi/Jetson_RELEASE/edk2/MdePkg/Library/BaseLib/SafeString.c
+/out/nvidia/bootloader/uefi/Jetson_RELEASE/edk2/MdePkg/Library/BaseLib/String.c
+/out/nvidia/bootloader/uefi/Jetson_RELEASE/edk2/MdePkg/Library/BaseMemoryLibOptDxe/Arm/MemLibGuid.c
+/out/nvidia/bootloader/uefi/Jetson_RELEASE/edk2/MdePkg/Library/BaseMemoryLibOptDxe/ZeroMemWrapper.c
+/out/nvidia/bootloader/uefi/Jetson_RELEASE/edk2/MdePkg/Library/BaseMemoryLibOptDxe/CompareMemWrapper.c
+/out/nvidia/bootloader/uefi/Jetson_RELEASE/edk2/MdePkg/Library/BaseMemoryLibOptDxe/CopyMemWrapper.c
+/out/nvidia/bootloader/uefi/Jetson_RELEASE/edk2/MdePkg/Library/BasePrintLib/PrintLib.c
+/out/nvidia/bootloader/uefi/Jetson_RELEASE/edk2/MdePkg/Library/DxePcdLib/DxePcdLib.c
+/out/nvidia/bootloader/uefi/Jetson_RELEASE/edk2/ArmPkg/Library/ArmArchTimerLib/ArmArchTimerLib.c
+/out/nvidia/bootloader/uefi/Jetson_RELEASE/edk2/MdePkg/Library/UefiMemoryAllocationLib/MemoryAllocationLib.c
+/out/nvidia/bootloader/uefi/Jetson_RELEASE/edk2/MdePkg/Library/UefiLib/UefiLibPrint.c
+--- nvidia bootloader-config service (what rewrites the ESP at boot?)
+  l4t-rootfs-validation-config.service                  loaded    inactive dead    Checking root filesystem boot successful
+  nv-l4t-bootloader-config.service                      loaded    inactive dead    Configure bootloader service
+  nv-l4t-usb-device-mode.service                        loaded    active   exited  Configure USB flashing port for device mode
+/etc/systemd/system/nv-l4t-bootloader-config.service
+--- QSPI / boot firmware devices (mtd)
+dev:    size   erasesize  name
+ls: cannot access '/dev/mtd*': No such file or directory
+--- dmesg: memory carveouts / tegra reserved (grep -iE 'carveout|Reserved memory|reserved mem')
+[    0.000000] Reserved memory: created CMA memory pool at 0x000000024a000000, size 256 MiB
+[    0.000000] OF: reserved mem: initialized node linux,cma, compatible id shared-dma-pool
+--- dmesg: cpu topology / cluster (grep -iE 'CPU[0-9]: Booted|cluster')
+[    0.000000] Detected PIPT I-cache on CPU0
+[    0.005403] Detected PIPT I-cache on CPU1
+[    0.005478] CPU1: Booted secondary processor 0x0000000100 [0x410fd421]
+[    0.005932] Detected PIPT I-cache on CPU2
+[    0.005959] CPU2: Booted secondary processor 0x0000000200 [0x410fd421]
+[    0.006368] Detected PIPT I-cache on CPU3
+[    0.006391] CPU3: Booted secondary processor 0x0000000300 [0x410fd421]
+[    0.008838] Detected PIPT I-cache on CPU4
+[    0.008893] CPU4: Booted secondary processor 0x0000010200 [0x410fd421]
+[    0.009381] Detected PIPT I-cache on CPU5
+[    0.009408] CPU5: Booted secondary processor 0x0000010300 [0x410fd421]
+##### END SESSION 4 #####
+
+##### SESSION 5 follow-up: HSP dt-binding header on the board + raw interrupt props #####
+--- hsp binding header search
+header=/usr/lib/modules/5.15.148-tegra/build/include/dt-bindings/mailbox/tegra186-hsp.h
+13:#define TEGRA_HSP_MBOX_TYPE_DB 0x0
+14:#define TEGRA_HSP_MBOX_TYPE_SM 0x1
+15:#define TEGRA_HSP_MBOX_TYPE_SS 0x2
+16:#define TEGRA_HSP_MBOX_TYPE_AS 0x3
+21:#define TEGRA_HSP_MBOX_TYPE_SM_128BIT (1 << 8)
+34:#define TEGRA_HSP_SM_MASK 0x00ffffff
+35:#define TEGRA_HSP_SM_FLAG_RX (0 << 31)
+36:#define TEGRA_HSP_SM_FLAG_TX (1 << 31)
+38:#define TEGRA_HSP_SM_RX(x) (TEGRA_HSP_SM_FLAG_RX | ((x) & TEGRA_HSP_SM_MASK))
+39:#define TEGRA_HSP_SM_TX(x) (TEGRA_HSP_SM_FLAG_TX | ((x) & TEGRA_HSP_SM_MASK))
+--- hsp_top0 (bus@0/hsp@3c00000) interrupts (raw big-endian hex, triplets <type irq flags>) and #mbox-cells
+00000000000000b000000004000000000000007800000004000000000000007900000004000000000000007a00000004000000000000007b00000004000000000000007c00000004000000000000007d00000004000000000000007e00000004000000000000007f00000004
+#mbox-cells = 00000002
+--- hsp_aon (bus@0/hsp@c150000) interrupts (raw hex)
+000000000000008500000004000000000000008600000004000000000000008700000004000000000000008800000004
+--- gic (bus@0/interrupt-controller@f400000) interrupts (raw hex: <1 9 0xf04> = PPI 9, maintenance IRQ)
+000000010000000900000f04
+--- date (board, UTC)
+2026-09-09T11:09:14Z
+##### END SESSION 5 #####

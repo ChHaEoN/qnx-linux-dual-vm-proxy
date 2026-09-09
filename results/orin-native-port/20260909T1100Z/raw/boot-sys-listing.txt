@@ -1,0 +1,54 @@
+# ls -la <SDP>/target/qnx/aarch64le/boot/sys/  (captured 2026-09-09)
+total 67367
+drwxr-xr-x 1 <user> 197609        0 Jun 10 18:29 .
+drwxr-xr-x 1 <user> 197609        0 Jun 10 18:03 ..
+-rw-r--r-- 1 <user> 197609      275 Jun 10 18:03 binary.boot
+-rw-r--r-- 1 <user> 197609      289 Jun 10 18:03 binary64k.boot
+-rw-r--r-- 1 <user> 197609      238 Jun 10 18:03 elf.boot
+-rw-r--r-- 1 <user> 197609      252 Jun 10 18:03 elf64k.boot
+-rw-r--r-- 1 <user> 197609  1374248 Jun 10 18:03 kdumper
+-rw-r--r-- 1 <user> 197609   373596 Jun 10 18:03 libmod_contextid.a
+-rw-r--r-- 1 <user> 197609 63955552 Jun 10 18:03 procnto-smp-instr
+-rw-r--r-- 1 <user> 197609    14832 Jun 10 18:03 raw.boot
+-rw-r--r-- 1 <user> 197609    14840 Jun 10 18:03 raw64k.boot
+-rw-r--r-- 1 <user> 197609      234 Jun 10 18:03 srec.boot
+-rw-r--r-- 1 <user> 197609      248 Jun 10 18:03 srec64k.boot
+-rw-r--r-- 1 <user> 197609  1623920 Jun 10 18:18 startup-armv8_fm
+-rw-r--r-- 1 <user> 197609  1599632 Jun 10 18:29 startup-qemu-virt
+-rw-r--r-- 1 <user> 197609      239 Jun 10 18:03 uefi.boot
+
+# <SDP>/target/qnx/aarch64le/boot/build/ (example build files)
+ls: cannot access 'C:/Users/<user>/qnx800/target/qnx/aarch64le/boot/build/': No such file or directory
+
+# uefi.boot
+[
+#
+# Boot image attributes for an EFI format image.
+#
+# The build file MUST specify load address via the [image=] attribute.
+#
+attr="?-bigendian"
++rsvd_vaddr
+vboot=0xffffff8060000000
+len=0x200
+filter="mkifsf_uefi %a %s %i"
+pagesizes=4k
+]
+
+# elf.boot
+[
+#
+# Boot image attributes for an ELF format image.
+#
+# The build file MUST specify load address via the [image=] attribute.
+#
+attr="?-bigendian"
++rsvd_vaddr
+vboot=0xffffff8060000000
+len=0x200
+filter="mkifsf_elf %a %s %i"
+pagesizes=4k
+]
+
+# raw.boot: ELF64 AArch64 PIE, entry 0x1000 (readelf -h), attribute line:
+[attr=?-bigendian +rsvd_vaddr vboot=0xffffff8060000000 pagesizes=4k ]

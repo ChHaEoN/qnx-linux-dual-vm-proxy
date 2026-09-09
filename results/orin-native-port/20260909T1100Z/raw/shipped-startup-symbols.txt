@@ -1,0 +1,57 @@
+# readelf -h (metadata only) and nm symbol NAMES (no code) on the shipped startup binaries; captured 2026-09-09 (H2 second pass)
+
+== C:/Users/<user>/qnx800/target/qnx/aarch64le/boot/sys/startup-armv8_fm
+  Type:                              REL (Relocatable file)
+  Machine:                           AArch64
+  Entry point address:               0x0
+total distinct symbol names: 725
+-- UEFI/ACPI/Tegra names present:
+(none)
+-- fn-pointer globals from _main.o:
+uefi_exit_boot_services_f
+uefi_io_resume_f
+uefi_io_suspend_f
+-- FDT/PSCI/GIC/CPU names present:
+_start board_smp_start cpuid_a78ae cstart display_char_pl011 fdt_init fdt_psci_configure gic_v2_init gic_v3_initialize gic_v3_its_initialize hypervisor_init init_intrinfo_fm init_pl011 init_raminfo_fdt main psci_call psci_smp_start spin_smp_start 
+
+== C:/Users/<user>/qnx800/target/qnx/aarch64le/boot/sys/startup-qemu-virt
+  Type:                              REL (Relocatable file)
+  Machine:                           AArch64
+  Entry point address:               0x0
+total distinct symbol names: 705
+-- UEFI/ACPI/Tegra names present:
+(none)
+-- fn-pointer globals from _main.o:
+uefi_exit_boot_services_f
+uefi_io_resume_f
+uefi_io_suspend_f
+-- FDT/PSCI/GIC/CPU names present:
+_start board_smp_start cpuid_a78ae cstart display_char_pl011 fdt_init fdt_psci_configure gic_v2_init gic_v3_initialize gic_v3_its_initialize hypervisor_init init_intrinfo init_pl011 init_raminfo_fdt main psci_call psci_smp_start 
+
+== <BSP-zip-extract>/prebuilt/aarch64le/boot/sys/startup-armv8_fm
+  Type:                              REL (Relocatable file)
+  Machine:                           AArch64
+  Entry point address:               0x0
+total distinct symbol names: 744
+-- UEFI/ACPI/Tegra names present:
+(none)
+-- fn-pointer globals from _main.o:
+uefi_exit_boot_services_f
+uefi_io_resume_f
+uefi_io_suspend_f
+-- FDT/PSCI/GIC/CPU names present:
+_start board_smp_start cpuid_a78ae cstart display_char_pl011 fdt_init fdt_psci_configure gic_v2_init gic_v3_initialize gic_v3_its_initialize hypervisor_init init_intrinfo_fm init_pl011 init_raminfo_fdt main psci_call psci_smp_start spin_smp_start 
+
+== <BSP-zip-extract>/binary_files_with_symbols/aarch64le/boot/sys/startup-armv8_fm.sym
+  Type:                              REL (Relocatable file)
+  Machine:                           AArch64
+  Entry point address:               0x0
+total distinct symbol names: 744
+-- UEFI/ACPI/Tegra names present:
+(none)
+-- fn-pointer globals from _main.o:
+uefi_exit_boot_services_f
+uefi_io_resume_f
+uefi_io_suspend_f
+-- FDT/PSCI/GIC/CPU names present:
+_start board_smp_start cpuid_a78ae cstart display_char_pl011 fdt_init fdt_psci_configure gic_v2_init gic_v3_initialize gic_v3_its_initialize hypervisor_init init_intrinfo_fm init_pl011 init_raminfo_fdt main psci_call psci_smp_start spin_smp_start 

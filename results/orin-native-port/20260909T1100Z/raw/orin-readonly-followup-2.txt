@@ -1,0 +1,34 @@
+# Read-only board checks, 2026-09-09 (orchestrating session, ssh <user>@<orin-ip>, sudo -n reads only).
+# Purpose: settle plan first-actions #8-#11 (kexec-load hazard, pstore layout, watchdog state, TCU idle state).
+
+--- /etc/default/kexec
+LOAD_KEXEC=false          # -> the shutdown unit does NOT re-load a Linux kernel; no silent replacement hazard
+KERNEL_IMAGE="/vmlinuz"; INITRD="/initrd.img"; APPEND=""; USE_GRUB_CONFIG=false
+kexec-load.service / kexec.service: sysv-init scripts (not native systemd units)
+
+--- watchdog (THE PLAN'S K9 IS WRONG)
+dmesg: "systemd[1]: Using hardware watchdog 'NVIDIA Tegra186 WDT', version 0, device /dev/watchdog"
+dmesg: "systemd[1]: Set hardware watchdog to 2min."
+/dev/watchdog, /dev/watchdog0 present
+/sys/class/watchdog/watchdog0/device -> ../../../2080000.timer     # TKE timer block, NOT the DT node watchdog@2190000
+(no wdt module in lsmod: the driver is built in)
+
+--- register peek (READ ONLY, /dev/mem, STRICT_DEVMEM=y but device ranges readable)
+WDT0 0x02190000 WDTCR=0x00710010  WDTSR=0x00000011      # non-zero: configured and counting
+WDT1 0x021A0000 WDTCR=0x00700000  WDTSR=0x00000000      # idle
+TCU TX  0x0C168000 = 0x00000000                         # bit 31 clear -> mailbox idle, as the protocol expects
+TCU RX  0x03C10000 = 0x00000000
+
+--- pstore / ramoops (black box is REAL)
+lsmod: ramoops 28672, reed_solomon 20480 (used by ramoops)
+/sys/fs/pstore:
+  -r--r--r-- root root  5571 Sep  8 23:33 console-ramoops-0
+  -r--r--r-- root root 67970 Sep  8 23:30 dmesg-ramoops-0
+kernel config: CONFIG_PSTORE=y, CONFIG_PSTORE_CONSOLE=y, CONFIG_PSTORE_RAM=m, CONFIG_STRICT_DEVMEM=y
+/sys/module/ramoops/parameters/* all read empty (module params not exposed as values)
+/dev/pmsg0 absent -> no pmsg zone
+(no 'ramoops' line in /proc/iomem: the carveout is reserved no-map, invisible there)
+
+--- cpufreq / uarta
+scaling_governor = schedutil ; cpuinfo_cur_freq = 1113600 kHz ; scaling_max_freq = 1344000 kHz
+/dev/ttyTHS1: permission denied to the login user (root-owned); no process holds it

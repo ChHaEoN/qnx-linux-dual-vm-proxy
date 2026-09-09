@@ -1,0 +1,4 @@
+# orin-sudo-probe.txt -- H3 first ssh command, 2026-09-09 (board local ~15:34). Command: ssh -o ConnectTimeout=8 -o BatchMode=yes -i ~/.ssh/<orin-key> <user>@<orin-ip> 'hostname && sudo -n true; echo sudo_rc=$?'
+# Output (hostname redacted):
+<user>-desktop
+sudo_rc=0

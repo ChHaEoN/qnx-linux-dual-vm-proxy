@@ -1,0 +1,34 @@
+# orin-identity.txt -- H3 live harvest of the Jetson Orin Nano over ssh, 2026-09-09 (board local time ~15:36, uptime 16h). READ-ONLY; sudo -n used only for dmesg/iomem/blkid/efibootmgr/ESP listing/ESRT/fuser.
+# Redacted: login/hostname -> <user>, LAN IPs -> <orin-ip>/<lan-ip>, ssh key -> <orin-key>, MAC -> <mac>, NVMe serial/EUI -> <nvme-serial>/<nvme-eui>. NUL bytes stripped.
+# Producing scripts: h3-a.sh / h3-c.sh / h3-f.sh / h3-d.sh (scratchpad); section markers === [x] === are the script sections.
+
+=== [a] identity ===
+--- /proc/device-tree/model
+NVIDIA Jetson Orin Nano Engineering Reference Developer Kit Super
+--- /proc/device-tree/compatible
+nvidia,p3768-0000+p3767-0005-super
+nvidia,p3767-0005
+nvidia,tegra234
+--- /etc/nv_tegra_release
+# R36 (release), REVISION: 4.7, GCID: 42132812, BOARD: generic, EABI: aarch64, DATE: Thu Sep 18 22:54:44 UTC 2025
+# KERNEL_VARIANT: oot
+TARGET_USERSPACE_LIB_DIR=nvidia
+TARGET_USERSPACE_LIB_DIR_PATH=usr/lib/aarch64-linux-gnu/nvidia
+--- uname -a
+Linux <user>-desktop 5.15.148-tegra #1 SMP PREEMPT Thu Sep 18 15:08:33 PDT 2025 aarch64 aarch64 aarch64 GNU/Linux
+--- /etc/os-release (PRETTY_NAME)
+PRETTY_NAME="Ubuntu 22.04.5 LTS"
+--- /proc/cpuinfo (implementer/part/variant/revision)
+      6 CPU implementer	: 0x41
+      6 CPU part	: 0xd42
+      6 CPU revision	: 1
+      6 CPU variant	: 0x0
+--- midr_el1 cpu0
+0x00000000410fd421
+--- nproc
+6
+--- free -m
+               total        used        free      shared  buff/cache   available
+Mem:            7619        1341         216          21        6061        6024
+Swap:           3809           2        3807
+

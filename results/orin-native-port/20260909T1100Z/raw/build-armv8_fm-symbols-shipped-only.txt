@@ -1,0 +1,14 @@
+cpuid_v1
+end_interrupt_config_gic_v2
+end_interrupt_id_gic_v2
+end_interrupt_mask_gic_v2
+end_interrupt_unmask_gic_v2
+gic_v2_intr
+interrupt_config_gic_v2
+interrupt_id_gic_v2
+interrupt_mask_gic_v2
+interrupt_unmask_gic_v2
+start_interrupt_config_gic_v2
+start_interrupt_id_gic_v2
+start_interrupt_mask_gic_v2
+start_interrupt_unmask_gic_v2

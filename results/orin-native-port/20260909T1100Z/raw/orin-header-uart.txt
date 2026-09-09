@@ -1,0 +1,131 @@
+# orin-header-uart.txt -- H3 live harvest of the Jetson Orin Nano over ssh, 2026-09-09. READ-ONLY, no sudo. Source: on-board /opt/nvidia/jetson-io files and dtc decompiles of /boot/*.dtb(o).
+# Redacted: login/hostname -> <user>, LAN IPs -> <orin-ip>/<lan-ip>, ssh key -> <orin-key>.
+
+=== [E1] jetson-io header_def.py / board.py uart lines ===
+=== [E2] on-disk DTB pinmux groups mentioning uart (dtc, names only) ===
+10590:		clock-names = "nvdisplayhub_clk\0nvdisplay_disp_clk\0nvdisplay_p0_clk\0nvdisplay_p1_clk\0dpaux0_clk\0fuse_clk\0dsipll_vco_clk\0dsipll_clkoutpn_clk\0dsipll_clkouta_clk\0sppll0_vco_clk\0sppll0_clkoutpn_clk\0sppll0_clkouta_clk\0sppll0_clkoutb_clk\0sppll0_div10_clk\0sppll0_div25_clk\0sppll0_div27_clk\0sppll1_vco_clk\0sppll1_clkoutpn_clk\0sppll1_div27_clk\0vpll0_ref_clk\0vpll0_clk\0vpll1_clk\0nvdisplay_p0_ref_clk\0rg0_clk\0rg1_clk\0disppll_clk\0disphubpll_clk\0dsi_lp_clk\0dsi_core_clk\0dsi_pixel_clk\0pre_sor0_clk\0pre_sor1_clk\0dp_link_ref_clk\0sor_linka_input_clk\0sor_linka_afifo_clk\0sor_linka_afifo_m_clk\0rg0_m_clk\0rg1_m_clk\0sor0_m_clk\0sor1_m_clk\0pllhub_clk\0sor0_clk\0sor1_clk\0sor_pad_input_clk\0pre_sf0_clk\0sf0_clk\0sf1_clk\0dsi_pad_input_clk\0pre_sor0_ref_clk\0pre_sor1_ref_clk\0sor0_ref_pll_clk\0sor1_ref_pll_clk\0sor0_ref_clk\0sor1_ref_clk\0osc_clk\0dsc_clk\0maud_clk\0aza_2xbit_clk\0aza_bit_clk\0mipi_cal_clk\0uart_fst_mipi_cal_clk\0sor0_div_clk";
+=== [E3] p3768 dynamic overlay (dtc) ===
+/dts-v1/;
+
+/ {
+	overlay-name = "Tegra234 p3768-0000+p3767-xxxx Dynamic Overlay";
+
+	p3767-sku-handling-fragment@0 {
+		target-path = "/bus@0/host1x@13e00000";
+
+		board_config {
+			fuse-info = "fuse-disable-nvenc";
+		};
+
+		__overlay__ {
+
+			nvenc@154c0000 {
+				status = "disabled";
+			};
+		};
+	};
+
+	p3767-sku-handling-fragment@1 {
+		target-path = "/bus@0/host1x@13e00000";
+
+		board_config {
+			fuse-info = "fuse-disable-pva";
+		};
+
+		__overlay__ {
+
+			pva0@16000000 {
+				status = "disabled";
+			};
+		};
+	};
+
+	p3767-sku-handling-fragment@2 {
+		target-path = "/bus@0/host1x@13e00000";
+
+		board_config {
+			fuse-info = "fuse-disable-dla0";
+		};
+
+		__overlay__ {
+
+			nvdla0@15880000 {
+				status = "disabled";
+			};
+		};
+	};
+
+	p3767-sku-handling-fragment@3 {
+		target-path = "/bus@0/host1x@13e00000";
+
+		board_config {
+			fuse-info = "fuse-disable-dla1";
+		};
+
+		__overlay__ {
+
+			nvdla1@158c0000 {
+				status = "disabled";
+			};
+		};
+	};
+
+	p3767-sku-handling-fragment@4 {
+		target-path = "/bus@0";
+
+		board_config {
+			ids = "3767-0000-*\03767-0001-*\03767-0003-*\03767-0004-*";
+		};
+
+		__overlay__ {
+
+			mmc@3400000 {
+				status = "disabled";
+			};
+		};
+	};
+
+=== [E4] p3509-a02 hdr40 overlay uart fragments (dtc; older carrier, for reference only) ===
+4:	overlay-name = "Jetson 40pin Header";
+5-	compatible = "nvidia,p3768-0000+p3767-0000\0nvidia,p3768-0000+p3767-0001\0nvidia,p3768-0000+p3767-0003\0nvidia,p3768-0000+p3767-0004\0nvidia,p3768-0000+p3767-0005\0nvidia,p3768-0000+p3767-0000-super\0nvidia,p3768-0000+p3767-0001-super\0nvidia,p3768-0000+p3767-0003-super\0nvidia,p3768-0000+p3767-0004-super\0nvidia,p3768-0000+p3767-0005-super\0nvidia,p3509-0000+p3767-0000\0nvidia,p3509-0000+p3767-0001\0nvidia,p3509-0000+p3767-0003\0nvidia,p3509-0000+p3767-0004\0nvidia,p3509-0000+p3767-0005";
+6-
+7-	fragment@0 {
+--
+14:			exp-header-pinmux {
+15-				phandle = <0x01>;
+16-
+17-				hdr40-pin7 {
+--
+26:					nvidia,pins = "uart1_tx_pr2";
+27-				};
+28-
+29-				hdr40-pin10 {
+30:					nvidia,pins = "uart1_rx_pr3";
+31-				};
+32-
+33-				hdr40-pin11 {
+34:					nvidia,pins = "uart1_rts_pr4";
+35:					nvidia,function = "uarta";
+36:					nvidia,pin-group = "uarta-cts/rts";
+37-					nvidia,tristate = <0x00>;
+38-					nvidia,enable-input = <0x00>;
+39-				};
+--
+176:					nvidia,pins = "uart1_cts_pr5";
+177:					nvidia,function = "uarta";
+178:					nvidia,pin-group = "uarta-cts/rts";
+179-					nvidia,tristate = <0x01>;
+180-					nvidia,enable-input = <0x01>;
+181-				};
+--
+217:			exp-header-pinmux {
+218-				phandle = <0x02>;
+219-
+220-				hdr40-pin3 {
+--
+242:		jetson_io_pinmux = "/fragment@0/__overlay__/exp-header-pinmux";
+243:		jetson_io_pinmux_aon = "/fragment@1/__overlay__/exp-header-pinmux";
+244-	};
+245-
+246-	__fixups__ {
+=== end E ===

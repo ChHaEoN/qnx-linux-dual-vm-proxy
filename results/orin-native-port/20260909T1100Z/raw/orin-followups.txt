@@ -1,0 +1,98 @@
+# orin-followups.txt -- H3 live harvest of the Jetson Orin Nano over ssh, 2026-09-09 (board local time ~15:36, uptime 16h). READ-ONLY; sudo -n used only for dmesg/iomem/blkid/efibootmgr/ESP listing/ESRT/fuser.
+# Redacted: login/hostname -> <user>, LAN IPs -> <orin-ip>/<lan-ip>, ssh key -> <orin-key>, MAC -> <mac>, NVMe serial/EUI -> <nvme-serial>/<nvme-eui>. NUL bytes stripped.
+# Producing scripts: h3-a.sh / h3-c.sh / h3-f.sh / h3-d.sh (scratchpad); section markers === [x] === are the script sections.
+
+=== [D1] memory node in the LIVE tree ===
+--- ls /sys/firmware/devicetree/base | grep -i mem
+reserved-memory
+--- find any node named memory* (depth<=4)
+/bus@0/memory-controller@2c00000
+--- any device_type=memory (depth<=4)
+--- /tegra-carveouts props
+compatible
+memory-region
+name
+status
+  compatible = "nvidia,carveouts|"
+  status = "okay|"
+  memory-region =  00000376 00000377 
+--- /chosen/linux,uefi-secure-boot
+ 00000002 
+--- /chosen/nvidia,sku
+699-13767-0005-300 T.1|||||||||
+--- /sram@40000000 reg
+ 00000000 40000000 00000000 00080000 
+
+=== [D2] memory node in the ON-DISK DTB (dtc/fdtget if installed) ===
+--- which dtc fdtget fdtdump
+/usr/bin/dtc
+/usr/bin/fdtget
+/usr/bin/fdtdump
+--- dtc: memory nodes in /boot/dtb/kernel_tegra234-p3768-0000+p3767-0005-nv-super.dtb
+--- dtc: /memory device_type=memory reg lines
+--- dtc: gic node in on-disk DTB (reg, redistributor, its)
+4736:		interrupt-controller@f400000 {
+4737:			compatible = "arm,gic-v3";
+4738-			reg = <0x00 0xf400000 0x00 0x10000 0x00 0xf440000 0x00 0x200000>;
+--
+4741:			#redistributor-regions = <0x01>;
+4742-			#interrupt-cells = <0x03>;
+--
+11296:		gic = "/bus@0/interrupt-controller@f400000";
+11297-		smmu_iso = "/bus@0/iommu@10000000";
+
+=== [D3] TCU mailbox phandle resolution ===
+--- /serial mboxes =  00000121 00000001 00000000 00000143 00000001 80000001 
+  phandle 0x121 -> /bus@0/hsp@3c00000  compatible=nvidia,tegra234-hsp|nvidia,tegra194-hsp|
+  phandle 0x143 -> /bus@0/hsp@c150000  compatible=nvidia,tegra234-hsp|nvidia,tegra194-hsp|
+--- __symbols__ entries for hsp/tcu
+  hsp_aon = /bus@0/hsp@c150000|
+  hsp_rce = /tegra-hsp@b950000|
+  hsp_top0 = /bus@0/hsp@3c00000|
+  hsp_top1 = /bus@0/hsp@3d00000|
+  hsp_top2 = /bus@0/hsp@1600000|
+  tcu = /serial|
+  uarta = /bus@0/serial@3100000|
+  uarte = /bus@0/serial@3140000|
+  uarti = /bus@0/serial@31d0000|
+
+=== [D4] ESRT ===
+--- /sys/firmware/efi/esrt/entries/entry0
+  capsule_flags = 0x0
+  fw_class = bf0d4599-20d4-414e-b2c5-3595b1cda402
+  fw_type = 1
+  fw_version = 2360324
+  last_attempt_status = 0
+  last_attempt_version = 2360324
+  lowest_supported_fw_version = 2360324
+--- fw_resource_count
+
+=== [D5] 40-pin header UART mapping from on-board jetson-io definitions ===
+--- ls /opt/nvidia/jetson-io/Jetson/board
+ls: cannot access '/opt/nvidia/jetson-io/Jetson/board': No such file or directory
+--- grep -ni uart in the p3768/p3767 board files and headers
+--- grep -rniE 'uart|ttyTHS' /opt/nvidia/jetson-io/Jetson/hdr40*.py (pin table)
+--- ls /opt/nvidia/jetson-io/Jetson
+board.py
+header_def.py
+header.py
+__init__.py
+io.py
+pmx.py
+
+=== [D6] misc: who owns ttyTHS1 (getty?), and the SBSA uart ===
+--- systemctl list-units serial-getty (no changes)
+  getty-static.service                                  loaded    inactive dead    getty on tty2-tty6 if dbus and logind are not available
+  getty@tty1.service                                    loaded    inactive dead    Getty on tty1
+  nvgetty.service                                       loaded    inactive dead    UART on ttyTHS0
+  serial-getty@ttyGS0.service                           loaded    active   running Serial Getty on ttyGS0
+  serial-getty@ttyS0.service                            loaded    inactive dead    Serial Getty on ttyS0
+  serial-getty@ttyTCU0.service                          loaded    active   running Serial Getty on ttyTCU0
+--- lsof-free check: fuser on ttys
+/dev/ttyTHS1: 
+/dev/ttyTHS2: 
+/dev/ttyAMA0: 
+/dev/ttyTCU0:    968
+--- /sys/class/tty/ttyAMA0/device/of_node/name
+serial|
+=== end D ===
