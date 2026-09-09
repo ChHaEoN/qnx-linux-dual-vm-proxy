@@ -1,0 +1,18 @@
+# Windows TCG CONTROL boot of the sha256-identical qnx-safety-vm ifs.bin — added by hand after the script run, 2026-09-09.
+# CONTROL ONLY: TCG cannot reproduce the KVM NISV hang (no hardware Data-Abort ISS is synthesised under TCG).
+# Host: Windows 11 x86_64, Git Bash; QEMU: <qemu-6.2.0>/qemu-system-aarch64.exe = QEMU emulator version 6.2.0 (v6.2.0-11889-g5b72bf03f5-dirty) (TCG-only build; same 6.2.0 version line as the Orin's Ubuntu package, NOT the same binary)
+# CWD: qnx-safety-vm/output (gitignored, NCEULA — nothing from it is copied here)
+# Command (150 s wrapper; -snapshot so disk-qemu is never written):
+#   timeout 150 <qemu-6.2.0>/qemu-system-aarch64.exe -machine virt,gic-version=3 -accel tcg -cpu max -smp 2 -m 1G -snapshot -drive file=disk-qemu,if=none,id=drv0,format=raw -device virtio-blk-device,drive=drv0 -kernel ifs.bin -nographic -serial file:boot-tcg-q620-snapshot.log -display none -no-reboot -monitor none
+# start (UTC): 20260909T101332Z   end (UTC): 20260909T101602Z
+# QEMU stderr/stdout: (empty)
+# QEMU_EXIT=124  <- killed by the timeout wrapper as intended; QNX does not exit on its own
+# sha256 BEFORE the boot:
+#   92868b2f116f17c06d26585b9618682076913d17491bdeb22c4a0392d43dd745 *ifs.bin
+#   fd2ee67d46f5e83fea4648f6eb9530b4dd5c83d83f10d58a12ef6a63f5c07bde *disk-qemu
+# sha256 AFTER the boot:
+#   92868b2f116f17c06d26585b9618682076913d17491bdeb22c4a0392d43dd745 *ifs.bin
+#   fd2ee67d46f5e83fea4648f6eb9530b4dd5c83d83f10d58a12ef6a63f5c07bde *disk-qemu
+# ifs.bin == the hash recorded in the a1.metal log header (92868b2f...). disk-qemu (fd2ee67d...) == the a1.metal transfer-time hash too;
+# the local qnx-safety-vm/output/SHA256SUMS file lists a different disk-qemu value and is the stale artefact (see summary.md).
+# Serial: raw/windows-tcg-control-boot-q620-snapshot.log (37 lines: 35 serial + 2 header comments). Markers: FOUND GICv3 ITS -> both '** CPU n PE is not awake' -> 'Startup complete' -> QNX banner.

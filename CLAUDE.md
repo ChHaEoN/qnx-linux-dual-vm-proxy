@@ -353,7 +353,11 @@ Quick summary for context:
    boot-unverified — `startup-qemu-virt` cannot be relinked without the
    `qemu-virt` board source, which the BSP does not ship. The
    cross-vendor `a1.metal` reproduction remains the other half of the
-   evidence.
+   evidence. The read-only collector `scripts/diagnose-gicv3-nisv.sh` and
+   its reviewed report (`results/gicv3-nisv-debug/20260909T101030Z/summary.md`)
+   list exactly which trace fields the filing still lacks (numeric
+   `pc=`/`ipa=`, one logged run per `-smp`/`gic-version`/`its` variant) and
+   the commands that would capture them.
    (A from-source QEMU v11.1.0 with `--enable-kvm` now exists on the Orin
    for the unrelated TCG/EL2-timer reason; re-running the `qnx-safety-vm`
    IFS under `-enable-kvm` with it is a near-zero-cost check, still

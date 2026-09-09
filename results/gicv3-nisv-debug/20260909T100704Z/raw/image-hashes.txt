@@ -1,0 +1,8 @@
+local ifs.bin (gitignored, NOT copied): size 9771456 bytes
+sha256 local:    92868b2f116f17c06d26585b9618682076913d17491bdeb22c4a0392d43dd745
+sha256 recorded: 92868b2f116f17c06d26585b9618682076913d17491bdeb22c4a0392d43dd745
+--- output/SHA256SUMS (hashes only)
+92868b2f116f17c06d26585b9618682076913d17491bdeb22c4a0392d43dd745 *ifs.bin
+f3667fe3bb97de299581b18bab497a40ceec0e395e5291c01acf3502cd58228a *disk-qemu
+6dea73b864f8a55ca250d9736fae96626988af1ca17435d94488223c489c4fc0 *disk-qemu.vmdk
+note: disk-qemu is a mutable raw disk and drifts on every non--snapshot boot; only ifs.bin is expected to stay byte-identical

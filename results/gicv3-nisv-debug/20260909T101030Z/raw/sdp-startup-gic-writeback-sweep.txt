@@ -1,0 +1,22 @@
+# Writeback-form (post-indexed '[xN], #imm' / pre-indexed '[xN, #imm]!') loads/stores inside gic-named functions of the SDP-shipped startup-qemu-virt (ELF64 REL, offsets are .text offsets; add 0x40081800 for the IFS VA).
+# Added by hand after the script run, 2026-09-09. Excerpt only (address + opcode + mnemonic); the full listing stays in the scratchpad (NCEULA).
+# Whole object: 418 writeback-form ld/st lines, 339 of them stores — overwhelmingly stack-frame pushes (stp/str x30,[sp,#-N]!) and ordinary memory code; that count is NOT an MMIO count.
+
+# Non-stack writeback stores in the two GICv3 bring-up functions (4 — same count and forms findings.md 2026-09-08 reports for the rebuilt gic_v3.o):
+  <gic_v3_gicc_init>:     28c0:	b8004401 	str	w1, [x0], #4
+  <gic_v3_initialize>:     4178:	b8004403 	str	w3, [x0], #4
+  <gic_v3_initialize>:     41a0:	b800441f 	str	wzr, [x0], #4
+  <gic_v3_initialize>:     4200:	f8008440 	str	x0, [x2], #8
+
+# Stack-frame writeback (excluded from the MMIO count) in the same two functions: 2 (one stp x19,x20,[sp,#-N]! prologue push in each; lines withheld — plain listing, not evidence).
+
+# Other gic-named functions containing writeback forms that are not [sp] pushes (callout-patch / IPI code; whether any targets MMIO was NOT analysed — listed for completeness, counts only):
+  <end_interrupt_config_gic_v2>: 1
+  <end_interrupt_eoi_gic_v3_lpi_mm>: 5
+  <end_interrupt_eoi_gic_v3_ppi_mm>: 3
+  <end_interrupt_eoi_gic_v3_spi_mm>: 3
+  <end_interrupt_unmask_gic_v3_lpi_direct>: 13
+  <end_sendipi_gic_v3_sr>: 1
+  <gic_v2_gicc_init>: 1
+  <gicc_patch>: 1
+  <gicd_patch>: 1

@@ -1,0 +1,142 @@
+AGENTS.md:245:  root-caused GICv3 / `KVM_EXIT_ARM_NISV` defect, since reproduced on
+AGENTS.md:246:  AWS `a1.metal` (a second ARM vendor), so TCG is the interim
+AGENTS.md:40:- Runtime host (design): c7g.large (Graviton3 Neoverse-V1, Ubuntu 22.04 arm64). **As built, no cloud-leg number was ever produced there** — non-metal Graviton has no `/dev/kvm` (ADR-002), so the QHV host + guest and every cloud-leg measurement run on the local Windows PC under TCG; AWS's remaining role is the `a1.metal` KVM test bed. See `docs/digital-twin-design.md` §1.
+CLAUDE.md:275:  takes a `KVM_EXIT_ARM_NISV` Data Abort that neither KVM nor QEMU
+CLAUDE.md:281:  way (`FOUND GICv3 ITS`, then silence, process alive throughout) on
+CLAUDE.md:282:  AWS `a1.metal` — Graviton1 / Annapurna Labs, Cortex-A72, a different
+CLAUDE.md:350:   (`gic_v3.c`), built with their own flags, emits `str w3,[x0],#4` at
+CLAUDE.md:351:   GICD+0x420, and adding `-fno-auto-inc-dec` takes the file's MMIO
+CLAUDE.md:355:   cross-vendor `a1.metal` reproduction remains the other half of the
+CLAUDE.md:391:64-vCPU launch outright — but an `a1.metal` fallback was run and
+CLAUDE.md:40:- Runtime host (design): c7g.large (Graviton3 Neoverse-V1, Ubuntu 22.04 arm64). **As built, no cloud-leg number was ever produced there** — non-metal Graviton has no `/dev/kvm` (ADR-002), so the QHV host + guest and every cloud-leg measurement run on the local Windows PC under TCG; AWS's remaining role is the `a1.metal` KVM test bed. See `docs/digital-twin-design.md` §1.
+README.md:214:  runtime leg or to repeat the `a1.metal` KVM probe. The as-built cloud leg
+README.md:86:| **3** — Hardware twin port (Jetson Orin Nano) | 🟡 **substantial, not closed** — heterogeneous QNX↔Linux IPC over a real `br0`/tap bridge works (2 × 100 000 iterations, 0 errors) under **TCG**; **KVM boot is blocked** by a root-caused GICv3 / `KVM_EXIT_ARM_NISV` defect, since reproduced on a second ARM vendor | [orin-ipc-latest.csv](results/hw/orin-ipc-latest.csv), [orin-port.md](docs/orin-port.md), [aws-a1-metal-kvm-nisv-repro.log](logs/sample-boot/aws-a1-metal-kvm-nisv-repro.log) |
+README.md:97:for one thing: an `a1.metal` instance supplied the cross-vendor
+docs/adr-003-hardware-timed-qhv.md:42:- a1.metal（Graviton1，Cortex-A72，16 vCPU）是唯一在 32-vCPU quota 內的 Graviton metal；AWS 現行 price feed 無 a1，<aws-region> $0.466/h 僅一個二手來源（aws-pricing.com），us-east-1 $0.408 [c8][c10]。它給 KVM 真 EL2（repo 2026-07-29 已實證），但**沒有可跑的 QNX host image**——除非 Hypervisor 2.2 AMI 能用，否則 a1.metal 量的是 KVM 而非 QHV。
+docs/adr-003-hardware-timed-qhv.md:55:| **風險** | (1) console：唯一 console 是 SPE 擁有的 TCU；(2) 三次 NVIDIA no-QNX 聲明；(3) 授權 4.6(c) 禁止 disassembly（2026-07-28 root cause 曾反組譯 startup-qemu-virt；2026-09-08 的 Apache-2.0 gic_v3.c 路徑才是乾淨立足點）、4.6(i) 禁止未經 BlackBerry 書面同意發布「performance or functional evaluation」結果——這是研究員的法律解讀，非 BlackBerry 聲明，但**讀在本 repo 每個已發布延遲數字上**，需 Architect/Docs 決定 [b12]；(4) Apache 標頭的源碼裝在 QDL 授權的 zip 裡，何者為準未定 |
+docs/adr-003-hardware-timed-qhv.md:74:URL：[c1] https://gitlab.com/qnx/hypervisor/getting-started · [c2] https://www.qnx.com/developers/docs/8.0/com.qnx.doc.neutrino.utilities/topic/s/startup_options.html · [c3] BSP 8.0 release notes（Pi 4 build 484、Pi 5 build 381、i.MX8QM MEK build 489），https://www.qnx.com/developers/docs/BSP8.0/ · [c4] https://github.com/EhabMagdyy/QNX-Hypervisor · [c5] https://www.raspberrypi.com/news/（2025-12-01 價格公告）· [c6] https://www.raspberrypi.com/products/raspberry-pi-5/ · [c7] https://qnx.software/en/press-release/2026/qnx-everywhere-expands-global-developer-ecosystem-through-education-innovation-and-open-collaboration · [c8] AWS on-demand price feed（b0.p.awsstatic.com，EU Frankfurt，Linux，2026-09-09）· [c9] https://docs.aws.amazon.com/ec2/latest/instancetypes/ec2-instance-quotas.html（L-1216C47A）· [c10] https://aws-pricing.com/a1.metal.html · [c11] Arm Neoverse V1 TRM 101427_0102_07（ID_AA64MMFR2_EL1.NV）· [c12] https://www.kernel.org/doc/html/latest/admin-guide/kernel-parameters.html（`kvm-arm.mode=nested`）· [c13] https://www.qnx.com/developers/docs/8.0/com.qnx.doc.hypervisor.user/topic/config/build_methods.html · [c14] https://www.qnx.com/developers/docs/8.0/com.qnx.doc.hypervisor.user/topic/debug/trace_events.html · [c15] …/topic/debug/tsc.html · [c16] …/topic/perform/overhead.html · [c17] …/topic/perform/guest_exits.html · [c18] …/topic/perform/irqs.html
+docs/adr-003-hardware-timed-qhv.md:86:**A-OS AMI 與 a1.metal 都不在此清單**：前者是 EL1 tenant、鎖 IFS；後者沒有 QNX host image 可跑（只能量 KVM）。
+docs/adr-003-hardware-timed-qhv.md:95:- 任何 AWS 路徑到真 EL2 都要過 64-vCPU quota（a1.metal 除外，但它沒有 QNX host image）；A-QHV 還是 7.1 世代與未解的 Project License 閘門——三個未知疊在 $4/h 上，不值得先花。
+docs/bsp-selection.md:276:> non-metal Graviton has no `/dev/kvm`; `a1.metal` gave real EL2/KVM
+docs/bsp-selection.md:458:  **Verdict: `a1.metal` (16 vCPU, Graviton1 / Cortex-A72, about $0.47/h
+docs/bsp-selection.md:468:  | a1.metal | Graviton1, Cortex-A72 (ARMv8.0, no VHE, no NV) | 16 | **0.466** (secondary: aws-pricing.com, instances.vantage.sh; the a1 family is absent from the AWS current-generation feed) | 0.408 | **yes** |
+docs/bsp-selection.md:476:  **no Graviton bare-metal size below 64 vCPUs** other than a1.metal; a1
+docs/bsp-selection.md:500:  [aws-pricing.com a1.metal](https://aws-pricing.com/a1.metal.html) and
+docs/bsp-selection.md:501:  [instances.vantage.sh a1.metal](https://instances.vantage.sh/aws/ec2/a1.metal)
+docs/digital-twin-design.md:167:the Orin — `FOUND GICv3 ITS`, slogger2, PCI, `devb`, file systems all come up
+docs/digital-twin-design.md:30:  is the KVM *test bed* (`a1.metal`, see
+docs/digital-twin-design.md:45:| QEMU acceleration | **TCG on both — for two different reasons** | This row previously read "cloud = tcg; Orin = `-enable-kvm` (KVM works on A78AE)". That is **no longer true and should not be quoted**: Orin's KVM boot is blocked by the GICv3 / `KVM_EXIT_ARM_NISV` defect ([orin-port.md](orin-port.md)), so the plain `qnx-safety-vm` leg runs TCG there *because KVM is broken*. On the **QHV leg** TCG is instead a hard architectural requirement on both sides — QHV needs EL2 for its guest, i.e. nested virtualisation, which ARM KVM does not provide on A78AE. Keep the two apart when reporting: only the QHV leg's TCG-on-both is genuine symmetry |
+docs/findings.md:326:`src/hardware/startup/lib/aarch64/gic_v3.c`. Its SPI priority-init loop
+docs/findings.md:327:(~line 1018) writes `ARM_GICD_IPRIORITYn + reg_idx*4` starting from
+docs/findings.md:328:`reg_idx=8`; with `ARM_GICD_IPRIORITYn = 0x400`
+docs/findings.md:330:**0x420**. Also settled along the way: SDP ships exactly two aarch64
+docs/findings.md:333:already GICv3-aware; it prints `FOUND GICv3 ITS` and finishes
+docs/findings.md:347:1a54:   91108020    add   x0, x1, #0x420        // GICD base + 0x420
+docs/findings.md:349:1a68:   b8004403    str   w3, [x0], #4          // post-indexed, writeback
+docs/findings.md:353:That is `str w3,[x0],#4` at offset 0x420 — the same instruction form at the
+docs/findings.md:360:four are the same ISV=0 instruction class; the GICD one is simply the first
+docs/findings.md:364:with `-fno-auto-inc-dec` appended to the BSP's own flags takes the
+docs/findings.md:376:bailing out to userspace with `KVM_EXIT_ARM_NISV`. It is a minimal,
+docs/findings.md:385:  `a1.metal`, this is a strong hypothesis with a compile-level proof of its
+docs/findings.md:394:- **Only `gic_v3.c` was audited.** Other startup objects may carry
+docs/findings.md:404:  bed, not the build host: `a1.metal` already reproduces the hang
+docs/findings.md:423:`a1.metal` under KVM.
+docs/findings.md:427:## 2026-07-29 — GICv3/NISV KVM hang reproduced on a second vendor's silicon (AWS `a1.metal`, Graviton1) — no longer Tegra234-specific
+docs/findings.md:430:risk register). Provisioned an AWS EC2 `a1.metal` instance (Graviton1,
+docs/findings.md:435:symptom**: `FOUND GICv3 ITS` printed, then zero further serial output for
+docs/findings.md:484:`KVM_EXIT_ARM_NISV` GICv3 finding in `docs/orin-port.md` — an MMIO emulator
+docs/fusa/phase1-gate-safety-concept.md:244:  `CPU 0/1 PE is not awake`) shall be annunciated and shall invalidate any
+docs/fusa/phase1-gate-safety-concept.md:369:     `CPU N PE is not awake`).
+docs/fusa/phase1-gate-verification.md:29:| TSR-PE-001 | NF-6 | configured PE not online (silent capacity loss) | `check_pe_online` (parses `CPU N PE is not awake`) | **YES — FLAG** (online=0 of smp=2 on real log; online=2 of smp=4 injected) | Detects the *logged* non-awake signature and invalidates capacity claims above the awake count. Does **not** detect a PE that wakes then later stalls. |
+docs/interview-narrative.md:164:> the exact exit: `KVM_EXIT_ARM_NISV` — the guest had taken a Data
+docs/interview-narrative.md:167:> (`str w3,[x0],#4`) writing a GICv3 distributor priority register.
+docs/interview-narrative.md:200:AWS `a1.metal` instance (Graviton1, Annapurna Labs SoC, Cortex-A72 —
+docs/interview-narrative.md:204:hang** — `FOUND GICv3 ITS`, then nothing, on a completely different
+docs/orin-port.md:140:| **KVM boot hangs silently after `FOUND GICv3 ITS`, zero further output, on real Orin Nano hardware** (2026-07-28, first real-hardware run) — root-caused: `startup`'s GICv3 distributor priority-register init loop (`str w3,[x0],#4`, GICD_IPRIORITYRn offset 0x420, post-indexed store form) takes a Data Abort with `ESR.ISV=0` on real Cortex-A78AE/Tegra234 silicon under KVM (confirmed via `/sys/kernel/debug/tracing/events/kvm` ftrace: `kvm_guest_fault hsr=0x92000045`, `kvm_userspace_exit reason KVM_EXIT_ARM_NISV (28)`, at the exact PC identified via static disassembly of the extracted `startup` executable). KVM's in-kernel vgic-v3 MMIO fast path cannot decode a non-ISV abort and exits to QEMU as `KVM_EXIT_ARM_NISV`; QEMU 6.2.0 cannot complete the emulation for this instruction encoding and falls back to injecting a synthetic external Data Abort into the guest (confirmed via literal error strings compiled into the installed `qemu-system-aarch64` binary: "Data abort exception with no valid ISS generated by guest memory access. KVM unable to emulate faulting instruction..."). QNX's `startup-qemu-virt` EL1 exception-vector table (`VBAR_EL1=0x4008d800`, confirmed via live QEMU-monitor register dump + disassembly) has no real handler for a Synchronous exception taken at Current EL/SP_ELx this early in boot — the vector slot at offset 0x200 is a bare, unconditional `b .` — so the guest parks forever with no further serial output. Reproduced identically at `-smp 1`, `-smp 2`, `gic-version=3`, `gic-version=host`, with/without `its=off`. TCG never hits this because TCG's software MMIO model performs the write directly without ever synthesizing a hardware Data-Abort ISS — there is no ISV=0 case under TCG, which is why the identical `ifs.bin`/`disk-qemu` boots cleanly under `-accel tcg` on this same hardware (see [orin-tcg-qnx-boot1.log](../logs/sample-boot/orin-tcg-qnx-boot1.log)). **Distinct from the AGX `Error(19)` row above** — that fails at vGIC *device creation* time, before any guest instruction runs; this fails deep into normal GICv3 *distributor bring-up* on real hardware backing, only after ITS discovery and CPU-interface (`ICC_SRE_EL1`/`ICC_PMR_EL1`/`ICC_CTLR_EL1`/…) bring-up already succeeded. Both are plausibly manifestations of a related underlying Tegra234 GIC/KVM-virtualization quirk family (same silicon lineage across AGX Orin / Orin NX / Orin Nano) surfacing differently depending on JetPack/kernel/QEMU version and exact code path — treat as related-but-not-identical; do not assume either "same bug" or "unrelated" | **Follow-up research (2026-07-28) downgrades the "try a newer QEMU" lead**: QEMU's KVM-backend handler for this exact case, `kvm_arm_handle_dabt_nisv()` (merged upstream years before QEMU 6.2, via Beata Michalska's patch series, [patchwork.kernel.org](https://patchwork.kernel.org/project/qemu-devel/patch/<email>/)), is *designed* to inject an external Data Abort when ISV=0 — it does not attempt instruction decode/emulation for the KVM accelerator, by deliberate upstream design (the kernel KVM/ARM maintainers' stated position: "well-written MMIO drivers shouldn't use writeback-form loads/stores on device registers" — [Linux KVM API docs](https://docs.kernel.org/virt/kvm/api.html)). A QEMU-side software decode-and-emulate fallback for ISV=0 exists only as an RFC for the **HVF** (macOS Hypervisor.framework) accelerator, not KVM. So a QEMU version bump on Linux/KVM is now assessed as **unlikely to help** — this isn't a version-specific bug, it's the KVM backend's permanent architecture. Revised real options: (a) **file this with QNX/BlackBerry support** — the defect is in their proprietary `startup-qemu-virt` binary's GICv3 bring-up code, which uses a post-indexed store on a device register that ARM's own architecture reference excludes from ISV reporting; a newer SDP dot-release may already avoid it. (b) **Accept TCG on Orin for now** (decision made 2026-07-28, see status header) — proceed with the Phase-3 IFS-port + IPC checklist on TCG, and revisit KVM if/when QNX ships a fix. Patching QNX's proprietary `startup` binary remains ruled out (NCEULA / binary-modification risk). | Medium — no longer blocks Phase-3 progress (TCG accepted as interim transport per 2026-07-28 decision); still blocks the *hardware-timed* KVM number specifically, pending a QNX-side fix |
+docs/orin-port.md:144:| **Cross-vendor validation (2026-07-29): the `FOUND GICv3 ITS` hang reproduces identically on AWS EC2 `a1.metal` (Graviton1, Annapurna Labs SoC, 16× Cortex-A72)** — a completely different vendor and core generation from Orin's Tegra234/Cortex-A78AE. Same `ifs.bin`/`disk-qemu`, same `-machine virt,gic-version=3 -cpu host -enable-kvm` invocation: `FOUND GICv3 ITS` printed, then zero further output for the full 60s capture, `qemu-system-aarch64` still alive (killed only by the external timeout). A bare vGIC smoke test (`-kernel /dev/null`) on the same instance ran clean, same as on Orin — vGIC *creation* is not the failure point there either. `c7g.metal` (Graviton3, same generation as this project's `c7g.large` cloud leg) was the intended cleaner comparison but was blocked by this AWS account's 32-vCPU quota (`c7g.metal` needs 64); `a1.metal` was the quota-fitting fallback. Full capture: [aws-a1-metal-kvm-nisv-repro.log](../logs/sample-boot/aws-a1-metal-kvm-nisv-repro.log). **This is one run, not a repeated series** (contrast with this doc's n=5 boot-time methodology) — treat as strong single-data-point evidence, not statistically hardened. | This upgrades the finding from "possibly Tegra234-specific" to "reproduced across at least two independent ARM vendors" — strengthens the case for filing with QNX/BlackBerry (option (a) in the row above) since it is now evidenced as a general `startup-qemu-virt` defect, not a Jetson-specific quirk. Does not change the recommended near-term posture (TCG remains the working interim transport). A `c7g.metal` run (same Graviton3 generation as the rest of the cloud leg) remains a real, not-yet-executed follow-up if/when the vCPU quota is raised. | Low (diagnosis only) — raises confidence on the vendor-escalation option above, does not itself unblock anything |
+docs/orin-port.md:145:| **COMPILE-VERIFIED (2026-09-08): the faulting instruction is reproducible from SDP's own BSP source, and one flag removes it** — `$SDP/bsp/BSP_hyp-guest-arm_be-800_SVN1018940_JBN323.zip` ships `src/hardware/startup/lib/aarch64/gic_v3.c`. Built unmodified with the SDP Windows toolchain (`qcc -Vgcc_ntoaarch64`, gcc 12.2.0), `gic_v3.o` contains `str w3,[x0],#4` at GICD base **+0x420** inside `gic_v3_initialize` — the same instruction form at the same offset this row's neighbour root-caused from ftrace + disassembly of the shipped binary, so the strength-reduction theory is **confirmed, not inferred**. Four MMIO writeback stores exist in that object (GICD priority `0x1a68`, GICD clear `0x1a90`, GICR priority `0x1b0`, 64-bit `0x1af0`); recompiling with `-fno-auto-inc-dec` takes that count to **zero**, the loop becoming `add x0,x0,#4` + `stur w3,[x0,#-4]` — identical addresses/values/iterations, non-writeback, so ISS is valid and KVM's vgic MMIO path can decode it. QNX already ships `-fno-store-merging` in these flags for the same class of reason. | **Still boot-unverified:** nothing has been booted, and `startup-qemu-virt` cannot be relinked because the BSP ships `boards/armv8_fm/` but **not** `boards/qemu-virt/` — `libstartup.a` rebuilds, the binary that consumes it does not. Only `gic_v3.c` was audited, not the whole library. Routes forward: (a) file with QNX/BlackBerry — this makes the report concrete enough for them to verify cheaply; (b) request the `qemu-virt` board source; (c) adapt `armv8_fm` to QEMU `virt`'s memory map and boot the result under KVM on `a1.metal`, which already reproduces the hang. | Low to reproduce (done); High to reach a bootable rebuilt startup |
+docs/orin-port.md:255:| GICv3 | GICD `0x0f400000` (64 KiB), GICR `0x0f440000` (2 MiB, one region), maintenance PPI 9; **no ITS node upstream** | `gic_v3.c` / `gic_v3_its.c` in libstartup.a; the NISV writeback-store issue above is irrelevant natively (no KVM trap) |
+docs/orin-port.md:411:  binary (4.6(c)); the 2026-09-08 move to the Apache-2.0 `gic_v3.c` source
+ipc-test/qnx-guest-shmem-probe/README.md:83:of problem as the unrelated Orin GICv3 `KVM_EXIT_ARM_NISV` finding elsewhere
+logs/sample-boot/aws-a1-metal-kvm-nisv-repro.log:2:# Captured 2026-07-29 on AWS EC2 a1.metal (<aws-instance-id>, <aws-region>,
+logs/sample-boot/aws-a1-metal-kvm-nisv-repro.log:56:FOUND GICv3 ITS
+logs/sample-boot/aws-a1-metal-kvm-nisv-repro.log:9:# Tegra234-specific or a general real-hardware/KVM limitation. AWS a1.metal
+logs/sample-boot/orin-qhv-tcg-q111-boot-blk-only.log:23:FOUND GICv3 ITS
+logs/sample-boot/orin-qhv-tcg-q111-boot-blk-only.log:24:** CPU 0 PE is not awake
+logs/sample-boot/orin-qhv-tcg-q111-boot-blk-only.log:25:** CPU 1 PE is not awake
+logs/sample-boot/orin-qhv-tcg-q111-boot-rng-slot3.log:20:FOUND GICv3 ITS
+logs/sample-boot/orin-qhv-tcg-q111-boot-rng-slot3.log:21:** CPU 0 PE is not awake
+logs/sample-boot/orin-qhv-tcg-q111-boot-rng-slot3.log:22:** CPU 1 PE is not awake
+logs/sample-boot/orin-qhv-tcg-q111-nohypvirt-control.log:10:FOUND GICv3 ITS
+logs/sample-boot/orin-qhv-tcg-q111-nohypvirt-control.log:11:** CPU 0 PE is not awake
+logs/sample-boot/orin-qhv-tcg-q111-nohypvirt-control.log:12:** CPU 1 PE is not awake
+logs/sample-boot/orin-qhv-tcg-q111-rng-snapshot-boot1.log:7:FOUND GICv3 ITS
+logs/sample-boot/orin-qhv-tcg-q111-rng-snapshot-boot1.log:8:** CPU 0 PE is not awake
+logs/sample-boot/orin-qhv-tcg-q111-rng-snapshot-boot1.log:9:** CPU 1 PE is not awake
+logs/sample-boot/orin-qhv-tcg-q62-INVALID-rng-in-slot2.log:21:FOUND GICv3 ITS
+logs/sample-boot/orin-qhv-tcg-q62-INVALID-rng-in-slot2.log:22:** CPU 0 PE is not awake
+logs/sample-boot/orin-qhv-tcg-q62-INVALID-rng-in-slot2.log:23:** CPU 1 PE is not awake
+logs/sample-boot/orin-qhv-tcg-q62-a57-control.log:19:FOUND GICv3 ITS
+logs/sample-boot/orin-qhv-tcg-q62-a57-control.log:20:** CPU 0 PE is not awake
+logs/sample-boot/orin-qhv-tcg-q62-a57-control.log:21:** CPU 1 PE is not awake
+logs/sample-boot/orin-qhv-tcg-q62-hang-blk-only.log:32:FOUND GICv3 ITS
+logs/sample-boot/orin-qhv-tcg-q62-hang-blk-only.log:33:** CPU 0 PE is not awake
+logs/sample-boot/orin-qhv-tcg-q62-hang-blk-only.log:34:** CPU 1 PE is not awake
+logs/sample-boot/orin-qhv-tcg-q62-hang-rng-slot3.log:21:FOUND GICv3 ITS
+logs/sample-boot/orin-qhv-tcg-q62-hang-rng-slot3.log:22:** CPU 0 PE is not awake
+logs/sample-boot/orin-qhv-tcg-q62-hang-rng-slot3.log:23:** CPU 1 PE is not awake
+logs/sample-boot/orin-tcg-qnx-boot-timed1.log:1:FOUND GICv3 ITS
+logs/sample-boot/orin-tcg-qnx-boot-timed1.log:2:** CPU 0 PE is not awake
+logs/sample-boot/orin-tcg-qnx-boot-timed1.log:3:** CPU 1 PE is not awake
+logs/sample-boot/orin-tcg-qnx-boot1.log:15:# "KVM boot hangs silently after FOUND GICv3 ITS" row, 2026-07-28 entry).
+logs/sample-boot/orin-tcg-qnx-boot1.log:24:FOUND GICv3 ITS
+logs/sample-boot/orin-tcg-qnx-boot1.log:25:** CPU 0 PE is not awake
+logs/sample-boot/orin-tcg-qnx-boot1.log:26:** CPU 1 PE is not awake
+logs/sample-boot/orin-tcg-qnx-ipc-boot1.log:34:FOUND GICv3 ITS
+logs/sample-boot/orin-tcg-qnx-ipc-boot1.log:35:** CPU 0 PE is not awake
+logs/sample-boot/orin-tcg-qnx-ipc-boot1.log:36:** CPU 1 PE is not awake
+logs/sample-boot/orin-tcg-qnx-network1.log:32:FOUND GICv3 ITS
+logs/sample-boot/orin-tcg-qnx-network1.log:33:** CPU 0 PE is not awake
+logs/sample-boot/orin-tcg-qnx-network1.log:34:** CPU 1 PE is not awake
+logs/sample-boot/qhv-tcg-host-and-guest-boot.log:32:FOUND GICv3 ITS
+logs/sample-boot/qhv-tcg-host-and-guest-boot.log:33:** CPU 0 PE is not awake
+logs/sample-boot/qhv-tcg-host-and-guest-boot.log:34:** CPU 1 PE is not awake
+logs/sample-boot/qhv-tcg-ipc-benchmark.log:1:FOUND GICv3 ITS
+logs/sample-boot/qhv-tcg-ipc-benchmark.log:2:** CPU 0 PE is not awake
+logs/sample-boot/qhv-tcg-ipc-benchmark.log:3:** CPU 1 PE is not awake
+logs/sample-boot/qhv-tcg-rq2-hyp-shm-host-probe.log:1:FOUND GICv3 ITS
+logs/sample-boot/qhv-tcg-rq2-hyp-shm-host-probe.log:2:** CPU 0 PE is not awake
+logs/sample-boot/qhv-tcg-rq2-hyp-shm-host-probe.log:3:** CPU 1 PE is not awake
+logs/sample-boot/qhv-tcg-rq2-shmem-roundtrip-attempt1-bus-error.log:1:FOUND GICv3 ITS
+logs/sample-boot/qhv-tcg-rq2-shmem-roundtrip-attempt1-bus-error.log:2:** CPU 0 PE is not awake
+logs/sample-boot/qhv-tcg-rq2-shmem-roundtrip-attempt1-bus-error.log:3:** CPU 1 PE is not awake
+logs/sample-boot/qhv-tcg-rq2-shmem-roundtrip-success.log:1:FOUND GICv3 ITS
+logs/sample-boot/qhv-tcg-rq2-shmem-roundtrip-success.log:2:** CPU 0 PE is not awake
+logs/sample-boot/qhv-tcg-rq2-shmem-roundtrip-success.log:3:** CPU 1 PE is not awake
+logs/sample-boot/qhv-tcg-sentinel-recovery-committed15-5-check.log:1:FOUND GICv3 ITS
+logs/sample-boot/qhv-tcg-sentinel-recovery-committed15-5-check.log:2:** CPU 0 PE is not awake
+logs/sample-boot/qhv-tcg-sentinel-recovery-committed15-5-check.log:3:** CPU 1 PE is not awake
+logs/sample-boot/qhv-tcg-sentinel-recovery-diag300-run1.log:1:FOUND GICv3 ITS
+logs/sample-boot/qhv-tcg-sentinel-recovery-diag300-run1.log:2:** CPU 0 PE is not awake
+logs/sample-boot/qhv-tcg-sentinel-recovery-diag300-run1.log:3:** CPU 1 PE is not awake
+logs/sample-boot/qhv-tcg-sentinel-recovery-diag300-run2.log:1:FOUND GICv3 ITS
+logs/sample-boot/qhv-tcg-sentinel-recovery-diag300-run2.log:2:** CPU 0 PE is not awake
+logs/sample-boot/qhv-tcg-sentinel-recovery-diag300-run2.log:3:** CPU 1 PE is not awake
+logs/sample-boot/qhv-tcg-sentinel-recovery-diag300-run3.log:1:FOUND GICv3 ITS
+logs/sample-boot/qhv-tcg-sentinel-recovery-diag300-run3.log:2:** CPU 0 PE is not awake
+logs/sample-boot/qhv-tcg-sentinel-recovery-diag300-run3.log:3:** CPU 1 PE is not awake
+logs/sample-boot/windows-qhv-tcg-boot-timed1.log:21:# architectural requirement on both hosts, not the GICv3/KVM_EXIT_ARM_NISV
+logs/sample-boot/windows-qhv-tcg-boot-timed1.log:49:FOUND GICv3 ITS
+logs/sample-boot/windows-qhv-tcg-boot-timed1.log:50:** CPU 0 PE is not awake
+logs/sample-boot/windows-qhv-tcg-boot-timed1.log:51:** CPU 1 PE is not awake
+logs/sample-boot/windows-qhv-tcg-q62-cell.log:10:FOUND GICv3 ITS
+logs/sample-boot/windows-qhv-tcg-q62-cell.log:11:** CPU 0 PE is not awake
+logs/sample-boot/windows-qhv-tcg-q62-cell.log:12:** CPU 1 PE is not awake
+logs/sample-boot/windows-tcg-qnx-boot-timed1.log:1:FOUND GICv3 ITS
+logs/sample-boot/windows-tcg-qnx-boot-timed1.log:2:** CPU 0 PE is not awake
+logs/sample-boot/windows-tcg-qnx-boot-timed1.log:3:** CPU 1 PE is not awake
+scripts/orin/launch-qhv-on-orin-tcg.sh:33:# suffers from (docs/orin-port.md's GICv3/KVM_EXIT_ARM_NISV risk-register row).
+scripts/orin/launch-qnx-on-orin-tcg.sh:15:# KVM_EXIT_ARM_NISV that QNX's startup has no handler for) and records the
+scripts/qhv/verify-bringup.sh:163:# Online-PE count vs configured -smp. Shortfall ("CPU N PE is not awake")
+scripts/qhv/verify-bringup.sh:170:  not_awake=$(count_matches 'PE is not awake' "$boot_log")
+skills/fmea/examples/phase1-cloud-bringup-fmea.md:376:| **NF-6** | Bring all configured PEs (cores) online | **SMP processing elements not awake** — degraded core availability | Guest/host run on fewer cores than provisioned (`-smp 2`); any deadline budget or load assumption made against N cores is invalid; silent capacity loss | **Direct evidence:** `** CPU 0 PE is not awake`, `** CPU 1 PE is not awake` at host boot. Whether `qvm` then presents working vCPUs to the guest is **unverified** | **4** | **4** | 3 | **48** | new SG-A6; SG-07 dependency |

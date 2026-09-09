@@ -214,6 +214,26 @@ per-marker segment lines; two series are comparable only if those stamps
 match. `twin/diff-results.sh` parses the IPC CSVs, not these files — compare
 them directly. Background and numbers: `docs/digital-twin-design.md` §1a.
 
+## Diagnostic — KVM/NISV boot-hang evidence collector (Phase 3/4)
+
+`diagnose-gicv3-nisv.sh` — **read-only**. Collects host / repo / boot-log
+evidence, decodes an `ESR_EL2` value (`--esr`), composes and range-checks a
+fault IPA (`--hpfar` / `--far` / `--ipa`), classifies the faulting opcode
+around `--guest-pc` in `--elf`, and writes
+`results/gicv3-nisv-debug/<UTC>/summary.md` + `raw/` with a
+PASS / FAIL / BLOCKED / NOT APPLICABLE / NOT RUN matrix and the exact
+next commands. It never boots a guest, sshes, installs anything or copies a
+QNX binary; missing tools degrade rows instead of aborting. Runs under
+Linux (L4T) and Git Bash. The committed report was produced by:
+
+```bash
+bash scripts/diagnose-gicv3-nisv.sh --esr 0x92000045 --boot-log logs/sample-boot/aws-a1-metal-kvm-nisv-repro.log
+```
+
+It is **not** for the QHV/TCG QEMU-6.2 timer hang above — those logs are
+excluded automatically. Background: `docs/orin-port.md` risk register,
+`docs/findings.md` 2026-07-28/29, 2026-09-08 and 2026-09-09.
+
 ## Idempotency notes
 
 - `bootstrap-*.sh` scripts use `apt install` (idempotent on Debian/Ubuntu).

@@ -1,0 +1,24 @@
+--- self-test 0x92000045
+
+- value: 0x92000045
+- EC [31:26] = 0x24 — Data Abort from a lower EL
+- IL [25] = 1 (32-bit instruction)
+- ISS [24:0] = 0x0000045
+- Data Abort ISS:
+  - ISV [24] = 0 — instruction syndrome NOT VALID: SAS/SSE/SRT/SF/AR are RES0 and are NOT decoded here
+  - VNCR [13] = 0, bits [12:11] = 0 (RES0 for this DFSC), FnV [10] = 0 (FAR valid), EA [9] = 0, CM [8] = 0, S1PTW [7] = 0
+  - WnR [6] = 1 (write)
+  - DFSC [5:0] = 0x05 — Translation fault, level 1
+  - reading: ISV=0 means the hardware did not describe the access (this is what the KVM API calls a 'NISV' Data Abort). ISV=0 by itself does NOT prove the IPA is GIC MMIO — that needs HPFAR/IPA (see Candidate IPA) or the disassembled instruction.
+
+--- supplied --esr 0x92000045
+- value: 0x92000045
+- EC [31:26] = 0x24 — Data Abort from a lower EL
+- IL [25] = 1 (32-bit instruction)
+- ISS [24:0] = 0x0000045
+- Data Abort ISS:
+  - ISV [24] = 0 — instruction syndrome NOT VALID: SAS/SSE/SRT/SF/AR are RES0 and are NOT decoded here
+  - VNCR [13] = 0, bits [12:11] = 0 (RES0 for this DFSC), FnV [10] = 0 (FAR valid), EA [9] = 0, CM [8] = 0, S1PTW [7] = 0
+  - WnR [6] = 1 (write)
+  - DFSC [5:0] = 0x05 — Translation fault, level 1
+  - reading: ISV=0 means the hardware did not describe the access (this is what the KVM API calls a 'NISV' Data Abort). ISV=0 by itself does NOT prove the IPA is GIC MMIO — that needs HPFAR/IPA (see Candidate IPA) or the disassembled instruction.

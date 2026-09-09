@@ -1,0 +1,3 @@
+/c/Program Files/qemu/qemu-system-aarch64.exe
+QEMU emulator version 11.0.50 (v11.0.0-12631-g54e84cdc7a)
+accel: tcg 
