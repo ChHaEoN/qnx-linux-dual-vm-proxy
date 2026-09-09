@@ -85,3 +85,6 @@ orin-native/startup/**/*.o
 orin-native/startup/**/*.dep
 orin-native/**/startup-t234-orin-nano
 *.kimg
+# mkifs [+keeplinked] drops symbol files next to the buildfile; they are derived
+# from QNX binaries and must never be committed.
+*.sym

@@ -84,6 +84,7 @@ truth; this table is a summary that can lag it.
 | **1** — Cloud twin bring-up: QHV `qvm` hosting a QNX guest under TCG | ✅ done | [qhv-tcg-host-and-guest-boot.log](logs/sample-boot/qhv-tcg-host-and-guest-boot.log) |
 | **2** — Cloud twin IPC + latency | 🟡 **partial** — real P50/P99/Max exist; sample count capped by a `qvm`/TCG virtio-queue stall that is **not root-caused**, but is now *recoverable* (19/19 real stalls recovered) | [cloud-ipc-latest.csv](results/cloud/cloud-ipc-latest.csv), [qnx-host-client/README.md](ipc-test/qnx-host-client/README.md) |
 | **3** — Hardware twin port (Jetson Orin Nano) | 🟡 **substantial, not closed** — heterogeneous QNX↔Linux IPC over a real `br0`/tap bridge works (2 × 100 000 iterations, 0 errors) under **TCG**; **KVM boot is blocked** by a root-caused GICv3 / `KVM_EXIT_ARM_NISV` defect, since reproduced on a second ARM vendor **and reproduced from QNX's own BSP source**: the faulting `str w3,[x0],#4` at GICD+0x420 falls out of `gic_v3.c` built with QNX's own flags, and `-fno-auto-inc-dec` removes all four MMIO writeback stores (compile-verified, boot-unverified — the `qemu-virt` board source is not shipped) | [orin-ipc-latest.csv](results/hw/orin-ipc-latest.csv), [orin-port.md](docs/orin-port.md), [aws-a1-metal-kvm-nisv-repro.log](logs/sample-boot/aws-a1-metal-kvm-nisv-repro.log) |
+| **3b** — Native QNX on the Orin Nano (no QEMU) | 🟡 **kicked off 2026-09-09, nothing has booted** — [ADR-003](docs/adr-003-hardware-timed-qhv.md) chose a native port over a Raspberry Pi 4B or AWS metal as the route to a *hardware-timed* hypervisor number. Verified so far is compile-only: the BSP's startup library and its reference board build unmodified under the Windows SDP tooling, and the M0 shim assembles to an exact 8 KiB page whose kexec header checks byte-for-byte. Adversarial review of the plan then found four of its twelve load-bearing claims materially wrong — three refuted outright, and one settled against the plan by reading the board's own registers. | [orin-native-port-plan.md](docs/orin-native-port-plan.md), [orin-native/](orin-native/), [results/orin-native-port/](results/orin-native-port/) |
 | **4** — Twin diff + DRIVE OS comparison | 🟡 **started** — boot-time twin diff done (n=5 per side); the QHV hypervisor leg now boots on the Orin under a from-source QEMU 11.1.0 (the distro 6.2.0 hangs it — a QEMU EL2-timer defect, verified by a reverted-wiring build, not the host); the release-aligned n=5 pair is measured (2.15× Orin/Windows, TCG throughput, not a hardware-timed number — routes to one are in [ADR-003](docs/adr-003-hardware-timed-qhv.md), Proposed); [drive-os-comparison.md](docs/drive-os-comparison.md) still open | [digital-twin-design.md](docs/digital-twin-design.md) §1a, §5 |
 | **5** — FuSa & Cybersecurity overlay | ⬜ not started as a dedicated phase (a Phase-1-gate FuSa + Cyber pass *did* run) | [docs/fusa/](docs/fusa/), [docs/cyber/](docs/cyber/), [docs/tara/](docs/tara/) |
 | **6** — Polish, public README, demo recording | ⬜ not started | — |
@@ -204,6 +205,52 @@ QEMU version quietly falsified — both recorded in
 
 ---
 
+### The native port (Phase 3b) — started, and nothing has run yet
+
+Every hypervisor number above is TCG emulation throughput. None of them is
+hardware-timed, because the QNX Hypervisor needs EL2 for its guest and ARM KVM
+does not offer nested virtualisation on this silicon.
+[ADR-003](docs/adr-003-hardware-timed-qhv.md) weighed the three routes to a real
+one and the project took the hardest: port QNX to the Jetson Orin Nano natively,
+with no QEMU underneath.
+
+The loader is `kexec` from the running L4T, which is the point — no firmware, no
+ESP, no boot-partition or UEFI-variable change, so a power cycle always returns
+an untouched Linux. An 8 KiB page carrying the `Image` header `kexec` insists on
+is prefixed to the QNX image; a raw IFS cannot host that header itself, because
+its own preboot stub already occupies those bytes.
+
+What is actually done, all of it compile-only or read-only:
+
+- the BSP's startup library and its reference board build unmodified under the
+  Windows SDP toolchain, in the order the BSP itself implies;
+- the M0 shim is written and assembles to an exact 8 KiB page in all three of
+  its modes, with the `kexec` header verified field by field;
+- an IFS built at the address the shim hands control to lays out correctly;
+- the board's ramoops console zone was located and its format read directly out
+  of memory, so the first milestones can produce readable evidence with **no
+  hardware bought** — the USB-TTL adapter became a schedule multiplier rather
+  than a prerequisite;
+- four of the plan's twelve load-bearing claims turned out to be materially
+  wrong before any of them could cost a board session: three were refuted by
+  the adversarial review that followed the plan, and one by reading the
+  board's registers. That last one matters most — a watchdog **is** armed at
+  hand-off, which gives unattended recovery for free and caps every
+  experiment at about two minutes.
+
+What is not done: no QNX instruction has executed on this hardware, no number
+exists, and the startup board directory is unwritten. The plan carries a claims
+register saying which of its own assumptions are verified, contested or merely
+reasoned, and the milestones it has not reached are marked as such.
+
+One honest constraint worth stating in public: logs and measurements from this
+track are evaluation output under the QNX non-commercial licence, so they stay
+private until that is cleared. Design, source and procedure are not, which is
+why the code and the plan are here and the results directory holds facts rather
+than boot logs.
+
+---
+
 ## Known limitations (honest framing)
 
 The whole point of the project is to be precise about what a software-layer
@@ -267,6 +314,7 @@ Other prereqs:
 - [x] **Phase 1** — Cloud twin bring-up (SDP 8.0 QHV `qvm` + one QNX guest under QEMU TCG — no Linux guest on this leg, per [ADR-002](docs/phase2-topology-decision.md))
 - [ ] **Phase 2** _(in progress)_ — Cloud twin IPC + latency benchmark: real P50/P99/Max landed; the 100k-iteration target is still blocked by an unfixed — though now recoverable — `qvm`/TCG stall
 - [ ] **Phase 3** _(in progress)_ — Hardware twin on Jetson Orin Nano: heterogeneous QNX↔Linux IPC done under TCG; a hardware-timed KVM number is still owed, blocked on the GICv3/NISV defect. What the defect filing still lacks (a numerically recorded fault PC/IPA, one logged run per QEMU variant) is pinned down by the read-only collector [scripts/diagnose-gicv3-nisv.sh](scripts/diagnose-gicv3-nisv.sh) and its reviewed report in [results/gicv3-nisv-debug/](results/gicv3-nisv-debug/20260909T101030Z/summary.md); the route to a *genuinely* hardware-timed hypervisor number was chosen in [ADR-003](docs/adr-003-hardware-timed-qhv.md) (Accepted 2026-09-09): a **native QNX port to the Orin Nano**, tracked as Phase 3b in [orin-native-port-plan.md](docs/orin-native-port-plan.md) — kicked off, nothing booted natively yet; two compile-only results are verified and a read-only board pass already refuted four of the plan's own load-bearing claims
+- [ ] **Phase 3b** _(kicked off)_ — Native QNX on the Orin Nano with no QEMU, the route [ADR-003](docs/adr-003-hardware-timed-qhv.md) chose to a hardware-timed hypervisor number: `kexec` from L4T, nothing persistent touched. Shim written and assembling, board facts harvested, four of the plan's twelve load-bearing claims already found wrong; nothing booted yet ([plan](docs/orin-native-port-plan.md))
 - [ ] **Phase 4** _(in progress)_ — Twin diff done for boot time **and for the QHV hypervisor leg** (same images on both hosts, one QEMU release, 2.15× Orin/Windows; the stock QEMU 6.2 hang it uncovered is a QEMU-side EL2-timer defect, written up honestly); the dimension-by-dimension [drive-os-comparison.md](docs/drive-os-comparison.md) is still open
 - [ ] **Phase 5** — FuSa & Cybersecurity overlay (FMEA, ASIL gap, STRIDE)
 - [ ] **Phase 6** — Polish, demo recording, public release
@@ -314,6 +362,7 @@ A 2-minute spoken version is at [docs/interview-narrative.md](docs/interview-nar
 │   ├── phase2-topology-decision.md # ADR-002 — falsified the cloud dual-VM topology
 │   ├── phase2-research-spike.md
 │   ├── orin-port.md                # Phase 3 plan + KVM/GICv3 risk register
+│   ├── orin-native-port-plan.md    # Phase 3b — native QNX on Orin: plan, claims register, M0-M4
 │   ├── adr-003-hardware-timed-qhv.md # ADR-003 (Accepted) — route to a hardware-timed QHV number
 │   ├── orin-native-port-plan.md    # Phase 3b — native QNX on Orin Nano: plan, claims register, M0-M4
 │   ├── drive-os-comparison.md      # Phase 4 gap doc (still open)
@@ -333,6 +382,9 @@ A 2-minute spoken version is at [docs/interview-narrative.md](docs/interview-nar
 │   ├── twin/                       # sync.sh + diff-results.sh; sync-qhv.sh (QHV images -> Orin, resumable, checksum-gated)
 │   ├── orin/patches/               # one-wire QEMU experiment patch that verified the EL2 virtual-timer mechanism
 │   └── bootstrap-*.sh, setup-bridge.sh, launch-*.sh   # EC2 fallback / pre-ADR-002 lineage
+├── orin-native/                    # Phase 3b: native port source (our own code only)
+│   ├── shim/                       #   M0 shim: arm64 Image header + EL2 vectors + state report
+│   └── startup/                    #   startup-t234-orin-nano board directory (not written yet)
 ├── ipc-test/                       # C99: QNX echo servers, QNX host client, Linux client,
 │   │                               #      host + guest vdev-shmem probes, shared frame code
 │   └── common/                     # wire protocol (frame.h) + raw-mode console I/O
