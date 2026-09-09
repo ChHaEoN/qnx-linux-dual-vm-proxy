@@ -83,7 +83,7 @@ truth; this table is a summary that can lag it.
 | **0** — Bootstrap, scaffold, BSP research, twin re-scope | ✅ done | [bsp-selection.md](docs/bsp-selection.md) |
 | **1** — Cloud twin bring-up: QHV `qvm` hosting a QNX guest under TCG | ✅ done | [qhv-tcg-host-and-guest-boot.log](logs/sample-boot/qhv-tcg-host-and-guest-boot.log) |
 | **2** — Cloud twin IPC + latency | 🟡 **partial** — real P50/P99/Max exist; sample count capped by a `qvm`/TCG virtio-queue stall that is **not root-caused**, but is now *recoverable* (19/19 real stalls recovered) | [cloud-ipc-latest.csv](results/cloud/cloud-ipc-latest.csv), [qnx-host-client/README.md](ipc-test/qnx-host-client/README.md) |
-| **3** — Hardware twin port (Jetson Orin Nano) | 🟡 **substantial, not closed** — heterogeneous QNX↔Linux IPC over a real `br0`/tap bridge works (2 × 100 000 iterations, 0 errors) under **TCG**; **KVM boot is blocked** by a root-caused GICv3 / `KVM_EXIT_ARM_NISV` defect, since reproduced on a second ARM vendor | [orin-ipc-latest.csv](results/hw/orin-ipc-latest.csv), [orin-port.md](docs/orin-port.md), [aws-a1-metal-kvm-nisv-repro.log](logs/sample-boot/aws-a1-metal-kvm-nisv-repro.log) |
+| **3** — Hardware twin port (Jetson Orin Nano) | 🟡 **substantial, not closed** — heterogeneous QNX↔Linux IPC over a real `br0`/tap bridge works (2 × 100 000 iterations, 0 errors) under **TCG**; **KVM boot is blocked** by a root-caused GICv3 / `KVM_EXIT_ARM_NISV` defect, since reproduced on a second ARM vendor **and reproduced from QNX's own BSP source**: the faulting `str w3,[x0],#4` at GICD+0x420 falls out of `gic_v3.c` built with QNX's own flags, and `-fno-auto-inc-dec` removes all four MMIO writeback stores (compile-verified, boot-unverified — the `qemu-virt` board source is not shipped) | [orin-ipc-latest.csv](results/hw/orin-ipc-latest.csv), [orin-port.md](docs/orin-port.md), [aws-a1-metal-kvm-nisv-repro.log](logs/sample-boot/aws-a1-metal-kvm-nisv-repro.log) |
 | **4** — Twin diff + DRIVE OS comparison | 🟡 **started** — boot-time twin diff done (n=5 per side); the QHV hypervisor leg now boots on the Orin under a from-source QEMU 11.1.0 (the distro 6.2.0 hangs it — a QEMU EL2-timer defect, not the host), aligned n=5 pair still owed; [drive-os-comparison.md](docs/drive-os-comparison.md) still open | [digital-twin-design.md](docs/digital-twin-design.md) §1a, §5 |
 | **5** — FuSa & Cybersecurity overlay | ⬜ not started as a dedicated phase (a Phase-1-gate FuSa + Cyber pass *did* run) | [docs/fusa/](docs/fusa/), [docs/cyber/](docs/cyber/), [docs/tara/](docs/tara/) |
 | **6** — Polish, public README, demo recording | ⬜ not started | — |
@@ -121,8 +121,9 @@ sides; n=5 per host, timed from process launch to the guest's own
 Windows' range is dominated by a single cold-start outlier (run 1) — drop it
 and Windows' remaining four runs span just **33 ms**. The defensible claim
 is that Orin is slower; "more consistent" depends entirely on whether you
-count that cold start. This is the only comparison in the repo where *only
-the host* differs — every other number confounds at least two variables.
+count that cold start. Until the hypervisor leg below, this was the only comparison in the repo
+where *only the host* differs — every other number confounds at least two
+variables.
 
 ### IPC round-trip latency — sample-size-matched (n=15 per side, 48-byte payload)
 
@@ -168,9 +169,14 @@ Ubuntu 22.04's stock QEMU 6.2.0 hangs the QHV host on the Orin at its first
 timeout-wait (`waitfor /dev/random` never times out; with an rng presented,
 `io-sock` start instead). The same 6.2.0 (Weilnetz Windows build) **hangs identically on the x86_64 host**, so the effect is host-independent.
 Under QEMU 11.1.0 the same image boots on the Orin with and without rng.
-Attributed cause, supported by a non-VHE control but not observed in
-registers: `v6.2.0`'s `virt` board never wires the EL2 *virtual* timer IRQ
-(added in QEMU 9.0), and a VHE hypervisor host's timers are exactly that.
+Cause, **verified by a reverted-wiring build**: `v6.2.0`'s `virt` board
+never wires the EL2 *virtual* timer IRQ (added in QEMU 9.0), and a VHE
+hypervisor host's timers are exactly that. QEMU 11.1.0 rebuilt on the Orin
+with only that one wire removed
+([patch](scripts/orin/patches/qemu-v11.1.0-unwire-ns-el2-virt-timer-irq.patch))
+hangs identically, while unpatched 11.1.0 boots the same image on the same
+board; a `-cpu cortex-a57` (no VHE) control on 6.2 gets past the hang point.
+One wire, one variable, opposite outcome.
 Along the way the leg's own instrument was corrected twice — an rng test in
 the wrong virtio-mmio slot, and a "one-variable comparison" claim that the
 QEMU version quietly falsified — both recorded in
@@ -320,14 +326,16 @@ A 2-minute spoken version is at [docs/interview-narrative.md](docs/interview-nar
 │   ├── build-qhv.bat               # cloud leg: build the QHV host + QNX guest images
 │   ├── launch-qhv-tcg.ps1          # cloud leg: boot QHV under QEMU TCG
 │   ├── qhv/                        # committed QHV config sources (g2.conf, post_start, gates)
-│   ├── orin/                       # hardware twin: L4T bootstrap, bridge, launch
-│   ├── twin/                       # sync.sh + diff-results.sh (Phase 4)
+│   ├── orin/                       # hardware twin: L4T bootstrap, bridge, launch; build-qemu-on-orin.sh; launch-qhv-on-orin-tcg.sh
+│   ├── twin/                       # sync.sh + diff-results.sh; sync-qhv.sh (QHV images -> Orin, resumable, checksum-gated)
+│   ├── orin/patches/               # one-wire QEMU experiment patch that verified the EL2 virtual-timer mechanism
 │   └── bootstrap-*.sh, setup-bridge.sh, launch-*.sh   # EC2 fallback / pre-ADR-002 lineage
 ├── ipc-test/                       # C99: QNX echo servers, QNX host client, Linux client,
 │   │                               #      host + guest vdev-shmem probes, shared frame code
 │   └── common/                     # wire protocol (frame.h) + raw-mode console I/O
 ├── logs/sample-boot/               # curated boot + benchmark logs (the evidence)
 ├── results/cloud/  results/hw/     # benchmark CSVs, one schema for both twins
+├── results/qhv-images-SHA256SUMS.txt  # copy-time SHA-256 of the QHV image pair (values only; images stay out of git)
 └── skills/                         # study artefacts (FMEA, ISO 26262, 21434, ASPICE, BSP,
                                     #                 digital twin, Jetson, Tegra virt)
 
