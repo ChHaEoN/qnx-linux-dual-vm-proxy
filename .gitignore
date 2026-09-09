@@ -76,3 +76,12 @@ Thumbs.db
 # Claude Code: per-user local settings stay out; project-shared subagents go in.
 .claude/settings.local.json
 .claude/.credentials.json
+
+# Phase 3b (native Orin port) build outputs. The shim source is committed; the
+# assembled page and any image concatenated with a QNX IFS are not — the latter
+# would carry QNX bytes (NCEULA).
+orin-native/shim/out/
+orin-native/startup/**/*.o
+orin-native/startup/**/*.dep
+orin-native/**/startup-t234-orin-nano
+*.kimg
