@@ -195,6 +195,25 @@ SSH session that launched it.
 
 ---
 
+## Workflow — QHV twin leg (Phase 4; hypervisor topology on both hosts)
+
+Added 2026-09-08/09. Not part of the two workflows above: it boots the same
+QHV host image (`qhv/host/output/{ifs.bin,disk-qemu}`, built by
+`build-qhv.bat`) on the Windows PC and on the Orin Nano and times launch →
+guest banner, with every controllable setting stamped into the times file.
+
+| Step | Windows | Orin |
+|---|---|---|
+| Build the images | `build-qhv.bat` | — (same images, copied) |
+| Stage to the Orin | `twin/sync-qhv.sh` (scp, checksum-verified on arrival, resumable; `SSH_OPTS` for a non-default key) | — |
+| QEMU ≥ 9.0 on the Orin | — | `orin/build-qemu-on-orin.sh` (the distro 6.2.0 hangs the QHV host on an EL2-timer defect; builds a tagged release into its own prefix, 6.2.0 untouched) |
+| Measure n=5 | `launch-qhv-tcg.ps1 -Runs 5 -StopOnGuestBanner -WithRng [-QemuPath …]` | `WITH_RNG=1 orin/launch-qhv-on-orin-tcg.sh 5` (picks `~/qemu-v11.1.0`, or `QEMU_BIN`) |
+
+Both instruments write `# qemu:` / `# devices:` / `# disk:` stamps and
+per-marker segment lines; two series are comparable only if those stamps
+match. `twin/diff-results.sh` parses the IPC CSVs, not these files — compare
+them directly. Background and numbers: `docs/digital-twin-design.md` §1a.
+
 ## Idempotency notes
 
 - `bootstrap-*.sh` scripts use `apt install` (idempotent on Debian/Ubuntu).

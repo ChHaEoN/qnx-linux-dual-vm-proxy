@@ -41,7 +41,8 @@ param(
   [string]$LogPath,
   [int]$Runs = 1,
   [switch]$StopOnGuestBanner,
-  [switch]$WithRng
+  [switch]$WithRng,
+  [string]$QemuPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -50,11 +51,22 @@ $repoRoot  = Split-Path -Parent $scriptDir
 $out       = Join-Path $repoRoot 'qhv\host\output'
 if (-not $LogPath) { $LogPath = Join-Path $repoRoot 'qhv\qhv-guest-boot.log' }
 
-$qemu = @(
-  "C:\Program Files\qemu\qemu-system-aarch64.exe",
-  "C:\Program Files\qemu\qemu-system-aarch64w.exe"
-) | Where-Object { Test-Path $_ } | Select-Object -First 1
-if (-not $qemu) { throw "qemu-system-aarch64 not found. Install QEMU (winget install SoftwareFreedomConservancy.QEMU)." }
+# WHICH QEMU. -QemuPath selects an explicit binary (e.g. a release extracted
+# into its own directory for the version-aligned twin diff, or the 6.2.0 cell
+# of the version-vs-host matrix); otherwise the winget install. Either way the
+# path is stamped into the times file next to the version string, because
+# identical argument lists on different binaries produced the 2026-09-08
+# confound and "which QEMU" must be visible in the data.
+if ($QemuPath) {
+  if (-not (Test-Path $QemuPath)) { throw "-QemuPath '$QemuPath' does not exist." }
+  $qemu = $QemuPath
+} else {
+  $qemu = @(
+    "C:\Program Files\qemu\qemu-system-aarch64.exe",
+    "C:\Program Files\qemu\qemu-system-aarch64w.exe"
+  ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+  if (-not $qemu) { throw "qemu-system-aarch64 not found. Install QEMU (winget install SoftwareFreedomConservancy.QEMU) or pass -QemuPath." }
+}
 
 $ifs  = Join-Path $out 'ifs.bin'
 $disk = Join-Path $out 'disk-qemu'
@@ -100,7 +112,7 @@ if ($StopOnGuestBanner) {
   $cpuName = (Get-CimInstance Win32_Processor | Select-Object -First 1 -ExpandProperty Name)
   $provenance = @(
     "# host: Windows $([System.Environment]::OSVersion.Version) $env:PROCESSOR_ARCHITECTURE / $cpuName",
-    "# qemu: $qemuVer",
+    "# qemu: $qemuVer  [$qemu]",
     ("# devices: " + $(if ($WithRng) { "virtio-blk + virtio-net(slirp) + virtio-rng(builtin)" } else { "virtio-blk only (NO rng: entropy init fails and times out, ~+19 s)" })),
     "# disk: -snapshot (guest writes discarded; every run boots the copy-time bytes, so SHA256SUMS keeps holding)",
     "# marker: launch -> guest banner (QNX qnx-guest ... ARMv8_Foundation_Model)",

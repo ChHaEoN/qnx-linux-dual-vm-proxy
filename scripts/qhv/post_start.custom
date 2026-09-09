@@ -6,8 +6,13 @@
 #
 # It auto-starts the QNX guest under QVM with a NO-NETWORK config, because:
 #   - the stock /data/hypervisor/start_guest wires a virtio-net peer that needs
-#     the host io-sock stack, which does not initialise on this qemu-virt build
-#     ("network stack down" / "Address family not supported"); and
+#     the host io-sock stack, which does not come up under the launch line
+#     launch-qhv-tcg.ps1 uses by default ("network stack down" / "Address
+#     family not supported"). That is a LAUNCH-LINE omission, not an image
+#     property: the image expects virtio-net + virtio-rng at fixed virtio-mmio
+#     slots (ADR-002 RQ-4; findings.md 2026-07-28), and with -WithRng /
+#     WITH_RNG=1 the host stack does initialise. This snippet keeps the guest
+#     no-net regardless, because the benchmark does not need it; and
 #   - driving `qvm` interactively over the slow TCG serial console drops chars.
 # Networking is not needed to demonstrate QHV hosting a guest; console + blk are.
 #
