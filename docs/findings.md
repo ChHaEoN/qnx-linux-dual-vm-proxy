@@ -117,10 +117,34 @@ Headline ratio Orin/Windows ≈ 2.20×. **Read the segments before quoting that
 ratio**: both guests burn a fixed `if_up -p -r 20 vtnet0` retry loop (no net
 vdev in `g2.conf`), which sits inside the `qvm_launched → guest_startup_complete`
 segment on both hosts and is host-independent; the review that demanded the
-timestamps estimated it could halve the apparent ratio. The Orin series above
-predates the segment stamps and should be re-run with them before the
-segments are compared. **Still not a twin diff**: the Windows QEMU is a
-different build of a different (dev) version. Windows column: needs
+timestamps estimated it could halve the apparent ratio. The Orin series was then
+re-run with the segment stamps (same configuration; the disk had to be
+re-synced first because a snapshot-less probe had mutated it — the
+pre-run `sha256sum -c` gate refused to measure until it was): **n=5 = 62,058, 62,031, 62,736, 62,524, 61,505 ms,
+median 62,058, spread 1,231 ms** —
+[orin-qhv-tcg-q111-rng-snapshot-segments-boot-times-n5.txt](../logs/sample-boot/orin-qhv-tcg-q111-rng-snapshot-segments-boot-times-n5.txt).
+
+**Segment view (medians, ms from launch):**
+
+| Segment | Windows (11.0.50) | Orin (11.1.0) | ratio |
+|---|---|---|---|
+| launch → host post_start | 6,093 | 13,430 | 2.20× |
+| host post_start → qvm launched | 110 | 337 | — |
+| qvm launched → guest banner | 22,514 | 48,452 | 2.15× |
+| **launch → guest banner (headline)** | **28,720** | **62,058** | **2.16×** |
+
+The review that demanded these timestamps expected the guest's fixed
+`if_up -p -r 20` retry burn (no net vdev) to add ~20 s to *both* hosts and
+so dilute the headline ratio by half or more. **The segments say otherwise:**
+the host-boot segment — which, with net and rng presented, contains no
+fixed wait at all — shows the same ~2.2× as the guest segment and the
+headline. Had a 20 s host-independent constant been sitting inside the guest
+segment, its compute-bound ratio would have been ~11×, not ~2.2×. So the
+`if_up` burn is short (its retry interval was not measured directly) and the
+headline ratio is *not* timeout-dominated. **This is still not a twin diff** — the Windows QEMU is a different build of a different
+(development) version — but it is now a pair of series whose stamps
+match on device set and disk mode, measured by the same instrument, on
+the same bytes, with the fixed waits visible instead of buried. Windows column: needs
 re-measuring under the same three stamps, and moving its QEMU to the
 official 11.1.0 release is the remaining alignment, with the honest caveat
 that "same release" is not "same build". Image pair at re-sync (copy-time SHA-256, before any `-snapshot`-less

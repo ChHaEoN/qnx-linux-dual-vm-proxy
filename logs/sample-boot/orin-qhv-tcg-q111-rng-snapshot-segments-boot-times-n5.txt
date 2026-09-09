@@ -1,0 +1,23 @@
+# Phase 4 -- QHV twin leg, Orin half, n=5, timestamped instrument (2026-09-09).
+# QEMU 11.1.0 (from source, ~/qemu-v11.1.0); rng in slot 3; -snapshot on the 95849168... disk (re-synced
+# after a snapshot-less probe had mutated it; sha256sum -c passed before and after this series).
+# Supersedes orin-qhv-tcg-q111-rng-snapshot-boot-times-n5.txt (same config, no segments).
+# '#   segments' = wall ms from launch to each marker. qvm_launched -> guest_startup_complete contains
+# the guest's fixed "if_up -p -r 20 vtnet0" retry burn (no net vdev), identical on both hosts.
+#
+# host: Linux 5.15.148-tegra aarch64 / ARMv8 Processor rev 1 (v8l)
+# qemu: QEMU emulator version 11.1.0 (v11.1.0)  [/home/haochen/qemu-v11.1.0/bin/qemu-system-aarch64]
+# disk: -snapshot (guest writes discarded; every run boots the copy-time bytes, so SHA256SUMS keeps holding)
+# devices: virtio-blk + virtio-net(slirp) + virtio-rng(builtin)
+# marker: launch -> guest banner (QNX qnx-guest ... ARMv8_Foundation_Model)
+# NOTE: only comparable against a run whose 'qemu:' AND 'devices:' lines both match.
+run 1: 62058 ms
+#   segments run 1: host_post_start=13155 qvm_launched=13606 guest_startup_complete=61948 guest_banner=62058 (ms from launch); if_up_exhausted=1
+run 2: 62031 ms
+#   segments run 2: host_post_start=13430 qvm_launched=13767 guest_startup_complete=61921 guest_banner=62031 (ms from launch); if_up_exhausted=1
+run 3: 62736 ms
+#   segments run 3: host_post_start=13670 qvm_launched=14009 guest_startup_complete=62626 guest_banner=62736 (ms from launch); if_up_exhausted=1
+run 4: 62524 ms
+#   segments run 4: host_post_start=13328 qvm_launched=13670 guest_startup_complete=62413 guest_banner=62524 (ms from launch); if_up_exhausted=1
+run 5: 61505 ms
+#   segments run 5: host_post_start=13544 qvm_launched=13882 guest_startup_complete=61287 guest_banner=61505 (ms from launch); if_up_exhausted=1
