@@ -56,3 +56,20 @@ placed at 0x80080000 by kexec (`text_offset = 0x80000` on top of the 2 MiB-align
 
 Whether kexec actually places the payload there (K2/placement, still to be observed on the board), whether the
 shim's jump into the stub works, or anything about running the image. It is a layout check only.
+
+## Re-verified at `[image=0x80082000]` (2026-09-09, after the shim page was sized)
+
+The shim turned out to need 8 KiB, not 4 KiB: the vector table must be 2 KiB-aligned and is itself 2 KiB, and
+the state-bank printer plus its strings do not fit in what a 4 KiB page leaves. So the IFS base moved one page
+further out and the layout check was re-run:
+
+| field | value at `[image=0x80082000]` |
+|---|---|
+| `*.boot` | offset `0x80082000`, `0xfa0` bytes |
+| startup header | `0x80082fa0`, flags1 `0x21`, `compress=0` |
+| `startup_vaddr` | `0x80083800` — still a 32-bit value, so the shipped stub's word-sized load of it still works |
+| image size | 2,289,732 B, ending well inside the 992 MiB window |
+
+`mkifs` exit 0. The shim page is exactly 8,192 bytes (`build-shim.sh` fails the build otherwise), so
+`kexec` places the header at `0x80080000` and the IFS begins at `0x80080000 + 0x2000 = 0x80082000`,
+which is what the buildfile now says. The arithmetic is unchanged; only the constant moved.
