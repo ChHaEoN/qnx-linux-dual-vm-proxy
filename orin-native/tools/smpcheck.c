@@ -11,7 +11,9 @@
  * specification this implements). Startup prints what it did to each core. This
  * reads back what the kernel was actually handed, then puts one pinned, timed
  * load on every core, so a pass is a statement about the running system rather
- * than about startup's intentions.
+ * than about startup's intentions. M1b (the M1b design's §3.10) adds two things
+ * to the census: the hypervisor fields of the system page, and a bounded check
+ * that cpu 0's kernel clock ticks at all.
  *
  *   smpcheck -i -n 6                          census of the kernel's system page
  *   smpcheck -b 60 -C 3 -o /dev/shmem/m2c3 &  silent busy worker pinned to cpu 3
@@ -30,10 +32,11 @@
  *
  * No mode may block forever. Nobody is standing next to the board, and a hang
  * costs a power cycle, which wipes the black box. Every wait has a deadline in
- * ClockCycles(). A waiter that has to sleep pins itself to cpu 0 first: cpu 0 is
- * the only core QNX has run on so far (M1), and a timer that never fires on an
- * application processor is exactly one of the failures this tool is here to
- * catch, so it must not also be able to stop the tool. The one sleep that has
+ * ClockCycles(). A waiter that has to sleep pins itself to cpu 0 first: cpu 0's
+ * clock is the one qtime names; the census proves it ticks before any waiter
+ * relies on it (-i). A timer that never fires on an application processor is
+ * exactly one of the failures this tool is here to catch, so it must not also
+ * be able to stop the tool. The one sleep that has
  * to happen on the core under test, a worker's timer check, is watched from
  * cpu 0 by a second thread that writes the hang into the record and ends the
  * process.
@@ -56,6 +59,7 @@
 #include <unistd.h>
 #include <sys/neutrino.h>
 #include <sys/syspage.h>
+#include <sys/sysmgr.h>
 
 /*
  * ---- Expectations: a DUPLICATE of the board's tables ----------------------
@@ -388,6 +392,132 @@ find_asinfo(const char *const want, uint64_t *const start)
 }
 
 /*
+ * The kernel's view of the hypervisor mode, printed and never judged. qtime's
+ * intr is the clock interrupt startup named: the virtual timer's PPI, or under
+ * el2-host the EL2 virtual timer's (startup library
+ * aarch64/init_qtime_v8gt.c:56-60). hypinfo's flags say only whether a
+ * hypervisor mode was enabled (hypervisor_setup.c:86-90), not which one.
+ * Neither is a PASS/FAIL input, so the census verdict reads the same in every
+ * -Q mode. A section too short for its field prints "-".
+ */
+static void
+census_hyp(void)
+{
+	char intr[16]  = "-";
+	char flags[24] = "-";
+
+	if ((size_t)SYSPAGE_ENTRY_SIZE(qtime)
+	    >= offsetof(struct qtime_entry, intr) + sizeof(SYSPAGE_ENTRY(qtime)->intr)) {
+		snprintf(intr, sizeof intr, "%u", (unsigned)SYSPAGE_ENTRY(qtime)->intr);
+	}
+	if ((size_t)SYSPAGE_ENTRY_SIZE(hypinfo) >= sizeof(struct hypinfo_entry)) {
+		snprintf(flags, sizeof flags, "0x%llx",
+		         (unsigned long long)SYSPAGE_ENTRY(hypinfo)->flags);
+	}
+	out("SMPCHECK census hyp qtime_intr=%s hypinfo_flags=%s\n", intr, flags);
+}
+
+/*
+ * Census tick check: does the kernel clock on cpu 0 fire at all?
+ *
+ * Every later wait in the image sleeps — the collectors' polls, the workers'
+ * timer checks and their watchdogs, the script's own sleeps — so a clock
+ * interrupt that never arrives stalls the run with nothing left to end it but a
+ * power cycle, which wipes the black box. Under -Q enable,el2-host that clock is
+ * INTID 28, which procnto has not been seen to use on this board. So it is
+ * proved here, before any worker starts, with a bound that needs no tick: one
+ * thread sleeps 100 ms on cpu 0 while this thread, pinned there at the same
+ * priority, polls ClockCycles() for at most TIMER_MAX_MS and yields between
+ * polls, which lets the woken sleeper run. The thread that judges never sleeps.
+ *
+ * A dead clock ends in sysmgr_reboot(), so the run resets and the black box can
+ * be read. Whether that reboot completes without a working tick is unknown.
+ */
+static struct {
+	volatile int      done;
+	volatile int      rc;
+	volatile int      pin_err;      /* -1 not yet run, 0, or an error number */
+	volatile uint64_t t0;
+	volatile uint64_t t1;
+} Tk;
+
+static void *
+tick_sleeper(void *const arg)
+{
+	(void)arg;
+	Tk.pin_err = pin_self(0);
+	Tk.t0      = ClockCycles();
+	Tk.rc      = sleep_ms(TIMER_SLEEP_MS);
+	Tk.t1      = ClockCycles();
+	Tk.done    = 1;
+	return NULL;
+}
+
+/* 0 when the tick was shown, 1 when the census must fail. Does not return on a dead tick. */
+static int
+tick_check(uint64_t const cps)
+{
+	pthread_t tid;
+	uint64_t  bound;
+	int       err;
+
+	if (cps == 0) {
+		out("SMPCHECK census tick=unknown (no cycles_per_sec)\n");
+		return 1;       /* the census has already failed on cps */
+	}
+	pin_waiter();
+
+	Tk.done    = 0;
+	Tk.rc      = 0;
+	Tk.pin_err = -1;
+	err = pthread_create(&tid, NULL, tick_sleeper, NULL);
+	if (err != 0) {
+		out("SMPCHECK census tick=error errno=%d\n", err);
+		return 1;
+	}
+
+	bound = ClockCycles() + (uint64_t)TIMER_MAX_MS * cps / 1000u;
+	while (!Tk.done && ClockCycles() < bound) {
+		(void)sched_yield();
+	}
+
+	if (!Tk.done) {
+		int rc;
+		int e;
+
+		out("SMPCHECK census tick=dead ms>%u: the kernel clock on cpu 0 did not fire\n",
+		    (unsigned)TIMER_MAX_MS);
+		out("SMPCHECK CENSUS FAIL\n");
+		out("SMPCHECK tick dead: calling sysmgr_reboot so the log can be recovered\n");
+		rc = sysmgr_reboot();
+		e  = errno;
+		out("SMPCHECK sysmgr_reboot returned %d errno=%d\n", rc, e);
+		exit(1);
+	}
+	(void)pthread_join(tid, NULL);
+
+	if (Tk.pin_err > 0) {
+		out("SMPCHECK note: the tick thread cannot pin to cpu 0 (%s); its sleep was not pinned\n",
+		    strerror(Tk.pin_err));
+	}
+	if (Tk.t1 < Tk.t0) {
+		out("SMPCHECK census tick=bad ms=backwards rc=%d\n", Tk.rc);
+		return 1;
+	}
+	{
+		unsigned long long const ms = cycles_to_ms(Tk.t1 - Tk.t0, cps);
+
+		/* rc != 0 fails as it does in a worker's timer check (fmt_timer, judge_done). */
+		if (Tk.rc == 0 && ms >= TIMER_MIN_MS && ms <= TIMER_MAX_MS) {
+			out("SMPCHECK census tick=ok ms=%llu rc=%d\n", ms, Tk.rc);
+			return 0;
+		}
+		out("SMPCHECK census tick=bad ms=%llu rc=%d\n", ms, Tk.rc);
+	}
+	return 1;
+}
+
+/*
  * Re-prove, from the kernel's copy of the system page, what startup printed.
  * Every section is bounds-checked against its recorded size before it is
  * indexed; a section too short for a cpu shows as "-" and fails that row.
@@ -482,6 +612,12 @@ census(unsigned const n)
 		if (!ok) {
 			fail = 1;
 		}
+	}
+
+	/* M1b: informational hypervisor fields, then the cpu 0 tick (no return if dead). */
+	census_hyp();
+	if (tick_check(cps) != 0) {
+		fail = 1;
 	}
 
 	out("SMPCHECK CENSUS %s\n", fail ? "FAIL" : "PASS");
@@ -1230,7 +1366,8 @@ static int
 usage(const char *const argv0)
 {
 	out("usage: %s <mode>\n", argv0);
-	out("  -i -n N                census: kernel system page against the board tables\n");
+	out("  -i -n N                census: kernel system page against the board tables,\n");
+	out("                         the hypervisor fields, and a bounded cpu 0 tick check\n");
 	out("  -b S -C c -o PREFIX    silent worker: pin to cpu c, load it S s,\n");
 	out("                         write PREFIX.ready and PREFIX.done\n");
 	out("  -R N -p PREFIX -T S    wait up to S s for PREFIX0..N-1.ready, print them\n");

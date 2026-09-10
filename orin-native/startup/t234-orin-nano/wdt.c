@@ -5,27 +5,32 @@
  * use this file except in compliance with the License. You may obtain a copy
  * of the License at http://www.apache.org/licenses/LICENSE-2.0
  *
- * The watchdogs, which on this board are load-bearing in both directions.
+ * The watchdogs.
  *
  * The plan originally recorded that nothing was counting at hand-off, because
  * the device tree's watchdog node is disabled. That was the wrong node: the
- * driver binds through the timer block, systemd arms it at two minutes, and a
- * register read on the running board shows WDT0 counting. So:
+ * driver binds through the timer block, systemd configures WDT0 at two minutes,
+ * and a register read at hand-over shows it still configured.
  *
- *   - a milestone that hangs gets the board back on its own, with nobody
- *     standing next to it. That is worth more than it sounds when the only
- *     alternative is a manual power cycle.
- *   - a milestone that legitimately takes longer than two minutes — M3's guest
- *     boot plus M4's trace capture over an 11 KB/s console — will be killed
- *     mid-measurement unless the watchdog is disabled or someone kicks it.
+ * The M0 hang test then showed that it does not fire after `systemctl kexec`:
+ * the shim, parked in wfi with nothing feeding the watchdog, stayed unreachable
+ * well past two minutes and had to be power-cycled by hand
+ * (results/orin-native-port/20260909T1100Z/m0-hang-watchdog.md). Most likely
+ * systemd hands the device back on its way out (HYPOTHESIS, from that note).
+ * So a hang costs a power cycle, which also empties the black box, and there is
+ * no two-minute ceiling on a run either.
  *
- * Hence -W, defaulting to keep. Reporting is unconditional: the two register
- * values go out before anything else can go wrong, so even a run that dies
- * immediately afterwards says what it inherited.
+ * -W is kept, defaulting to keep: as insurance against the opposite finding on
+ * another hand-over path, and for parity with the runs so far. Reporting is
+ * unconditional: the two register values go out before anything else can go
+ * wrong, so even a run that dies immediately afterwards says what it inherited.
  *
  * What is not implemented here, deliberately: arming. The board comes up with
- * it armed already, and a startup that arms a watchdog it did not verify it can
- * feed is a way to lose a board rather than recover one.
+ * it configured already, and a startup that arms a watchdog it did not verify it
+ * can feed is a way to lose a board rather than recover one.
+ *
+ * The EL2 virtual-timer probe that used to end this file as a stub is now the
+ * automatic el2-host probe in aarch64/hvtimer.c.
  */
 
 #include "t234_startup.h"
@@ -47,7 +52,7 @@ t234_wdt_report(void)
 	kprintf("t234: WDT0 CR=%x SR=%x  WDT1 CR=%x SR=%x\n", cr0, sr0, cr1, sr1);
 
 	if (cr0 != 0) {
-		kprintf("t234: WDT0 is armed - this run has about two minutes unless -Wdisable\n");
+		kprintf("t234: WDT0 is configured, but it did not fire after the kexec hand-over (M0 hang test): a hang from here needs a power cycle\n");
 	}
 }
 
@@ -55,8 +60,8 @@ void
 t234_wdt_apply(const char *policy)
 {
 	if (policy == NULL || strcmp(policy, "keep") == 0) {
-		/* Leave it exactly as inherited. The default, because an armed
-		 * watchdog is the only unattended way back from a hang. */
+		/* Leave it exactly as inherited. The default, for parity; the
+		 * header says why it is not a way back from a hang. */
 		return;
 	}
 
@@ -78,36 +83,4 @@ t234_wdt_apply(const char *policy)
 	}
 
 	kprintf("t234: -W%s not understood, leaving the watchdog as inherited\n", policy);
-}
-
-/*
- * The EL2 virtual timer probe, behind -t.
- *
- * In el2-host mode the library sets the system timer's interrupt to INTID 28,
- * the non-secure EL2 virtual timer PPI, unconditionally — it does not check
- * that anything wired it. Tegra234's device tree lists only PPIs 13, 14, 11 and
- * 10, and Linux never uses 28, so whether the GIC sees it on this silicon is
- * genuinely unknown and is the single fact that decides whether M3 produces a
- * VHE number or an EL1-host one wearing a different label.
- *
- * The probe: arm CNTHV to fire almost immediately, then look at the boot CPU's
- * redistributor pending register for bit 28. It reports and clears; it never
- * takes the interrupt.
- */
-void
-t234_probe_hv_timer(void)
-{
-	/*
-	 * Not implemented yet — and saying so is better than a probe that reports
-	 * "absent" because it was written wrong. Writing it needs the SGI frame
-	 * address for the boot CPU's redistributor, which is the frame the library
-	 * has already located during gic_v3_initialize but does not expose; the
-	 * honest way in is a small accessor rather than recomputing the walk here
-	 * and getting a different answer than the library did.
-	 *
-	 * Until then M1 runs -Q disable and M1b runs -Q enable,el2-host, and if the
-	 * hypervisor comes up and its timeouts work, INTID 28 is wired — which is
-	 * the same answer by a slower route.
-	 */
-	kprintf("t234: -t requested, but the EL2 virtual-timer probe is not implemented\n");
 }

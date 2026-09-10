@@ -9,6 +9,28 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-10 — M1b: QNX runs as the hypervisor host at EL2 (VHE) on all six cores of the Orin Nano
+
+The same evening as M2, the host moved from EL1 to EL2. With `-Q enable,el2-host` the startup library turned on VHE
+(`HCR_EL2` E2H and TGE) on every core. procnto and user space ran at EL2 with the kernel clock on INTID 28, the EL2
+virtual timer's interrupt, which the Tegra234 device tree does not list. A board probe settled that interrupt before
+procnto depended on it. On each core it armed the EL2 physical timer as a control (INTID 26 went pending), then the EL2
+virtual timer (INTID 28 went pending, and cleared when masked), without ever taking an interrupt. Any other outcome
+would have stopped the run by name with a warm reset. It said `wired` on all six cores, closing the plan's ranked
+unknown #3, so M3 can use the VHE host. R0 re-ran M2's six-core image with the new startup and differed from M2 in
+exactly the three intended lines. R1 (one core), R2 (six cores) and R2b (a repeat) met every criterion. R1 ended in
+`SMPCHECK RESULT PASS-DEGRADED cpus=1/6`, the expected shape with one core, while R2 and R2b each ended in
+`SMPCHECK RESULT PASS cpus=6/6`. All three ended in the image's own warm reset. The design found one thing beyond the verdict: CPU0
+had no working fault handler once QNX stays at EL2. The shim's vectors print through registers the startup's C code
+reuses, and they fall outside the identity map once the MMU is on, so startup now installs its own EL2 table from
+`board_init`. The runs also showed that a `CPU_ON` issued from EL2 enters a secondary in exactly the state one issued
+from EL1 did. Still open: the two cluster-1 cores run the busy loop at the same fixed 57 million iterations per
+second at EL2 as at EL1, and nothing hypervisor-shaped (qvm, a guest, stage 2) has run, which is M3. Before R0, a
+plain reboot of L4T after 5 h 27 min of uptime ended in a Linux Oops in its own shutdown path and a watchdog reset,
+the second such event. Record: [m1b-runs.md](../results/orin-native-port/20260909T1100Z/m1b-runs.md); design:
+[m1b-design.md](../results/orin-native-port/20260909T1100Z/m1b-design.md); capture:
+[orin-native-m1b-el2-host.log](../logs/sample-boot/orin-native-m1b-el2-host.log).
+
 ## 2026-09-10 — M2: QNX 8.0.0 on all six cores of the Jetson Orin Nano
 
 The same day M1 ran QNX on one core, M2 ran it on all six. Every secondary was started through PSCI `CPU_ON` and

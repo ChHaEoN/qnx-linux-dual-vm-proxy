@@ -27,6 +27,11 @@
  * FAR such as 0x2_72770000, or any virtual ELR, used to print wrong. And the
  * faulting core names itself: MPIDR is read here, in C, on the CPU that took
  * the exception, which keeps the assembly-to-C call at four arguments.
+ *
+ * M1b adds the core's stage to both lines, and HCR_EL2 to the EL2 line: under
+ * -Q enable,el2-host the EL2 handler is the only one any core has from its
+ * first board code until procnto, and E2H in that value says whether the fault
+ * came before or after the core's own hypervisor_init.
  */
 
 #include "t234_startup.h"
@@ -48,9 +53,38 @@ t234_ec_name(unsigned const ec)
 	case 0x26: return "SP alignment fault";
 	case 0x22: return "PC alignment fault";
 	case 0x00: return "unknown/undefined";
+	/*
+	 * The one trap CPTR_EL2 can produce at EL2 once E2H is set: at_el2 wrote
+	 * CPTR_EL2 = 0 (lib/aarch64/_start_el1.S:161) and init_one_cpuinfo writes
+	 * cpacr_el1 = 0 (lib/aarch64/init_cpuinfo.c:320), and with E2H=1 that
+	 * layout means FPEN = 00, which traps FP/SIMD (VENDOR_CLAIM, Arm ARM).
+	 */
+	case 0x07: return "FP/SIMD access trap";
+	case 0x18: return "system register trap";
+	case 0x3c: return "BRK";
 	default: break;
 	}
 	return "exception";
+}
+
+/*
+ * The stage from the faulting core's diagnostic record. The record is found by
+ * affinity, with the same mask the GIC wrapper uses: MPIDR bits 31 and 24
+ * (RES1 and MT) are not part of the table. On CPU0 the stage is a boot stage
+ * below 0x10, or a wrapper stage 0x40-0x45 during init_cpuinfo; 0 means the
+ * affinity is not in the table.
+ */
+static unsigned
+t234_stage_of(_Uint64t const mpidr)
+{
+	unsigned i;
+
+	for (i = 0; i < T234_NUM_CPU; ++i) {
+		if ((mpidr & 0xff00ffffffull) == t234_cpu_mpidr[i]) {
+			return t234_ap_diag[i].stage;
+		}
+	}
+	return 0;
 }
 
 void
@@ -60,38 +94,32 @@ t234_el1_fault(unsigned long idx, unsigned long esr,
 	_Uint64t const mpidr = aa64_sr_rd64(mpidr_el1);
 	unsigned const ec    = (unsigned)((esr >> 26) & 0x3fu);
 
-	crash("t234: EL1 %s on MPIDR=%L vector %d EC=%x ESR=%L ELR=%L FAR=%L\n",
+	crash("t234: EL1 %s on MPIDR=%L vector %d EC=%x ESR=%L ELR=%L FAR=%L stage=%x\n",
 	      t234_ec_name(ec), mpidr, (int)idx, ec,
-	      (_Uint64t)esr, (_Uint64t)elr, (_Uint64t)far);
+	      (_Uint64t)esr, (_Uint64t)elr, (_Uint64t)far, t234_stage_of(mpidr));
 	/* crash() does not return; crash_done() resets this board. */
 }
 
 /*
- * The EL2 counterpart, reached only on a secondary core (CPU0 keeps the shim's
- * EL2 vectors). The stage from that core's diagnostic record says how far its
+ * The EL2 counterpart. Reached on a secondary from t234_ap_entry onward, and on
+ * CPU0 from board_init onward, in every -Q mode. Under el2-host it is the only
+ * fault handler any core has until procnto. The stage says how far that core's
  * bring-up had got, which is what separates a trap in the trampoline's
- * normalisation from one in at_el2 or later. The record is found by affinity,
- * with the same mask the GIC wrapper uses: MPIDR bits 31 and 24 (RES1 and MT)
- * are not part of the table.
+ * normalisation from one in at_el2 or later. HCR_EL2 is read directly: this
+ * handler only ever runs at EL2. With E2H (bit 34) clear the fault came before
+ * that core's hypervisor_init; with E2H and TGE set it came in the VHE host.
  */
 void
 t234_el2_fault(unsigned long idx, unsigned long esr, unsigned long elr,
                unsigned long far, unsigned long spsr)
 {
 	_Uint64t const mpidr = aa64_sr_rd64(mpidr_el1);
+	_Uint64t const hcr   = aa64_sr_rd64(hcr_el2);
 	unsigned const ec    = (unsigned)((esr >> 26) & 0x3fu);
-	unsigned       stage = 0;
-	unsigned       i;
 
-	for (i = 0; i < T234_NUM_CPU; ++i) {
-		if ((mpidr & 0xff00ffffffull) == t234_cpu_mpidr[i]) {
-			stage = t234_ap_diag[i].stage;
-			break;
-		}
-	}
-
-	crash("t234: EL2 %s on MPIDR=%L vector %d EC=%x ESR=%L ELR=%L FAR=%L SPSR=%L stage=%x\n",
+	crash("t234: EL2 %s on MPIDR=%L vector %d EC=%x ESR=%L ELR=%L FAR=%L SPSR=%L HCR_EL2=%L stage=%x\n",
 	      t234_ec_name(ec), mpidr, (int)idx, ec,
-	      (_Uint64t)esr, (_Uint64t)elr, (_Uint64t)far, (_Uint64t)spsr, stage);
+	      (_Uint64t)esr, (_Uint64t)elr, (_Uint64t)far, (_Uint64t)spsr, hcr,
+	      t234_stage_of(mpidr));
 	/* crash() does not return; crash_done() resets this board. */
 }

@@ -31,7 +31,8 @@
  * is safe. The part that is not failure handling is psci_cpu_id.c next door:
  * the affinities are not the linear indices.
  *
- * Nothing in this file has run on the board with more than one CPU.
+ * M2 ran this file on six cores under -Q disable; nothing here has run with
+ * CPU_ON issued from EL2.
  */
 
 #include "t234_startup.h"
@@ -205,6 +206,11 @@ board_smp_start(unsigned cpu, void (*start)(void))
  * Runs on the secondary, at its entry EL, on the library stack, before
  * hypervisor_init (lib/aarch64/smp_start.S:57-73). CPU0 is in board_smp_start's
  * silent wait, so printing here cannot interleave.
+ *
+ * What happens to this core next depends on the -Q mode. Under -Q disable (and
+ * el1-host) it drops to EL1 in its own hypervisor_init. Under el2-host it stays
+ * at EL2 with E2H and TGE set, VBAR_EL1 is unused, and its fault path is the
+ * EL2 table t234_ap_entry installed.
  */
 unsigned
 board_smp_adjust_num(unsigned cpu)
@@ -213,8 +219,11 @@ board_smp_adjust_num(unsigned cpu)
 
 	/*
 	 * The same table main() gives CPU0, and for the same reason: smp_start has
-	 * just installed vbar_default (smp_start.S:44-45), and everything this core
-	 * does at EL1 until procnto takes over would otherwise fault silently.
+	 * just installed vbar_default (smp_start.S:44-45), and under -Q disable
+	 * everything this core does at EL1 until procnto takes over would otherwise
+	 * fault silently. Under el2-host this core never reaches EL1 and the table
+	 * is written but never used. Before hypervisor_init by construction
+	 * (smp_start.S:66 vs :73), so this is the real VBAR_EL1 in every mode.
 	 */
 	t234_install_el1_vectors();
 	d->stage = T234_STAGE_EL1_VECTORS;
@@ -234,13 +243,16 @@ board_smp_adjust_num(unsigned cpu)
 	}
 
 	/*
-	 * Fail closed on EL1 entry. At EL1, _start_el2_or_el1 returns without a
-	 * single write (lib/aarch64/_start_el1.S:64-66), and under -Q disable the
-	 * hypervisor code does nothing either (lib/aarch64/hypervisor.c:38-44,
-	 * :80-87). Whatever HCR_EL2 routing, trap bits and VBAR_EL2 firmware left
-	 * would persist unseen. Linux on this board reports all CPUs starting at
-	 * EL2, so EL1 here would itself be the finding; allowing it would first
-	 * need NVIDIA's T234 TF-A read, and a rebuild.
+	 * Fail closed on EL1 entry, in every -Q mode. At EL1, _start_el2_or_el1
+	 * returns without a single write (lib/aarch64/_start_el1.S:64-66). Under
+	 * -Q disable the hypervisor code then does nothing either
+	 * (lib/aarch64/hypervisor.c:38-44, :80-87); under -Q enable it would crash
+	 * with a message that does not name the core (:41-43). Whatever HCR_EL2
+	 * routing, trap bits and VBAR_EL2 firmware left would persist unseen. Linux
+	 * on this board reports all CPUs starting at EL2, and M2 saw all five
+	 * secondaries enter at EL2 for a CPU_ON issued from EL1, so EL1 here would
+	 * itself be the finding; allowing it would first need NVIDIA's T234 TF-A
+	 * read, and a rebuild.
 	 */
 	if (d->entry_el != 2) {
 		crash("t234: cpu %d entered at EL%d: EL2 trap and vector state cannot be read or normalised from EL1, stopping\n",
