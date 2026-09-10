@@ -242,6 +242,12 @@ Getting there took two milestones and a review that stopped the first attempt:
   left running, set up the timer and the console, and started the kernel. User
   space followed once two image-packaging errors were fixed.
 
+The image also ends itself now. Its last command warm-resets the board back to
+Linux, and a RAM log that survives the reset is read on the next boot. In the first
+such run that log was the better witness: the live console lost its last lines to
+the reset, and the RAM log still had them. A run that ends in a reset no longer
+needs anyone at the board. A run that hangs still does.
+
 What this is not, stated plainly: it ran on one CPU, at EL1, entered from Linux
 rather than cold-booted. Multi-core bring-up, the hypervisor host at EL2 and every
 number are still ahead. And these results are evaluation output under the QNX
