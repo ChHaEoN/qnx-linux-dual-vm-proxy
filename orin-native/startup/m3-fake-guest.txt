@@ -1,0 +1,10 @@
+M3 HARNESS: the lines below are fake guest markers written by cat, not a guest
+---> Starting slogger2
+---> Starting devb
+---> Starting Networking
+if_up: tries exhausted
+---> Starting sshd
+---> Starting misc
+server: echo endpoint up (HARNESS FAKE)
+Startup complete
+QNX qnx-guest HARNESS-FAKE not-a-guest

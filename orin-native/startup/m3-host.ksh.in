@@ -1,0 +1,165 @@
+## m3-host.ksh.in — the M3 host state machine template (Phase 3b).
+##
+## Byte for byte the script in results/orin-native-port/20260909T1100Z/
+## m3-design.md §3.7 (revision 2), below these ## lines, which make-m3-images.sh
+## drops. Markers it replaces, per image: @RUNG@ @P@ @MODE@ (harness, boot or
+## full) @CPUS@ @IPC_BOUND@ @STARTUP_LINE@ @A@ @GUEST_SHA256@ @DISK_SHA256@
+## @CONF_SHA256@ @CLIENT_SHA256@ @GUEST_MD5@ @DISK_MD5@ @CONF_MD5@; it fails if
+## any @[A-Z0-9_]+@ survives. The generated script lands in the image as
+## /proc/boot/m3-host.ksh and runs in the foreground of the IFS script.
+##
+## Rules (design §2, §3.7): no pipe and no command substitution; every wait is a
+## bwait with a bound; nothing is printed between the qvm_launch reading and the
+## return of the banner wait, because the TCU console callout busy-polls every
+## character in the writer's own context. Records print first and again in the
+## closing summary; capped diagnostics come last.
+# m3-host.ksh: M3 host state machine, generated from m3-host.ksh.in; edit the template.
+S=/dev/shmem
+B=/proc/boot
+RUNG=@RUNG@
+MODE=@MODE@
+P=@P@
+CPUS="@CPUS@"
+IPC_BOUND=@IPC_BOUND@
+FAIL=
+LAUNCHED=
+
+say()   { echo "M3 $*"; }
+state() { echo "M3 STATE $*"; }
+hit()   { [ -e "$S/$1.hit" ]; }
+mem() {
+	pidin info > "$S/mem.$1" 2>&1
+	while read -r l; do
+		case "$l" in
+		*FreeMem:*) f=${l#*FreeMem:}; say "MEM $1 ${f%% *}" ;;
+		esac
+	done < "$S/mem.$1"
+}
+rates() {
+	for c in $CPUS; do
+		smpcheck -b 3 -C "$c" -o "$S/${1}c${c}" &
+	done
+	smpcheck -c "$P" -p "$S/${1}c" -T 20
+}
+md5ok() {
+	if grep -q "^$2 " "$1"; then say "CHECK $4 $3 ok"; else say "FAIL $4 $3"; FAIL=${FAIL:-$4}; fi
+}
+
+state config
+say "CONFIG rung=$RUNG mode=$MODE startup='@STARTUP_LINE@' q=el2-host w=keep A=@A@ cpus=$P guest_sha256=@GUEST_SHA256@ disk_sha256=@DISK_SHA256@ conf_sha256=@CONF_SHA256@ client_sha256=@CLIENT_SHA256@ clock=unverified"
+
+state preflight
+bwait -p /dev/ptyp1 -t 10 || { say "FAIL preflight /dev/ptyp1"; FAIL=preflight; }
+bwait -p /dev/ttyp0 -t 10 || { say "FAIL preflight /dev/ttyp0"; FAIL=preflight; }
+bwait -p /dev/slog -t 5 || say "NOTE no /dev/slog"
+bwait -p /dev/pipe -t 5 || say "NOTE no /dev/pipe"
+mem boot
+
+state rate_pre
+rates r0
+
+if [ -z "$FAIL" ]; then
+	state integrity_pre
+	bwait -k 30 -o "$S/md5.pre" -e "$S/md5.pre.err" -- "$B/md5sum" "$B/guest-ifs.bin" "$B/disk-qvm" "$B/g2.conf"
+	cat "$S/md5.pre"
+	md5ok "$S/md5.pre" @GUEST_MD5@ guest md5_pre
+	md5ok "$S/md5.pre" @DISK_MD5@ disk md5_pre
+	md5ok "$S/md5.pre" @CONF_MD5@ conf md5_pre
+fi
+
+if [ -z "$FAIL" ]; then
+	state disk
+	bwait -k 30 -o "$S/cp.out" -e "$S/cp.err" -- "$B/cp" "$B/disk-qvm" "$S/disk-qvm"
+	if bwait -k 30 -o "$S/cmp.out" -e "$S/cmp.err" -- "$B/cmp" "$B/disk-qvm" "$S/disk-qvm"; then
+		say "CHECK disk_copy ok"
+	else
+		say "FAIL disk_copy"; head -c 512 "$S/cp.err"; head -c 512 "$S/cmp.out"; FAIL=disk_copy
+	fi
+fi
+if [ -z "$FAIL" ]; then
+	devb-loopback loopback blksz=512,prefix=qvmdisk,fd=/dev/shmem/disk-qvm
+	bwait -p /dev/qvmdisk0 -t 10 || { say "FAIL disk_dev"; FAIL=disk_dev; }
+	mem disk
+fi
+
+if [ -z "$FAIL" ]; then
+	state hostcheck
+	bwait -k 10 -o "$S/qc.out" -e "$S/qc.err" -- "$B/qvm-check"
+	head -c 1024 "$S/qc.out"; head -c 1024 "$S/qc.err"
+	if [ "$MODE" = harness ]; then
+		bwait -k 10 -o "$S/qvmh.out" -e "$S/qvmh.err" -- "$B/qvm" -h
+		head -c 512 "$S/qvmh.out"; head -c 512 "$S/qvmh.err"
+	fi
+fi
+
+if [ -z "$FAIL" ]; then
+	state window
+	stamp -i /dev/ptyp1 -o "$S/m3.guest" -m 65536 -r "$S/m3.stamps" -h "$S" -s '---> Starting slogger2' -l g_first -s '---> Starting devb' -l g_devb -s '---> Starting Networking' -l g_net -s 'if_up: tries exhausted' -l g_ifup -s '---> Starting sshd' -l g_sshd -s '---> Starting misc' -l g_misc -s 'server: echo endpoint up' -l g_srv -s 'Startup complete' -l g_startup_complete -s 'QNX qnx-guest' -l banner &
+	bwait -p "$S/open.hit" -t 5 || { say "FAIL reader"; FAIL=reader; }
+fi
+if [ -z "$FAIL" ]; then
+	LAUNCHED=1
+	bwait -s 90 -c "$S/grace.hit" &
+	if [ "$MODE" = harness ]; then
+		( stamp -n -q -l qvm_launch -r "$S/m3.stamps" -x "$B/cat" "$B/m3-fake-guest.txt" < /dev/null > /dev/ttyp1 2>&1; echo "rc=$?" > "$S/qvm.rc"; : > "$S/qvm_exit.hit" ) &
+	else
+		( stamp -n -q -l qvm_launch -r "$S/m3.stamps" -x "$B/qvm" "@$B/g2.conf" < /dev/null > /dev/ttyp1 2>&1; echo "rc=$?" > "$S/qvm.rc"; : > "$S/qvm_exit.hit" ) &
+	fi
+	bwait -p "$S/banner.hit" -p "$S/qvm_exit.hit" -t 240
+	bwait -p "$S/banner.hit" -t 2 > "$S/banner.settle"
+	state report
+	cat "$S/m3.stamps"
+	[ -e "$S/qvm.rc" ] && { say "QVM ended before teardown"; cat "$S/qvm.rc"; }
+	mem banner
+	pidin -p qvm -f abNli > "$S/pq.1" 2>&1; head -n 30 "$S/pq.1"
+fi
+
+if [ -n "$LAUNCHED" ] && hit banner && [ "$MODE" != boot ]; then
+	state ipc
+	bwait -p "$S/grace.hit" -t 100
+	stamp -n -q -l ipc_start -r "$S/m3.stamps"
+	bwait -k "$IPC_BOUND" -r "$S/ipc.bwait" -o "$S/ipc.out" -e "$S/ipc.err" -- "$B/qnx-host-client" 15 /dev/ttyp0 5
+	stamp -n -q -l ipc_end -r "$S/m3.stamps"
+	cat "$S/ipc.out"
+	head -c 2048 "$S/ipc.err"
+	pidin -p qvm -f abNli > "$S/pq.2" 2>&1; head -n 30 "$S/pq.2"
+fi
+
+state teardown
+if [ -n "$LAUNCHED" ] && [ "$MODE" != harness ]; then
+	slay -f -Q qvm
+	bwait -p "$S/qvm_exit.hit" -t 15 || { slay -f -Q -s KILL qvm; bwait -p "$S/qvm_exit.hit" -t 5; }
+fi
+[ -e "$S/qvm.rc" ] && cat "$S/qvm.rc"
+if [ -n "$LAUNCHED" ]; then
+	bwait -p "$S/eof.hit" -t 5 || slay -f -Q stamp
+	state integrity_post
+	bwait -k 30 -o "$S/md5.post" -e "$S/md5.post.err" -- "$B/md5sum" "$B/guest-ifs.bin" "$B/disk-qvm"
+	cat "$S/md5.post"
+	md5ok "$S/md5.post" @GUEST_MD5@ guest md5_post
+	md5ok "$S/md5.post" @DISK_MD5@ disk md5_post
+fi
+
+state rate_post
+rates r1
+
+state summary
+[ -e "$S/m3.stamps" ] && cat "$S/m3.stamps"
+[ -e "$S/ipc.out" ] && grep -E '^(samples=|P50=|sentinel_)' "$S/ipc.out"
+[ -e "$S/ipc.bwait" ] && cat "$S/ipc.bwait"
+say "FAIL_STATE ${FAIL:-none}"
+if [ -e "$S/m3.guest" ]; then
+	wc -c "$S/m3.guest"
+	head -c 4096 "$S/m3.guest"
+fi
+if [ -n "$LAUNCHED" ] && ! hit banner; then
+	state diag
+	[ -e "$S/m3.guest" ] && tail -c 1024 "$S/m3.guest"
+	bwait -k 15 -o "$S/slog.txt" -e "$S/slog.err" -- "$B/slog2info"
+	head -c 6144 "$S/slog.txt"; tail -c 2048 "$S/slog.txt"
+else
+	bwait -k 15 -o "$S/slog.txt" -e "$S/slog.err" -- "$B/slog2info"
+	head -c 2048 "$S/slog.txt"
+fi
+mem end
+state end
