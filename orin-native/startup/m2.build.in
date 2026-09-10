@@ -1,0 +1,216 @@
+# M2 — all six Cortex-A78AE cores under native QNX on the Jetson Orin Nano.
+#
+# Phase 3b, docs/orin-native-port-plan.md (the M2 rung of the milestone ladder),
+# built to the M2 design's §3.10 and §4. No image generated from this template
+# has run on the board.
+#
+# The m2-p*.build buildfiles are generated from orin-native/startup/m2.build.in
+# by make-m2-images.sh, one per rung of the run ladder, under
+# orin-native/shim/out/m2/ (git-ignored: an IFS carries QNX binaries). Edit the
+# template, never a generated copy. The generator then builds, checks and wraps
+# each image:
+#
+#   image    -P  run     purpose
+#   m2-p1     1  R0      the new board code on M1's single-CPU path
+#   m2-p2     2  R1      the first secondary core, affinity 0x100
+#   m2-p4     4  R2      all of cluster 0; recorded as degraded if M2 ends here
+#   m2-p5     5  R3      the first cluster-1 core (0x10200), GICR frames 4 and 5
+#   m2-p6     6  R4/R4b  the M2 pass run and its repeat
+#   m2-p6t    6  R5      m2-p6 plus a tracelogger capture during the load
+#
+# Six images rather than one because -P is a startup argument, and mkifs bakes
+# startup arguments into the IFS: into the boot_args block the startup library
+# reserves for it (lib/aarch64/cstart.S:36-37) and walks as argv
+# (lib/_main.c:79-84). The generator checks each IFS for exactly its own -P.
+#
+## THIS FILE IS THE TEMPLATE, not a buildfile; mkifs cannot read it as it stands.
+## Lines that start with two hashes describe the template and never reach a
+## generated buildfile. The generator knows three markers:
+##   @P@      replaced everywhere by the image's CPU count N
+##   @CPU@    a line holding it is repeated N times, with 0..N-1 in its place
+##   @TRACE@  at the very start of a line: that line is kept, marker removed,
+##            in m2-p6t only, and dropped from every other image
+## Nothing else differs between the images (design §2 rule 2), and the
+## generator checks the expansion rather than trusting it.
+# Build:
+#   startup      orin-native/startup/build-board.sh
+#   tools        make -C orin-native/tools        (tcu-cat, stamp, smpcheck)
+#   images       orin-native/startup/make-m2-images.sh [m2-p1 m2-p2 ...]
+#
+# startup-t234-orin-nano lives in the BSP build tree, and smpcheck, tcu-cat and
+# stamp in orin-native/tools; neither is in the SDP. The generator names both
+# directories in MKIFS_PATH, and mkifs still finds everything else under
+# QNX_TARGET.
+#
+# The base address is not free. kexec places the shim page at 0x80080000 and the
+# shim is exactly 8 KiB, so the image begins one page-pair later. build-shim.sh
+# fails the build if the page is not exactly 8192 bytes, which is what keeps
+# these two numbers from drifting apart.
+
+[image=0x80082000]
+[-compress]
+
+# Startup options are M1's, character for character, except -P: one variable per
+# run (design §2 rule 2), and one startup build for every image (design §4).
+#
+# -vvv           every startup message, as in M1. At -P6 that has to fit the
+#                64 KiB black box; gate G1 (design §6) checks it from the R0 and
+#                R1 black-box sizes, and if it fails, p6 and p6t are rebuilt at
+#                -vv as a recorded deviation from this line.
+# -P<N>          how many CPUs to start, @P@ in this image, and the only option
+#                that differs between images (1, 2, 4, 5 or 6). At -P1
+#                init_smp() skips its whole body (lib/init_smp.c:106), so m2-p1
+#                re-runs M1's single-CPU path with the new board code in it.
+# -Q disable     drop to EL1, as in M1. A pass here says nothing about -Q enable
+#                with more than one CPU; that is M1b/M3 (design §10).
+# -m992M         the lowest System RAM fragment, stated because the firmware
+#                device tree has no /memory node to read.
+# -Wkeep         kept only for parity with M1. M1 kept it as the thing that
+#                returns the board unattended; the M2 design (§4, §3.11) records
+#                that WDT0 does not fire after kexec, so it has no effect here.
+# -Dtcu          console on the Tegra Combined UART mailbox. -Dtegra8250 moves
+#                it to the port Linux left clocked, if the SPE turns out to have
+#                stopped draining the mailbox once Linux is gone.
+#
+# procnto-smp-instr is M1's kernel, unchanged: already the SMP build, and the
+# instrumented one, which emits the kernel events m2-p6t's tracelogger captures.
+[virtual=aarch64le,raw] .bootstrap = {
+    startup-t234-orin-nano -vvv -P@P@ -Q disable -m992M -Wkeep -Dtcu
+    PATH=/proc/boot LD_LIBRARY_PATH=/proc/boot
+    [+keeplinked] procnto-smp-instr -v
+}
+
+# The script is a report that ends in a warm reset. Its shape follows the
+# design's §4 and differs from M1's on purpose:
+#   - One printer at a time. The kernel console callout takes no lock, and
+#     whether procnto serialises it across CPUs is unknown (design C7), so the
+#     busy workers print nothing and write files that one collector prints.
+#   - No foreground command can block forever: every wait is an smpcheck with
+#     a -T bound.
+#   - No tcu-cat. It writes the mailbox directly, so its lines never reach the
+#     RAM black box (logs/sample-boot/orin-native-m1-reboot-blackbox.log:9-11);
+#     display_msg does (same log, line 243).
+#   - No waitfor. M1 waited for /dev/ptyp0 after devc-pty; the two QNX documents
+#     disagree on waitfor's argument order (design C9), and a wait whose bound
+#     might be misread is the unbounded wait this script exists to avoid.
+#   - No pipes: an IFS script is not a shell. The first M1 user-space run passed
+#     the '|' and 'tcu-cat' to pidin as arguments ('pidin: | invalid or
+#     ambiguous shorthand').
+[+script] .script = {
+    display_msg "T234 M2 -P@P@: procnto up"
+    procmgr_symlink ../../proc/boot/ldqnx-64.so.2 /usr/lib/ldqnx-64.so.2
+    procmgr_symlink /proc/boot/ksh /bin/sh
+
+    devc-pty
+
+    # One Processor line per CPU the kernel brought up (design §8 criterion 5).
+    pidin info
+
+    # Census: the kernel's syspage copy of the CPU, GIC and redistributor tables
+    # against the values startup printed, one line per CPU, then
+    # SMPCHECK CENSUS PASS or FAIL (design §5).
+    smpcheck -i -n @P@
+
+    # One silent busy worker pinned to each CPU for 60 s, at priority 9 so the
+    # script and the collectors still run. Each checks its pin and its CPU's
+    # timer, writes <prefix>.ready, loads the core, checks the timer again and
+    # writes <prefix>.done. Backgrounded, so every core is loaded at once.
+    smpcheck -b 60 -C @CPU@ -o /dev/shmem/m2c@CPU@ &
+
+    # Each worker's ready line, or MISSING, within 15 s. Always returns.
+    smpcheck -R @P@ -p /dev/shmem/m2c -T 15
+@TRACE@
+@TRACE@    # m2-p6t only: two seconds of kernel events while every core is loaded,
+@TRACE@    # written to /dev/shmem rather than the console so the black box keeps
+@TRACE@    # its room for the verdict. The six-second sleep lets the capture finish
+@TRACE@    # before the next command prints.
+@TRACE@    tracelogger -s 2 -f /dev/shmem/m2.kev &
+@TRACE@    smpcheck -z 6
+
+    # The kernel's own view of the workers while they run: a=pid b=tid N=name
+    # l=last CPU i=runmask and inherit mask (the codes as pidin's use text in
+    # SDP 8.0 lists them). That text does not say whether -p with a name matches
+    # every smpcheck or only the first; the collectors carry the verdict either
+    # way, and this line is corroboration.
+    pidin -p smpcheck -f abNli
+
+    # The verdict: waits up to 90 s (60 s of load plus margin) for every .done
+    # file, prints each, then SMPCHECK RESULT PASS, PASS-DEGRADED or FAIL.
+    smpcheck -c @P@ -p /dev/shmem/m2c -T 90
+@TRACE@
+@TRACE@    # m2-p6t only: decode on the board, again into /dev/shmem; only the
+@TRACE@    # per-CPU event counts and one sample line per CPU reach the console.
+@TRACE@    traceprinter -f /dev/shmem/m2.kev -o /dev/shmem/m2.txt
+@TRACE@    smpcheck -k /dev/shmem/m2.txt -n @P@
+
+    # The system summary again, after the load.
+    pidin info
+
+    # Then reset, deliberately.
+    #
+    # This looks like throwing away a working system, and it is the opposite.
+    # Nobody can read the console: it goes to a mailbox that needs a serial
+    # adapter, and to a DRAM region that only Linux can recover. If QNX simply
+    # keeps running, the only way back to Linux is pulling the power, and a cold
+    # power cycle wipes that region - so a perfectly successful boot would be
+    # indistinguishable from a hang, and would leave exactly as little evidence.
+    #
+    # A warm reset preserves it. So the milestone ends by resetting into Linux,
+    # which then hands us everything that was printed. M2 is a report, not a
+    # session.
+    #
+    # The banner is display_msg rather than M1's tcu-cat, so it lands in the
+    # black box too.
+    display_msg "T234 M2 -P@P@: resetting so the log can be recovered"
+    # M1's live console lost its tail at the reset (M1 black-box log:7-8), so
+    # the TCU gets three seconds to drain first.
+    smpcheck -z 3
+    # -S reboot, NOT -b. shutdown's own usage says -b is 'shut down but do not
+    # reboot', equivalent to -S system. The first user-space run used -b, printed
+    # 'It is now safe to reboot your computer' and halted, which cost a power
+    # cycle and the black box with it. -S reboot is the default and reaches the
+    # board's PSCI reset callout, which is warm and keeps the log.
+    shutdown -S reboot
+}
+
+[type=link] /usr/lib/ldqnx-64.so.2=/proc/boot/ldqnx-64.so.2
+libc.so.6
+libgcc_s.so.1
+# devc-pty needs this one too; mkifs does not chase DT_NEEDED for you, and the
+# symptom of leaving it out is a resource manager that never appears rather
+# than a build error.
+libsecpol.so.1
+# The runtime linker. Every dynamically linked program names /usr/lib/ldqnx-64.so.2
+# as its interpreter, and the link below points that at /proc/boot -- which is
+# worthless unless the file is actually in /proc/boot. The first M1 image had the
+# link and not the file: the kernel came up and every program failed with errno 83,
+# ELIBACC, "can not access shared library".
+ldqnx-64.so.2
+
+# ours. tcu-cat and stamp are M1's and this script does not call them; they stay
+# so the file list is M1's plus smpcheck and nothing else.
+/proc/boot/tcu-cat=tcu-cat
+/proc/boot/stamp=stamp
+# M2's test payload: orin-native/tools/smpcheck.c, specified in design §5.
+/proc/boot/smpcheck=smpcheck
+@TRACE@
+@TRACE@# m2-p6t only. Their DT_NEEDED lists are not known, because reading them
+@TRACE@# would mean inspecting QNX binaries; a missing library shows on the board
+@TRACE@# as 'Unable to start "tracelogger" (83)', not as a build error.
+@TRACE@tracelogger
+@TRACE@traceprinter
+@TRACE@libtracelog.so.1
+@TRACE@libtraceparser.so.1
+
+# Everything lands in /proc/boot, which is the whole of PATH in the bootstrap
+# line above. Putting binaries at /bin or /sbin instead looks tidier and means
+# the script cannot find them by name -- there is no filesystem here to search.
+# cat, ls, echo and cksum are not listed at all: they are ksh built-ins in
+# QNX 8, not separate binaries.
+ksh
+pidin
+on
+slay
+waitfor
+shutdown
+devc-pty
