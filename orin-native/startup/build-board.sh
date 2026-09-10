@@ -107,10 +107,17 @@ echo "== built $OUT ($(stat -c %s "$OUT") bytes)"
 
 echo "== symbol gate"
 fail=0
+# psci_smp_start is not in the list any more: board_smp_start issues CPU_ON
+# itself (with t234_ap_entry as the entry point), so nothing references the
+# library's version and it need not be linked. The M2 pieces are, and a board
+# object silently dropped from the link would leave the library's unbounded
+# paths in place with no other symptom.
 for s in display_char_tcu poll_key_tcu break_detect_tcu init_tcu put_tcu \
-         psci_smc psci_smp_start psci_cpu_id gic_v3_set_paddr_range \
+         psci_smc psci_cpu_id gic_v3_set_paddr_range \
          gic_v3_initialize hyp_enable_el2_host hypervisor_init \
-         board_smp_start board_smp_num_cpu init_intrinfo cpuid_a78ae; do
+         board_smp_start board_smp_num_cpu init_intrinfo cpuid_a78ae \
+         t234_ap_entry t234_transfer_aps t234_el2_vectors \
+         t234_gic_cpu_init t234_gicr_probe; do
 	if ! ntoaarch64-nm "$OUT" | awk -v s="$s" '$NF==s' | grep -q .; then
 		echo "  MISSING $s" >&2
 		fail=1
@@ -122,6 +129,13 @@ done
 # the only symptom would be two cores that never start.
 n=$(ntoaarch64-nm "$OUT" | awk '$NF=="psci_cpu_id" && $(NF-1) ~ /[TtWD]/' | wc -l)
 [ "$n" = "1" ] || { echo "  psci_cpu_id defined $n times, expected 1" >&2; fail=1; }
+
+# Likewise crash_done: crash_done.c's header says this script counts its
+# definitions. If the library's `while (1) wfi` version won instead, every
+# crash() — including every named M2 timeout — would park the board rather than
+# reset it, and a power cycle would wipe the message it had just printed.
+n=$(ntoaarch64-nm "$OUT" | awk '$NF=="crash_done" && $(NF-1) ~ /[TtWD]/' | wc -l)
+[ "$n" = "1" ] || { echo "  crash_done defined $n times, expected 1" >&2; fail=1; }
 
 # No firmware-entry code should be linked in: this startup is entered from the
 # shim, not from UEFI. The three uefi_*_f entries are weak hook pointers the

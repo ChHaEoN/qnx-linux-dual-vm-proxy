@@ -220,6 +220,28 @@ main(int argc, char **argv, char **envv)
 	add_typed_string(_CS_MACHINE, "NVIDIA Jetson Orin Nano Developer Kit (Tegra234)");
 
 	init_system_private();
+
+	/*
+	 * Swap the library's unbounded AP release loop for the bounded one in
+	 * board_smp.c. This line has exactly one correct place.
+	 *
+	 * smp_hook_rtn is called twice. The first call is inside
+	 * init_system_private (lib/init_system_private.c:305), where it is still
+	 * start_aps: that issues every CPU_ON and, on its way out, sets the hook to
+	 * the library's transfer_aps (lib/init_smp.c:83). The second call is from
+	 * _main after this function returns (lib/_main.c:156), and releases the
+	 * parked cores. The override has to sit between the two. Installed any
+	 * earlier — just after init_smp, say — the first call would run the
+	 * release loop instead of start_aps and no core would ever be started;
+	 * t234_transfer_aps checks for that and names it.
+	 *
+	 * At -P1 num_cpu is 1, the hook stays hook_dummy (lib/_main.c:165), and
+	 * this is M1's path unchanged.
+	 */
+	if (lsp.syspage.p->num_cpu > 1) {
+		smp_hook_rtn = t234_transfer_aps;
+	}
+
 	print_syspage();
 
 	return 0;

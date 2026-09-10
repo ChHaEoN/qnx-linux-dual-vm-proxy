@@ -3,11 +3,11 @@
 #   source ~/qnx800/qnxsdp-env.sh   (or run qnxsdp-env.bat first on Windows)
 #   make
 #
-# Both binaries go into the M1 image as /proc/boot entries; neither is committed.
+# The binaries go into the M1/M2 images as /proc/boot entries; none is committed.
 
 CC      := qcc -Vgcc_ntoaarch64le
 CFLAGS  := -Wall -Wextra -Werror -O2
-TOOLS   := tcu-cat stamp
+TOOLS   := tcu-cat stamp smpcheck
 
 all: $(TOOLS)
 
