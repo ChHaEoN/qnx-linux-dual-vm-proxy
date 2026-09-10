@@ -68,6 +68,9 @@
 #ifndef PAYLOAD_OFF
 #define PAYLOAD_OFF 0x2000              /* IFS sits right after this 8 KiB page */
 #endif
+#ifndef SHIM_WDT_START
+#define SHIM_WDT_START 0                /* 1 = restart WDT0's counter before handing over */
+#endif
 
 #define PSCI_SYSTEM_RESET  0x84000009
 #define WDT0_BASE          0x02190000   /* TKE WDT0: WDTCR at +0, WDTSR at +4 */
@@ -303,6 +306,44 @@ landing_ok:
 	adr	x1, s_norm
 	bl	puts
 
+#if SHIM_WDT_START
+/* ---- restart the watchdog counter ------------------------------------ *
+ * The board arrives with WDT0 configured — systemd set it to two minutes —
+ * but the hang test proved it does not actually fire after this hand-over,
+ * so systemd almost certainly hands it back on its shutdown path. The
+ * configuration is still in the register though, so this tries the cheapest
+ * possible thing: unlock and issue the start command, reusing whatever
+ * period Linux left rather than programming a timer source blind.
+ *
+ * If it takes, every hang from here on becomes an automatic warm reset,
+ * which is the one kind of reset the black box survives. If it does not,
+ * the status word printed afterwards says so and nothing is worse than
+ * before.
+ * --------------------------------------------------------------------- */
+	movz	x9, #0x0000
+	movk	x9, #0x0219, lsl #16		/* WDT0 */
+	movz	w10, #0xc45a			/* unlock pattern */
+	str	w10, [x9, #0x0c]
+	mov	w10, #1				/* start the counter */
+	str	w10, [x9, #0x08]
+	dsb	sy
+
+	adr	x1, s_wdtstart
+	bl	puts
+	movz	x9, #0x0000
+	movk	x9, #0x0219, lsl #16
+	ldr	w2, [x9]			/* CR after the write */
+	bl	puthex64
+	mov	w0, #'/'
+	bl	putc
+	movz	x9, #0x0000
+	movk	x9, #0x0219, lsl #16
+	ldr	w2, [x9, #4]		/* SR after the write */
+	bl	puthex64
+	mov	w0, #'\n'
+	bl	putc
+#endif
+
 	/* How many bytes the TCU swallowed.  Zero means the SPE is alive; a
 	 * count equal to everything printed means the console is dead and only
 	 * the black box carries this run — which is a result, not a failure. */
@@ -438,6 +479,7 @@ s_dtbmagic:	.asciz	" DTBMAGIC="
 s_badland:	.asciz	"BAD-LANDING pc="
 s_expect:	.asciz	" expect="
 s_norm:		.asciz	"NORMALISED"
+s_wdtstart:	.asciz	" WDT0-RESTARTED CR/SR="
 s_drops:	.asciz	" TCUDROPS="
 s_probe:	.asciz	"PROBE-RESET\n"
 s_hang:		.asciz	"HANG (waiting on WDT0)\n"

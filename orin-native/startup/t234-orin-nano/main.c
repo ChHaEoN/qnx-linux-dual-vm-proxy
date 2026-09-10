@@ -159,6 +159,21 @@ main(int argc, char **argv, char **envv)
 	select_debug(debug_devices, sizeof(debug_devices));
 
 	/*
+	 * Install our own EL1 vectors before hypervisor_init can drop us there.
+	 *
+	 * The library's vbar_default is a branch-to-self in every slot — right for
+	 * a board with a debugger attached, and the worst possible ending here.
+	 * Under -Q disable the drop happens inside hypervisor_init below, so from
+	 * that point until procnto takes over, every fault in the least-tested code
+	 * in this port would otherwise be silent and unrecoverable: no output, no
+	 * reset, and a power cycle that wipes the log. See aarch64/vectors_el1.S.
+	 *
+	 * After select_debug, so a fault that happens between here and the drop can
+	 * already say so.
+	 */
+	t234_install_el1_vectors();
+
+	/*
 	 * Report both watchdogs before anything else can hang. WDT0 is armed at
 	 * two minutes when Linux hands over, so these two words decide whether a
 	 * milestone that outlasts that needs -Wdisable or a kicker.
@@ -168,9 +183,15 @@ main(int argc, char **argv, char **envv)
 
 	t234_init_raminfo();
 
-	/* Keep the shim's page: its exception vectors stay installed through
-	 * startup, because the library writes vbar_el1 and only touches vbar_el2
-	 * under -Q enable,el1-host. An early fault would otherwise vanish. */
+	/*
+	 * Keep the shim's page. Its EL2 vectors stay installed — the library writes
+	 * vbar_el2 only under -Q enable,el1-host — but they only *apply* while the
+	 * CPU is still at EL2, which under -Q disable is a short window ending
+	 * inside hypervisor_init. EL1 faults after that are ours to catch, which is
+	 * what t234_install_el1_vectors is for. An earlier version of this comment
+	 * claimed the shim covered all of startup; it does not, and the pre-flight
+	 * review caught it before the image ran.
+	 */
 	avoid_ram(T234_SHIM_BASE, T234_SHIM_SIZE);
 	if (fdt_size != 0) {
 		avoid_ram((paddr_t)boot_regs[0], fdt_size);

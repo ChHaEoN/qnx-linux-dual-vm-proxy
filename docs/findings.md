@@ -8,6 +8,68 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 
 ---
 
+
+## 2026-09-10 — M1: the QNX kernel ran natively on the Jetson Orin Nano
+
+The first native QNX image booted on the board, entered by kexec from L4T with no
+QEMU underneath, and was watched live over the J14 debug header. The kernel
+printed `T234 M1: procnto up` through the TCU console callout this port wrote. So
+the question Phase 3b was opened to answer at its first milestone — does QNX run
+on Tegra234 at all — is answered yes. Record:
+[m1-first-procnto.md](../results/orin-native-port/20260909T1100Z/m1-first-procnto.md);
+full capture:
+[orin-native-m1-first-procnto.log](../logs/sample-boot/orin-native-m1-first-procnto.log).
+
+What came up, each line in the capture: the MMU; the GIC-600 identified as
+arch v3.0 with 960 SPIs; **the GIC re-initialised cleanly against the controller
+Linux had left enabled** (`Add SPI entry 0 for vectors 32 -> 991, Ok`), which the
+pre-flight review had judged the single most likely place to hang; the A78AE with
+its full cache topology; the redistributor frame found by affinity; the IFS
+unpacked; a complete system page with the 31.25 MHz timer, the console callouts,
+the RAM range and the machine string; and the hand-off to procnto.
+
+What did not: user space. Every program failed to start, on two buildfile errors
+rather than kernel ones. errno 83, `ELIBACC`, because the image carried the
+`/usr/lib/ldqnx-64.so.2` symlink but not the runtime linker it points at; and
+errno 2, `ENOENT`, because `devc-pty` sat in `/sbin` outside `PATH=/proc/boot`.
+With `shutdown` also unable to start, the image could not reset itself as
+designed, and the board stayed in QNX until the power was pulled — the case the
+serial console had been added for an hour earlier, and the reason nothing of the
+run was lost.
+
+Two things this closes beyond the headline. The shim's register bank came out
+identical to the M0 run, so the hand-over is repeatable rather than a one-off. And
+the library printed the boot CPU's redistributor SGI frame, `0x0f450000`, which
+was the one missing input that had kept the EL2 virtual-timer probe unimplemented.
+
+What it does not show: anything above the kernel — no resource manager, no shell,
+no process list — and only one CPU at EL1. SMP and the hypervisor host at EL2 are
+untouched, and no number exists.
+
+**Getting the console working took its own detour, recorded in
+[serial-console-wiring.md](../results/orin-native-port/20260909T1100Z/serial-console-wiring.md).**
+I first recommended the 40-pin header because its wiring could be checked from
+Linux; three UARTs transmitting at once put nothing on its pin 8, the kernel showed
+`UART1_TX_PR2` as `MUX UNCLAIMED`, and the carrier specification plus a known-good
+adapter left the unrouted pad as the only cause. J14 carries the real console, and
+the first capture off it was UEFI's own `L4TLauncher: Attempting Direct Boot`,
+proving the wiring with none of this port's code involved. The carrier spec also
+settled the long-open pin question: J14 pin 4 is `UART2_TXD`.
+
+**And user space came up the same morning.** With the runtime linker in the image
+and `devc-pty` on `PATH`, the next run printed `T234 M1: user space up` from
+`tcu-cat`, and a stock `pidin info` reported **QNX Release 8.0.0 on a Cortex-A78ae,
+975 MB free of 992 MB, 3 processes and 14 threads** — the operating system itself
+confirming the RAM range the board code states rather than discovers. M1 is met:
+QNX, kernel and user space, runs natively on this board. Two script errors were
+left, neither in QNX nor in the board code: an IFS script is not a shell, so
+`pidin info | tcu-cat` passed the pipe to `pidin` as an argument; and `shutdown -b`
+turned out, by `shutdown`'s own embedded usage, to mean "do not reboot", so the
+image halted at `Shutdown Complete` instead of resetting and the board needed the
+power pulled. Both are fixed — no pipes, `shutdown -S reboot` — and the capture is
+[orin-native-m1-userspace.log](../logs/sample-boot/orin-native-m1-userspace.log).
+Still one CPU at EL1: SMP, the hypervisor host and any number are ahead.
+
 ## 2026-09-09 — QHV leg on the Orin: the hang was QEMU 6.2, not the host; the leg now boots on real ARM silicon — and a review found what the previous day's write-up got wrong
 
 Two threads, kept together because the second corrects the first. An
@@ -307,6 +369,35 @@ mode. The board directory written the same day has never been packaged into an
 image, M1 has not been attempted, and the `hang` mode that would test whether an
 un-petted watchdog recovers the board was not run — this boot reset itself
 deliberately through PSCI, which says nothing about that path.
+
+**The same evening, the `hang` test: the watchdog does not recover the board,
+and the black box does not survive a power cycle.** Two assumptions died in one
+run. The shim was rebuilt in `hang` mode — print, then `wfi` forever with nothing
+petting WDT0 — to test whether the watchdog systemd arms at two minutes brings
+the board back unattended. It sat there for six and a half minutes and came back
+only when the owner pulled the power. Standing at the board they reported the
+green LED lit and the fan stopped, which is what a core parked in `wfi` looks
+like from outside: powered, idle, nothing running, and distinct from a brown-out
+where the LED would be dark. Nothing could have woken it — the shim enters with
+`DAIF` masked and never unmasks. Most likely systemd hands the watchdog back on
+its own shutdown path, which `systemctl kexec` is; that is a hypothesis and one
+boot would settle it.
+
+The second death followed from the recovery. After the cold power cycle
+`/sys/fs/pstore` came back **completely empty**, including `dmesg-ramoops`
+records from days earlier — DRAM losing its contents, not pstore declining to
+surface them. So the black box is bounded rather than general: it carries the
+payload's output through a PSCI reset or through an exception the shim's vectors
+turn into one, and carries nothing at all through a hang.
+
+Together those sharpen the rule for M1 onward beyond "every path must reach a
+reset". A startup that fails into a wait loop is now the *worst* available
+outcome — worse than one that crashes, because crashing prints and hanging costs
+both the evidence and a trip to the board. Anything resembling a spin needs a
+bounded deadline with a reset at the end of it. The remotely switchable mains
+socket also stops being a convenience: it is the only thing that restores the
+recovery path the watchdog was assumed to provide.
+[m0-hang-watchdog.md](../results/orin-native-port/20260909T1100Z/m0-hang-watchdog.md)
 
 
 **Owner decisions (2026-09-09, recorded verbatim in intent, not paraphrased

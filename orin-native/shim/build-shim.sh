@@ -87,7 +87,7 @@ ntoaarch64-gcc -c -x assembler-with-cpp \
   -DSHIM_MODE="$MODE_CH" \
   -DIMAGE_SIZE="$image_size" \
   -DLINK_ADDR="$LINK_ADDR" \
-  -DPAYLOAD_OFF="$PAYLOAD_OFF" \
+  -DPAYLOAD_OFF="$PAYLOAD_OFF" -DSHIM_WDT_START="${SHIM_WDT_START:-0}" \
   -o t234-shim.o "$HERE/t234-shim.S"
 
 ntoaarch64-ld -N -e _start -Ttext="$LINK_ADDR" --no-warn-rwx-segments -o t234-shim.elf t234-shim.o

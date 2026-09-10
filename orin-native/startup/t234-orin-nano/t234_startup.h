@@ -98,6 +98,23 @@
 #define T234_RAM_BASE       0x80000000ull
 #define T234_RAM_SIZE       0x3E000000ull     /* 992 MiB */
 
+/* ---- The RAM black box: the ramoops console zone, at the carveout base plus
+ * the dump area the kernel puts ahead of it. Located and its format read
+ * directly out of memory on the running board, not inferred.
+ *
+ * This is the only output channel that does not depend on a wire nobody has
+ * attached yet. It survives a PSCI reset and an exception the shim's vectors
+ * turn into one; it does NOT survive a power cycle, so anything that hangs
+ * takes its own evidence with it.
+ *
+ * Header is three little-endian words — signature, write cursor, length —
+ * followed by the data. startup appends after whatever the shim left rather
+ * than starting again, so one recovered zone holds both. */
+#define T234_BB_BASE        0x272770000ull
+#define T234_BB_SIG         0x43474244u      /* 'D','B','G','C' in memory order */
+#define T234_BB_MAP         0x10000u         /* map 64 KiB: -vvv and the syspage fit */
+#define T234_BB_LIMIT       (T234_BB_MAP - 16u)
+
 /* ---- The shim. kexec places our 8 KiB page here and the vectors it installs
  * stay live through startup, so this range must never be handed to the RAM
  * allocator. */
@@ -119,6 +136,7 @@ void         t234_init_raminfo(void);
 void         t234_wdt_report(void);
 void         t234_wdt_apply(const char *policy);
 void         t234_probe_hv_timer(void);
+void         t234_install_el1_vectors(void);
 void         init_tcu(unsigned channel, const char *init, const char *defaults);
 void         put_tcu(int c);
 

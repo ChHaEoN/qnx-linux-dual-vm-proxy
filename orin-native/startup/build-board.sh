@@ -54,6 +54,20 @@ if [ -z "${QNX_HOST:-}" ] || [ -z "${QNX_TARGET:-}" ]; then
 	echo "== using SDP at $QNX_BASE"
 fi
 
+# The library needs one change of its own: wait_for_rwp is an unbounded busy-wait
+# on a bit the library itself flags as possibly never clearing, and a spin there
+# cannot be recovered on this board. Applying it here rather than by hand keeps
+# the built startup honest about what it contains. Idempotent.
+GICH="$STARTUP/lib/public/aarch64/gic.h"
+if [ -f "$GICH" ] && ! grep -q __rwp_limit "$GICH"; then
+	echo "== bounding wait_for_rwp (patches/gic-bounded-rwp.patch)"
+	if command -v git >/dev/null 2>&1 && git apply --directory="$(cd "$STARTUP/../../.." && pwd)" 	     "$HERE/patches/gic-bounded-rwp.patch" 2>/dev/null; then
+		:
+	else
+		echo "   git apply did not take; patch it by hand or see the patch header" >&2
+	fi
+fi
+
 echo "== staging $BOARD into the BSP tree"
 rm -rf "${STARTUP:?}/boards/$BOARD"
 mkdir -p "$STARTUP/boards/$BOARD"
