@@ -84,7 +84,7 @@ truth; this table is a summary that can lag it.
 | **1** — Cloud twin bring-up: QHV `qvm` hosting a QNX guest under TCG | ✅ done | [qhv-tcg-host-and-guest-boot.log](logs/sample-boot/qhv-tcg-host-and-guest-boot.log) |
 | **2** — Cloud twin IPC + latency | 🟡 **partial** — real P50/P99/Max exist; sample count capped by a `qvm`/TCG virtio-queue stall that is **not root-caused**, but is now *recoverable* (19/19 real stalls recovered) | [cloud-ipc-latest.csv](results/cloud/cloud-ipc-latest.csv), [qnx-host-client/README.md](ipc-test/qnx-host-client/README.md) |
 | **3** — Hardware twin port (Jetson Orin Nano) | 🟡 **substantial, not closed** — heterogeneous QNX↔Linux IPC over a real `br0`/tap bridge works (2 × 100 000 iterations, 0 errors) under **TCG**; **KVM boot is blocked** by a root-caused GICv3 / `KVM_EXIT_ARM_NISV` defect, since reproduced on a second ARM vendor **and reproduced from QNX's own BSP source**: the faulting `str w3,[x0],#4` at GICD+0x420 falls out of `gic_v3.c` built with QNX's own flags, and `-fno-auto-inc-dec` removes all four MMIO writeback stores (compile-verified, boot-unverified — the `qemu-virt` board source is not shipped) | [orin-ipc-latest.csv](results/hw/orin-ipc-latest.csv), [orin-port.md](docs/orin-port.md), [aws-a1-metal-kvm-nisv-repro.log](logs/sample-boot/aws-a1-metal-kvm-nisv-repro.log) |
-| **3b** — Native QNX on the Orin Nano (no QEMU) | 🟡 **M1b met 2026-09-10: QNX 8.0.0 as the hypervisor host at EL2 on all six cores, natively** — [ADR-003](docs/adr-003-hardware-timed-qhv.md) chose a native port as the route to a *hardware-timed* hypervisor number. The QNX kernel and user space booted on the board, entered by `kexec` from L4T with no QEMU and no NVIDIA BSP, and a stock `pidin` reported Release 8.0.0 on a Cortex-A78ae. The same day all six cores came up under QNX, each secondary entering at EL2 through PSCI `CPU_ON`. Then the host moved to EL2 with VHE on every core, the mode the QNX hypervisor runs in. A guest under it and any number are still ahead. | [orin-native-port-plan.md](docs/orin-native-port-plan.md), [orin-native/](orin-native/), [results/orin-native-port/](results/orin-native-port/) |
+| **3b** — Native QNX on the Orin Nano (no QEMU) | 🟡 **M3 met 2026-09-10: the QNX Hypervisor boots a QNX guest natively on the board** — [ADR-003](docs/adr-003-hardware-timed-qhv.md) chose a native port as the route to a *hardware-timed* hypervisor number. The QNX kernel and user space booted on the board, entered by `kexec` from L4T with no QEMU and no NVIDIA BSP, and a stock `pidin` reported Release 8.0.0 on a Cortex-A78ae. The same day all six cores came up under QNX, each secondary entering at EL2 through PSCI `CPU_ON`. Then the host moved to EL2 with VHE on every core, and the QNX Hypervisor booted the unmodified cloud-leg QNX guest on it in five timed runs out of five. The measured figures are held back until publishing them is cleared. | [orin-native-port-plan.md](docs/orin-native-port-plan.md), [orin-native/](orin-native/), [results/orin-native-port/](results/orin-native-port/) |
 | **4** — Twin diff + DRIVE OS comparison | 🟡 **started** — boot-time twin diff done (n=5 per side); the QHV hypervisor leg now boots on the Orin under a from-source QEMU 11.1.0 (the distro 6.2.0 hangs it — a QEMU EL2-timer defect, verified by a reverted-wiring build, not the host); the release-aligned n=5 pair is measured (2.15× Orin/Windows, TCG throughput, not a hardware-timed number — the route to one was chosen in [ADR-003](docs/adr-003-hardware-timed-qhv.md), Accepted 2026-09-09); [drive-os-comparison.md](docs/drive-os-comparison.md) still open | [digital-twin-design.md](docs/digital-twin-design.md) §1a, §5 |
 | **5** — FuSa & Cybersecurity overlay | ⬜ not started as a dedicated phase (a Phase-1-gate FuSa + Cyber pass *did* run) | [docs/fusa/](docs/fusa/), [docs/cyber/](docs/cyber/), [docs/tara/](docs/tara/) |
 | **6** — Polish, public README, demo recording | ⬜ not started | — |
@@ -282,10 +282,25 @@ SMPCHECK RESULT PASS cpus=6/6 secs=60 reasons=none
 
 A repeat of the six-core run passed the same way.
 
-What this is not, stated plainly: the hypervisor host is up at EL2 but has hosted
-nothing yet, and QNX is entered from Linux rather than cold-booted. A guest and every
-number are still ahead, and the two second-cluster cores run a busy loop at a fixed,
-much lower rate whose cause is still open. And these results are evaluation output under the QNX
+**A guest on the hypervisor.** Later that night, M3 put the QNX Hypervisor itself on the
+board. `qvm`, running natively at EL2 on four cores, booted the same QNX guest image the
+cloud leg boots under emulation, with its unmodified disk, to its banner. It reached the
+banner in all five timed runs, and the host-to-guest message test over a virtual console
+completed every round.
+
+Getting there took three fixes that only the real board could reveal:
+
+- The plan's diskless guest configuration never prints the banner.
+- The host image was missing libraries the cloud host carries.
+- Unloading the GPU driver quietly reset the CPU frequency governor.
+
+The timing and latency figures are recorded but not published here yet: they are
+evaluation results under the QNX non-commercial licence.
+
+What this is not, stated plainly: the hypervisor has hosted one QNX guest, not Linux,
+with no device pass-through, on a host entered from Linux rather than cold-booted. No
+per-exit hypervisor number exists yet, and the two second-cluster cores run a busy loop
+at a fixed, much lower rate whose cause is still open. And these results are evaluation output under the QNX
 non-commercial licence, so they stay unpublished until that is cleared; the code,
 the plan and the procedure are here, and the measurements will follow them.
 
@@ -354,7 +369,7 @@ Other prereqs:
 - [x] **Phase 1** — Cloud twin bring-up (SDP 8.0 QHV `qvm` + one QNX guest under QEMU TCG — no Linux guest on this leg, per [ADR-002](docs/phase2-topology-decision.md))
 - [ ] **Phase 2** _(in progress)_ — Cloud twin IPC + latency benchmark: real P50/P99/Max landed; the 100k-iteration target is still blocked by an unfixed — though now recoverable — `qvm`/TCG stall
 - [ ] **Phase 3** _(in progress)_ — Hardware twin on Jetson Orin Nano: heterogeneous QNX↔Linux IPC done under TCG; a hardware-timed KVM number is still owed, blocked on the GICv3/NISV defect. What the defect filing still lacks (a numerically recorded fault PC/IPA, one logged run per QEMU variant) is pinned down by the read-only collector [scripts/diagnose-gicv3-nisv.sh](scripts/diagnose-gicv3-nisv.sh) and its reviewed report in [results/gicv3-nisv-debug/](results/gicv3-nisv-debug/20260909T101030Z/summary.md); the route to a *genuinely* hardware-timed hypervisor number was chosen in [ADR-003](docs/adr-003-hardware-timed-qhv.md) (Accepted 2026-09-09): a **native QNX port to the Orin Nano**, tracked as Phase 3b in [orin-native-port-plan.md](docs/orin-native-port-plan.md) — kicked off, nothing booted natively yet. Three compile-only results are verified, and review found four of the plan's twelve load-bearing claims materially wrong before any could cost a board session — three refuted outright, one settled against the plan by reading the board's registers
-- [ ] **Phase 3b** _(M1b met)_ — Native QNX on the Orin Nano with no QEMU, the route [ADR-003](docs/adr-003-hardware-timed-qhv.md) chose to a hardware-timed hypervisor number. QNX 8.0.0 kernel and user space ran natively on the board, entered by `kexec` from L4T, then on all six cores, and then as the hypervisor host at EL2; next is a guest under that host and the first number ([plan](docs/orin-native-port-plan.md))
+- [ ] **Phase 3b** _(M3 met)_ — Native QNX on the Orin Nano with no QEMU, the route [ADR-003](docs/adr-003-hardware-timed-qhv.md) chose to a hardware-timed hypervisor number. QNX 8.0.0 kernel and user space ran natively on the board, entered by `kexec` from L4T, then on all six cores, then as the hypervisor host at EL2, and then booted the cloud-leg QNX guest under the QNX Hypervisor; next is the per-exit hypervisor number ([plan](docs/orin-native-port-plan.md))
 - [ ] **Phase 4** _(in progress)_ — Twin diff done for boot time **and for the QHV hypervisor leg** (same images on both hosts, one QEMU release, 2.15× Orin/Windows; the stock QEMU 6.2 hang it uncovered is a QEMU-side EL2-timer defect, written up honestly); the dimension-by-dimension [drive-os-comparison.md](docs/drive-os-comparison.md) is still open
 - [ ] **Phase 5** — FuSa & Cybersecurity overlay (FMEA, ASIL gap, STRIDE)
 - [ ] **Phase 6** — Polish, demo recording, public release
