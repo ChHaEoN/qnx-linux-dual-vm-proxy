@@ -1,0 +1,173 @@
+# M3 — the QNX Hypervisor host natively at EL2 on the Jetson Orin Nano, booting
+# the byte-identical cloud-leg guest.
+#
+# Phase 3b, results/orin-native-port/20260909T1100Z/m3-design.md (revision 2),
+# §3.6. No image generated from this template has run on the board.
+#
+# The m3-*.build buildfiles are generated from this template by
+# make-m3-images.sh under orin-native/shim/out/m3/ (git-ignored: an IFS carries
+# QNX binaries, and these carry the guest IFS and its disk as well). Edit the
+# template, never a generated copy. Every comment line is dropped from the
+# generated buildfile, as in M1b.
+#
+#   image    rung  mode      configuration      role (design §5.1, §6.6)
+#   m3-r0    r0    harness   g2-m3.conf (unused) R0: the whole image except qvm
+#   m3-r1    r1    boot      g2-m3.conf          R1: first qvm launch, banner, no IPC
+#   m3-r2    r2    full      g2-m3.conf          Q and T1-T5: banner plus IPC
+#   m3-d1    d1    boot      g2-m3-diag.conf     diagnostic D1, never timed
+#   m3-d2    d2    boot      g2-noblk.conf       diagnostic D2, never timed
+#
+## THIS FILE IS THE TEMPLATE, not a buildfile. The generator replaces:
+##   @RUNG@        r0, r1, r2, d1 or d2
+##   @P@           the CPU count, 4 (6 only in the on-demand -p6 contingency)
+##   @CLIENT@      the IPC client build, ipc-test/qnx-host-client/qnx-host-client
+##   @GUEST_IFS@   qhv/guest/output/ifs.bin
+##   @GUEST_DISK@  qhv/guest/output/disk-qvm
+##   @KSH@ @CONF@ @FAKE@  files it generated under orin-native/shim/out/m3/
+## and fails if any @[A-Z0-9_]+@ survives. The images differ only in those.
+#
+# The base address is not free: kexec places the 8 KiB shim page at 0x80080000,
+# so the image begins right after it (build-shim.sh fails a shim page that is not
+# exactly 8192 bytes).
+[image=0x80082000]
+[-compress]
+
+# M1b's startup line with two changes (design §3.2):
+# -P@P@          cluster 0 only (owner decision O2): one cpufreq policy, and the
+#                vCPU floats inside it; the configuration's cpu line stays bare.
+# -A             an abnormal host-kernel termination resets through PSCI instead
+#                of spinning in the reboot callout with interrupts masked (O3,
+#                design C15). A normal shutdown ignores it.
+# Unchanged from M1b: -vvv, -Q enable,el2-host (the QNX host at EL2 with VHE; the
+# INTID 28 probe said wired on every core), -m992M, -Wkeep (no effect: WDT0 does
+# not fire after kexec), -Dtcu. procnto is M1b's, -v (design C23).
+[virtual=aarch64le,raw] .bootstrap = {
+    startup-t234-orin-nano -vvv -P@P@ -Q enable,el2-host -m992M -Wkeep -A -Dtcu
+    PATH=/proc/boot LD_LIBRARY_PATH=/proc/boot
+    [+keeplinked] procnto-smp-instr -v
+}
+
+# An IFS script is not a shell: no pipes, no redirection, no waitfor, one program
+# per line, and the only background job is the guard (design §3.6, m2.build.in's
+# rules). slogger2, pipe and devc-pty return by daemonising. The host state
+# machine carries every bounded wait (m3-host.ksh.in). The script ends in a warm
+# reset, which keeps the black box.
+#
+# Order, a deliberate change from the design's §3.6 block, where the guard came
+# before slogger2 and the census came after pidin info:
+# - The census runs first. Before its tick check it only reads the syspage and
+#   prints (smpcheck.c:531-618). The tick check itself is bounded by ClockCycles()
+#   with no sleep in the judging thread, and on a dead cpu 0 clock it calls
+#   sysmgr_reboot() (smpcheck.c:458-495). It needs no tick, and it ran unguarded
+#   in every M2 and M1b run.
+# - The guard starts second. Its countdown sleeps with nanosleep (bwait.c:131-148),
+#   so it is only as live as the tick the census has just proved. It still starts
+#   before anything that could block, and resets the board with sysmgr_reboot()
+#   if the run outlives 900 s.
+# - With the guard first, a dead tick plus a hang in slogger2, pipe, devc-pty or
+#   pidin info would have stalled both the guard and the census, with nothing
+#   left to reset the board.
+[+script] .script = {
+    display_msg "T234 M3 @RUNG@ -P@P@: procnto up"
+    procmgr_symlink ../../proc/boot/ldqnx-64.so.2 /usr/lib/ldqnx-64.so.2
+    procmgr_symlink /proc/boot/ksh /bin/sh
+    smpcheck -i -n @P@
+    bwait -g 900 &
+    slogger2
+    pipe
+    devc-pty
+    pidin info
+    ksh /proc/boot/m3-host.ksh
+    display_msg "T234 M3 @RUNG@ -P@P@: resetting so the log can be recovered"
+    smpcheck -z 3
+    shutdown -S reboot
+}
+
+# The runtime linker and the libraries. [-autolink] with explicit links follows
+# the QNX-generated host IFS, so no automatic link can collide with an explicit
+# one. Which libraries qvm, the vdevs, devb-loopback and slogger2 need cannot be
+# read from the binaries under the licence, so every library the cloud host IFS
+# carries for them is carried here; a missing one shows on the board as
+# 'Unable to start "<tool>" (83)' (design §3.1, §7).
+[type=link] /usr/lib/ldqnx-64.so.2=/proc/boot/ldqnx-64.so.2
+ldqnx-64.so.2
+[-autolink]
+libc.so.6
+libgcc_s.so.1
+libsecpol.so.1
+libm.so.3
+libqh.so.1
+libregex.so.1
+libjail.so.1
+libfsnotify.so.1
+libsocket.so.4
+[type=link] libsocket.so=libsocket.so.4
+libfdt.so.1
+[type=link] libfdt.so=libfdt.so.1
+libcam.so.2
+io-blk.so
+cam-disk.so
+libslog2.so.1
+[type=link] libslog2.so=libslog2.so.1
+libslog2parse.so.1
+libslog2shim.so.1
+libjson.so.1
+# R0 (2026-09-10T21:11Z) stopped at md5_pre: toybox and slog2info printed
+# 'ldd:FATAL: Could not load library libz.so.2'. The loader names only the
+# first missing library, so the rest of the cloud host IFS's [-autolink] set
+# comes too (qhv/host/output/build/ifs.build), with its qcrypto.conf. That
+# host's CONFIG_PATH is not copied: on this bootstrap line mkifs prefixes it to
+# every script command, which the generator's exact-line checks reject.
+libz.so.2
+libcrypto.so.3
+libqcrypto.so.1.0
+qcrypto-openssl-3.so
+libpci.so.3.0
+[uid=0 gid=0 perms=0444] qcrypto.conf={
+openssl-3 tags=*
+}
+
+# Ours: the tools (orin-native/tools), the IPC client, the generated host script,
+# configuration and harness text. The guest IFS and its disk are [+raw], so mkifs
+# stores them as opaque bytes; the generator extracts both back out of the image
+# and checks their sha256 against the pins.
+/proc/boot/tcu-cat=tcu-cat
+/proc/boot/stamp=stamp
+/proc/boot/bwait=bwait
+/proc/boot/smpcheck=smpcheck
+[perms=0555] /proc/boot/qnx-host-client=@CLIENT@
+[perms=0444] /proc/boot/m3-host.ksh=@KSH@
+[perms=0444] /proc/boot/g2.conf=@CONF@
+[perms=0444] /proc/boot/m3-fake-guest.txt=@FAKE@
+[+raw perms=0444] /proc/boot/guest-ifs.bin=@GUEST_IFS@
+[+raw perms=0444] /proc/boot/disk-qvm=@GUEST_DISK@
+
+# M1b's utilities, then the hypervisor set and the guest disk's block stack. No
+# vpctl, virtio-net, random, io-sock, fs-qnx6 or trace tools (design §3.1): the
+# absence of fs-qnx6.so means the host can never mount the guest's partitions.
+ksh
+pidin
+on
+slay
+waitfor
+shutdown
+devc-pty
+slogger2
+slog2info
+pipe
+qvm
+qvm-check
+vdev-pl011.so
+vdev-virtio-console.so
+vdev-virtio-blk.so
+vdev-shmem.so
+devb-loopback
+toybox
+[type=link] cat=toybox
+[type=link] cp=toybox
+[type=link] cmp=toybox
+[type=link] grep=toybox
+[type=link] head=toybox
+[type=link] md5sum=toybox
+[type=link] tail=toybox
+[type=link] wc=toybox

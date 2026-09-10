@@ -12,7 +12,13 @@
 # results/cloud/header.csv schema. It never invents a number: every field is
 # taken from a value qnx-host-client itself printed.
 #
-# Usage: extract-ipc-result.sh <boot_log> [csv_out]
+# Usage: extract-ipc-result.sh <boot_log> [csv_out] [notes]
+#   csv_out  default results/cloud/cloud-ipc-latest.csv (an empty argument too)
+#   notes    the row's notes field, one CSV field: no comma, CR or newline.
+#            Default "tcg-qvm-virtio-console;transcribed-from-serial-log:<boot_log
+#            basename>", the cloud leg's value, so existing callers are unaffected.
+#            The native M3 leg passes its own and writes under
+#            results/orin-native-port/, never results/cloud/ (m3-design.md §4.4).
 # Exit: 0 = row appended, 1 = summary not found in <boot_log>, 2 = usage/IO error.
 
 set -eu
@@ -22,9 +28,18 @@ REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
 
 boot_log="${1:-}"
 csv_out="${2:-$REPO_ROOT/results/cloud/cloud-ipc-latest.csv}"
+notes="${3:-}"
 
-[ -n "$boot_log" ] || { echo "Usage: $0 <boot_log> [csv_out]" >&2; exit 2; }
+[ -n "$boot_log" ] || { echo "Usage: $0 <boot_log> [csv_out] [notes]" >&2; exit 2; }
 [ -f "$boot_log" ] || { echo "extract-ipc-result.sh: not found: $boot_log" >&2; exit 2; }
+cr=$(printf '\r')
+nl='
+'
+case "$notes" in
+  *,*|*"$cr"*|*"$nl"*)
+    echo "extract-ipc-result.sh: notes must not contain a comma, CR or newline (it is one CSV field)" >&2
+    exit 2 ;;
+esac
 
 summary_line=$(grep -E '^samples=[0-9]+ payload=[0-9]+ cps=[0-9]+$' -- "$boot_log" | tail -n1 || true)
 latency_line=$(grep -E '^P50=[0-9]+ ns  P99=[0-9]+ ns  Max=[0-9]+ ns$' -- "$boot_log" | tail -n1 || true)
@@ -47,9 +62,11 @@ if [ ! -f "$csv_out" ]; then
   cp -- "$REPO_ROOT/results/cloud/header.csv" "$csv_out"
 fi
 
+[ -n "$notes" ] || notes="tcg-qvm-virtio-console;transcribed-from-serial-log:$log_base"
+
 printf '%s,%s,%s,%s,%s,%s,%s,%s\n' \
   "$unix_ts" "$samples" "$payload" "$p50" "$p99" "$maxv" "$cps" \
-  "tcg-qvm-virtio-console;transcribed-from-serial-log:$log_base" \
+  "$notes" \
   >> "$csv_out"
 
 echo "extract-ipc-result.sh: appended row to $csv_out"

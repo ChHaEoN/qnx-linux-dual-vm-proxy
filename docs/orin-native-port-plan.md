@@ -366,7 +366,7 @@ panic in its own kexec shutdown, and a serial capture that received nothing) are
 Image adds the hypervisor set exactly as the cloud host's build lists it (`qvm`, `qvm-check`, `vdev-pl011`,
 `vdev-virtio-console`, `vdev-shmem`, `libfdt.so`, `tracelogger`/`traceprinter`, slogger2) plus
 `/proc/boot/guest-ifs.bin` = the cloud-leg guest (sha256 `968029…7cf4f`), and a `g2.conf` that is the
-cloud-leg config **minus virtio-blk**. Startup runs `-Q enable,el2-host`. M1b's probe found INTID 28 wired on every core, so the el1-host
+cloud-leg config **minus virtio-blk** (corrected 2026-09-10: without its disk the guest never prints its banner and never starts the echo server, so M3 ran the as-run four-vdev configuration with the disk carried in the image; [m3-design.md](../results/orin-native-port/20260909T1100Z/m3-design.md) §1). Startup runs `-Q enable,el2-host`. M1b's probe found INTID 28 wired on every core, so the el1-host
 fallback and its relabelling are not needed. `-Wdisable` or a `wdtkick` kicker is insurance only: the "mandatory (K9)
 because guest boot plus a trace capture does not fit in 2 minutes" written here assumed a limit that M0's `hang` test disproved. `stamp` prints `ClockCycles()` at `qvm` launch and at the guest
 banner; delta / 31,250,000 = seconds; five runs = five kexec rounds. Then the Phase-2 host-client /
@@ -377,6 +377,17 @@ only its `qvm_launched → guest_banner` segment.
 **Pass:** the guest banner appears on 5/5 runs; each of the five stamped deltas is recorded with startup
 options, `-Q` mode, guest sha256, `-W` policy and CPU MHz (or "clock not verified"); the IPC pair completes
 its 15 timed iterations. **Fail** = fewer than 5 banners, or any run whose stamps are missing a field.
+
+**M3 met 2026-09-10.**
+- **What ran.** Native `qvm` on four Cortex-A78AE cores at EL2 (`-P4 -Q enable,el2-host`) booted the byte-identical cloud-leg guest to its banner on 5/5 timed runs. The guest IFS was `968029…7cf4f`, with the unmodified disk `cf5b06d0…216b`.
+- **IPC.** The pair completed its 15 iterations in each run.
+- **The qualification run** passed the same way.
+- **The pass fields.** Every field the pass line asks for was recorded in every run, with CPU MHz as `clock not verified`.
+- **Deviations.**
+  - The guest disk went back in (above).
+  - R0's first attempt failed on `libz.so.2`, so five libraries and `qcrypto.conf` from the cloud host IFS were added.
+  - The governor is pinned again after the GPU-module quiesce.
+- **Unpublished.** The measured interval and the IPC figures are evaluation output under NC QDL v7 4.6(i). They stay in an unpublished local record (branch `m3-results-unpublished`) until the supervising professor has been consulted.
 
 ### M4 — The qvm-trace number — **blocked on a dry run (K11)**
 
@@ -441,7 +452,7 @@ kexec-residual-state caveat a finding in its own right.
 | 2 | ~~The SPE keeps draining the TCU mailbox after Linux exits~~ **CLOSED 2026-09-09: it does.** ~330 characters went out with `TCUDROPS=0`. [m0-first-run.md](../results/orin-native-port/20260909T1100Z/m0-first-run.md) | **VERIFIED** (mailbox) | The wire itself is still unobserved — no adapter attached — so a silent console would now point at the wiring, not the mechanism. |
 | 3 | ~~NS-EL2 virtual timer PPI 12 / INTID 28 is wired on Tegra234~~ **CLOSED 2026-09-10: it is.** M1b's probe saw the EL2 virtual timer raise INTID 28 on all six cores, with INTID 26 as a passing control, and procnto's clock ticked on it. [m1b-runs.md](../results/orin-native-port/20260909T1100Z/m1b-runs.md) | **VERIFIED** (Non-secure view, this SKU and firmware) | Nothing for M3: the VHE host is available. Formerly: no VHE number; `el1-host` gives a hardware-timed but differently-labelled one |
 | 4 | ~~The watchdog's behaviour across `kernel_kexec`~~ **CLOSED 2026-09-09: it does not fire.** Six and a half minutes of `wfi` against a two-minute watchdog, recovered only by pulling the power. [m0-hang-watchdog.md](../results/orin-native-port/20260909T1100Z/m0-hang-watchdog.md) | **VERIFIED** (does not recover) | Either no unattended recovery (manual power cycle, smart plug) **or** a hard 2-min cap on M3/M4 until `-Wdisable`/`wdtkick` works |
-| 5 | `qvm` arms stage-2/ICH/virtual-timer state on real A78AE as it does under TCG | HYPOTHESIS | M3 stalls; no support path for Everywhere licensees; the finding is the deliverable |
+| 5 | ~~`qvm` arms stage-2/ICH/virtual-timer state on real A78AE as it does under TCG~~ **CLOSED 2026-09-10: it does, for this guest.** Native `qvm` at EL2 booted the cloud-leg QNX guest to its banner on 5/5 timed runs (record unpublished, 4.6(i)) | **VERIFIED** (one guest, one board) | Nothing for M3. Formerly: M3 stalls; no support path for Everywhere licensees; the finding is the deliverable |
 | 6 | No firmware agent (BPMP/SPE/DCE/PSC) or stale device DMA touches `0x80000000-0xBDFFFFFF` after hand-off | HYPOTHESIS | Irreproducible corruption; escape = a higher `[image=]` and the `-U` EFI-map path |
 | 7 | ~~ramoops zone offsets~~ **SETTLED 2026-09-09** — DT gives `record-size 0x10000` / `console-size 0x80000` / no ECC, so the console zone is at `0x2_72770000`; `/dev/mem` reads it despite `STRICT_DEVMEM=y`; the header is `sig 0x43474244` + `start` + `size`. [blackbox-verified.md](../results/orin-native-port/20260909T1100Z/blackbox-verified.md) | VERIFIED | Nothing — this row is closed. Formerly: black box addressable only by the "last 256 KiB + `dd if=/dev/mem`" hack |
 | 8 | The `t234-orin-nano` board dir builds and links `display_char_tcu` | UNKNOWN | Makefile work before any signal — but the toolchain itself is now proven (K12) |
@@ -497,7 +508,7 @@ still run against the black box, at roughly one question per reboot cycle — cl
 | M0 — sign of life | 0.5-3 | HIGH on "TCU alive after Linux" | SPE behaviour, the NVIDIA kernel fork, DMA quiesce hunting |
 | M1 — procnto + user space, then M1b | 3-7 | HIGH | First QNX instruction ever on Tegra234; EL2/GIC/raminfo interactions; blind debugging doubles it. **M1 and M1b met 2026-09-10** |
 | M2 — SMP | 1-2 | LOW-MED | Both known pitfalls pre-empted; cluster-1 wake UNKNOWN. **Met 2026-09-10** |
-| M3 — QHV host + guest, first number | 2-6 | MED-HIGH | ~~INTID 28~~ (wired, M1b); stage-2/ICH on real silicon; ~~plus the watchdog policy, now on the critical path~~ (WDT0 does not fire after kexec) |
+| M3 — QHV host + guest, first number | 2-6 | MED-HIGH | ~~INTID 28~~ (wired, M1b); stage-2/ICH on real silicon; ~~plus the watchdog policy, now on the critical path~~ (WDT0 does not fire after kexec). **Met 2026-09-10** |
 | M4 — qvm-trace | 1-3 | LOW-MED | The dry run first; then 11 KB/s transport and the parser |
 | M5 — optional UEFI cross-check | 2-5 | HIGH | PE ImageBase/relocation, `mkifsf_uefi` behaviour |
 
