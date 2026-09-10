@@ -9,6 +9,20 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-10 — M3: the QNX Hypervisor boots the cloud-leg guest natively on the Orin Nano
+
+Late the same day, native `qvm` ran at EL2 on four of the board's Cortex-A78AE cores. It booted the byte-identical cloud-leg
+QNX guest, with its unmodified disk, to its banner on all five timed runs. The Phase-2 IPC pair completed its 15 iterations in
+every run. That closes the plan's unknown #5: stage-2 translation, the virtual GIC and the guest timers work on real A78AE
+for this guest. The shake-down found three things the design could not. First, the plan's diskless guest configuration would
+never print the banner, because the guest's `uname` lives on the disk. Second, the image lacked `libz.so.2` and four more
+libraries the cloud host carried. Third, unloading the GPU modules put the cpufreq governor back to schedutil, which also
+showed that the frequency Linux last sets carries into QNX. The quiesce rehearsal hit the third Linux teardown oops of the day
+(in `tcp_metrics_flush_all`, after hours of uptime); on a fresh boot the quiesce worked. The measured interval and IPC figures
+are evaluation output. The repo is public, so they, the run record and the curated capture stay on the local branch
+`m3-results-unpublished` until the 4.6(i) consultation. Design:
+[m3-design.md](../results/orin-native-port/20260909T1100Z/m3-design.md).
+
 ## 2026-09-10 — M1b: QNX runs as the hypervisor host at EL2 (VHE) on all six cores of the Orin Nano
 
 The same evening as M2, the host moved from EL1 to EL2. With `-Q enable,el2-host` the startup library turned on VHE
