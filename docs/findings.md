@@ -9,6 +9,26 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-10 — M2: QNX 8.0.0 on all six cores of the Jetson Orin Nano
+
+The same day M1 ran QNX on one core, M2 ran it on all six. Every secondary was started through PSCI `CPU_ON` and
+entered at EL2, including the two cores of the second cluster. Each bound its own redistributor (frames 0-3, 6 and 7)
+with the expected IPI routing, and a user-space check that pinned a 60 s busy process to every core passed
+(`SMPCHECK RESULT PASS cpus=6/6`) in two runs of the identical image, plus a third that added a tracelogger capture
+with events on all six. The ladder `-P1`, `-P2`, `-P4`, `-P5`, `-P6` passed rung by rung, and every run ended in the
+image's own warm reset. The startup library already had the core geometry right; the work that mattered was failure
+handling, because a design, three design reviews, a parallel implementation and three code reviews found several
+plausible secondary-core faults that would have hung the board silently. The runs settled three questions: a
+QNX-issued `CPU_ON` enters at EL2 although QNX calls it from EL1; the unpopulated redistributor frames 4 and 5 read
+cleanly and hold the two absent cores' affinities, closing ranked unknown #10; and firmware leaves every secondary
+in the same non-VHE EL2 state. Two things stay open: both second-cluster cores run a busy loop at one fixed rate,
+roughly a tenth of the first cluster's, and the trace shows no interrupt storm to explain it; and none of this is
+under `-Q enable` yet. Along the way Linux panicked once in its own kexec shutdown (`tcp_metrics_flush_all`), and the
+watchdog reset that followed preserved pstore. Record:
+[m2-runs.md](../results/orin-native-port/20260909T1100Z/m2-runs.md); design:
+[m2-design.md](../results/orin-native-port/20260909T1100Z/m2-design.md); capture:
+[orin-native-m2-six-cores.log](../logs/sample-boot/orin-native-m2-six-cores.log).
+
 ## 2026-09-10 — M1: the QNX kernel ran natively on the Jetson Orin Nano
 
 The first native QNX image booted on the board, entered by kexec from L4T with no
