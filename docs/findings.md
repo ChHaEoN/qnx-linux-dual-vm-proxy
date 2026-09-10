@@ -70,6 +70,22 @@ power pulled. Both are fixed — no pipes, `shutdown -S reboot` — and the capt
 [orin-native-m1-userspace.log](../logs/sample-boot/orin-native-m1-userspace.log).
 Still one CPU at EL1: SMP, the hypervisor host and any number are ahead.
 
+**A third run the same morning closed the loop with nobody at the board.** With no
+pipes and `shutdown -S reboot`, `pidin` printed its full table, and the image then
+warm-reset the board: firmware follows `pidin` directly on the console, and L4T
+answered ssh again with a new `boot_id` about 80 s after the launch. The RAM black
+box survived that reset. On the next boot pstore held 7,252 bytes, from the shim's
+register bank through the last `pidin` row, and it was the more complete record: the
+live console lost its tail at the reset, stopping inside the `devc-pty` row, most
+likely because bytes not yet sent to the UART were discarded. Two limits. `tcu-cat`
+writes the mailbox itself, so its banners are never in the black box and the
+`resetting` banner reached neither channel; the reset is attributed to `shutdown` by
+elimination, not by a captured line. And this recovers only runs that end in a reset;
+a hang still needs the power pulled. Record:
+[m1-first-procnto.md](../results/orin-native-port/20260909T1100Z/m1-first-procnto.md),
+section Run 3; capture:
+[orin-native-m1-reboot-blackbox.log](../logs/sample-boot/orin-native-m1-reboot-blackbox.log).
+
 ## 2026-09-09 — QHV leg on the Orin: the hang was QEMU 6.2, not the host; the leg now boots on real ARM silicon — and a review found what the previous day's write-up got wrong
 
 Two threads, kept together because the second corrects the first. An

@@ -137,3 +137,46 @@ Both are fixed in the buildfile: no pipes, and `shutdown -S reboot`, which reach
 the board's PSCI reset callout — a warm reset, which preserves the log.
 
 Still not shown: one CPU only, at EL1, with no hypervisor host and no number.
+
+## Run 3, the same morning: the image resets the board, and the black box keeps what the wire lost
+
+With both script errors fixed, the third image ran from the `kexec` to its own reset
+with nobody touching the board. Live console and recovered black box together:
+[logs/sample-boot/orin-native-m1-reboot-blackbox.log](../../../logs/sample-boot/orin-native-m1-reboot-blackbox.log).
+
+What it showed:
+
+- **User space as before, and `pidin` now prints its table.** The kernel, `tcu-cat`'s
+  `user space up` and `pidin info` matched run 2. Without the pipe, `pidin` listed
+  the kernel's twelve threads, `devc-pty` and `pidin` itself: the three processes and
+  fourteen threads `pidin info` had counted.
+- **`shutdown -S reboot` warm-reset the board.** Firmware (`MB1`, then BL31 and UEFI)
+  follows `pidin` directly on the console. A waiter polling ssh saw L4T answer again
+  with a new `boot_id` about 80 s after the launch, which covers the `kexec`, the
+  whole QNX run, the reset and a full L4T boot. Nothing else in the script can reset
+  the board, neither channel shows a crash message, and the inherited watchdog needs
+  two minutes and was shown on 2026-09-09 not to fire after this hand-over at all.
+- **The live console lost its tail at the reset.** The wire stops inside `pidin`'s
+  `devc-pty` row, then two NUL bytes and garbage, then `MB1`. The last table row and
+  the `T234 M1: resetting so the log can be recovered` banner never arrived. The
+  likely reason is that bytes handed to the console mailbox but not yet sent at
+  115,200 baud were discarded by the reset. That is an inference, not a measurement.
+- **The black box survived the warm reset and kept those lines.** On the next boot
+  `/sys/fs/pstore/console-ramoops-0` held 7,252 bytes: the shim's register bank, the
+  startup output, `T234 M1: procnto up`, `pidin info`, and the whole `pidin` table
+  through its last row. This is the first run where the black box, not the wire, is
+  the more complete record.
+
+One gap, and the limit it puts on the conclusion:
+
+- **Neither `tcu-cat` banner is in the black box.** Only output that goes through the
+  kernel's console callout is mirrored into RAM. `tcu-cat` writes the mailbox itself,
+  so `user space up` reached the wire and not the black box, and `resetting` reached
+  neither.
+- So **the reset is attributed to `shutdown -S reboot` by elimination**, not by a
+  captured line. Two cheap ways to close it: have `tcu-cat` also append to the black
+  box, or pause a couple of seconds before `shutdown` so the console drains.
+
+What it settles: a run that ends in a reset no longer needs anyone at the board. The
+loop is stage, `kexec`, wait about 80 s, read pstore, which makes an unattended
+regression loop possible from M2 on. A run that hangs still needs the power pulled.
