@@ -1,0 +1,67 @@
+Bound the GIC register-write-pending wait, so it fails loudly instead of hanging.
+
+Project: qnx-linux-dual-vm-proxy, Phase 3b, 2026-09-10.
+Applies to: src/hardware/startup/lib/public/aarch64/gic.h in the QNX SDP 8.0
+hypervisor-guest-arm BSP (Apache-2.0 source; modification is what
+NC QDL v7 4.1(iii) grants).
+
+WHY
+
+`wait_for_rwp()` is an unbounded busy-wait, and the library's own comment says
+so: `//XXXX: check for never clearing`. It is entered four times on the boot CPU
+during `gic_v3_initialize()` and `gic_v3_gicc_init()`.
+
+On every previous validation in this project that was harmless, because the GIC
+had just come out of reset under QEMU. This board is the first case where the
+same code meets a GICv3 that Linux configured, used, and left enabled with
+device interrupts possibly still pending. If the pending bit never clears there,
+the loop never exits.
+
+That would be survivable on most boards. On this one it is the worst available
+outcome, and both halves of that are measured rather than assumed: the watchdog
+does not fire after this kexec hand-over, so a spin needs a human to pull the
+power; and a cold power cycle wipes the DRAM region holding everything printed
+up to that point. A hang therefore costs the board session *and* the evidence
+explaining it. See results/orin-native-port/20260909T1100Z/m0-hang-watchdog.md.
+
+WHAT THIS CHANGES
+
+A deadline, and nothing else. The wait still spins on the same bit and still
+exits the instant it clears, so a working GIC behaves exactly as before. When
+the bit does not clear it calls `crash()`, which prints through the same console
+path as everything else — into the black box as well as the mailbox — and then
+reaches this board's `crash_done()`, which issues a PSCI reset rather than
+parking in `wfi`. So the failure becomes: a named message saying which register
+never settled, a warm reset, and the whole log waiting in pstore on the next
+boot.
+
+The bound is an iteration count rather than a real deadline because this runs
+before the timer is initialised and there is no calibrated clock to spend yet.
+Ten million iterations is far longer than any real propagation and far shorter
+than a human noticing the board is gone.
+
+diff --git a/src/hardware/startup/lib/public/aarch64/gic.h b/src/hardware/startup/lib/public/aarch64/gic.h
+--- a/src/hardware/startup/lib/public/aarch64/gic.h
++++ b/src/hardware/startup/lib/public/aarch64/gic.h
+@@
+ static __inline__ void
+ wait_for_rwp(paddr_t const addr, unsigned const rwp_bit) {
+-	//XXXX: check for never clearing
+-	do {
+-		// Wait for the RWP bit to clear
+-	} while(in32(addr) & rwp_bit);
++	/*
++	 * Bounded (qnx-linux-dual-vm-proxy, 2026-09-10). The original loop is
++	 * unbounded and the comment it carried -- "check for never clearing" --
++	 * is exactly the case this board can produce: a GIC that Linux left
++	 * enabled, re-initialised from scratch. A spin here cannot be recovered
++	 * on this hardware and takes the log with it, so it is a crash instead.
++	 */
++	unsigned long __rwp_limit = 10000000UL;
++
++	while (in32(addr) & rwp_bit) {
++		if (--__rwp_limit == 0) {
++			crash("gic: RWP never cleared at %P (bit %x)\n", addr, rwp_bit);
++		}
++	}
+ }

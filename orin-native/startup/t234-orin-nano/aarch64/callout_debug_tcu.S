@@ -54,7 +54,22 @@ patch_tcu_tx:
 	movk	x1, #(T234_TCU_TX >> 16), lsl #16
 	bl		callout_io_map
 
+	CALLOUT_PATCH	x19, w6, w7		// x19 advances past the 4 patched words
+
+	/*
+	 * The same callout carries a second address: the black box. Without it,
+	 * every byte procnto prints exists only on a wire nobody is reading, and
+	 * a kernel that comes up perfectly is indistinguishable from one that
+	 * never started. CALLOUT_PATCH left x19 pointing at the next sequence.
+	 */
+	mov		x0, #T234_BB_MAP
+	movz	x1, #(T234_BB_BASE & 0xffff)
+	movk	x1, #((T234_BB_BASE >> 16) & 0xffff), lsl #16
+	movk	x1, #((T234_BB_BASE >> 32) & 0xffff), lsl #32
+	bl		callout_io_map
+
 	CALLOUT_PATCH	x19, w6, w7
+
 	ldp		x19, x30, [sp]
 	add		sp, sp, #16
 	ret
@@ -87,6 +102,32 @@ CALLOUT_START(display_char_tcu, 0, patch_tcu_tx)
 	movk	x7, #0xabcd, lsl #32
 	movk	x7, #0xabcd, lsl #48
 
+	mov		x6, #0xabcd			// black box vaddr (patched)
+	movk	x6, #0xabcd, lsl #16
+	movk	x6, #0xabcd, lsl #32
+	movk	x6, #0xabcd, lsl #48
+
+	/*
+	 * Mirror first, because the mailbox is the half that can fail. The zone's
+	 * own length word is the cursor — the same trick the region's format
+	 * already uses — so this needs no read-write storage of its own and
+	 * appends to whatever the shim and startup wrote before it.
+	 */
+	ldr		w2, [x6]
+	movz	w3, #0x4244
+	movk	w3, #0x4347, lsl #16		// 'D','B','G','C'
+	cmp		w2, w3
+	b.ne	2f					// not our zone: leave it alone
+	ldr		w2, [x6, #8]			// bytes already there
+	movz	w3, #0xfff0			// what is mapped, less a margin
+	cmp		w2, w3
+	b.hs	2f					// full: stop rather than run off the map
+	add		x4, x6, x2
+	strb	w1, [x4, #12]
+	add		w2, w2, #1
+	str		w2, [x6, #4]
+	str		w2, [x6, #8]
+2:
 	mov		x2, #0x100000		// bounded poll
 0:	ldr		w3, [x7]
 	tbz		w3, #31, 1f			// FULL clear: the mailbox is ours

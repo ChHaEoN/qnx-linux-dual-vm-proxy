@@ -68,11 +68,30 @@
     # devc-ser8250 -e -b115200 0x3100000^2,144
     # reopen /dev/ser1
     # [+session] ksh &
+
+    # Then reset, deliberately.
+    #
+    # This looks like throwing away a working system, and it is the opposite.
+    # Nobody can read the console: it goes to a mailbox that needs a serial
+    # adapter, and to a DRAM region that only Linux can recover. If QNX simply
+    # keeps running, the only way back to Linux is pulling the power, and a cold
+    # power cycle wipes that region - so a perfectly successful boot would be
+    # indistinguishable from a hang, and would leave exactly as little evidence.
+    #
+    # A warm reset preserves it. So the milestone ends by resetting into Linux,
+    # which then hands us everything that was printed. M1 is a report, not a
+    # session; the session comes when there is a wire to watch it on.
+    tcu-cat -m "T234 M1: resetting so the log can be recovered"
+    shutdown -b
 }
 
 [type=link] /usr/lib/ldqnx-64.so.2=/proc/boot/ldqnx-64.so.2
 libc.so.6
 libgcc_s.so.1
+# devc-pty needs this one too; mkifs does not chase DT_NEEDED for you, and the
+# symptom of leaving it out is a resource manager that never appears rather
+# than a build error.
+libsecpol.so.1
 
 # ours
 /proc/boot/tcu-cat=tcu-cat

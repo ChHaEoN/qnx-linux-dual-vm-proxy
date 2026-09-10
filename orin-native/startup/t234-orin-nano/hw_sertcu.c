@@ -34,6 +34,21 @@
 static uintptr_t tcu_tx;
 static unsigned  tcu_drops;
 
+/*
+ * The black box. Every character that goes to the mailbox is mirrored into a
+ * reserved DRAM region that the kernel recovers on the next boot, because
+ * without it nothing startup prints is visible at all: the mailbox needs a
+ * serial adapter on the debug header to be read, and there is not one.
+ *
+ * The shim has already written its register bank here, so startup appends
+ * rather than restarting the log — one recovered zone then holds the hand-off
+ * state and everything that happened afterwards, in order.
+ */
+static uintptr_t bb_base;
+static unsigned  bb_len;
+
+static void bb_putc(int c);
+
 void
 init_tcu(unsigned channel, const char *init, const char *defaults)
 {
@@ -49,6 +64,25 @@ init_tcu(unsigned channel, const char *init, const char *defaults)
 	tcu_tx = startup_io_map(sizeof(_Uint32t), T234_TCU_TX);
 
 	/*
+	 * Pick up where the shim left off. If the signature is intact its length
+	 * word says how much is already there; if it is not — a cold boot wiped
+	 * the region, or something else owns it — start a fresh log rather than
+	 * appending into whatever happens to be there.
+	 */
+	bb_base = startup_io_map(T234_BB_MAP, T234_BB_BASE);
+	if (bb_base != 0) {
+		if (in32(bb_base) == T234_BB_SIG) {
+			bb_len = in32(bb_base + 8);
+			if (bb_len > T234_BB_LIMIT) {
+				bb_len = 0;
+			}
+		} else {
+			out32(bb_base, T234_BB_SIG);
+			bb_len = 0;
+		}
+	}
+
+	/*
 	 * A newline with both flush bits, which is what NVIDIA's own firmware
 	 * sends to open the channel. It also makes the first real line start
 	 * cleanly rather than appended to whatever Linux left mid-line.
@@ -61,6 +95,8 @@ put_tcu(int c)
 {
 	unsigned limit = TX_POLL_LIMIT;
 	_Uint32t w;
+
+	bb_putc(c);            /* first, so a dead mailbox costs the wire only */
 
 	if (tcu_tx == 0) {
 		return;
@@ -75,6 +111,23 @@ put_tcu(int c)
 
 	w = TCU_FULL | TCU_FLUSH | (1u << TCU_COUNT_SHIFT) | ((_Uint32t)c & 0xffu);
 	out32(tcu_tx, w);
+}
+
+/*
+ * Mirror one character into the black box. Separate from the mailbox write so
+ * that a mailbox that has stopped draining does not also cost us the log: this
+ * runs first and unconditionally.
+ */
+static void
+bb_putc(int c)
+{
+	if (bb_base == 0 || bb_len >= T234_BB_LIMIT) {
+		return;
+	}
+	out8(bb_base + 12u + bb_len, (_Uint8t)c);
+	bb_len++;
+	out32(bb_base + 4u, bb_len);       /* cursor */
+	out32(bb_base + 8u, bb_len);       /* length */
 }
 
 /*
