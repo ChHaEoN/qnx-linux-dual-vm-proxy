@@ -31,7 +31,8 @@
  * cleared cpu_starting (lib/init_smp.c:69-77). Every address is PC-relative,
  * as smp_start forms its own (lib/aarch64/smp_start.S:57, :63).
  *
- * Nothing in this file has run on the board.
+ * Ran on every secondary in M2 (CPU_ON issued from EL1, -Q disable); not yet
+ * with CPU_ON issued from EL2.
  */
 
 #include "t234_startup.h"

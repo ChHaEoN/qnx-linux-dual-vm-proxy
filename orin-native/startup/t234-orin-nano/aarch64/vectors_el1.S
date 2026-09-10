@@ -5,37 +5,45 @@
  * use this file except in compliance with the License. You may obtain a copy
  * of the License at http://www.apache.org/licenses/LICENSE-2.0
  *
- * EL1 exception vectors for startup, because the library's are a silent trap.
+ * EL1 and EL2 exception vectors for startup, because the library's are a
+ * silent trap and the shim's cannot be relied on.
  *
  * The startup library installs `vbar_default` into VBAR_EL1, and every one of
  * its sixteen slots is a branch to itself. That is deliberate and reasonable:
  * it stops the machine with ELR_EL1 and ESR_EL1 intact for a JTAG debugger to
  * read. There is no debugger on this board and there is not going to be one.
  *
- * It also covers far more ground than it looks. Under `-Q disable` the library
- * drops to EL1 inside hypervisor_init, which main() calls before init_smp,
- * init_mmu, init_intrinfo and init_qtime — so the entire first-ever bring-up of
- * this port's interrupt controller, MMU and timer runs at EL1 with those
- * vectors installed. The shim's own EL2 vectors, which do print and reset, stop
- * applying the moment the CPU drops: EL1 exceptions are not routed to EL2
- * unless HCR_EL2 says so, and under `-Q disable` nothing sets those bits.
+ * Which table a startup fault lands in depends on the -Q mode:
+ *
+ *   - -Q disable, and -Q enable,el1-host: CPU0 and each secondary drop to EL1
+ *     inside their own hypervisor_init, which main() calls before init_smp,
+ *     init_mmu, init_intrinfo and init_qtime — so the bring-up of this port's
+ *     interrupt controller, MMU and timer runs at EL1, and its faults land in
+ *     t234_el1_vectors. EL1 exceptions are not routed to EL2 unless HCR_EL2
+ *     says so, and under -Q disable nothing sets those bits.
+ *   - -Q enable,el2-host: no core ever runs at EL1. hyp_enable_el2_host sets
+ *     E2H and TGE (lib/aarch64/hypervisor_enable.S:24-34), every startup fault
+ *     on every core lands in t234_el2_vectors, and VBAR_EL1 is written but
+ *     never used.
  *
  * So without this file, any fault in the least-tested code in the project ends
- * as a branch-to-self: no output, no reset, and — because this board's watchdog
- * does not fire after the kexec hand-over — a power cycle, which wipes the DRAM
- * region holding everything printed up to that point. A diagnosed failure
- * becomes an undiagnosable one.
+ * as a branch-to-self or a re-fault loop: no output, no reset, and — because
+ * this board's watchdog does not fire after the kexec hand-over — a power
+ * cycle, which wipes the DRAM region holding everything printed up to that
+ * point. A diagnosed failure becomes an undiagnosable one.
  *
  * With it, the same fault prints its cause and resets warm, which is the one
  * kind of reset the black box survives.
  *
- * The table is installed from main() before hypervisor_init runs, so there is
- * no window where the library's version is the live one after the drop. A
+ * The EL1 table is installed from main() before hypervisor_init runs, so there
+ * is no window where the library's version is the live one after the drop. A
  * secondary core gets the same table from board_smp_adjust_num, which the
  * library calls after writing vbar_default (lib/aarch64/smp_start.S:44-45,
- * :66) and before that core's own hypervisor_init drops it (:73).
+ * :66) and before that core's own hypervisor_init (:73). Both calls precede
+ * hypervisor_init by construction, so they reach the real VBAR_EL1 in every
+ * mode, never VBAR_EL2 through the E2H alias.
  *
- * Two guards sit in front of the C handler, because a handler that faults
+ * Two guards sit in front of each C handler, because a handler that faults
  * while reporting a fault would otherwise loop without a word:
  *
  *   - MMU on. Once vstart has enabled translation, TTBR0 maps only the startup
@@ -51,12 +59,18 @@
  * from EL1 because at_el2 leaves HCR_EL2.TSC clear
  * (lib/aarch64/_start_el1.S:148-156), and from EL2 unconditionally.
  *
- * The EL2 table below is installed only by secondary cores, from
- * t234_ap_entry, before they run any other EL2 code. CPU0 keeps the shim's EL2
- * vectors: their common path needs registers the shim's own body sets up
- * (orin-native/shim/t234-shim.S:102-138), so they cannot be shared.
+ * The EL2 table is installed on every secondary by t234_ap_entry, and on CPU0
+ * by board_init (main.c) in every -Q mode. CPU0 does not keep the shim's EL2
+ * vectors: their printer depends on x21-x23 (orin-native/shim/t234-shim.S:
+ * 404-435), which _main's own code has already reused by the time it calls
+ * board_init, and their page lies outside the only low mapping once vstart
+ * turns the MMU on (lib/aarch64/init_mmu.c:159-161).
  *
- * Nothing in this file has run on a secondary core.
+ * What has run on the board: M1 and M2 installed the EL1 table on every core
+ * they used and the EL2 table on the five secondaries, all under -Q disable.
+ * No fault reached either handler in any of those runs, so the handlers
+ * themselves have not run. t234_install_el2_vectors is new for M1b and has not
+ * run.
  */
 
 #include <aarch64/callout.ah>
@@ -67,8 +81,11 @@
 /*
  * void t234_install_el1_vectors(void)
  *
- * Called from C at EL2, before the library drops. Writing VBAR_EL1 from EL2 is
- * allowed and is the only chance to get ahead of the drop.
+ * Called from C at EL2, before the library drops: from main() on CPU0 and from
+ * board_smp_adjust_num on a secondary. Writing VBAR_EL1 from EL2 is allowed and
+ * is the only chance to get ahead of the drop. Both callers run before
+ * hypervisor_init, while E2H is clear, so this is the real VBAR_EL1; under
+ * el2-host the table is then never used.
  */
 	.globl	t234_install_el1_vectors
 t234_install_el1_vectors:
@@ -76,6 +93,28 @@ t234_install_el1_vectors:
 	msr	vbar_el1, x0
 	isb
 	ret
+
+/*
+ * void t234_install_el2_vectors(void)
+ *
+ * Called from board_init on CPU0, first thing in _main (lib/_main.c:126),
+ * with cstart's stack in place (lib/aarch64/cstart.S:88-90). Replaces the
+ * shim's EL2 vectors. Their printer depends on x21-x23
+ * (orin-native/shim/t234-shim.S:404-435), and _main's own code has already
+ * reused x21 and x22 by the time it calls board_init. Their page also leaves
+ * the only low mapping once vstart turns the MMU on
+ * (lib/aarch64/init_mmu.c:159-161).
+ * At EL1 (never on this board: kexec enters at EL2) it does nothing.
+ */
+	.globl	t234_install_el2_vectors
+t234_install_el2_vectors:
+	mrs	x9, CurrentEL
+	cmp	x9, #(2 << 2)
+	b.ne	1f
+	adr	x9, t234_el2_vectors
+	msr	vbar_el2, x9
+	isb
+1:	ret
 
 /*
  * Each slot records which vector it was and branches to the common handler.
@@ -125,12 +164,15 @@ t234_el1_common:
 	b	t234_el1_fault		/* noreturn: prints, then resets */
 
 /*
- * EL2 vectors for secondary cores. Same shape as the EL1 table; the handler
- * also receives SPSR_EL2, which says where the exception came from.
+ * EL2 vectors for every core: each secondary from t234_ap_entry, CPU0 from
+ * board_init. Same shape as the EL1 table; the handler also receives SPSR_EL2,
+ * which says where the exception came from.
  *
- * The stack a handler here uses is the board's small one from ap_entry.S until
- * smp_start installs the library's; after the drop to EL1, SP_EL2 keeps the
- * library stack value it had.
+ * The stack a handler here uses: on CPU0, cstart's
+ * (lib/aarch64/cstart.S:88-90); on a secondary, the board's small one from
+ * ap_entry.S until smp_start installs the library AP stack. Under -Q disable
+ * the core then drops to EL1 and SP_EL2 keeps the value it had; under el2-host
+ * it stays the live stack until procnto.
  */
 	.macro	VEC2 idx
 	.balign	0x80
@@ -145,7 +187,7 @@ t234_el2_vectors:
 	VEC2 1
 	VEC2 2
 	VEC2 3
-	VEC2 4				/* Current EL, SPx — the trampoline and at_el2 */
+	VEC2 4				/* Current EL, SPx — trampoline, at_el2, el2-host startup */
 	VEC2 5
 	VEC2 6
 	VEC2 7
@@ -160,8 +202,14 @@ t234_el2_vectors:
 
 	.balign	0x80
 t234_el2_common:
+	/*
+	 * SCTLR_EL2.M set: under el2-host vstart's sctlr_el1 write lands here
+	 * through E2H (lib/aarch64/vstart.S:86-90). TTBR0 then maps only the
+	 * startup image (lib/aarch64/init_mmu.c:159-161), so MMIO is unmapped:
+	 * reset without printing.
+	 */
 	mrs	x9, sctlr_el2
-	tbnz	x9, #0, t234_fault_reset	/* EL2 MMU on: not this startup's state */
+	tbnz	x9, #0, t234_fault_reset
 	adr	x9, t234_fault_nest
 	ldr	w10, [x9]
 	cbnz	w10, t234_fault_reset

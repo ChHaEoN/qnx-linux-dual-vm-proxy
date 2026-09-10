@@ -29,8 +29,12 @@
  * M2 adds two things, both there to turn a silent secondary-core failure into a
  * named one: a probe of the redistributor frames on CPU0 before any core
  * depends on them, and a wrapper around the library's per-CPU GIC routine that
- * wakes the redistributor first and checks the result afterwards. Neither has
- * run on a secondary core.
+ * wakes the redistributor first and checks the result afterwards. M2 ran both
+ * on six cores under -Q disable.
+ *
+ * M1b adds a step 8 to the wrapper, under -Q enable,el2-host only: a check that
+ * the core is the VHE host procnto will run on, and the INTID 28 probe
+ * (hvtimer.c). Step 8 has not run on the board.
  */
 
 #include "t234_startup.h"
@@ -64,8 +68,8 @@ t234_frame_owner(unsigned const f)
 }
 
 /*
- * Read the redistributor frames the library's walk is about to read, on the one
- * CPU whose faults are reported, before any secondary depends on them.
+ * Read the redistributor frames the library's walk is about to read, on CPU0,
+ * before any secondary depends on them.
  *
  * The walk for the highest-numbered CPU the image starts reads frames 0 up to
  * that CPU's frame (lib/aarch64/gic_v3.c:1343-1354), so that is the range read
@@ -138,9 +142,10 @@ t234_gicr_probe(void)
 /*
  * The per-CPU GIC routine as the library calls it: from init_one_cpuinfo
  * (lib/aarch64/init_cpuinfo.c:306-308), on CPU0 during init_cpuinfo and on each
- * secondary itself, at EL1 with the MMU off, before that secondary clears
- * cpu_starting (lib/aarch64/smp_start.S:83-90). On a secondary CPU0 is silent,
- * so printing here is safe.
+ * secondary itself — at EL1 under -Q disable, or at EL2 with E2H and TGE set
+ * under el2-host, MMU off in both — before that secondary clears cpu_starting
+ * (lib/aarch64/smp_start.S:83-90). On a secondary CPU0 is silent, so printing
+ * here is safe.
  *
  * On CPU0 the final check also confirms that kexec handed over on affinity 0,
  * before any CPU_ON is issued.
@@ -174,8 +179,8 @@ t234_gic_cpu_init(unsigned const cpu)
 	 * wait for ChildrenAsleep to clear. The board does that first, against a
 	 * real deadline, so when it has run the library sees ProcessorSleep clear
 	 * and skips its branch. Its ASSERT stays reachable only when this step was
-	 * skipped. Whether WAKER is writable from Non-secure EL1 on this GIC is
-	 * unknown; if it is RAZ/WI, this reads 0 and does nothing.
+	 * skipped. Whether WAKER is writable from Non-secure EL1 or EL2 on this GIC
+	 * is unknown; if it is RAZ/WI, this reads 0 and does nothing.
 	 *
 	 * The affinity formula is the library's (gic_v3.c:1340). The frame comes
 	 * from the board table, and is used only if it really holds this core.
@@ -268,6 +273,52 @@ t234_gic_cpu_init(unsigned const cpu)
 	        cpu, mpidr, frame, idx, sgi1r, waker, (unsigned)d->waker_fw, isen,
 	        act, act_state, (unsigned)aa64_sr_rd32(S3_0_C12_C9_0));
 	d->stage = T234_STAGE_UP;
+
+	/*
+	 * 8. el2-host only: prove this core is the VHE host procnto will run on,
+	 * and that the clock interrupt the library gave procnto is wired to it.
+	 * Runs after this core's own hypervisor_init (CPU0: main.c; a secondary:
+	 * lib/aarch64/smp_start.S:73 before :84), so E2H and TGE are set and every
+	 * CNTV_* access procnto makes lands on CNTHV_*_EL2, whose PPI the library
+	 * named INTID 28 (lib/aarch64/init_qtime_v8gt.c:56-57) without checking it.
+	 *
+	 * Placed after the up line, so that 0x43 keeps M2's meaning and the stages
+	 * stay in time order. Under -Q disable and el1-host nothing here runs or
+	 * prints. lsp.qtime is allocated: init_qtime runs before init_cpuinfo on
+	 * CPU0 (main.c), long before any secondary starts.
+	 */
+	if (hypervisor_get_required_flags() == (HYP_FLAG_ENABLED | HYP_FLAG_EL2_HOST)) {
+		unsigned const el = (unsigned)(aa64_sr_rd64(CurrentEL) >> 2) & 3u;
+		_Uint64t       hcr;
+		int            v;
+
+		if (el != 2) {
+			crash("t234: cpu %d el2-host requested but running at EL%d, stopping\n", cpu, el);
+		}
+		hcr = aa64_sr_rd64(hcr_el2);
+		if ((hcr & T234_HCR_E2H) == 0 || (hcr & T234_HCR_TGE) == 0) {
+			crash("t234: cpu %d el2-host requested but HCR_EL2=%L: E2H and TGE must both be set, stopping\n", cpu, hcr);
+		}
+		kprintf("t234: cpu %d el2-host EL2 HCR_EL2=%L\n", cpu, hcr);
+
+		d->stage = T234_STAGE_HVT;
+		if (t234_hvt_policy == T234_HVT_OFF) {
+			kprintf("t234: hvtimer cpu %d probe off (-toff): clock INTID %d not checked\n",
+			        cpu, (int)lsp.qtime.p->intr);
+		} else {
+			/*
+			 * Under -tstop the probe crashes itself on anything but wired, so
+			 * that the crash text can carry its reason (hvtimer.c). Only
+			 * -tcontinue comes back here with another verdict.
+			 */
+			v = t234_hvt_probe(cpu, sgi);
+			if (v != T234_HVT_WIRED && t234_hvt_policy == T234_HVT_CONTINUE) {
+				kprintf("t234: hvtimer cpu %d continuing despite verdict=%s (-tcontinue)\n",
+				        cpu, t234_hvt_verdict_name(v));
+			}
+		}
+		d->stage = T234_STAGE_HVT_DONE;
+	}
 }
 
 void
@@ -294,7 +345,11 @@ init_intrinfo(void)
 	 */
 	gic_v3_use_mm_reg_callouts(NULL_PADDR, 0);
 
-	/* Before the library touches a frame; CPU0's EL1 vectors are live (main.c). */
+	/*
+	 * Before the library touches a frame. CPU0's fault vectors are live: the
+	 * board EL1 table under -Q disable, the board EL2 table under el2-host
+	 * (main.c).
+	 */
 	t234_gicr_probe();
 
 	gic_v3_initialize();

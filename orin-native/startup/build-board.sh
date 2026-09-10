@@ -105,19 +105,32 @@ OUT="$STARTUP/boards/$BOARD/aarch64/le/startup-$BOARD"
 [ -f "$OUT" ] || { echo "no output at $OUT" >&2; exit 1; }
 echo "== built $OUT ($(stat -c %s "$OUT") bytes)"
 
+# Informational, never a failure: the SDP libc.a members the link pulled in.
+# They are the only code in this startup whose source is in neither this repo
+# nor the BSP's library, and under -Q enable,el2-host an FP/SIMD instruction in
+# one of them would trap at EL2 (m1b-design.md §1 C12), so a new dependency
+# should show up here, at build time.
+MAP="$OUT.map"
+if [ -f "$MAP" ]; then
+	echo "== SDP libc.a members in the link (informational)"
+	{ grep -o 'libc\.a([^)]*)' "$MAP" || true; } | sort -u | sed 's/^/   /'
+fi
+
 echo "== symbol gate"
 fail=0
 # psci_smp_start is not in the list any more: board_smp_start issues CPU_ON
 # itself (with t234_ap_entry as the entry point), so nothing references the
 # library's version and it need not be linked. The M2 pieces are, and a board
 # object silently dropped from the link would leave the library's unbounded
-# paths in place with no other symptom.
+# paths in place with no other symptom. M1b adds CPU0's EL2 vector install, the
+# INTID 28 probe, and board_init, the hook that does the install.
 for s in display_char_tcu poll_key_tcu break_detect_tcu init_tcu put_tcu \
          psci_smc psci_cpu_id gic_v3_set_paddr_range \
          gic_v3_initialize hyp_enable_el2_host hypervisor_init \
          board_smp_start board_smp_num_cpu init_intrinfo cpuid_a78ae \
          t234_ap_entry t234_transfer_aps t234_el2_vectors \
-         t234_gic_cpu_init t234_gicr_probe; do
+         t234_gic_cpu_init t234_gicr_probe \
+         t234_install_el2_vectors t234_hvt_probe board_init; do
 	if ! ntoaarch64-nm "$OUT" | awk -v s="$s" '$NF==s' | grep -q .; then
 		echo "  MISSING $s" >&2
 		fail=1
@@ -136,6 +149,29 @@ n=$(ntoaarch64-nm "$OUT" | awk '$NF=="psci_cpu_id" && $(NF-1) ~ /[TtWD]/' | wc -
 # reset it, and a power cycle would wipe the message it had just printed.
 n=$(ntoaarch64-nm "$OUT" | awk '$NF=="crash_done" && $(NF-1) ~ /[TtWD]/' | wc -l)
 [ "$n" = "1" ] || { echo "  crash_done defined $n times, expected 1" >&2; fail=1; }
+
+# And board_init (M1b), which installs the board EL2 vectors on CPU0. If the
+# library's empty member won instead, CPU0 would silently keep the shim's
+# vectors, and the only symptom would be a silent hang under -Q enable,el2-host.
+# A count of one cannot tell which definition won — before M1b the library's
+# was the only one — so the link map must also not have pulled the library's
+# board_init.o.
+n=$(ntoaarch64-nm "$OUT" | awk '$NF=="board_init" && $(NF-1) ~ /[TtWD]/' | wc -l)
+[ "$n" = "1" ] || { echo "  board_init defined $n times, expected 1" >&2; fail=1; }
+if [ ! -f "$MAP" ]; then
+	echo "  no link map at $MAP: cannot check which board_init was linked" >&2
+	fail=1
+elif grep -q 'libstartup\.a(board_init\.o)' "$MAP"; then
+	echo "  the library's board_init.o is in the link: CPU0 would keep the shim's EL2 vectors" >&2
+	fail=1
+fi
+
+# The stub that only printed "not implemented" is gone from wdt.c; the probe is
+# aarch64/hvtimer.c. A stale object must not put the stub back.
+if ntoaarch64-nm "$OUT" | awk '$NF=="t234_probe_hv_timer"' | grep -q .; then
+	echo "  t234_probe_hv_timer is linked in: a stale wdt.o?" >&2
+	fail=1
+fi
 
 # No firmware-entry code should be linked in: this startup is entered from the
 # shim, not from UEFI. The three uefi_*_f entries are weak hook pointers the

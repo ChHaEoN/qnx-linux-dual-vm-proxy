@@ -75,13 +75,15 @@
 #define T234_UARTI_BASE     0x031D0000u
 #define T234_UARTI_SHIFT    2
 
-/* ---- TKE watchdogs. WDT0 is armed by systemd at two minutes and is counting
- * when the payload takes over — verified by reading WDTCR/WDTSR on the running
- * board, not inferred from the device tree, whose watchdog node is disabled and
- * is a different node from the one the driver actually binds.
+/* ---- TKE watchdogs. WDT0 is configured by systemd at two minutes when Linux
+ * hands over — read from WDTCR/WDTSR on the running board, not inferred from
+ * the device tree, whose watchdog node is disabled and is a different node from
+ * the one the driver actually binds.
  *
- * That is free unattended recovery and a hard two-minute budget at the same
- * time, which is why -W exists. */
+ * But the M0 hang test showed it does not fire after the kexec hand-over
+ * (results/orin-native-port/20260909T1100Z/m0-hang-watchdog.md): a hang needs a
+ * power cycle, which also empties the black box. -W stays as insurance and for
+ * parity. */
 #define T234_WDT0_BASE      0x02190000u
 #define T234_WDT1_BASE      0x021A0000u
 #define T234_WDT_CR         0x00u
@@ -104,9 +106,9 @@
  * directly out of memory on the running board, not inferred.
  *
  * This is the only output channel that does not depend on a wire nobody has
- * attached yet. It survives a PSCI reset and an exception the shim's vectors
- * turn into one; it does NOT survive a power cycle, so anything that hangs
- * takes its own evidence with it.
+ * attached yet. It survives a PSCI reset, which every board fault handler ends
+ * in; it does NOT survive a power cycle, so anything that hangs takes its own
+ * evidence with it.
  *
  * Header is three little-endian words — signature, write cursor, length —
  * followed by the data. startup appends after whatever the shim left rather
@@ -116,9 +118,9 @@
 #define T234_BB_MAP         0x10000u         /* map 64 KiB: -vvv and the syspage fit */
 #define T234_BB_LIMIT       (T234_BB_MAP - 16u)
 
-/* ---- The shim. kexec places our 8 KiB page here and the vectors it installs
- * stay live through startup, so this range must never be handed to the RAM
- * allocator. */
+/* ---- The shim. kexec places our 8 KiB page here. Its EL2 vectors are live on
+ * CPU0 from the jump until board_init replaces them (main.c), so the range must
+ * never be handed to the RAM allocator. */
 #define T234_SHIM_BASE      0x80080000ull
 #define T234_SHIM_SIZE      0x2000ull
 
@@ -156,16 +158,35 @@
 #define T234_DIAG_WAKER_FW      88
 #define T234_DIAG_SIZE          96
 
-/* Stages, in the order a healthy secondary passes them. The owner of each
- * write is the CPU in the comment; a timeout prints the last one reached. */
+/* Stages. The owner of each write is the CPU in the comment, "core" meaning the
+ * core that is coming up, CPU0 included; a timeout or an EL2 fault line prints
+ * the last one reached.
+ *
+ * cpu 0 writes the boot stages 0x01-0x0a from board_init and main(), and passes
+ * 0x40-0x45 in the GIC wrapper during init_cpuinfo, so its numbers are not
+ * monotonic. A secondary passes 0x10-0x70 in the order below, with 0x44/0x45
+ * only under -Q enable,el2-host. The boot stages stay below 0x10, so they can
+ * never be mistaken for a secondary's. */
+#define T234_STAGE_BOOT_VECTORS 0x01    /* CPU0: board_init, board EL2 vectors in    */
+#define T234_STAGE_BOOT_OPTIONS 0x02    /* CPU0: main, after select_debug            */
+#define T234_STAGE_BOOT_HYP     0x03    /* CPU0: before hypervisor_init(0)           */
+#define T234_STAGE_BOOT_SMP     0x04    /* CPU0: before init_smp                     */
+#define T234_STAGE_BOOT_MMU     0x05    /* CPU0: before init_mmu                     */
+#define T234_STAGE_BOOT_INTR    0x06    /* CPU0: before init_intrinfo                */
+#define T234_STAGE_BOOT_QTIME   0x07    /* CPU0: before init_qtime                   */
+#define T234_STAGE_BOOT_CPUINFO 0x08    /* CPU0: before init_cacheattr, init_cpuinfo */
+#define T234_STAGE_BOOT_SYSPRIV 0x09    /* CPU0: before init_system_private (CPU_ON) */
+#define T234_STAGE_BOOT_PRINT   0x0a    /* CPU0: before print_syspage                */
 #define T234_STAGE_CPU_ON       0x10    /* CPU0: CPU_ON issued                       */
 #define T234_STAGE_TRAMP_IN     0x20    /* AP:   t234_ap_entry reached               */
 #define T234_STAGE_TRAMP_NORM   0x21    /* AP:   EL2 state normalised (EL2 entry)    */
 #define T234_STAGE_EL1_VECTORS  0x30    /* AP:   board_smp_adjust_num, vectors in    */
-#define T234_STAGE_GIC_WAKE     0x40    /* AP:   GIC wrapper entered, wake step      */
-#define T234_STAGE_GIC_LIB      0x41    /* AP:   library gicc_init called            */
-#define T234_STAGE_GIC_CHECK    0x42    /* AP:   library returned, board checks      */
-#define T234_STAGE_UP           0x43    /* AP:   "cpu N up" printed                  */
+#define T234_STAGE_GIC_WAKE     0x40    /* core: GIC wrapper entered, wake step      */
+#define T234_STAGE_GIC_LIB      0x41    /* core: library gicc_init called            */
+#define T234_STAGE_GIC_CHECK    0x42    /* core: library returned, board checks      */
+#define T234_STAGE_UP           0x43    /* core: "cpu N up" printed                  */
+#define T234_STAGE_HVT          0x44    /* core: el2-host check passed, probe next   */
+#define T234_STAGE_HVT_DONE     0x45    /* core: probe returned, policy let it go on */
 #define T234_STAGE_HANDSHAKE    0x50    /* CPU0: saw cpu_starting == 0               */
 #define T234_STAGE_RELEASED     0x60    /* CPU0: released towards smp_spin          */
 #define T234_STAGE_PARKED       0x70    /* CPU0: saw smp.pending == 0                */
@@ -260,9 +281,10 @@ t234_cps(void)
 
 /*
  * A deadline on the virtual counter. at_el2 zeroes CNTVOFF_EL2
- * (lib/aarch64/_start_el1.S:180) and sets CNTHCTL_EL2 to 3 (:167-168), so at
- * EL1 this reads the physical count without a trap, on CPU0 and on every
- * secondary. 64 bits at 31.25 MHz do not wrap in any run this port will make.
+ * (lib/aarch64/_start_el1.S:180), so this reads the physical count. At EL1
+ * (-Q disable) CNTHCTL_EL2=3 (:167-168) lets it through; at EL2 (el2-host) the
+ * counter never traps. That holds on CPU0 and on every secondary. 64 bits at
+ * 31.25 MHz do not wrap in any run this port will make.
  */
 static __inline__ _Uint64t
 t234_deadline(unsigned const secs)
@@ -280,7 +302,6 @@ t234_expired(_Uint64t const dl)
 void         t234_init_raminfo(void);
 void         t234_wdt_report(void);
 void         t234_wdt_apply(const char *policy);
-void         t234_probe_hv_timer(void);
 void         t234_install_el1_vectors(void);
 void         init_tcu(unsigned channel, const char *init, const char *defaults);
 void         put_tcu(int c);
@@ -293,6 +314,33 @@ void         t234_gic_cpu_init(unsigned cpu);
 void         t234_el2_fault(unsigned long idx, unsigned long esr,
                             unsigned long elr, unsigned long far,
                             unsigned long spsr);
+
+/* ---- M1b: CPU0's EL2 vectors from board_init (main.c), and the el2-host check
+ * and INTID 28 probe the GIC wrapper runs on every core (aarch64/hvtimer.c).
+ *
+ * HCR_EL2 bits hyp_enable_el2_host sets (lib/aarch64/hypervisor_enable.S:30-31). */
+#define T234_HCR_E2H            (1ull << 34)
+#define T234_HCR_TGE            (1ull << 27)
+
+/* -t policy for a probe verdict other than wired. stop is the default. */
+#define T234_HVT_STOP           0
+#define T234_HVT_CONTINUE       1
+#define T234_HVT_OFF            2
+
+/* Probe verdicts, printed as wired, absent and inconclusive. */
+#define T234_HVT_WIRED          0
+#define T234_HVT_ABSENT         1
+#define T234_HVT_INCONCLUSIVE   2
+
+/*
+ * Defined in main.c, in .data, initialised to T234_HVT_STOP. CPU0 sets it from
+ * -t before any secondary exists; every core reads it in the GIC wrapper.
+ */
+extern int   t234_hvt_policy;
+
+void         t234_install_el2_vectors(void);
+int          t234_hvt_probe(unsigned cpu, paddr_t sgi);
+const char  *t234_hvt_verdict_name(int verdict);
 
 extern struct callout_rtn display_char_tcu;
 extern struct callout_rtn poll_key_tcu;
