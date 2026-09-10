@@ -8,6 +8,54 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 
 ---
 
+
+## 2026-09-10 — M1: the QNX kernel ran natively on the Jetson Orin Nano
+
+The first native QNX image booted on the board, entered by kexec from L4T with no
+QEMU underneath, and was watched live over the J14 debug header. The kernel
+printed `T234 M1: procnto up` through the TCU console callout this port wrote. So
+the question Phase 3b was opened to answer at its first milestone — does QNX run
+on Tegra234 at all — is answered yes. Record:
+[m1-first-procnto.md](../results/orin-native-port/20260909T1100Z/m1-first-procnto.md);
+full capture:
+[orin-native-m1-first-procnto.log](../logs/sample-boot/orin-native-m1-first-procnto.log).
+
+What came up, each line in the capture: the MMU; the GIC-600 identified as
+arch v3.0 with 960 SPIs; **the GIC re-initialised cleanly against the controller
+Linux had left enabled** (`Add SPI entry 0 for vectors 32 -> 991, Ok`), which the
+pre-flight review had judged the single most likely place to hang; the A78AE with
+its full cache topology; the redistributor frame found by affinity; the IFS
+unpacked; a complete system page with the 31.25 MHz timer, the console callouts,
+the RAM range and the machine string; and the hand-off to procnto.
+
+What did not: user space. Every program failed to start, on two buildfile errors
+rather than kernel ones. errno 83, `ELIBACC`, because the image carried the
+`/usr/lib/ldqnx-64.so.2` symlink but not the runtime linker it points at; and
+errno 2, `ENOENT`, because `devc-pty` sat in `/sbin` outside `PATH=/proc/boot`.
+With `shutdown` also unable to start, the image could not reset itself as
+designed, and the board stayed in QNX until the power was pulled — the case the
+serial console had been added for an hour earlier, and the reason nothing of the
+run was lost.
+
+Two things this closes beyond the headline. The shim's register bank came out
+identical to the M0 run, so the hand-over is repeatable rather than a one-off. And
+the library printed the boot CPU's redistributor SGI frame, `0x0f450000`, which
+was the one missing input that had kept the EL2 virtual-timer probe unimplemented.
+
+What it does not show: anything above the kernel — no resource manager, no shell,
+no process list — and only one CPU at EL1. SMP and the hypervisor host at EL2 are
+untouched, and no number exists.
+
+**Getting the console working took its own detour, recorded in
+[serial-console-wiring.md](../results/orin-native-port/20260909T1100Z/serial-console-wiring.md).**
+I first recommended the 40-pin header because its wiring could be checked from
+Linux; three UARTs transmitting at once put nothing on its pin 8, the kernel showed
+`UART1_TX_PR2` as `MUX UNCLAIMED`, and the carrier specification plus a known-good
+adapter left the unrouted pad as the only cause. J14 carries the real console, and
+the first capture off it was UEFI's own `L4TLauncher: Attempting Direct Boot`,
+proving the wiring with none of this port's code involved. The carrier spec also
+settled the long-open pin question: J14 pin 4 is `UART2_TXD`.
+
 ## 2026-09-09 — QHV leg on the Orin: the hang was QEMU 6.2, not the host; the leg now boots on real ARM silicon — and a review found what the previous day's write-up got wrong
 
 Two threads, kept together because the second corrects the first. An
