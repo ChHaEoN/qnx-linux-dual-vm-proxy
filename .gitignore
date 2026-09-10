@@ -88,3 +88,7 @@ orin-native/**/startup-t234-orin-nano
 # the two user-space tools are source here; the built binaries are outputs
 orin-native/tools/tcu-cat
 orin-native/tools/stamp
+
+# mkifs [+keeplinked] drops symbol files next to the buildfile; they are derived
+# from QNX binaries and must never be committed.
+*.sym
