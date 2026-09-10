@@ -55,8 +55,12 @@
     devc-pty
 
     tcu-cat -m "T234 M1: user space up"
-    pidin info | tcu-cat
-    pidin | tcu-cat
+    # No pipes: an IFS script is not a shell. The first user-space run passed the
+    # '|' and 'tcu-cat' to pidin as arguments ('pidin: | invalid or ambiguous
+    # shorthand'). The pipe was never needed anyway - a script's stdout is the
+    # console, so pidin's output reaches the wire directly.
+    pidin info
+    pidin
     # A checksum of a known file would have been the cheapest end-to-end proof
     # that the console reports what actually ran, but this SDP ships no cksum:
     # cat, ls, echo and cksum are ksh built-ins in QNX 8, not separate
@@ -82,7 +86,12 @@
     # which then hands us everything that was printed. M1 is a report, not a
     # session; the session comes when there is a wire to watch it on.
     tcu-cat -m "T234 M1: resetting so the log can be recovered"
-    shutdown -b
+    # -S reboot, NOT -b. shutdown's own usage says -b is 'shut down but do not
+    # reboot', equivalent to -S system. The first user-space run used -b, printed
+    # 'It is now safe to reboot your computer' and halted, which cost a power
+    # cycle and the black box with it. -S reboot is the default and reaches the
+    # board's PSCI reset callout, which is warm and keeps the log.
+    shutdown -S reboot
 }
 
 [type=link] /usr/lib/ldqnx-64.so.2=/proc/boot/ldqnx-64.so.2

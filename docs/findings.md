@@ -56,6 +56,20 @@ the first capture off it was UEFI's own `L4TLauncher: Attempting Direct Boot`,
 proving the wiring with none of this port's code involved. The carrier spec also
 settled the long-open pin question: J14 pin 4 is `UART2_TXD`.
 
+**And user space came up the same morning.** With the runtime linker in the image
+and `devc-pty` on `PATH`, the next run printed `T234 M1: user space up` from
+`tcu-cat`, and a stock `pidin info` reported **QNX Release 8.0.0 on a Cortex-A78ae,
+975 MB free of 992 MB, 3 processes and 14 threads** — the operating system itself
+confirming the RAM range the board code states rather than discovers. M1 is met:
+QNX, kernel and user space, runs natively on this board. Two script errors were
+left, neither in QNX nor in the board code: an IFS script is not a shell, so
+`pidin info | tcu-cat` passed the pipe to `pidin` as an argument; and `shutdown -b`
+turned out, by `shutdown`'s own embedded usage, to mean "do not reboot", so the
+image halted at `Shutdown Complete` instead of resetting and the board needed the
+power pulled. Both are fixed — no pipes, `shutdown -S reboot` — and the capture is
+[orin-native-m1-userspace.log](../logs/sample-boot/orin-native-m1-userspace.log).
+Still one CPU at EL1: SMP, the hypervisor host and any number are ahead.
+
 ## 2026-09-09 — QHV leg on the Orin: the hang was QEMU 6.2, not the host; the leg now boots on real ARM silicon — and a review found what the previous day's write-up got wrong
 
 Two threads, kept together because the second corrects the first. An

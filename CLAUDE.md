@@ -332,8 +332,14 @@ Quick summary for context:
   the next deliverable. TCG here is a hard requirement (QHV needs EL2 →
   nested virt, which ARM KVM lacks on A78AE), not the GICv3 blockage —
   do not conflate them.
-- Phase 3b — **Native QNX on the Orin Nano — kicked off 2026-09-09, nothing
-  booted yet.** ADR-003 option (B) accepted by the owner: get a hardware-timed
+- Phase 3b — **Native QNX on the Orin Nano — M1 met 2026-09-10: QNX 8.0.0,
+  kernel and user space, ran natively on the board.** Entered by kexec from L4T
+  with no QEMU and no NVIDIA BSP, watched live over the J14 debug header, and
+  confirmed by a stock `pidin info` reporting Release 8.0.0 on a Cortex-A78ae with
+  975 MB free of 992 MB. Before that, M0 (the shim alone) closed the plan's four
+  highest-ranked unknowns, starting with whether kexec hands over at EL2. Still one
+  CPU at EL1: SMP (M2), the hypervisor host at EL2 (M1b/M3) and any number are
+  ahead. Earlier state, kept for the record: ADR-003 option (B) accepted by the owner: get a hardware-timed
   QHV number from the board itself rather than a Pi 4B or AWS metal. Plan,
   claims register and milestone ladder M0-M4 in
   [docs/orin-native-port-plan.md](docs/orin-native-port-plan.md); the harvest,

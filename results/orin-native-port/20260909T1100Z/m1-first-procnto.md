@@ -97,3 +97,43 @@ manager, no shell, no process list. It ran on one CPU with `-Q disable`: SMP (M2
 and the hypervisor host at EL2 (M1b, M3) are untouched. No number exists, and this
 is a functional result, which the licence treats as evaluation output until the
 professor is consulted.
+
+## Run 2, the same morning: user space came up
+
+With the runtime linker added and `devc-pty` moved onto `PATH`, the next image got
+past the kernel. Captured live:
+[logs/sample-boot/orin-native-m1-userspace.log](../../../logs/sample-boot/orin-native-m1-userspace.log).
+
+```
+T234 M1: procnto up
+T234 M1: user space up
+CPU:AARCH64 Release:8.0.0  FreeMem:975MB/992MB BootTime:Jan 01 00:00:00 GMT 1970
+Processes: 3, Threads: 14
+Processor1: 1091556385 Cortex-A78ae 0MHz FPU
+```
+
+`tcu-cat` ran, which means dynamic linking now works end to end. `pidin info`, a
+stock QNX utility, reported **QNX 8.0.0** on a **Cortex-A78ae** with **975 MB free
+of the 992 MB** the board declared — the RAM range the board code states rather
+than discovers, confirmed by the operating system using it. `devc-pty` started and
+`/dev/ptyp0` appeared, since neither error from run 1 recurred. The `0MHz` is
+startup not reporting a CPU frequency, which it has no source for here; cosmetic.
+
+**So M1 is met: QNX, kernel and user space, runs natively on this board.**
+
+Two script errors remained, neither a fault in QNX or in the board code:
+
+- `pidin: '|' invalid or ambiguous shorthand`, twice. An IFS script is not a shell,
+  so `pidin info | tcu-cat` handed `|` and `tcu-cat` to `pidin` as arguments. The
+  pipe was never needed: a script's stdout is the console.
+- The run ended at QNX's own `Shutdown Complete` and `It is now safe to reboot your
+  computer`, and stayed there. `shutdown`'s embedded usage, read with the SDK's host
+  `use` tool, says `-b` means "shut down but do not reboot", equivalent to
+  `-S system`. So the image halted instead of resetting, and the board needed the
+  power pulled. The live capture meant nothing was lost, but this is the path that
+  would have erased the black box had there been no wire.
+
+Both are fixed in the buildfile: no pipes, and `shutdown -S reboot`, which reaches
+the board's PSCI reset callout — a warm reset, which preserves the log.
+
+Still not shown: one CPU only, at EL1, with no hypervisor host and no number.
