@@ -1,0 +1,687 @@
+# Curated artefact -- Phase 3b, M2 run R4: QNX 8.0.0 on all six Cortex-A78AE cores of the Jetson Orin Nano (2026-09-10).
+# Image m2-p6: startup-t234-orin-nano -vvv -P6 -Q disable -m992M -Wkeep -Dtcu, kimg sha256 prefix 5cae65e821edcdb9c2355310,
+# entered by kexec from L4T R36.4.7. PART 1 was captured live over J14 (TCU, UART2_TXD pin 4), FT232R adapter, 115200 8N1, from
+# Linux's kexec line to the first firmware lines after the reset. PART 2 is /sys/fs/pstore/console-ramoops-0 read on the next boot.
+# RESULT: every M2 pass criterion held in this one run. Each secondary entered at EL2 through PSCI CPU_ON and printed its firmware
+# EL2 registers before normalisation. 't234: cpu N up' appears for all six cores with the expected MPIDR, redistributor frame
+# (frames 0-3 for cluster 0, 6 and 7 for cluster 1; frames 4 and 5 read without fault and hold the two absent cores' affinities),
+# index and IPI routing value. All six parked in smp_spin, the kernel's gic_map and gicr_map carry the same six rows, pidin info
+# lists six processors, and smpcheck printed 'SMPCHECK CENSUS PASS' and 'SMPCHECK RESULT PASS cpus=6/6 secs=60 reasons=none'.
+# The image then warm-reset the board itself (PMC reset reason MAINSWRST) and L4T answered again 149 s after the launch.
+# OBSERVED, NOT A CRITERION: both cluster-1 cores ran smpcheck's busy loop at about 12% of the cluster-0 rate, the same on both and
+# in the previous run. The cause is not established; CPU frequency is uncontrolled in these runs.
+# NOT SHOWN: anything under -Q enable (every core ran at EL1, no hypervisor host); that the kernel console callout is SMP-safe;
+# direct IPI delivery; any timing figure; repeatability beyond this run.
+# ---------------------------------------------------------------------------
+
+=== PART 1: live serial console, kexec to the first firmware lines ===
+
+[   83.756740] kexec_core: Starting new kernel
+
+T234-SHIM EL=2 HCR=0000000488000000 SCTLR2=0000000030400800 MMFR1=0000000010212122 MPIDR=0000000081000000 CNTFRQ=0000000001dcd650 CNTHCTL=0000000000000cb6 CNTHPCTL=0000000000000005 MDCR=0000000000000006 WDT0=0000000000710010/0000000000000010 WDT1=0000000000700000/0000000000000000 TXMB=0000000000000000 PC=0000000080080000 X0=0000000270400000 DTBMAGIC=00000000edfe0dd0
+NORMALISED TCUDROPS=0000000000000000
+JUMP
+
+t234: WDT0 CR=00710010 SR=00000010  WDT1 CR=00700000 SR=00000000
+t234: WDT0 is armed - this run has about two minutes unless -Wdisable
+Hypervisor support disabled
+MMU: 16-bit ASID 48-bit PA TCR_EL1=00000015b5183519
+ARM GIC-?00 r0p4, arch v3.0 detected
+t234: fdt cpus=6 num_cpu=6 cntvct=000000010573f7e6 cps=0000000001dcd650
+t234: gicr frame 0 @000000000f440000 TYPER_hi=00000000 TYPER_lo=00000020 WAKER=00000000
+t234: gicr frame 1 @000000000f460000 TYPER_hi=00000100 TYPER_lo=00000120 WAKER=00000000
+t234: gicr frame 2 @000000000f480000 TYPER_hi=00000200 TYPER_lo=00000220 WAKER=00000000
+t234: gicr frame 3 @000000000f4a0000 TYPER_hi=00000300 TYPER_lo=00000320 WAKER=00000000
+t234: gicr frame 4 @000000000f4c0000 TYPER_hi=00010000 TYPER_lo=00000420 WAKER=-
+t234: gicr frame 5 @000000000f4e0000 TYPER_hi=00010100 TYPER_lo=00000520 WAKER=-
+t234: gicr frame 6 @000000000f500000 TYPER_hi=00010200 TYPER_lo=00000620 WAKER=00000000
+t234: gicr frame 7 @000000000f520000 TYPER_hi=00010300 TYPER_lo=00000720 WAKER=00000000
+GICv3: itlines: 31, max INTID: 991
+GICD @ 000000000f400000 mapped to ffffff8040201000
+GICR @ 000000000f440000 mapped to ffffff8040211000
+Add SPI entry 0 for vectors 32 -> 991 [SPI max: 960], Ok
+No SPI intrinfo. Add default entry for 32 -> 991 vectors, Ok
+cpu0: MPIDR=0000000081000000
+cpu0: MIDR=410fd421 Cortex-A78ae r0p1
+cpu0: CWG=4 ERG=4 Dminline=4 Iminline=4 PIPT
+cpu0: CLIDR=c3000123 LoUU=0 LoC=3 LoUIS=0
+cpu0: L1 Icache 64K linesz=64 set/way=256/4
+cpu0: L1 Dcache 64K linesz=64 set/way=256/4
+cpu0: L2 Unified 256K linesz=64 set/way=512/8
+cpu0: L3 Unified 2048K linesz=64 set/way=2048/16
+cpu0: Core GICR SGI address: 0x0f450000
+cpu0: GICv3 cpu interface 0x00000001
+t234: cpu 0 up MPIDR=0000000081000000 GICR=000000000f440000 idx=0 SGI1R=0000000000000001 WAKER=00000000 fw=00000000 ISENABLER0=00000001 ISACTIVER0=00000000(0) AP1R0=00000000
+Loading IFS...done
+t234: cpu 1 CPU_ON aff=0000000000000100 entry=0000000080083800 affinity_info=00000001
+t234: cpu 1 entry EL2 MPIDR=0000000081000100 HCR_EL2=0000000080000000 SCTLR_EL2=0000000030c50830 CNTFRQ=01dcd650
+t234: cpu 1 fw MDCR_EL2=0000000000000006 HSTR_EL2=0000000000000000 ICH_HCR_EL2=0000000000000000 CNTHP_CTL=00000000 CNTP_CTL=00000000 CNTV_CTL=00000000 -> normalised
+cpu1: MPIDR=0000000081000100
+cpu1: MIDR=410fd421 Cortex-A78ae r0p1
+cpu1: CWG=4 ERG=4 Dminline=4 Iminline=4 PIPT
+cpu1: CLIDR=c3000123 LoUU=0 LoC=3 LoUIS=0
+cpu1: L1 Icache 64K linesz=64 set/way=256/4
+cpu1: L1 Dcache 64K linesz=64 set/way=256/4
+cpu1: L2 Unified 256K linesz=64 set/way=512/8
+cpu1: L3 Unified 2048K linesz=64 set/way=2048/16
+cpu1: Core GICR SGI address: 0x0f470000
+cpu1: GICv3 cpu interface 0x00010001
+t234: cpu 1 up MPIDR=0000000081000100 GICR=000000000f460000 idx=1 SGI1R=0000000000010001 WAKER=00000000 fw=00000000 ISENABLER0=00000001 ISACTIVER0=00000000(0) AP1R0=00000000
+t234: cpu 2 CPU_ON aff=0000000000000200 entry=0000000080083800 affinity_info=00000001
+t234: cpu 2 entry EL2 MPIDR=0000000081000200 HCR_EL2=0000000080000000 SCTLR_EL2=0000000030c50830 CNTFRQ=01dcd650
+t234: cpu 2 fw MDCR_EL2=0000000000000006 HSTR_EL2=0000000000000000 ICH_HCR_EL2=0000000000000000 CNTHP_CTL=00000000 CNTP_CTL=00000000 CNTV_CTL=00000000 -> normalised
+cpu2: MPIDR=0000000081000200
+cpu2: MIDR=410fd421 Cortex-A78ae r0p1
+cpu2: CWG=4 ERG=4 Dminline=4 Iminline=4 PIPT
+cpu2: CLIDR=c3000123 LoUU=0 LoC=3 LoUIS=0
+cpu2: L1 Icache 64K linesz=64 set/way=256/4
+cpu2: L1 Dcache 64K linesz=64 set/way=256/4
+cpu2: L2 Unified 256K linesz=64 set/way=512/8
+cpu2: L3 Unified 2048K linesz=64 set/way=2048/16
+cpu2: Core GICR SGI address: 0x0f490000
+cpu2: GICv3 cpu interface 0x00020001
+t234: cpu 2 up MPIDR=0000000081000200 GICR=000000000f480000 idx=2 SGI1R=0000000000020001 WAKER=00000000 fw=00000000 ISENABLER0=00000001 ISACTIVER0=00000000(0) AP1R0=00000000
+t234: cpu 3 CPU_ON aff=0000000000000300 entry=0000000080083800 affinity_info=00000001
+t234: cpu 3 entry EL2 MPIDR=0000000081000300 HCR_EL2=0000000080000000 SCTLR_EL2=0000000030c50830 CNTFRQ=01dcd650
+t234: cpu 3 fw MDCR_EL2=0000000000000006 HSTR_EL2=0000000000000000 ICH_HCR_EL2=0000000000000000 CNTHP_CTL=00000000 CNTP_CTL=00000000 CNTV_CTL=00000000 -> normalised
+cpu3: MPIDR=0000000081000300
+cpu3: MIDR=410fd421 Cortex-A78ae r0p1
+cpu3: CWG=4 ERG=4 Dminline=4 Iminline=4 PIPT
+cpu3: CLIDR=c3000123 LoUU=0 LoC=3 LoUIS=0
+cpu3: L1 Icache 64K linesz=64 set/way=256/4
+cpu3: L1 Dcache 64K linesz=64 set/way=256/4
+cpu3: L2 Unified 256K linesz=64 set/way=512/8
+cpu3: L3 Unified 2048K linesz=64 set/way=2048/16
+cpu3: Core GICR SGI address: 0x0f4b0000
+cpu3: GICv3 cpu interface 0x00030001
+t234: cpu 3 up MPIDR=0000000081000300 GICR=000000000f4a0000 idx=3 SGI1R=0000000000030001 WAKER=00000000 fw=00000000 ISENABLER0=00000001 ISACTIVER0=00000000(0) AP1R0=00000000
+t234: cpu 4 CPU_ON aff=0000000000010200 entry=0000000080083800 affinity_info=00000001
+t234: cpu 4 entry EL2 MPIDR=0000000081010200 HCR_EL2=0000000080000000 SCTLR_EL2=0000000030c50830 CNTFRQ=01dcd650
+t234: cpu 4 fw MDCR_EL2=0000000000000006 HSTR_EL2=0000000000000000 ICH_HCR_EL2=0000000000000000 CNTHP_CTL=00000000 CNTP_CTL=00000000 CNTV_CTL=00000000 -> normalised
+cpu4: MPIDR=0000000081010200
+cpu4: MIDR=410fd421 Cortex-A78ae r0p1
+cpu4: CWG=4 ERG=4 Dminline=4 Iminline=4 PIPT
+cpu4: CLIDR=c3000123 LoUU=0 LoC=3 LoUIS=0
+cpu4: L1 Icache 64K linesz=64 set/way=256/4
+cpu4: L1 Dcache 64K linesz=64 set/way=256/4
+cpu4: L2 Unified 256K linesz=64 set/way=512/8
+cpu4: L3 Unified 2048K linesz=64 set/way=2048/16
+cpu4: Core GICR SGI address: 0x0f510000
+cpu4: GICv3 cpu interface 0x00020001
+t234: cpu 4 up MPIDR=0000000081010200 GICR=000000000f500000 idx=6 SGI1R=0000000100020001 WAKER=00000000 fw=00000000 ISENABLER0=00000001 ISACTIVER0=00000000(0) AP1R0=00000000
+t234: cpu 5 CPU_ON aff=0000000000010300 entry=0000000080083800 affinity_info=00000001
+t234: cpu 5 entry EL2 MPIDR=0000000081010300 HCR_EL2=0000000080000000 SCTLR_EL2=0000000030c50830 CNTFRQ=01dcd650
+t234: cpu 5 fw MDCR_EL2=0000000000000006 HSTR_EL2=0000000000000000 ICH_HCR_EL2=0000000000000000 CNTHP_CTL=00000000 CNTP_CTL=00000000 CNTV_CTL=00000000 -> normalised
+cpu5: MPIDR=0000000081010300
+cpu5: MIDR=410fd421 Cortex-A78ae r0p1
+cpu5: CWG=4 ERG=4 Dminline=4 Iminline=4 PIPT
+cpu5: CLIDR=c3000123 LoUU=0 LoC=3 LoUIS=0
+cpu5: L1 Icache 64K linesz=64 set/way=256/4
+cpu5: L1 Dcache 64K linesz=64 set/way=256/4
+cpu5: L2 Unified 256K linesz=64 set/way=512/8
+cpu5: L3 Unified 2048K linesz=64 set/way=2048/16
+cpu5: Core GICR SGI address: 0x0f530000
+cpu5: GICv3 cpu interface 0x00030001
+t234: cpu 5 up MPIDR=0000000081010300 GICR=000000000f520000 idx=7 SGI1R=0000000100030001 WAKER=00000000 fw=00000000 ISENABLER0=00000001 ISACTIVER0=00000000(0) AP1R0=00000000
+Header size=0x000000f0, Total Size=0x00001318, Version=2.0, #Cpu=6, Type=4353
+Section:system_private offset:0x00000f30 size:0x00000060
+  syspage ptr user:ffffff8040415000 kernel:ffffff8040411000
+  cpupage ptr user:ffffff8040418000 kernel:ffffff8040414000 spacing:80
+  kdebug info:0000000000000000 callback:0000000000000000 num_ready:0
+  pagesize:00001000 flags:00000000, kdinfo:00000000
+Section:qtime offset:0x00000388 size:0x00000068
+  boot:00000000 CPS:0000000001dcd650 period/scale:32/-9 intr:27
+  flags:00000000 epoch:1970 rr_mul:0 adj count/inc:0/0
+  nsec_tod_adj:0000000000000000 load_max:7fffffffffffffff
+Section:callout offset:0x000000f0 size:0x00000068
+  reboot:ffffff8040413278 watchdog:0000000000000000
+  0) display:ffffff80404132a4 poll:ffffff8040413328 break:ffffff8040413384
+  1) display:0000000000000000 poll:0000000000000000 break:0000000000000000
+Section:cpuinfo offset:0x000003f0 size:0x000000c0 elsize:0x00000020
+  0) cpu:410fd421 flg:c0f08c7a spd:0 hwid:81000000 cache i/d:0/1 name:54
+  1) cpu:410fd421 flg:c0f08c7a spd:0 hwid:81000100 cache i/d:0/1 name:54
+  2) cpu:410fd421 flg:c0f08c7a spd:0 hwid:81000200 cache i/d:0/1 name:54
+  3) cpu:410fd421 flg:c0f08c7a spd:0 hwid:81000300 cache i/d:0/1 name:54
+  4) cpu:410fd421 flg:c0f08c7a spd:0 hwid:81010200 cache i/d:0/1 name:54
+  5) cpu:410fd421 flg:c0f08c7a spd:0 hwid:81010300 cache i/d:0/1 name:54
+Section:cacheattr offset:0x000012d8 size:0x00000040 elsize:0x00000020
+  0) flags:01 size:0040 #lines:0400 ways:0004 control:ffffff8040413000 next:255
+  1) flags:02 size:0040 #lines:0400 ways:0004 control:ffffff8040413050 next:255
+Section:asinfo offset:0x000010f8 size:0x00000120 elsize:0x00000018
+  0000) 0000000000000000-0000ffffffffffff o:ffff 21
+  0018) 0000000000000000-00000000ffffffff o:0000 28
+  0030) 0000000080000000-00000000bdffffff o:0018 36
+  0048) 0000000270400000-000000027043d339 o:0000 40
+  0060) 000000000f400000-000000000f40ffff o:0000 44
+  0078) 000000000f440000-000000000f63ffff o:0000 49
+  0090) 00000000800ae0e8-000000008031f043 o:0000 67
+  00a8) 0000000080082fa0-00000000800ae0e7 o:0000 75
+  00c0) 00000000800ae0e8-000000008031f043 o:0000 83
+  00d8) 0000000080000000-000000008000bfff o:0030 91
+  00f0) 00000000800181e0-0000000080082f9f o:0030 91
+  0108) 000000008031f044-00000000bdffffff o:0030 91
+Section:hwinfo offset:0x00001070 size:0x00000088
+  0) size:3 tag:3(Group) isize:3, iname:0(hw), owner:65535, kids:1
+  12) size:3 tag:17(Bus) isize:3, iname:9(unknown), owner:0, kids:0
+Section:typed_strings offset:0x00000f98 size:0x00000050
+  off:0 type:5 string:'NVIDIA Jetson Orin Nano Developer Kit (Tegra234)'
+  off:56 type:2 string:'localhost'
+Section:strings offset:0x00000fe8 size:0x00000088
+  [0]'hw' [3]'Group' [9]'unknown' [17]'Bus' [21]'memory' [28]'below4G'
+  [36]'ram' [40]'fdt' [44]'gicd' [49]'gicr' [54]'Cortex-A78ae' [67]'imagefs'
+  [75]'startup' [83]'bootram' [91]'sysram'
+Section:intrinfo offset:0x00001218 size:0x000000c0 elsize:0x00000060
+  0) vector_base:00000000, #vectors:32, cascade_vector:7fffffff
+     cpu_intr_base:00000000, cpu_intr_stride:0, flags:0000, local_stride:32768
+      id => flags:0000, size:0010, rtn:ffffff80404130a8
+     eoi => flags:0000, size:0008, rtn:ffffff80404130b8
+     mask:ffffff80404130c0, unmask:ffffff8040413110, config:ffffff8040413154
+  1) vector_base:00000020, #vectors:960, cascade_vector:7fffffff
+     cpu_intr_base:00000000, cpu_intr_stride:0, flags:0000, local_stride:0
+      id => flags:0000, size:0010, rtn:ffffff8040413164
+     eoi => flags:0000, size:0008, rtn:ffffff8040413174
+     mask:ffffff804041317c, unmask:ffffff80404131bc, config:0000000000000000
+Section:smp offset:0x00000358 size:0x00000018
+  send_ipi:ffffff8040413248
+Section:hypinfo offset:0x00000f90 size:0x00000008
+  flags:0000000000000000
+Section:cluster offset:0x00001318 size:0x00000000 elsize:0x00000010
+Section:gic_map offset:0x00000030
+  0) 0000000000000001
+  1) 0000000000010001
+  2) 0000000000020001
+  3) 0000000000030001
+  4) 0000000100020001
+  5) 0000000100030001
+Section:gicr_map offset:0x00000034
+  0) region:0 idx:0
+  1) region:0 idx:1
+  2) region:0 idx:2
+  3) region:0 idx:3
+  4) region:0 idx:6
+  5) region:0 idx:7
+Section:idreg_dump offset:0x00000038
+  0) AA64PFR0:1100000011111112 AA64PFR1:0000000000000010
+      AA64ZFR0:0000000000000000 AA64SMFR0:0000000000000000
+      AA64DFR0:0000000110305408 AA64DFR1:0000000000000000
+      AA64AFR0:0000000000000000 AA64AFR1:0000000000000000
+      AA64ISAR0:0010100010211120 AA64ISAR1:0000000001200031
+      AA64ISAR2:0000000000000000 AA64MMFR0:0000000000101125
+      AA64MMFR1:0000000010212122 AA64MMFR2:0000000100001011
+      AA64MMFR3:0000000000000000 AA64MMFR4:0000000000000000
+      AA64PFR2:0000000000000000
+  1) AA64PFR0:1100000011111112 AA64PFR1:0000000000000010
+      AA64ZFR0:0000000000000000 AA64SMFR0:0000000000000000
+      AA64DFR0:0000000110305408 AA64DFR1:0000000000000000
+      AA64AFR0:0000000000000000 AA64AFR1:0000000000000000
+      AA64ISAR0:0010100010211120 AA64ISAR1:0000000001200031
+      AA64ISAR2:0000000000000000 AA64MMFR0:0000000000101125
+      AA64MMFR1:0000000010212122 AA64MMFR2:0000000100001011
+      AA64MMFR3:0000000000000000 AA64MMFR4:0000000000000000
+      AA64PFR2:0000000000000000
+  2) AA64PFR0:1100000011111112 AA64PFR1:0000000000000010
+      AA64ZFR0:0000000000000000 AA64SMFR0:0000000000000000
+      AA64DFR0:0000000110305408 AA64DFR1:0000000000000000
+      AA64AFR0:0000000000000000 AA64AFR1:0000000000000000
+      AA64ISAR0:0010100010211120 AA64ISAR1:0000000001200031
+      AA64ISAR2:0000000000000000 AA64MMFR0:0000000000101125
+      AA64MMFR1:0000000010212122 AA64MMFR2:0000000100001011
+      AA64MMFR3:0000000000000000 AA64MMFR4:0000000000000000
+      AA64PFR2:0000000000000000
+  3) AA64PFR0:1100000011111112 AA64PFR1:0000000000000010
+      AA64ZFR0:0000000000000000 AA64SMFR0:0000000000000000
+      AA64DFR0:0000000110305408 AA64DFR1:0000000000000000
+      AA64AFR0:0000000000000000 AA64AFR1:0000000000000000
+      AA64ISAR0:0010100010211120 AA64ISAR1:0000000001200031
+      AA64ISAR2:0000000000000000 AA64MMFR0:0000000000101125
+      AA64MMFR1:0000000010212122 AA64MMFR2:0000000100001011
+      AA64MMFR3:0000000000000000 AA64MMFR4:0000000000000000
+      AA64PFR2:0000000000000000
+  4) AA64PFR0:1100000011111112 AA64PFR1:0000000000000010
+      AA64ZFR0:0000000000000000 AA64SMFR0:0000000000000000
+      AA64DFR0:0000000110305408 AA64DFR1:0000000000000000
+      AA64AFR0:0000000000000000 AA64AFR1:0000000000000000
+      AA64ISAR0:0010100010211120 AA64ISAR1:0000000001200031
+      AA64ISAR2:0000000000000000 AA64MMFR0:0000000000101125
+      AA64MMFR1:0000000010212122 AA64MMFR2:0000000100001011
+      AA64MMFR3:0000000000000000 AA64MMFR4:0000000000000000
+      AA64PFR2:0000000000000000
+  5) AA64PFR0:1100000011111112 AA64PFR1:0000000000000010
+      AA64ZFR0:0000000000000000 AA64SMFR0:0000000000000000
+      AA64DFR0:0000000110305408 AA64DFR1:0000000000000000
+      AA64AFR0:0000000000000000 AA64AFR1:0000000000000000
+      AA64ISAR0:0010100010211120 AA64ISAR1:0000000001200031
+      AA64ISAR2:0000000000000000 AA64MMFR0:0000000000101125
+      AA64MMFR1:0000000010212122 AA64MMFR2:0000000100001011
+      AA64MMFR3:0000000000000000 AA64MMFR4:0000000000000000
+      AA64PFR2:0000000000000000
+t234: cpu 1 -> smp_spin
+t234: cpu 2 -> smp_spin
+t234: cpu 3 -> smp_spin
+t234: cpu 4 -> smp_spin
+t234: cpu 5 -> smp_spin
+t234: all 6 cpus parked in smp_spin
+
+System page at phys:0000000080015000 user:ffffff8040415000 kern:ffffff8040411000
+Starting next program at vffffff8060070950
+syspage::hypinfo::flags=0x00000000
+T234 M2 -P6: procnto up
+CPU:AARCH64 Release:8.0.0  FreeMem:974MB/992MB BootTime:Jan 01 00:00:00 GMT 1970
+Processes: 3, Threads: 29
+Processor1: 1091556385 Cortex-A78ae 0MHz FPU
+Processor2: 1091556385 Cortex-A78ae 0MHz FPU
+Processor3: 1091556385 Cortex-A78ae 0MHz FPU
+Processor4: 1091556385 Cortex-A78ae 0MHz FPU
+Processor5: 1091556385 Cortex-A78ae 0MHz FPU
+Processor6: 1091556385 Cortex-A78ae 0MHz FPU
+SMPCHECK census cps=31250000 num_cpu=6 expect=6 smp_size=24 online=6
+SMPCHECK cpu 0 hwid=0x81000000 aff=0x0 gic=0x1 gicr_idx=0 gicr=0x0f440000 name=Cortex-A78ae ok
+SMPCHECK cpu 1 hwid=0x81000100 aff=0x100 gic=0x10001 gicr_idx=1 gicr=0x0f460000 name=Cortex-A78ae ok
+SMPCHECK cpu 2 hwid=0x81000200 aff=0x200 gic=0x20001 gicr_idx=2 gicr=0x0f480000 name=Cortex-A78ae ok
+SMPCHECK cpu 3 hwid=0x81000300 aff=0x300 gic=0x30001 gicr_idx=3 gicr=0x0f4a0000 name=Cortex-A78ae ok
+SMPCHECK cpu 4 hwid=0x81010200 aff=0x10200 gic=0x100020001 gicr_idx=6 gicr=0x0f500000 name=Cortex-A78ae ok
+SMPCHECK cpu 5 hwid=0x81010300 aff=0x10300 gic=0x100030001 gicr_idx=7 gicr=0x0f520000 name=Cortex-A78ae ok
+SMPCHECK CENSUS PASS
+SMPCHECK ready cpu=0 prio=ok pin=ok mask=0x1 errno=0 timer0_ms=100 timer0_cpu=0 wd=ok
+SMPCHECK ready cpu=1 prio=ok pin=ok mask=0x2 errno=0 timer0_ms=100 timer0_cpu=1 wd=ok
+SMPCHECK ready cpu=2 prio=ok pin=ok mask=0x4 errno=0 timer0_ms=100 timer0_cpu=2 wd=ok
+SMPCHECK ready cpu=3 prio=ok pin=ok mask=0x8 errno=0 timer0_ms=100 timer0_cpu=3 wd=ok
+SMPCHECK ready cpu=4 prio=ok pin=ok mask=0x10 errno=0 timer0_ms=100 timer0_cpu=4 wd=ok
+SMPCHECK ready cpu=5 prio=ok pin=ok mask=0x20 errno=0 timer0_ms=100 timer0_cpu=5 wd=ok
+     pid tid name               cpu
+    8195   1 smpcheck             0
+	Runmask     : 0x00000001
+	Inherit Mask: 0x0000003f
+    8195   2 smpcheck             0
+	Runmask     : 0x00000001
+	Inherit Mask: 0x0000003f
+
+    8196   1 smpcheck             1
+	Runmask     : 0x00000002
+	Inherit Mask: 0x0000003f
+    8196   2 smpcheck             0
+	Runmask     : 0x00000001
+	Inherit Mask: 0x0000003f
+
+    8197   1 smpcheck             2
+	Runmask     : 0x00000004
+	Inherit Mask: 0x0000003f
+    8197   2 smpcheck             0
+	Runmask     : 0x00000001
+	Inherit Mask: 0x0000003f
+
+    8198   1 smpcheck             3
+	Runmask     : 0x00000008
+	Inherit Mask: 0x0000003f
+    8198   2 smpcheck             0
+	Runmask     : 0x00000001
+	Inherit Mask: 0x0000003f
+
+    8199   1 smpcheck             4
+	Runmask     : 0x00000010
+	Inherit Mask: 0x0000003f
+    8199   2 smpcheck             0
+	Runmask     : 0x00000001
+	Inherit Mask: 0x0000003f
+
+    8200   1 smpcheck             5
+	Runmask     : 0x00000020
+	Inherit Mask: 0x0000003f
+    8200   2 smpcheck             0
+	Runmask     : 0x00000001
+	Inherit Mask: 0x0000003f
+
+SMPCHECK done cpu=0 secs=60 elapsed_ms=60000 samples=436691 misplaced=0 backwards=0 iters=28618981376 rate=476983022 timer0_ms=100 timer0_cpu=0 timer1_ms=100 timer1_cpu=0 pin=ok end=ok
+SMPCHECK done cpu=1 secs=60 elapsed_ms=60000 samples=437265 misplaced=0 backwards=0 iters=28656599040 rate=477609984 timer0_ms=100 timer0_cpu=1 timer1_ms=100 timer1_cpu=1 pin=ok end=ok
+SMPCHECK done cpu=2 secs=60 elapsed_ms=60000 samples=437617 misplaced=0 backwards=0 iters=28679667712 rate=477994461 timer0_ms=100 timer0_cpu=2 timer1_ms=100 timer1_cpu=2 pin=ok end=ok
+SMPCHECK done cpu=3 secs=60 elapsed_ms=60000 samples=436619 misplaced=0 backwards=0 iters=28614262784 rate=476904379 timer0_ms=100 timer0_cpu=3 timer1_ms=100 timer1_cpu=3 pin=ok end=ok
+SMPCHECK done cpu=4 secs=60 elapsed_ms=60000 samples=52271 misplaced=0 backwards=0 iters=3425632256 rate=57093870 timer0_ms=100 timer0_cpu=4 timer1_ms=101 timer1_cpu=4 pin=ok end=ok
+SMPCHECK done cpu=5 secs=60 elapsed_ms=60000 samples=52270 misplaced=0 backwards=0 iters=3425566720 rate=57092778 timer0_ms=100 timer0_cpu=5 timer1_ms=100 timer1_cpu=5 pin=ok end=ok
+SMPCHECK RESULT PASS cpus=6/6 secs=60 reasons=none
+CPU:AARCH64 Release:8.0.0  FreeMem:974MB/992MB BootTime:Jan 01 00:00:00 GMT 1970
+Processes: 3, Threads: 32
+Processor1: 1091556385 Cortex-A78ae 0MHz FPU
+Processor2: 1091556385 Cortex-A78ae 0MHz FPU
+Processor3: 1091556385 Cortex-A78ae 0MHz FPU
+Processor4: 1091556385 Cortex-A78ae 0MHz FPU
+Processor5: 1091556385 Cortex-A78ae 0MHz FPU
+Processor6: 1091556385 Cortex-A78ae 0MHz FPU
+T234 M2 -P6: resetting so the log can be recovered
+????Shutdown state requested 1
+Rebooting system ...
+??   <-- live console cut here by the reset (NUL bytes removed)
+[0000.065] I> MB1 (version: 1.4.0.4-t234-54845784-e89ea9bc)
+[0000.070] I> t234-A01-1-Silicon (0x12347) Prod
+
+=== PART 2: black box, pstore console-ramoops-0, recovered on the next boot ===
+
+
+T234-SHIM EL=2 HCR=0000000488000000 SCTLR2=0000000030400800 MMFR1=0000000010212122 MPIDR=0000000081000000 CNTFRQ=0000000001dcd650 CNTHCTL=0000000000000cb6 CNTHPCTL=0000000000000005 MDCR=0000000000000006 WDT0=0000000000710010/0000000000000010 WDT1=0000000000700000/0000000000000000 TXMB=0000000000000000 PC=0000000080080000 X0=0000000270400000 DTBMAGIC=00000000edfe0dd0
+NORMALISED TCUDROPS=0000000000000000
+JUMP
+
+t234: WDT0 CR=00710010 SR=00000010  WDT1 CR=00700000 SR=00000000
+t234: WDT0 is armed - this run has about two minutes unless -Wdisable
+Hypervisor support disabled
+MMU: 16-bit ASID 48-bit PA TCR_EL1=00000015b5183519
+ARM GIC-?00 r0p4, arch v3.0 detected
+t234: fdt cpus=6 num_cpu=6 cntvct=000000010573f7e6 cps=0000000001dcd650
+t234: gicr frame 0 @000000000f440000 TYPER_hi=00000000 TYPER_lo=00000020 WAKER=00000000
+t234: gicr frame 1 @000000000f460000 TYPER_hi=00000100 TYPER_lo=00000120 WAKER=00000000
+t234: gicr frame 2 @000000000f480000 TYPER_hi=00000200 TYPER_lo=00000220 WAKER=00000000
+t234: gicr frame 3 @000000000f4a0000 TYPER_hi=00000300 TYPER_lo=00000320 WAKER=00000000
+t234: gicr frame 4 @000000000f4c0000 TYPER_hi=00010000 TYPER_lo=00000420 WAKER=-
+t234: gicr frame 5 @000000000f4e0000 TYPER_hi=00010100 TYPER_lo=00000520 WAKER=-
+t234: gicr frame 6 @000000000f500000 TYPER_hi=00010200 TYPER_lo=00000620 WAKER=00000000
+t234: gicr frame 7 @000000000f520000 TYPER_hi=00010300 TYPER_lo=00000720 WAKER=00000000
+GICv3: itlines: 31, max INTID: 991
+GICD @ 000000000f400000 mapped to ffffff8040201000
+GICR @ 000000000f440000 mapped to ffffff8040211000
+Add SPI entry 0 for vectors 32 -> 991 [SPI max: 960], Ok
+No SPI intrinfo. Add default entry for 32 -> 991 vectors, Ok
+cpu0: MPIDR=0000000081000000
+cpu0: MIDR=410fd421 Cortex-A78ae r0p1
+cpu0: CWG=4 ERG=4 Dminline=4 Iminline=4 PIPT
+cpu0: CLIDR=c3000123 LoUU=0 LoC=3 LoUIS=0
+cpu0: L1 Icache 64K linesz=64 set/way=256/4
+cpu0: L1 Dcache 64K linesz=64 set/way=256/4
+cpu0: L2 Unified 256K linesz=64 set/way=512/8
+cpu0: L3 Unified 2048K linesz=64 set/way=2048/16
+cpu0: Core GICR SGI address: 0x0f450000
+cpu0: GICv3 cpu interface 0x00000001
+t234: cpu 0 up MPIDR=0000000081000000 GICR=000000000f440000 idx=0 SGI1R=0000000000000001 WAKER=00000000 fw=00000000 ISENABLER0=00000001 ISACTIVER0=00000000(0) AP1R0=00000000
+Loading IFS...done
+t234: cpu 1 CPU_ON aff=0000000000000100 entry=0000000080083800 affinity_info=00000001
+t234: cpu 1 entry EL2 MPIDR=0000000081000100 HCR_EL2=0000000080000000 SCTLR_EL2=0000000030c50830 CNTFRQ=01dcd650
+t234: cpu 1 fw MDCR_EL2=0000000000000006 HSTR_EL2=0000000000000000 ICH_HCR_EL2=0000000000000000 CNTHP_CTL=00000000 CNTP_CTL=00000000 CNTV_CTL=00000000 -> normalised
+cpu1: MPIDR=0000000081000100
+cpu1: MIDR=410fd421 Cortex-A78ae r0p1
+cpu1: CWG=4 ERG=4 Dminline=4 Iminline=4 PIPT
+cpu1: CLIDR=c3000123 LoUU=0 LoC=3 LoUIS=0
+cpu1: L1 Icache 64K linesz=64 set/way=256/4
+cpu1: L1 Dcache 64K linesz=64 set/way=256/4
+cpu1: L2 Unified 256K linesz=64 set/way=512/8
+cpu1: L3 Unified 2048K linesz=64 set/way=2048/16
+cpu1: Core GICR SGI address: 0x0f470000
+cpu1: GICv3 cpu interface 0x00010001
+t234: cpu 1 up MPIDR=0000000081000100 GICR=000000000f460000 idx=1 SGI1R=0000000000010001 WAKER=00000000 fw=00000000 ISENABLER0=00000001 ISACTIVER0=00000000(0) AP1R0=00000000
+t234: cpu 2 CPU_ON aff=0000000000000200 entry=0000000080083800 affinity_info=00000001
+t234: cpu 2 entry EL2 MPIDR=0000000081000200 HCR_EL2=0000000080000000 SCTLR_EL2=0000000030c50830 CNTFRQ=01dcd650
+t234: cpu 2 fw MDCR_EL2=0000000000000006 HSTR_EL2=0000000000000000 ICH_HCR_EL2=0000000000000000 CNTHP_CTL=00000000 CNTP_CTL=00000000 CNTV_CTL=00000000 -> normalised
+cpu2: MPIDR=0000000081000200
+cpu2: MIDR=410fd421 Cortex-A78ae r0p1
+cpu2: CWG=4 ERG=4 Dminline=4 Iminline=4 PIPT
+cpu2: CLIDR=c3000123 LoUU=0 LoC=3 LoUIS=0
+cpu2: L1 Icache 64K linesz=64 set/way=256/4
+cpu2: L1 Dcache 64K linesz=64 set/way=256/4
+cpu2: L2 Unified 256K linesz=64 set/way=512/8
+cpu2: L3 Unified 2048K linesz=64 set/way=2048/16
+cpu2: Core GICR SGI address: 0x0f490000
+cpu2: GICv3 cpu interface 0x00020001
+t234: cpu 2 up MPIDR=0000000081000200 GICR=000000000f480000 idx=2 SGI1R=0000000000020001 WAKER=00000000 fw=00000000 ISENABLER0=00000001 ISACTIVER0=00000000(0) AP1R0=00000000
+t234: cpu 3 CPU_ON aff=0000000000000300 entry=0000000080083800 affinity_info=00000001
+t234: cpu 3 entry EL2 MPIDR=0000000081000300 HCR_EL2=0000000080000000 SCTLR_EL2=0000000030c50830 CNTFRQ=01dcd650
+t234: cpu 3 fw MDCR_EL2=0000000000000006 HSTR_EL2=0000000000000000 ICH_HCR_EL2=0000000000000000 CNTHP_CTL=00000000 CNTP_CTL=00000000 CNTV_CTL=00000000 -> normalised
+cpu3: MPIDR=0000000081000300
+cpu3: MIDR=410fd421 Cortex-A78ae r0p1
+cpu3: CWG=4 ERG=4 Dminline=4 Iminline=4 PIPT
+cpu3: CLIDR=c3000123 LoUU=0 LoC=3 LoUIS=0
+cpu3: L1 Icache 64K linesz=64 set/way=256/4
+cpu3: L1 Dcache 64K linesz=64 set/way=256/4
+cpu3: L2 Unified 256K linesz=64 set/way=512/8
+cpu3: L3 Unified 2048K linesz=64 set/way=2048/16
+cpu3: Core GICR SGI address: 0x0f4b0000
+cpu3: GICv3 cpu interface 0x00030001
+t234: cpu 3 up MPIDR=0000000081000300 GICR=000000000f4a0000 idx=3 SGI1R=0000000000030001 WAKER=00000000 fw=00000000 ISENABLER0=00000001 ISACTIVER0=00000000(0) AP1R0=00000000
+t234: cpu 4 CPU_ON aff=0000000000010200 entry=0000000080083800 affinity_info=00000001
+t234: cpu 4 entry EL2 MPIDR=0000000081010200 HCR_EL2=0000000080000000 SCTLR_EL2=0000000030c50830 CNTFRQ=01dcd650
+t234: cpu 4 fw MDCR_EL2=0000000000000006 HSTR_EL2=0000000000000000 ICH_HCR_EL2=0000000000000000 CNTHP_CTL=00000000 CNTP_CTL=00000000 CNTV_CTL=00000000 -> normalised
+cpu4: MPIDR=0000000081010200
+cpu4: MIDR=410fd421 Cortex-A78ae r0p1
+cpu4: CWG=4 ERG=4 Dminline=4 Iminline=4 PIPT
+cpu4: CLIDR=c3000123 LoUU=0 LoC=3 LoUIS=0
+cpu4: L1 Icache 64K linesz=64 set/way=256/4
+cpu4: L1 Dcache 64K linesz=64 set/way=256/4
+cpu4: L2 Unified 256K linesz=64 set/way=512/8
+cpu4: L3 Unified 2048K linesz=64 set/way=2048/16
+cpu4: Core GICR SGI address: 0x0f510000
+cpu4: GICv3 cpu interface 0x00020001
+t234: cpu 4 up MPIDR=0000000081010200 GICR=000000000f500000 idx=6 SGI1R=0000000100020001 WAKER=00000000 fw=00000000 ISENABLER0=00000001 ISACTIVER0=00000000(0) AP1R0=00000000
+t234: cpu 5 CPU_ON aff=0000000000010300 entry=0000000080083800 affinity_info=00000001
+t234: cpu 5 entry EL2 MPIDR=0000000081010300 HCR_EL2=0000000080000000 SCTLR_EL2=0000000030c50830 CNTFRQ=01dcd650
+t234: cpu 5 fw MDCR_EL2=0000000000000006 HSTR_EL2=0000000000000000 ICH_HCR_EL2=0000000000000000 CNTHP_CTL=00000000 CNTP_CTL=00000000 CNTV_CTL=00000000 -> normalised
+cpu5: MPIDR=0000000081010300
+cpu5: MIDR=410fd421 Cortex-A78ae r0p1
+cpu5: CWG=4 ERG=4 Dminline=4 Iminline=4 PIPT
+cpu5: CLIDR=c3000123 LoUU=0 LoC=3 LoUIS=0
+cpu5: L1 Icache 64K linesz=64 set/way=256/4
+cpu5: L1 Dcache 64K linesz=64 set/way=256/4
+cpu5: L2 Unified 256K linesz=64 set/way=512/8
+cpu5: L3 Unified 2048K linesz=64 set/way=2048/16
+cpu5: Core GICR SGI address: 0x0f530000
+cpu5: GICv3 cpu interface 0x00030001
+t234: cpu 5 up MPIDR=0000000081010300 GICR=000000000f520000 idx=7 SGI1R=0000000100030001 WAKER=00000000 fw=00000000 ISENABLER0=00000001 ISACTIVER0=00000000(0) AP1R0=00000000
+Header size=0x000000f0, Total Size=0x00001318, Version=2.0, #Cpu=6, Type=4353
+Section:system_private offset:0x00000f30 size:0x00000060
+  syspage ptr user:ffffff8040415000 kernel:ffffff8040411000
+  cpupage ptr user:ffffff8040418000 kernel:ffffff8040414000 spacing:80
+  kdebug info:0000000000000000 callback:0000000000000000 num_ready:0
+  pagesize:00001000 flags:00000000, kdinfo:00000000
+Section:qtime offset:0x00000388 size:0x00000068
+  boot:00000000 CPS:0000000001dcd650 period/scale:32/-9 intr:27
+  flags:00000000 epoch:1970 rr_mul:0 adj count/inc:0/0
+  nsec_tod_adj:0000000000000000 load_max:7fffffffffffffff
+Section:callout offset:0x000000f0 size:0x00000068
+  reboot:ffffff8040413278 watchdog:0000000000000000
+  0) display:ffffff80404132a4 poll:ffffff8040413328 break:ffffff8040413384
+  1) display:0000000000000000 poll:0000000000000000 break:0000000000000000
+Section:cpuinfo offset:0x000003f0 size:0x000000c0 elsize:0x00000020
+  0) cpu:410fd421 flg:c0f08c7a spd:0 hwid:81000000 cache i/d:0/1 name:54
+  1) cpu:410fd421 flg:c0f08c7a spd:0 hwid:81000100 cache i/d:0/1 name:54
+  2) cpu:410fd421 flg:c0f08c7a spd:0 hwid:81000200 cache i/d:0/1 name:54
+  3) cpu:410fd421 flg:c0f08c7a spd:0 hwid:81000300 cache i/d:0/1 name:54
+  4) cpu:410fd421 flg:c0f08c7a spd:0 hwid:81010200 cache i/d:0/1 name:54
+  5) cpu:410fd421 flg:c0f08c7a spd:0 hwid:81010300 cache i/d:0/1 name:54
+Section:cacheattr offset:0x000012d8 size:0x00000040 elsize:0x00000020
+  0) flags:01 size:0040 #lines:0400 ways:0004 control:ffffff8040413000 next:255
+  1) flags:02 size:0040 #lines:0400 ways:0004 control:ffffff8040413050 next:255
+Section:asinfo offset:0x000010f8 size:0x00000120 elsize:0x00000018
+  0000) 0000000000000000-0000ffffffffffff o:ffff 21
+  0018) 0000000000000000-00000000ffffffff o:0000 28
+  0030) 0000000080000000-00000000bdffffff o:0018 36
+  0048) 0000000270400000-000000027043d339 o:0000 40
+  0060) 000000000f400000-000000000f40ffff o:0000 44
+  0078) 000000000f440000-000000000f63ffff o:0000 49
+  0090) 00000000800ae0e8-000000008031f043 o:0000 67
+  00a8) 0000000080082fa0-00000000800ae0e7 o:0000 75
+  00c0) 00000000800ae0e8-000000008031f043 o:0000 83
+  00d8) 0000000080000000-000000008000bfff o:0030 91
+  00f0) 00000000800181e0-0000000080082f9f o:0030 91
+  0108) 000000008031f044-00000000bdffffff o:0030 91
+Section:hwinfo offset:0x00001070 size:0x00000088
+  0) size:3 tag:3(Group) isize:3, iname:0(hw), owner:65535, kids:1
+  12) size:3 tag:17(Bus) isize:3, iname:9(unknown), owner:0, kids:0
+Section:typed_strings offset:0x00000f98 size:0x00000050
+  off:0 type:5 string:'NVIDIA Jetson Orin Nano Developer Kit (Tegra234)'
+  off:56 type:2 string:'localhost'
+Section:strings offset:0x00000fe8 size:0x00000088
+  [0]'hw' [3]'Group' [9]'unknown' [17]'Bus' [21]'memory' [28]'below4G'
+  [36]'ram' [40]'fdt' [44]'gicd' [49]'gicr' [54]'Cortex-A78ae' [67]'imagefs'
+  [75]'startup' [83]'bootram' [91]'sysram'
+Section:intrinfo offset:0x00001218 size:0x000000c0 elsize:0x00000060
+  0) vector_base:00000000, #vectors:32, cascade_vector:7fffffff
+     cpu_intr_base:00000000, cpu_intr_stride:0, flags:0000, local_stride:32768
+      id => flags:0000, size:0010, rtn:ffffff80404130a8
+     eoi => flags:0000, size:0008, rtn:ffffff80404130b8
+     mask:ffffff80404130c0, unmask:ffffff8040413110, config:ffffff8040413154
+  1) vector_base:00000020, #vectors:960, cascade_vector:7fffffff
+     cpu_intr_base:00000000, cpu_intr_stride:0, flags:0000, local_stride:0
+      id => flags:0000, size:0010, rtn:ffffff8040413164
+     eoi => flags:0000, size:0008, rtn:ffffff8040413174
+     mask:ffffff804041317c, unmask:ffffff80404131bc, config:0000000000000000
+Section:smp offset:0x00000358 size:0x00000018
+  send_ipi:ffffff8040413248
+Section:hypinfo offset:0x00000f90 size:0x00000008
+  flags:0000000000000000
+Section:cluster offset:0x00001318 size:0x00000000 elsize:0x00000010
+Section:gic_map offset:0x00000030
+  0) 0000000000000001
+  1) 0000000000010001
+  2) 0000000000020001
+  3) 0000000000030001
+  4) 0000000100020001
+  5) 0000000100030001
+Section:gicr_map offset:0x00000034
+  0) region:0 idx:0
+  1) region:0 idx:1
+  2) region:0 idx:2
+  3) region:0 idx:3
+  4) region:0 idx:6
+  5) region:0 idx:7
+Section:idreg_dump offset:0x00000038
+  0) AA64PFR0:1100000011111112 AA64PFR1:0000000000000010
+      AA64ZFR0:0000000000000000 AA64SMFR0:0000000000000000
+      AA64DFR0:0000000110305408 AA64DFR1:0000000000000000
+      AA64AFR0:0000000000000000 AA64AFR1:0000000000000000
+      AA64ISAR0:0010100010211120 AA64ISAR1:0000000001200031
+      AA64ISAR2:0000000000000000 AA64MMFR0:0000000000101125
+      AA64MMFR1:0000000010212122 AA64MMFR2:0000000100001011
+      AA64MMFR3:0000000000000000 AA64MMFR4:0000000000000000
+      AA64PFR2:0000000000000000
+  1) AA64PFR0:1100000011111112 AA64PFR1:0000000000000010
+      AA64ZFR0:0000000000000000 AA64SMFR0:0000000000000000
+      AA64DFR0:0000000110305408 AA64DFR1:0000000000000000
+      AA64AFR0:0000000000000000 AA64AFR1:0000000000000000
+      AA64ISAR0:0010100010211120 AA64ISAR1:0000000001200031
+      AA64ISAR2:0000000000000000 AA64MMFR0:0000000000101125
+      AA64MMFR1:0000000010212122 AA64MMFR2:0000000100001011
+      AA64MMFR3:0000000000000000 AA64MMFR4:0000000000000000
+      AA64PFR2:0000000000000000
+  2) AA64PFR0:1100000011111112 AA64PFR1:0000000000000010
+      AA64ZFR0:0000000000000000 AA64SMFR0:0000000000000000
+      AA64DFR0:0000000110305408 AA64DFR1:0000000000000000
+      AA64AFR0:0000000000000000 AA64AFR1:0000000000000000
+      AA64ISAR0:0010100010211120 AA64ISAR1:0000000001200031
+      AA64ISAR2:0000000000000000 AA64MMFR0:0000000000101125
+      AA64MMFR1:0000000010212122 AA64MMFR2:0000000100001011
+      AA64MMFR3:0000000000000000 AA64MMFR4:0000000000000000
+      AA64PFR2:0000000000000000
+  3) AA64PFR0:1100000011111112 AA64PFR1:0000000000000010
+      AA64ZFR0:0000000000000000 AA64SMFR0:0000000000000000
+      AA64DFR0:0000000110305408 AA64DFR1:0000000000000000
+      AA64AFR0:0000000000000000 AA64AFR1:0000000000000000
+      AA64ISAR0:0010100010211120 AA64ISAR1:0000000001200031
+      AA64ISAR2:0000000000000000 AA64MMFR0:0000000000101125
+      AA64MMFR1:0000000010212122 AA64MMFR2:0000000100001011
+      AA64MMFR3:0000000000000000 AA64MMFR4:0000000000000000
+      AA64PFR2:0000000000000000
+  4) AA64PFR0:1100000011111112 AA64PFR1:0000000000000010
+      AA64ZFR0:0000000000000000 AA64SMFR0:0000000000000000
+      AA64DFR0:0000000110305408 AA64DFR1:0000000000000000
+      AA64AFR0:0000000000000000 AA64AFR1:0000000000000000
+      AA64ISAR0:0010100010211120 AA64ISAR1:0000000001200031
+      AA64ISAR2:0000000000000000 AA64MMFR0:0000000000101125
+      AA64MMFR1:0000000010212122 AA64MMFR2:0000000100001011
+      AA64MMFR3:0000000000000000 AA64MMFR4:0000000000000000
+      AA64PFR2:0000000000000000
+  5) AA64PFR0:1100000011111112 AA64PFR1:0000000000000010
+      AA64ZFR0:0000000000000000 AA64SMFR0:0000000000000000
+      AA64DFR0:0000000110305408 AA64DFR1:0000000000000000
+      AA64AFR0:0000000000000000 AA64AFR1:0000000000000000
+      AA64ISAR0:0010100010211120 AA64ISAR1:0000000001200031
+      AA64ISAR2:0000000000000000 AA64MMFR0:0000000000101125
+      AA64MMFR1:0000000010212122 AA64MMFR2:0000000100001011
+      AA64MMFR3:0000000000000000 AA64MMFR4:0000000000000000
+      AA64PFR2:0000000000000000
+t234: cpu 1 -> smp_spin
+t234: cpu 2 -> smp_spin
+t234: cpu 3 -> smp_spin
+t234: cpu 4 -> smp_spin
+t234: cpu 5 -> smp_spin
+t234: all 6 cpus parked in smp_spin
+
+System page at phys:0000000080015000 user:ffffff8040415000 kern:ffffff8040411000
+Starting next program at vffffff8060070950
+syspage::hypinfo::flags=0x00000000
+T234 M2 -P6: procnto up
+CPU:AARCH64 Release:8.0.0  FreeMem:974MB/992MB BootTime:Jan 01 00:00:00 GMT 1970
+Processes: 3, Threads: 29
+Processor1: 1091556385 Cortex-A78ae 0MHz FPU
+Processor2: 1091556385 Cortex-A78ae 0MHz FPU
+Processor3: 1091556385 Cortex-A78ae 0MHz FPU
+Processor4: 1091556385 Cortex-A78ae 0MHz FPU
+Processor5: 1091556385 Cortex-A78ae 0MHz FPU
+Processor6: 1091556385 Cortex-A78ae 0MHz FPU
+SMPCHECK census cps=31250000 num_cpu=6 expect=6 smp_size=24 online=6
+SMPCHECK cpu 0 hwid=0x81000000 aff=0x0 gic=0x1 gicr_idx=0 gicr=0x0f440000 name=Cortex-A78ae ok
+SMPCHECK cpu 1 hwid=0x81000100 aff=0x100 gic=0x10001 gicr_idx=1 gicr=0x0f460000 name=Cortex-A78ae ok
+SMPCHECK cpu 2 hwid=0x81000200 aff=0x200 gic=0x20001 gicr_idx=2 gicr=0x0f480000 name=Cortex-A78ae ok
+SMPCHECK cpu 3 hwid=0x81000300 aff=0x300 gic=0x30001 gicr_idx=3 gicr=0x0f4a0000 name=Cortex-A78ae ok
+SMPCHECK cpu 4 hwid=0x81010200 aff=0x10200 gic=0x100020001 gicr_idx=6 gicr=0x0f500000 name=Cortex-A78ae ok
+SMPCHECK cpu 5 hwid=0x81010300 aff=0x10300 gic=0x100030001 gicr_idx=7 gicr=0x0f520000 name=Cortex-A78ae ok
+SMPCHECK CENSUS PASS
+SMPCHECK ready cpu=0 prio=ok pin=ok mask=0x1 errno=0 timer0_ms=100 timer0_cpu=0 wd=ok
+SMPCHECK ready cpu=1 prio=ok pin=ok mask=0x2 errno=0 timer0_ms=100 timer0_cpu=1 wd=ok
+SMPCHECK ready cpu=2 prio=ok pin=ok mask=0x4 errno=0 timer0_ms=100 timer0_cpu=2 wd=ok
+SMPCHECK ready cpu=3 prio=ok pin=ok mask=0x8 errno=0 timer0_ms=100 timer0_cpu=3 wd=ok
+SMPCHECK ready cpu=4 prio=ok pin=ok mask=0x10 errno=0 timer0_ms=100 timer0_cpu=4 wd=ok
+SMPCHECK ready cpu=5 prio=ok pin=ok mask=0x20 errno=0 timer0_ms=100 timer0_cpu=5 wd=ok
+     pid tid name               cpu
+    8195   1 smpcheck             0
+	Runmask     : 0x00000001
+	Inherit Mask: 0x0000003f
+    8195   2 smpcheck             0
+	Runmask     : 0x00000001
+	Inherit Mask: 0x0000003f
+
+    8196   1 smpcheck             1
+	Runmask     : 0x00000002
+	Inherit Mask: 0x0000003f
+    8196   2 smpcheck             0
+	Runmask     : 0x00000001
+	Inherit Mask: 0x0000003f
+
+    8197   1 smpcheck             2
+	Runmask     : 0x00000004
+	Inherit Mask: 0x0000003f
+    8197   2 smpcheck             0
+	Runmask     : 0x00000001
+	Inherit Mask: 0x0000003f
+
+    8198   1 smpcheck             3
+	Runmask     : 0x00000008
+	Inherit Mask: 0x0000003f
+    8198   2 smpcheck             0
+	Runmask     : 0x00000001
+	Inherit Mask: 0x0000003f
+
+    8199   1 smpcheck             4
+	Runmask     : 0x00000010
+	Inherit Mask: 0x0000003f
+    8199   2 smpcheck             0
+	Runmask     : 0x00000001
+	Inherit Mask: 0x0000003f
+
+    8200   1 smpcheck             5
+	Runmask     : 0x00000020
+	Inherit Mask: 0x0000003f
+    8200   2 smpcheck             0
+	Runmask     : 0x00000001
+	Inherit Mask: 0x0000003f
+
+SMPCHECK done cpu=0 secs=60 elapsed_ms=60000 samples=436691 misplaced=0 backwards=0 iters=28618981376 rate=476983022 timer0_ms=100 timer0_cpu=0 timer1_ms=100 timer1_cpu=0 pin=ok end=ok
+SMPCHECK done cpu=1 secs=60 elapsed_ms=60000 samples=437265 misplaced=0 backwards=0 iters=28656599040 rate=477609984 timer0_ms=100 timer0_cpu=1 timer1_ms=100 timer1_cpu=1 pin=ok end=ok
+SMPCHECK done cpu=2 secs=60 elapsed_ms=60000 samples=437617 misplaced=0 backwards=0 iters=28679667712 rate=477994461 timer0_ms=100 timer0_cpu=2 timer1_ms=100 timer1_cpu=2 pin=ok end=ok
+SMPCHECK done cpu=3 secs=60 elapsed_ms=60000 samples=436619 misplaced=0 backwards=0 iters=28614262784 rate=476904379 timer0_ms=100 timer0_cpu=3 timer1_ms=100 timer1_cpu=3 pin=ok end=ok
+SMPCHECK done cpu=4 secs=60 elapsed_ms=60000 samples=52271 misplaced=0 backwards=0 iters=3425632256 rate=57093870 timer0_ms=100 timer0_cpu=4 timer1_ms=101 timer1_cpu=4 pin=ok end=ok
+SMPCHECK done cpu=5 secs=60 elapsed_ms=60000 samples=52270 misplaced=0 backwards=0 iters=3425566720 rate=57092778 timer0_ms=100 timer0_cpu=5 timer1_ms=100 timer1_cpu=5 pin=ok end=ok
+SMPCHECK RESULT PASS cpus=6/6 secs=60 reasons=none
+CPU:AARCH64 Release:8.0.0  FreeMem:974MB/992MB BootTime:Jan 01 00:00:00 GMT 1970
+Processes: 3, Threads: 32
+Processor1: 1091556385 Cortex-A78ae 0MHz FPU
+Processor2: 1091556385 Cortex-A78ae 0MHz FPU
+Processor3: 1091556385 Cortex-A78ae 0MHz FPU
+Processor4: 1091556385 Cortex-A78ae 0MHz FPU
+Processor5: 1091556385 Cortex-A78ae 0MHz FPU
+Processor6: 1091556385 Cortex-A78ae 0MHz FPU
+T234 M2 -P6: resetting so the log can be recovered
