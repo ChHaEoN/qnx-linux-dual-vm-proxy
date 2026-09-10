@@ -97,11 +97,15 @@ libsecpol.so.1
 /proc/boot/tcu-cat=tcu-cat
 /proc/boot/stamp=stamp
 
-# cat, ls, echo and cksum are ksh built-ins here, so only real binaries are listed.
-/bin/ksh=ksh
-/bin/pidin=pidin
-/bin/on=on
-/bin/slay=slay
-/bin/waitfor=waitfor
-/sbin/shutdown=shutdown
+# Everything lands in /proc/boot, which is the whole of PATH in the bootstrap
+# line above. Putting binaries at /bin or /sbin instead looks tidier and means
+# the script cannot find them by name -- there is no filesystem here to search.
+# cat, ls, echo and cksum are not listed at all: they are ksh built-ins in
+# QNX 8, not separate binaries.
+ksh
+pidin
+on
+slay
+waitfor
+shutdown
 /sbin/devc-pty=devc-pty
