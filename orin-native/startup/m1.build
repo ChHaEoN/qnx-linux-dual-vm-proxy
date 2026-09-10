@@ -92,6 +92,12 @@ libgcc_s.so.1
 # symptom of leaving it out is a resource manager that never appears rather
 # than a build error.
 libsecpol.so.1
+# The runtime linker. Every dynamically linked program names /usr/lib/ldqnx-64.so.2
+# as its interpreter, and the link below points that at /proc/boot -- which is
+# worthless unless the file is actually in /proc/boot. The first M1 image had the
+# link and not the file: the kernel came up and every program failed with errno 83,
+# ELIBACC, "can not access shared library".
+ldqnx-64.so.2
 
 # ours
 /proc/boot/tcu-cat=tcu-cat
@@ -108,4 +114,4 @@ on
 slay
 waitfor
 shutdown
-/sbin/devc-pty=devc-pty
+devc-pty

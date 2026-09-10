@@ -47,7 +47,7 @@ t234_wdt_report(void)
 	kprintf("t234: WDT0 CR=%x SR=%x  WDT1 CR=%x SR=%x\n", cr0, sr0, cr1, sr1);
 
 	if (cr0 != 0) {
-		kprintf("t234: WDT0 is armed — this run has about two minutes unless -Wdisable\n");
+		kprintf("t234: WDT0 is armed - this run has about two minutes unless -Wdisable\n");
 	}
 }
 
