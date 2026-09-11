@@ -1,0 +1,45 @@
+# m4fix: synthetic
+# m4fix-3 (m4-design.md 4.5.9): three CPUs, 64-bit t:. CPU 1's first event comes after the start
+# marker (its ring overwrote part of the window), CPU 2 has a BUFFER sequence gap, and one
+# GUEST_ENTER on CPU 0 comes before any THRUNNING there (unattributed). Every pair is therefore
+# ineligible. Invented values in the traceprinter -n default layout; a test input, not a trace,
+# and no measured figure.
+# expect: M4C TIME64 mode=t64 time_events=4 mismatches=0 wraps=0 backsteps=0 backsteps64=0 unknown=0
+# expect: M4C RING state=wrapped wrapped_cpus=1 seq1_cpus=0,2
+# expect: M4C BUF cpu=2 first_seq=1 last_seq=3 kept=2 gaps=1 restarts=0
+# expect: M4C BUF cpu=1 first_seq=5 last_seq=5 kept=1 gaps=0 restarts=0
+# expect: M4C VCPU threads=1 pid=300 tid=4 cycles_events=3 unattributed_qvm=1
+# expect: M4C TRIPLES complete=3 broken=0 alt_order=0 order_ok=3 order_violated=0 in_window=3
+# expect: M4C PAIRS total=2 eligible=0 clean=0 pre=0 blk=0 mig=0 unk=0 broken_between=0 order_violated=0 status_nonzero=0 negative=0 out_of_window=0 not_held=2 untimed=0 capped=0
+# expect: M4C STAT class=clean n=0 p50_ticks=- p99_ticks=- max_ticks=- p50_ns=- p99_ns=- max_ns=- quantum_ns=32 p99_quotable=no
+ -- HEADER FILE INFORMATION --
+  TRACE_CYCLES_PER_SEC:: 31250000
+         TRACE_CPU_NUM:: 3
+ -- KERNEL EVENTS --
+t:0x100000000 CPU:00 CONTROL         :TIME               msb:0x00000001 lsb(offset):0x00000000
+t:0x100000000 CPU:00 CONTROL         :BUFFER             sequence = 1, num_events = 13
+
+t:0x100000000 CPU:02 CONTROL         :TIME               msb:0x00000001 lsb(offset):0x00000000
+t:0x100000000 CPU:02 CONTROL         :BUFFER             sequence = 1, num_events = 2
+
+t:0x100000005 CPU:00 QVM             :GUEST_ENTER        guest_ip:0xffffff8040231ffc
+t:0x10000000a CPU:00 THREAD          :THRUNNING          pid:300 tid:4
+t:0x100000014 CPU:02 THREAD          :THRUNNING          pid:1 tid:3
+t:0x10000003b CPU:02 CONTROL         :BUFFER_END         cookie1 = e6e6e6e6, cookie2 = e6e6e6e6
+t:0x10000003c CPU:02 CONTROL         :TIME               msb:0x00000001 lsb(offset):0x0000003c
+t:0x10000003c CPU:02 CONTROL         :BUFFER             sequence = 3, num_events = 1
+
+t:0x100000064 CPU:00 USREVENT        :EVENT:20           STR:"m4-fix-start", d0:0x00000000 d1:0x00000000 d2:0x00000000 d3:0x00000000
+t:0x100000096 CPU:01 CONTROL         :TIME               msb:0x00000001 lsb(offset):0x00000096
+t:0x100000096 CPU:01 CONTROL         :BUFFER             sequence = 5, num_events = 1
+
+t:0x1000000c8 CPU:00 QVM             :GUEST_ENTER        guest_ip:0xffffff8040232000
+t:0x100000129 CPU:00 QVM             :CYCLES             at_entry:0x00000000fffff0cd at_exit:0x00000000fffff127
+t:0x10000012c CPU:00 QVM             :GUEST_EXIT         status:0x00000000 hw_reason:0x93810047 clockcycles_offset:0xfffffffffffff000 guest_ip:0xffffff8040232000 payload:0x0000000000000000
+t:0x100000190 CPU:00 QVM             :GUEST_ENTER        guest_ip:0xffffff8040232004
+t:0x1000001f1 CPU:00 QVM             :CYCLES             at_entry:0x00000000fffff195 at_exit:0x00000000fffff1ef
+t:0x1000001f4 CPU:00 QVM             :GUEST_EXIT         status:0x00000000 hw_reason:0x93810047 clockcycles_offset:0xfffffffffffff000 guest_ip:0xffffff8040232004 payload:0x0000000000000000
+t:0x10000026c CPU:00 QVM             :GUEST_ENTER        guest_ip:0xffffff8040232008
+t:0x1000002b9 CPU:00 QVM             :CYCLES             at_entry:0x00000000fffff271 at_exit:0x00000000fffff2b7
+t:0x1000002bc CPU:00 QVM             :GUEST_EXIT         status:0x00000000 hw_reason:0x93810047 clockcycles_offset:0xfffffffffffff000 guest_ip:0xffffff8040232008 payload:0x0000000000000000
+t:0x1000003e8 CPU:00 USREVENT        :EVENT:21           STR:"m4-fix-end", d0:0x00000000 d1:0x00000000 d2:0x00000000 d3:0x00000000

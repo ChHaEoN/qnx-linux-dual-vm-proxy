@@ -1,0 +1,6 @@
+# post_start-m4tcg.custom: Phase 3b M4 TCG rehearsal (m4-design.md §11.2).
+# mkqnximage appends this to the rehearsal host's post_startup.sh. Everything the
+# rehearsal does is in /system/bin/m4-host.ksh; the reboot then ends QEMU, which
+# runs under -no-reboot.
+ksh /system/bin/m4-host.ksh
+shutdown -S reboot

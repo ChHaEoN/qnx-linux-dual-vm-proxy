@@ -1,0 +1,87 @@
+# m4fix: synthetic
+# m4fix-1 (m4-design.md 4.5.9): four CPUs, 64-bit t:, both markers, BUFFER sequences from 1,
+# one vCPU thread (pid 100 tid 2), eight triples giving seven pairs: two clean, one preempted by
+# another thread's THRUNNING, one preempted by THREADY, one blocked by THCONDVAR, one migrated
+# (entry on another CPU), one with a non-zero status. CPUs 0 and 1 end with the STOP-time
+# trailing buffer whose sequence restarts at 1 after the end marker (m4-design.md 14, I2).
+# Invented values in the traceprinter -n default layout; a test input, not a trace, and no
+# measured figure.
+# expect: M4C TIME64 mode=t64 time_events=7 mismatches=0 wraps=0 backsteps=0 backsteps64=0 unknown=0
+# expect: M4C RING state=held wrapped_cpus=none seq1_cpus=0,1,2,3
+# expect: M4C BUF cpu=0 first_seq=1 last_seq=2 kept=3 gaps=0 restarts=1
+# expect: M4C BUF cpu=1 first_seq=1 last_seq=1 kept=2 gaps=0 restarts=1
+# expect: M4C BUF cpu=3 first_seq=1 last_seq=1 kept=1 gaps=0 restarts=0
+# expect: M4C VCPU threads=1 pid=100 tid=2 cycles_events=8 unattributed_qvm=0
+# expect: M4C TRIPLES complete=8 broken=0 alt_order=0 order_ok=8 order_violated=0 in_window=8
+# expect: M4C PAIRS total=7 eligible=6 clean=2 pre=2 blk=1 mig=1 unk=0 broken_between=0 order_violated=0 status_nonzero=1 negative=0 out_of_window=0 not_held=0 untimed=0 capped=0 intr_clean=1 intr_pre=0 intr_blk=0 intr_mig=0
+# expect: M4C STAT class=clean n=2 p50_ticks=110 p99_ticks=130 max_ticks=130 p50_ns=3520 p99_ns=4160 max_ns=4160 quantum_ns=32 p99_quotable=no
+ -- HEADER FILE INFORMATION --
+  TRACE_CYCLES_PER_SEC:: 31250000
+         TRACE_CPU_NUM:: 4
+ -- KERNEL EVENTS --
+t:0x100000000 CPU:00 CONTROL         :TIME               msb:0x00000001 lsb(offset):0x00000000
+t:0x100000000 CPU:00 CONTROL         :BUFFER             sequence = 1, num_events = 20
+
+t:0x100000000 CPU:01 CONTROL         :TIME               msb:0x00000001 lsb(offset):0x00000000
+t:0x100000000 CPU:01 CONTROL         :BUFFER             sequence = 1, num_events = 10
+
+t:0x100000000 CPU:02 CONTROL         :TIME               msb:0x00000001 lsb(offset):0x00000000
+t:0x100000000 CPU:02 CONTROL         :BUFFER             sequence = 1, num_events = 3
+
+t:0x100000000 CPU:03 CONTROL         :TIME               msb:0x00000001 lsb(offset):0x00000000
+t:0x100000000 CPU:03 CONTROL         :BUFFER             sequence = 1, num_events = 3
+
+t:0x10000000a CPU:00 THREAD          :THRUNNING          pid:100 tid:2
+t:0x100000014 CPU:01 THREAD          :THRUNNING          pid:1 tid:2
+t:0x10000001e CPU:02 THREAD          :THRUNNING          pid:1 tid:3
+t:0x10000001f CPU:03 THREAD          :THRUNNING          pid:1 tid:4
+t:0x100000064 CPU:00 USREVENT        :EVENT:20           STR:"m4-fix-start", d0:0x00000000 d1:0x00000000 d2:0x00000000 d3:0x00000000
+t:0x1000000c8 CPU:00 QVM             :GUEST_ENTER        guest_ip:0xffffff8040232000
+t:0x100000129 CPU:00 QVM             :CYCLES             at_entry:0x00000000fffff0cd at_exit:0x00000000fffff127
+t:0x10000012c CPU:00 QVM             :GUEST_EXIT         status:0x00000000 hw_reason:0x93810047 clockcycles_offset:0xfffffffffffff000 guest_ip:0xffffff8040232000 payload:0x0000000000000000
+t:0x100000190 CPU:00 QVM             :GUEST_ENTER        guest_ip:0xffffff8040232004
+t:0x1000001f1 CPU:00 QVM             :CYCLES             at_entry:0x00000000fffff195 at_exit:0x00000000fffff1ef
+t:0x1000001f4 CPU:00 QVM             :GUEST_EXIT         status:0x00000000 hw_reason:0x93810047 clockcycles_offset:0xfffffffffffff000 guest_ip:0xffffff8040232004 payload:0x0000000000000000
+t:0x100000226 CPU:00 INTERRUPT       :INT_DELIVER       intr_id:0x1c(28)
+t:0x10000026c CPU:00 QVM             :GUEST_ENTER        guest_ip:0xffffff8040232008
+t:0x1000002b9 CPU:00 QVM             :CYCLES             at_entry:0x00000000fffff271 at_exit:0x00000000fffff2b7
+t:0x1000002bc CPU:00 QVM             :GUEST_EXIT         status:0x00000000 hw_reason:0x93820007 clockcycles_offset:0xfffffffffffff000 guest_ip:0xffffff8040232008 payload:0x0000000000000000
+t:0x1000002d0 CPU:00 THREAD          :THRUNNING          pid:1 tid:1
+t:0x100000320 CPU:00 THREAD          :THRUNNING          pid:100 tid:2
+t:0x100000352 CPU:00 QVM             :GUEST_ENTER        guest_ip:0xffffff804023200c
+t:0x1000003b3 CPU:00 QVM             :CYCLES             at_entry:0x00000000fffff357 at_exit:0x00000000fffff3b1
+t:0x1000003b6 CPU:00 QVM             :GUEST_EXIT         status:0x00000000 hw_reason:0x93810047 clockcycles_offset:0xfffffffffffff000 guest_ip:0xffffff804023200c payload:0x0000000000000000
+t:0x1000003dd CPU:00 CONTROL         :BUFFER_END         cookie1 = e6e6e6e6, cookie2 = e6e6e6e6
+t:0x1000003de CPU:00 CONTROL         :TIME               msb:0x00000001 lsb(offset):0x000003de
+t:0x1000003de CPU:00 CONTROL         :BUFFER             sequence = 2, num_events = 24
+
+t:0x1000003e8 CPU:00 THREAD          :THREADY            pid:100 tid:2
+t:0x10000041a CPU:00 THREAD          :THRUNNING          pid:100 tid:2
+t:0x10000044c CPU:00 QVM             :GUEST_ENTER        guest_ip:0xffffff8040232010
+t:0x1000004ad CPU:00 QVM             :CYCLES             at_entry:0x00000000fffff451 at_exit:0x00000000fffff4ab
+t:0x1000004b0 CPU:00 QVM             :GUEST_EXIT         status:0x00000000 hw_reason:0x93810047 clockcycles_offset:0xfffffffffffff000 guest_ip:0xffffff8040232010 payload:0x0000000000000000
+t:0x1000004e2 CPU:00 THREAD          :THCONDVAR          pid:100 tid:2
+t:0x1000004ec CPU:00 THREAD          :THRUNNING          pid:1 tid:1
+t:0x100000546 CPU:00 THREAD          :THREADY            pid:100 tid:2
+t:0x10000056e CPU:00 THREAD          :THRUNNING          pid:100 tid:2
+t:0x100000578 CPU:00 QVM             :GUEST_ENTER        guest_ip:0xffffff8040232014
+t:0x1000005d9 CPU:00 QVM             :CYCLES             at_entry:0x00000000fffff57d at_exit:0x00000000fffff5d7
+t:0x1000005dc CPU:00 QVM             :GUEST_EXIT         status:0x00000000 hw_reason:0x93810047 clockcycles_offset:0xfffffffffffff000 guest_ip:0xffffff8040232014 payload:0x0000000000000000
+t:0x10000060e CPU:00 THREAD          :THRUNNING          pid:1 tid:1
+t:0x100000640 CPU:01 THREAD          :THRUNNING          pid:100 tid:2
+t:0x100000672 CPU:01 QVM             :GUEST_ENTER        guest_ip:0xffffff8040232018
+t:0x1000006d3 CPU:01 QVM             :CYCLES             at_entry:0x00000000fffff677 at_exit:0x00000000fffff6d1
+t:0x1000006d6 CPU:01 QVM             :GUEST_EXIT         status:0x00000000 hw_reason:0x93810047 clockcycles_offset:0xfffffffffffff000 guest_ip:0xffffff8040232018 payload:0x0000000000000000
+t:0x10000073a CPU:01 QVM             :GUEST_ENTER        guest_ip:0xffffff804023201c
+t:0x10000079b CPU:01 QVM             :CYCLES             at_entry:0x00000000fffff73f at_exit:0x00000000fffff799
+t:0x10000079e CPU:01 QVM             :GUEST_EXIT         status:0x00000024 hw_reason:0x93810047 clockcycles_offset:0xfffffffffffff000 guest_ip:0xffffff804023201c payload:0x0000000000000000
+t:0x1000007d0 CPU:01 USREVENT        :EVENT:21           STR:"m4-fix-end", d0:0x00000000 d1:0x00000000 d2:0x00000000 d3:0x00000000
+t:0x100000833 CPU:00 CONTROL         :BUFFER_END         cookie1 = e6e6e6e6, cookie2 = e6e6e6e6
+t:0x100000834 CPU:00 CONTROL         :TIME               msb:0x00000001 lsb(offset):0x00000834
+t:0x100000834 CPU:00 CONTROL         :BUFFER             sequence = 1, num_events = 2
+
+t:0x100000836 CPU:00 THREAD          :THRUNNING          pid:1 tid:1
+t:0x10000083d CPU:01 CONTROL         :BUFFER_END         cookie1 = e6e6e6e6, cookie2 = e6e6e6e6
+t:0x10000083e CPU:01 CONTROL         :TIME               msb:0x00000001 lsb(offset):0x0000083e
+t:0x10000083e CPU:01 CONTROL         :BUFFER             sequence = 1, num_events = 1
+

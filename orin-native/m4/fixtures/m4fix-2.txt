@@ -1,0 +1,41 @@
+# m4fix: synthetic
+# m4fix-2 (m4-design.md 4.5.9): one CPU, 32-bit t: with one msb: TIME event and one low-word
+# wrap inside the window that no TIME event marks (the safety net), one triple failing the order
+# check (its at_entry maps before its GUEST_ENTER), and one negative dwell (the last triple's
+# offset differs, so the two raw guest readings step backwards while both triples order-check).
+# Invented values in the traceprinter -n default layout; a test input, not a trace, and no
+# measured figure.
+# expect: M4C TIME64 mode=rebuilt time_events=1 mismatches=0 wraps=1 backsteps=0 backsteps64=0 unknown=0
+# expect: M4C RING state=held wrapped_cpus=none seq1_cpus=0
+# expect: M4C BUF cpu=0 first_seq=1 last_seq=1 kept=1 gaps=0 restarts=0
+# expect: M4C TRIPLES complete=6 broken=0 alt_order=0 order_ok=5 order_violated=1 in_window=6
+# expect: M4C PAIRS total=5 eligible=2 clean=2 pre=0 blk=0 mig=0 unk=0 broken_between=0 order_violated=2 status_nonzero=0 negative=1 out_of_window=0 not_held=0 untimed=0 capped=0
+# expect: M4C STAT class=clean n=2 p50_ticks=266 p99_ticks=129034 max_ticks=129034 p50_ns=8512 p99_ns=4129088 max_ns=4129088 quantum_ns=32 p99_quotable=no
+ -- HEADER FILE INFORMATION --
+  TRACE_CYCLES_PER_SEC:: 31250000
+         TRACE_CPU_NUM:: 1
+ -- KERNEL EVENTS --
+t:0xfffe0000 CPU:00 CONTROL         :TIME               msb:0x00000005 lsb(offset):0xfffe0000
+t:0xfffe0000 CPU:00 CONTROL         :BUFFER             sequence = 1, num_events = 22
+
+t:0xfffe0010 CPU:00 THREAD          :THRUNNING          pid:200 tid:3
+t:0xfffe0100 CPU:00 USREVENT        :EVENT:20           STR:"m4-fix-start", d0:0x00000000 d1:0x00000000 d2:0x00000000 d3:0x00000000
+t:0xfffe0200 CPU:00 QVM             :GUEST_ENTER        guest_ip:0xffffff8040232000
+t:0xfffe02fd CPU:00 QVM             :CYCLES             at_entry:0x00000005ffff0205 at_exit:0x00000005ffff02fb
+t:0xfffe0300 CPU:00 QVM             :GUEST_EXIT         status:0x00000000 hw_reason:0x93810047 clockcycles_offset:0x0000000000010000 guest_ip:0xffffff8040232000 payload:0x0000000000000000
+t:0xfffe0400 CPU:00 QVM             :GUEST_ENTER        guest_ip:0xffffff8040232004
+t:0xfffe04fd CPU:00 QVM             :CYCLES             at_entry:0x00000005ffff03fb at_exit:0x00000005ffff04fb
+t:0xfffe0500 CPU:00 QVM             :GUEST_EXIT         status:0x00000000 hw_reason:0x93810047 clockcycles_offset:0x0000000000010000 guest_ip:0xffffff8040232004 payload:0x0000000000000000
+t:0xfffe0600 CPU:00 QVM             :GUEST_ENTER        guest_ip:0xffffff8040232008
+t:0xfffe06fd CPU:00 QVM             :CYCLES             at_entry:0x00000005ffff0605 at_exit:0x00000005ffff06fb
+t:0xfffe0700 CPU:00 QVM             :GUEST_EXIT         status:0x00000000 hw_reason:0x93810047 clockcycles_offset:0x0000000000010000 guest_ip:0xffffff8040232008 payload:0x0000000000000000
+t:0xfffe0800 CPU:00 QVM             :GUEST_ENTER        guest_ip:0xffffff804023200c
+t:0xfffe08fd CPU:00 QVM             :CYCLES             at_entry:0x00000005ffff0805 at_exit:0x00000005ffff08fb
+t:0xfffe0900 CPU:00 QVM             :GUEST_EXIT         status:0x00000000 hw_reason:0x93810047 clockcycles_offset:0x0000000000010000 guest_ip:0xffffff804023200c payload:0x0000000000000000
+t:0x00000100 CPU:00 QVM             :GUEST_ENTER        guest_ip:0xffffff8040232010
+t:0x000001fd CPU:00 QVM             :CYCLES             at_entry:0x0000000600010105 at_exit:0x00000006000101fb
+t:0x00000200 CPU:00 QVM             :GUEST_EXIT         status:0x00000000 hw_reason:0x93810047 clockcycles_offset:0x0000000000010000 guest_ip:0xffffff8040232010 payload:0x0000000000000000
+t:0x00000300 CPU:00 QVM             :GUEST_ENTER        guest_ip:0xffffff8040232014
+t:0x000003fd CPU:00 QVM             :CYCLES             at_entry:0x000000060000f305 at_exit:0x000000060000f3fb
+t:0x00000400 CPU:00 QVM             :GUEST_EXIT         status:0x00000000 hw_reason:0x93810047 clockcycles_offset:0x000000000000f000 guest_ip:0xffffff8040232014 payload:0x0000000000000000
+t:0x00000500 CPU:00 USREVENT        :EVENT:21           STR:"m4-fix-end", d0:0x00000000 d1:0x00000000 d2:0x00000000 d3:0x00000000
