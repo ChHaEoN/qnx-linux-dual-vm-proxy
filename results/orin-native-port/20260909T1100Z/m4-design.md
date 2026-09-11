@@ -222,7 +222,7 @@ python orin-native/m4/parse-m4.py size-r2 --r1-parse results/orin-native-port/<u
 5. **The two readings agree** (D2, D3): the PC's parse of the delivered block `v` gives the same triples, pairs, classes, eligibility and dwell as the counter's block `c` for every pair wholly inside the delivered range (`xcheck_pairs=match`), and, when `v` is not capped, the same `M4C PAIRS` counts and `M4C STAT` values (`xcheck_stats=match`).
 6. `flt_v=ok` and `flt_c=ok`; `M4C END rc=0`.
 
-**On fail:** §9. Specifically: `ring=wrapped` at K1 = 256 → build `m4-r1-k512` and rerun r1 once; at 512 → D1(b), `m4-r1-lin`. `M4 FAIL mem_trace` → halve K1 (not below 64) and rerun; below 64 → owner, M3's O7 memory fallback (D3:1331). Any §1.7 zero → §1.7.
+**On fail:** §9. Specifically: `ring=wrapped` at K1 = 256 → build `m4-r1-k512` and rerun r1 once; at 512 → D1(b), `m4-r1-lin`. `M4 FAIL mem_trace` → halve K1 (not below 64) and rerun; below 64 → owner, M3's O7 memory fallback (D3:1331). `m4-r1-lin` has no K1 to halve: its need follows §2.4 step 3's linear rule (I26), and a `mem_trace` fail there goes to the owner. Any §1.7 zero → §1.7.
 
 ### 2.3 r2: Q and five timed runs on one kimg
 
@@ -253,7 +253,7 @@ The parser's `size-r1` and `size-r2` subcommands implement these rules exactly a
 
 1. `need1 = ceil(16 × b0 × 60) + 2`. The factor 16 (budget, HYPOTHESIS) allows qvm and the IPC run to raise the busiest CPU's buffer rate sixteen-fold over idle. 60 s (budget) covers the settle, the client's start and 1 s priming drain, 20 iterations and four 10 s sentinel recoveries (D3:846-848).
 2. `K1 = 256` if `need1 ≤ 256`; `512` if `need1 ≤ 512`; otherwise `lin` (D1(b)).
-3. `ring_mb(K) = ceil(K × 16 × 4 / 1024)` ([use-tl]: about 16 KB per buffer, per CPU; DD:1604). `S(K) = ring_mb(K) + 4` MiB, so `-S` always exceeds the ring (DD:1616). `cost(K) = max(ring_mb(K), ceil(probe_cost_mb × K / 64))`. `TRACE_NEED_MB(K) = cost(K) + S(K) + 32` (32 MB margin, budget).
+3. `ring_mb(K) = ceil(K × 16 × 4 / 1024)` ([use-tl]: about 16 KB per buffer, per CPU; DD:1604). `S(K) = ring_mb(K) + 4` MiB, so `-S` always exceeds the ring (DD:1616). `cost(K) = max(ring_mb(K), ceil(probe_cost_mb × K / 64))`. `TRACE_NEED_MB(K) = cost(K) + S(K) + 32` (32 MB margin, budget). **For `lin` (I26, §14.8):** the window passes no `-k`, so the kernel keeps tracelogger's default of 8 buffers per CPU ([use-tl]). `cost(lin) = max(ring_mb(8), ceil(probe_cost_mb))`, which r0's 64-buffer probe bounds, and `TRACE_NEED_MB(lin) = cost(lin) + S(512) + 32`.
 4. If `4 × S(K1) × 1,048,576 / tp_bps0 > 600`, step K1 down (512 → 256); at 256 still over: owner decision (raise TP_BOUND, guard recomputed).
 5. `CNT_BOUND1 = 120` if `4 × 5 × S(K1) × 1,048,576 / cnt_bps0 ≤ 120`, else 300. The factor 5 (budget) is text bytes per `.kev` byte, shaped on the unpublished 7b record.
 6. `SEND(cap) = ceil(cap / max(0.5 × tcu_bps0, 2000)) + 15` s. If it exceeds 600 s for a block, that block's cap halves until it fits.
@@ -273,7 +273,7 @@ The parser's `size-r1` and `size-r2` subcommands implement these rules exactly a
 3. `N2 = min(N_pairs, 13200)`. 13,200 keeps `IPC_BOUND2 = 240 + ceil(0.05 × N2)` at most 900 s, with 50 ms per iteration (budget: the client's 20 ms pacing, client.c:317, plus the round trip and recoveries).
 4. `K2 = max(256, ceil(1.5 × beta × (N2 + 5)) + 2)`.
 5. If `K2 > 512`: `N_ring = floor(510 / (1.5 × beta)) − 5`. If `N_ring × p1 ≥ 1200`, set `N2 = N_ring`, `K2 = 512`, and record `p99_target=ring-limited`. Otherwise D1(b): `m4-r2-lin-n<N2>`, with step 3's `N2`.
-6. `TRACE_NEED_MB2 = TRACE_NEED_MB(K2)` with r0's `probe_cost_mb`.
+6. `TRACE_NEED_MB2 = TRACE_NEED_MB(K2)` with r0's `probe_cost_mb`; under D1(b), step 3's linear rule (I26).
 7. `TP_BOUND2 = min(900, max(120, ceil(4 × tp_ms1 / 1000 × S(K2) / S(K1)) + 60))`; `CNT_BOUND2 = min(600, max(60, ceil(4 × cnt_ms1 / 1000 × S(K2) / S(K1)) + 30))`.
 8. `CAP_C2 = 1,048,576`; `CAP_V2 = 131,072`. The rule prints `c_capped_predicted=yes` when `1.5 × (pairs_all1 / 20) × (N2 + 5) × bpp1 > CAP_C2`. The on-target statistics stay complete either way; only the PC recount is limited.
 9. `SEND_C2`, `SEND_V2` by step 6 above with r1's `tcu_bps`.
@@ -1316,7 +1316,7 @@ Keyed on the last distinctive line in the black box, COM3, the board log or the 
 | r0 probe `kept` above 65 on any CPU | `-k` does not size the ring per CPU on the board | SR-bb | Stop; the §2.4 rules are invalid; owner |
 | r0 or r1 `M4C RING state=wrapped` | The ring overwrote part of the window | SR-bb | r0: owner. r1: contingency C1, then C2 |
 | `M4C RING state=unknown` with both markers and `gaps` above 0 | A BUFFER sequence gap: dropped buffers | SR-bb | Recorded; pairs not eligible; rerun; owner if repeated |
-| `M4 FAIL mem_trace free_mb=… need_mb=…` | Not enough RAM for the ring | SR-bb | Contingency C3 (half K); below 64: owner, M3's O7 (D3:1331) |
+| `M4 FAIL mem_trace free_mb=… need_mb=…` | Not enough RAM for the ring | SR-bb | Contingency C3 (half K); below 64: owner, M3's O7 (D3:1331); a linear window: owner (§2.4 step 3, I26) |
 | `M4 FAIL mem_format name=<n> step=…` | Not enough RAM after release to format or count that listing; nothing was written or sent for it | SR-bb | Read the `MEM` lines. Owner: halve K (C3), or lower `-P`/`-T` with `CNT_MB` recomputed and E8 counting any cap hit; rebuild; rerun |
 | `M4C TIME64 … mismatches=` above 0 | The target's `t:` is not the full count, or the msb logic disagrees | SR-bb | Hold r2; compare with the PC's reading of `v`; fix the counter and parser in lockstep |
 | `M4C QVM enter=0` (or `exit=0`, `cycles=0`) at r1 | No Class-10 event natively | SR-bb | §1.7: verified zero → fallback amendment; unverified → rerun r1 |
@@ -1792,3 +1792,47 @@ The first native M4 rung ran on the board under the §10 checklist:
   - set the final E3 rule from r1's board status records, plus any aarch64 meaning QNX documents.
   - The note recommends keeping `none` unless one of those changes it, and reporting dwell per `hw_reason` class rather than excluding classes.
 
+
+### 14.8 Board r1, first attempt: `mem_trace`, and the linear memory rule (I26) (2026-09-11, owner at the plug)
+
+`size-r1` chose `m4-r1-lin` from r0's record, because §2.4 step 2 returned `lin`. The run followed the §10 flow:
+- a fresh L4T boot;
+- `stage PASS` and the p0 kexec gate;
+- the byte-exact COM3 capture before `run`;
+- O4 and O5 adopted.
+
+**What the board showed.** These are functional results under the freeze decision, not measurements:
+- **Landing:** the shim entered at EL2, procnto came up at `-P4`, and the guard armed.
+- **Before the window:** config, preflight, rate_pre, integrity_pre, disk and hostcheck passed, and the guest booted to its banner.
+- **At `ipc`:** the memory gate before arming failed with `M4 FAIL mem_trace`, because free memory was below the image's `trace_need_mb`. No trace was armed, so the attempt has no marker, STOP, `.kev`, counter output or listing.
+- **After the fail,** as designed:
+  - the IPC client ran its iterations untraced and completed;
+  - teardown and `integrity_post` passed;
+  - the remaining states ran to `end`, with `FAIL_STATE mem_trace`.
+- **Return:** the image reset itself (`MAINSWRST`). The black box and COM3 records are identical, the black box stayed under its budget, and no dmesg-ramoops was written.
+- **Verdict:** `run_verdict=fail`. `crit_1` to `crit_6` and `crit_neg` fail, all because no trace ran; `crit_reset` and `crit_bb` pass.
+
+**Cause: the sizing rules' linear branch (I26).**
+- **The defect:** §2.4 step 3 defines `TRACE_NEED_MB(K)` for a ring. For `lin`, `size-r1` and `size-r2` substituted K = 512, the largest ring that D1(b) replaces, so a linear window was costed as a 512-buffer ring scaled from r0's probe.
+- **Why that is wrong:** a linear window passes no `-k`. tracelogger's usage message gives its defaults:
+  - `-k`: 8 kernel buffers per CPU, about 16 KB each;
+  - `-b`: at most 64 dynamic buffers in tracelogger, about 11 KB each.
+  - r0's probe ran with `-k 64` and the same `-b` default, so the probe's measured cost bounds a linear window's.
+- **Fix (commit d916877):**
+  - `cost(lin) = max(ring_mb(8), ceil(probe_cost_mb))`;
+  - `TRACE_NEED_MB(lin) = cost(lin) + S + 32`, with `S = S(512)` as before;
+  - the generator's `ring + S + 32` check uses 8 buffers for `lin`;
+  - ring sizing is untouched.
+- **Checks:**
+  - `selftest` passes, though it does not cover sizing.
+  - `size-r1` over r0's valid parse gives a size file that differs from the attempt's params only in `trace_need_mb`.
+  - The generator accepted that file and rebuilt `m4-r1-lin`.
+- **Still HYPOTHESIS:** that `-c` plus `trcctl -x` stops and flushes a linear capture (§4.2). The rerun tests it.
+- **If the rerun fails `mem_trace` again,** the owner decides, because a linear window has no K to halve (§2.2, §9).
+
+**Owner decision (2026-09-11):** apply the fix and rerun `m4-r1-lin` the same day, without first rehearsing the linear stop path under TCG. §4.2 already gives that test to the board's r1.
+
+**Records.**
+- The attempt's record directory is git-ignored, and the I25 params copy is in it.
+- The rebuild replaced the PC's copy of the as-run kimg, so that kimg is kept on the board under a new name.
+- The figures are on the unpublished branch.
