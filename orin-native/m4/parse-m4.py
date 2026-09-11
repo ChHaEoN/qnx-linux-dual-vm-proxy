@@ -2303,6 +2303,16 @@ def trace_need_mb(k, probe_cost_mb):
     return cost + s_mb(k) + 32
 
 
+TL_K_DEFAULT = 8   # tracelogger's usage message: -k defaults to 8 kernel buffers per CPU
+
+
+def trace_need_mb_lin(s, probe_cost_mb):
+    # I26: a linear capture (-c -S, no -k) keeps the default kernel buffers, fewer than r0's 64-buffer
+    # probe, so the probe's cost bounds it; the file itself grows to -S.
+    cost = max(ring_mb(TL_K_DEFAULT), math.ceil(probe_cost_mb))
+    return cost + s + 32
+
+
 def fmt_need_mb(s, cap_v, cap_c):
     return 5 * s + CNT_MB + math.ceil((cap_v + cap_c) / MIB) + 32
 
@@ -2412,7 +2422,8 @@ def cmd_size_r1(a):
         "image": f"m4-r1-{'lin' if k1 == 'lin' else 'k%d' % k1}", "rung": "r1", "mode": "full", "p": 4,
         "kind": "linear" if k1 == "lin" else "ring", "k": k1, "s_mb": s,
         "tl_args": f"-c -S {s}M" if k1 == "lin" else f"-r -k {k1} -M -S {s}M",
-        "tl_bound": 2 + ipc + 5 + 160 + 30, "trace_need_mb": trace_need_mb(kk, probe_cost),
+        "tl_bound": 2 + ipc + 5 + 160 + 30,
+        "trace_need_mb": trace_need_mb_lin(s, probe_cost) if k1 == "lin" else trace_need_mb(kk, probe_cost),
         "fmt_need_mb": fmt_need_mb(s, cap_v, cap_c), "cnt_need_mb": cnt_need_mb(cap_v, cap_c),
         "iters": 15, "ipc_bound": ipc, "banner_bound": 240, "grace": 90, "tp_bound": 600, "cnt_bound": cnt_bound,
         "hash_bound": 20, "forms": "v c", "cap_v": cap_v, "cap_c": cap_c, "send_v": send_v, "send_c": send_c,
@@ -2524,7 +2535,8 @@ def cmd_size_r2(a):
     values = {
         "image": image, "rung": "r2", "mode": "full", "p": 4, "kind": "linear" if lin else "ring",
         "k": "lin" if lin else k2, "s_mb": s2, "tl_args": f"-c -S {s2}M" if lin else f"-r -k {k2} -M -S {s2}M",
-        "tl_bound": 2 + ipc2 + 5 + 160 + 30, "trace_need_mb": trace_need_mb(kk, probe_cost),
+        "tl_bound": 2 + ipc2 + 5 + 160 + 30,
+        "trace_need_mb": trace_need_mb_lin(s2, probe_cost) if lin else trace_need_mb(kk, probe_cost),
         "fmt_need_mb": fmt_need_mb(s2, cap_v, cap_c), "cnt_need_mb": cnt_need_mb(cap_v, cap_c),
         "iters": n2, "ipc_bound": ipc2, "banner_bound": 240, "grace": 90, "tp_bound": tp2, "cnt_bound": cnt2,
         "hash_bound": 20, "forms": "c v", "cap_v": cap_v, "cap_c": cap_c, "send_v": send_v, "send_c": send_c,

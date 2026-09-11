@@ -530,7 +530,9 @@ params_sized() {
 	same send_t_v $(( ${PARAM[send_v]} - 5 ))
 	same send_t_c $(( ${PARAM[send_c]} - 5 ))
 	same tl_bound $(( 2 + ${PARAM[ipc_bound]} + 5 + 160 + 30 ))
-	(( ${PARAM[trace_need_mb]} >= $(ring_mb "$kk") + ${PARAM[s_mb]} + 32 )) \
+	# I26: a linear capture passes no -k, so it keeps tracelogger's default 8 kernel buffers per CPU
+	if [ "${PARAM[k]}" = lin ]; then tk=8; else tk="$kk"; fi
+	(( ${PARAM[trace_need_mb]} >= $(ring_mb "$tk") + ${PARAM[s_mb]} + 32 )) \
 		|| die "parameters: trace_need_mb=${PARAM[trace_need_mb]} is below ring + S + 32 MiB (§2.4 step 3)"
 	caps=$(ceil_div $(( ${PARAM[cap_v]} + ${PARAM[cap_c]} )) 1048576)
 	same fmt_need_mb $(( 5 * ${PARAM[s_mb]} + 270 + caps + 32 ))
