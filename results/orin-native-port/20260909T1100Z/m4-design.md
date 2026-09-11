@@ -1743,7 +1743,7 @@ The first native M4 rung ran on the board under the §10 checklist:
 ### 14.7 N15 decided: E3 off for the functional rungs, and the status values recorded (2026-09-11)
 
 **Owner decision (2026-09-11): option (b) now, option (c) in research, the final E3 at the freeze.**
-- **(b)** The functional rungs run with E3 = `none`, so no pair is refused for its `status`. `PAIRS status_nonzero` still counts the pairs that `status0` would refuse, so both readings stay visible.
+- **(b)** The functional rungs run with E3 = `none`, so no pair is refused for its `status`. ~~`PAIRS status_nonzero` still counts the pairs that `status0` would refuse, so both readings stay visible.~~ **Corrected 2026-09-11 (verification):** `PAIRS status_nonzero` is an eligibility reason set only under `-E status0`, so under `E3=none` it always reads 0 in both implementations. What stays visible under `none` is the QVM-level `status_nonzero` count and the `STATUS` and `STATUSSUM` records.
 - **(b), continued.** Every GUEST_EXIT's `status` value is recorded, whether the event pairs or not. The freeze then chooses E3 from the values the board actually prints.
 - **(c)** In parallel, research what the `status` field and its bits mean. Until a QNX source says, the meaning is UNKNOWN. §1.4's reading (a zero status means the entry succeeded) stays VENDOR_CLAIM.
 - **At the freeze** the owner chooses the final E3, before the one measurement campaign. No functional rung is a measurement.
@@ -1785,4 +1785,10 @@ The first native M4 rung ran on the board under the §10 checklist:
 **Consequences.**
 - Records from a counter built before this change carry no `STATUS` lines. Re-parsed with this parser, they fail r0's `crit_4` (the new fixture expectations) and r1's `crit_5` (`STATUSSUM.absent`). §14.6's offline re-parse of the r0 board record is therefore not repeatable as it stands. The r0 kimg needs a rebuild anyway (I25).
 - The records add lines to every counter run, so they add to §8.3's black-box budget; the ksh summary does not reprint them. That the addition fits the budget is a HYPOTHESIS until r1's black box shows it.
+- **Before the freeze (N15 follow-ups, from [n15-status-research.md](n15-status-research.md)):**
+  - add a fixture with an ENTER, then an EXIT with no CYCLES, expecting `broken_between`, in both implementations;
+  - decide whether the cross-pair chain `a <= t(EXIT_n) <= t(ENTER_n+1) <= b` becomes an eligibility rule;
+  - decide whether r2's compact pair list also carries `status`;
+  - set the final E3 rule from r1's board status records, plus any aarch64 meaning QNX documents.
+  - The note recommends keeping `none` unless one of those changes it, and reporting dwell per `hw_reason` class rather than excluding classes.
 
