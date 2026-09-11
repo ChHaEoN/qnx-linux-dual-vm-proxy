@@ -11,17 +11,24 @@ This repo is a **Digital Twin design** of the NVIDIA DRIVE OS dual-VM
 partition architecture, running QNX SDP 8.0 (Safety proxy) + Linux aarch64
 (Compute proxy):
 
-- **Cloud twin:** QEMU/KVM on AWS Graviton (c7g.large) — fast iteration, regression sweeps.
-- **Hardware twin:** QEMU/KVM on **Jetson Orin Nano Dev Kit** (Cortex-A78AE, same Tegra family as DRIVE Orin) — validation on real silicon.
+- **Cloud twin:** designed as QEMU/KVM on AWS Graviton (c7g.large), for fast iteration and regression sweeps. As built, it runs the QNX Hypervisor host and one QNX guest under QEMU TCG on the local Windows PC, because non-metal Graviton has no `/dev/kvm` (ADR-002).
+- **Hardware twin:** **Jetson Orin Nano Dev Kit** (Cortex-A78AE, same Tegra family as DRIVE Orin) — validation on real silicon. QEMU runs there under TCG, because KVM boot of the QNX IFS hangs on the GICv3/NISV defect. Since Phase 3b the QNX Hypervisor also runs natively on the board.
 
-The same QNX IFS and the same IPC client/server source run on both sides
-unchanged; the only thing that changes is the host. The **twin diff**
-(what actually changes when only the host changes?) is the load-bearing
-measurement.
+The design had the same QNX IFS and the same IPC client/server source run
+on both sides unchanged, with only the host changing. As built, the Orin
+IPC leg used a rebuilt IFS, and "host" is a bundle of CPU, OS, TCG backend
+and QEMU build (`docs/digital-twin-design.md` §1a). The **twin diff**
+(what changes when the host bundle changes?) is still the load-bearing
+measurement. It is re-run once on reference architecture v1
+(`docs/orin-native-port-plan.md`, freeze section).
 
-**This is not a real hypervisor.** There is no Type-1 partition isolation,
-no ASIL-D guarantee, no certified RTOS, no GPU partitioning. KVM-on-Linux
-is host-mediated, not certified Type-1. The value is in studying the
+**This is not a certified hypervisor stack.** The QNX Hypervisor (`qvm`)
+that the project runs is a Type-1 hypervisor, but it runs uncertified:
+emulated under QEMU TCG, and natively on a consumer devkit as Experimental
+Software (Phase 3b). There is no demonstrated partition isolation (no SMMU
+work, no fault injection), no ASIL-D guarantee, no certified RTOS, no GPU
+partitioning. KVM-on-Linux, where used, is host-mediated, not certified
+Type-1. The value is in studying the
 *software layer* — BSP bring-up, IPC patterns, kernel/userspace boundaries,
 and cloud→target portability — that an SE supporting DRIVE OS customers
 actually touches day-to-day.
@@ -58,7 +65,7 @@ the NVIDIA AVOS / DRIVE OS SE role this portfolio targets.
   `virtio-console` vdev — crosses the real EL2/EL1 partition boundary, TCG-emulated,
   **no** `br0`/tap (host `io-sock` never comes up because the launch line presents no virtio-net/-rng device — a launch-line omission per ADR-002 RQ-4, not an image property; with the devices presented it does). See [ADR-002](docs/phase2-topology-decision.md).
 - IPC (Phase 3 / Orin leg): heterogeneous QNX↔Linux over host bridge `br0` + tap
-  devices (`tap-qnx` / `tap-linux`) + virtio-net under KVM — this bridged path
+  devices (`tap-qnx` / `tap-linux`) + virtio-net under TCG (KVM boot is blocked; `docs/orin-port.md`) — this bridged path
   belongs to Orin, **not** the cloud leg.
 - Reference architecture: NVIDIA DRIVE OS dual-VM partition design (public docs)
 
@@ -67,15 +74,18 @@ IDE / git / SSH-into-AWS workstation **and**, as of the 2026-05-07
 amendment in [docs/findings.md](docs/findings.md), the primary QNX
 SDP 8.0 build host. QNX Software Center, SDP install, and IFS build
 all run natively on Windows; the resulting `output\ifs.bin` is scp'd
-to the c7g.large Graviton runtime host. The EC2 t3.medium x86_64
+to the runtime host: the c7g.large Graviton by design; as built, the
+cloud leg boots the images locally under QEMU TCG and they are copied to
+the Orin (ADR-002; `docs/orin-port.md` step 4). The EC2 t3.medium x86_64
 Ubuntu host stays in the repo as a fallback for users without a
 local x86_64 Windows or Linux box. Honest framing: this collapses
 two roles (dev driver + build host) onto one machine and removes the
 ssh / X11 / browser hops needed to drive the QNX Software Center GUI
 on a remote EC2 — but it does **not** demonstrate build-environment
-parity with a real DRIVE OS customer's Linux build host, and Phase 1
-must still verify Windows-built vs. EC2-built IFS produce equivalent
-output before the pivot is treated as fully validated. The Macbook
+parity with a real DRIVE OS customer's Linux build host. A separate
+Windows-built vs. EC2-built equivalence check was planned and then
+withdrawn as over-specified (`docs/findings.md` 2026-05-07 amendment;
+`docs/bsp-selection.md` F5 note). The Macbook
 Pro M1 Max remains usable as a secondary IDE / SSH terminal but
 cannot host SDP 8.0 (no macOS installer in 8.0).
 
@@ -92,7 +102,7 @@ qnx-linux-dual-vm-proxy/
 ├── agents/                    # sub-prompt templates per agent in the roster
 ├── scripts/                   # cloud-twin scripts (top-level), orin/, twin/
 ├── ipc-test/                  # Phase 2 cross-VM IPC client/server source
-├── results/cloud/             # Phase 2 latency CSVs (AWS twin)
+├── results/cloud/             # Phase 2 latency CSVs (cloud leg, run on the Windows PC)
 ├── results/hw/                # Phase 3 latency CSVs (Orin twin)
 ├── logs/sample-boot/          # curated boot logs (Phase 1)
 ├── skills/                    # FMEA, ISO 26262, ASPICE, BSP-porting, digital-twin, jetson, tegra-virt, 21434
@@ -138,9 +148,9 @@ has a sub-prompt template at `agents/<agent-name>.md`.
 | Location | Audience | Format | Use |
 |---|---|---|---|
 | `agents/<name>.md` | Humans (PR reviewers, GitHub readers) | Long-form prose: role, inputs, outputs, handoff, sub-prompt template | Documentation; on-boarding new collaborators |
-| `.Codex/agents/<name>.md` | Codex Task tool | YAML frontmatter (`name`, `description`, `tools`) + concise system prompt | Native subagent invocation: `subagent_type: <name>` |
+| `.codex/agents/<name>.toml` | Codex Task tool | TOML (`name`, `description`, `developer_instructions`) with a concise system prompt | Native subagent invocation: `subagent_type: <name>` |
 
-The `.Codex/agents/` files are intentionally thin and refer back to `agents/<name>.md` for full context. Edit both together so they don't drift.
+The `.codex/agents/` files are intentionally thin and refer back to `agents/<name>.md` for full context. Edit both together so they don't drift.
 
 **How to invoke a subagent (in any Codex session):**
 
@@ -151,12 +161,23 @@ The `.Codex/agents/` files are intentionally thin and refer back to `agents/<nam
 
 **Phase 1 starting sequence (concrete):**
 
+> **Superseded in part by [ADR-002](docs/phase2-topology-decision.md) (Accepted).**
+> Steps 3–5 below assume the falsified cloud topology — KVM + `br0`/tap +
+> a dual QNX/Linux VM launch. The as-built cloud leg is the QHV host
+> `qvm` + a **single** QNX guest under QEMU **TCG** (no KVM, no
+> `br0`/tap, no Linux guest). Treat `setup-bridge.sh` and
+> `launch-linux-vm.sh` on the cloud runtime as **not used on cloud**;
+> they belong to the Phase-3 Orin heterogeneous path. The live cloud
+> bring-up path is `scripts/qhv/` (first booted 2026-06-11; see that day's
+> QHV milestone in [docs/findings.md](docs/findings.md)) and the Phase-2
+> IPC is QNX-host↔QNX-guest over the `qvm` virtio-console vdev.
+
 ```text
 1. research + architect  → complete (commit 072446c — HARA / TARA / F6 verdicts; 2026-05-07 amendment in findings.md — Windows build-host pivot)
 2. user (manual)         → install QNX SDP 8.0 on local Windows PC via QNX Software Center (primary path is GUI-only; not scripted)
-3. implementation        → scripts/bootstrap-runtime-host.sh on Graviton c7g.large (provision QEMU + KVM + bridge tooling). Fallback only: scripts/bootstrap-build-host.sh on a t3.medium EC2 if no local x86_64 host
-4. implementation        → scripts/build-qnx-ifs.bat on Windows (or build-qnx-ifs.sh on EC2 fallback) → scp ifs.bin to runtime → setup-bridge.sh + launch-{qnx,linux}-vm.sh on the runtime
-5. test                  → capture boot logs into logs/sample-boot/cloud-{qnx,linux}-boot1.log; record QNX boot time
+3. implementation        → scripts/bootstrap-runtime-host.sh on Graviton c7g.large (provision QEMU + bridge tooling). [ADR-002: no KVM on cloud — TCG only] Fallback only: scripts/bootstrap-build-host.sh on a t3.medium EC2 if no local x86_64 host
+4. implementation        → scripts/build-qnx-ifs.bat on Windows (or build-qnx-ifs.sh on EC2 fallback) → scp ifs.bin to runtime → boot QHV host + single QNX guest under TCG via scripts/qhv/. [ADR-002 supersedes the old setup-bridge.sh + launch-{qnx,linux}-vm.sh dual-VM-over-bridge step — that is Phase-3/Orin only]
+5. test                  → capture boot logs into logs/sample-boot/cloud-{qnx,linux}-boot1.log (cloud is QNX-only per ADR-002); record QNX boot time
 6. fusa-analysis         + cyber-analysis (parallel)  →  Phase-1-gate review
 7. docs                  → update findings.md with Phase 1 measured numbers
 ```
@@ -167,7 +188,7 @@ Three parallel-friendly handoffs in that flow: step 6 (FuSa-Analysis ∥ Cyber-A
 
 ## What this project does NOT do
 
-- No Type-1 / Type-2 hypervisor (QEMU + KVM is for OS bring-up, not partition isolation)
+- No certified Type-1 hypervisor: the QNX Hypervisor runs uncertified, emulated under QEMU TCG and natively on a consumer devkit (Phase 3b); QEMU and KVM serve OS bring-up, not partition isolation
 - No ASIL-B/D safety claim
 - No MISRA-C compliance
 - No GPU virtualization or vGPU partitioning
@@ -219,7 +240,7 @@ Quick summary for context:
 
 ## Phase status
 
-> **Updated 2026-09-08.** This section had drifted badly — it still said
+> **Updated 2026-09-08; Phase 3b, Phase 4 and next actions refreshed 2026-09-11.** This section had drifted badly — it still said
 > "Phase 0 ← current" long after Phases 1–4 had real work and real
 > numbers. `docs/findings.md` is the authoritative, dated ground truth;
 > `CLAUDE.md`'s Phase-status section carries the same content in more
@@ -246,15 +267,25 @@ Quick summary for context:
   AWS `a1.metal` (a second ARM vendor), so TCG is the interim
   transport. Honest caveat: that IPC run used a **rebuilt** IFS, not
   the byte-identical Phase-1 image.
+- Phase 3b — Native QNX on the Orin Nano (ADR-003 option B) — **M0, M1,
+  M2, M1b and M3 met**: entered by kexec from L4T, with no QEMU, the QNX
+  Hypervisor host runs at EL2 and booted the cloud-leg QNX guest (M3,
+  2026-09-10). M3's figures stay on the local branch
+  `m3-results-unpublished` until the 4.6(i) consultation. **Decision
+  2026-09-11 (owner, option B):** M4-F, then M5-F, then S1-F (a Linux
+  guest without a GPU under native qvm), then freeze reference
+  architecture v1, then one measurement campaign. Earlier measurements
+  are architecture-version history. See `docs/orin-native-port-plan.md`.
 - Phase 4 — Twin diff + DRIVE OS comparison — **started**: boot-time
-  twin diff done (n=5 per side; Orin +23–25% slower than Windows). A
-  second leg on the *hypervisor* topology (QHV host + guest, same images
-  on both hosts) now boots on the Orin under a from-source QEMU 11.1.0
-  (the distro 6.2.0 hangs on an EL2/VHE timer defect — QEMU-side, not
-  host). Windows column with rng: median 29,324 ms; the aligned n=5 pair
-  (one QEMU release, rng, `-snapshot`) is the next deliverable — see
-  CLAUDE.md Phase 4 and `docs/digital-twin-design.md` §1a.
-  `docs/drive-os-comparison.md` is still untouched.
+  twin diff done on the plain leg (n=5 per side; Orin +23–25% slower
+  than Windows; now A2 history). A second leg on the *hypervisor*
+  topology (QHV host + guest, same images on both hosts) boots on the
+  Orin under a from-source QEMU 11.1.0 (the distro 6.2.0 hangs on an
+  EL2/VHE timer defect — QEMU-side, not host). The release-aligned pair
+  ran on 2026-09-09 and is now A3 history; the twin diff is re-run in
+  the v1 campaign — see CLAUDE.md Phase 4 and
+  `docs/digital-twin-design.md` §1a. `docs/drive-os-comparison.md`'s
+  verdicts wait for that campaign.
 - Phase 5 — FuSa & Cybersecurity overlay — not started as a dedicated
   phase (a Phase-1-gate FuSa + Cyber pass did run).
 - Phase 6 — Polish, public README, demo recording — not started.
@@ -264,7 +295,6 @@ Quick summary for context:
   NVIDIA-primary single-SoC convergence track.
 
 Next actions: see the identically-named list in `CLAUDE.md`'s Phase
-status section — currently (1) decide whether to raise the committed
-cloud-leg run size now that sentinel recovery is proven, (2) file the
-GICv3/NISV defect with QNX/BlackBerry, (3) write
-`docs/drive-os-comparison.md`'s verdicts.
+status section. Since the 2026-09-11 owner decision the Phase 3b order
+leads: M4-F, M5-F, S1-F, freeze reference architecture v1, then one
+measurement campaign (`docs/orin-native-port-plan.md`, freeze section).

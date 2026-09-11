@@ -13,6 +13,8 @@
 # (qhv/host/local/snippets/post_start.custom) that builds a no-network qvm config
 # and runs `qvm @g2.conf`. Networking was dropped because the host io-sock stack
 # does not initialise on this qemu-virt build (see the "network stack down" lines).
+# 2026-09-11: ADR-002 RQ-4 traced this to the launch line, which presented no virtio-net or
+# virtio-rng device (docs/phase2-research-spike.md); it is not a property of the build.
 #
 # LOAD-BEARING EVIDENCE — two distinct QNX instances with different machines.
 #   CORRECTION (2026-09-08/09): the HOST prints NO banner; an earlier version of

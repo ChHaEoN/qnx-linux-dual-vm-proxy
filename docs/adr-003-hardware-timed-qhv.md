@@ -22,6 +22,8 @@
 
 本專案的 QNX Hypervisor (QHV) leg 目前只在 QEMU TCG（模擬 EL2）下跑，Windows 與 Orin Nano 兩個 host 都一樣（findings.md 2026-09-09 條目），所以 `qvm` 的 guest entry/exit、中斷注入等數字全是模擬器時間，不是矽時間。問題是：一個持 QNX Everywhere 個人授權、手上有 Jetson Orin Nano Dev Kit 與一個 32-vCPU quota AWS 帳號的人，能從哪個平台取得**真實 EL2 上、QNX 自己的量測方法所承認**的 hypervisor 延遲數字。
 
+> **2026-09-11 註：** 上段描述的是 2026-09-09 決策時的狀態。M3（2026-09-10）已在 Orin 上以原生 `qvm` 於真實 EL2 執行，並把 cloud-leg 的 QNX guest 開到 banner（架構 A4，[findings.md 2026-09-10 M3 條目](findings.md)）。這是功能性通過；其量測延到參考架構 v1 的單一量測 campaign（[orin-native-port-plan.md 的凍結一節](orin-native-port-plan.md#architecture-versions-and-the-measurement-freeze-decided-2026-09-11)）。
+
 ## 2. 三個選項的事實表
 
 ### (A) AWS Marketplace QNX AMI on Graviton（含 metal？）
@@ -55,13 +57,13 @@ URL：[a1] https://aws.amazon.com/marketplace/pp/prodview-fyhziqwvrksrw · [a2] 
 | 面向 | 內容 |
 |---|---|
 | **已確立** | 開機鏈 BootROM → MB1 → MB2 → UEFI (edk2-nvidia) → L4TLauncher → kernel；可用 grub-install 換掉 BOOTAA64.efi，即任意 AArch64 EFI application 可當 OS loader [b1]。TF-A 把 BL33 交到「highest available Exception Level (EL2 if available)」[b2]，公開 AGX Orin dmesg 顯示 `All CPU(s) started at EL2` / `VHE mode initialized`。Tegra234 register map 公開於上游 DT：GICD 0x0f400000、GICR 0x0f440000（單一 2 MiB region，無 ITS node）、PSCI smc、uarta 0x03100000 / uarte 0x03140000（8250 類）、uarti 0x031d0000（sbsa-uart）、`serial0 = &tcu`（HSP mailbox，無 MMIO UART）[b3]。NVIDIA staff 對重用 TCU 為普通 UART：「we don't suggest and support for this use case」[b4]。SDP 8.0 install 實際出貨 `aarch64le/boot/sys/uefi.boot`、`mkifsf_uefi.exe`、libstartup.a 246 members 含 efi_entry_point.o、uefi*.o、acpi*.o、cpuid_a78ae.o（MIDR 0x4100D420）、callout_debug_tegra.o、callout_interrupt_t18x_* [a10]；hypervisor-guest BSP zip 附 Apache-2.0 源碼，唯一板目錄是 armv8_fm [b5]。本 session 以 `[virtual=aarch64le,uefi]` 跑 mkifs 產出 MZ/PE/0xAA64 的 AArch64 PE32+（文件卻說 uefi.boot 僅 x86_64）[b6]。edk2-nvidia 源碼樹 `SocT23X.conf` 有 `imply SOC_GENERAL`，`BuildGeneral.conf` `imply ACPI` / `imply DEVICETREE` [b7]。NVIDIA 三次明說不支援：2020「no plan to do」、2024「We don't support QNX on Jetson. It's only available on DRIVE platforms」、2025「There is no plan to support QNX OS on Jetson」[b8][b9][b10]。DRIVE AGX SDK program 為邀請制 [b11]。Catalog 有「QSC - Partner - NVIDIA Customers」資料夾內的 Orin 驅動套件（`com.qnx.qnx800.target.pci.hw.nvidia` T19x/T23x 等），但**無 NVIDIA BSP / startup** [a16]。授權：NC QDL v7 4.1(iii) 授權「modify the Software supplied as Source Code」用於任何 Non-Commercial Target System，無硬體清單限制 [b12]。 |
-| **未知** | 本板（Orin Nano 而非 AGX Orin）EL2 交接**沒有留存 dmesg**——`logs/` 下無 `started at EL2` / `VHE mode initialized`，只有 orin-port.md 一個打勾句子；違反 repo「test before claim」。ACPI/shell「預設開啟」是源碼 `imply` 預設，**不是** NVIDIA 出貨韌體的證據；R36.4.3 Orin UEFI 頁無 ACPI 字樣 [b1][b7]。mkifs 產出的 PE entry 是否真的到達 efi_entry_point（armv8_fm/main.c 從不呼叫 is_uefi_boot()）。40-pin header 上是否有 CPU 可驅動的 8250 UART。t18x（Parker）PCIe/MSI callout 是否適用 Tegra234。tegra234-sdhci / PCIe 沒有已知 QNX driver。Tegra234 TRM 登入閘（HTTP 403）。 |
+| **未知** | ~~本板（Orin Nano 而非 AGX Orin）EL2 交接**沒有留存 dmesg**——`logs/` 下無 `started at EL2` / `VHE mode initialized`，只有 orin-port.md 一個打勾句子；違反 repo「test before claim」。~~ **（2026-09-09 已補：本板自己的 dmesg 已存入 [orin-l4t-boot-el2-uefi-evidence.txt](../logs/sample-boot/orin-l4t-boot-el2-uefi-evidence.txt)，含 `All CPU(s) started at EL2` 與 `VHE mode initialized successfully`；同日 M0 在 kexec 進入點讀到 `EL=2`，見 [findings.md 2026-09-09 條目](findings.md)。）** ACPI/shell「預設開啟」是源碼 `imply` 預設，**不是** NVIDIA 出貨韌體的證據；R36.4.3 Orin UEFI 頁無 ACPI 字樣 [b1][b7]。mkifs 產出的 PE entry 是否真的到達 efi_entry_point（armv8_fm/main.c 從不呼叫 is_uefi_boot()）。40-pin header 上是否有 CPU 可驅動的 8250 UART。t18x（Parker）PCIe/MSI callout 是否適用 Tegra234。tegra234-sdhci / PCIe 沒有已知 QNX driver。Tegra234 TRM 登入閘（HTTP 403）。 |
 | **成本** | 硬體 $0（已擁有）；時間為主要成本 |
 | **工夫** | 數週的無支援 BSP 工作：新 board directory、debug callout、timer/GIC/PSCI 初始化、storage driver；最終為 Experimental Software，無 vendor 路徑 |
 | **風險** | (1) console：唯一 console 是 SPE 擁有的 TCU；(2) 三次 NVIDIA no-QNX 聲明；(3) 授權 4.6(c) 禁止 disassembly（2026-07-28 root cause 曾反組譯 startup-qemu-virt；2026-09-08 的 Apache-2.0 gic_v3.c 路徑才是乾淨立足點）、4.6(i) 禁止未經 BlackBerry 書面同意發布「performance or functional evaluation」結果——這是研究員的法律解讀，非 BlackBerry 聲明，但**讀在本 repo 每個已發布延遲數字上**，需 Architect/Docs 決定 [b12]；(4) Apache 標頭的源碼裝在 QDL 授權的 zip 裡，何者為準未定 |
 | **能量什麼** | 若成功：A78AE 上真 VHE (el2-host) 的 QHV 數字，與 TCG leg 拓撲一致；同時是最強的 BSP-porting 敘事 |
 | **不能量什麼** | 短期內任何東西；也不是 vendor 支援的組態 |
-| **第一道便宜閘門** | 零成本、一小時內：(1) 在 Orin Nano 擷取並存入 `logs/` 的 dmesg（`started at EL2`、`VHE mode`、`EFI v2.x by EDK II`）；(2) 把本 session 的 UEFI PE 放到 ESP 當 BOOTAA64.efi，看 UEFI 是否至少載入它（任何 serial/TCU 輸出即算通過——但 TCU 輸出仍靠 L4T 韌體側）；(3) 用 `-cpu cortex-a72` / `-cpu max` 在 QEMU 複現 PAUTH abort，釐清 guest 到底需不需要 PAUTH（見 C） |
+| **第一道便宜閘門** | 零成本、一小時內：(1) 在 Orin Nano 擷取並存入 `logs/` 的 dmesg（`started at EL2`、`VHE mode`、`EFI v2.x by EDK II`）**（2026-09-09 已完成：[orin-l4t-boot-el2-uefi-evidence.txt](../logs/sample-boot/orin-l4t-boot-el2-uefi-evidence.txt)）**；(2) 把本 session 的 UEFI PE 放到 ESP 當 BOOTAA64.efi，看 UEFI 是否至少載入它（任何 serial/TCU 輸出即算通過——但 TCU 輸出仍靠 L4T 韌體側）；(3) 用 `-cpu cortex-a72` / `-cpu max` 在 QEMU 複現 PAUTH abort，釐清 guest 到底需不需要 PAUTH（見 C） |
 
 URL：[b1] https://docs.nvidia.com/jetson/archives/r36.4.3/DeveloperGuide/SD/Bootloader/UEFI.html · [b2] https://trustedfirmware-a.readthedocs.io/en/latest/design/firmware-design.html · [b3] https://github.com/torvalds/linux/blob/master/arch/arm64/boot/dts/nvidia/tegra234.dtsi · [b4] https://forums.developer.nvidia.com/t/287340 · [b5] `bsp/BSP_hyp-guest-arm_be-800_SVN1018940_JBN323.zip`（lib/efi_entry_point.c、boards/armv8_fm/main.c）· [b6] https://www.qnx.com/developers/docs/8.0/com.qnx.doc.neutrino.utilities/topic/m/mkifs.html · [b7] https://github.com/NVIDIA/edk2-nvidia/blob/main/Platform/NVIDIA/KconfigIncludes/BuildGeneral.conf（及同目錄 SocT23X.conf）· [b8] https://forums.developer.nvidia.com/t/144240 · [b9] https://forums.developer.nvidia.com/t/284463 · [b10] https://forums.developer.nvidia.com/t/is-it-possible-to-port-qnx-os-to-nvidia-jetson-orin/339232 · [b11] https://developer.nvidia.com/drive/agx-sdk-program · [b12] https://www.qnx.com/download/download/51624/BB_QNX_Development_License_Non-Commercial_License_Class_v7_2025-12-10.pdf
 
@@ -91,7 +93,7 @@ URL：[c1] https://gitlab.com/qnx/hypervisor/getting-started · [c2] https://www
 
 **A-OS AMI 與 a1.metal 都不在此清單**：前者是 EL1 tenant、鎖 IFS；後者沒有 QNX host image 可跑（只能量 KVM）。
 
-**模擬 leg 仍能貢獻的：** (i) 量測儀器本身——Class 10 trace 的擷取腳本、ID 7 + clockcycles_offset 的換算、guest-exit 計數、N-vs-V 流程，現在就能在 TCG 上開發並驗證**形狀**，換平台後只換時間軸；(ii) exit 種類與次數的分佈（哪些 MMIO / sysreg 觸發 exit）在 TCG 與矽上應近似，可作 sanity 比對；(iii) host-only twin diff（Windows vs Orin 同 QEMU 版本）繼續是乾淨的一變數比較；(iv) 任何硬體數字都需要 TCG 版作為「這裡是模擬 vs 這裡是矽」的對照欄。
+**模擬 leg 仍能貢獻的：** (i) 量測儀器本身——Class 10 trace 的擷取腳本、ID 7 + clockcycles_offset 的換算、guest-exit 計數、N-vs-V 流程，現在就能在 TCG 上開發並驗證**形狀**，換平台後只換時間軸；(ii) exit 種類與次數的分佈（哪些 MMIO / sysreg 觸發 exit）在 TCG 與矽上應近似，可作 sanity 比對；(iii) ~~host-only twin diff（Windows vs Orin 同 QEMU 版本）繼續是乾淨的一變數比較~~ **（2026-09-11 更正：這是兩個 host bundle 的比較，不是一變數比較，見 [digital-twin-design.md §1a](digital-twin-design.md)；2026-09-09 的 release 對齊結果已是 A3 歷史，twin diff 在 v1 campaign 重跑）**；(iv) 任何硬體數字都需要 TCG 版作為「這裡是模擬 vs 這裡是矽」的對照欄。
 
 ## 4. 建議
 
@@ -105,7 +107,7 @@ URL：[c1] https://gitlab.com/qnx/hypervisor/getting-started · [c2] https://www
 
 **花錢或花週之前必須解掉的未知（明列）：**
 1. **PAUTH 矛盾**：本專案 guest 在 QEMU cortex-a57 的 `PE does not support PAUTH feature` vs 社群在 A72 Pi 4B 開機成功——在 QEMU `-cpu cortex-a72` / `-cpu max,pauth=off` 複現，決定 Pi 4 是否要另建 guest。
-2. **Orin Nano 本板 EL2 證據**：擷取 dmesg 存入 `logs/`（現在只有一個打勾句）。
+2. **Orin Nano 本板 EL2 證據**：擷取 dmesg 存入 `logs/`（~~現在只有一個打勾句~~ **2026-09-09 已完成：[orin-l4t-boot-el2-uefi-evidence.txt](../logs/sample-boot/orin-l4t-boot-el2-uefi-evidence.txt)；M0 亦在 kexec 進入點讀到 `EL=2`**）。
 3. **Software Center refresh**：cache 是 8.0.4 世代；確認 Hypervisor 8.0.5 group 是否對 Everywhere 帳號開放、有無任何 Graviton/AWS 套件、`fvsp.image_builder` 是否仍 unavailable。
 4. **`QNX Hypervisor 8.0` Marketplace listing 是否存在**（console 內唯讀搜尋；本次只能靠搜尋引擎與 JS-rendered 空頁）。
 5. **NC 授權下 Hypervisor AMI 的 Project License 適用性**（問 QNX；NC v7 零次提 hypervisor）。
@@ -132,7 +134,7 @@ URL：[c1] https://gitlab.com/qnx/hypervisor/getting-started · [c2] https://www
 
 **Orin / Tegra234**
 - NVIDIA 對 Orin Nano（非 AGX Orin）UEFI 是否有 ACPI / "O/S Hardware Description Selection" 切換的說明；出貨韌體是否啟用 ACPI / UEFI shell（只有源碼 `imply` 預設）。
-- 本板 Orin Nano 的 EL2 交接 dmesg（`logs/` 下沒有）。
+- ~~本板 Orin Nano 的 EL2 交接 dmesg（`logs/` 下沒有）。~~ **（2026-09-09 已補：[orin-l4t-boot-el2-uefi-evidence.txt](../logs/sample-boot/orin-l4t-boot-el2-uefi-evidence.txt)。）**
 - 任何 QNX 移植到任何 Jetson 世代（TX1/TX2/Xavier/Orin）的紀錄，官方或社群。
 - 任何可用的 seL4 / Xen / Zephyr / FreeBSD Orin 移植。
 - QNX 8.0 文件中的 AArch64 UEFI startup（文件說 uefi.boot 僅 x86_64，與 install 內容矛盾）。
@@ -156,4 +158,4 @@ URL：[c1] https://gitlab.com/qnx/hypervisor/getting-started · [c2] https://www
 
 **已剔除的推翻項目（不採用）：** 「catalog 無任何 com.qnx.qnx800 Graviton 套件」（有 fvsp.image_builder）；「catalog 無 NVIDIA」（有 partner 資料夾驅動套件，無 BSP）；「SocT23X 是否滿足 TEGRA_ACPI 閘門未解」（已解：`imply SOC_GENERAL`）；DaneLLL 引言日期（應為 2025-10-20，thread 348348）；orin-native sweep 的「no other repo file was modified」（docs/bsp-selection.md 亦為 dirty）；「press release 只提 Pi 4B」（有提 Pi 5，但非 hypervisor 脈絡）；「vantage 亦給 $0.466」（僅 aws-pricing.com）。另已修正：Finding 3 引言的頁面歸屬；「officially documented path」降為「QNX-authored recipe, unsupported platform」；Pi 5 生產至 2036 出自產品頁而非新聞稿（本文未引用該句）。
 
-**相關檔案（絕對路徑）：** `E:/Project/qnx-linux-dual-vm-proxy/docs/findings.md`（2026-06-10、2026-07-29、2026-09-09 條目）、`E:/Project/qnx-linux-dual-vm-proxy/docs/orin-port.md`（Research sweep B 段落，第 149–435 行，未提交）、`E:/Project/qnx-linux-dual-vm-proxy/docs/bsp-selection.md`（F7 段落，未提交）、`E:/Project/qnx-linux-dual-vm-proxy/logs/sample-boot/aws-a1-metal-kvm-nisv-repro.log`、`E:/Project/qnx-linux-dual-vm-proxy/logs/sample-boot/orin-qhv-tcg-q62-a57-control.log`（第 49 行 PAUTH 字串）。本回覆未修改任何 repo 檔案。
+**相關檔案（絕對路徑）：** `E:/Project/qnx-linux-dual-vm-proxy/docs/findings.md`（2026-06-10、2026-07-29、2026-09-09 條目）、`E:/Project/qnx-linux-dual-vm-proxy/docs/orin-port.md`（Research sweep B 段落，第 149–435 行）、`E:/Project/qnx-linux-dual-vm-proxy/docs/bsp-selection.md`（F7 段落）、`E:/Project/qnx-linux-dual-vm-proxy/logs/sample-boot/aws-a1-metal-kvm-nisv-repro.log`、`E:/Project/qnx-linux-dual-vm-proxy/logs/sample-boot/orin-qhv-tcg-q62-a57-control.log`（第 49 行 PAUTH 字串）。

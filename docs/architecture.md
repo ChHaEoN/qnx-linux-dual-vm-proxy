@@ -46,13 +46,18 @@ hosts: an x86_64 builder and an arm64 runtime.
 > runtime originally assumed KVM-on-arm64 hardware virtualization, but
 > AWS non-metal Graviton exposes **no `/dev/kvm`** — so the cloud leg
 > runs under QEMU **TCG** emulation, hosting the SDP 8.0 QHV (`qvm`)
-> and a single QNX guest. KVM acceleration moves to Phase 3 (Orin).
+> and a single QNX guest. KVM acceleration was moved to Phase 3 (Orin), but
+> KVM boot there is blocked by the GICv3/NISV defect
+> ([orin-port.md](orin-port.md) risk register), so that leg runs TCG too.
 
 Per the 2026-05-07 amendment in [findings.md](findings.md), the
 primary build host is a **local Windows PC** (the same machine that
 serves as the dev driver). The EC2 t3.medium x86_64 Ubuntu instance
 is retained as an **explicit fallback** for users without a local
-x86_64 Windows or Linux box. The runtime host stays on Graviton.
+x86_64 Windows or Linux box. The runtime host was designed to stay on
+Graviton. As built, the QHV host and its guest run under TCG on the same
+Windows PC, and no cloud-leg number came from Graviton
+([digital-twin-design.md](digital-twin-design.md) §1).
 
 > **As-built per [ADR-002](phase2-topology-decision.md) (Accepted).** The
 > cloud runtime is **not** two co-equal KVM guests over a Linux bridge —
@@ -64,8 +69,8 @@ x86_64 Windows or Linux box. The runtime host stays on Graviton.
 
 ```
 ┌──────────────────────────────┐         ┌─────────────────────────────────┐
-│ Build Host (PRIMARY)         │  scp    │ Runtime Host (Graviton arm64)   │
-│ Local Windows PC (x86_64)    │────────▶│ c7g.large, Ubuntu 22.04 (TCG)   │
+│ Build Host (PRIMARY)         │  scp    │ Runtime (as built: this PC)     │
+│ Local Windows PC (x86_64)    │────────▶│ design: Graviton c7g.large      │
 │ • QNX SDP 8.0 Windows native │  ifs    │                                 │
 │ • mkqnximage --type=qemu     │         │ • qemu-system-aarch64 -accel tcg│
 │   --qvm=yes  (QHV host+guest)│         │   (no /dev/kvm on cloud)        │
@@ -91,18 +96,21 @@ Build host (fallback): `t3.medium` (2 vCPU, 4 GB) is enough headroom
 for SDP install + IFS build; t3 charges by the hour and can be
 stopped between builds.
 
-Runtime host: `c7g.large` (2 vCPU Graviton3, 4 GB). Per
+Runtime host (design): `c7g.large` (2 vCPU Graviton3, 4 GB). Per
 [ADR-002](phase2-topology-decision.md), there is **no `/dev/kvm`** on
 non-metal Graviton, so the QHV host + single QNX guest run under QEMU
-**TCG**. Only the QNX side runs on this instance; the Linux Compute
-guest moved to Phase 3 / Orin.
+**TCG**. As built they run on the local Windows PC, not on this instance,
+so the diagram's `scp` hop to a runtime host does not occur. The Linux
+Compute guest moved to Phase 3 / Orin.
 
 **Honest framing:** the Windows-primary pivot removes ssh / X11 /
 browser-flow friction and EC2 build-host cost — but it does **not**
-demonstrate cross-host build determinism. Phase 1 must verify the
-Windows-built IFS is functionally equivalent to an EC2-built IFS
-from the same `mkqnximage --arch=aarch64le` invocation; until that
-verification lands, the EC2 fallback is the canonical reference.
+demonstrate cross-host build determinism. A Phase-1 check that a
+Windows-built IFS matches an EC2-built one was proposed, then withdrawn
+on 2026-05-07 as over-specified: the build host changes only build
+metadata, not the aarch64 code QNX boots ([findings.md](findings.md),
+2026-05-07 amendment; [bsp-selection.md](bsp-selection.md), F5 note).
+The EC2 host stays a fallback, not a canonical reference.
 And the local Windows host is **not** closer to a real DRIVE OS
 customer build environment than EC2 is — production AVOS / DRIVE OS
 customer builds run on rented / vendor-provided Linux farms, not
@@ -123,17 +131,17 @@ booted under QEMU on the A78AE cores.
                  Build host (cloud twin) ─── scp (output/ifs.bin) ──┐
                                                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ Jetson Orin Nano Dev Kit  (NVIDIA L4T / JetPack 6, KVM enabled)         │
+│ Jetson Orin Nano Dev Kit  (NVIDIA L4T / JetPack 6, TCG; KVM blocked)    │
 │                                                                          │
 │   L4T (Ubuntu 22.04 base) is BOTH the host OS AND the Compute side       │
 │   of the dual-VM pair. QNX runs in QEMU as the Safety side.              │
 │                                                                          │
 │   ┌────────────────────────┐         ┌───────────────────────────────┐   │
 │   │  QNX VM (in QEMU)      │         │  L4T (host, Compute role)     │   │
-│   │  same IFS as cloud twin│         │  native userspace; ipc-test/  │   │
+│   │  rebuilt IFS (TCP srv) │         │  native userspace; ipc-test/  │   │
 │   │  ┌──────────────────┐  │         │  linux-client built natively  │   │
-│   │  │ qnx-server       │  │ virtio  │                               │   │
-│   │  │ (TCP listen)     │◄─┼─net────►│  tcp connect to qnx-server    │   │
+│   │  │ qnx-server-net   │  │ virtio  │                               │   │
+│   │  │ (TCP listen)     │◄─┼─net────►│  tcp connect to qnx-server-net│   │
 │   │  └──────────────────┘  │         │                               │   │
 │   └─────────────┬──────────┘         └───────────────────────────────┘   │
 │                 │ tap-qnx                                                │
@@ -148,7 +156,9 @@ not run inside its own QEMU VM on the hardware twin — L4T is already
 the host, so there is no point virtualising another Linux. This is
 slightly closer to DRIVE OS reality (Linux runs on Tegra natively;
 QNX is the partitioned guest), but is **still not** Type-1: the QNX
-guest is hosted by KVM-on-L4T, which is host-mediated.
+guest is hosted by QEMU TCG on L4T (KVM boot is blocked; see
+[orin-port.md](orin-port.md)), which is host-mediated. The IPC run used an
+IFS rebuilt to stage the TCP server ([orin-port.md](orin-port.md) step 4).
 
 **Why this is the right way to use 8 GB:** running L4T (≈3 GB) +
 QEMU(QNX, 1 GB) leaves ~4 GB headroom for the userspace
@@ -158,8 +168,42 @@ make the twin diff harder to interpret (it would no longer be
 isolating "what changes when only the host changes?").
 
 The Orin Nano L4T host is also responsible for **bridge + tap**
-provisioning (same `setup-bridge.sh` shape as on AWS, with an Orin
-variant in `scripts/orin/`).
+provisioning (`scripts/orin/setup-bridge-orin.sh`, an Orin variant of
+`setup-bridge.sh`; the cloud script is not used on the as-built cloud leg).
+
+---
+
+## Hardware twin, native — QNX Hypervisor on the Orin Nano (Phase 3b)
+
+*Added 2026-09-11.* The section above runs QNX under QEMU on L4T. Phase 3b
+runs it on the board with no QEMU at all. The plan's architecture table
+calls this **A4**
+([orin-native-port-plan.md](orin-native-port-plan.md#architecture-versions)).
+
+```
+Jetson Orin Nano Dev Kit, native (A4, as run in M3)
+L4T hands over by kexec, then is gone while QNX runs
+└── QNX Hypervisor host: procnto at EL2 (VHE), this port's own board startup
+    ├── host process: IPC client
+    └── qvm
+        └── QNX guest: the cloud leg's guest image and disk
+            (IPC over the qvm virtio-console vdev)
+```
+
+- **What changes against the QEMU twins:** the hypervisor runs on silicon.
+  Stage-2 translation, the virtual GIC and the guest timers run on the real
+  A78AE, not inside an emulator ([findings.md](findings.md) 2026-09-10).
+- **What it does not have:** L4T, so no Linux Compute side; no GPU; no
+  certified isolation.
+- **Status:** M0, M1, M2, M1b and M3 are met. Under the owner's freeze
+  decision its measurements run in the v1 campaign. M3's figures are A4
+  history and stay on the local branch `m3-results-unpublished`.
+
+**Target: reference architecture v1 (not frozen).** A4's native host plus a
+Linux guest without a GPU under `qvm` (S1), plus two TCG twin legs that boot
+v1's guests in a QHV host image under QEMU. Whether the QNX guest stays beside
+the Linux guest is settled at the freeze. GPU pass-through is a later stage,
+still research only. Details: the plan's architecture table and freeze gate.
 
 ---
 
@@ -176,8 +220,9 @@ BSP / customer-port engineering on arm64 silicon (Orin, Thor). An
 x86_64-only run would be architecturally off-target. Note (per
 [ADR-002](phase2-topology-decision.md)): the cloud runtime *wanted* KVM
 too, but non-metal Graviton has no `/dev/kvm`, so the cloud leg runs
-under TCG and hardware-accelerated KVM moves to the Phase-3 Orin twin;
-the arm64-on-target argument still holds (the IFS is aarch64 either way).
+under TCG. KVM boot on the Phase-3 Orin twin is blocked too (GICv3/NISV;
+[orin-port.md](orin-port.md)), so that leg also runs TCG. The arm64-on-target
+argument still holds (the IFS is aarch64 either way).
 
 **The IFS is arch-agnostic from the build host's perspective.**
 `mkqnximage --arch=aarch64le` produces a bootable image whose
@@ -223,23 +268,25 @@ this leg (no working host network stack; `io-sock` down).
 boundary, but the cloud leg is **TCG-emulated**, so the latency it
 yields is dominated by TCG emulation cost — it does **not** measure
 hardware-timed hypervisor IPC. Hardware-timed numbers come from the
-Phase-3 Orin twin (KVM). The heterogeneous QNX↔Linux IPC (the bridged
-virtio-net path with `tap`/`br0`) is committed to **Phase 3 / Orin**,
-where it runs natively against L4T — see that twin's section below.
+native QNX Hypervisor on the Orin (Phase 3b, section above), in the v1
+campaign; the Phase-3 Orin twin under QEMU runs TCG as well. The
+heterogeneous QNX↔Linux IPC (the bridged virtio-net path with `tap`/`br0`)
+is committed to **Phase 3 / Orin**, where it runs natively against L4T —
+see that twin's section above.
 
 ---
 
 ## What this is NOT (per twin side)
 
-| Aspect | Real DRIVE OS | Cloud twin (AWS Graviton) | HW twin (Jetson Orin Nano) |
+| Aspect | Real DRIVE OS | Cloud twin (designed on AWS Graviton; as built on a Windows PC) | HW twin (Jetson Orin Nano, QEMU on L4T) |
 |---|---|---|---|
-| Partitioner | Type-1 NVIDIA Hypervisor | SDP 8.0 QHV (`qvm`) hosting one QNX guest under QEMU **TCG** (no KVM on cloud; see [ADR-002](phase2-topology-decision.md)) | KVM-on-L4T scheduling QEMU(QNX) alongside native L4T workload |
+| Partitioner | Type-1 NVIDIA Hypervisor | SDP 8.0 QHV (`qvm`) hosting one QNX guest under QEMU **TCG** (no KVM on cloud; see [ADR-002](phase2-topology-decision.md)) | QEMU TCG on L4T (KVM boot blocked) running QNX alongside native L4T workload |
 | Shared SoC | Yes (Tegra Orin / Thor) | No — pure-virt, no shared peripherals | **Same Tegra family** (A78AE, Ampere) but Jetson SKU; no DRIVE-class FuSa peripherals |
 | Inter-VM IPC | Shared memory + mailbox | host↔guest over `qvm` virtio-console vdev (TCG-emulated EL2 partition boundary; not hardware-timed) | virtio-net through host bridge (Phase 3; heterogeneous QNX↔Linux) |
-| VM-aware scheduling | Yes (partition scheduler) | No — host CFS schedules everything | No — L4T CFS schedules QEMU thread alongside L4T processes |
+| VM-aware scheduling | Yes (partition scheduler) | No — the host OS scheduler schedules everything | No — L4T CFS schedules QEMU thread alongside L4T processes |
 | Real-time | Certified RT path on Safety guest | Best-effort; jitter from host scheduler is observable | Best-effort; A78AE does have hardware RT support but L4T host doesn't expose certified RT |
 | FSI lockstep | Cortex-R52 lockstep cluster | None | None — Jetson SKU has no FSI exposed to user software |
-| Camera / NVDLA / GPU | Real, vGPU-partitioned | None — Graviton has no NVIDIA accelerators | Real Ampere GPU is present but **out of scope** for this project; not exposed to QNX guest |
+| Camera / NVDLA / GPU | Real, vGPU-partitioned | None — the emulated `virt` machine has no NVIDIA accelerators | Real Ampere GPU is present but **out of scope** for this project; not exposed to QNX guest |
 | Bootloader chain | SecureBoot + measured boot, certified | None | None — JetPack provides UEFI but no chain-of-trust beyond default |
 
 The project's value lives in being *honest* about every row of that

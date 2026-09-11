@@ -37,7 +37,7 @@ Boundary of the system under analysis:
 - The QNX Safety guest (in QEMU)
 - The Linux Compute side — **Phase 3 / Orin only** (L4T native); there is no Linux guest on the cloud leg (ADR-002)
 - The IPC channel between them: cloud leg = QNX-host ↔ QNX-guest over the `qvm` `virtio-console` vdev; Orin leg = virtio-net via host bridge `br0`
-- The host kernel (Linux on Graviton or L4T on Orin) — included as **trusted base**, not as part of attack surface
+- The host — as built: the Windows PC running QEMU TCG (cloud leg), L4T running QEMU (Orin plain leg), or the QNX Hypervisor host, which replaces L4T while it runs (Orin native, Phase 3b); Linux on Graviton was the design — included as **trusted base**, not as part of attack surface
 - The QNX IFS build pipeline on the cloud-twin x86_64 build host
 
 Out of scope:
@@ -111,9 +111,9 @@ exists so the gap is documented rather than glossed over.
 | Layer | Real DRIVE OS | Cloud twin | HW twin |
 |---|---|---|---|
 | Hardware root of trust | Tegra fuses | None | Orin Nano fuses exist but not used by this project |
-| First-stage bootloader | NVIDIA-signed | QEMU UEFI (unsigned) | JetPack UEFI (default) |
+| First-stage bootloader | NVIDIA-signed | None: QEMU loads the IFS with `-kernel`, no firmware chain | JetPack UEFI (default) |
 | OS kernel signature check | Yes | No | No (default JetPack does *measured* boot but the project does not extend it) |
-| Hypervisor signature check | Yes | n/a (no HV) | n/a (no HV) |
+| Hypervisor signature check | Yes | No (`qvm` inside the host IFS, unsigned) | n/a on the plain leg (no HV); No for native `qvm` (Phase 3b: unsigned, entered by kexec from L4T) |
 | Guest IPL signature check | Yes | No (mkqnximage IFS, unsigned) | No (same IFS) |
 
 **What the project can study (not implement):** the bootloader chain

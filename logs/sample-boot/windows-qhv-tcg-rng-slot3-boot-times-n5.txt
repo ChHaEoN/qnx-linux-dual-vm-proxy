@@ -7,6 +7,8 @@
 # WITHOUT -snapshot on the then-mutating disk (c71b9499...), so by the launchers' own rule it
 # can never be paired with an Orin series; it is superseded by the -snapshot series on the
 # 95849168... disk. Comparable only against a file whose qemu:/devices:/disk: lines match.
+# 2026-09-11: the aligned comparison was produced on 2026-09-09
+# (windows- and orin-qhv-tcg-q111-rng-snapshot-segments-boot-times-n5.txt); A3 history.
 #
 # host: Windows 10.0.26200.0 AMD64 / AMD Ryzen 7 9700X 8-Core Processor             
 # qemu: QEMU emulator version 11.0.50 (v11.0.0-12631-g54e84cdc7a)

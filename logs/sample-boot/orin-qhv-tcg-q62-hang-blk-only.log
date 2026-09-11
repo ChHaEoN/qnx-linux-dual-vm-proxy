@@ -15,7 +15,8 @@
 # QEMU 11 booting proves nothing either way: that compat flag only hides the IRQ from the
 # device tree and leaves the wiring, so it is not a discriminator. NOT a host finding: the same
 # image on the Windows host ran QEMU 11.0.50 and passed.
-# host ran QEMU 11.0.50 and passed.
+# MECHANISM VERIFIED 2026-09-09 by the reverted-wiring build (orin-qhv-tcg-q111-nohypvirt-control.log):
+# 11.1.0 with only the NS-EL2 virtual-timer IRQ unwired hangs the same way.
 # QEMU args (identical to scripts/launch-qhv-tcg.ps1 / scripts/orin/launch-qhv-on-orin-tcg.sh
 # at the time): -machine virt,virtualization=on,gic-version=3 -cpu max -accel tcg -smp 2 -m 2G
 #   -drive file=disk-qemu,if=none,id=drv0,format=raw -device virtio-blk-device,drive=drv0

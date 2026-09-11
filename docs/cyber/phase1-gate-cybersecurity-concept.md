@@ -77,6 +77,16 @@ one or more TCRs against each:
   image now** and goes live the instant networking comes up, so the
   entropy TCR is written as a Phase-1 requirement, not deferred.
 
+> **2026-09-11 note.** Real EL2 now exists natively: Phase 3b runs `qvm` on
+> the Orin, entered by kexec from L4T
+> ([orin-native-port-plan.md](../orin-native-port-plan.md), architecture
+> A4). That plan does no SMMU work (its §7 item 3), rules out reflash and
+> UEFI-variable writes on its primary path (its §1 non-goals), and runs
+> with Secure Boot
+> disabled (its §3.1). It plans no fuse or measured-boot work. The T30
+> hardware-isolation closure path and the trust-anchor location are
+> UNKNOWN.
+
 ---
 
 ## 2. Cybersecurity Concept (security strategy for the QHV/qvm TCB)

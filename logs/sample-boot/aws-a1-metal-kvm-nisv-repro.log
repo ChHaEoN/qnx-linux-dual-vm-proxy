@@ -4,8 +4,9 @@
 # Annapurna Labs SoC, 16x Cortex-A72, kernel 6.8.0-1061-aws).
 #
 # Purpose: determine whether the GICv3/NISV KVM boot hang found on Jetson
-# Orin Nano (Tegra234, Cortex-A78AE -- see docs/orin-port.md risk register,
-# docs/findings.md 2026-07-28 "root-cause KVM boot hang" entry) is
+# Orin Nano (Tegra234, Cortex-A78AE -- see the docs/orin-port.md risk register
+# row "KVM boot hangs silently after FOUND GICv3 ITS"; this run is the
+# docs/findings.md 2026-07-29 entry) is
 # Tegra234-specific or a general real-hardware/KVM limitation. AWS a1.metal
 # was chosen because it fits this AWS account's 32-vCPU quota (c7g.metal
 # needs 64 vCPU and was quota-blocked); it is a DIFFERENT vendor (Annapurna

@@ -39,6 +39,13 @@ build host's CPU does not have to match. Therefore building on x86_64
 and running on Graviton is sound — the empirical "does it actually
 boot under KVM-on-arm64" question is what F5 below tracks.
 
+> **2026-09-11 (as built):** no IFS ever ran on Graviton. Non-metal
+> Graviton exposes no `/dev/kvm` (F3 note below). The x86_64-built
+> images booted under QEMU TCG on the Windows PC and on the Orin, and the
+> cloud-leg guest booted under native `qvm` on the Orin (M3,
+> [findings.md](findings.md) 2026-09-10). The cross-build argument held;
+> the Graviton runtime host and its KVM line are design-time only.
+
 ---
 
 ### F2. Two BSP paths under SDP 8.0
@@ -57,6 +64,14 @@ validated the toolchain end-to-end.
 ---
 
 ### F3. KVM acceleration on Graviton works with stock Ubuntu 22.04
+
+> **2026-09-11: falsified on 2026-06-11.** Non-metal Graviton exposes no
+> `/dev/kvm`; EL2 is not passed through (a t4g.small probe;
+> [findings.md](findings.md) 2026-06-11 QHV milestone;
+> [ADR-002](phase2-topology-decision.md) §1). KVM on AWS needs a `*.metal`
+> instance. The `a1.metal` run on 2026-07-29 hangs the QNX IFS
+> under KVM on the GICv3/NISV defect ([findings.md](findings.md)
+> 2026-07-29). The Phase 0 text below is kept as written.
 
 Graviton instances expose `/dev/kvm` to userspace. The QEMU invocation
 that activates KVM on aarch64 hosts is:
@@ -111,6 +126,18 @@ answered by running the cloud-twin toolchain end-to-end in Phase 1.
 - [ ] Does `joexue/qemu-virt`'s missing PCI support matter for Phase 2 IPC
       (virtio-net-mmio is sufficient if so)?
 
+> **2026-09-11 outcomes.** Transport (the first question): virtio-mmio.
+> The `mkqnximage --type=qemu` image expects its virtio devices at fixed
+> virtio-mmio slots, assigned in `-device` order
+> ([findings.md](findings.md) 2026-07-28, Orin TCG networking entry).
+> Q2 and Q3 (boot and boot time on Graviton under KVM): moot as asked,
+> since no IFS ran on Graviton (F3). The x86_64-built IFS boots under TCG
+> on the Windows PC and on the Orin, and its boot time was measured under
+> TCG on both ([digital-twin-design.md](digital-twin-design.md) §5, now
+> architecture A2 history). Q4 (community-BSP PCI): UNKNOWN. No recorded
+> run used `joexue/qemu-virt`, and Phase 2 IPC ran over the `qvm`
+> virtio-console vdev instead ([ADR-002](phase2-topology-decision.md) §3.1).
+
 **Note — there is no separate Windows-vs-EC2 build-equivalence
 question.** An earlier draft of this section had one (and the
 2026-05-07 amendment in [findings.md](findings.md) called for one);
@@ -122,7 +149,9 @@ build metadata (embedded paths, timestamps), not the ARM code QNX
 boots. Q2 above already validates that *any* x86_64-built IFS boots
 on Graviton — that question is host-platform-agnostic and covers the
 load-bearing claim. The 2026-05-07 [findings.md](findings.md) caveat
-is corrected in the same commit that drops this question.
+is corrected in the same commit that drops this question. **(2026-09-11:
+Q2 never ran on Graviton; the evidence that an x86_64-built IFS boots is
+from TCG on the Windows PC and the Orin, per the outcomes note above.)**
 
 ---
 
@@ -134,6 +163,14 @@ QEMU-on-Graviton also runs unchanged on QEMU-on-Orin-Nano.** This is
 plausible — QEMU's `virt` machine model is host-CPU-agnostic so long as
 the host CPU implements the required ARMv8 features (which Cortex-A78AE
 does) — but it has not been validated empirically.
+
+> **2026-09-11 outcome (2026-07-28).** Validated under TCG: the unchanged
+> Phase-1 `ifs.bin` and `disk-qemu` booted on the Orin
+> ([orin-tcg-qnx-boot1.log](../logs/sample-boot/orin-tcg-qnx-boot1.log)),
+> so no fallback below was needed for that boot. Under KVM the same pair
+> hangs after `FOUND GICv3 ITS` on the GICv3/NISV defect
+> ([orin-port.md](orin-port.md) risk register). The Orin IPC run then used
+> a rebuilt IFS ([orin-port.md](orin-port.md) step 4).
 
 Phase 3 first task is to verify this end-to-end. If it works, Phases
 3 and 4 proceed as planned. If it does not, the fallback options in
@@ -187,6 +224,16 @@ Open empirical questions for Phase 3:
   **Empirical confirmation:** Phase 3 step 5 — `scripts/orin/launch-qnx-on-orin.sh`
   with the cloud-twin `output/ifs.bin`; pass if QNX reaches its
   shell prompt and `pidin sysinfo` reports a sane `cycles_per_sec`.
+  **Outcome (2026-07-28; noted 2026-09-11): not under KVM.** The IFS
+  hangs after `FOUND GICv3 ITS`: a post-indexed store on a GICv3
+  distributor register takes a `KVM_EXIT_ARM_NISV` exit that neither KVM
+  nor QEMU emulates. That is not the MIDR/REVIDR risk named above
+  ([orin-port.md](orin-port.md) risk register), and the same hang
+  reproduced on `a1.metal` ([findings.md](findings.md) 2026-07-29). Under
+  TCG the unchanged IFS boots
+  ([orin-tcg-qnx-boot1.log](../logs/sample-boot/orin-tcg-qnx-boot1.log)).
+  The `pidin sysinfo` check was not done ([orin-port.md](orin-port.md)
+  step 5).
 
 - **Q2 — Does JetPack 6 ship `qemu-system-aarch64` with KVM support
   enabled out of the box, or does it need a custom build?**
@@ -206,6 +253,11 @@ Open empirical questions for Phase 3:
   `qemu-system-aarch64 -accel help` and confirm `kvm` is listed; then
   `qemu-system-aarch64 -M virt,accel=kvm -cpu host -smp 1 -m 256 -nographic`
   starts without "KVM not available" errors.
+  **Outcome (2026-07-28; noted 2026-09-11): yes.** The stock
+  `qemu-system-aarch64` is 6.2.0, `/dev/kvm` is usable, and a bare vGIC
+  smoke test ran clean ([orin-port.md](orin-port.md) step 2). The later
+  QHV-in-TCG leg needed a from-source QEMU for an unrelated EL2
+  virtual-timer defect ([orin-port.md](orin-port.md) risk register).
 
 - **Q3 — Does the Orin Nano's 8 GB RAM accommodate L4T (~3 GB) +
   QEMU(QNX, 1 GB) + benchmark workload comfortably?**
@@ -232,6 +284,10 @@ Open empirical questions for Phase 3:
   fresh boot to a headless tty (target ≥4.5 GB free), then `free -h`
   again with QNX QEMU running and the 100k-iteration benchmark in
   flight (target ≥1 GB free, no swap usage).
+  **Outcome (noted 2026-09-11): partly checked.** A `free -h` reading
+  was recorded at Phase 3 step 1 ([orin-port.md](orin-port.md)), and the
+  long Orin IPC runs completed without errors (step 6). A reading with
+  QEMU running and the benchmark in flight was not recorded (UNKNOWN).
 
 - **Q4 — Is the L4T kernel's `vhost-net` path enabled? (Affects
   virtio-net latency on the hardware twin.)**
@@ -256,6 +312,9 @@ Open empirical questions for Phase 3:
   flashing, `zcat /proc/config.gz | grep -E 'VHOST_NET|VHOST='` (or
   inspect `/boot/config-$(uname -r)`); if absent, `modprobe vhost_net`
   fails and the twin-diff doc records this as a known gap.
+  **Outcome (noted 2026-09-11): UNKNOWN.** No check of `vhost-net` on the
+  board is recorded; the [orin-port.md](orin-port.md) risk-register row
+  has no outcome.
 
 ---
 

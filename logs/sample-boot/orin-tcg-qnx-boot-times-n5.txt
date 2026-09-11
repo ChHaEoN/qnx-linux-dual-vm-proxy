@@ -1,3 +1,6 @@
+# A2 history (plain qnx-safety-vm leg, 2026-07-28; header added 2026-09-11).
+# QEMU build, device set and disk mode were not stamped. The Orin ran the distro QEMU 6.2.0
+# (docs/orin-port.md risk register: distro 6.2.0 was kept for every prior qnx-safety-vm result).
 run 1: 31753 ms
 run 2: 31758 ms
 run 3: 31775 ms

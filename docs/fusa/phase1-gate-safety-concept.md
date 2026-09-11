@@ -338,6 +338,18 @@ gated behind AoU-ENTROPY rather than claimed.
 The following are **not discharged** by this concept and remain open residual
 risk, carried as assumptions of use to Phase 3 (Orin, real EL2/KVM/SMMU):
 
+> **2026-09-11 note.** The Phase-3 route named here, in §4 (TSR-FFI-001,
+> TSR-TIM-001) and in §7, does not exist as written. KVM boot of QNX on the
+> Orin is blocked by the GICv3/NISV defect
+> ([orin-port.md](../orin-port.md) risk register), and the Orin IPC leg ran
+> under TCG. Phase 3b now runs native `qvm` on the Orin, with real EL2 and
+> stage-2 translation for one guest
+> ([findings.md](../findings.md) 2026-09-10 M3;
+> [orin-native-port-plan.md](../orin-native-port-plan.md), architecture
+> A4). That plan does no SMMU work (its §7 item 3). When FFI or timing
+> closure evidence will exist is UNKNOWN. TSR-TIM-001's prohibition stays
+> in force.
+
 | Item | Safety Goal | Disposition | Where it closes |
 |---|---|---|---|
 | **NF-3** guest escape / spatial+temporal FFI | SG-A3 (TSR-FFI-001) | Architecture-only on this leg; **residual risk open**. A single emulated guest under no adversarial load is not an isolation test. | Phase 3 fault injection on real EL2/SMMU |

@@ -6,6 +6,8 @@
 # existing Windows series (windows-qhv-tcg-rng-slot3-boot-times-n5.txt, median 29,324 ms) was
 # run on the 11.0.50 fork build WITHOUT -snapshot -- so this is not yet a twin diff.
 # Comparable only against a file whose qemu:/devices:/disk: lines match.
+# 2026-09-11: superseded by orin-qhv-tcg-q111-rng-snapshot-segments-boot-times-n5.txt; its Windows
+# column is windows-qhv-tcg-q111-rng-snapshot-segments-boot-times-n5.txt; both are A3 history.
 #
 # host: Linux 5.15.148-tegra aarch64 / ARMv8 Processor rev 1 (v8l)
 # qemu: QEMU emulator version 11.1.0 (v11.1.0)  [/home/<user>/qemu-v11.1.0/bin/qemu-system-aarch64]

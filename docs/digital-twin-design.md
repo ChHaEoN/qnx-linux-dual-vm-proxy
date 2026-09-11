@@ -5,10 +5,15 @@ architecture diagrams in [architecture.md](architecture.md). It
 defines what is actually twinned, what is deliberately not, how the
 two sides stay in sync, and how the twin diff is measured.
 
-> **Status:** Sections 1–3 are populated as part of Phase 0
+> ~~**Status:** Sections 1–3 are populated as part of Phase 0
 > re-scope. Sections 4–6 (twin-diff methodology specifics, results
 > interpretation, narrative tie-back) wait for Phase 2 / Phase 4
-> measurement so the prose can be backed by numbers.
+> measurement so the prose can be backed by numbers.~~
+> **2026-09-11:** §1a and §5 now hold measured results. Under the owner's
+> freeze decision those measurements are architecture-version history. The
+> twin diff runs once, in the v1 campaign
+> ([orin-native-port-plan.md](orin-native-port-plan.md#architecture-versions-and-the-measurement-freeze-decided-2026-09-11)).
+> §4 now points there. §6 is still deferred.
 
 ---
 
@@ -39,14 +44,14 @@ A short table of what crosses the twin boundary:
 | QNX IFS (`output/ifs.bin`) | **Leg-dependent — was silently broken** | Built once on the x86_64 build host (Windows local primary; EC2 fallback) and scp'd to both runtime hosts. **Honest correction:** this row claimed "bit-for-bit identical" as an unconditional invariant, but the Phase-3 Orin IPC run used a **rebuilt** IFS with new TCP server code staged in — so for that measurement the twin's load-bearing invariant did not hold. It *does* hold for the QHV leg (§1a), where both hosts boot the identical `qhv/host/output/{ifs.bin,disk-qemu}` pair verified by `SHA256SUMS` |
 | QNX IPC server (`ipc-test/qnx-server`) source | **Yes** | Same C99; compiled with `qcc` inside QNX guest in both twins |
 | Linux IPC client (`ipc-test/linux-client`) source | **Phase 3 / Orin only** | Per [ADR-002](phase2-topology-decision.md), there is **no Linux guest on the cloud leg** — the cloud initiator is a QNX-host program (`ipc-test/qnx-host-client`). This client runs on L4T natively on the HW twin only |
-| Wire protocol (sequence + timestamp + payload) | **Yes** | Fixed-width binary frame, version-tagged |
-| Test harness + benchmark scripts | **Yes** | Same `run-bench.sh`; output CSV format is identical |
+| Wire protocol (sequence + timestamp + payload) | **Yes** | Fixed-width binary frame, ~~version-tagged~~ **2026-09-11:** with no version tag (`ipc-test/common/frame.h`; see §3) |
+| Test harness + benchmark scripts | ~~**Yes**~~ **CSV schema only** | ~~Same `run-bench.sh`;~~ output CSV format is identical. **2026-09-11:** No `run-bench.sh` exists. The legs use different programs and launchers. Only the CSV schema is shared (`results/cloud/header.csv`, `results/hw/header.csv`) |
 | QEMU command line (machine/CPU/mem) | **Mostly** | `-machine virt,gic-version=3 -cpu ... -m 1G` shape is shared; see the accel row for the cloud/Orin split |
 | QEMU acceleration | **TCG on both — for two different reasons** | This row previously read "cloud = tcg; Orin = `-enable-kvm` (KVM works on A78AE)". That is **no longer true and should not be quoted**: Orin's KVM boot is blocked by the GICv3 / `KVM_EXIT_ARM_NISV` defect ([orin-port.md](orin-port.md)), so the plain `qnx-safety-vm` leg runs TCG there *because KVM is broken*. On the **QHV leg** TCG is instead a hard architectural requirement on both sides — QHV needs EL2 for its guest, i.e. nested virtualisation, which ARM KVM does not provide on A78AE. Keep the two apart when reporting: only the QHV leg's TCG-on-both is genuine symmetry |
-| IPC transport | **Different by design** | Cloud: host↔guest `qvm` virtio-console (single-OS QNX↔QNX); Orin: QNX↔Linux virtio-net over KVM bridge. The legs no longer share an identical topology — see §4 |
+| IPC transport | **Different by design** | Cloud: host↔guest `qvm` virtio-console (single-OS QNX↔QNX); Orin: QNX↔Linux virtio-net ~~over KVM bridge~~ **2026-09-11:** over the `br0` bridge, under TCG. The legs no longer share an identical topology — see §4 |
 | Linux Compute side | **Different by design** | Cloud: **no Linux guest** (single QNX guest under QHV); HW: L4T native (host OS). See §2/§3 |
 | Host kernel | **Different by design** | This is exactly the variable being studied |
-| Host CPU | **Different by design** | Graviton3 Neoverse-V1 vs Tegra A78AE — same ARMv8 ISA, different micro-architecture and scheduler context |
+| Host CPU | **Different by design** | ~~Graviton3 Neoverse-V1 vs Tegra A78AE — same ARMv8 ISA, different micro-architecture and scheduler context~~ **2026-09-11:** As built, an x86_64 Windows PC against the Tegra A78AE, so the ISA differs too (§1, §5). Graviton3 was the design |
 
 The rows marked **Yes** / **Mostly** are the **invariant set** — the QNX
 IFS, the QNX server source, the wire protocol, the harness, and the
@@ -61,7 +66,7 @@ than host difference alone.
 
 ---
 
-## 1a. The QHV leg — the twin's one clean host-only comparison
+## 1a. The QHV leg — ~~the twin's one clean host-only comparison~~ **(2026-09-11: a comparison of two host bundles)**
 
 *Added 2026-09-08.* By §1's own rule ("anything that differs between twin
 sides in those rows is a bug") the twin was in trouble: the invariant set had
@@ -94,8 +99,12 @@ So the same two images can be copied to the Orin and booted there unchanged:
 | `qvm` config, guest, vdevs | identical (inside the image) | identical |
 | QEMU machine / CPU / mem args | identical | identical |
 | Accelerator | TCG | TCG |
-| **QEMU binary version** | **11.0.50** | **6.2.0** ← *not* controlled |
+| **QEMU binary version** | ~~**11.0.50**~~ | ~~**6.2.0** ← *not* controlled~~ |
 | **Host CPU / kernel** | **x86_64, Windows** | **Cortex-A78AE, L4T** |
+
+**2026-09-11:** The QEMU row was later aligned to one release. Both hosts ran
+QEMU 11.1.0, in different builds that the times files stamp. That pair is A3
+history under the freeze decision. The TCG legs run again in the v1 campaign.
 
 > **This table originally omitted the QEMU version row, and that omission
 > broke the leg's whole premise on first contact with the hardware
@@ -108,8 +117,10 @@ So the same two images can be copied to the Orin and booted there unchanged:
 > to exist at all and is among the most heavily changed areas of QEMU across
 > those releases. Any number produced from this pairing would confound host
 > with QEMU version, which is precisely the error §4 warns about for the IPC
-> diff. **The leg is not a valid host-only comparison until both sides run the
-> same QEMU.**
+> diff. ~~**The leg is not a valid host-only comparison until both sides run the
+> same QEMU.**~~ **2026-09-11:** One QEMU release is needed but not enough. The
+> build and the TCG backend still travel with the host, so the leg compares
+> host bundles (next paragraph).
 
 It is a comparison on the *hypervisor* topology — the part of this project
 that actually resembles a DRIVE OS partition boundary — rather than on plain
@@ -159,6 +170,13 @@ every times file by both instruments (`# qemu:`, `# devices:`, `# disk:`):
   (rnd-seed, keys, logs); without `-snapshot`, `sha256sum -c` fails after the
   first run and "byte-identical images" holds only at copy time. With it,
   every run boots the copy-time bytes.
+
+**2026-09-11:** Both instruments now also print one segment line per run
+(`#   segments run N:`). It gives wall time from launch to four markers: host
+post_start, qvm launched, guest startup complete and the guest banner. The
+segments separate compute-bound time from fixed waits. The release-aligned
+pair and its segment tables used this instrument. They are in
+[findings.md](findings.md) 2026-09-09 and are A3 history.
 
 **First execution on the Orin: a deterministic hang — caused by QEMU 6.2's
 unwired EL2 virtual-timer IRQ, not the host; verified by a reverted-wiring
@@ -254,8 +272,13 @@ that was wrong for a day:
 
 The conclusion that matters for this leg: **the hang is a QEMU-version effect
 and is not attributable to the host.** With a modern QEMU the Orin column
-exists. What is still owed before a number from this leg may be called a twin
-diff is spelled out in the list below.
+exists. ~~What is still owed before a number from this leg may be called a twin
+diff is spelled out in the list below.~~ **2026-09-11:** No such list follows.
+A later Windows run under QEMU 6.2.0 hung at the same point, so the version
+effect does not depend on the host
+([windows-qhv-tcg-q62-cell.log](../logs/sample-boot/windows-qhv-tcg-q62-cell.log)).
+The release-aligned pair ran on 2026-09-09 ([findings.md](findings.md)). Under
+the freeze decision it is A3 history.
 
 **One measurement detail that has to be checked per host, not assumed.** The
 host's `post_start.custom` contains a hard-coded `sleep 90` boot-grace before
@@ -269,8 +292,12 @@ much more than ~90 s should be inspected rather than plotted.
 
 **What this leg still cannot show:** it is TCG on both sides, so it measures
 host emulation throughput on the QHV workload, not hardware-timed
-virtualisation cost. No configuration in this repo produces a hardware-timed
-QHV number — that needs nested virt, which the hardware does not offer. The
+virtualisation cost. ~~No configuration in this repo produces a hardware-timed
+QHV number — that needs nested virt, which the hardware does not offer.~~
+**2026-09-11:** That holds for every QEMU configuration. The native port (A4,
+Phase 3b) runs qvm at EL2 on the Orin itself, with no nesting. M3 there is a
+functional pass. The hardware-timed measurement runs in the v1 campaign
+([orin-native-port-plan.md](orin-native-port-plan.md#architecture-versions-and-the-measurement-freeze-decided-2026-09-11)). The
 comparison is honest about *what changes when the host changes*; it is not a
 performance claim about QHV.
 
@@ -306,16 +333,19 @@ been corrected below.
 This is a calibrated trade-off, not an accident: each twin side
 demonstrates what its host can *actually* do — the cloud leg owns the
 hypervisor-boundary IPC *mechanism*; Orin owns the *heterogeneous*
-dual-OS story. A dual-guest Linux-under-QHV cloud topology (ADR-002
+dual-OS story. ~~A dual-guest Linux-under-QHV cloud topology (ADR-002
 Option B) is a research-gated **Phase 2.5** stretch only, not a claim
-made today.
+made today.~~ **2026-09-11:** The cloud dual-guest topology is still unbuilt
+and is not a claim. Its idea moved to the native leg: a Linux guest without a
+GPU under native qvm on the Orin is now S1-F, planned before the v1 freeze. No
+S1 run is recorded in this repo.
 
 The HW twin therefore can **claim**:
 - Real Tegra-family silicon (A78AE matches DRIVE Orin's CCPLEX core family)
 - L4T as the actual Compute-side OS (closer to the real DRIVE OS Linux partition than Ubuntu cloudimg)
 
 The HW twin **cannot** claim:
-- Type-1 hypervisor partitioning (KVM-on-L4T is host-mediated)
+- Type-1 hypervisor partitioning (~~KVM-on-L4T is host-mediated~~ **2026-09-11:** QEMU TCG on L4T is host-mediated, because KVM boot is blocked. The native port, A4, runs qvm at EL2 on the board itself: a real `qvm` boundary, not a certified one)
 - DRIVE OS-class Safety RT guarantees
 - NVDLA / PVA / GPU partitioning (those exist on Orin Nano but are out of scope; QNX guest never sees them)
 - Secure-boot chain across partitions
@@ -326,7 +356,7 @@ The cloud twin can claim none of the above either, but offers in exchange:
   strongest hypervisor artefact in the project — exercised by the
   host↔guest IPC, though TCG-emulated, not hardware-timed (per
   [ADR-002](phase2-topology-decision.md))
-- A scaling path (instance size up to c7g.16xlarge) for stress testing
+- ~~A scaling path (instance size up to c7g.16xlarge) for stress testing~~ **2026-09-11:** Not as built. The leg runs on the Windows PC, so no instance size applies (§1)
 
 What the cloud twin **cannot** claim (corrected under ADR-002): two
 co-equal OS guests over KVM — there is one QNX guest under TCG, and the
@@ -351,18 +381,32 @@ sides for the comparison to be sound:
    and in the curated log headers instead) so any
    accidental rebuild between runs is caught.
 2. **The IPC source code** — under `ipc-test/`, single git tree,
-   pinned to the commit SHA used for any given measurement run. The
-   benchmark script records the SHA in its output CSV header.
-3. **The wire protocol version tag** — a one-byte field at the head
+   pinned to the commit SHA used for any given measurement run. ~~The
+   benchmark script records the SHA in its output CSV header.~~
+3. ~~**The wire protocol version tag** — a one-byte field at the head
    of every frame. If the cloud twin and the HW twin ever speak
    different protocol versions, the receiver-side benchmark refuses
    to run rather than producing comparable-looking-but-incomparable
-   numbers.
+   numbers.~~
 
-The Twin Sync Agent (Phase 3+) owns the script `scripts/twin/sync.sh`
+   **2026-09-11:** Neither was implemented. The CSVs carry no SHA; their only
+   free-text field is `notes`
+   ([cloud](../results/cloud/cloud-ipc-latest.csv),
+   [hw](../results/hw/orin-ipc-latest.csv)). The frame starts with a
+   sequence number and has no version byte (`ipc-test/common/frame.h`).
+   Under the freeze decision, the v1 manifest records the instrument source
+   hashes, `frame.h` included, and every campaign record carries the
+   manifest's version stamp
+   ([orin-native-port-plan.md](orin-native-port-plan.md#reference-architecture-v1-manifest-contents)).
+
+~~The Twin Sync Agent (Phase 3+) owns the script `scripts/twin/sync.sh`
 that rsyncs IFS + sources from a known-good build host snapshot to
 both runtime hosts and verifies the SHA-256 + git-SHA invariants on
-landing.
+landing.~~ **2026-09-11:** `sync.sh` is not used from the Windows build host.
+It targets the plain IFS, demands a cloud runtime host this leg no longer has,
+and needs `rsync`, which Git Bash lacks. The hypervisor images move with
+[`scripts/twin/sync-qhv.sh`](../scripts/twin/sync-qhv.sh), which enforces the
+checksum invariant on arrival ([findings.md](findings.md) 2026-09-08).
 
 **Anti-pattern explicitly forbidden:** rebuilding the IFS on each
 runtime host independently. Even if the build is reproducible in
@@ -373,11 +417,16 @@ just having one canonical artefact.
 
 ## 4. Twin-diff methodology
 
-> _Section deferred to Phase 4. Will define what a "twin diff" run
+> ~~_Section deferred to Phase 4. Will define what a "twin diff" run
 > looks like (one matched pair of measurement runs across cloud +
 > HW); the metrics chosen (boot time, P50 / P99 / P99.9 IPC RTT,
 > jitter envelope, throughput at 1 KB / 4 KB / 16 KB messages); the
-> reporting format; how to interpret a delta._
+> reporting format; how to interpret a delta._~~
+> **2026-09-11:** The owner's freeze decision defines the twin diff. It runs
+> once, in the v1 campaign: the two TCG legs against each other (two host
+> bundles, §1a), and each TCG leg against the native leg. A table compares only
+> records with the same `arch=` stamp
+> ([orin-native-port-plan.md](orin-native-port-plan.md#the-campaign)).
 
 > **Constraint on the diff design (per [ADR-002](phase2-topology-decision.md)):**
 > the original premise — "hold everything identical, change only the
@@ -395,13 +444,21 @@ just having one canonical artefact.
 > the IPC delta as a host-only effect. The cloud IPC number is
 > TCG-emulation-bound (a *mechanism-alive* sanity figure), so **neither** leg yields a hardware-timed transport number (this originally
 > claimed the Orin leg did); the diff is
-> "mechanism vs. heterogeneity", not a clean host-only comparison. The
+> "mechanism vs. heterogeneity", not a clean host-only comparison. ~~The
 > **boot-time** diff (same IFS, same QEMU machine shape) remains the
-> cleaner near-host-only comparison and is the diff to lead with.
+> cleaner near-host-only comparison and is the diff to lead with.~~
+> **2026-09-11:** Not a lead comparison. Its time files carry no QEMU-build
+> stamp, so "near-host-only" cannot be checked, and "host" is a bundle (§1a).
+> That diff is A2 history.
 
 ---
 
 ## 5. Results interpretation
+
+> **2026-09-11:** Every figure in this section is architecture-version history.
+> The cloud IPC leg is A1; the Orin IPC leg and the plain-IFS boot times are A2
+> ([orin-native-port-plan.md](orin-native-port-plan.md#measurement-inventory)).
+> They are kept as recorded and are not re-run for their own sake.
 
 **First real numbers (2026-07-28)**, produced by
 [`scripts/twin/diff-results.sh`](../scripts/twin/diff-results.sh)
@@ -445,9 +502,11 @@ observations are honestly supportable from this data:
   transport on cloud, and cloud's Linux-side is deliberately absent per
   [ADR-002](phase2-topology-decision.md).
 - **The cleaner host-only comparison remains boot time**, per §4's own
-  guidance, and is still not done — `logs/sample-boot/orin-tcg-qnx-boot1.log`
+  guidance, ~~and is still not done — `logs/sample-boot/orin-tcg-qnx-boot1.log`
   and the cloud-leg equivalents exist but have not been time-diffed
-  against each other in this pass.
+  against each other in this pass.~~ **2026-09-11:** It ran the same day
+  (next paragraph). It is A2 history, and §4 no longer calls it the cleaner
+  comparison.
 
 **Follow-up, same day: the boot-time comparison, actually run.** No
 plain-`qnx-safety-vm` boot had ever been captured on the local Windows
@@ -463,18 +522,25 @@ the captured serial log:
 | Local Windows (x86_64, TCG) | **26,088 ms** |
 | Jetson Orin Nano (aarch64 A78AE, TCG) | **32,125 ms** |
 
-Δ = +6,037 ms (+23.1%), Orin slower. **This is the cleanest host-only
+Δ = +6,037 ms (+23.1%), Orin slower. ~~**This is the cleanest host-only
 comparison in the repo so far** — same IFS, same disk image, same QEMU
 machine/CPU/mem shape, same accelerator (TCG on both, this time by
 genuine symmetry rather than incidental blockage), only the host CPU
 architecture and micro-architecture differ (x86_64 host translating
-aarch64 TCG vs. aarch64 host translating aarch64 TCG). TCG-on-TCG
+aarch64 TCG vs. aarch64 host translating aarch64 TCG).~~ **2026-09-11:**
+Overclaimed. The QEMU build was not controlled. The Orin single run's log
+header records the distro QEMU 6.2.0. The Windows QEMU was never recorded
+(UNKNOWN), and the series files carry no stamp. The TCG backend also changes
+with the host (§1a), and §1's accelerator row says TCG on this plain leg is not
+genuine symmetry. So host and QEMU build are confounded. This diff is A2
+history. TCG-on-TCG
 same-ISA (aarch64 guest on an aarch64 host) still does full binary
 translation — QEMU's TCG does not skip translation just because host and
 guest architectures match, so the Orin result is not disadvantaged by an
-ISA mismatch the Windows result doesn't have; the gap is genuinely about
+ISA mismatch the Windows result doesn't have; ~~the gap is genuinely about
 host micro-architecture/scheduler/storage differences, which is exactly
-what a twin diff is supposed to isolate.
+what a twin diff is supposed to isolate.~~ **2026-09-11:** Not established;
+see the note above.
 
 **Follow-up, same day: repeated to a real sample (n=5 per side)**, since
 a single run per side is not a measurement, it's an anecdote. Five

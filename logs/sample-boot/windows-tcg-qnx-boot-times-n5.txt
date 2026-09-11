@@ -1,3 +1,5 @@
+# A2 history (plain qnx-safety-vm leg, 2026-07-28; header added 2026-09-11).
+# QEMU build, device set and disk mode were not stamped; the Windows QEMU version is UNKNOWN.
 run 1: 26515 ms
 run 2: 25445 ms
 run 3: 25412 ms

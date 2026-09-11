@@ -9,6 +9,19 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-11 — Owner answers on the freeze decision's open points, and a stale-document cleanup
+
+The owner answered four points the plan's freeze section had flagged, and asked for stale documents to be cleaned up.
+(1) The M path ends at M5-F's functional pass, so README PR #1 can merge then. Whether a failed M5-F also ends it is
+still open. (2) The M0, M1, M2 and M1b run records and curated captures stay public for now. M3 and later figures stay
+on the local branch `m3-results-unpublished`. (3) Of the research track's gates, S1-F needs only the qvm `dryrun` gate
+first; the GPU checks wait for the first GPU stage. (4) The A2 plain-leg boot diff between Windows and the Orin stays
+history, and experiments are redone after the architecture is confirmed. (5) For the cleanup, this log's Phase 1-4
+stubs and several lines in older entries that later work disproved are now struck through, each with a dated note.
+No original text was removed, except one LAN address, now `<orin-ip>`. CLAUDE.md and the plan carry matching
+corrections. Nothing was run for this entry. The decisions are recorded in
+[orin-native-port-plan.md](orin-native-port-plan.md#architecture-versions-and-the-measurement-freeze-decided-2026-09-11).
+
 ## 2026-09-11 — Decision: finish the M path functionally, add a Linux guest, freeze reference architecture v1, then measure once
 
 The owner chose option B for how the rest of Phase 3b and the twin are measured. The reason is how this project has
@@ -618,7 +631,7 @@ Orin numbers arrive: this instrument is precise enough that a real host
 difference will not be lost in noise.
 
 **Not done, and the reason matters:** the Orin half. The board was
-unreachable — `ssh` to 192.168.178.56 timed out on port 22 — so it is
+unreachable — `ssh` to `<orin-ip>` timed out on port 22 — so it is
 presumably powered down or has taken a different DHCP lease. **This entry
 therefore ships the instrument and one side's numbers, not the comparison.**
 Nothing here should be quoted as a twin diff until the Orin column exists.
@@ -1311,7 +1324,10 @@ boots a guest that reaches `Startup complete` as `qnx-guest` on machine
 Type-1 partition boundary is real. Curated log:
 [../logs/sample-boot/qhv-tcg-host-and-guest-boot.log](../logs/sample-boot/qhv-tcg-host-and-guest-boot.log).
 Gotchas recorded: the stock `start_guest` wires a virtio-net peer that needs the
-host io-sock stack, which does **not** initialise on this qemu-virt build
+host io-sock stack, ~~which does **not** initialise on this qemu-virt build~~ **(2026-09-11: not a
+property of the build. Per RQ-4 in [phase2-research-spike.md](phase2-research-spike.md), the launch line
+presented no virtio-net or virtio-rng device; with them presented it comes up, as the 2026-07-28 Orin networking
+entry above found for the plain image)**
 (`network stack down` / `Address family not supported`) — worked around with a
 no-network qvm config auto-started via a custom `post_start.custom` snippet;
 driving the guest start over the TCG serial console interactively drops
@@ -1320,7 +1336,9 @@ TCG proves the QHV *software* architecture (qvm config, vdev instantiation, gues
 isolation, EL2/VHE host) — not hardware timing/acceleration (needs metal/Orin).
 Note this supersedes the earlier Track-A framing where the cloud leg ran a QNX
 *Neutrino* guest under QEMU/**KVM** on c7g.large — that KVM-on-cloud assumption is
-now falsified (see finding chain above); KVM acceleration belongs on Orin (Phase 3).
+now falsified (see finding chain above); ~~KVM acceleration belongs on Orin (Phase 3).~~
+**2026-09-11:** KVM boot of the QNX IFS later hung on the Orin and on `a1.metal` (the GICv3/NISV defect,
+2026-07-28 and 2026-07-29). The hardware-timed route became the native port (ADR-003).
 
 ---
 
@@ -1342,8 +1360,9 @@ inspect). After install the build **succeeded**: `ifs.bin` ~9.3 MB plus a raw
 disk. This is a genuine BSP-bring-up flavour finding — an incomplete
 package-dependency selection on the build host, exactly the class of issue real
 BSP integration hits. **Honest framing:** this is build-host tooling, not a port
-— it says nothing about whether the IFS boots on Graviton (still the open
-Phase 1 question below). Secondary finding: `mkqnximage` emits a **split VMDK** —
+— it says nothing about whether the IFS boots on Graviton ~~(still the open
+Phase 1 question below)~~ **(2026-09-11: never answered on Graviton; Phase 1 closed on the Windows PC
+under TCG, in the 2026-06-11 QHV milestone entry above)**. Secondary finding: `mkqnximage` emits a **split VMDK** —
 `disk-qemu.vmdk` is only a ~169-byte `monolithicFlat` *descriptor* pointing at the
 ~150 MB raw extent `disk-qemu`; the repo's scp/README/`twin/sync.sh` instructions
 listed only `ifs.bin` + `disk-qemu.vmdk`, which would fail to boot on the runtime
@@ -1379,11 +1398,16 @@ variable since Marketplace subscription is a human prerequisite; cost estimate
 ~$15–20/mo + unknown AMI software fee (verify on listing), well under the €100
 target. **Status:** decision recorded; Terraform not yet written (awaiting
 Marketplace subscribe + software-fee confirmation + explicit apply approval).
+**2026-09-11:** Track B was never built. The plan's architecture table records it as A0′.
 
 ---
 
-## Phase 1 — Cyber-Analysis TARA (TBD: gate review)
+## Phase 1 — Cyber-Analysis TARA ~~(TBD: gate review)~~
 
+> **2026-09-11:** the gate review ran on 2026-06-11 (the Phase-1 gate entry above), against the as-built
+> hypervisor boundary. It deferred the KVM, `br0` and Linux-guest rows this body assumes. The text below
+> keeps its original assumptions.
+>
 > **Study-level only; not 21434 evidence. TARA here is illustrative,
 > not the work-product a real programme would audit.**
 >
@@ -1410,8 +1434,12 @@ Marketplace subscribe + software-fee confirmation + explicit apply approval).
 
 ---
 
-## Phase 1 — FuSa-Analysis HARA (TBD: gate review)
+## Phase 1 — FuSa-Analysis HARA ~~(TBD: gate review)~~
 
+> **2026-09-11:** the gate review ran on 2026-06-11 (the Phase-1 gate entry above), against the as-built
+> hypervisor boundary. It deferred the KVM, `br0` and Linux-guest rows this body assumes. The text below
+> keeps its original assumptions.
+>
 > _Study-level only; not certification evidence._
 >
 > Initial HARA + Design FMEA for the Phase 1 cloud twin (QNX SDP 8.0 +
@@ -1435,40 +1463,55 @@ Marketplace subscribe + software-fee confirmation + explicit apply approval).
 
 ---
 
-## Phase 4 — TBD: cloud-vs-HW twin diff
+## Phase 4 — ~~TBD:~~ cloud-vs-HW twin diff
 
-> _Stub. Filled in after the twin-diff measurement run lands. Expected
+> ~~_Stub. Filled in after the twin-diff measurement run lands. Expected
 > contents: P50/P99/P99.9 latency delta, boot-time delta, jitter
 > profile delta. Hypothesis going in: IPC-path latency tracks within
 > a small constant; boot times diverge meaningfully due to host CPU
-> and scheduler differences._
+> and scheduler differences._~~
+>
+> **2026-09-11:** superseded. Twin diffs were recorded in [digital-twin-design.md](digital-twin-design.md) §5
+> (2026-07-28) and as the release-aligned QHV pair (the 2026-09-09 entry above). Under the 2026-09-11 decision
+> they are architecture-version history, and the twin diff runs once, in the v1 campaign
+> ([plan freeze section](orin-native-port-plan.md#architecture-versions-and-the-measurement-freeze-decided-2026-09-11)).
 
 ---
 
-## Phase 3 — TBD: hardware twin port to Jetson Orin Nano
+## Phase 3 — ~~TBD:~~ hardware twin port to Jetson Orin Nano
 
-> _Stub. Filled in after the same `mkqnximage --type=qemu --arch=aarch64le`
+> ~~_Stub. Filled in after the same `mkqnximage --type=qemu --arch=aarch64le`
 > IFS has been booted on QEMU-on-Orin under L4T. Expected contents:
 > (a) does the unmodified IFS boot? (b) JetPack 6 KVM availability;
-> (c) RAM headroom on 8 GB; (d) any GICv3 / A78AE quirks._
+> (c) RAM headroom on 8 GB; (d) any GICv3 / A78AE quirks._~~
+>
+> **2026-09-11:** superseded by the 2026-07-28 and 2026-07-29 entries above. The plain IFS boots under TCG.
+> KVM is present, but the boot hangs on the GICv3/NISV defect. The bridged IPC ran, on a rebuilt IFS.
+> Phase 3b later ran QNX natively (2026-09-09 onward).
 
 ---
 
-## Phase 2 — TBD: cloud-twin IPC latency baseline
+## Phase 2 — ~~TBD:~~ cloud-twin IPC latency baseline
 
-> _Stub. Filled in after the C99 client/server has been run to 100k
+> ~~_Stub. Filled in after the C99 client/server has been run to 100k
 > iterations. Expected contents: P50, P99, P99.9 of round-trip on
 > Graviton + virtio-net + host bridge; time-base normalisation
-> notes; warm-up tail behaviour._
+> notes; warm-up tail behaviour._~~
+>
+> **2026-09-11:** superseded by the 2026-07-28 Phase 2 entries above (A1): QNX host to QNX guest over the
+> qvm virtio-console, with no Graviton and no bridge. Those numbers are now architecture-version history.
 
 ---
 
-## Phase 1 — TBD: cloud-twin bring-up
+## Phase 1 — ~~TBD:~~ cloud-twin bring-up
 
-> _Stub. Filled in after both VMs boot under KVM-on-Graviton. Expected
+> ~~_Stub. Filled in after both VMs boot under KVM-on-Graviton. Expected
 > contents: virtio-mmio vs virtio-pci default in mkqnximage SDP 8.0;
 > whether x86_64-built aarch64 IFS runs under KVM-on-Graviton without
-> modification; QNX boot time on Graviton._
+> modification; QNX boot time on Graviton._~~
+>
+> **2026-09-11:** superseded by the 2026-06-11 QHV milestone entry above: the QNX Hypervisor and one guest
+> under TCG on the Windows PC. The dual-VM KVM topology was never built (A0 in the plan's architecture table).
 
 ---
 
@@ -1523,7 +1566,9 @@ build/runtime architecture (x86_64 build host → arm64 runtime host).
 Two BSP paths are viable under SDP 8.0: the official `mkqnximage
 --type=qemu --arch=aarch64le` (used as the Phase 1 baseline) and the
 community MIT-licensed `joexue/qemu-virt` (deferred to Phase 2+
-study). KVM acceleration on Graviton works with stock Ubuntu 22.04.
+study). ~~KVM acceleration on Graviton works with stock Ubuntu 22.04.~~
+**2026-09-11:** falsified on 2026-06-11 for non-metal Graviton, which has no `/dev/kvm` (ADR-002). On
+`a1.metal` KVM is present, but the QNX IFS hangs there on the GICv3/NISV defect (the 2026-07-29 entry).
 The QNX Everywhere NCEULA covers personal/portfolio/demo use but
 forbids redistributing QNX binaries — so the repo ships scripts and
 logs only, never IFS images.
