@@ -4,6 +4,8 @@
 # Superseded as the Windows baseline by windows-qhv-tcg-rng-slot3-boot-times-n5.txt;
 # kept as the record of the first instrumented series. "Identical invocation"
 # below is true of the argument list only — see docs/digital-twin-design.md §1a.
+# 2026-09-11: the chain continues: rng-slot3 -> rng-snapshot-segments -> the q111 release-aligned
+# pair (windows- and orin-qhv-tcg-q111-rng-snapshot-segments-boot-times-n5.txt); all A3 history.
 #
 # Run 1 of a 5-run timed series produced by:
 #     scripts\launch-qhv-tcg.ps1 -Runs 5 -StopOnGuestBanner -CaptureSeconds 280

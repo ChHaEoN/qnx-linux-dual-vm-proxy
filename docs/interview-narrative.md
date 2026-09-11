@@ -4,7 +4,8 @@
 > [ADR-002](phase2-topology-decision.md). Refine after Phase 1 with real
 > numbers (boot time, cloud `qvm` virtio-console P99 — TCG-bound, not a
 > transport benchmark — EC2 cost) and after Phase 3 with the
-> comparison-doc findings (Orin KVM virtio-net is the hardware-timed leg).
+> comparison-doc findings (Orin virtio-net ran under TCG; the
+> hardware-timed route is the native port, measured in the v1 campaign).
 > **Length target:** 2 minutes spoken (~250–280 words).
 > **Audience:** NVIDIA AVOS / DRIVE OS Software Engineer interview.
 >
@@ -13,14 +14,19 @@
 > pivot note for DENSO-PoC-flavored questions pointing at the new
 > single-SoC domain-convergence track in
 > [future-multi-soc.md](future-multi-soc.md).
+>
+> **2026-09-11:** corrected the leg descriptions below (the cloud leg ran
+> under QEMU TCG on a Windows PC, and the Orin legs under TCG, not KVM) and
+> added the native-port update to the GICv3/NISV Q&A.
 
 ---
 
 ## 30-second elevator version (v0)
 
 > I built a Digital Twin design of NVIDIA DRIVE OS dual-VM partitioning —
-> QNX SDP and Linux running under QEMU on AWS Graviton (cloud twin) and
-> on a Jetson Orin Nano dev kit (hardware twin) — to study the BSP, IPC,
+> QNX under QEMU TCG on a Windows PC (cloud twin; AWS non-metal Graviton
+> had no `/dev/kvm`) and QNX beside Linux on a Jetson Orin Nano dev kit
+> (hardware twin) — to study the BSP, IPC,
 > and kernel-boundary work an SE supporting DRIVE OS customers does
 > day-to-day. The cloud side is a software-layer proxy for fast iteration;
 > the Orin side validates the same artefacts on real Tegra-class silicon.
@@ -36,11 +42,12 @@
 > To deepen my understanding of NVIDIA's DRIVE OS architecture —
 > specifically the dual-VM partition model — I built a personal
 > project across two host substrates. On the cloud leg I run QNX's
-> own Type-1 hypervisor (QHV) hosting a QNX guest on AWS Graviton,
-> with IPC between the hypervisor host and its guest across the
-> partition boundary; the heterogeneous QNX-Safety / Linux-Compute
-> split I carry to a Jetson Orin Nano, where Linux (L4T) is the native
-> host and KVM actually works.
+> own Type-1 hypervisor (QHV) hosting a QNX guest under QEMU TCG on a
+> Windows PC, because AWS non-metal Graviton has no `/dev/kvm`, with IPC
+> between the hypervisor host and its guest across the partition
+> boundary; the heterogeneous QNX-Safety / Linux-Compute split I carry
+> to a Jetson Orin Nano, where Linux (L4T) is the native host and the
+> QNX guest runs under TCG, because a GICv3 defect blocks the KVM boot.
 >
 > I want to be upfront about what each leg does and doesn't show. The
 > cloud leg crosses a *real* `qvm` EL2/EL1 partition boundary — that's
@@ -59,21 +66,23 @@
 > One concrete engineering takeaway from the project setup itself:
 > QNX SDP 8.0 doesn't support ARM hosts, so I designed a hybrid
 > build/runtime architecture — build the IFS on an x86_64 host
-> (Windows or Linux), then scp the image to a Graviton arm64 instance
-> for KVM-accelerated execution. That kind of toolchain-constraint
+> (Windows or Linux), then boot the aarch64 image under QEMU TCG on that
+> PC, or on the Orin under TCG or natively. That kind of
+> toolchain-constraint
 > discovery is the day-to-day of BSP work.
 >
 > The takeaway for me was concrete intuition for which DRIVE OS
 > design choices are hardware-driven versus software-configurable,
 > which I think is directly relevant to BSP work on this platform.
 >
-> One more thing — I designed it as a Digital Twin: the same QNX IFS
-> and the same IPC code run on AWS as the cloud twin and on a Jetson
-> Orin Nano dev kit as the hardware twin. Orin Nano uses Cortex-A78AE,
+> One more thing — I designed it as a Digital Twin: the same hypervisor
+> images boot on my Windows PC as the cloud twin and on a Jetson Orin
+> Nano dev kit as the hardware twin. Orin Nano uses Cortex-A78AE,
 > the same core family as DRIVE Orin's CCPLEX, so the hardware twin
 > validates the cloud-twin work on real Tegra-class silicon. The
 > twin-diff measurement — how latency, jitter, and boot-time change
-> when only the host changes — is the part I think tells the most
+> when the host bundle changes (CPU, OS, emulator build), re-run once
+> the reference architecture is frozen — is the part I think tells the most
 > honest story about what cloud simulation can and cannot give you
 > versus a real-target bring-up. That maps directly to how DRIVE OS
 > customers actually do bring-up: develop in the cloud, validate on
@@ -91,14 +100,18 @@ work + QNX hands-on; gap I wanted to close was concrete familiarity with
 DRIVE OS partition behaviour from the customer-port perspective. Honest
 framing front-loaded: this is a Digital Twin design, not a hypervisor.
 
-**Section 2 — Architecture choices (2 min).** Cloud twin runtime on
-AWS Graviton (c7g.large, KVM-on-arm64); build host is local Windows
+**Section 2 — Architecture choices (2 min).** Cloud twin runtime
+designed for AWS Graviton (c7g.large, KVM-on-arm64); as built it runs
+under QEMU TCG on the local Windows PC, because non-metal Graviton has
+no `/dev/kvm`. The build host is local Windows
 since SDP 8.0 host toolchain is x86_64-only and ships both Linux and
 Windows installers (EC2 t3.medium fallback if no local x86_64 host).
 Hardware twin on Jetson Orin Nano because A78AE matches DRIVE Orin's
 CCPLEX core family. The "same IFS, same IPC code, only host changes"
-property is the design's load-bearing claim — walk through how the
-twin diff isolates host-effects from code-effects.
+property was the design's load-bearing claim — walk through why it had
+to be restated: the Orin IPC leg used a rebuilt IFS, and "host" is a
+bundle (CPU, OS, TCG backend, QEMU build), so the twin diff compares
+host bundles and is re-run on reference architecture v1.
 
 **Section 3 — One concrete BSP-engineering story (1.5 min).** SDP 8.0's
 x86_64-only host requirement forced the hybrid build/runtime
@@ -110,10 +123,11 @@ in customer-port BSP work.
 host↔guest over the `qvm` virtio-console vdev (single-OS QNX↔QNX, both
 ends `ClockCycles()`) — honest caveat that this number is TCG-emulation-
 bound, not a transport cost (per [ADR-002](phase2-topology-decision.md)).
-Orin leg (Phase 3): heterogeneous QNX↔Linux over virtio-net under KVM,
-where the cross-clock time-base normalisation between QNX `ClockCycles()`
-and Linux `clock_gettime(CLOCK_MONOTONIC)` re-enters and the
-hardware-timed number appears. Framed echo protocol; P50/P99/P99.9
+Orin leg (Phase 3): heterogeneous QNX↔Linux over virtio-net under TCG
+(KVM boot blocked), where the cross-clock time-base normalisation between
+QNX `ClockCycles()` and Linux `clock_gettime(CLOCK_MONOTONIC)` re-enters.
+The hardware-timed number comes from the native QNX Hypervisor in the v1
+campaign. Framed echo protocol; P50/P99/P99.9
 reporting choice; warm-up exclusion. **Insert real numbers from
 `results/cloud/` and `results/hw/` once Phase 2 / 3 land.**
 
@@ -210,6 +224,24 @@ vendor's silicon. If asked "did you validate that beyond the one board":
 > one SoC — which changes how I'd prioritize: it's now a stronger case
 > to file with QNX/BlackBerry than a Jetson-specific curiosity would be.
 
+**Update, 2026-09-11 — two later steps.** On 2026-09-08 I built QNX's
+own BSP startup-library source (`gic_v3.c`) with their own flags and got
+the same post-indexed store at the same register offset, and adding one
+compiler flag (`-fno-auto-inc-dec`) removes it without changing what the
+loop writes. That is compile-verified, not boot-verified: the `qemu-virt`
+board source does not ship, so the startup this project boots cannot be
+relinked. It also puts the filing on shipped source rather than on
+disassembly. Then ADR-003 (2026-09-09) chose a different route to a
+hardware-timed hypervisor number: a native QNX port to the Orin Nano.
+The QNX Hypervisor host now runs natively on the board, entered by kexec
+from L4T, and it booted the cloud-leg QNX guest as a functional pass
+(M3). If asked "so did you get the hardware-timed number":
+> Not one I can publish yet. I ported QNX natively to the Orin Nano
+> instead of waiting on KVM: the QNX Hypervisor runs at EL2 on the board
+> and boots the same QNX guest the cloud leg uses. That is a functional
+> pass. The timed runs happen once, on a frozen reference architecture,
+> and publishing any evaluation result waits on a licence consultation.
+
 **Why this holds up under follow-up questions:** the finding is
 reproducible (documented across multiple boots, `docs/orin-port.md`'s
 risk register), the root cause is verified at the instruction level
@@ -253,7 +285,7 @@ Use these terms once each in any longer-form telling:
 ## Customization slots (when targeting a specific JD)
 
 - **Customer-facing phrasing:** swap "AVOS / DRIVE OS team" for the specific team
-- **Cost framing:** mention `c7g.large` cost discipline if interviewer is platform-eng
+- **Cost framing:** mention AWS cost discipline (the bare-metal `a1.metal` instance was terminated right after its capture) if interviewer is platform-eng
 - **Cert framing:** lean harder on `skills/iso-26262/` if JD emphasizes ASPICE/26262
 - **Hypervisor framing:** if JD explicitly says "hypervisor experience," lead with the
   Phase 3 gap analysis instead of the Phase 1 bring-up

@@ -209,6 +209,18 @@ spike, so its unbounded risk cannot contaminate the committed schedule. This is
 the honest-framing rule applied to scope: demonstrate what each host can
 actually do, and say plainly where the dual-OS story does and does not live.
 
+> **2026-09-11 note (later evidence; the accepted text above stands as
+> decided).** KVM did not boot the QNX IFS on the Orin. The boot hangs on the
+> GICv3/NISV defect ([orin-port.md](orin-port.md) risk register), and the
+> heterogeneous QNX↔Linux leg ran under TCG instead. The same correction
+> applies to the KVM wording in §1 item 1, Option C and §4. The route to a
+> hardware-timed number is the native port chosen in
+> [ADR-003](adr-003-hardware-timed-qhv.md), measured in the v1 campaign
+> ([orin-native-port-plan.md](orin-native-port-plan.md#architecture-versions-and-the-measurement-freeze-decided-2026-09-11)).
+> Option B's idea continues there as S1-F: a Linux guest under native `qvm` on
+> the Orin, planned before the v1 freeze. The cloud dual-guest topology is
+> still unbuilt.
+
 ---
 
 ## 4. Consequences (downstream changes this decision forces)
@@ -292,6 +304,10 @@ so they do not drift)
 - The **real** transport-vs-transport and hardware-timed numbers come from Phase
   3 (Orin, KVM). The twin diff (Phase 4) must therefore compare *non-identical*
   IPC paths and say so, rather than presenting the delta as host-only.
+  **2026-09-11 note:** the Orin leg ran under TCG, so it produced no
+  hardware-timed number ([digital-twin-design.md](digital-twin-design.md) §4).
+  Hardware-timed numbers come from the native port
+  ([ADR-003](adr-003-hardware-timed-qhv.md)), in the v1 campaign.
 - Time-base normalisation (`ClockCycles()` on QNX, `clock_gettime` on Linux) in
   `ipc-test/README.md` is now **single-OS on the cloud leg** (both ends QNX →
   both use `ClockCycles()`); the cross-clock-skew handling only re-enters at
@@ -313,6 +329,11 @@ so they do not drift)
 > DTB GICv3 patch, unconfirmed on Nano — schedule a smoke spike before Phase 2
 > closes). **Net: Option B feasibility-GREEN; the committed Option-A deliverable
 > is unaffected and can start now.**
+>
+> **2026-09-11 note on RQ-5 (outcome recorded 2026-07-28 in
+> [orin-port.md](orin-port.md), step 2 and risk register):** on the Nano, vGIC
+> creation with `gic-version=3` works without the DTB patch. The QNX IFS still
+> hangs under KVM on the GICv3/NISV defect, so the Orin leg used TCG.
 >
 > **RQ-2 REFINED 2026-07-28 — host<->guest (not just guest<->guest) is
 > RESOLVED YES, proven live on the host side; guest side open.** The

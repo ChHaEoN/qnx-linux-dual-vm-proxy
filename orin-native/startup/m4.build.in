@@ -1,0 +1,170 @@
+# M4 — per-exit hypervisor dwell from qvm Class-10 trace events, natively on the
+# Jetson Orin Nano: M3's host, guest and procedure plus a kernel trace, an
+# on-target counter and a checked transfer over the TCU.
+#
+# Phase 3b, results/orin-native-port/20260909T1100Z/m4-design.md (revision 2),
+# §3.2. No image generated from this template has run on the board.
+#
+# The m4-*.build buildfiles are generated from this template by
+# make-m4-images.sh under orin-native/shim/out/m4/ (git-ignored: an IFS carries
+# QNX binaries, and these carry the guest IFS and its disk as well). Edit the
+# template, never a generated copy. Every comment line is dropped from the
+# generated buildfile, as in M1b and M3.
+#
+#   image                rung  mode   role (design §2, §3.3)
+#   m4-r0                r0    trace  trace tools, probe, idle rate, counter, transfer; no qvm
+#   m4-r1-k<K1>          r1    full   M3's run inside a ring of K1 buffers per CPU, 15 iterations
+#   m4-r2-k<K2>-n<N2>    r2    full   Q and T1-T5: N2 iterations, compact list plus a sample
+#
+## THIS FILE IS THE TEMPLATE, not a buildfile. The generator replaces:
+##   @RUNG@        r0, r1 or r2
+##   @P@           the CPU count, 4
+##   @GUARD@       the guard in seconds, from the §8.1 bound table
+##   @CLIENT@      the IPC client build, ipc-test/qnx-host-client/qnx-host-client
+##   @GUEST_IFS@   qhv/guest/output/ifs.bin
+##   @GUEST_DISK@  qhv/guest/output/disk-qvm
+##   @KSH@ @CONF@ @FIX1@ @FIX2@ @FIX3@ @FIX4@  files it generated or copied under orin-native/shim/out/m4/
+## and fails if any @[A-Z0-9_]+@ survives. The mode lives only in the host
+## script, so the buildfiles of the rungs differ only in @RUNG@, @GUARD@ and @KSH@.
+##
+## The two blocks marked "verbatim from m3.build.in" are copies of
+## m3.build.in:95-128 and :148-173; make-m4-images.sh step 9 checks that each
+## still equals those lines, so the two templates cannot drift apart silently.
+#
+# The base address is not free: kexec places the 8 KiB shim page at 0x80080000,
+# so the image begins right after it (build-shim.sh fails a shim page that is not
+# exactly 8192 bytes).
+[image=0x80082000]
+[-compress]
+
+# M3's startup line, unchanged (m3.build.in:45; design §3.2): -P@P@ on cluster 0,
+# -Q enable,el2-host, -A, and the instrumented kernel that emits the trace events.
+[virtual=aarch64le,raw] .bootstrap = {
+    startup-t234-orin-nano -vvv -P@P@ -Q enable,el2-host -m992M -Wkeep -A -Dtcu
+    PATH=/proc/boot LD_LIBRARY_PATH=/proc/boot
+    [+keeplinked] procnto-smp-instr -v
+}
+
+# M3's script order (census, then the guard, m3.build.in:56-69), with the M4
+# names and the guard from the bound table. An IFS script is not a shell: no
+# pipes, no redirection, one program per line; the host state machine
+# (m4-host.ksh.in) carries every bounded wait. The script ends in a warm reset,
+# which keeps the black box.
+[+script] .script = {
+    display_msg "T234 M4 @RUNG@ -P@P@: procnto up"
+    procmgr_symlink ../../proc/boot/ldqnx-64.so.2 /usr/lib/ldqnx-64.so.2
+    procmgr_symlink /proc/boot/ksh /bin/sh
+    smpcheck -i -n @P@
+    bwait -g @GUARD@ &
+    slogger2
+    pipe
+    devc-pty
+    pidin info
+    ksh /proc/boot/m4-host.ksh
+    display_msg "T234 M4 @RUNG@ -P@P@: resetting so the log can be recovered"
+    smpcheck -z 3
+    shutdown -S reboot
+}
+
+# The runtime linker and the libraries: M3's set, then the two trace libraries
+# (m2.build.in:202-203). Their DT_NEEDED lists are not read (licence); a missing
+# library shows on the board as 'Unable to start "tracelogger" (83)'.
+[type=link] /usr/lib/ldqnx-64.so.2=/proc/boot/ldqnx-64.so.2
+ldqnx-64.so.2
+[-autolink]
+# verbatim from m3.build.in:95-128, begin
+libc.so.6
+libgcc_s.so.1
+libsecpol.so.1
+libm.so.3
+libqh.so.1
+libregex.so.1
+libjail.so.1
+libfsnotify.so.1
+libsocket.so.4
+[type=link] libsocket.so=libsocket.so.4
+libfdt.so.1
+[type=link] libfdt.so=libfdt.so.1
+libcam.so.2
+io-blk.so
+cam-disk.so
+libslog2.so.1
+[type=link] libslog2.so=libslog2.so.1
+libslog2parse.so.1
+libslog2shim.so.1
+libjson.so.1
+# R0 (2026-09-10T21:11Z) stopped at md5_pre: toybox and slog2info printed
+# 'ldd:FATAL: Could not load library libz.so.2'. The loader names only the
+# first missing library, so the rest of the cloud host IFS's [-autolink] set
+# comes too (qhv/host/output/build/ifs.build), with its qcrypto.conf. That
+# host's CONFIG_PATH is not copied: on this bootstrap line mkifs prefixes it to
+# every script command, which the generator's exact-line checks reject.
+libz.so.2
+libcrypto.so.3
+libqcrypto.so.1.0
+qcrypto-openssl-3.so
+libpci.so.3.0
+[uid=0 gid=0 perms=0444] qcrypto.conf={
+openssl-3 tags=*
+}
+# verbatim from m3.build.in:95-128, end
+libtracelog.so.1
+libtraceparser.so.1
+
+# Ours: the tools (orin-native/tools), the IPC client, the generated host script,
+# the configuration and the counter's three synthetic fixtures. The guest IFS and
+# its disk are [+raw]; the generator extracts both back out of the image and
+# checks their sha256 against the pins.
+/proc/boot/tcu-cat=tcu-cat
+/proc/boot/stamp=stamp
+/proc/boot/bwait=bwait
+/proc/boot/smpcheck=smpcheck
+/proc/boot/trcctl=trcctl
+/proc/boot/clkcmp=clkcmp
+/proc/boot/m4count=m4count
+[perms=0555] /proc/boot/qnx-host-client=@CLIENT@
+[perms=0444] /proc/boot/m4-host.ksh=@KSH@
+[perms=0444] /proc/boot/g2.conf=@CONF@
+[perms=0444] /proc/boot/m4fix-1.txt=@FIX1@
+[perms=0444] /proc/boot/m4fix-2.txt=@FIX2@
+[perms=0444] /proc/boot/m4fix-3.txt=@FIX3@
+[perms=0444] /proc/boot/m4fix-4.txt=@FIX4@
+[+raw perms=0444] /proc/boot/guest-ifs.bin=@GUEST_IFS@
+[+raw perms=0444] /proc/boot/disk-qvm=@GUEST_DISK@
+
+# M3's utilities, the hypervisor set and the guest disk's block stack, then the
+# trace tools and two more toybox applets (cksum for each block, rm for the disk
+# copy and the text listing). Still no vpctl, virtio-net, random, io-sock,
+# fs-qnx6, gawk, awk, gzip or base64 (design §3.1).
+# verbatim from m3.build.in:148-173, begin
+ksh
+pidin
+on
+slay
+waitfor
+shutdown
+devc-pty
+slogger2
+slog2info
+pipe
+qvm
+qvm-check
+vdev-pl011.so
+vdev-virtio-console.so
+vdev-virtio-blk.so
+vdev-shmem.so
+devb-loopback
+toybox
+[type=link] cat=toybox
+[type=link] cp=toybox
+[type=link] cmp=toybox
+[type=link] grep=toybox
+[type=link] head=toybox
+[type=link] md5sum=toybox
+[type=link] tail=toybox
+[type=link] wc=toybox
+# verbatim from m3.build.in:148-173, end
+tracelogger
+traceprinter
+[type=link] cksum=toybox
+[type=link] rm=toybox

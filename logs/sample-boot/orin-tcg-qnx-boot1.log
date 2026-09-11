@@ -20,6 +20,8 @@
 # hardware-backed vGICv3, and it is not the Phase-3 success criterion
 # (that requires -enable-kvm per docs/orin-port.md). It is diagnostic
 # evidence only.
+# 2026-09-11: TCG was accepted as the Phase-3 transport (docs/orin-port.md status); the
+# hardware-timed route is the native port (docs/adr-003-hardware-timed-qhv.md).
 
 FOUND GICv3 ITS
 ** CPU 0 PE is not awake

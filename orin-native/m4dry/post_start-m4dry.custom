@@ -1,0 +1,4 @@
+# post_start-m4dry.custom: Phase 3b checklist 7b dry run (m4-dryrun-design.md).
+# mkqnximage appends this to the variant host's post_startup.sh. Everything the
+# dry run does is in /system/bin/m4dry-host.ksh; this line only runs it.
+/proc/boot/ksh /system/bin/m4dry-host.ksh

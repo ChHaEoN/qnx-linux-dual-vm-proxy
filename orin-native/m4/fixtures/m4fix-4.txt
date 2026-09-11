@@ -1,0 +1,28 @@
+# m4fix: synthetic
+# m4fix-4 (m4-design.md 4.5.4 and 14.5, I22): two CPUs, 64-bit t:. The ring wrapped past the start
+# marker: the end marker is present, the start marker is not, and neither CPU's first kept BUFFER
+# sequence is 1, so earlier buffers were overwritten. The ring is therefore wrapped, not unknown.
+# Invented values in the traceprinter -n default layout; a test input, not a trace, and no
+# measured figure.
+# expect: M4C TIME64 mode=t64 time_events=3 mismatches=0 wraps=0 backsteps=0 backsteps64=0 unknown=0
+# expect: M4C RING state=wrapped wrapped_cpus=0,1 seq1_cpus=none
+# expect: M4C BUF cpu=0 first_seq=7 last_seq=8 kept=2 gaps=0 restarts=0
+# expect: M4C BUF cpu=1 first_seq=9 last_seq=9 kept=1 gaps=0 restarts=0
+ -- HEADER FILE INFORMATION --
+  TRACE_CYCLES_PER_SEC:: 31250000
+         TRACE_CPU_NUM:: 2
+ -- KERNEL EVENTS --
+t:0x100000000 CPU:00 CONTROL         :TIME               msb:0x00000001 lsb(offset):0x00000000
+t:0x100000000 CPU:00 CONTROL         :BUFFER             sequence = 7, num_events = 3
+
+t:0x100000000 CPU:01 CONTROL         :TIME               msb:0x00000001 lsb(offset):0x00000000
+t:0x100000000 CPU:01 CONTROL         :BUFFER             sequence = 9, num_events = 3
+
+t:0x100000010 CPU:00 THREAD          :THRUNNING          pid:1 tid:1
+t:0x100000020 CPU:01 THREAD          :THRUNNING          pid:1 tid:2
+t:0x100000030 CPU:00 CONTROL         :BUFFER_END         cookie1 = e6e6e6e6, cookie2 = e6e6e6e6
+t:0x100000031 CPU:00 CONTROL         :TIME               msb:0x00000001 lsb(offset):0x00000031
+t:0x100000031 CPU:00 CONTROL         :BUFFER             sequence = 8, num_events = 2
+
+t:0x100000064 CPU:01 USREVENT        :EVENT:21           STR:"m4-fix-end", d0:0x00000000 d1:0x00000000 d2:0x00000000 d3:0x00000000
+t:0x100000070 CPU:00 THREAD          :THRUNNING          pid:1 tid:3

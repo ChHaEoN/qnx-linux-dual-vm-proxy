@@ -107,6 +107,17 @@ Per the test-before-claim rule, the following are reported honestly to FuSa-Desi
 
 ## 4. Residual risk — deferred to Phase 3 (NOT discharged)
 
+> **2026-09-11 note.** The Phase-3 evidence paths below do not exist as
+> written. KVM boot of QNX on the Orin is blocked by the GICv3/NISV defect
+> ([orin-port.md](../orin-port.md) risk register), and the `a1.metal`
+> KVM run hung the same way ([findings.md](../findings.md) 2026-07-29).
+> Phase 3b runs native `qvm` on the Orin with real EL2 and stage-2
+> translation for one guest ([findings.md](../findings.md) 2026-09-10 M3;
+> [orin-native-port-plan.md](../orin-native-port-plan.md), architecture
+> A4), but that plan does no SMMU work (its §7 item 3). When FFI or timing
+> closure evidence will exist is UNKNOWN. TSR-TIM-001's prohibition stays
+> in force.
+
 | Item | Why it cannot close on this leg | Phase-3 evidence required |
 |---|---|---|
 | **TSR-FFI-001 / NF-3** (guest→host escape, partition FFI) | TCG emulates one CPU on one host; there is no hardware-enforced EL2/stage-2/SMMU boundary to test. "No escape observed" under TCG is not evidence of isolation. | Orin / real EL2 + SMMU; fault-injection across the qvm boundary on silicon; a DFA against shared-EL2 common cause (Addendum §A.4). |

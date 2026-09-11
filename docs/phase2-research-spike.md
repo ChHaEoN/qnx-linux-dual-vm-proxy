@@ -3,7 +3,7 @@
 > **Study-level research record.** Resolves the five research questions
 > [ADR-002](phase2-topology-decision.md) §5 handed to Research. Evidence is
 > tagged **[EMPIRICAL]** (found in the local SDP 8.0.4 install at
-> `C:\Users\andy8\qnx800`), **[VENDOR]** (QNX/NVIDIA official docs — a *claim*,
+> `C:\Users\<user>\qnx800`), **[VENDOR]** (QNX/NVIDIA official docs — a *claim*,
 > not independently verified here), or **[SPIKE]** (cannot be settled without a
 > runtime/hardware spike). Per the honest-framing rule, vendor claims are not
 > upgraded to facts.
@@ -16,6 +16,8 @@
   channel) resolve positive. The cloud `io-sock` failure (RQ-4) is a fixable
   launch-line omission, not a missing package. Orin KVM (RQ-5) is achievable but
   needs a DTB patch and is unconfirmed on the Orin *Nano* SKU specifically.
+  **(2026-07-28 outcome, noted 2026-09-11: no patch was needed on the Nano,
+  but the QNX IFS hangs under KVM; see the RQ-5 note.)**
 
 ---
 
@@ -122,6 +124,16 @@ ships QEMU without KVM" risk row to cover the vGIC/device-tree patch.
 flash JetPack 6, `dmesg | grep -i kvm`, `ls /dev/kvm`,
 `qemu -enable-kvm -M virt,gic-version=3` boot — so an Orin-Nano GICv3 surprise
 surfaces on schedule, not mid-Phase-3.
+
+> **2026-07-28 outcome (noted 2026-09-11).** On the Orin Nano, vGIC
+> creation with `gic-version=3` works on the stock JetPack 6 kernel with no
+> DTB patch, so the AGX `Error(19)` failure did not reproduce
+> ([orin-port.md](orin-port.md) step 2 and risk register). The real QNX IFS
+> still hangs under KVM after `FOUND GICv3 ITS`: a GICv3 distributor write
+> takes a `KVM_EXIT_ARM_NISV` exit that neither KVM nor QEMU emulates
+> (orin-port.md risk register). The heterogeneous IPC therefore ran under
+> TCG. The kernel-rebuild and DTB-patch correction above did not apply to
+> the Nano. The research record above is kept as written.
 
 ---
 

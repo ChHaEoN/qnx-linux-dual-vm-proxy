@@ -90,6 +90,9 @@ orin-native/tools/tcu-cat
 orin-native/tools/stamp
 orin-native/tools/smpcheck
 orin-native/tools/bwait
+orin-native/tools/clkcmp
+orin-native/tools/trcctl
+orin-native/tools/m4count
 
 # mkifs [+keeplinked] drops symbol files next to the buildfile; they are derived
 # from QNX binaries and must never be committed.

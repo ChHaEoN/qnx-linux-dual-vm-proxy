@@ -17,6 +17,9 @@
 # or disk mode (no rng: ~19 s timeout artefact per run; no -snapshot). This
 # series is superseded by windows-qhv-tcg-rng-slot3-boot-times-n5.txt and is
 # not comparable to any Orin run. Kept as the first instrumented record.
+# 2026-09-11: the Orin half ran on 2026-09-09. The chain continues: rng-slot3 ->
+# rng-snapshot-segments -> the q111 release-aligned pair
+# (windows- and orin-qhv-tcg-q111-rng-snapshot-segments-boot-times-n5.txt); all A3 history.
 
 run 1: 49080 ms
 run 2: 49165 ms

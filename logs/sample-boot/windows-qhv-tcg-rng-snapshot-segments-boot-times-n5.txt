@@ -6,6 +6,8 @@
 # complete contains the guest's fixed "if_up -p -r 20 vtnet0" retry burn (no net vdev in g2.conf;
 # if_up default is 5 walks, the image asks for 20) -- a wait that is the same on both hosts and
 # therefore dilutes any host ratio computed from the headline number alone.
+# 2026-09-11: the aligned series is windows-qhv-tcg-q111-rng-snapshot-segments-boot-times-n5.txt;
+# this file is its same-host QEMU-build control. A3 history.
 #
 # host: Windows 10.0.26200.0 AMD64 / AMD Ryzen 7 9700X 8-Core Processor             
 # qemu: QEMU emulator version 11.0.50 (v11.0.0-12631-g54e84cdc7a)

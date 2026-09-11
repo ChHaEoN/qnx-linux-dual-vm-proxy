@@ -50,7 +50,9 @@ OEM programmes have.
 
 **Architecture — three peer guests, not nested.** Rather than nesting
 IVI inside `qvm` (which would stack two unresolved unknowns at once —
-whether `qvm` can host a Linux guest at all, ADR-002's still-open RQ-1,
+whether `qvm` can host a Linux guest at all (ADR-002's RQ-1, resolved
+feasible on 2026-06-11 from vendor documentation but never booted here;
+S1-F now plans the first Linux guest under native `qvm`),
 *and* whether Android Automotive can boot under `qvm` — too much risk
 concentrated in one experiment), the IVI domain is added as a **third
 guest running alongside** the existing QNX Safety guest and Linux
@@ -87,6 +89,15 @@ register) is Tegra234-specific or a general real-hardware/KVM
 limitation. This is a resourcing decision, not an abandonment — see
 `docs/interview-narrative.md`'s new Q&A section for how to talk about
 this finding on its own terms.
+
+> **2026-09-11: superseded.** The `a1.metal` run on 2026-07-29 reproduced
+> the hang on a second vendor's silicon ([findings.md](findings.md)), and
+> [ADR-003](adr-003-hardware-timed-qhv.md) (2026-09-09) chose a native QNX
+> port to the Orin Nano for the hardware-timed number. Its numbers come
+> from the v1 measurement campaign
+> ([orin-native-port-plan.md](orin-native-port-plan.md)). As built, the
+> cloud leg is the Windows PC under QEMU TCG, not Graviton
+> ([digital-twin-design.md](digital-twin-design.md) §1).
 
 ---
 
@@ -148,9 +159,11 @@ is the Phase 7 deliverable's load-bearing piece.
 
 ## QNX Hypervisor (QHV) availability — important correction
 
-QHV 2.x is **bundled with QNX SDP 8.0** and the QNX Everywhere
-non-commercial licence covers personal use of QHV (same NCEULA as the
-rest of SDP). What is *not* available under Everywhere is the
+QNX Hypervisor 8.0 is **included with QNX SDP 8.0**, and QNX says the
+QNX Everywhere licence covers it. That is a vendor claim from QNX's blog
+and its Pi 4 README; the non-commercial licence text does not mention
+the hypervisor ([ADR-003](adr-003-hardware-timed-qhv.md) §2). QNX
+Hypervisor 2.2 is the SDP 7.1 generation. What is *not* available under Everywhere is the
 proprietary Snapdragon BSP for QHV (that lives behind Qualcomm-QNX
 commercial agreements).
 
@@ -169,9 +182,17 @@ the nesting path before committing to QHV-as-cockpit-HV. If nesting
 turns out unstable, the fallback is KVM-on-host directly (simpler,
 honest framing notes the QHV gap).
 
+> **2026-09-11 (as built):** QHV already runs inside QEMU TCG with no KVM,
+> on the Windows PC and on the Orin, and natively on the Orin
+> ([orin-native-port-plan.md](orin-native-port-plan.md), architectures
+> A1, A3 and A4). Non-metal Graviton has no `/dev/kvm`
+> ([ADR-002](phase2-topology-decision.md)), so the Graviton nesting path
+> above and the KVM-on-Graviton question below are design-time, not as
+> built.
+
 Phase 7 research items (added):
 
-- [ ] Does QHV 2.x ship a `--type=qemu --arch=aarch64le` BSP comparable to `mkqnximage`'s? If not, what is the porting effort?
+- [x] Does QHV 2.x ship a `--type=qemu --arch=aarch64le` BSP comparable to `mkqnximage`'s? If not, what is the porting effort? **(2026-09-11: answered 2026-06-11. In SDP 8.0, `mkqnximage --type=qemu --arch=aarch64le --qvm=yes` builds a QHV host for QEMU `virt`; [findings.md](findings.md) 2026-06-11 QHV milestone.)**
 - [ ] Does KVM-on-Graviton support nested virt well enough to host QHV? (Single-host nested-KVM benchmark is the gate.)
 - [ ] If nested QHV works: what is the inter-guest IPC latency *inside* QHV vs the inter-SoC virtio-net latency? (Useful comparison point — gives Phase 7 a "stacked latency budget" picture.)
 
@@ -213,6 +234,10 @@ Phase 7 research items (added):
 
 ## AWS sizing
 
+> **2026-09-11:** design-time sizing. No phase ran on `c7g.large`; the
+> cloud leg runs on the Windows PC
+> ([digital-twin-design.md](digital-twin-design.md) §1).
+
 Phase 1–6 uses `c7g.large` (2 vCPU, 4 GB) which is enough for two VMs
 with ~1 GB each. Phase 7 needs to run 4–5 VMs simultaneously
 (cockpit-side IVI + cockpit-safety + ADAS-safety + ADAS-compute +
@@ -231,7 +256,7 @@ Phase 7 is a stretch goal precisely because the AWS bill goes up
 
 ## Open empirical questions (to revisit when Phase 7 starts)
 
-- [ ] Does Android Automotive OS aarch64 boot under QEMU/KVM on Graviton with virtio devices? (Cuttlefish targets x86_64; aarch64 path is less smooth.)
+- [ ] Does Android Automotive OS aarch64 boot under QEMU/KVM on Graviton with virtio devices? (Cuttlefish targets x86_64; aarch64 path is less smooth.) **(2026-09-11: KVM needs a `*.metal` Graviton, per ADR-002; the as-built legs use TCG or the Orin.)**
 - [ ] Can SOME/IP-SD (vsomeip / CommonAPI) run on QNX SDP 8.0 without porting effort?
 - [ ] What is `br-intersoc` realistic latency vs the existing intra-SoC `br0`? (The two should differ; Phase 7 wants to see that delta.)
 - [ ] Is there a public open-source DRIVE OS-style "service discovery" stub usable as scaffolding, or do we write our own minimal SOME/IP server?

@@ -1,0 +1,326 @@
+## m4-host.ksh.in — the M4 host state machine template (Phase 3b).
+##
+## The script in results/orin-native-port/20260909T1100Z/m4-design.md §4.1
+## (revision 2), below these ## lines, which make-m4-images.sh and
+## orin-native/m4/build-m4tcg-image.ps1 drop. One change from the design's text,
+## recorded in that file's §14 (I6): show() loops over _f, not f, because send()
+## sets f to the block file before it calls show(), and ksh functions declared
+## as name() share one variable scope, so the design's show() would have sent
+## the wc output in place of the listing.
+##
+## Markers the generator replaces (board value; TCG profile of §11.2):
+##   @RUNG@ @MODE@ (trace for r0, full otherwise) @P@ (4; 2) @CPUS@ ("0 1 2 3";
+##   "0 1") @RATES@ (1; 0) @IO_BOUND@ (30; 600) @B@ our tools (/proc/boot;
+##   /system/bin) @X@ QNX tools (/proc/boot; /system/bin) @GUEST_IFS@
+##   @GUEST_DISK@ @CONF@ @CLIENT@ @STARTUP_LINE@ @A@ @GUEST_SHA256@
+##   @DISK_SHA256@ @CONF_SHA256@ @CLIENT_SHA256@ @GUEST_MD5@ @DISK_MD5@
+##   @CONF_MD5@ @ITERS@ @IPC_BOUND@ @BANNER_BOUND@ @GRACE@ @GRACE_WAIT@ @KIND@
+##   @TL_ARGS@ @TL_BOUND@ @TRACE_NEED_MB@ @FMT_NEED@ @CNT_NEED@ @TP_BOUND@
+##   @CNT_BOUND@ @HASH_BOUND@ @CNT_OUT@ @FORMS@ @SEND_V@ @SEND_T_V@ @SEND_C@
+##   @SEND_T_C@ @TRANSPORT@ (tcu; console) @FIX@ (the fixture paths; four since I24)
+## Both builds fail if any @[A-Z0-9_]+@ survives, and both run
+## orin-native/m4/parse-m4.py kshcheck on the generated script (§3.4 step 9).
+##
+## Rules (§4.1): no pipe, no command substitution, no backquote, no case-pattern
+## alternation, no nested shell string, no here-document, no arithmetic; every
+## wait a bwait with a bound; nothing printed from a start marker to the end of
+## its stop ladder; the records before any listing byte, capped diagnostics last.
+# m4-host.ksh: M4 host state machine, generated from m4-host.ksh.in; edit the template.
+S=/dev/shmem
+B=@B@
+X=@X@
+RUNG=@RUNG@
+MODE=@MODE@
+P=@P@
+CPUS="@CPUS@"
+GUEST_IFS=@GUEST_IFS@
+GUEST_DISK=@GUEST_DISK@
+CONF=@CONF@
+CLIENT=@CLIENT@
+FAIL=
+LAUNCHED=
+TRACED=
+MEMFREE=0
+STOPBY=none
+
+say()   { echo "M4 $*"; }
+state() { echo "M4 STATE $*"; }
+hit()   { [ -e "$S/$1.hit" ]; }
+show()  { for _f in "$@"; do [ -s "$_f" ] && cat "$_f"; done; }
+headc() { [ -s "$2" ] && head -c "$1" "$2"; }
+mem() {
+	MEMFREE=0
+	pidin info > "$S/mem.$1" 2>&1
+	while read -r l; do
+		case "$l" in
+		*FreeMem:*) f=${l#*FreeMem:}; f=${f# }; f=${f%% *}; say "MEM $1 $f"; MEMFREE=${f%%MB*} ;;
+		esac
+	done < "$S/mem.$1"
+	case "$MEMFREE" in '') MEMFREE=0 ;; *[!0-9]*) MEMFREE=0 ;; esac
+}
+rates() {
+	if [ "@RATES@" != 1 ]; then say "RATES $1 skipped"; return; fi
+	for c in $CPUS; do
+		smpcheck -b 3 -C "$c" -o "$S/${1}c${c}" &
+	done
+	smpcheck -c "$P" -p "$S/${1}c" -T 20
+}
+md5ok() {
+	if grep -q "^$2 " "$1"; then say "CHECK $4 $3 ok"; else say "FAIL $4 $3"; FAIL=${FAIL:-$4}; fi
+}
+# arm NAME KEV BOUND ARGS...: tracelogger in the background under a kill bound, silently.
+arm() {
+	n=$1; k=$2; tb=$3; shift 3
+	( bwait -k "$tb" -r "$S/$n.rec" -o "$S/$n.out" -e "$S/$n.err" -- "$X/tracelogger" "$@" -f "$k" > "$S/$n.b" 2>&1; : > "$S/$n.done" ) &
+}
+# stopladder NAME: STOP, then SIGINT, then SIGKILL; silent (m4-dryrun-design.md D3).
+stopladder() {
+	STOPBY=none
+	if [ -e "$S/$1.done" ]; then STOPBY=early; return; fi
+	trcctl -x > "$S/$1.x" 2>&1
+	if bwait -p "$S/$1.done" -t 120 > "$S/$1.s1" 2>&1; then STOPBY=stop; return; fi
+	slay -f -Q -s INT tracelogger
+	if bwait -p "$S/$1.done" -t 30 > "$S/$1.s2" 2>&1; then STOPBY=sigint; return; fi
+	slay -f -Q -s KILL tracelogger
+	if bwait -p "$S/$1.done" -t 10 > "$S/$1.s3" 2>&1; then STOPBY=kill; fi
+}
+stopreport() {
+	show "$S/$1.m1" "$S/$1.m2" "$S/$1.x" "$S/$1.s1" "$S/$1.s2" "$S/$1.s3" "$S/$1.b"
+	headc 512 "$S/$1.out"
+	headc 512 "$S/$1.err"
+	say "STOP $1 by=$STOPBY"
+}
+# fmtcount NAME KEV TPBOUND FMTNEED CNTNEED START END [m4count output options]: after the window only.
+fmtcount() {
+	n=$1; k=$2; tb=$3; fn=$4; cn=$5; ms=$6; me=$7; shift 7
+	if [ ! -e "$S/$n.done" ] || [ ! -s "$k" ]; then say "KEVFILE $n path=none"; return; fi
+	bwait -k @HASH_BOUND@ -o "$S/$n.kwc" -e "$S/$n.kwc.err" -- "$X/wc" -c "$k" > "$S/$n.kwb" 2>&1
+	KB=none
+	[ -s "$S/$n.kwc" ] && read -r KB rest < "$S/$n.kwc"
+	say "KEVFILE $n path=$k bytes=$KB"
+	mem "preformat_$n"
+	if [ "$MEMFREE" -lt "$fn" ]; then
+		say "FAIL mem_format name=$n step=format free_mb=$MEMFREE need_mb=$fn"; FAIL=${FAIL:-mem_format}; return
+	fi
+	bwait -k "$tb" -r "$S/$n.tp.rec" -o "$S/$n.tp.out" -e "$S/$n.tp.err" -- "$X/traceprinter" -n -f "$k" -o "$S/$n.txt"
+	headc 512 "$S/$n.tp.err"
+	bwait -k @HASH_BOUND@ -o "$S/$n.twc" -e "$S/$n.twc.err" -- "$X/wc" -c "$S/$n.txt" > "$S/$n.twb" 2>&1
+	TB=none
+	[ -s "$S/$n.twc" ] && read -r TB rest < "$S/$n.twc"
+	say "TEXT $n bytes=$TB"
+	mem "formatted_$n"
+	if [ "$MEMFREE" -lt "$cn" ]; then
+		say "FAIL mem_format name=$n step=count free_mb=$MEMFREE need_mb=$cn"; FAIL=${FAIL:-mem_format}
+		"$X/rm" -f "$S/$n.txt"; return
+	fi
+	bwait -k @CNT_BOUND@ -r "$S/$n.cnt.rec" -o "$S/$n.cnt" -e "$S/$n.cnt.err" -- "$B/m4count" -i "$S/$n.txt" -w "$n" -s "$ms" -e "$me" "$@"
+	show "$S/$n.cnt"
+	headc 512 "$S/$n.cnt.err"
+	"$X/rm" -f "$S/$n.txt"
+}
+# send NAME FILE BOUND DEADLINE: the hashes on the console, then the framed body (§5).
+send() {
+	n=$1; f=$2; sb=$3; st=$4
+	if [ ! -s "$f" ]; then say "FLT SKIP name=$n reason=absent-or-empty"; return; fi
+	bwait -k @HASH_BOUND@ -o "$S/$n.md5" -e "$S/$n.md5.err" -- "$X/md5sum" "$f" > "$S/$n.h1" 2>&1
+	bwait -k @HASH_BOUND@ -o "$S/$n.ck" -e "$S/$n.ck.err" -- "$X/cksum" "$f" > "$S/$n.h2" 2>&1
+	bwait -k @HASH_BOUND@ -o "$S/$n.wc" -e "$S/$n.wc.err" -- "$X/wc" -l -c "$f" > "$S/$n.h3" 2>&1
+	FM=none; FC=none; FB=none; FL=none; FW=none
+	[ -s "$S/$n.md5" ] && read -r FM rest < "$S/$n.md5"
+	[ -s "$S/$n.ck" ] && read -r FC FB rest < "$S/$n.ck"
+	[ -s "$S/$n.wc" ] && read -r FL FW rest < "$S/$n.wc"
+	show "$S/$n.h1" "$S/$n.h2" "$S/$n.h3"
+	say "FLT BEGIN name=$n rung=$RUNG lines=$FL bytes=$FB wc_bytes=$FW md5=$FM cksum=$FC"
+	bwait -s 1 -c "$S/$n.pause"
+	if [ "@TRANSPORT@" = tcu ]; then
+		bwait -k 10 -o "$S/$n.t0o" -e "$S/$n.t0e" -- "$B/tcu-cat" -a 50 -s -m "=M4FLT= BEGIN name=$n rung=$RUNG" > "$S/$n.t0" 2>&1
+		bwait -k "$sb" -o "$S/$n.t1o" -e "$S/$n.t1e" -- "$B/tcu-cat" -a 50 -T "$st" -s -f "$f" > "$S/$n.t1" 2>&1
+		R=$?
+		bwait -k 10 -o "$S/$n.t2o" -e "$S/$n.t2e" -- "$B/tcu-cat" -a 50 -s -m "=M4FLT= END name=$n" > "$S/$n.t2" 2>&1
+		show "$S/$n.t0" "$S/$n.t0e" "$S/$n.t1" "$S/$n.t1e" "$S/$n.t2" "$S/$n.t2e"
+	else
+		echo "=M4FLT= BEGIN name=$n rung=$RUNG"
+		cat "$f"
+		R=$?
+		echo "=M4FLT= END name=$n"
+	fi
+	say "FLT END name=$n rc=$R"
+}
+
+state config
+say "CONFIG rung=$RUNG mode=$MODE startup='@STARTUP_LINE@' q=el2-host w=keep A=@A@ cpus=$P guest_sha256=@GUEST_SHA256@ disk_sha256=@DISK_SHA256@ conf_sha256=@CONF_SHA256@ client_sha256=@CLIENT_SHA256@ clock=unverified kind=@KIND@ tl_args='@TL_ARGS@' iters=@ITERS@ forms='@FORMS@' trace_need_mb=@TRACE_NEED_MB@ transport=@TRANSPORT@"
+
+state preflight
+bwait -p /dev/ptyp1 -t 10 || { say "FAIL preflight /dev/ptyp1"; FAIL=preflight; }
+bwait -p /dev/ttyp0 -t 10 || { say "FAIL preflight /dev/ttyp0"; FAIL=preflight; }
+bwait -p /dev/slog -t 5 || say "NOTE no /dev/slog"
+bwait -p /dev/pipe -t 5 || say "NOTE no /dev/pipe"
+mem boot
+
+state rate_pre
+rates r0
+
+if [ -z "$FAIL" ]; then
+	state integrity_pre
+	bwait -k @IO_BOUND@ -o "$S/md5.pre" -e "$S/md5.pre.err" -- "$X/md5sum" "$GUEST_IFS" "$GUEST_DISK" "$CONF"
+	show "$S/md5.pre"
+	md5ok "$S/md5.pre" @GUEST_MD5@ guest md5_pre
+	md5ok "$S/md5.pre" @DISK_MD5@ disk md5_pre
+	md5ok "$S/md5.pre" @CONF_MD5@ conf md5_pre
+fi
+
+if [ "$MODE" = trace ]; then
+	state clock
+	bwait -k 120 -o "$S/clk.out" -e "$S/clk.err" -- "$B/clkcmp"
+	grep -E '^CLK (HDR|VERDICT|SKIP|NOTE|ERROR)' "$S/clk.out"
+	state fixtures
+	for fx in @FIX@; do
+		bwait -k 20 -o "$S/fix.out" -e "$S/fix.err" -- "$B/m4count" -q -i "$fx" -w fix -s m4-fix-start -e m4-fix-end
+		show "$S/fix.out"
+		headc 256 "$S/fix.err"
+	done
+fi
+
+if [ -z "$FAIL" ]; then
+	state disk
+	bwait -k @IO_BOUND@ -o "$S/cp.out" -e "$S/cp.err" -- "$X/cp" "$GUEST_DISK" "$S/disk-qvm"
+	if bwait -k @IO_BOUND@ -o "$S/cmp.out" -e "$S/cmp.err" -- "$X/cmp" "$GUEST_DISK" "$S/disk-qvm"; then
+		say "CHECK disk_copy ok"
+	else
+		say "FAIL disk_copy"; headc 512 "$S/cp.err"; headc 512 "$S/cmp.out"; FAIL=disk_copy
+	fi
+fi
+if [ -z "$FAIL" ]; then
+	devb-loopback loopback blksz=512,prefix=qvmdisk,fd=/dev/shmem/disk-qvm
+	bwait -p /dev/qvmdisk0 -t 10 || { say "FAIL disk_dev"; FAIL=disk_dev; }
+	mem disk
+fi
+
+if [ "$MODE" = trace ] && [ -z "$FAIL" ]; then
+	state probe
+	mem probe_pre
+	arm p /dev/shmem/p.kev 300 -r -k 64 -M -S 8M
+	bwait -s 2 -c "$S/p.settle"
+	mem probe_armed
+	trcctl -m 30 m4-probe-start > "$S/p.m1" 2>&1
+	bwait -s 5 -c "$S/p.gap"
+	trcctl -m 31 m4-probe-end > "$S/p.m2" 2>&1
+	stopladder p
+	stopreport p
+	mem probe_stopped
+	state l0
+	arm l0 /dev/shmem/l0.kev 150 -s 10 -S 32M
+	bwait -s 2 -c "$S/l0.settle"
+	trcctl -m 32 m4-l0-start > "$S/l0.m1" 2>&1
+	bwait -s 6 -c "$S/l0.gap"
+	trcctl -m 33 m4-l0-end > "$S/l0.m2" 2>&1
+	if bwait -p "$S/l0.done" -t 130 > "$S/l0.w" 2>&1; then STOPBY=self; else stopladder l0; fi
+	show "$S/l0.w"
+	stopreport l0
+fi
+
+if [ "$MODE" = full ] && [ -z "$FAIL" ]; then
+	state hostcheck
+	bwait -k 10 -o "$S/qc.out" -e "$S/qc.err" -- "$X/qvm-check"
+	headc 1024 "$S/qc.out"; headc 1024 "$S/qc.err"
+	state window
+	stamp -i /dev/ptyp1 -o "$S/m3.guest" -m 65536 -r "$S/m3.stamps" -h "$S" -s '---> Starting slogger2' -l g_first -s '---> Starting devb' -l g_devb -s '---> Starting Networking' -l g_net -s 'if_up: tries exhausted' -l g_ifup -s '---> Starting sshd' -l g_sshd -s '---> Starting misc' -l g_misc -s 'server: echo endpoint up' -l g_srv -s 'Startup complete' -l g_startup_complete -s 'QNX qnx-guest' -l banner &
+	bwait -p "$S/open.hit" -t 5 || { say "FAIL reader"; FAIL=reader; }
+fi
+if [ "$MODE" = full ] && [ -z "$FAIL" ]; then
+	LAUNCHED=1
+	bwait -s @GRACE@ -c "$S/grace.hit" &
+	( stamp -n -q -l qvm_launch -r "$S/m3.stamps" -x "$X/qvm" "@$CONF" < /dev/null > /dev/ttyp1 2>&1; echo "rc=$?" > "$S/qvm.rc"; : > "$S/qvm_exit.hit" ) &
+	bwait -p "$S/banner.hit" -p "$S/qvm_exit.hit" -t @BANNER_BOUND@
+	bwait -p "$S/banner.hit" -t 2 > "$S/banner.settle"
+	state report
+	show "$S/m3.stamps"
+	[ -e "$S/qvm.rc" ] && { say "QVM ended before teardown"; show "$S/qvm.rc"; }
+	mem banner
+	pidin -p qvm -f abNli > "$S/pq.1" 2>&1; head -n 30 "$S/pq.1"
+fi
+
+if [ -n "$LAUNCHED" ] && hit banner; then
+	state ipc
+	bwait -p "$S/grace.hit" -t @GRACE_WAIT@
+	mem trace_pre
+	if [ "$MEMFREE" -lt @TRACE_NEED_MB@ ]; then
+		say "FAIL mem_trace free_mb=$MEMFREE need_mb=@TRACE_NEED_MB@"; FAIL=${FAIL:-mem_trace}
+	else
+		TRACED=1
+		say "TRACE ARM kind=@KIND@ args='@TL_ARGS@' file=/dev/shmem/t.kev bound=@TL_BOUND@"
+		arm t /dev/shmem/t.kev @TL_BOUND@ @TL_ARGS@
+		bwait -s 2 -c "$S/t.settle"
+		trcctl -m 20 m4-ipc-start > "$S/t.m1" 2>&1
+	fi
+	stamp -n -q -l ipc_start -r "$S/m3.stamps"
+	bwait -k @IPC_BOUND@ -r "$S/ipc.bwait" -o "$S/ipc.out" -e "$S/ipc.err" -- "$CLIENT" @ITERS@ /dev/ttyp0 5 > "$S/ipc.b" 2>&1
+	stamp -n -q -l ipc_end -r "$S/m3.stamps"
+	if [ -n "$TRACED" ]; then
+		trcctl -m 21 m4-ipc-end > "$S/t.m2" 2>&1
+		stopladder t
+	fi
+	state report_ipc
+	[ -n "$TRACED" ] && stopreport t
+	show "$S/ipc.out" "$S/ipc.b"
+	headc 2048 "$S/ipc.err"
+	pidin -p qvm -f abNli > "$S/pq.2" 2>&1; head -n 30 "$S/pq.2"
+fi
+
+state teardown
+if [ -n "$LAUNCHED" ]; then
+	slay -f -Q qvm
+	bwait -p "$S/qvm_exit.hit" -t 15 || { slay -f -Q -s KILL qvm; bwait -p "$S/qvm_exit.hit" -t 5; }
+fi
+[ -e "$S/qvm.rc" ] && show "$S/qvm.rc"
+if [ -n "$LAUNCHED" ]; then
+	bwait -p "$S/eof.hit" -t 5 || slay -f -Q stamp
+	state integrity_post
+	bwait -k @IO_BOUND@ -o "$S/md5.post" -e "$S/md5.post.err" -- "$X/md5sum" "$GUEST_IFS" "$GUEST_DISK"
+	show "$S/md5.post"
+	md5ok "$S/md5.post" @GUEST_MD5@ guest md5_post
+	md5ok "$S/md5.post" @DISK_MD5@ disk md5_post
+fi
+
+state release
+slay -f -Q devb-loopback
+"$X/rm" -f /dev/shmem/disk-qvm
+mem released
+
+state rate_post
+rates r1
+
+state format
+if [ "$MODE" = trace ]; then
+	fmtcount p /dev/shmem/p.kev 120 @FMT_NEED@ @CNT_NEED@ m4-probe-start m4-probe-end
+	fmtcount l0 /dev/shmem/l0.kev @TP_BOUND@ @FMT_NEED@ @CNT_NEED@ m4-l0-start m4-l0-end @CNT_OUT@
+elif [ -n "$TRACED" ]; then
+	fmtcount t /dev/shmem/t.kev @TP_BOUND@ @FMT_NEED@ @CNT_NEED@ m4-ipc-start m4-ipc-end @CNT_OUT@
+fi
+
+state summary
+show "$S/m3.stamps" "$S/ipc.bwait"
+[ -s "$S/ipc.out" ] && grep -E '^(samples=|P50=|sentinel_)' "$S/ipc.out"
+for n in p l0 t; do
+	[ -s "$S/$n.cnt" ] && grep -E '^M4C (QVM|TIME64|TRIPLES|PAIRS|STAT|RING|WARN|END) ' "$S/$n.cnt"
+done
+say "FAIL_STATE ${FAIL:-none}"
+
+state send
+for n in @FORMS@; do
+	case "$n" in
+	v) send v /dev/shmem/flt.v @SEND_V@ @SEND_T_V@ ;;
+	c) send c /dev/shmem/flt.c @SEND_C@ @SEND_T_C@ ;;
+	esac
+done
+
+state diag
+if [ -e "$S/m3.guest" ]; then
+	wc -c "$S/m3.guest"
+	if [ -n "$LAUNCHED" ] && ! hit banner; then tail -c 1024 "$S/m3.guest"; else head -c 2048 "$S/m3.guest"; fi
+fi
+bwait -k 15 -o "$S/slog.txt" -e "$S/slog.err" -- "$X/slog2info"
+if [ -n "$LAUNCHED" ] && ! hit banner; then headc 6144 "$S/slog.txt"; else headc 1024 "$S/slog.txt"; fi
+mem end
+say "FAIL_STATE ${FAIL:-none}"
+state end
