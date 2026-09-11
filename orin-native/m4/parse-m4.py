@@ -1177,6 +1177,8 @@ def verbatim_selection(data, L, vcap):
     """§4.5.8 form v over the listing bytes, as the counter's pass 3 writes it."""
     ts = TimeState()
     anchors = set(L.anchor_lines)
+    # I23 (m4-design.md 14.5), in lockstep with m4count.c: the marker events themselves, always.
+    marks = {m["line"] for m in (L.mk["start"], L.mk["end"]) if m is not None}
     out = bytearray()
     st = {"lines": 0, "capped": 0, "sel_lines": 0, "sel_bytes": 0, "last_t": None, "collision": 0, "cr": 0}
     seen_event = False
@@ -1198,7 +1200,7 @@ def verbatim_selection(data, L, vcap):
                 sel = True
             elif t is not None and L.window_known and L.start_t <= t <= L.end_t:
                 sel = True
-            if lineno in anchors:
+            if lineno in anchors or lineno in marks:
                 sel = True
         if not sel:
             continue

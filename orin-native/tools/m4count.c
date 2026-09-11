@@ -2238,6 +2238,12 @@ pass3_verbatim(FILE *const f)
 			if (ai < anchors.n && A[ai] == line) {
 				sel = 1;
 			}
+			/* I23 (m4-design.md 14.5): the marker events themselves, always. Without the end
+			 * marker the PC cannot tell a ring that wrapped past the start (I22) from one whose
+			 * markers are missing, and its reading of v would disagree with RING. */
+			if ((mk_start.found && mk_start.line == line) || (mk_end.found && mk_end.line == line)) {
+				sel = 1;
+			}
 		}
 		if (!sel) {
 			continue;

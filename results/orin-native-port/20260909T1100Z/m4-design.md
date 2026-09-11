@@ -953,6 +953,7 @@ For each CPU: `bufs_in_window` (BUFFER events with a time inside the markers), `
 2. a CONTROL event (TIME, BUFFER), wherever it is;
 3. an event whose 64-bit time lies in `[start_t, end_t]`;
 4. an **anchor**, found in pass 1: per CPU, the last THRUNNING before `start_t`; the three lines of any triple with `t_enter < start_t ≤ t_exit` or `t_enter ≤ end_t < t_exit`; and, per vCPU thread, the three lines of the first complete triple entered after `end_t` (it carries `at_entry` of the window's last pair).
+5. **(I23, 2026-09-11)** the START or END marker event itself, wherever it is. Without it the PC cannot tell a ring that wrapped past the start marker (I22) from one whose markers are missing, and its reading of `v` would disagree with `RING`.
 
 Copying stops before the first line that would take the file past VCAP (`capped=1`); `sel_lines` and `sel_bytes` count the whole selection anyway, and `last_t` is the time of the last event written. A selected line containing `=M4FLT=` is skipped and counted (`marker_collision`; §5.2 needs the framing text to be unique). `cr_bytes` counts CR bytes in the written lines, which must be 0 for the PC to strip CRs safely (§6.3).
 
@@ -1687,3 +1688,9 @@ The exec bit on `make-m4-images.sh` and `m4-board.sh` is not set (no shell). Bot
   - **The cause was the rule, not the code.** §4.5.4 called a ring wrapped only when both markers were present, so a wrap deep enough to lose the start marker read `unknown`. That contradicts §11.4's k16 expectation, and on the board it would disguise an undersized ring as a missing marker.
   - **Rule change:** §4.5.4 now also says `wrapped` when the end marker is found, the start marker is not, and a CPU's first kept sequence is above 1.
   - **Where it is applied:** in `m4count.c` and the parser, with a new fixture `m4fix-4`. `held` is unchanged. The k16 rehearsal is rerun with the new counter.
+- **Step 8, k16 rerun with I22, and a selection fix (I23).**
+  - **The rerun:** with the I22 counter, the k16 target counter reported `RING state=wrapped` on both CPUs, and the negative scan passed. `crit_k16` still failed on `pc-agree`: the PC's reading of `v` said `unknown`.
+  - **Cause:** §4.5.8 selected CONTROL lines and the marker window, but not the marker events themselves. With the start marker overwritten there is no window, so the end marker never reached the PC.
+  - **Fix:** §4.5.8 rule 5 now always selects both marker events, in `m4count.c` and the parser together.
+  - **Checks before the next k16 run:** both implementations pass all four fixtures again, and the synthetic COM3 regression matches step 6's expectations exactly as before.
+
