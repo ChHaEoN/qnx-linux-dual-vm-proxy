@@ -898,6 +898,16 @@ class Listing:
                 self.ring = "wrapped"
             elif self.start_t < self.end_t and clean:
                 self.ring = "held"
+        elif self.mk["end"] is not None and self.mk["start"] is None:
+            # I22 (m4-design.md 14.5), in lockstep with m4count.c: the start marker was overwritten.
+            # A CPU whose first kept BUFFER sequence is above 1 lost its earlier buffers.
+            any_wrapped = False
+            for r in self.cpu:
+                if r["events"] and r["kept"] and r["first_seq"] > 1:
+                    r["wrapped"] = True
+                    any_wrapped = True
+            if any_wrapped:
+                self.ring = "wrapped"
 
         if self.window_known:
             T = self.triples
@@ -1975,7 +1985,7 @@ def cmd_run(a):
              "clk:" + ",".join(str(v) for v in verdicts))
         fx_runs = fixture_runs_from_lines(texts)
         fx_bad = []
-        for i in (1, 2, 3):
+        for i in (1, 2, 3, 4):
             fname = f"m4fix-{i}.txt"
             try:
                 exp = fixture_expects(os.path.join(fixtures_dir, fname))
@@ -2525,7 +2535,7 @@ def cmd_selftest(a):
             print(f"parse-m4: input error: {e}", file=sys.stderr)
             return 1
         board_runs = fixture_runs_from_lines(texts)
-    for i in (1, 2, 3):
+    for i in (1, 2, 3, 4):
         name = f"m4fix-{i}.txt"
         path = os.path.join(a.fixtures, name)
         try:
@@ -2657,7 +2667,7 @@ def cmd_synth_com3(a):
         console += ["M4 STATE clock"]
         console += [f"CLK VERDICT mode={m} usable=5 strict=5 res=5 result=agree" for m in ("same0", "same1", "cross")]
         console += ["M4 STATE fixtures"]
-        for i in (1, 2, 3):
+        for i in (1, 2, 3, 4):
             FL = Listing("m4-fix-start", "m4-fix-end").feed_file(os.path.join(HERE, "fixtures", f"m4fix-{i}.txt"))
             frecs = FL.records(label="fix", quiet=True)
             for fname, ff in frecs:

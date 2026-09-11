@@ -877,7 +877,7 @@ Per CPU, in file order:
 - **Per CPU:** `first_seq`, `last_seq`, `kept` (BUFFER events), `gaps` (a sequence number that is not the previous plus one), `max_events` (largest `num_events`), and the 64-bit times of the first and last event kept on that CPU.
 - **Markers:** the first USREVENT whose `STR:"…"` equals START, and the first equal to END: time, CPU and a duplicate count.
 - **Cover:** CPU *c* is `covered` when it has no event at all, or its first kept event is no later than the start marker. Otherwise it `wrapped`: its ring overwrote part of the window.
-- **`ring=held`** when both markers are found, the start precedes the end, every CPU is covered and every `gaps` is 0. **`ring=wrapped`** when both markers are found and some CPU wrapped. **`ring=unknown`** otherwise. Also recorded: `seq1_cpus`, the CPUs whose first kept sequence is 1, which is R37's reading of "nothing overwritten since start" (DD:1688) and is recorded, not gated: the 2 s settle may legitimately be overwritten (§4.2).
+- **`ring=held`** when both markers are found, the start precedes the end, every CPU is covered and every `gaps` is 0. **`ring=wrapped`** when both markers are found and some CPU wrapped, **or (I22, 2026-09-11) when the end marker is found, the start marker is not, and some CPU's first kept BUFFER sequence is above 1**: the ring overwrote the start marker itself, which is an undersized ring, not a missing marker. **`ring=unknown`** otherwise. Also recorded: `seq1_cpus`, the CPUs whose first kept sequence is 1, which is R37's reading of "nothing overwritten since start" (DD:1688) and is recorded, not gated: the 2 s settle may legitimately be overwritten (§4.2).
 
 #### 4.5.5 Triples and pairs
 
@@ -1681,3 +1681,9 @@ The exec bit on `make-m4-images.sh` and `m4-board.sh` is not set (no shell). Bot
   - **Verdict:** crit_2 to crit_9 passed; crit_1 does not apply under TCG. `run_verdict` still failed on `crit_neg`.
   - **Cause:** the TCG host boots through QNX's `startup-qemu-virt`, which prints `** CPU <n> PE is not awake` on every boot. That token is on the board's negative list because only our startup could print it there. The canonical QHV host logs and every 7b attempt carry the same two lines; no board capture does.
   - **Fix:** the parser now drops exactly that line shape before the negative scan, for `--com3-format qemu-serial` only, and records how many lines it dropped in `neg_tcg_startup_ignored`. Board captures are scanned as before.
+- **Step 8, k512 and k16 attempts, and a rule fix (I22).**
+  - **k512:** the rehearsal passed. The ring held, the listing transfer and PC checks matched, the pair cross-check and statistics matched, and no QEMU or parser process survived.
+  - **k16 failed.** The run was built to wrap, and it did: the start marker was overwritten, the end marker was found, and each CPU's first kept BUFFER sequence was well above 1.
+  - **The cause was the rule, not the code.** §4.5.4 called a ring wrapped only when both markers were present, so a wrap deep enough to lose the start marker read `unknown`. That contradicts §11.4's k16 expectation, and on the board it would disguise an undersized ring as a missing marker.
+  - **Rule change:** §4.5.4 now also says `wrapped` when the end marker is found, the start marker is not, and a CPU's first kept sequence is above 1.
+  - **Where it is applied:** in `m4count.c` and the parser, with a new fixture `m4fix-4`. `held` is unchanged. The k16 rehearsal is rerun with the new counter.

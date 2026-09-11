@@ -1505,6 +1505,23 @@ between_passes(void)
 		} else if (start_t < end_t && clean) {
 			ring_state = RING_HELD;
 		}
+	} else if (mk_end.found && !mk_start.found) {
+		/* I22 (m4-design.md 14.5): the start marker was overwritten. A CPU whose first kept
+		 * BUFFER sequence is above 1 lost its earlier buffers, so the ring wrapped past the
+		 * start; say wrapped, so an undersized ring is not reported as a missing marker. */
+		int any_wrapped = 0;
+
+		for (unsigned c = 0; c < MAX_CPUS; c++) {
+			struct cpurec *const r = &cpus[c];
+
+			if (r->events != 0u && r->kept != 0u && r->first_seq > 1u) {
+				r->wrapped  = 1;
+				any_wrapped = 1;
+			}
+		}
+		if (any_wrapped) {
+			ring_state = RING_WRAPPED;
+		}
 	}
 
 	/* Triple anchors of the verbatim selection (§4.5.8 rule 4). */
