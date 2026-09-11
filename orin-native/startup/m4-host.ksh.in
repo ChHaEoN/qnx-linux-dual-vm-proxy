@@ -17,7 +17,7 @@
 ##   @CONF_MD5@ @ITERS@ @IPC_BOUND@ @BANNER_BOUND@ @GRACE@ @GRACE_WAIT@ @KIND@
 ##   @TL_ARGS@ @TL_BOUND@ @TRACE_NEED_MB@ @FMT_NEED@ @CNT_NEED@ @TP_BOUND@
 ##   @CNT_BOUND@ @HASH_BOUND@ @CNT_OUT@ @FORMS@ @SEND_V@ @SEND_T_V@ @SEND_C@
-##   @SEND_T_C@ @TRANSPORT@ (tcu; console) @FIX@ (the three fixture paths)
+##   @SEND_T_C@ @TRANSPORT@ (tcu; console) @FIX@ (the fixture paths; four since I24)
 ## Both builds fail if any @[A-Z0-9_]+@ survives, and both run
 ## orin-native/m4/parse-m4.py kshcheck on the generated script (§3.4 step 9).
 ##

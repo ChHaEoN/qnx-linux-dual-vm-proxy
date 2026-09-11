@@ -23,7 +23,7 @@
 ##   @CLIENT@      the IPC client build, ipc-test/qnx-host-client/qnx-host-client
 ##   @GUEST_IFS@   qhv/guest/output/ifs.bin
 ##   @GUEST_DISK@  qhv/guest/output/disk-qvm
-##   @KSH@ @CONF@ @FIX1@ @FIX2@ @FIX3@  files it generated or copied under orin-native/shim/out/m4/
+##   @KSH@ @CONF@ @FIX1@ @FIX2@ @FIX3@ @FIX4@  files it generated or copied under orin-native/shim/out/m4/
 ## and fails if any @[A-Z0-9_]+@ survives. The mode lives only in the host
 ## script, so the buildfiles of the rungs differ only in @RUNG@, @GUARD@ and @KSH@.
 ##
@@ -128,6 +128,7 @@ libtraceparser.so.1
 [perms=0444] /proc/boot/m4fix-1.txt=@FIX1@
 [perms=0444] /proc/boot/m4fix-2.txt=@FIX2@
 [perms=0444] /proc/boot/m4fix-3.txt=@FIX3@
+[perms=0444] /proc/boot/m4fix-4.txt=@FIX4@
 [+raw perms=0444] /proc/boot/guest-ifs.bin=@GUEST_IFS@
 [+raw perms=0444] /proc/boot/disk-qvm=@GUEST_DISK@
 

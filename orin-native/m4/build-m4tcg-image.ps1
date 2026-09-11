@@ -305,7 +305,7 @@ try {
   Write-Lf $confPath $confText
   Log 'check m4-g2.conf equals the as-run printf text: ok'
 
-  foreach ($i in 1..3) {
+  foreach ($i in 1..4) {
     $src = Join-Path $fixDir "m4fix-$i.txt"
     if (-not (Test-Path -LiteralPath $src)) { Fail "fixture m4fix-$i.txt is missing" }
     Write-Lf (Join-Path $stageDir "m4fix-$i.txt") (Read-Text $src)
@@ -337,7 +337,7 @@ try {
     '@CNT_OUT@' = $cntOut; '@FORMS@' = $forms
     '@SEND_V@' = '1800'; '@SEND_T_V@' = '1795'; '@SEND_C@' = '1800'; '@SEND_T_C@' = '1795'
     '@TRANSPORT@' = 'console'
-    '@FIX@' = '/system/bin/m4fix-1.txt /system/bin/m4fix-2.txt /system/bin/m4fix-3.txt'
+    '@FIX@' = '/system/bin/m4fix-1.txt /system/bin/m4fix-2.txt /system/bin/m4fix-3.txt /system/bin/m4fix-4.txt'
   }
   foreach ($key in $subs.Keys) { $ksh = $ksh.Replace($key, [string]$subs[$key]) }
   $left = [regex]::Matches($ksh, '@[A-Z0-9_]+@')
@@ -355,7 +355,7 @@ try {
   $params = [ordered]@{
     image = "tcg-$Variant"; rung = $rung; mode = $mode; variant = $Variant; profile = 'tcg'; p = '2'
     transport = 'console'; iters = '15'; guard_s = '-'; kind = $kind; tl_args = $tlArgs; forms = $forms
-    cap_v = "$capV"; cap_c = "$capC"; e3 = $E3; kimg_sha256 = '-'; ksh_sha256 = (Get-Sha256 $kshPath)
+    cap_v = "$capV"; cap_c = "$capC"; e3 = $E3; fixtures = 'm4fix-1.txt,m4fix-2.txt,m4fix-3.txt,m4fix-4.txt'; kimg_sha256 = '-'; ksh_sha256 = (Get-Sha256 $kshPath)
   }
   $paramsText = "# m4tcg.params: TCG rehearsal parameters (m4-design.md §11.2); emulated, never a board image's.`n"
   foreach ($key in $params.Keys) { $paramsText += "$key=$($params[$key])`n" }
@@ -367,7 +367,7 @@ try {
   foreach ($t in @('bwait', 'trcctl', 'stamp', 'clkcmp', 'm4count')) { $sysLines.Add("[perms=555] bin/$t=$repoFwd/orin-native/tools/$t") }
   $sysLines.Add("[perms=555] bin/m4-host.ksh=$repoFwd/qhv/m4tcg/stage-$vName/m4-host.ksh")
   $sysLines.Add("[perms=444] bin/m4-g2.conf=$repoFwd/qhv/m4tcg/stage-$vName/m4-g2.conf")
-  foreach ($i in 1..3) { $sysLines.Add("[perms=444] bin/m4fix-$i.txt=$repoFwd/qhv/m4tcg/stage-$vName/m4fix-$i.txt") }
+  foreach ($i in 1..4) { $sysLines.Add("[perms=444] bin/m4fix-$i.txt=$repoFwd/qhv/m4tcg/stage-$vName/m4fix-$i.txt") }
   # The script calls $X/rm with X=/system/bin; the canonical system image has no bin/rm (§14).
   $canonSys = @((Read-Text $canonSysBld).Replace("`r`n", "`n").Split("`n") | ForEach-Object { $_.Trim() })
   if (@($canonSys | Where-Object { $_ -match '(^|\]\s*)/?bin/rm=' }).Count -eq 0) { $sysLines.Add('bin/rm=usr/bin/toybox') }

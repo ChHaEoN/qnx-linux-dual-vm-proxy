@@ -1701,3 +1701,38 @@ The exec bit on `make-m4-images.sh` and `m4-board.sh` is not set (no shell). Bot
   - **The r0 board kimg** was rebuilt with the final counter, build only and never transferred.
   - **Every TCG rung has now passed.** §14.3 is done, and board r0 waits only on the owner at the plug with a freshly booted L4T.
 
+### 14.6 Board r0 (2026-09-11, owner at the plug)
+
+The first native M4 rung ran on the board under the §10 checklist:
+- a fresh L4T boot;
+- `stage PASS` and the p0 kexec gate passed;
+- the byte-exact COM3 capture started before `run`, and gates A and B passed.
+
+**What the board showed.** Everything below is a functional result under the freeze decision, not a measurement:
+- **Kexec and landing:** the shim entered at EL2, procnto came up at `-P4`, and the guard armed.
+- **The r0 states all ran in order,** with `FAIL_STATE none`:
+  - config, preflight, rate_pre and integrity_pre;
+  - clock, fixtures, disk and probe;
+  - l0, teardown, release and rate_post;
+  - format, summary, send, diag and end.
+- **The on-target counter:** both trace windows gave `TIME64 mismatches=0` and `RING state=held` on all four CPUs, with `M4C END rc=0`.
+- **The listing:** block `v` went over the TCU with `M4 FLT END rc=0`, and the PC's md5, cksum and line count matched.
+- **Return:** the image reset itself, and L4T came back with `reset_reason=MAINSWRST`.
+- **Records:** the black box and COM3 records are identical line by line, and the black box stayed under its budget.
+- **Housekeeping:** thermal was recorded before kexec, and no dmesg-ramoops was written.
+
+**The harness verdict was `fail(crit_4)`, and the cause was a parser defect (I24).**
+- **What went wrong:** when m4fix-4 was added (I22), the parser's run-time fixture check was widened to four fixtures. The r0 image had been built with three, so `m4fix-4.txt` read as absent.
+- **Fix:**
+  - Images now record the fixtures they carry in a new `.params` key, `fixtures`.
+  - The parser expects exactly those, and falls back to m4fix-1 to m4fix-3 for images built before the key existed.
+  - The generator, the build template and the TCG builder now ship all four fixtures.
+- **Offline re-parse:** the same board records, parsed with the fixed parser, give every r0 criterion `pass` and `run_verdict=pass`. The harness's original parse log is kept beside it.
+- **r0 status:** it is M4-F's first rung, passed functionally.
+- **Before r1:** the owner reviews this record, and `size-r1` sizes K1 from r0's rates. r1 also needs N15 decided.
+- **I24 validated under TCG (2026-09-11).**
+  - The r0 rehearsal image was rebuilt with all four fixtures and the new `fixtures` key.
+  - The target ran m4fix-1 to m4fix-4, including m4fix-4's wrap past the start marker. The parser expected all four, and `crit_4` passed with `run_verdict=pass`.
+  - QEMU exited with no survivors, and the canonical images were unchanged.
+  - The generator's four-fixture change is still to be checked with `--generate-only` once no other edit is in progress, because its `git status` guard must not see concurrent changes.
+

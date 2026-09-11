@@ -1987,8 +1987,12 @@ def cmd_run(a):
              "clk:" + ",".join(str(v) for v in verdicts))
         fx_runs = fixture_runs_from_lines(texts)
         fx_bad = []
-        for i in (1, 2, 3, 4):
-            fname = f"m4fix-{i}.txt"
+        # I24 (m4-design.md 14.5): expect the fixtures this image carried. Images built before I24 have no
+        # fixtures key and shipped m4fix-1 to m4fix-3; m4fix-4 (I22) is expected only where it was shipped.
+        fx_names = [n for n in params.get("fixtures", "").split(",") if n] or \
+            ["m4fix-1.txt", "m4fix-2.txt", "m4fix-3.txt"]
+        log("fixtures_expected", ",".join(fx_names))
+        for fname in fx_names:
             try:
                 exp = fixture_expects(os.path.join(fixtures_dir, fname))
             except InputError:
@@ -2765,7 +2769,8 @@ def cmd_synth_com3(a):
     endl = f"\n--- raw capture ended {iso} bytes={len(com3)} ---\n".encode()
     params = {"image": "synthetic", "rung": a.rung, "mode": "trace" if a.rung == "r0" else "full", "p": 2,
               "variant": "synthetic", "synthetic": 1, "transport": a.transport, "iters": 15, "guard_s": "-",
-              "start_marker": a.start_marker, "end_marker": a.end_marker, "e3": a.e3}
+              "start_marker": a.start_marker, "end_marker": a.end_marker, "e3": a.e3,
+              "fixtures": "m4fix-1.txt,m4fix-2.txt,m4fix-3.txt,m4fix-4.txt"}
     try:
         write_bytes(os.path.join(a.out_dir, "synthetic-com3.log"), head + bytes(com3) + endl)
         write_bytes(os.path.join(a.out_dir, "synthetic-blackbox.log"), bytes(bb))
