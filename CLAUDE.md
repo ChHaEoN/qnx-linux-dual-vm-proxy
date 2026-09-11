@@ -327,9 +327,18 @@ Quick summary for context:
   "host" as a bundle (CPU, OS, TCG backend, QEMU build) and both
   instruments stamp QEMU binary, device set (`WITH_RNG`/`-WithRng`: the
   rng in slot 3 removes ~19 s of timeout artefact) and `-snapshot`.
-  Windows with rng: n=5 median 29,324 ms (QEMU 11.0.50 fork build). The
+  ~~Windows with rng: n=5 median 29,324 ms (QEMU 11.0.50 fork build). The
   aligned n=5 pair (both hosts, one QEMU release, rng, `-snapshot`) is
-  the next deliverable. TCG here is a hard requirement (QHV needs EL2 →
+  the next deliverable.~~ **2026-09-11:** that Windows series is
+  superseded. It predates release alignment: it ran on the 11.0.50 fork
+  build without `-snapshot`, and its own header says it can never be
+  paired. **Done 2026-09-09:** the release-aligned pair ran (that day's
+  [docs/findings.md](docs/findings.md) entry; its Windows column is
+  [windows-qhv-tcg-q111-rng-snapshot-segments-boot-times-n5.txt](logs/sample-boot/windows-qhv-tcg-q111-rng-snapshot-segments-boot-times-n5.txt)).
+  Under the
+  2026-09-11 measurement-freeze decision it is architecture-version
+  history (A3), and the TCG twin legs run again once, on the frozen
+  reference architecture v1. TCG here is a hard requirement (QHV needs EL2 →
   nested virt, which ARM KVM lacks on A78AE), not the GICv3 blockage —
   do not conflate them.
 - Phase 3b — **Native QNX on the Orin Nano — M3 met 2026-09-10: the QNX Hypervisor host booted the cloud-leg QNX
@@ -347,10 +356,20 @@ Quick summary for context:
   six-core runs passed (R1, R2, R2b; record in results/orin-native-port/20260909T1100Z/m1b-runs.md). Then M3. Native qvm at EL2 on four cores booted the byte-identical cloud-leg guest, with its disk, to its banner on
   5/5 timed runs, and the IPC pair completed its 15 iterations in every run. The run record, the curated capture and every
   measured figure are on the local, unpushed branch m3-results-unpublished until the 4.6(i) consultation; the repo is public.
-  Dry run 7b is done (2026-09-11): inside a rebuilt TCG QHV host image, qvm's Class-10 IDs 0, 1 and 7 are emitted at default settings, and the plan's ring flags turned out to keep only a short tail (-k, not -S, sizes a ring); record unpublished. Still ahead: the per-exit number on the board (M4). The two cluster-1 cores run at a fixed low rate under QNX,
-  cause open (a frequency hypothesis is in m3-design.md §4.3). Earlier state, kept for the record: ADR-003 option (B) accepted by the owner: get a hardware-timed
+  Dry run 7b is done (2026-09-11): inside a rebuilt TCG QHV host image, qvm's Class-10 IDs 0, 1 and 7 are emitted at default settings, and the plan's ring flags turned out to keep only a short tail (-k, not -S, sizes a ring); record unpublished. ~~Still ahead: the per-exit number on the board (M4).~~ **Decision 2026-09-11 (owner, option B):** each design
+  change so far replaced the whole architecture (TCG, then QHV inside TCG, then the native QNX Hypervisor), so earlier
+  measurements become architecture-version history, kept and not chased. Still ahead, in order: M4 functional (r0 and
+  r1: the trace instrument works on the board; the timed r2 waits); M5 functional (a UEFI cold boot that reaches
+  startup; the median comparison waits); S1 functional (a Linux guest without a GPU under native qvm); freeze
+  reference architecture v1; then one measurement campaign on it (the M3 and M4 numbers, the M5 comparison, the twin
+  diff), every record stamped with the version. Awaiting the owner's confirmation: the M path ends at M5's functional
+  pass, which sets when README PR #1 can merge. Details in
+  [the plan's freeze section](docs/orin-native-port-plan.md#architecture-versions-and-the-measurement-freeze-decided-2026-09-11).
+  The two cluster-1 cores run at a fixed low rate under QNX,
+  cause open (a frequency hypothesis is in m3-design.md §4.3; explaining it or leaving cluster 1 out is a freeze-gate
+  item). Earlier state, kept for the record: ADR-003 option (B) accepted by the owner: get a hardware-timed
   QHV number from the board itself rather than a Pi 4B or AWS metal. Plan,
-  claims register and milestone ladder M0-M4 in
+  claims register and milestone ladder ~~M0-M4~~ **M0-M5 plus S1 (2026-09-11)** in
   [docs/orin-native-port-plan.md](docs/orin-native-port-plan.md); the harvest,
   research and compile-only results under `results/orin-native-port/`. Two
   things are VERIFIED so far, both compile-only: the BSP zip's startup lib and
@@ -375,6 +394,9 @@ Quick summary for context:
    sentinel recovery is proven out to 300 iterations — the cheapest
    remaining Phase-2 win, and it needs a decision, not a discovery.
    Root-causing the `qvm`/TCG stall itself stays open behind it.
+   **2026-09-11:** under the measurement-freeze decision the cloud-leg
+   (A1) numbers are history. The run-size question is now settled once,
+   at the v1 freeze, as the campaign's IPC sample size.
 2. File the GICv3/NISV defect with QNX/BlackBerry — **now the strongest
    of the three.** As of 2026-09-08 the filing no longer rests on
    disassembling their shipped binary: their own BSP source
@@ -395,7 +417,7 @@ Quick summary for context:
    assessed as unlikely to help — NISV is the KVM backend's deliberate
    behaviour, not a version bug — but no longer untried for want of a
    binary.)
-3. Finish the QHV twin diff, now that the Orin boots it: on the Orin
+3. ~~Finish the QHV twin diff, now that the Orin boots it: on the Orin
    `WITH_RNG=1 ./launch-qhv-on-orin-tcg.sh 5` (picks `~/qemu-v11.1.0`,
    stamps everything); on Windows install the official QEMU 11.1.0 (user
    decision — it is still a different *build* of the same release) and run
@@ -403,7 +425,19 @@ Quick summary for context:
    compare the two times files directly (`diff-results.sh` parses the IPC
    CSVs, not boot-time files) after checking their `qemu:`/`devices:`/`disk:`
    stamps match. Regenerating the QHV images from clean sources (the shipped disk
-   is the RQ-2 diagnostic variant) is a separate, number-changing step.
+   is the RQ-2 diagnostic variant) is a separate, number-changing step.~~
+   **2026-09-11 (owner decision): take Phase 3b to the v1 freeze, then run
+   one campaign.** The release-aligned QHV pair this item asked for ran on
+   2026-09-09 ([docs/findings.md](docs/findings.md)). It is now A3 history,
+   and the twin diff is re-run inside the campaign. In order: M4-F (r0 and
+   r1, after m4-design's §11 TCG rehearsal), M5-F (a UEFI cold boot that
+   reaches startup), S1-F (a Linux guest without a GPU under native qvm).
+   Then settle the freeze gate and write the v1 manifest. Then run the
+   single campaign, native leg and both TCG twin legs, every record stamped
+   `arch=v1;manifest=<sha>`. Regenerating the guest disk from clean sources
+   is now a freeze-gate item, not a separate later step. The owner
+   decisions the freeze needs, and the PR #1 merge-timing assumption, are in
+   [the plan's freeze section](docs/orin-native-port-plan.md#architecture-versions-and-the-measurement-freeze-decided-2026-09-11).
 4. **ADR-003 is decided (2026-09-09): option (B), a native QNX port to
    the Orin Nano** ([docs/adr-003-hardware-timed-qhv.md](docs/adr-003-hardware-timed-qhv.md),
    Status: Accepted). Licence stance, also decided by the owner: proceed;
@@ -411,7 +445,9 @@ Quick summary for context:
    results (NC QDL v7 4.6(i)); keep 4.6(c) clean — source and docs only,
    never disassembly of a QNX-shipped binary. The port is tracked as
    **Phase 3b** in [docs/orin-native-port-plan.md](docs/orin-native-port-plan.md)
-   (kick-off plan + claims register; nothing has booted natively yet) with
+   (kick-off plan + claims register; ~~nothing has booted natively yet~~
+   **M0-M3 have been met since, and the 2026-09-11 freeze decision in
+   item 3 now shapes the rest**) with
    the zero-cost harvest under `results/orin-native-port/`. The Pi 4B
    route in the ADR stays the documented cheaper alternative, not rejected.
 5. Write `docs/drive-os-comparison.md`'s dimension-by-dimension

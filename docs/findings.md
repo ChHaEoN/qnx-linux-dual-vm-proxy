@@ -9,6 +9,30 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-11 — Decision: finish the M path functionally, add a Linux guest, freeze reference architecture v1, then measure once
+
+The owner chose option B for how the rest of Phase 3b and the twin are measured. The reason is how this project has
+moved. Its design changes never adjusted one architecture; each replaced the whole of it. The cloud leg went from a
+plain QNX guest under TCG to the QNX Hypervisor inside TCG, and Phase 3b now runs the QNX Hypervisor natively on the
+Orin. Many cloud-leg measurements were hard to test while the hardware integration was unfinished. Some earlier
+measurements now need redoing only because the architecture changed under them, and chasing each one again would
+repeat that. The order is now:
+1. Finish the M path as functional verification only. M4 becomes r0 and r1, which must show the trace instrument
+   working on the board; its timed runs wait. M5 is a UEFI cold boot that reaches startup; its comparison of medians waits.
+2. Then S1, from the GPU pass-through research track: a Linux guest without a GPU under native qvm.
+3. Then freeze reference architecture v1, as a manifest of images, configuration and instruments.
+4. Then run one measurement campaign on v1: the M3 and M4 numbers, the M5 comparison and the twin diff, with every
+   record stamped with the architecture version.
+
+Earlier measurements become architecture-version history: kept, labelled with the architecture they ran on, and not
+chased. That covers the release-aligned QHV pair of 2026-09-09, which CLAUDE.md still listed as the next deliverable.
+It also covers M3's figures, which stay on the local branch `m3-results-unpublished`; M3 itself stands as a
+functional pass. S1 crosses the native-port plan's non-goal of no Linux guest, which is now struck through there. One
+assumption awaits the owner's confirmation: the M path ends at M5's functional pass, which sets when README PR #1 can
+merge. Nothing was run for this entry. The architecture timeline, the measurement inventory, the freeze gate, the v1
+manifest and the campaign are in
+[orin-native-port-plan.md](orin-native-port-plan.md#architecture-versions-and-the-measurement-freeze-decided-2026-09-11).
+
 ## 2026-09-11 — M4 dry run (7b): qvm's Class-10 trace events are real, and the plan's ring recipe was not
 
 Before any board time, M4's trace recipe was rehearsed inside the Windows-TCG QHV host. A variant host image, built in its own
