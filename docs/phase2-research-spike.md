@@ -3,7 +3,7 @@
 > **Study-level research record.** Resolves the five research questions
 > [ADR-002](phase2-topology-decision.md) §5 handed to Research. Evidence is
 > tagged **[EMPIRICAL]** (found in the local SDP 8.0.4 install at
-> `C:\Users\andy8\qnx800`), **[VENDOR]** (QNX/NVIDIA official docs — a *claim*,
+> `C:\Users\<user>\qnx800`), **[VENDOR]** (QNX/NVIDIA official docs — a *claim*,
 > not independently verified here), or **[SPIKE]** (cannot be settled without a
 > runtime/hardware spike). Per the honest-framing rule, vendor claims are not
 > upgraded to facts.

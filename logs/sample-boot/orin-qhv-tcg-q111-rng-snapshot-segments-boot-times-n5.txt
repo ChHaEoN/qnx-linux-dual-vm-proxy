@@ -6,7 +6,7 @@
 # the guest's fixed "if_up -p -r 20 vtnet0" retry burn (no net vdev), identical on both hosts.
 #
 # host: Linux 5.15.148-tegra aarch64 / ARMv8 Processor rev 1 (v8l)
-# qemu: QEMU emulator version 11.1.0 (v11.1.0)  [/home/haochen/qemu-v11.1.0/bin/qemu-system-aarch64]
+# qemu: QEMU emulator version 11.1.0 (v11.1.0)  [/home/<user>/qemu-v11.1.0/bin/qemu-system-aarch64]
 # disk: -snapshot (guest writes discarded; every run boots the copy-time bytes, so SHA256SUMS keeps holding)
 # devices: virtio-blk + virtio-net(slirp) + virtio-rng(builtin)
 # marker: launch -> guest banner (QNX qnx-guest ... ARMv8_Foundation_Model)

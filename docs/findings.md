@@ -835,7 +835,7 @@ passes, both today:
    vendor docs frame the host-side API as requiring NDA'd documentation
    this project does not have access to.
 2. **Local SDP 8.0 install inspection contradicts the "need NDA'd docs"
-   framing being a hard wall.** `C:\Users\andy8\qnx800\target\qnx\usr\include\hyp_shm.h`
+   framing being a hard wall.** `C:\Users\<user>\qnx800\target\qnx\usr\include\hyp_shm.h`
    ("Host side QNX hypervisor interface definitions") **is** shipped in
    the standard install, with a real, if terse, Doxygen-commented API
    (`hyp_shm_create`, `hyp_shm_attach_ext`, `hyp_shm_data`, `hyp_shm_poke`,
@@ -1130,7 +1130,7 @@ for a net device. (3) `/dev/random` is unusable because `random`'s
 device at that fixed MMIO address (`devr-virtio: failed to find virtio
 entropy device`, already visible, if under-explained, in the original
 `orin-tcg-qnx-boot1.log`). (4) Comparing against
-`C:\Users\andy8\qnx800\host\common\mkqnximage\qemu\runimage` (the
+`C:\Users\<user>\qnx800\host\common\mkqnximage\qemu\runimage` (the
 canonical qemu launch script `mkqnximage --type=qemu` itself ships)
 confirms this build's `startup.sh` (`devb-virtio ... smem=0xa003e00,irq=79`
 and `random ... devr-virtio.so:mem=0xa003a00`) assumes QEMU is invoked with
@@ -1303,7 +1303,7 @@ now falsified (see finding chain above); KVM acceleration belongs on Orin (Phase
 ## 2026-06-10 — Phase 1 finding: first QNX aarch64 IFS built on the Windows host (missing `target.qemuvirt` package)
 
 First real `mkqnximage --type=qemu --arch=aarch64le --build` on the local
-Windows build host (SDP 8.0.4, install root `C:\Users\andy8\qnx800`) **failed**
+Windows build host (SDP 8.0.4, install root `C:\Users\<user>\qnx800`) **failed**
 with `Host file 'startup-qemu-virt' not available / Failed to create ifs boot
 image`. Root cause: a default SDP 8.0.4 install carried the aarch64 kernel
 (`procnto-smp-instr`), the `*.boot` prefabs and the aarch64 host toolchain, plus
