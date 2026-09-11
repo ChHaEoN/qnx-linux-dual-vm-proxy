@@ -23,7 +23,8 @@
  *   -w  the label every record carries (w=), 1-32 of [A-Za-z0-9_.-]
  *   -s  the start marker text, matched against STR:"<text>" exactly
  *   -e  the end marker text
- *   -q  quiet: IN, TIME64, BUF, RING, VCPU, TRIPLES, PAIRS, the clean STAT, END
+ *   -q  quiet: IN, TIME64, BUF, RING, VCPU, STATUS, STATUSSUM, TRIPLES, PAIRS,
+ *       the clean STAT, END
  *   -v  write the verbatim window selection to VFILE, at most VCAP bytes
  *   -c  write the compact pair list to CFILE, at most CCAP bytes
  *   -P  triple table cap (broken fragments share it), default 1,000,000
@@ -32,9 +33,11 @@
  *
  * Passes over the one file:
  *   1  64-bit host time per CPU, BUFFER sequences, markers, histogram, QVM
- *      counts, THRUNNING attribution, triple assembly per (CPU, thread)
+ *      counts, the GUEST_EXIT status table, THRUNNING attribution, triple
+ *      assembly per (CPU, thread)
  *   2  the THRUNNING events of every thread and every THREAD event of the vCPU
- *      threads, the INTERRUPT events, the per-CPU rates, the start anchors
+ *      threads, the INTERRUPT events, the per-CPU rates, the in-window status
+ *      counts, the start anchors
  *   3  only with -v or -c: the verbatim selection and the compact pair list
  * Records IN to WARN print as soon as pass 2 has ended, before pass 3 writes a
  * byte, and every record is flushed as it is printed: a counter killed by
@@ -64,6 +67,12 @@
  *                  eligibility E1-E8 in order, the first failure named
  *   statistics     nearest rank over eligible pairs of each class and nonblk;
  *                  ns = ticks * 10^9 / cps in 128-bit arithmetic
+ *   status (§14.7) every GUEST_EXIT, paired or not: its status value in a
+ *                  first-seen table of STATUS_KEEP values, the first
+ *                  STATUS_PRINT printed with their count and the count whose
+ *                  time lies in the window; values past the print cap, values
+ *                  past the table and events without a status are summed on
+ *                  STATUSSUM. -E does not change it
  *
  * Exit: 0 parsed; 1 input error (unreadable, no event line), an output file
  * that could not be written, or no memory; 2 usage; 3 a table cap was hit
@@ -108,6 +117,8 @@
 #define SAMPLE_MAX      12u
 #define SAMPLE_CHARS    160u
 #define OFFSETS_KEEP    64u
+#define STATUS_KEEP     64u
+#define STATUS_PRINT    16u
 #define SEQ_KEEP        4096u
 #define ANCHOR_MAX      100000ul
 #define QUOTABLE_N      10000u
@@ -293,6 +304,12 @@ struct sample {
 	char line[SAMPLE_CHARS + 1u];
 };
 
+struct stval {
+	uint64_t value;
+	uint64_t n;
+	uint64_t in_window;
+};
+
 /* ------------------------------------------------------------------------ */
 /* State                                                                     */
 /* ------------------------------------------------------------------------ */
@@ -376,6 +393,13 @@ static int            sampled_intr;
 static uint64_t       offsets[OFFSETS_KEEP];
 static size_t         noffsets;
 static int            offsets_overflow;
+
+static struct stval   stvals[STATUS_KEEP];
+static size_t         nstvals;
+static uint64_t       st_missing;
+static uint64_t       st_overflow;
+static uint64_t       st_win_other;
+static uint64_t       st_win_missing;
 
 static uint64_t       tr_complete;
 static uint64_t       tr_broken;
@@ -1008,6 +1032,48 @@ offset_add(uint64_t const off)
 	}
 }
 
+/*
+ * §14.7, pass 1: every GUEST_EXIT's status, paired or not, in first-seen order. A new
+ * value past STATUS_KEEP distinct ones counts only as overflow. -E never reads this.
+ */
+static void
+status_add(uint64_t const v)
+{
+	for (size_t i = 0; i < nstvals; i++) {
+		if (stvals[i].value == v) {
+			stvals[i].n++;
+			return;
+		}
+	}
+	if (nstvals < STATUS_KEEP) {
+		stvals[nstvals].value     = v;
+		stvals[nstvals].n         = 1;
+		stvals[nstvals].in_window = 0;
+		nstvals++;
+	} else {
+		st_overflow++;
+	}
+}
+
+/* §14.7, pass 2: a GUEST_EXIT whose time lies in the window, against the printed values. */
+static void
+status_window(const char *const args)
+{
+	uint64_t v = 0;
+
+	if (!arg_u64(args, "status", &v)) {
+		st_win_missing++;
+		return;
+	}
+	for (size_t i = 0; i < nstvals && i < STATUS_PRINT; i++) {
+		if (stvals[i].value == v) {
+			stvals[i].in_window++;
+			return;
+		}
+	}
+	st_win_other++;
+}
+
 /* ------------------------------------------------------------------------ */
 /* Triple assembly (§4.5.5)                                                  */
 /* ------------------------------------------------------------------------ */
@@ -1256,8 +1322,13 @@ pass1_event(const struct ev *const e, const char *const line_text, uint32_t cons
 			uint64_t v = 0;
 
 			q_exit++;
-			if (arg_u64(e->args, "status", &v) && v != 0u) {
-				q_status_nonzero++;
+			if (arg_u64(e->args, "status", &v)) {
+				if (v != 0u) {
+					q_status_nonzero++;
+				}
+				status_add(v);
+			} else {
+				st_missing++;
 			}
 			if (arg_u64(e->args, "clockcycles_offset", &v)) {
 				offset_add(v);
@@ -1589,6 +1660,9 @@ pass2(FILE *const f)
 			cpus[e.cpu].events_in_window++;
 			if (strcmp(e.cls, "CONTROL") == 0 && strcmp(e.sub, "BUFFER") == 0) {
 				cpus[e.cpu].bufs_in_window++;
+			}
+			if (strcmp(e.cls, "QVM") == 0 && strcmp(e.sub, "GUEST_EXIT") == 0) {
+				status_window(e.args);
 			}
 		}
 
@@ -2135,6 +2209,30 @@ records(void)
 			rec("M4C OFFSET w=%s distinct=%zu value=%s overflow=1\n", opt_label, noffsets, a);
 		} else {
 			rec("M4C OFFSET w=%s distinct=%zu value=%s\n", opt_label, noffsets, a);
+		}
+	}
+
+	/* §14.7: printed with -q too, because r0's fixture check reads them. */
+	{
+		size_t const printed = (nstvals < STATUS_PRINT) ? nstvals : STATUS_PRINT;
+		uint64_t     other   = st_overflow;
+
+		for (size_t i = 0; i < nstvals; i++) {
+			if (i < printed) {
+				rec("M4C STATUS w=%s value=0x%" PRIx64 " n=%" PRIu64 " in_window=%" PRIu64 "\n", opt_label,
+				    stvals[i].value, stvals[i].n, stvals[i].in_window);
+			} else {
+				other += stvals[i].n;
+			}
+		}
+		if (st_overflow != 0u) {
+			rec("M4C STATUSSUM w=%s distinct=%zu printed=%zu other=%" PRIu64 " missing=%" PRIu64
+			    " in_window_other=%" PRIu64 " in_window_missing=%" PRIu64 " overflow=%" PRIu64 "\n",
+			    opt_label, nstvals, printed, other, st_missing, st_win_other, st_win_missing, st_overflow);
+		} else {
+			rec("M4C STATUSSUM w=%s distinct=%zu printed=%zu other=%" PRIu64 " missing=%" PRIu64
+			    " in_window_other=%" PRIu64 " in_window_missing=%" PRIu64 "\n",
+			    opt_label, nstvals, printed, other, st_missing, st_win_other, st_win_missing);
 		}
 	}
 

@@ -55,6 +55,8 @@ QOTHER_PRINT = 8
 SAMPLE_MAX = 12
 SAMPLE_CHARS = 160
 OFFSETS_KEEP = 64
+STATUS_KEEP = 64            # m4-design.md 14.7: distinct GUEST_EXIT status values kept
+STATUS_PRINT = 16           # ... and printed as STATUS lines, first-seen order
 SEQ_KEEP = 4096
 QUOTABLE_N = 10000
 DEFAULT_CPS = 31250000
@@ -597,6 +599,14 @@ class Listing:
         self.sampled_intr = False
         self.offsets = []
         self.offsets_overflow = False
+        # m4-design.md 14.7, in lockstep with m4count.c's status table: every GUEST_EXIT's status.
+        self.status = {}
+        self.status_missing = 0
+        self.status_overflow = 0
+        self.exit_status = []
+        self.status_win = {}
+        self.status_win_other = 0
+        self.status_win_missing = 0
         self.thread_ids = {}
         self.thread_list = []
         self.running = [-1] * MAX_CPUS
@@ -774,6 +784,16 @@ class Listing:
             st = arg_u64(e.args, "status")
             if st is not None and st != 0:
                 self.q["status_nonzero"] += 1
+            # 14.7: every GUEST_EXIT, paired or not, in first-seen order (m4count.c status_add).
+            if st is None:
+                self.status_missing += 1
+            elif st in self.status:
+                self.status[st] += 1
+            elif len(self.status) < STATUS_KEEP:
+                self.status[st] = 1
+            else:
+                self.status_overflow += 1
+            self.exit_status.append((t, st))
             off = arg_u64(e.args, "clockcycles_offset")
             if off is not None:
                 if off not in self.offsets:
@@ -963,9 +983,22 @@ class Listing:
                 self.rate.append((c, bf, ev, self.end_t - self.start_t))
             else:
                 self.rate.append((c, 0, 0, None))
+        # 14.7: the in-window part of the status table, as m4count.c's pass 2 counts it (status_window).
+        self.status_win = {v: 0 for v in list(self.status)[:STATUS_PRINT]}
+        if self.window_known:
+            for t, st in self.exit_status:
+                if t is None or t < self.start_t or t > self.end_t:
+                    continue
+                if st is None:
+                    self.status_win_missing += 1
+                elif st in self.status_win:
+                    self.status_win[st] += 1
+                else:
+                    self.status_win_other += 1
         self._pairs()
         self.ev_times = None
         self.buf_times = None
+        self.exit_status = None
         return self
 
     def _frag_between(self, th, lo, hi):
@@ -1135,6 +1168,17 @@ class Listing:
             if self.offsets_overflow:
                 of.append(("overflow", 1))
             add("OFFSET", of)
+        # 14.7: printed with -q too (r0's fixture check reads them), as m4count.c does.
+        items = list(self.status.items())
+        for v, n in items[:STATUS_PRINT]:
+            add("STATUS", [("value", hexs(v)), ("n", n), ("in_window", self.status_win.get(v, 0))])
+        ss = [("distinct", len(items)), ("printed", min(len(items), STATUS_PRINT)),
+              ("other", self.status_overflow + sum(n for _, n in items[STATUS_PRINT:])),
+              ("missing", self.status_missing), ("in_window_other", self.status_win_other),
+              ("in_window_missing", self.status_win_missing)]
+        if self.status_overflow:
+            ss.append(("overflow", self.status_overflow))
+        add("STATUSSUM", ss)
         add("TRIPLES", [("complete", self.tr_complete), ("broken", self.tr_broken), ("alt_order", self.tr_alt),
                         ("order_ok", self.tr_ok), ("order_violated", self.tr_violated),
                         ("in_window", self.tr_in_window)])
@@ -1577,6 +1621,37 @@ def read_params(path):
     return params
 
 
+def status_window_diffs(t_status, t_sum, p_status, p_sum):
+    """m4-design.md 14.7: the target's GUEST_EXIT status records against the PC's reading of block v.
+
+    n, distinct and other cover the whole listing, which v does not hold (as I8), so only the in-window
+    part is compared. A printed value's in_window counts every in-window event of that value on either
+    side, so a value printed on both sides must agree. When neither side counted an in-window event of an
+    unprinted value (in_window_other), the values with in-window events must also be the same.
+    """
+    if t_sum is None or p_sum is None:
+        return ["STATUSSUM.absent"]
+    tm = {f.get("value"): to_int(f.get("in_window")) for f in t_status}
+    pm = {f.get("value"): to_int(f.get("in_window")) for f in p_status}
+    t_other, t_miss = to_int(t_sum.get("in_window_other")), to_int(t_sum.get("in_window_missing"))
+    p_other, p_miss = to_int(p_sum.get("in_window_other")), to_int(p_sum.get("in_window_missing"))
+    if None in (t_other, t_miss, p_other, p_miss) or None in tm.values() or None in pm.values():
+        return ["STATUSSUM.fields"]
+    diffs = []
+    if t_miss != p_miss:
+        diffs.append("STATUSSUM.in_window_missing")
+    if sum(tm.values()) + t_other + t_miss != sum(pm.values()) + p_other + p_miss:
+        diffs.append("STATUSSUM.in_window")
+    for v in sorted(set(tm) & set(pm)):
+        if tm[v] != pm[v]:
+            diffs.append(f"STATUS.{v}.in_window")
+    if t_other == 0 and p_other == 0:
+        for v in sorted(set(tm) ^ set(pm)):
+            if (tm[v] if v in tm else pm[v]) != 0:
+                diffs.append(f"STATUS.{v}.in_window")
+    return diffs
+
+
 def cmd_run(a):
     log = Log()
     try:
@@ -1706,9 +1781,12 @@ def cmd_run(a):
                 log(f"cnt_{w}_{name.lower()}_cpu{f.get('cpu', '?')}", composite(f.items()))
             elif name == "STAT":
                 log(f"cnt_{w}_stat_{f.get('class', '?')}", composite(f.items()))
+            elif name == "STATUS":
+                log(f"cnt_{w}_status_{f.get('value', '?')}", composite(f.items()))
             elif name == "FLT":
                 log(f"cnt_{w}_flt_{f.get('form', '?')}", composite(f.items()))
-            elif name in ("IN", "TIME64", "RING", "MARK", "VCPU", "OFFSET", "TRIPLES", "PAIRS", "QVM", "END", "WARN"):
+            elif name in ("IN", "TIME64", "RING", "MARK", "VCPU", "OFFSET", "STATUSSUM", "TRIPLES", "PAIRS", "QVM",
+                          "END", "WARN"):
                 log(f"cnt_{w}_{name.lower()}", composite(f.items()))
             elif name == "PASS":
                 log(f"cnt_{w}_pass", composite(f.items()))
@@ -1769,10 +1847,12 @@ def cmd_run(a):
     if v_body is not None and v_status == "ok":
         L = Listing(start_marker, end_marker, e3_status0=e3, assume_end_t=assume_end).feed_bytes(v_body)
         for name, f in L.records(label="pc", quiet=False):
-            if name in ("TIME64", "RING", "MARK", "VCPU", "OFFSET", "TRIPLES", "PAIRS"):
+            if name in ("TIME64", "RING", "MARK", "VCPU", "OFFSET", "STATUSSUM", "TRIPLES", "PAIRS"):
                 log(f"pc_v_{name.lower()}", composite((k, v) for k, v in f.items() if k != "w"))
             elif name == "STAT":
                 log(f"pc_v_stat_{f['class']}", composite((k, v) for k, v in f.items() if k != "w"))
+            elif name == "STATUS":
+                log(f"pc_v_status_{f['value']}", composite((k, v) for k, v in f.items() if k != "w"))
 
     # Step 5: the cross-checks.
     xs = "n/a(v-incomplete)"
@@ -1803,6 +1883,9 @@ def cmd_run(a):
                       "p99_quotable"):
                 if t.get(k) != p.get(k):
                     diffs.append(f"STAT.{cls}.{k}")
+        # 14.7: the in-window part of the GUEST_EXIT status records.
+        diffs += status_window_diffs(rec_all(run_main, "STATUS"), rec_first(run_main, "STATUSSUM"),
+                                     [f for n, f in pcrec if n == "STATUS"], pc_first("STATUSSUM"))
         xs = "match" if not diffs else "differ(" + "+".join(diffs[:20]) + ")"
     log("xcheck_stats", xs)
 
@@ -2614,8 +2697,10 @@ def cmd_regress_7b(a):
         log("dwell_multiset_note", f"distinct-values-only-in-m4:{only4},only-in-m4dry:{only7};"
                                    "file-order-pairing(m4dry)-against-time-order-pairing(m4)")
     for name, f in L.records(label="regress"):
-        if name in ("TIME64", "RING", "TRIPLES", "PAIRS", "VCPU"):
+        if name in ("TIME64", "RING", "TRIPLES", "PAIRS", "VCPU", "STATUSSUM"):
             log(f"m4_{name.lower()}", composite((k, v) for k, v in f.items() if k != "w"))
+        elif name == "STATUS":
+            log(f"m4_status_{f['value']}", composite((k, v) for k, v in f.items() if k != "w"))
     out = os.path.join(a.out_dir, "regress-7b-parse.log")
     try:
         write_text(out, log.text())

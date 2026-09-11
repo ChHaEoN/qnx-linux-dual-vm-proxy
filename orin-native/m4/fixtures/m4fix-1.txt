@@ -15,6 +15,9 @@
 # expect: M4C TRIPLES complete=8 broken=0 alt_order=0 order_ok=8 order_violated=0 in_window=8
 # expect: M4C PAIRS total=7 eligible=6 clean=2 pre=2 blk=1 mig=1 unk=0 broken_between=0 order_violated=0 status_nonzero=1 negative=0 out_of_window=0 not_held=0 untimed=0 capped=0 intr_clean=1 intr_pre=0 intr_blk=0 intr_mig=0
 # expect: M4C STAT class=clean n=2 p50_ticks=110 p99_ticks=130 max_ticks=130 p50_ns=3520 p99_ns=4160 max_ns=4160 quantum_ns=32 p99_quotable=no
+# expect: M4C STATUS value=0x0 n=7 in_window=7
+# expect: M4C STATUS value=0x24 n=1 in_window=1
+# expect: M4C STATUSSUM distinct=2 printed=2 other=0 missing=0 in_window_other=0 in_window_missing=0
  -- HEADER FILE INFORMATION --
   TRACE_CYCLES_PER_SEC:: 31250000
          TRACE_CPU_NUM:: 4

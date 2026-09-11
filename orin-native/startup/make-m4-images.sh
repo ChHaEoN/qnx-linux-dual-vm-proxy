@@ -151,7 +151,8 @@ HASHED_NAMES=(qvm qvm-check vdev-pl011.so vdev-virtio-console.so vdev-virtio-blk
 	tracelogger traceprinter libtracelog.so.1 libtraceparser.so.1)
 TOOL_NAMES=(tcu-cat stamp smpcheck bwait trcctl clkcmp m4count)
 
-# The .params keys, in the design's order (§3.3), and the extra key e3 (§14).
+# The .params keys, in the design's order (§3.3), and the extra key e3 (§14): r0 status0, and
+# r1 and r2 none unless their size file names e3 (owner decision N15, §14.7).
 PARAM_KEYS=(image rung mode p kind k s_mb tl_args tl_bound trace_need_mb fmt_need_mb cnt_need_mb iters
 	ipc_bound banner_bound grace tp_bound cnt_bound hash_bound forms cap_v cap_c send_v send_c send_t_v
 	send_t_c clean_pred p2_reachable p99_reachable accept_low_n ksh_worst_s guard_s return_bound_s
@@ -494,7 +495,8 @@ params_sized() {
 	           return_bound_s capture_s; do
 		[ -n "${PARAM[$key]+set}" ] || die "size file lacks key $key"
 	done
-	[ -n "${PARAM[e3]+set}" ] || PARAM[e3]=status0
+	# N15 (m4-design.md 14.7): r1 and r2 default to E3 none; a size file that names e3 still decides.
+	[ -n "${PARAM[e3]+set}" ] || PARAM[e3]=none
 	[ -n "${PARAM[transport]+set}" ] || PARAM[transport]=tcu
 	case "${PARAM[e3]}" in status0|none) ;; *) die "size file e3=${PARAM[e3]} is not status0 or none" ;; esac
 	[ "${PARAM[transport]}" = tcu ] || die "a board image sends over the TCU (transport=${PARAM[transport]})"

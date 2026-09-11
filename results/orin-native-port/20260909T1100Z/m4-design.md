@@ -1740,3 +1740,49 @@ The first native M4 rung ran on the board under the §10 checklist:
   - **Harness fix:** `m4-board.sh run` now copies the params into the record directory (`<run>-params.log`, git-ignored) before any board session.
   - **Until m4-r0 is rebuilt,** the `m4-r0.kimg` on disk is the three-fixture image and does not match the params beside it, so r0 must not be rerun without a rebuild.
 
+### 14.7 N15 decided: E3 off for the functional rungs, and the status values recorded (2026-09-11)
+
+**Owner decision (2026-09-11): option (b) now, option (c) in research, the final E3 at the freeze.**
+- **(b)** The functional rungs run with E3 = `none`, so no pair is refused for its `status`. `PAIRS status_nonzero` still counts the pairs that `status0` would refuse, so both readings stay visible.
+- **(b), continued.** Every GUEST_EXIT's `status` value is recorded, whether the event pairs or not. The freeze then chooses E3 from the values the board actually prints.
+- **(c)** In parallel, research what the `status` field and its bits mean. Until a QNX source says, the meaning is UNKNOWN. §1.4's reading (a zero status means the entry succeeded) stays VENDOR_CLAIM.
+- **At the freeze** the owner chooses the final E3, before the one measurement campaign. No functional rung is a measurement.
+
+**Why.** Under TCG every GUEST_EXIT in 7b's listings carries a non-zero `status`, so at `status0` no pair is eligible (I4; §14.5 step 5). VERIFIED in the listings; no counts are kept here.
+
+**The records** (`m4count.c` and `parse-m4.py` in lockstep):
+
+| Record | Fields |
+|---|---|
+| `STATUS` | `value=0x<hex> n= in_window=`, one line per distinct `status` value in first-seen file order, at most `STATUS_PRINT` (16) lines. `n` counts every GUEST_EXIT with that value. `in_window` counts those whose 64-bit time lies in `[start_t, end_t]`, and is 0 when the window is unknown |
+| `STATUSSUM` | `distinct= printed= other= missing= in_window_other= in_window_missing=`, plus `overflow=` when it is not 0 |
+
+- **Pass 1** keeps a first-seen table of at most `STATUS_KEEP` (64) distinct values; `distinct` is its size. A further new value adds to `overflow`, and `distinct` is then a lower bound.
+- **Summary counts.**
+  - `other` counts the GUEST_EXIT events whose value is not printed: table places after `STATUS_PRINT`, plus `overflow`.
+  - `missing` counts GUEST_EXIT events without a parseable `status`.
+  - The printed `n`, `other` and `missing` add up to `QVM exit`.
+- **Pass 2** counts each GUEST_EXIT whose time lies in the window: to a printed value's `in_window`, otherwise to `in_window_other`, or to `in_window_missing` when it has no `status`.
+- **Printing.** Both records come after `OFFSET` and before `TRIPLES`, and each is flushed with the other records before pass 3. They are printed under `-q` too, because r0's fixture check reads them (as I3).
+- **`-E`** changes neither record.
+
+**The cross-check** is in `run`'s `xcheck_stats`, so a mismatch fails r1's `crit_5`.
+- **Not compared:** `n`, `distinct` and `other` cover the whole listing, which block `v` does not hold (as I8).
+- **Compared:** the in-window part. Every event in the window is in `v`, in file order.
+  - The in-window totals and `in_window_missing` must be equal.
+  - A value printed on both sides must have the same `in_window`.
+  - When neither side has an `in_window_other`, the values with in-window events must be the same on both sides.
+  - A target run without `STATUSSUM` fails (`STATUSSUM.absent`).
+- **Logged:** `run` logs the records as `cnt_<w>_status_<value>`, `cnt_<w>_statussum`, `pc_v_status_<value>` and `pc_v_statussum`; `regress-7b` logs them as `m4_status_<value>` and `m4_statussum`. `synth-com3` renders them like every other record.
+
+**Fixtures.** m4fix-1 to m4fix-3 now expect their `STATUS` lines and `STATUSSUM`, derived by hand from the fixture text. m4fix-4 has no GUEST_EXIT and expects the empty `STATUSSUM`. `selftest` checks the parser against them, and `selftest --m4c` checks the counter.
+
+**Image defaults.**
+- **`make-m4-images.sh`:** r1 and r2 default to `e3=none` when the size file does not name `e3`. Their counter then runs with `-E none`, and their `.params` say `e3=none`. A size file that names `e3=status0` still decides.
+- **r0** stays `e3=status0`. It runs no qvm, so E3 does not apply there.
+- **`build-m4tcg-image.ps1`** keeps its `-E3` switch and its `status0` default. A rehearsal meant to match r1 passes `-E3 none`.
+
+**Consequences.**
+- Records from a counter built before this change carry no `STATUS` lines. Re-parsed with this parser, they fail r0's `crit_4` (the new fixture expectations) and r1's `crit_5` (`STATUSSUM.absent`). §14.6's offline re-parse of the r0 board record is therefore not repeatable as it stands. The r0 kimg needs a rebuild anyway (I25).
+- The records add lines to every counter run, so they add to §8.3's black-box budget; the ksh summary does not reprint them. That the addition fits the budget is a HYPOTHESIS until r1's black box shows it.
+

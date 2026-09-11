@@ -8,6 +8,7 @@
 # expect: M4C RING state=wrapped wrapped_cpus=0,1 seq1_cpus=none
 # expect: M4C BUF cpu=0 first_seq=7 last_seq=8 kept=2 gaps=0 restarts=0
 # expect: M4C BUF cpu=1 first_seq=9 last_seq=9 kept=1 gaps=0 restarts=0
+# expect: M4C STATUSSUM distinct=0 printed=0 other=0 missing=0 in_window_other=0 in_window_missing=0
  -- HEADER FILE INFORMATION --
   TRACE_CYCLES_PER_SEC:: 31250000
          TRACE_CPU_NUM:: 2
