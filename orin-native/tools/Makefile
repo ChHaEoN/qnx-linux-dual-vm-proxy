@@ -5,10 +5,12 @@
 #
 # The binaries go into the M1/M2/M1b/M3 images as /proc/boot entries; none is
 # committed. bwait is M3's bounded-wait helper (m3-design.md §3.8.2).
+# clkcmp and trcctl are the checklist 7b dry run's tools (m4-dryrun-design.md
+# §5.1-5.2); orin-native/m4dry/build-m4dry-image.ps1 builds them with bwait.
 
 CC      := qcc -Vgcc_ntoaarch64le
 CFLAGS  := -Wall -Wextra -Werror -O2
-TOOLS   := tcu-cat stamp smpcheck bwait
+TOOLS   := tcu-cat stamp smpcheck bwait clkcmp trcctl
 
 all: $(TOOLS)
 

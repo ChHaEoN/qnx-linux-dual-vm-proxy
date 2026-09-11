@@ -1,0 +1,269 @@
+## m4dry-host.ksh.in: the checklist 7b host script template (Phase 3b).
+##
+## Byte for byte the script in results/orin-native-port/20260909T1100Z/
+## m4-dryrun-design.md §5.3 (revision 2), below these ## lines, which
+## build-m4dry-image.ps1 drops. Markers: @VARIANT@ @BUILD_UTC@ @TRACE_SET@
+## @SET_LINES@ @W2_K@ @W1_SECS@ @GRACE@ @GUEST_MD5@ @DISK_MD5@ @CLIENT_MD5@.
+## The build fails if any @[A-Z0-9_]+@ survives. TCG host only: this script
+## uses pipes and command substitution, which the board image forbids.
+# m4dry-host.ksh: generated from m4dry-host.ksh.in; edit the template.
+S=/dev/shmem
+T=/system/bin
+D=/data/hypervisor
+G=$D/guest
+VARIANT=@VARIANT@
+W1_SECS=@W1_SECS@
+GRACE=@GRACE@
+W2_K=@W2_K@
+W2F=/dev/shmem/t.kev
+FAIL=
+LAUNCHED=
+QPID=
+
+say()   { echo "M4D $*"; }
+state() { echo "M4D STATE $*"; }
+fail()  { say "FAIL $*"; FAIL=${FAIL:-$1}; }
+nbytes() { wc -c < "$1" | tr -d ' '; }
+mem() {
+	pidin info > $S/mem.$1 2>&1
+	while read -r l; do
+		case "$l" in
+		*FreeMem:*) f=${l#*FreeMem:}; say "MEM $1 ${f%% *}" ;;
+		esac
+	done < $S/mem.$1
+}
+# kevpath NAME: the first non-empty of the two places -M may put NAME (D2),
+# then of every file named NAME anywhere under /dev/shmem.
+kevpath() {
+	for p in $S/$1 $S/dev/shmem/$1 $(find $S -name "$1" 2>/dev/null); do
+		if [ -s "$p" ]; then echo "$p"; return 0; fi
+	done
+	echo none
+	return 1
+}
+# stopladder W: end the background tracelogger whose subshell creates $S/W.done (D3).
+stopladder() {
+	by=none
+	if [ -e $S/$1.done ]; then
+		by=self
+	else
+		$T/trcctl -x
+		if bwait -p $S/$1.done -t 120; then
+			by=stop
+		else
+			slay -f -Q -s INT tracelogger
+			if bwait -p $S/$1.done -t 30; then
+				by=sigint
+			else
+				slay -f -Q -s KILL tracelogger
+				bwait -p $S/$1.done -t 10 && by=kill
+			fi
+		fi
+	fi
+	say "STOP $1 by=$by"
+}
+# process W NAME: the three passes of §2.1 steps 5-7 over one window's .kev.
+process() {
+	w=$1
+	K=$(kevpath $2)
+	if [ "$K" = none ]; then say "KEVFILE $w path=none"; return 1; fi
+	km=$(md5sum $K); kc=$(cksum $K)
+	say "KEVFILE $w path=$K bytes=$(nbytes $K) md5=${km%% *} cksum=${kc% *}"
+	bwait -k 300 -o $S/$w.plan -e $S/$w.plan.err -- /proc/boot/ksh -c "$T/traceprinter -f $K | grep -E 'QVM|Class 10|GUEST' | wc -l -c"
+	read -r L B < $S/$w.plan
+	say "PLANFILTER $w lines=$L bytes=$B"
+	head -c 256 $S/$w.plan.err
+	bwait -k 300 -o $S/$w.cnt -e $S/$w.cnt.err -- /proc/boot/ksh -c "$T/traceprinter -n -p 'M4H|%C|%Z|%z|%e|' -f $K | gawk -F'|' -v w=$w -v qpid=${QPID:-none} -f $T/m4dry-count.awk"
+	cat $S/$w.cnt
+	head -c 256 $S/$w.cnt.err
+	if [ "$w" = w2 ]; then
+		bwait -k 300 -o $S/$w.corr -e $S/$w.corr.err -- /proc/boot/ksh -c "$T/traceprinter -n -f $K | grep -E 'QVM *:' > $S/w2.flt; wc -l -c < $S/w2.flt"
+	else
+		bwait -k 300 -o $S/$w.corr -e $S/$w.corr.err -- /proc/boot/ksh -c "$T/traceprinter -n -f $K | grep -E 'QVM *:' | wc -l -c"
+	fi
+	read -r L B < $S/$w.corr
+	say "CORRFILTER $w lines=$L bytes=$B"
+	head -c 256 $S/$w.corr.err
+	slay -f -Q -s KILL traceprinter
+	return 0
+}
+# kevblock W NAME: send one .kev as gzip + base64, capped (§6).
+kevblock() {
+	K=$(kevpath $2)
+	if [ "$K" = none ]; then say "KEV SKIP name=$1 reason=absent"; return; fi
+	bwait -k 180 -o $S/$1.gz -e $S/$1.gz.err -- $T/gzip -c $K
+	gb=$(nbytes $S/$1.gz)
+	if [ "$gb" -gt 16777216 ]; then
+		say "KEV SKIP name=$1 reason=over-cap gz_bytes=$gb"
+	else
+		km=$(md5sum $K); gm=$(md5sum $S/$1.gz)
+		say "KEV BEGIN name=$1 bytes=$(nbytes $K) md5=${km%% *} gz_bytes=$gb gz_md5=${gm%% *} enc=gzip-base64"
+		base64 $S/$1.gz
+		say "KEV END name=$1"
+	fi
+	rm -f $S/$1.gz
+}
+
+state guard
+bwait -g 4900 &
+
+state config
+say "CONFIG variant=$VARIANT build_utc=@BUILD_UTC@ image=rebuilt-host guest=byte-identical trace_set=@TRACE_SET@ w2_k=${W2_K:-plan} w1_secs=$W1_SECS grace=$GRACE guest_md5=@GUEST_MD5@ disk_md5=@DISK_MD5@ client_md5=@CLIENT_MD5@ plan_w2='-r -M -S 8M -f /dev/shmem/t.kev'"
+uname -a
+mem boot
+bwait -k 30 -o $S/tp0.out -e $S/tp0.err -- $T/traceprinter -f $S/absent.kev
+head -c 512 $S/tp0.out
+head -c 512 $S/tp0.err
+
+state preflight
+bwait -p /dev/ptyp0 -t 10 || fail preflight_pty
+bwait -k 180 -o $S/md5.pre -e $S/md5.pre.err -- $T/md5sum $G/ifs.bin $G/disk-qvm $D/qnx-host-client
+cat $S/md5.pre
+grep -q "^@GUEST_MD5@ " $S/md5.pre && say "CHECK md5_pre ifs.bin ok" || fail md5_pre_ifs.bin
+grep -q "^@DISK_MD5@ " $S/md5.pre && say "CHECK md5_pre disk-qvm ok" || fail md5_pre_disk-qvm
+grep -q "^@CLIENT_MD5@ " $S/md5.pre && say "CHECK md5_pre client ok" || fail md5_pre_client
+
+state clock_pre
+bwait -k 120 -o $S/clk.pre -e $S/clk.pre.err -- $T/clkcmp
+cat $S/clk.pre
+head -c 256 $S/clk.pre.err
+$T/clkcmp -e 10
+
+state probe
+( bwait -k 600 -o $S/p.out -e $S/p.err -- $T/tracelogger -r -M -S 1M -f /dev/shmem/p.kev; : > $S/p.done ) &
+sleep 3
+$T/trcctl -m 1 m4d-probe
+sleep 1
+stopladder p
+head -c 512 $S/p.out
+head -c 512 $S/p.err
+find /dev/shmem -name '*.kev'
+PK=$(kevpath p.kev)
+if [ "$PK" != none ]; then
+	bwait -k 120 -o $S/p.txt -e $S/p.txt.err -- $T/traceprinter -n -f $PK
+	PM=absent
+	grep -q m4d-probe $S/p.txt && PM=found
+	say "PROBE path=$PK bytes=$(nbytes $PK) marker=$PM"
+else
+	say "PROBE path=none bytes=0 marker=absent"
+fi
+case "$PK" in
+$S/p.kev)           W2F=/dev/shmem/t.kev; WHY=probe-literal ;;
+$S/dev/shmem/p.kev) W2F=/t.kev; WHY=probe-doubled ;;
+none)               W2F=/dev/shmem/t.kev; WHY=probe-none ;;
+*)                  W2F=/dev/shmem/t.kev; WHY=probe-elsewhere ;;
+esac
+say "W2F path=$W2F reason=$WHY"
+rm -f $S/p.txt $S/p.kev $S/dev/shmem/p.kev
+[ "$PK" != none ] && rm -f "$PK"
+
+if [ -z "$FAIL" ]; then
+	state disk
+	devb-loopback loopback blksz=512,prefix=qvmdisk,fd=$G/disk-qvm
+	bwait -p /dev/qvmdisk0 -t 10 || fail disk_dev
+	printf 'system mkqnximage-guest\n@SET_LINES@ram 0x80000000,512M\ncpu\nload /data/hypervisor/guest/ifs.bin\nvdev pl011\n hostdev >-\n loc 0x1c090000\n intr gic:37\nvdev virtio-console\n loc 0x20000000\n intr gic:42\n hostdev /dev/ptyp0\nvdev virtio-blk\n loc 0x1c0d0000\n intr gic:41\n hostdev /dev/qvmdisk0\n name vblk0\nvdev shmem\n loc 0x1c0f0000\n intr gic:43\n allow phase2-rq2-probe\n' > $G/g2.conf
+	cat $G/g2.conf
+fi
+
+if [ -z "$FAIL" ]; then
+	state w1
+	( bwait -k $((W1_SECS + 600)) -o $S/w1.out -e $S/w1.err -- $T/tracelogger -s $W1_SECS -S 32M -f /dev/shmem/w1.kev; : > $S/w1.done ) &
+	sleep 2
+	$T/trcctl -m 10 m4d-w1-start
+	state qvm
+	echo "=== launching qvm @g2.conf (background) ==="
+	( qvm @$G/g2.conf < /dev/null; echo "rc=$?" > $S/qvm.rc; : > $S/qvm_exit.hit ) &
+	bwait -s $GRACE -c $S/grace.hit &
+	LAUNCHED=1
+	state clock_load
+	( bwait -k 120 -o $S/clk.load -e $S/clk.load.err -- $T/clkcmp; : > $S/clkl.done ) &
+	state w1_wait
+	if bwait -p $S/w1.done -t $((W1_SECS + 120)); then say "STOP w1 by=self"; else stopladder w1; fi
+	head -c 512 $S/w1.out
+	head -c 512 $S/w1.err
+	CL=no; [ -e $S/clkl.done ] && CL=yes
+	say "CLKLOAD done_at_w1_stop=$CL"
+	bwait -p $S/clkl.done -t 130 || say "CLKLOAD wait=timeout"
+	cat $S/clk.load
+	head -c 256 $S/clk.load.err
+	pidin -p qvm -f abNli > $S/pq.1 2>&1
+	head -n 40 $S/pq.1
+	QPID=$(pidin -p qvm -f a 2>/dev/null | grep -E '^ *[0-9]+ *$' | head -n 1 | tr -d ' ')
+	say "QPID ${QPID:-unknown}"
+	mem w1
+fi
+
+if [ -n "$LAUNCHED" ]; then
+	state grace_wait
+	bwait -p $S/grace.hit -p $S/qvm_exit.hit -t $((GRACE + 30))
+	if [ -e $S/qvm_exit.hit ]; then
+		fail qvm_exited_early
+		cat $S/qvm.rc
+	else
+		state w2
+		( bwait -k 1800 -o $S/w2.out -e $S/w2.err -- $T/tracelogger -r ${W2_K:+-k $W2_K} -M -S 8M -f $W2F; : > $S/w2.done ) &
+		sleep 2
+		$T/trcctl -m 20 m4d-ipc-start
+		state ipc
+		bwait -k 600 -r $S/ipc.bwait -o $S/ipc.out -e $S/ipc.err -- $D/qnx-host-client 15 /dev/ttyp0 5
+		$T/trcctl -m 21 m4d-ipc-end
+		sleep 2
+		state w2_stop
+		stopladder w2
+		head -c 512 $S/w2.out
+		head -c 512 $S/w2.err
+		state report_ipc
+		cat $S/ipc.out
+		head -c 2048 $S/ipc.err
+		pidin -p qvm -f abNli > $S/pq.2 2>&1
+		head -n 40 $S/pq.2
+		mem ipc
+	fi
+	state teardown
+	slay -f -Q qvm
+	bwait -p $S/qvm_exit.hit -t 15 || { slay -f -Q -s KILL qvm; bwait -p $S/qvm_exit.hit -t 5; }
+	[ -e $S/qvm.rc ] && cat $S/qvm.rc
+fi
+
+state clock_post
+bwait -k 120 -o $S/clk.post -e $S/clk.post.err -- $T/clkcmp
+cat $S/clk.post
+
+state process_w1
+process w1 w1.kev
+state process_w2
+if [ -e $S/w2.done ]; then process w2 t.kev; else say "KEVFILE w2 path=none reason=not-run"; fi
+mem processed
+
+state summary
+for c in pre load post; do
+	[ -e $S/clk.$c ] || continue
+	while read -r l; do
+		case "$l" in "CLK VERDICT "*) say "CLKSUM run=$c ${l#CLK VERDICT }" ;; esac
+	done < $S/clk.$c
+done
+[ -e $S/ipc.out ] && grep -E '^(samples=|P50=|sentinel_)' $S/ipc.out
+[ -e $S/ipc.bwait ] && cat $S/ipc.bwait
+grep -h -E '^M4D (QVM|QVMBY|QVMFIELDS|MARKERS) ' $S/w1.cnt $S/w2.cnt
+say "FAIL_STATE ${FAIL:-none}"
+
+state flt
+if [ -s $S/w2.flt ]; then
+	head -n 20000 $S/w2.flt > $S/w2.fltc
+	fm=$(md5sum $S/w2.fltc); fc=$(cksum $S/w2.fltc)
+	say "FLT BEGIN name=w2 lines=$(wc -l < $S/w2.fltc | tr -d ' ') of=$(wc -l < $S/w2.flt | tr -d ' ') bytes=$(nbytes $S/w2.fltc) md5=${fm%% *} cksum=${fc% *}"
+	cat $S/w2.fltc
+	say "FLT END name=w2"
+else
+	say "FLT SKIP name=w2 reason=absent-or-empty"
+fi
+
+state kev
+kevblock w2 t.kev
+kevblock w1 w1.kev
+
+state end
+mem end
+say "FAIL_STATE ${FAIL:-none}"
+sleep 1
+shutdown -S reboot
