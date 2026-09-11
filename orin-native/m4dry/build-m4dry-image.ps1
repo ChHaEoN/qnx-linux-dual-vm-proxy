@@ -5,7 +5,9 @@
 
 .DESCRIPTION
   Implements results/orin-native-port/20260909T1100Z/m4-dryrun-design.md,
-  section 5.5 (revision 2). The variant is a REBUILT host IFS and disk that
+  section 5.5 (revision 2), with section 13's additions: the k512 ring variant,
+  W2's -S size as a template parameter, and -Tag, which builds into
+  host-<variant>-<tag> so an earlier build never has to be renamed. The variant is a REBUILT host IFS and disk that
   carries the byte-identical guest IFS and guest disk. It is not the canonical
   host image, and nothing it produces feeds the Phase-4 twin diff.
 
@@ -41,9 +43,14 @@
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File orin-native\m4dry\build-m4dry-image.ps1 -Variant vtwfe
   Adds 'set trace-vtimer on' and 'set trace-wfe on' to the qvm configuration.
+
+.EXAMPLE
+  powershell -ExecutionPolicy Bypass -File orin-native\m4dry\build-m4dry-image.ps1 -Variant k512 -Tag r3
+  W2 as 'tracelogger -r -k 512 -M -S 32M' (design section 13.3), built into qhv/m4dry/host-k512-r3.
 #>
 param(
-  [ValidateSet('plan','k64','vtwfe')][string]$Variant = 'plan',
+  [ValidateSet('plan','k64','k512','vtwfe')][string]$Variant = 'plan',
+  [ValidatePattern('^[a-z0-9]{0,16}$')][string]$Tag = '',
   [ValidateRange(1,3600)][int]$W1Secs = 60,
   [ValidateRange(1,3600)][int]$Grace = 150
 )
@@ -64,11 +71,13 @@ $repoFwd    = $repoRoot -replace '\\','/'
 $canonHost  = Join-Path $repoRoot 'qhv\host'
 $canonGuest = Join-Path $repoRoot 'qhv\guest'
 $runRoot    = Join-Path $repoRoot 'qhv\m4dry'
-$hostDir    = Join-Path $runRoot "host-$Variant"
-$stageDir   = Join-Path $runRoot "stage-$Variant"
+$vName      = $Variant
+if ($Tag) { $vName = "$Variant-$Tag" }
+$hostDir    = Join-Path $runRoot "host-$vName"
+$stageDir   = Join-Path $runRoot "stage-$vName"
 $guestCopy  = Join-Path $runRoot 'guest'
 $guestPart  = Join-Path $runRoot 'guest.partial'
-$buildLog   = Join-Path $runRoot "build-$Variant.log"
+$buildLog   = Join-Path $runRoot "build-$vName.log"
 $toolsDir   = Join-Path $repoRoot 'orin-native\tools'
 $clientBin  = Join-Path $repoRoot 'ipc-test\qnx-host-client\qnx-host-client'
 if ($env:QNX_INSTALL_ROOT) { $sdpRoot = $env:QNX_INSTALL_ROOT } else { $sdpRoot = Join-Path $env:USERPROFILE 'qnx800' }
@@ -216,21 +225,29 @@ try {
   New-Item -ItemType Directory -Force -Path $runRoot | Out-Null
   Log ''
   Log ('===== build-m4dry-image.ps1 start utc=' + (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') + ' =====')
-  Log "variant=$Variant w1_secs=$W1Secs grace=$Grace image=rebuilt-host guest=byte-identical"
+  Log "variant=$Variant tag=$(if ($Tag) { $Tag } else { 'none' }) dir=qhv/m4dry/host-$vName w1_secs=$W1Secs grace=$Grace image=rebuilt-host guest=byte-identical"
   Log "repo=$repoRoot sdp=$sdpRoot"
 
   # 1. Variant parameters.
   $w2k = ''
+  $w2s = '8M'
   $traceSet = 'defaults'
   $setLines = ''
   if ($Variant -eq 'k64') { $w2k = '64' }
+  if ($Variant -eq 'k512') {
+    # -S must hold the whole ring, or an undocumented second limit could cut it:
+    # 512 buffers per CPU x 2 CPUs (-smp 2) x ~16 KB per buffer (tracelogger use
+    # text) is about 16 MB, which fits in 32M. Design section 13.3.
+    $w2k = '512'
+    $w2s = '32M'
+  }
   if ($Variant -eq 'vtwfe') {
     $traceSet = 'vtimer-wfe'
     # Literal backslash-n: it lands inside the host script's printf format.
     $setLines = 'set trace-vtimer on\nset trace-wfe on\n'
   }
   $buildUtc = (Get-Date).ToUniversalTime().ToString("yyyyMMdd'T'HHmmss'Z'")
-  Log "params W2_K='$w2k' TRACE_SET=$traceSet SET_LINES='$setLines' BUILD_UTC=$buildUtc"
+  Log "params W2_K='$w2k' W2_S=$w2s TRACE_SET=$traceSet SET_LINES='$setLines' BUILD_UTC=$buildUtc"
 
   # 2. Canonical checks.
   foreach ($d in @($hostDir, $stageDir, $guestCopy, $guestPart)) { Assert-TargetPath $d }
@@ -301,8 +318,8 @@ try {
     "[perms=555] bin/bwait=$repoFwd/orin-native/tools/bwait",
     "[perms=555] bin/clkcmp=$repoFwd/orin-native/tools/clkcmp",
     "[perms=555] bin/trcctl=$repoFwd/orin-native/tools/trcctl",
-    "[perms=555] bin/m4dry-host.ksh=$repoFwd/qhv/m4dry/stage-$Variant/m4dry-host.ksh",
-    "[perms=444] bin/m4dry-count.awk=$repoFwd/qhv/m4dry/stage-$Variant/m4dry-count.awk"
+    "[perms=555] bin/m4dry-host.ksh=$repoFwd/qhv/m4dry/stage-$vName/m4dry-host.ksh",
+    "[perms=444] bin/m4dry-count.awk=$repoFwd/qhv/m4dry/stage-$vName/m4dry-count.awk"
   )
   $sfPath = Join-Path $snip 'system_files.custom'
   $sf = ''
@@ -339,6 +356,7 @@ try {
     '@TRACE_SET@'  = $traceSet
     '@SET_LINES@'  = $setLines
     '@W2_K@'       = $w2k
+    '@W2_S@'       = $w2s
     '@W1_SECS@'    = "$W1Secs"
     '@GRACE@'      = "$Grace"
     '@GUEST_MD5@'  = $guestMd5
@@ -417,9 +435,9 @@ try {
   [System.IO.File]::WriteAllText((Join-Path $hostDir 'output\M4DRY-SHA256SUMS'), "$vi *ifs.bin`n$vd *disk-qemu`n", $utf8NoBom)
   Log "variant sha256 ifs.bin=$vi"
   Log "variant sha256 disk-qemu=$vd"
-  Log "wrote qhv/m4dry/host-$Variant/output/M4DRY-SHA256SUMS"
+  Log "wrote qhv/m4dry/host-$vName/output/M4DRY-SHA256SUMS"
 
-  Log "BUILD_OK variant=$Variant"
+  Log "BUILD_OK variant=$Variant tag=$(if ($Tag) { $Tag } else { 'none' })"
   $exitCode = 0
 } catch {
   if ("$_" -ne 'M4DRY-FAIL') {

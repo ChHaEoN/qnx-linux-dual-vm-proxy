@@ -3,10 +3,19 @@
 """parse-m4dry.py: the PC parser for the Phase 3b checklist 7b dry run.
 
 Implements results/orin-native-port/20260909T1100Z/m4-dryrun-design.md §5.7
-(revision 2), with the verdict rules of §1.2 and the payload rules of §1.3.
+(revision 2), with the verdict rules of §1.2, the payload rules of §1.3 and
+the attempt-1 fixes of §13: classification by printed name only (D-a, D-b),
+64-bit host time rebuilt from CONTROL TIME events (D-c), INTERRUPT events
+counted by class (D-d), and the filter-byte check of D-h.
 
     parse-m4dry.py --attempt N --serial FILE --launch FILE --run-dir DIR
                    --out-dir DIR [--traceprinter EXE]
+                   [--parse-log NAME.log] [--serial-copy NAME.log|none]
+
+--parse-log and --serial-copy name the two outputs inside --out-dir; the
+defaults are attempt<N>-parse.log and attempt<N>-serial.log. A re-parse of an
+earlier attempt passes a new --run-dir, a new --parse-log and
+--serial-copy none, so nothing that attempt wrote is overwritten.
 
 Steps, numbered as the design's §5.7:
    1. read the raw serial log as bytes, decoded latin-1 (lossless)
@@ -48,20 +57,27 @@ TP_BOUND_S = 300                    # one host traceprinter pass (§5.7 step 6)
 IPC_ITERS = 15                      # qnx-host-client 15 /dev/ttyp0 5 (M3's completion rule)
 WINDOWS = ("w1", "w2")
 PASS_IDS = (0, 1, 7)
-P_FORMAT = "M4H|%C|%Z|%z|%e|"       # the on-target counter's own format
+P_FORMAT = "M4H|%C|%Z|%z|"          # the on-target counter's own format; no %e (§13 D-a)
 M64 = 1 << 64
 
-# The _NTO_TRACE_QVM_* suffixes, sys/trace.h:286-293.
-ID = {"GUEST_ENTER": 0, "GUEST_EXIT": 1, "CREATE_VCPU_THREAD": 2, "RAISE_INTR": 3,
-      "LOWER_INTR": 4, "TIMER_CREATE": 5, "TIMER_FIRE": 6, "CYCLES": 7}
+# Printed subtype name -> Class-10 event ID: m4dry-count.awk's table (§13 D-a, D-b).
+# The constants are sys/trace.h:286-293. GUEST_ENTER, GUEST_EXIT, CREATE_VCPU_THREAD
+# and CYCLES printed as their suffixes (VERIFIED, attempt 1). The interrupt events
+# printed as INTR_RAISE/INTR_LOWER, the reverse word order of RAISE_INTR/LOWER_INTR;
+# mapping them to 3 and 4 is HYPOTHESIS. No timer event appeared, so both word
+# orders are accepted for 5 and 6 (HYPOTHESIS).
+ID = {"GUEST_ENTER": 0, "GUEST_EXIT": 1, "CREATE_VCPU_THREAD": 2,
+      "INTR_RAISE": 3, "RAISE_INTR": 3, "INTR_LOWER": 4, "LOWER_INTR": 4,
+      "TIMER_CREATE": 5, "CREATE_TIMER": 5, "TIMER_FIRE": 6, "FIRE_TIMER": 6,
+      "CYCLES": 7}
 
 PLAN_RE = re.compile(r"QVM|Class 10|GUEST")                 # the plan's filter, plan:395
 CORR_RE = re.compile(r"QVM *:")                             # the corrected filter, D1
 QCLASS_RE = re.compile(r"QVM|HYP|CLASS[ _]*0*10([^0-9]|$)")  # m4dry-count.awk's class test
-HEX_RE = re.compile(r"0[xX][0-9a-fA-F]+")
-DEC_RE = re.compile(r"[0-9]+")
 NONZERO_RE = re.compile(r"[1-9a-fA-F]")
-INT_RE = re.compile(r"INT_ENTR|INT_EXIT|INTERRUPT")
+MSB_RE = re.compile(r"msb:0x([0-9a-fA-F]+)")                        # CONTROL TIME's high word (D-c)
+BUFSEQ_RE = re.compile(r"sequence = (\d+), num_events = (\d+)")    # CONTROL BUFFER
+TPFMT_T_RE = re.compile(r"\bt:0x([0-9a-fA-F]+)")                    # M4D TPFMT lines (D-h)
 HEXVAL = {n: re.compile(re.escape(n) + r":0x([0-9a-fA-F]+)")
           for n in ("at_entry", "at_exit", "clockcycles_offset", "status")}
 # traceprinter's default format, "t:0x%08c CPU:%02C %-16Z:%-18z", with -n arguments after it.
@@ -343,13 +359,14 @@ class Records:
         self.planfilter = {}
         self.corrfilter = {}
         self.qvm = {}
-        self.qvmby = {}
+        self.qvmother = {}
         self.qvmfields = {}
         self.markers = {}
         self.hist = {}
         self.qvmtid = {}
         self.samples_seen = {}
-        self.disagree_seen = {}
+        self.reap = {}
+        self.tpfmt = []
         self.qpid = None
         self.clkload_done = None
         self.clkload_timeout = False
@@ -404,6 +421,9 @@ class Records:
             m = re.fullmatch(r"\s*rc=(-?\d+)\s*", line)
             if m and self.qvm_rc is None:
                 self.qvm_rc = int(m.group(1))
+            # echo_up is the guest echo server announcing /dev/vcon2
+            # (ipc-test/qnx-server/server.c:61), the endpoint the client's /dev/ttyp0
+            # reaches. Attempt 1 printed it; ipc_after_guest_ready needs it.
             for key, needle in (("qvm_launch", "=== launching qvm @g2.conf"),
                                 ("echo_up", "server: echo endpoint up"),
                                 ("guest_banner", "QNX qnx-guest")):
@@ -435,8 +455,8 @@ class Records:
             self.probe = kv(rest)
         elif head == "W2F" and self.w2f is None:
             self.w2f = kv(rest)
-        elif head in ("KEVFILE", "PLANFILTER", "CORRFILTER", "QVM", "QVMBY", "QVMFIELDS",
-                      "MARKERS", "HIST", "QVMTID", "SAMPLE", "DISAGREE"):
+        elif head in ("KEVFILE", "PLANFILTER", "CORRFILTER", "QVM", "QVMOTHER", "QVMFIELDS",
+                      "MARKERS", "HIST", "QVMTID", "SAMPLE", "REAP"):
             parts = rest.split(" ", 1)
             w = parts[0]
             tail = parts[1] if len(parts) > 1 else ""
@@ -454,8 +474,9 @@ class Records:
                 self.corrfilter.setdefault(w, (to_int(m.group(1)), to_int(m.group(2))) if m else (None, None))
             elif head == "QVM":
                 self.qvm.setdefault(w, kv(tail))
-            elif head == "QVMBY":
-                self.qvmby.setdefault(w, kv(tail))
+            elif head == "QVMOTHER":
+                d = kv(tail)
+                self.qvmother.setdefault(w, []).append((d.get("sub", ""), to_int(d.get("n"), 0)))
             elif head == "QVMFIELDS":
                 self.qvmfields.setdefault(w, kv(tail))
             elif head == "MARKERS":
@@ -467,8 +488,11 @@ class Records:
                 self.qvmtid.setdefault(w, []).append(kv(tail))
             elif head == "SAMPLE":
                 self.samples_seen[w] = self.samples_seen.get(w, 0) + 1
-            elif head == "DISAGREE":
-                self.disagree_seen[w] = self.disagree_seen.get(w, 0) + 1
+            elif head == "REAP":
+                pass_name, _, left = tail.partition(" ")
+                self.reap.setdefault(w, []).append((pass_name, kv(left).get("left", "")))
+        elif head == "TPFMT":
+            self.tpfmt.append(rest)
         elif head == "QPID" and self.qpid is None:
             self.qpid = rest.strip()
         elif head == "CLKSUM":
@@ -539,21 +563,6 @@ def trim(s):
     return s.strip(" \t")
 
 
-def evnum(s):
-    """m4dry-count.awk's evnum(): the Class-10 event number %e carries, or -1."""
-    if HEX_RE.fullmatch(s):
-        v = int(s, 16)
-    elif DEC_RE.fullmatch(s):
-        v = int(s, 10)
-    else:
-        return -1
-    if v <= 7:
-        return v
-    if (v & 31744) == 10240 and (v & 1023) <= 7:
-        return v & 1023
-    return -1
-
-
 def hexval(line, name):
     m = HEXVAL[name].search(line)
     return m.group(1) if m else ""
@@ -565,19 +574,16 @@ def canon(h):
 
 
 class Counter:
-    """m4dry-count.awk, rule for rule (design §5.4), over the -n -p output."""
+    """m4dry-count.awk, rule for rule (design §5.4 as amended in §13), over the -n -p output."""
 
     def __init__(self):
         self.n = [0] * 8
-        self.nname = [0] * 8
-        self.nnum = [0] * 8
-        self.agree = self.name_only = self.num_only = self.conflict = 0
         self.qother = self.qvm = self.nonqvm = self.events = self.unformatted = 0
+        self.other = {}
         self.cyc_ok = self.cyc_bad = self.off_seen = self.status0 = 0
         self.offs = set()
         self.hist = {}
         self.mk_w1 = self.mk_is = self.mk_ie = 0
-        self.ndis = 0
 
     def feed(self, line):
         if "m4d-w1-start" in line:
@@ -590,38 +596,22 @@ class Counter:
         if f[0] != "M4H":
             self.unformatted += 1
             return
-        f += [""] * (6 - len(f))
+        f += [""] * (5 - len(f))
         self.events += 1
-        cls, st, ev = trim(f[2]), trim(f[3]), trim(f[4])
-        key = cls + "|" + st + "|" + ev
+        cls, st = trim(f[2]), trim(f[3])
+        key = cls + "|" + st
         self.hist[key] = self.hist.get(key, 0) + 1
         isq = QCLASS_RE.search(cls.upper()) is not None
-        byname = ID.get(st, -1)
-        bynum = evnum(ev) if isq else -1
-        if not (isq or byname >= 0):
+        cid = ID.get(st, -1)
+        if not (isq or cid >= 0):
             self.nonqvm += 1
             return
         self.qvm += 1
-        if byname >= 0:
-            self.nname[byname] += 1
-        if bynum >= 0:
-            self.nnum[bynum] += 1
-        if byname >= 0 and bynum >= 0:
-            if byname == bynum:
-                self.agree += 1
-            else:
-                self.conflict += 1
-        elif byname >= 0:
-            self.name_only += 1
-        elif bynum >= 0:
-            self.num_only += 1
-        cid = byname if byname >= 0 else bynum
         if cid >= 0:
             self.n[cid] += 1
         else:
             self.qother += 1
-        if byname != bynum:
-            self.ndis += 1
+            self.other[st] = self.other.get(st, 0) + 1
         if cid == 7:
             e = hexval(line, "at_entry")
             x = hexval(line, "at_exit")
@@ -664,6 +654,52 @@ def thread_of(args):
     return (pid, tid)
 
 
+class Clock64:
+    """64-bit host cycles per CPU, rebuilt from traceprinter's CONTROL TIME events (§13 D-c).
+
+    The host traceprinter.exe prints t: as the low 32 bits of the cycle count; its
+    -p '%016c' prints the same value zero-padded (checked on this PC against
+    attempt 1's w2.kev), although the target binary's use text calls %c the
+    64-bit cycle count. Every CONTROL TIME event carries its CPU's high word as
+    msb:, and traceprinter emits one when the low word wraps. As a safety net, a
+    drop of more than half the 32-bit range between two events on one CPU is also
+    taken as a wrap; a smaller drop is only counted, as a backstep.
+    """
+
+    def __init__(self):
+        self.msb = {}
+        self.last = {}
+        self.time_events = 0
+        self.wraps = 0
+        self.backsteps = 0
+        self.unknown = 0
+
+    def update(self, cpu, lsb, cls, st, rest):
+        prev = self.last.get(cpu)
+        self.last[cpu] = lsb
+        if cls == "CONTROL" and st == "TIME":
+            m = MSB_RE.search(rest)
+            if m:
+                self.msb[cpu] = int(m.group(1), 16)
+                self.time_events += 1
+                return (self.msb[cpu] << 32) | lsb
+        if prev is not None and lsb < prev:
+            if prev - lsb > (1 << 31):
+                if cpu in self.msb:
+                    self.msb[cpu] += 1
+                    self.wraps += 1
+            else:
+                self.backsteps += 1
+        if cpu not in self.msb:
+            self.unknown += 1
+            return None
+        return (self.msb[cpu] << 32) | lsb
+
+    def summary(self):
+        return (f"time_events:{self.time_events},wraps_inferred:{self.wraps},"
+                f"backsteps:{self.backsteps},unknown:{self.unknown}")
+
+
 class Analysis:
     """Step 7, and the name-only reading of step 6, in one pass over <name>.n.txt."""
 
@@ -675,13 +711,20 @@ class Analysis:
         self.corr_lines = 0
         self.corr_bytes = 0
         self.corr_between_bytes = 0
+        self.corr_t64_extra = 0         # D-h: the bytes a 64-bit t: field would add
+        self.corr_t64_unknown = 0
+        self.clock = Clock64()          # D-c
+        self.buffers = {}               # cpu -> [(sequence, num_events)] from CONTROL BUFFER
+        self.tmin = None
+        self.tmax = None
         self.mk = {"w1_start": None, "ipc_start": None, "ipc_end": None}
         self.running = {}
         self.cur = {}
         self.thr_count = {}
         self.run_cyc = {}
-        self.intr = {}
-        self.intr_cls = {}
+        self.intr = {}                  # D-d: INTERRUPT-class events while a tid runs
+        self.intr_by = {}               # tid -> {subtype: count}
+        self.intr_sub = {}              # every INTERRUPT-class event, by subtype
         self.thread_events = 0
         self.cycles_threads = {}
         self.unattributed = 0
@@ -702,7 +745,7 @@ class Analysis:
         run = self.cur.get(cpu)
         if run is not None:
             th, start = run
-            if cyc >= start:
+            if cyc is not None and start is not None and cyc >= start:
                 self.run_cyc[th] = self.run_cyc.get(th, 0) + (cyc - start)
             self.cur[cpu] = None
 
@@ -725,11 +768,20 @@ class Analysis:
             return
         self.events += 1
         idx = self.events
-        cyc = int(m.group(1), 16)
+        lsb_text = m.group(1)
         cpu = int(m.group(2))
         cls = m.group(3).strip()
         st = m.group(4)
         rest = m.group(5)
+        # 64-bit host cycles (D-c); None until this CPU's first CONTROL TIME event.
+        cyc = self.clock.update(cpu, int(lsb_text, 16), cls, st, rest)
+        if cyc is not None:
+            self.tmin = cyc if self.tmin is None else min(self.tmin, cyc)
+            self.tmax = cyc if self.tmax is None else max(self.tmax, cyc)
+        if cls == "CONTROL" and st == "BUFFER":
+            b = BUFSEQ_RE.search(rest)
+            if b:
+                self.buffers.setdefault(cpu, []).append((int(b.group(1)), int(b.group(2))))
         for key, needle in (("w1_start", "m4d-w1-start"), ("ipc_start", "m4d-ipc-start"),
                             ("ipc_end", "m4d-ipc-end")):
             if self.mk[key] is None and needle in line:
@@ -737,6 +789,10 @@ class Analysis:
         if CORR_RE.search(line):
             self.corr_lines += 1
             self.corr_bytes += len(line) + 1
+            if cyc is None:
+                self.corr_t64_unknown += 1
+            else:
+                self.corr_t64_extra += len("%08x" % cyc) - len(lsb_text)
             if self.mk["ipc_start"] is not None and self.mk["ipc_end"] is None:
                 self.corr_between_bytes += len(line) + 1
         nid = ID.get(st, -1)
@@ -770,15 +826,15 @@ class Analysis:
                         self._close(c, cyc)
             return
 
-        # INTERRUPT events while a thread runs on that CPU. The design's rule
-        # matches the subtype; the class-or-subtype count is recorded beside it.
-        ist = INT_RE.search(st) is not None
-        if ist or INT_RE.search(cls.upper()) is not None:
+        # INTERRUPT events, matched by class (D-d): attempt 1's only subtype,
+        # INT_DELIVER, missed the design's subtype pattern. Every subtype is reported.
+        if cls.upper() == "INTERRUPT":
+            self.intr_sub[st] = self.intr_sub.get(st, 0) + 1
             run = self.cur.get(cpu)
             if run is not None:
-                if ist:
-                    self.intr[run[0]] = self.intr.get(run[0], 0) + 1
-                self.intr_cls[run[0]] = self.intr_cls.get(run[0], 0) + 1
+                self.intr[run[0]] = self.intr.get(run[0], 0) + 1
+                by = self.intr_by.setdefault(run[0], {})
+                by[st] = by.get(st, 0) + 1
             return
 
         if nid not in (0, 1, 7):
@@ -830,9 +886,11 @@ class Analysis:
         _, t_enter, _, enter_before_end = s["enter"]
         ae, ax = s["cycles"]
         self.triples += 1
-        if ae is None or ax is None or off is None:
+        if ae is None or ax is None or off is None or t_enter is None or t_exit is None:
             self.off_missing += 1
         else:
+            # [tsc]: host = guest - offset, the offset signed, with 64-bit wrap. t_enter
+            # and t_exit are the rebuilt 64-bit host cycles (D-c), not the 32-bit t: word.
             so = off - M64 if off >= (1 << 63) else off
             he = (ae - so) % M64
             hx = (ax - so) % M64
@@ -890,7 +948,8 @@ def run_tp(exe, args, out_path, env, log_path):
 def cross_check(name, blk, exe, run_dir, emit):
     """Returns the PC recount for one window, or None."""
     out = {"status": None, "events": 0, "non_qvm": 0, "ids": [0] * 8, "counter": None,
-           "analysis": None, "plan": (None, None), "corr": (None, None)}
+           "analysis": None, "plan": (None, None), "corr": (None, None),
+           "plan_t64": (None, None), "corr_t64": (None, None)}
     if blk is None or blk.get("status") != "ok":
         why = "kev-" + (blk.get("status", "absent") if blk else "absent")
         out["status"] = f"none({why})"
@@ -913,12 +972,23 @@ def cross_check(name, blk, exe, run_dir, emit):
         if r["err"]:
             emit(f"tp_{name}_{k}_stderr_head", r["err"].replace(" ", "_")[:200])
     if passes["plain"]["ok"]:
-        lines = byts = 0
+        lines = byts = extra = unknown = 0
+        clk = Clock64()
         for l in iter_lines(txt):
+            m = EV_RE.match(l)
+            t64 = None
+            if m:
+                t64 = clk.update(int(m.group(2)), int(m.group(1), 16), m.group(3).strip(), m.group(4), m.group(5))
             if PLAN_RE.search(l):
                 lines += 1
                 byts += len(l) + 1
+                if m and t64 is None:
+                    unknown += 1
+                elif m:
+                    extra += len("%08x" % t64) - len(m.group(1))
         out["plan"] = (lines, byts)
+        # D-h: the same byte count, as if t: carried the full 64-bit cycle count.
+        out["plan_t64"] = (byts + extra, unknown)
     counter = None
     if passes["p"]["ok"]:
         counter = Counter()
@@ -932,6 +1002,7 @@ def cross_check(name, blk, exe, run_dir, emit):
             analysis.feed(l)
         out["analysis"] = analysis
         out["corr"] = (analysis.corr_lines, analysis.corr_bytes)
+        out["corr_t64"] = (analysis.corr_bytes + analysis.corr_t64_extra, analysis.corr_t64_unknown)
     p_complete = counter is not None and counter.events > 0 and counter.unformatted <= counter.events
     n_ok = analysis is not None and analysis.events > 0
     if p_complete:
@@ -960,6 +1031,15 @@ def emit_analysis(name, pcw, rec, cps, emit):
         return "partial(no-extraction)"
     emit(f"analysis_{name}_events", a.events, shape=True)
     emit(f"analysis_{name}_unformatted_lines", a.unformatted, shape=True)
+    emit(f"time64_{name}", a.clock.summary(), shape=True)
+    if a.tmin is not None:
+        emit(f"span_{name}_cycles", a.tmax - a.tmin, shape=True)
+    for c in sorted(a.buffers):
+        seqs = [q for q, _ in a.buffers[c]]
+        emit(f"buffers_{name}_cpu{c}", f"records:{len(seqs)},seq_first:{seqs[0]},seq_last:{seqs[-1]},"
+                                       f"seq_max:{max(seqs)}", shape=True)
+    emit(f"intr_subtypes_{name}", ",".join(f"{k}:{v}" for k, v in sorted(a.intr_sub.items())) or "none",
+         shape=True)
     vcpus = sorted(a.cycles_threads)
     emit(f"analysis_{name}_vcpu_threads", ",".join(f"{p}/{t}" for p, t in vcpus) or "none", shape=True)
     qpid = to_int(rec.qpid)
@@ -988,9 +1068,10 @@ def emit_analysis(name, pcw, rec, cps, emit):
 
     tids = vcpus or sorted(th for th in a.thr_count if qpid is not None and th[0] == qpid)
     for th in tids:
+        subs = "+".join(f"{k}/{v}" for k, v in sorted(a.intr_by.get(th, {}).items())) or "none"
         emit(f"fallback_{name}_{th[0]}_{th[1]}",
              f"thrunning:{a.thr_count.get(th, 0)},running_cycles:{a.run_cyc.get(th, 0)},"
-             f"intr:{a.intr.get(th, 0)},intr_class_or_subtype:{a.intr_cls.get(th, 0)}", shape=True)
+             f"intr:{a.intr.get(th, 0)},intr_subtypes:{subs}", shape=True)
     if a.thread_events == 0:
         fb = "impossible(no-thread-events)"
     elif not tids:
@@ -1000,11 +1081,17 @@ def emit_analysis(name, pcw, rec, cps, emit):
     emit(f"fallback_{name}", fb, shape=True)
 
     if name == "w2":
+        # §13.3: the span the ring kept against W2 tracelogger's own run, so a wrap
+        # shows even when both IPC markers were overwritten (attempt 1).
+        tl = next((b for b in rec.bwait if b["prog"] == "tracelogger" and b["state"] == "w2_stop"), None)
+        kept = (a.tmax - a.tmin) * 1000 // cps if (cps and a.tmin is not None) else "unknown"
+        emit("ring_w2_kept", f"span_ms:{kept},tracelogger_ms:{tl['ms'] if tl else 'unknown'}", shape=True)
         corr_bytes = rec.corrfilter.get("w2", (None, None))[1]
         if corr_bytes is None:
             corr_bytes = a.corr_bytes
         emit("flt_bytes_per_pair", f"{corr_bytes / a.pairs:.1f}" if a.pairs else "n/a", shape=True)
-        if a.mk["ipc_start"] and a.mk["ipc_end"] and cps:
+        if (a.mk["ipc_start"] and a.mk["ipc_end"] and cps and a.mk["ipc_start"][1] is not None
+                and a.mk["ipc_end"][1] is not None):
             span = a.mk["ipc_end"][1] - a.mk["ipc_start"][1]
             secs = span / cps if span > 0 else 0
             emit("flt_bytes_per_s", f"{a.corr_between_bytes / secs:.1f}" if secs > 0 else "n/a", shape=True)
@@ -1220,16 +1307,15 @@ def ontarget_counter(rec, pc):
         c = pc.get(w, {}).get("counter") if pc.get(w) else None
         if to_int(tq.get("id7"), 0) > 0 and to_int(tf.get("cycles_both_nonzero"), 0) == 0 and c and c.cyc_ok > 0:
             return "suspect(format)"
+    # §13 D-a: the name/number comparison (M4D QVMBY) went with %e. The counter is
+    # suspect when any per-ID count differs from a complete PC recount of that window.
     for w in WINDOWS:
-        by = rec.qvmby.get(w)
-        if not by:
+        tq = rec.qvm.get(w)
+        pcw = pc.get(w)
+        if not tq or not pcw or pcw.get("status") != "complete":
             continue
-        if to_int(by.get("conflict"), 0) > 0:
-            return "suspect(classify)"
-        names = [to_int(x, 0) for x in by.get("name", "").split(",")] if by.get("name") else []
-        nums = [to_int(x, 0) for x in by.get("num", "").split(",")] if by.get("num") else []
-        if len(names) == 8 and len(nums) == 8 and any((names[i] > 0) != (nums[i] > 0) for i in PASS_IDS):
-            return "suspect(classify)"
+        if any(to_int(tq.get(f"id{i}"), 0) != pcw["ids"][i] for i in range(8)):
+            return "suspect(xcheck)"
     return "ok"
 
 
@@ -1252,6 +1338,19 @@ def ring_state(rec, pc):
     if p and p.get("path", "none") != "none" and to_int(p.get("bytes"), 0) > 0 and p.get("marker") == "absent":
         ring = "unknown"
     return ring
+
+
+def target_time_field(rec):
+    """§13 D-h: how the target traceprinter printed t:, from the probe's M4D TPFMT lines."""
+    digits = []
+    for t in rec.tpfmt:
+        m = TPFMT_T_RE.search(t)
+        if m:
+            digits.append(len(m.group(1)))
+    if not digits:
+        return "unknown(no-TPFMT-lines)"
+    kind = "64bit" if max(digits) > 8 else "low32-or-msb0"
+    return f"{kind} lines:{len(digits)},hex_digits:{min(digits)}-{max(digits)}"
 
 
 # ------------------------------------------------------------------ main
@@ -1281,11 +1380,20 @@ def main(argv=None):
     ap.add_argument("--run-dir", required=True)
     ap.add_argument("--out-dir", required=True)
     ap.add_argument("--traceprinter")
+    ap.add_argument("--parse-log", help="name inside --out-dir; default attempt<N>-parse.log")
+    ap.add_argument("--serial-copy", help="name inside --out-dir, or none; default attempt<N>-serial.log")
     a = ap.parse_args(argv)
+    parse_log = a.parse_log or f"attempt{a.attempt}-parse.log"
+    serial_copy = a.serial_copy or f"attempt{a.attempt}-serial.log"
 
     emit = Emitter()
     errors = []
     try:
+        for nm in (parse_log, serial_copy):
+            if nm != "none" and (os.path.basename(nm) != nm or not nm.endswith(".log")):
+                raise OSError(f"output name {nm!r} must be a bare *.log file name")
+        if parse_log == "none":
+            raise OSError("--parse-log cannot be none")
         lines = read_serial(a.serial)
         launch = read_launch(a.launch)
         os.makedirs(a.run_dir, exist_ok=True)
@@ -1307,8 +1415,11 @@ def main(argv=None):
 
     # Steps 2-4.
     elided, kev, flt = split_blocks(lines, a.attempt)
-    with open(os.path.join(a.out_dir, f"attempt{a.attempt}-serial.log"), "wb") as f:
-        f.write(redact("\n".join(elided) + "\n").encode("latin-1", "replace"))
+    if serial_copy != "none":
+        with open(os.path.join(a.out_dir, serial_copy), "wb") as f:
+            f.write(redact("\n".join(elided) + "\n").encode("latin-1", "replace"))
+    emit("serial_copy", serial_copy)
+    emit("run_dir", a.run_dir.replace(chr(92), "/"))
     for name in WINDOWS:
         blk = kev.get(name)
         if blk is None:
@@ -1348,7 +1459,8 @@ def main(argv=None):
         except Exception as e:
             errors.append(f"cross_check_{w}:{e!r}")
             pc[w] = {"status": "none(parser-error)", "events": 0, "non_qvm": 0, "ids": [0] * 8,
-                     "counter": None, "analysis": None, "plan": (None, None), "corr": (None, None)}
+                     "counter": None, "analysis": None, "plan": (None, None), "corr": (None, None),
+                     "plan_t64": (None, None), "corr_t64": (None, None)}
         pcw = pc[w]
         emit(f"pc_recount_{w}", pcw["status"])
         tq = rec.qvm.get(w)
@@ -1358,11 +1470,16 @@ def main(argv=None):
         pairs += [("planfilter_lines", rec.planfilter.get(w, (None, None))[0], pcw["plan"][0]),
                   ("planfilter_bytes", rec.planfilter.get(w, (None, None))[1], pcw["plan"][1]),
                   ("corrfilter_lines", rec.corrfilter.get(w, (None, None))[0], pcw["corr"][0]),
-                  ("corrfilter_bytes", rec.corrfilter.get(w, (None, None))[1], pcw["corr"][1])]
+                  ("corrfilter_bytes", rec.corrfilter.get(w, (None, None))[1], pcw["corr"][1]),
+                  # D-h: the PC byte counts recomputed as if t: carried the 64-bit cycle count.
+                  ("planfilter_bytes_if_t64", rec.planfilter.get(w, (None, None))[1], pcw["plan_t64"][0]),
+                  ("corrfilter_bytes_if_t64", rec.corrfilter.get(w, (None, None))[1], pcw["corr_t64"][0])]
         tf = rec.qvmfields.get(w) or {}
         pairs += [("cycles_both_nonzero", to_int(tf.get("cycles_both_nonzero")), c.cyc_ok if c else None),
                   ("exit_with_offset", to_int(tf.get("exit_with_offset")), c.off_seen if c else None),
-                  ("offsets_distinct", to_int(tf.get("offsets_distinct")), len(c.offs) if c else None)]
+                  ("offsets_distinct", to_int(tf.get("offsets_distinct")), len(c.offs) if c else None),
+                  ("qvm_other", to_int(tq.get("qvm_other")) if tq else None, c.qother if c else None),
+                  ("hist_keys", to_int(tq.get("hist_keys")) if tq else None, len(c.hist) if c else None)]
         for field, t, p in pairs:
             if t is None or p is None:
                 emit(f"xcheck_{w}_{field}", "n/a")
@@ -1370,8 +1487,22 @@ def main(argv=None):
                 emit(f"xcheck_{w}_{field}", "match" if t == p else f"differ(target={t},pc={p})")
         if c is not None:
             emit(f"pc_counter_{w}", f"events:{c.events},unformatted_lines:{c.unformatted},non_qvm:{c.nonqvm},"
-                                    f"qvm_total:{c.qvm},hist_keys:{len(c.hist)},agree:{c.agree},"
-                                    f"name_only:{c.name_only},num_only:{c.num_only},conflict:{c.conflict}")
+                                    f"qvm_total:{c.qvm},qvm_other:{c.qother},hist_keys:{len(c.hist)}")
+            others = ",".join(f"{k}:{v}" for k, v in sorted(c.other.items()))
+            emit(f"pc_qvm_other_names_{w}", others or "none")
+            qhist = []
+            for k, v in sorted(c.hist.items()):
+                hcls, _, hsub = k.partition("|")
+                if QCLASS_RE.search(hcls.upper()):
+                    qhist.append(f"{hsub}:{v}")
+            emit(f"pc_hist_qvm_{w}", ",".join(qhist) or "none")
+        if w in rec.qvmother:
+            emit(f"target_qvm_other_names_{w}", ",".join(f"{s}:{n}" for s, n in rec.qvmother[w]) or "none")
+        if w in rec.reap:
+            emit(f"reap_{w}", ",".join(f"{p}:{l}" for p, l in rec.reap[w]))
+        t64u = (pcw.get("plan_t64", (None, None))[1], pcw.get("corr_t64", (None, None))[1])
+        if t64u != (None, None):
+            emit(f"pc_t64_unknown_{w}", f"plan:{t64u[0]},corr:{t64u[1]}")
 
     # Step 8 (before 7: the dwell figures need cps).
     try:
@@ -1400,6 +1531,7 @@ def main(argv=None):
     except Exception as e:
         errors.append(f"verdict:{e!r}")
         v, usable, unverified, fields, counter, ring = "INCONCLUSIVE", [], [], "MISSING(parser-error)", "ok", "unknown"
+    emit("target_tp_time_field", target_time_field(rec))
     probe = rec.probe or {}
     w2f = rec.w2f or {}
     stop_w2 = rec.stops.get("w2", (None, "none"))[1]
@@ -1418,7 +1550,7 @@ def main(argv=None):
         emit("parser_errors", ";".join(errors).replace(" ", "_")[:1000])
 
     # Step 10.
-    with open(os.path.join(a.out_dir, f"attempt{a.attempt}-parse.log"), "w", encoding="utf-8", newline="\n") as f:
+    with open(os.path.join(a.out_dir, parse_log), "w", encoding="utf-8", newline="\n") as f:
         f.write("\n".join(emit.lines) + "\n")
     print(redact("M4D-PC " + line))
     return 1 if errors else 0

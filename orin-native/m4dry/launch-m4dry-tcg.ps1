@@ -6,7 +6,9 @@
 
 .DESCRIPTION
   Implements results/orin-native-port/20260909T1100Z/m4-dryrun-design.md,
-  section 5.6 (revision 2). scripts/launch-qhv-tcg.ps1 is neither changed nor
+  section 5.6 (revision 2), with the attempt-1 fixes of section 13: -Tag selects
+  a tagged build (host-<variant>-<tag>), the k512 ring variant, and a bounded
+  re-check behind every alive_after= (D-e). scripts/launch-qhv-tcg.ps1 is neither changed nor
   called: its default behaviour feeds the Phase-4 twin diff. The QEMU argument
   list below is that script's -WithRng list with only the two image paths and
   the serial file changed.
@@ -45,10 +47,15 @@
 
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File orin-native\m4dry\launch-m4dry-tcg.ps1 -Attempt 1
+
+.EXAMPLE
+  powershell -ExecutionPolicy Bypass -File orin-native\m4dry\launch-m4dry-tcg.ps1 -Attempt 2 -Variant k64 -Tag r3
+  Boots qhv/m4dry/host-k64-r3/output, built with build-m4dry-image.ps1 -Variant k64 -Tag r3.
 #>
 param(
   [Parameter(Mandatory = $true)][ValidateRange(1, 9999)][int]$Attempt,
-  [ValidateSet('plan','k64','vtwfe')][string]$Variant = 'plan',
+  [ValidateSet('plan','k64','k512','vtwfe')][string]$Variant = 'plan',
+  [ValidatePattern('^[a-z0-9]{0,16}$')][string]$Tag = '',
   [string]$QemuPath,
   [ValidateRange(60, 86400)][int]$WallSeconds = 5500,
   [ValidateRange(1, 3600)][int]$EndGraceSeconds = 90,
@@ -68,8 +75,12 @@ $repoFwd    = $repoRoot -replace '\\','/'
 $canonHost  = Join-Path $repoRoot 'qhv\host'
 $canonGuest = Join-Path $repoRoot 'qhv\guest'
 $runRoot    = Join-Path $repoRoot 'qhv\m4dry'
-$imageDir   = Join-Path $runRoot "host-$Variant\output"
-$buildLog   = Join-Path $runRoot "build-$Variant.log"
+# -Tag names a separate build of the variant (design section 13), so a rebuilt
+# image never needs an earlier attempt's directory renamed or removed.
+$vName      = $Variant
+if ($Tag) { $vName = "$Variant-$Tag" }
+$imageDir   = Join-Path $runRoot "host-$vName\output"
+$buildLog   = Join-Path $runRoot "build-$vName.log"
 $attemptDir = Join-Path $runRoot "attempt$Attempt"
 $serialLog  = Join-Path $attemptDir 'serial-raw.log'
 $outDir     = Join-Path $repoRoot 'results\orin-native-port\20260910T2307Z\m4-dryrun'
@@ -132,8 +143,25 @@ function Test-Under([string]$Path, [string]$Base) {
   return ($a -ieq $b) -or $a.StartsWith($b + '\', [System.StringComparison]::OrdinalIgnoreCase)
 }
 
+# Alive means listed and not exited. A process that has just exited can stay
+# listed for a moment while Windows tears it down; attempt 1 logged
+# alive_after=yes straight after QEMU exited, then survivors=none (section 13 D-e).
 function Test-Alive([int]$Id) {
-  try { $null = Get-Process -Id $Id -ErrorAction Stop; return $true } catch { return $false }
+  try { $p = Get-Process -Id $Id -ErrorAction Stop } catch { return $false }
+  try { if ($p.HasExited) { return $false } } catch { }
+  return $true
+}
+
+# Bounded re-check: milliseconds until the process is no longer alive, or -1
+# when it is still alive after $Seconds.
+function Wait-Gone([int]$Id, [int]$Seconds) {
+  $gw = [System.Diagnostics.Stopwatch]::StartNew()
+  while ($gw.Elapsed.TotalSeconds -lt $Seconds) {
+    if (-not (Test-Alive $Id)) { return [long]$gw.Elapsed.TotalMilliseconds }
+    Start-Sleep -Milliseconds 100
+  }
+  if (-not (Test-Alive $Id)) { return [long]$gw.Elapsed.TotalMilliseconds }
+  return -1
 }
 
 function Get-FreeGB {
@@ -243,6 +271,8 @@ function Test-SerialLine([string]$Raw) {
   if ($l.Contains('CLK EXT start')) { Set-Mark 'clk_ext_start' }
   if ($l.Contains('CLK EXT end')) { Set-Mark 'clk_ext_end' }
   if ($l.Contains('=== launching qvm @g2.conf')) { Set-Mark 'qvm_launch' }
+  # echo_up: the guest echo server announcing /dev/vcon2 (ipc-test/qnx-server/server.c:61),
+  # the endpoint the client's /dev/ttyp0 reaches; the parser's ipc_after_guest_ready needs it.
   if ($l.Contains('server: echo endpoint up')) { Set-Mark 'echo_up' }
   if ($l.Contains('QNX qnx-guest')) { Set-Mark 'guest_banner' }
   if ($l.StartsWith('samples=')) { Set-Mark 'samples' }
@@ -318,7 +348,7 @@ try {
   $qemuVer = (@(& $qemu --version))[0]
   $cpuName = (Get-CimInstance -ClassName Win32_Processor | Select-Object -First 1 -ExpandProperty Name)
   LL ('launch_utc=' + (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'))
-  LL "attempt=$Attempt variant=$Variant"
+  LL "attempt=$Attempt variant=$Variant tag=$(if ($Tag) { $Tag } else { 'none' }) image_dir=qhv/m4dry/host-$vName/output"
   LL "host=Windows $([System.Environment]::OSVersion.Version) $env:PROCESSOR_ARCHITECTURE / $cpuName"
   LL "qemu_version=$qemuVer"
   LL "qemu_path=$qemu"
@@ -372,11 +402,11 @@ try {
       try { Stop-Process -Id $qemuProc.Id -Force -ErrorAction Stop } catch { }
       try { Wait-Process -Id $qemuProc.Id -Timeout 15 -ErrorAction Stop } catch { }
     }
-    $qAlive = Test-Alive $qemuProc.Id
+    $qGoneMs = Wait-Gone $qemuProc.Id 15
     $qExit = 'none'
     if ($qemuProc.HasExited) { try { $qExit = "$($qemuProc.ExitCode)" } catch { $qExit = 'none' } }
     Read-SerialTail $true
-    LL "QEMU_STOPPED how=$qemuHow exit=$qExit alive_after=$(if ($qAlive) { 'yes' } else { 'no' }) pc_ms=$([long]$script:sw.Elapsed.TotalMilliseconds) serial_bytes=$($script:offset)"
+    LL "QEMU_STOPPED how=$qemuHow exit=$qExit alive_after=$(if ($qGoneMs -lt 0) { 'yes' } else { 'no' }) gone_wait_ms=$qGoneMs pc_ms=$([long]$script:sw.Elapsed.TotalMilliseconds) serial_bytes=$($script:offset)"
   }
 
   # 9. After the run.
@@ -428,7 +458,7 @@ try {
     }
     foreach ($id in @($parserProc.Id) + @($parserDesc)) { try { Wait-Process -Id $id -Timeout 15 -ErrorAction Stop } catch { } }
     $pAlive = $false
-    foreach ($id in @($parserProc.Id) + @($parserDesc)) { if (Test-Alive $id) { $pAlive = $true } }
+    foreach ($id in @($parserProc.Id) + @($parserDesc)) { if ((Wait-Gone $id 15) -lt 0) { $pAlive = $true } }
     $pExitText = 'none'
     if ($parserProc.HasExited -and $parserHow -eq 'exited') { try { $parserExit = $parserProc.ExitCode; $pExitText = "$parserExit" } catch { } }
     LL "PARSER_STOPPED how=$parserHow exit=$pExitText descendants_killed=$killedDesc alive_after=$(if ($pAlive) { 'yes' } else { 'no' })"

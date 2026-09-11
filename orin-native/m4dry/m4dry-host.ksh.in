@@ -1,11 +1,14 @@
 ## m4dry-host.ksh.in: the checklist 7b host script template (Phase 3b).
 ##
-## Byte for byte the script in results/orin-native-port/20260909T1100Z/
-## m4-dryrun-design.md §5.3 (revision 2), below these ## lines, which
-## build-m4dry-image.ps1 drops. Markers: @VARIANT@ @BUILD_UTC@ @TRACE_SET@
-## @SET_LINES@ @W2_K@ @W1_SECS@ @GRACE@ @GUEST_MD5@ @DISK_MD5@ @CLIENT_MD5@.
-## The build fails if any @[A-Z0-9_]+@ survives. TCG host only: this script
-## uses pipes and command substitution, which the board image forbids.
+## The script in results/orin-native-port/20260909T1100Z/m4-dryrun-design.md
+## §5.3 (revision 2, as run in attempt 1), amended as §13 lists: the counter's
+## -p format without %e (D-a), reap after every bounded pipeline (D-f), TPFMT
+## lines from the probe listing (D-h), and W2's -S as a variant parameter
+## (§13.3). build-m4dry-image.ps1 drops these ## lines. Markers: @VARIANT@
+## @BUILD_UTC@ @TRACE_SET@ @SET_LINES@ @W2_K@ @W2_S@ @W1_SECS@ @GRACE@
+## @GUEST_MD5@ @DISK_MD5@ @CLIENT_MD5@. The build fails if any @[A-Z0-9_]+@
+## survives. TCG host only: this script uses pipes and command substitution,
+## which the board image forbids.
 # m4dry-host.ksh: generated from m4dry-host.ksh.in; edit the template.
 S=/dev/shmem
 T=/system/bin
@@ -15,6 +18,7 @@ VARIANT=@VARIANT@
 W1_SECS=@W1_SECS@
 GRACE=@GRACE@
 W2_K=@W2_K@
+W2_S=@W2_S@
 W2F=/dev/shmem/t.kev
 FAIL=
 LAUNCHED=
@@ -62,6 +66,21 @@ stopladder() {
 	fi
 	say "STOP $1 by=$by"
 }
+# reap W PASS: SIGKILL any pipeline stage that outlived its bounded ksh -c, and
+# say which (§13 D-f). bwait -k kills only the ksh it spawned, so a hung stage
+# would survive it; bwait itself is unchanged. slay's exit status is the number
+# of processes it slew (slay use text). toybox covers a grep or wc that runs
+# under the toybox name (HYPOTHESIS: which name slay matches for a hard link).
+# Nothing else runs these programs while process() runs.
+reap() {
+	left=
+	for p in traceprinter gawk grep wc toybox; do
+		slay -f -Q -s KILL $p > /dev/null 2>&1
+		r=$?
+		[ "$r" -gt 0 ] && left="$left${left:+,}$p:$r"
+	done
+	say "REAP $1 $2 left=${left:-none}"
+}
 # process W NAME: the three passes of §2.1 steps 5-7 over one window's .kev.
 process() {
 	w=$1
@@ -70,10 +89,12 @@ process() {
 	km=$(md5sum $K); kc=$(cksum $K)
 	say "KEVFILE $w path=$K bytes=$(nbytes $K) md5=${km%% *} cksum=${kc% *}"
 	bwait -k 300 -o $S/$w.plan -e $S/$w.plan.err -- /proc/boot/ksh -c "$T/traceprinter -f $K | grep -E 'QVM|Class 10|GUEST' | wc -l -c"
+	reap $w plan
 	read -r L B < $S/$w.plan
 	say "PLANFILTER $w lines=$L bytes=$B"
 	head -c 256 $S/$w.plan.err
-	bwait -k 300 -o $S/$w.cnt -e $S/$w.cnt.err -- /proc/boot/ksh -c "$T/traceprinter -n -p 'M4H|%C|%Z|%z|%e|' -f $K | gawk -F'|' -v w=$w -v qpid=${QPID:-none} -f $T/m4dry-count.awk"
+	bwait -k 300 -o $S/$w.cnt -e $S/$w.cnt.err -- /proc/boot/ksh -c "$T/traceprinter -n -p 'M4H|%C|%Z|%z|' -f $K | gawk -F'|' -v w=$w -v qpid=${QPID:-none} -f $T/m4dry-count.awk"
+	reap $w cnt
 	cat $S/$w.cnt
 	head -c 256 $S/$w.cnt.err
 	if [ "$w" = w2 ]; then
@@ -81,10 +102,10 @@ process() {
 	else
 		bwait -k 300 -o $S/$w.corr -e $S/$w.corr.err -- /proc/boot/ksh -c "$T/traceprinter -n -f $K | grep -E 'QVM *:' | wc -l -c"
 	fi
+	reap $w corr
 	read -r L B < $S/$w.corr
 	say "CORRFILTER $w lines=$L bytes=$B"
 	head -c 256 $S/$w.corr.err
-	slay -f -Q -s KILL traceprinter
 	return 0
 }
 # kevblock W NAME: send one .kev as gzip + base64, capped (§6).
@@ -108,7 +129,7 @@ state guard
 bwait -g 4900 &
 
 state config
-say "CONFIG variant=$VARIANT build_utc=@BUILD_UTC@ image=rebuilt-host guest=byte-identical trace_set=@TRACE_SET@ w2_k=${W2_K:-plan} w1_secs=$W1_SECS grace=$GRACE guest_md5=@GUEST_MD5@ disk_md5=@DISK_MD5@ client_md5=@CLIENT_MD5@ plan_w2='-r -M -S 8M -f /dev/shmem/t.kev'"
+say "CONFIG variant=$VARIANT build_utc=@BUILD_UTC@ image=rebuilt-host guest=byte-identical trace_set=@TRACE_SET@ w2_k=${W2_K:-plan} w2_s=$W2_S w1_secs=$W1_SECS grace=$GRACE guest_md5=@GUEST_MD5@ disk_md5=@DISK_MD5@ client_md5=@CLIENT_MD5@ plan_w2='-r -M -S 8M -f /dev/shmem/t.kev'"
 uname -a
 mem boot
 bwait -k 30 -o $S/tp0.out -e $S/tp0.err -- $T/traceprinter -f $S/absent.kev
@@ -144,6 +165,14 @@ if [ "$PK" != none ]; then
 	PM=absent
 	grep -q m4d-probe $S/p.txt && PM=found
 	say "PROBE path=$PK bytes=$(nbytes $PK) marker=$PM"
+	# The target traceprinter's default t: field as printed, for §13 D-h: the
+	# first few event lines of the probe listing.
+	n=0
+	while read -r l; do
+		case "$l" in
+		t:*) say "TPFMT probe $l"; n=$((n + 1)); [ "$n" -ge 6 ] && break ;;
+		esac
+	done < $S/p.txt
 else
 	say "PROBE path=none bytes=0 marker=absent"
 fi
@@ -201,7 +230,7 @@ if [ -n "$LAUNCHED" ]; then
 		cat $S/qvm.rc
 	else
 		state w2
-		( bwait -k 1800 -o $S/w2.out -e $S/w2.err -- $T/tracelogger -r ${W2_K:+-k $W2_K} -M -S 8M -f $W2F; : > $S/w2.done ) &
+		( bwait -k 1800 -o $S/w2.out -e $S/w2.err -- $T/tracelogger -r ${W2_K:+-k $W2_K} -M -S $W2_S -f $W2F; : > $S/w2.done ) &
 		sleep 2
 		$T/trcctl -m 20 m4d-ipc-start
 		state ipc
