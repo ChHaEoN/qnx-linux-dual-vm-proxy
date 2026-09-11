@@ -722,6 +722,11 @@ cmd_run() {
 		rec "run image=$IMG run_id=$M4_RUN_ID utc=$UTC kexec_syscall=kexec_load (-c -l ... -i, contingency K1)"
 	fi
 	rec "run kimg=$IMG.kimg bytes=$(stat -c %s "$KIMG") pc_sha256=$KIMG_SHA params=$(basename "$PARAMS") params_sha256=$(sha256sum "$PARAMS" | cut -d' ' -f1)"
+	# I25 (m4-design.md 14.6): keep the params this run used beside its records, so a later
+	# make-m4-images.sh run cannot overwrite the only copy.
+	cp "$PARAMS" "$base-params.log" || die "cannot copy $PARAMS into the record directory"
+	check_private "$base-params.log"
+	rec "run params_copy=$(basename "$base-params.log")"
 	rec "run com3_log=$(basename "$M4_COM3_LOG") capture_left_s=$left return_bound_s=$RETURN_BOUND quiesce_O4=$M4_QUIESCE governor_pin_O5=$M4_GOVERNOR_PIN"
 
 	# step 2: the kimg, identity, the uptime rules, pstore before

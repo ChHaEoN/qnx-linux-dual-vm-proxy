@@ -1735,4 +1735,8 @@ The first native M4 rung ran on the board under the §10 checklist:
   - The target ran m4fix-1 to m4fix-4, including m4fix-4's wrap past the start marker. The parser expected all four, and `crit_4` passed with `run_verdict=pass`.
   - QEMU exited with no survivors, and the canonical images were unchanged.
   - The generator's four-fixture change is still to be checked with `--generate-only` once no other edit is in progress, because its `git status` guard must not see concurrent changes.
+- **Params provenance (I25).**
+  - **What happened:** the `--generate-only` check of I24 rewrote `m4-r0.params` beside the three-fixture r0 kimg that had run. The as-run file is lost, but its sha256 is in the harness parse log and the board log, and the offline re-parse used the as-run file.
+  - **Harness fix:** `m4-board.sh run` now copies the params into the record directory (`<run>-params.log`, git-ignored) before any board session.
+  - **Until m4-r0 is rebuilt,** the `m4-r0.kimg` on disk is the three-fixture image and does not match the params beside it, so r0 must not be rerun without a rebuild.
 
