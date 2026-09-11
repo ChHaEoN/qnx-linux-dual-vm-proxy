@@ -1693,4 +1693,11 @@ The exec bit on `make-m4-images.sh` and `m4-board.sh` is not set (no shell). Bot
   - **Cause:** §4.5.8 selected CONTROL lines and the marker window, but not the marker events themselves. With the start marker overwritten there is no window, so the end marker never reached the PC.
   - **Fix:** §4.5.8 rule 5 now always selects both marker events, in `m4count.c` and the parser together.
   - **Checks before the next k16 run:** both implementations pass all four fixtures again, and the synthetic COM3 regression matches step 6's expectations exactly as before.
+- **Step 8 complete (2026-09-11).**
+  - **k16:** rerun with the I23 counter, it passes. The target counter and the PC's reading of `v` agree on `RING state=wrapped` for both CPUs, with the end marker found and the start marker overwritten. `crit_k16` and the negative scan pass, and QEMU and the parser exit with no survivors.
+  - **r0 and k512** passed earlier with the counter built before I22 and I23; they were not rerun.
+    - Both keep their markers inside a held window, where I22 changes nothing.
+    - Rule 5 of §4.5.8 adds no line there either: a marker event's time equals `start_t` or `end_t`, so rule 3 already selected it.
+  - **The r0 board kimg** was rebuilt with the final counter, build only and never transferred.
+  - **Every TCG rung has now passed.** §14.3 is done, and board r0 waits only on the owner at the plug with a freshly booted L4T.
 
