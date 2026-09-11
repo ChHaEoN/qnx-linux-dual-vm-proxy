@@ -347,7 +347,7 @@ Quick summary for context:
   six-core runs passed (R1, R2, R2b; record in results/orin-native-port/20260909T1100Z/m1b-runs.md). Then M3. Native qvm at EL2 on four cores booted the byte-identical cloud-leg guest, with its disk, to its banner on
   5/5 timed runs, and the IPC pair completed its 15 iterations in every run. The run record, the curated capture and every
   measured figure are on the local, unpushed branch m3-results-unpublished until the 4.6(i) consultation; the repo is public.
-  Still ahead: the per-exit number (M4, blocked on dry run 7b). The two cluster-1 cores run at a fixed low rate under QNX,
+  Dry run 7b is done (2026-09-11): inside a rebuilt TCG QHV host image, qvm's Class-10 IDs 0, 1 and 7 are emitted at default settings, and the plan's ring flags turned out to keep only a short tail (-k, not -S, sizes a ring); record unpublished. Still ahead: the per-exit number on the board (M4). The two cluster-1 cores run at a fixed low rate under QNX,
   cause open (a frequency hypothesis is in m3-design.md §4.3). Earlier state, kept for the record: ADR-003 option (B) accepted by the owner: get a hardware-timed
   QHV number from the board itself rather than a Pi 4B or AWS metal. Plan,
   claims register and milestone ladder M0-M4 in

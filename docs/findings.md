@@ -9,6 +9,22 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-11 — M4 dry run (7b): qvm's Class-10 trace events are real, and the plan's ring recipe was not
+
+Before any board time, M4's trace recipe was rehearsed inside the Windows-TCG QHV host. A variant host image, built in its own
+git-ignored directory, carried the byte-identical guest plus traceprinter and two small tools (`clkcmp`, `trcctl`); the canonical
+images were only hashed. Four attempts passed. qvm emits the Class-10 GUEST_ENTER, GUEST_EXIT and CYCLES events at its default
+settings. The target counted them, and the PC recounted them from the extracted trace, so K11's event IDs are no longer a
+vendor claim for this host. Three parts of the plan's recipe did not survive:
+- Plain traceprinter output splits each event's arguments across lines, so the planned grep keeps only headers.
+- `-S` does not size a ring capture. The planned `-r -M -S 8M` kept only a short tail and lost the whole workload; `-k` sizes the ring.
+- `%e` in traceprinter's format is a sequence index, not the event ID.
+
+A stop through `TraceEvent(_NTO_TRACE_STOP)` does make a ring capture write its file. Host time equals guest time minus
+`clockcycles_offset`, as QNX documents, once 64-bit time is rebuilt from the trace's CONTROL TIME events. None of this is a board
+number or a dwell figure: under TCG every clock is emulated. The run record and its figures stay on the local branch
+`m3-results-unpublished`. Design: [m4-dryrun-design.md](../results/orin-native-port/20260909T1100Z/m4-dryrun-design.md).
+
 ## 2026-09-10 — M3: the QNX Hypervisor boots the cloud-leg guest natively on the Orin Nano
 
 Late the same day, native `qvm` ran at EL2 on four of the board's Cortex-A78AE cores. It booted the byte-identical cloud-leg
