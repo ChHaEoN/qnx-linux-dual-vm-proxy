@@ -1,5 +1,5 @@
 # Phase 3 / cross-vendor validation
-# Captured 2026-07-29 on AWS EC2 a1.metal (<instance-id redacted>, eu-central-1,
+# Captured 2026-07-29 on AWS EC2 a1.metal (<aws-instance-id>, eu-central-1,
 # terminated immediately after this capture -- bare-metal Graviton1,
 # Annapurna Labs SoC, 16x Cortex-A72, kernel 6.8.0-1061-aws).
 #
