@@ -1909,7 +1909,7 @@ The review narrowed what the pass shows:
    - §4.2's argument that `-S` always exceeds the ring is about rings only, and §9 has no row for a linear capture cut at `-S`.
 
 **Before the campaign relies on M4.** These follow-ups have not been run:
-- implement items 3-5 in `parse-m4.py`, `m4count.c` (in lockstep), the ksh and the harness, with a fixture for each new rule (for `held`: a trailing buffer missing on a CPU other than the end marker's); **(2026-09-13: item 3's `crit_5` and `c_stats` bullets are done - I28, §14.11, which also records that no self-test exercises the cross-check. Item 2's `held` rule was implemented and then withdrawn as a gate - §14.10. The rest of item 3, and items 4 and 5, stand.)**
+- implement items 3-5 in `parse-m4.py`, `m4count.c` (in lockstep), the ksh and the harness, with a fixture for each new rule (for `held`: a trailing buffer missing on a CPU other than the end marker's); **(2026-09-13: item 3's `crit_5` and `c_stats` bullets are done - I28, §14.11 - and the cross-check now has a self-test, I29, §14.12. Item 2's `held` rule was implemented and then withdrawn as a gate - §14.10. The rest of item 3, and items 4 and 5, stand.)**
 - derive a linear window's `-S` from its budget, add a linear variant to the TCG builder, and rehearse it under TCG;
 - get a whole-window cross-check, or record the owner's acceptance of r1's partial one. The options are a `v` sized to the selection, several verbatim blocks, or a narrower selection;
 - confirm or reject N18;
@@ -1954,8 +1954,31 @@ The record carries both directions and the compared count, so a thin comparison 
 
 **A note on §14.10.** In that capped verbatim block every CPU's events stop before the end marker, so `short_tail_cpus` names all of them. Had the short tail stayed a gate, it would have refused this record - which is the case §14.10 withdrew it for.
 
-**Where it is not exercised.** No automated self-test covers `xcheck_pairs`. The four fixtures are listings only, with no compact block, so the cross-check reads `n/a` throughout `selftest`. `synth-com3` can build a record carrying both blocks, but it is a manual command. The only exercise this rule has had is the r1 record, by hand. A self-test built from `synth-com3` is a follow-up.
+**Where it is not exercised.** No automated self-test covers `xcheck_pairs`. The four fixtures are listings only, with no compact block, so the cross-check reads `n/a` throughout `selftest`. `synth-com3` can build a record carrying both blocks, but it is a manual command. The only exercise this rule has had is the r1 record, by hand. A self-test built from `synth-com3` is a follow-up. **(2026-09-13: done the same day, by a shorter route than `synth-com3` - I29, §14.12.)**
 
 **Lockstep.** `m4count.c` needs no change here: the cross-check is the PC's comparison of its own reading against the counter's, and exists only in `parse-m4.py`.
 
 **Re-parsing a record.** Two things a later re-parse must get right, both learned here. `crit_reset` reads the `--reset-reason` argument and not the capture, so omitting it fails that criterion on a good record. And the harness's PC copy of the COM3 capture was rewritten by the redaction task, so its sha256 no longer matches the `input_com3` line in its own parse log; the raw capture in the same directory still carries the recorded bytes. Re-parse the raw capture.
+
+### 14.12 I29: the cross-check gets a self-test (2026-09-13)
+
+§14.11 recorded that no automated test reached `xcheck_pairs`. It does now, and it needed no board, no synthetic record and no new fixture.
+
+**What moved.** Two functions came out of `cmd_run`, with the rule unchanged: `compact_rows`, which reads form `c` into the rows `c_stats` sums and the index the cross-check looks pairs up in, and `xcheck_pairs_record(L, c_lines, limit, c_capped)`, the comparison itself. `limit` is the last time the PC could have seen - the window's end, or the delivered listing's last event when block `v` was capped - so a caller stands in for a truncated capture by passing a lower one. That argument is what makes the rule testable without a truncated capture to hand.
+
+**What the self-test does.** `m4fix-1` is a listing, so `compact_list` generates from the PC's own pairs the compact block the counter would have written for it. That block and mutated copies give six cases:
+
+| Case | The block, or the bound | Expected |
+|---|---|---|
+| `agree` | as generated | `match` |
+| `differ` | one row's class changed | `differ(1) orphan=0` |
+| `orphan` | one row added that no pair accounts for | `differ(0) orphan=1` |
+| `capped` | the same, with the block marked capped | `match`; both walks are exempt |
+| `empty` | the bound below the window's start | `empty compared=0`, which fails the criterion |
+| `straddle` | the bound at a row's entry, its exit past it | `match`; the truncation is not a disagreement |
+
+The last is I28's regression guard. Under the first form of the reverse walk that case reads `orphan=1`, which is exactly how the defect reached a board record and failed a run that had passed.
+
+**What these do not show.** They check one implementation against itself - the PC's pairs against a block derived from those same pairs - so they fix the rule's behaviour, not the counter's agreement with it. Only a run carrying both blocks does that, and r1 is still the only one. The counter half of the lockstep is untouched here, because the cross-check exists only on the PC.
+
+**Verification.** `selftest` passes the four fixtures and all six cases, and `kshcheck` is unchanged. Re-parsing the r1 record with the refactored parser reproduces the recorded log line for line, apart from the parser's own sha256, the input file names and §14.10's field, so the factoring changed no behaviour.

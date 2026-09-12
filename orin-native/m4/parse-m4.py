@@ -1313,6 +1313,100 @@ def compact_list(L, ccap, label):
     return bytes(out), {"lines": lines, "capped": capped, "pairs_written": written, "pairs_total": len(listed)}
 
 
+def compact_rows(body):
+    """§4.5.8 form c as the counter wrote it: the rows in file order, and the
+    index the cross-check looks pairs up in. The counter writes one row per
+    pair, keyed by the entry's offset from start_t and the exit CPU, so that key
+    is unique by construction and a missing entry is a disagreement rather than
+    a collision."""
+    index = {}
+    rows = []
+    for raw in iter_raw_lines(body):
+        parts = raw.decode("latin-1").split()
+        if len(parts) != 9 or parts[0] != "c":
+            continue
+        _, k, cls, elig, dwell, cx, ce, hw, dt = parts
+        row = (cls, elig, dwell, cx, ce)
+        rows.append(row)
+        index[(to_int(dt), to_int(cx))] = row
+    return index, rows
+
+
+def xcheck_pairs_record(L, c_lines, limit, c_capped):
+    """§6.2's cross-check of the PC's pairs against the counter's compact block,
+    in both directions (I28; m4-design.md 14.9 item 3 and 14.11).
+
+    `limit` is the last time the PC could have seen: the window's end, or the
+    delivered listing's last event when block `v` was capped. Both walks bound a
+    pair by its exit and by the CPU it exited on, so neither side is compared
+    past the data it was given.
+    """
+    # The bound was the file-order last_t of the verbatim block, but the listing
+    # is ordered per CPU buffer: a CPU whose delivered events stop earlier would
+    # be compared past its own data, and a pair the PC never saw would count as
+    # the counter's fault. Each CPU is bounded by its own last delivered event.
+    cpu_limit = {}
+    for c, r in enumerate(L.cpu):
+        if r["events"] and r["last_t"] is not None:
+            cpu_limit[c] = min(limit, r["last_t"])
+
+    def in_range(t, cpu):
+        if t is None or t < L.start_t:
+            return False
+        return t <= cpu_limit.get(cpu, limit)
+
+    compared = 0
+    bad = 0
+    seen = set()
+    for p in L.pairs:
+        if p["a"] is None or p["b"] is None or p["a"] < L.start_t:
+            continue
+        if not in_range(p["b"], p["cpu_exit"]):
+            continue
+        key = ((p["a"] - L.start_t), p["cpu_exit"])
+        got = c_lines.get(key)
+        if got is None:
+            if not c_capped:
+                bad += 1
+            continue
+        seen.add(key)
+        compared += 1
+        want = ("unk" if p["cls"].startswith("unk") else p["cls"], "1" if p["reason"] == "eligible" else "0",
+                str(p["dwell"]) if p["dwell"] is not None else "-", str(p["cpu_exit"]), str(p["cpu_entry"]))
+        if got != want:
+            bad += 1
+
+    # The other direction: a row the counter wrote, inside the range the PC
+    # could see, that the PC produced no pair for. A capped compact block is
+    # exempt, exactly as the forward walk is.
+    #
+    # The bound is the row's exit, entry + dwell, and not its entry, because
+    # that is what the forward walk bounds a pair by. A row whose entry is
+    # inside the range and whose exit is past it is skipped going forward,
+    # correctly - the PC holds no exit event to pair with - so counting it
+    # coming back would report the truncation as a disagreement. The r1 board
+    # record holds exactly one such row (m4-design.md 14.11). A row whose dwell
+    # is not a number gives no exit to bound, so it is left alone rather than
+    # compared past the PC's data.
+    orphan = 0
+    if not c_capped:
+        for key, val in c_lines.items():
+            if key in seen:
+                continue
+            off, cx = key
+            dwell = to_int(val[2])
+            if dwell is None:
+                continue
+            if in_range(L.start_t + off + dwell, cx):
+                orphan += 1
+
+    if bad == 0 and orphan == 0 and compared > 0:
+        return f"match compared={compared}"
+    if compared == 0:
+        return f"empty compared=0 orphan={orphan}"
+    return f"differ({bad}) orphan={orphan} compared={compared}"
+
+
 # ------------------------------------------------------------------ run: capture, records, blocks
 
 RECORD_PREFIXES = ("M4 ", "M4C ", "BWAIT ", "TRCCTL ", "STAMP ", "tcu-cat:", "samples=", "P50=", "sentinel_", "CLK ")
@@ -1908,12 +2002,8 @@ def cmd_run(a):
     pc_from_c = {}
     if c_body is not None and c_status == "ok":
         vals = {cls: [] for cls in CLASSES}
-        for raw in iter_raw_lines(c_body):
-            parts = raw.decode("latin-1").split()
-            if len(parts) != 9 or parts[0] != "c":
-                continue
-            _, k, cls, elig, dwell, cx, ce, hw, dt = parts
-            c_lines[(to_int(dt), to_int(cx))] = (cls, elig, dwell, cx, ce)
+        c_lines, c_rows = compact_rows(c_body)
+        for cls, elig, dwell, _cx, _ce in c_rows:
             if elig == "1" and cls in vals and to_int(dwell) is not None:
                 vals[cls].append(int(dwell))
         cps_c = to_int((rec_first(run_main, "IN") or {}).get("cps"), DEFAULT_CPS)
@@ -1946,73 +2036,7 @@ def cmd_run(a):
         limit = L.end_t if last_t is None else min(L.end_t, last_t)
         c_capped = flt_c_rec is not None and flt_c_rec.get("capped") == "1"
 
-        # I28 (m4-design.md 14.9 item 3). The bound was the file-order last_t of
-        # the verbatim block, but the listing is ordered per CPU buffer: a CPU
-        # whose delivered events stop earlier would be compared past its own
-        # data, and a pair the PC never saw would count as the counter's fault.
-        # Each CPU is bounded by its own last delivered event.
-        cpu_limit = {}
-        for c, r in enumerate(L.cpu):
-            if r["events"] and r["last_t"] is not None:
-                cpu_limit[c] = min(limit, r["last_t"])
-
-        def in_range(t, cpu):
-            if t is None or t < L.start_t:
-                return False
-            return t <= cpu_limit.get(cpu, limit)
-
-        compared = 0
-        bad = 0
-        seen = set()
-        for p in L.pairs:
-            if p["a"] is None or p["b"] is None or p["a"] < L.start_t:
-                continue
-            if not in_range(p["b"], p["cpu_exit"]):
-                continue
-            key = ((p["a"] - L.start_t), p["cpu_exit"])
-            got = c_lines.get(key)
-            if got is None:
-                if not c_capped:
-                    bad += 1
-                continue
-            seen.add(key)
-            compared += 1
-            want = ("unk" if p["cls"].startswith("unk") else p["cls"], "1" if p["reason"] == "eligible" else "0",
-                    str(p["dwell"]) if p["dwell"] is not None else "-", str(p["cpu_exit"]), str(p["cpu_entry"]))
-            if got != want:
-                bad += 1
-
-        # The other direction: a row the counter wrote, inside the range the PC
-        # could see, that the PC produced no pair for. The counter's key is one
-        # row per pair, so this is a disagreement, not a duplicate. A capped
-        # compact block is exempt, exactly as the forward walk is.
-        #
-        # The bound is the row's exit, entry + dwell, and not its entry, because
-        # that is what the forward walk bounds a pair by. A row whose entry is
-        # inside the range and whose exit is past it is skipped going forward,
-        # correctly - the PC holds no exit event to pair with - so counting it
-        # coming back would report the truncation as a disagreement. The r1
-        # board record holds exactly one such row (m4-design.md 14.11). A row
-        # whose dwell is not a number gives no exit to bound, so it is left
-        # alone rather than compared past the PC's data.
-        orphan = 0
-        if not c_capped:
-            for key, val in c_lines.items():
-                if key in seen:
-                    continue
-                off, cx = key
-                dwell = to_int(val[2])
-                if dwell is None:
-                    continue
-                if in_range(L.start_t + off + dwell, cx):
-                    orphan += 1
-
-        if bad == 0 and orphan == 0 and compared > 0:
-            xp = f"match compared={compared}"
-        elif compared == 0:
-            xp = f"empty compared=0 orphan={orphan}"
-        else:
-            xp = f"differ({bad}) orphan={orphan} compared={compared}"
+        xp = xcheck_pairs_record(L, c_lines, limit, c_capped)
     log("xcheck_pairs", xp)
 
     p1zero = []
@@ -2728,6 +2752,52 @@ def cmd_selftest(a):
                 miss = check_expects(got, exp)
                 log(f"selftest_m4c_{name}", "ok" if not miss else "fail(" + ";".join(miss).replace(" ", "_") + ")")
                 ok = ok and not miss
+    # I29 (m4-design.md 14.12): the cross-check itself, which no fixture reaches.
+    # The fixtures are listings with no compact block, so `run`'s xcheck_pairs
+    # reads n/a throughout selftest and the rule was exercised only by hand, on
+    # the board's r1 record. Here the compact block is generated from the PC's
+    # own pairs and then mutated, so each case names one behaviour of the rule.
+    XL = None
+    try:
+        XL = Listing("m4-fix-start", "m4-fix-end").feed_file(os.path.join(a.fixtures, "m4fix-1.txt"))
+        index, _rows = compact_rows(compact_list(XL, 1 << 20, "fix")[0])
+    except (InputError, OSError) as e:
+        log("selftest_xcheck", f"error({str(e).replace(' ', '_')[:80]})")
+        ok = False
+    if XL is not None and XL.window_known and index:
+        k0 = sorted(index)[0]
+        v0 = index[k0]
+        differ = dict(index)
+        differ[k0] = ("blk" if v0[0] != "blk" else "clean",) + v0[1:]
+        extra = dict(index)
+        extra[(k0[0] + 1, k0[1])] = v0
+        cases = [("agree", XL.end_t, index, False, "match compared="),
+                 ("differ", XL.end_t, differ, False, "differ(1) orphan=0 compared="),
+                 ("orphan", XL.end_t, extra, False, "differ(0) orphan=1 compared="),
+                 ("capped", XL.end_t, extra, True, "match compared="),
+                 ("empty", XL.start_t - 1, index, False, "empty compared=0")]
+        # I28's regression guard. A row whose entry is inside the range and whose
+        # exit is past it is the truncation, not a disagreement: the first form
+        # of the reverse walk called it an orphan and failed a board record that
+        # had passed. The bound is set at such a row's entry, with at least one
+        # whole pair below it so the comparison is not empty.
+        straddle = None
+        for p in sorted((q for q in XL.pairs if q["list"] and q["a"] is not None and q["b"] is not None
+                         and q["dwell"] is not None and q["dwell"] > 0), key=lambda q: q["a"]):
+            if any(q["a"] is not None and q["b"] is not None and q["a"] >= XL.start_t and q["b"] <= p["a"]
+                   for q in XL.pairs):
+                straddle = p["a"]
+                break
+        if straddle is None:
+            log("selftest_xcheck_straddle", "fail(no-case-in-fixture)")
+            ok = False
+        else:
+            cases.append(("straddle", straddle, index, False, "match compared="))
+        for name, lim, idx, capped, want in cases:
+            got = xcheck_pairs_record(XL, idx, lim, capped)
+            good = got.startswith(want)
+            log(f"selftest_xcheck_{name}", "ok" if good else f"fail(got:{got.replace(' ', '_')})")
+            ok = ok and good
     log("selftest", "pass" if ok else "fail")
     try:
         write_text(out, log.text())
