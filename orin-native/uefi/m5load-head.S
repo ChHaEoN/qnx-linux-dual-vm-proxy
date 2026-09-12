@@ -4,13 +4,19 @@
  * console writers and the trampoline that takes the CPU and branches.
  *
  * Phase 3b, results/orin-native-port/20260909T1100Z/m5-design.md sections 3.3
- * (steps 11-14), 3.4 (the PE layout and the gate) and 13 (decision C: the
- * post-exit console is chosen from the device tree).
+ * (steps 11-14), 3.4 (the PE layout and the gate), 13 decision C (the post-exit
+ * console comes from the device tree) and 13 decision L (two sections).
+ *
+ * Two sections, not one: the first T0b run faulted on `str x20, [x19, #512]`,
+ * the first write to an in-image static, because the firmware maps a section's
+ * pages from its characteristics and our single read-write-execute section came
+ * out non-writable. Code is read and execute; the statics and the payload live
+ * in a data section that is read and write, with no execute.
  *
  * Nothing here is copied from Linux's arm64 header or from edk2. The PE header
- * below is written from the PE/COFF specification; the TCU writer follows our
- * own shim (shim/t234-shim.S), which is where the mailbox protocol and its
- * deadline come from.
+ * is written from the PE/COFF specification; the TCU writer follows our own
+ * shim (shim/t234-shim.S), which is where the mailbox protocol and its deadline
+ * come from.
  *
  * Position independence is a hard requirement (section 3.4 item 6): every
  * reference below is PC-relative, and the header's computed fields come from
@@ -21,6 +27,13 @@
 	.set	PE_SECTION_ALIGN,  0x1000
 	.set	PE_FILE_ALIGN,     0x1000
 	.set	PE_HEADERS_SIZE,   0x1000
+
+	/* Section characteristics, PE/COFF. */
+	.set	SCN_CNT_CODE,      0x00000020
+	.set	SCN_CNT_INIT_DATA, 0x00000040
+	.set	SCN_MEM_EXECUTE,   0x20000000
+	.set	SCN_MEM_READ,      0x40000000
+	.set	SCN_MEM_WRITE,     0x80000000
 
 	/* Post-exit console kinds, shared with m5load.c. */
 	.set	CON_NONE,  0
@@ -53,7 +66,7 @@ m5_pe_header:
 
 	/* COFF header, 20 bytes. */
 	.short	0xaa64				/* Machine: AArch64             */
-	.short	1				/* NumberOfSections             */
+	.short	2				/* NumberOfSections: text, data */
 	.long	0				/* TimeDateStamp                */
 	.long	0				/* PointerToSymbolTable         */
 	.long	0				/* NumberOfSymbols              */
@@ -68,10 +81,10 @@ m5_opt_header:
 	.byte	0				/* MajorLinkerVersion           */
 	.byte	0				/* MinorLinkerVersion           */
 	.long	PE_SIZE_OF_CODE			/* SizeOfCode (from m5load.lds) */
-	.long	0				/* SizeOfInitializedData        */
+	.long	PE_SIZE_OF_DATA			/* SizeOfInitializedData        */
 	.long	0				/* SizeOfUninitializedData      */
 	.long	PE_ENTRY_RVA			/* AddressOfEntryPoint          */
-	.long	PE_HEADERS_SIZE			/* BaseOfCode                   */
+	.long	PE_TEXT_RVA			/* BaseOfCode                   */
 
 	/* PE32+ Windows-specific fields. */
 	.quad	0				/* ImageBase: 0 (gate item 2)   */
@@ -101,17 +114,31 @@ m5_opt_header:
 	.quad	0, 0, 0
 m5_dirs_end:
 
-	/* One section, covering everything after the headers. */
+	/* Section 1: code. Read and execute, never writable - a writable code
+	 * section is what the firmware refused to map writable at all. */
 	.ascii	".text\0\0\0"
 	.long	PE_TEXT_VSIZE			/* VirtualSize                  */
-	.long	PE_HEADERS_SIZE			/* VirtualAddress               */
+	.long	PE_TEXT_RVA			/* VirtualAddress               */
 	.long	PE_TEXT_VSIZE			/* SizeOfRawData                */
-	.long	PE_HEADERS_SIZE			/* PointerToRawData             */
+	.long	PE_TEXT_RVA			/* PointerToRawData             */
 	.long	0				/* PointerToRelocations         */
 	.long	0				/* PointerToLinenumbers         */
 	.short	0				/* NumberOfRelocations          */
 	.short	0				/* NumberOfLinenumbers          */
-	.long	0xe0000020			/* CODE | EXECUTE | READ | WRITE */
+	.long	SCN_CNT_CODE | SCN_MEM_EXECUTE | SCN_MEM_READ
+
+	/* Section 2: data. The writable statics and the embedded payload.
+	 * Read and write, never executable. */
+	.ascii	".data\0\0\0"
+	.long	PE_DATA_VSIZE			/* VirtualSize                  */
+	.long	PE_DATA_RVA			/* VirtualAddress               */
+	.long	PE_DATA_VSIZE			/* SizeOfRawData                */
+	.long	PE_DATA_RVA			/* PointerToRawData             */
+	.long	0				/* PointerToRelocations         */
+	.long	0				/* PointerToLinenumbers         */
+	.short	0				/* NumberOfRelocations          */
+	.short	0				/* NumberOfLinenumbers          */
+	.long	SCN_CNT_INIT_DATA | SCN_MEM_READ | SCN_MEM_WRITE
 
 /* ------------------------------------------------------------------ *
  * The entry the firmware calls: x0 = ImageHandle, x1 = SystemTable,
@@ -364,8 +391,9 @@ m5_str_elr:		.asciz	" ELR="
 m5_str_crlf:		.asciz	"\r\n"
 
 /* ------------------------------------------------------------------ *
- * .pool - zero-filled scratch in the image, not .bss: the linker script
- * refuses a .bss so that SizeOfImage and the file always agree.
+ * .pool - the writable statics, routed into the PE data section by
+ * m5load.lds.  Not .bss: the linker script refuses one, so that
+ * SizeOfImage and the file always agree.
  * ------------------------------------------------------------------ */
 	.section .pool, "aw"
 	.align	3

@@ -2,18 +2,22 @@
  *
  * m5load.lds - the link map for M5LOAD.EFI.
  *
- * Phase 3b, results/orin-native-port/20260909T1100Z/m5-design.md §3.4: one
- * .text section, read-write-execute, holding the code, the strings, the
- * embedded blob and a zero-filled pool, with file offsets equal to RVAs and
- * SizeOfHeaders 0x1000.
+ * Phase 3b, results/orin-native-port/20260909T1100Z/m5-design.md §3.4, as
+ * amended by §13 decision L: two sections, not one.
  *
- * The layout this produces, which objcopy -O binary then writes out flat, is
- * exactly the PE file:
+ * The layout, which objcopy -O binary then writes out flat, is the PE file:
  *
  *   0x0000  .head   the hand-written DOS and PE headers (m5load-head.S)
  *   0x1000  .text   entry, loader code, trampoline, exception table, strings
- *           .pool   a zero-filled scratch area, page-aligned
+ *           .data   the writable statics, page-aligned
  *           .blob   the embedded payload, page-aligned, LAST (gate items 4, 8)
+ *
+ * .text is read and execute; .data and .blob are read and write, with no
+ * execute, and the PE header describes them as one data section. Why: the
+ * first T0b run faulted on the first write to an in-image static, because the
+ * firmware mapped our single read-write-execute section non-writable. UEFI
+ * image protection sets a section's page attributes from its characteristics,
+ * so the writable data has to live in its own section.
  *
  * IMAGE_BASE is a linker argument, not an edit: the build links once at 0 and
  * once at 0x100000 and the gate requires the two files to be byte-identical
@@ -43,16 +47,18 @@ SECTIONS
 		*(.text.entry)
 		*(.text .text.*)
 		*(.rodata .rodata.*)
-		*(.data .data.*)
-		. = ALIGN(16);
+		. = ALIGN(0x1000);
 		m5_text_end = .;
 	}
 
-	.pool : ALIGN(0x1000) {
-		m5_pool_start = .;
+	/* Everything the loader writes to, and the payload it carries. One PE
+	 * data section covers both, so the firmware may map it writable and
+	 * non-executable. */
+	.data : ALIGN(0x1000) {
+		m5_data_start = .;
+		*(.data .data.*)
 		*(.pool)
 		. = ALIGN(0x1000);
-		m5_pool_end = .;
 	}
 
 	.blob : ALIGN(0x1000) {
@@ -62,6 +68,7 @@ SECTIONS
 		m5_blob_end = .;
 	}
 
+	m5_data_end = .;
 	m5_image_end = .;
 
 	/* The PE header's computed fields live here, not in the assembler: GNU as
@@ -69,8 +76,12 @@ SECTIONS
 	 * an RVA or a size, so none depends on IMAGE_BASE and the two links agree
 	 * byte for byte (§3.4 gate item 6). */
 	PE_SIZE_OF_IMAGE = m5_image_end - IMAGE_BASE;
-	PE_SIZE_OF_CODE  = m5_image_end - IMAGE_BASE - 0x1000;
-	PE_TEXT_VSIZE    = m5_image_end - IMAGE_BASE - 0x1000;
+	PE_SIZE_OF_CODE  = m5_text_end - m5_text_start;
+	PE_SIZE_OF_DATA  = m5_data_end - m5_data_start;
+	PE_TEXT_RVA      = m5_text_start - IMAGE_BASE;
+	PE_TEXT_VSIZE    = m5_text_end - m5_text_start;
+	PE_DATA_RVA      = m5_data_start - IMAGE_BASE;
+	PE_DATA_VSIZE    = m5_data_end - m5_data_start;
 	PE_ENTRY_RVA     = m5_entry - IMAGE_BASE;
 
 	/* Nothing may reach the image through a relocation record: the gate

@@ -20,6 +20,7 @@
 
 typedef unsigned char       UINT8;
 typedef unsigned short      CHAR16;
+typedef unsigned short      UINT16;
 typedef unsigned int        UINT32;
 typedef unsigned long long  UINT64;
 typedef long long           INTN;
@@ -38,16 +39,15 @@ typedef UINT64              EFI_VIRTUAL_ADDRESS;
 
 #define EFI_ERROR(s)            (((EFI_STATUS)(s)) >> 63)
 
+/* UEFI 2.10 appendix A: Data1, Data2 and Data3 are integers, not byte arrays.
+ * Declaring them as bytes is how the first working T0b run came to look up
+ * GUIDs that do not exist: the loader printed self=0+0 and then REFUSE fdt,
+ * because HandleProtocol and the configuration-table search both matched
+ * nothing. */
 typedef struct {
 	UINT32 Data1;
-	UINT32 Data2and3;      /* Data2 and Data3 packed; we only ever compare */
-	UINT64 Data4;
-} M5_GUID_CMP;
-
-typedef struct {
-	UINT32 Data1;
-	UINT8  Data2[2];
-	UINT8  Data3[2];
+	UINT16 Data2;
+	UINT16 Data3;
 	UINT8  Data4[8];
 } EFI_GUID;
 
@@ -226,13 +226,13 @@ typedef struct {
 } EFI_LOADED_IMAGE_PROTOCOL;
 
 #define EFI_LOADED_IMAGE_PROTOCOL_GUID \
-	{ 0x5b1b31a1, { 0x95, 0x62 }, { 0x11, 0xd2 }, { 0x8e, 0x3f, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b } }
+	{ 0x5b1b31a1, 0x9562, 0x11d2, { 0x8e, 0x3f, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b } }
 
 /* The device-tree configuration table, b1b621d5-f19c-41a5-830b-d9152c69aae0
  * (m5-design.md §3.3 step 2). Not a UEFI specification GUID: it is the
  * EFI_DTB_TABLE_GUID that edk2 and the ARM boot conventions publish. */
 #define EFI_DTB_TABLE_GUID \
-	{ 0xb1b621d5, { 0xf1, 0x9c }, { 0x41, 0xa5 }, { 0x83, 0x0b, 0xd9, 0x15, 0x2c, 0x69, 0xaa, 0xe0 } }
+	{ 0xb1b621d5, 0xf19c, 0x41a5, { 0x83, 0x0b, 0xd9, 0x15, 0x2c, 0x69, 0xaa, 0xe0 } }
 
 /* OpenProtocol attribute: BY_HANDLE_PROTOCOL, the read-only form used for
  * LOADED_IMAGE. HandleProtocol is equivalent and simpler; both are declared so

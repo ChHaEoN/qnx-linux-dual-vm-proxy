@@ -99,6 +99,10 @@ function Invoke-Case {
     '-drive', "if=pflash,format=raw,unit=1,file=$scratchVars",
     '-drive', "file=fat:rw:$esp,format=raw,if=virtio",
     '-display', 'none',
+    # No network device. With one, BdsDxe tries PXE over IPv4 and then IPv6
+    # before it reaches the built-in Shell, and the whole case times out in the
+    # attempt: that is what the first T0 run showed.
+    '-nic', 'none',
     '-serial', "file:$log",
     '-no-reboot'
   )

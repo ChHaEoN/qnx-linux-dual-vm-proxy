@@ -2,26 +2,34 @@
 # SPDX-License-Identifier: MIT
 """m5-gate.py - the header gate for M5LOAD.EFI.
 
-Phase 3b, results/orin-native-port/20260909T1100Z/m5-design.md section 3.4.
+Phase 3b, results/orin-native-port/20260909T1100Z/m5-design.md section 3.4, as
+amended by section 13 decision L (two sections, not one).
 build-m5-loader.sh runs it and any miss fails the build.
 
 The ten items, in the design's order:
 
   1  MZ, PE\\0\\0, Machine 0xAA64, PE32+ magic 0x20b, Subsystem 10.
   2  Characteristics bit 0x0001 (RELOCS_STRIPPED) clear; ImageBase 0.
-  3  SectionAlignment and FileAlignment 0x1000; one section; SizeOfHeaders
-     0x1000; SizeOfImage page-aligned and covering the section.
-  4  The entry RVA lies inside .text and before the embedded blob.
+  3  SectionAlignment and FileAlignment 0x1000; exactly two sections, code and
+     data, with the code section not writable and the data section not
+     executable; SizeOfHeaders 0x1000; SizeOfImage page-aligned and covering
+     both sections.
+  4  The entry RVA lies inside the code section and before the embedded blob.
   5  Every data directory is zero.
   6  Position independence, tested: the linked ELF carries no relocation
      records, and linking at base 0 and at 0x100000 gives identical files.
   7  The blob's sha256 equals the pin; the length and CRC32 constants equal
      values computed from the blob itself.
-  8  The T0 build and the board build differ only in the blob and its
-     constants.
+  8  The T0 build and the board build differ only in the blob, its constants,
+     and the header fields that are a function of the payload's size.
   9  The cache and MMU sequence, read statically, over the trampoline's symbol
      range only - never over the blob (NC QDL v7 4.6(c)).
   10 Print the output's sha256, which is the value that gets staged.
+
+Item 3's characteristics check exists because the first T0b run faulted on the
+first write to an in-image static: a single read-write-execute section was
+mapped non-writable by the firmware. The check makes that defect impossible to
+reintroduce unnoticed.
 
 Standard library only. Every check that cannot be performed fails closed.
 """
@@ -35,6 +43,12 @@ import sys
 import zlib
 
 PAGE = 0x1000
+
+SCN_CNT_CODE = 0x00000020
+SCN_CNT_INIT_DATA = 0x00000040
+SCN_MEM_EXECUTE = 0x20000000
+SCN_MEM_READ = 0x40000000
+SCN_MEM_WRITE = 0x80000000
 
 
 class Gate:
@@ -60,7 +74,7 @@ class Gate:
 # ----------------------------------------------------------------- ELF
 
 def elf_symbols(path):
-    """Return {name: address} from an ELF64 little-endian file's .symtab."""
+    """Return ({name: address}, [relocation sections]) from an ELF64 LE file."""
     with open(path, "rb") as fh:
         data = fh.read()
     if data[:4] != b"\x7fELF" or data[4] != 2 or data[5] != 1:
@@ -85,14 +99,12 @@ def elf_symbols(path):
     rela = []
     for s in sections:
         nm = sname(s)
-        if nm.startswith(".rela") or nm.startswith(".rel."):
-            if s["size"] > 0:
-                rela.append((nm, s["size"]))
+        if (nm.startswith(".rela") or nm.startswith(".rel.")) and s["size"] > 0:
+            rela.append((nm, s["size"]))
         if s["type"] != 2:                       # SHT_SYMTAB
             continue
         strtab = sections[s["link"]]
-        n = s["size"] // s["entsize"]
-        for i in range(n):
+        for i in range(s["size"] // s["entsize"]):
             off = s["offset"] + i * s["entsize"]
             st_name, st_info, st_other, st_shndx, st_value, st_size = struct.unpack_from(
                 "<IBBHQQ", data, off)
@@ -137,7 +149,13 @@ class PE:
             vsize, vaddr, rawsize, rawptr = struct.unpack_from("<IIII", self.raw, so + 8)
             chars, = struct.unpack_from("<I", self.raw, so + 36)
             self.sections.append(dict(name=name, vsize=vsize, vaddr=vaddr, rawsize=rawsize,
-                                      rawptr=rawptr, chars=chars))
+                                      rawptr=rawptr, chars=chars, off=so))
+
+    def section(self, name):
+        for s in self.sections:
+            if s["name"] == name:
+                return s
+        return None
 
 
 def sha256(path):
@@ -208,25 +226,41 @@ def main():
             "characteristics=%#x relocs_stripped clear, image_base=0" % pe.characteristics,
             "characteristics=%#x image_base=%#x" % (pe.characteristics, pe.image_base))
 
-    # item 3
-    sect = pe.sections[0] if pe.sections else None
-    ok3 = (pe.section_align == PAGE and pe.file_align == PAGE and pe.nsections == 1 and
-           pe.size_headers == PAGE and sect is not None and
-           pe.size_image % PAGE == 0 and pe.size_image >= sect["vaddr"] + sect["vsize"])
-    g.check(3, ok3,
-            "alignments 0x1000, one section, headers 0x1000, image %#x covers %s" % (
-                pe.size_image, sect["name"] if sect else "-"),
-            "align=%#x/%#x sections=%d headers=%#x image=%#x" % (
-                pe.section_align, pe.file_align, pe.nsections, pe.size_headers, pe.size_image))
+    # item 3: two sections, and the page attributes the firmware will apply
+    text = pe.section(".text")
+    data = pe.section(".data")
+    ok3 = (pe.section_align == PAGE and pe.file_align == PAGE and pe.nsections == 2 and
+           pe.size_headers == PAGE and text is not None and data is not None and
+           pe.size_image % PAGE == 0 and
+           pe.size_image >= max(s["vaddr"] + s["vsize"] for s in pe.sections))
+    if ok3:
+        code_w = bool(text["chars"] & SCN_MEM_WRITE)
+        data_x = bool(data["chars"] & SCN_MEM_EXECUTE)
+        code_x = bool(text["chars"] & SCN_MEM_EXECUTE)
+        data_w = bool(data["chars"] & SCN_MEM_WRITE)
+        ok3 = (not code_w) and code_x and data_w and (not data_x)
+        g.check(3, ok3,
+                "two sections: .text %#x+%#x code, not writable; .data %#x+%#x writable, not executable; image %#x" % (
+                    text["vaddr"], text["vsize"], data["vaddr"], data["vsize"], pe.size_image),
+                ".text writable=%s executable=%s, .data writable=%s executable=%s "
+                "(a writable code section is mapped non-writable by the firmware: section 13 L)" % (
+                    code_w, code_x, data_w, data_x))
+    else:
+        g.bad(3, "align=%#x/%#x sections=%d headers=%#x image=%#x names=%s" % (
+            pe.section_align, pe.file_align, pe.nsections, pe.size_headers, pe.size_image,
+            [s["name"] for s in pe.sections]))
 
-    # item 4: the entry sits in .text, before the blob
+    # item 4: the entry sits in the code section, before the blob
     blob_rva = syms.get("m5_blob_start")
-    entry_ok = (sect is not None and blob_rva is not None and
-                sect["vaddr"] <= pe.entry_rva < blob_rva)
+    entry_ok = (text is not None and blob_rva is not None and
+                text["vaddr"] <= pe.entry_rva < text["vaddr"] + text["vsize"] and
+                pe.entry_rva < blob_rva)
     g.check(4, entry_ok,
-            "entry %#x inside %s and before the blob at %#x" % (
-                pe.entry_rva, sect["name"] if sect else "-", blob_rva or 0),
-            "entry=%#x blob=%s" % (pe.entry_rva, hex(blob_rva) if blob_rva else "missing"))
+            "entry %#x inside .text and before the blob at %#x" % (pe.entry_rva, blob_rva or 0),
+            "entry=%#x text=%s blob=%s" % (
+                pe.entry_rva,
+                "%#x+%#x" % (text["vaddr"], text["vsize"]) if text else "missing",
+                hex(blob_rva) if blob_rva else "missing"))
 
     # item 5
     dirs = struct.unpack_from("<%dQ" % pe.nrva, pe.raw, pe.dirs_off)
@@ -273,18 +307,21 @@ def main():
         if const_ok:
             for s in const_syms:
                 allowed.update(range(s, s + 8))
-        # The four header fields that are a function of the payload's size must
-        # differ when the payloads differ: SizeOfCode, SizeOfImage, and the
-        # section table's VirtualSize and SizeOfRawData. Their offsets come from
-        # the parsed header, never from a constant, so a layout change cannot
-        # quietly widen this exemption.
-        for off in (pe.opt_off + 4, pe.opt_off + 56, pe.sect_off + 8, pe.sect_off + 16):
+        # The header fields that are a function of the payload's size must
+        # differ when the payloads differ: SizeOfCode, SizeOfInitializedData,
+        # SizeOfImage, and each section's VirtualSize and SizeOfRawData. Their
+        # offsets come from the parsed header, never from a constant, so a
+        # layout change cannot quietly widen this exemption.
+        for off in (pe.opt_off + 4, pe.opt_off + 8, pe.opt_off + 56):
             allowed.update(range(off, off + 4))
+        for s in pe.sections:
+            allowed.update(range(s["off"] + 8, s["off"] + 12))
+            allowed.update(range(s["off"] + 16, s["off"] + 20))
         head = min(len(pe_bytes), len(other), blob_rva or 0)
         diffs = [i for i in range(head) if pe_bytes[i] != other[i] and i not in allowed]
         g.check(8, const_ok and not diffs,
-                "the two builds differ only in the blob and its three constants",
-                "differing offsets outside the blob and constants: %s" % (
+                "the two builds differ only in the blob, its three constants and the size fields",
+                "differing offsets outside the blob, constants and size fields: %s" % (
                     [hex(d) for d in diffs[:8]] if const_ok else "constant symbols missing"))
     else:
         g.lines.append("M5G item=8  SKIP the other build is not present yet")
@@ -294,17 +331,16 @@ def main():
     if t0s is None or t0e is None or t0e <= t0s:
         g.bad(9, "the trampoline symbols are missing: the sequence cannot be read")
     else:
-        rc, text = disassemble_range(a.objdump, a.elf, t0s, t0e)
+        rc, text_out = disassemble_range(a.objdump, a.elf, t0s, t0e)
         if rc != 0:
             g.bad(9, "objdump returned %d" % rc)
+        elif blob_rva is not None and t0e > blob_rva:
+            g.bad(9, "the trampoline range reaches into the blob: refusing to read it")
         else:
-            if blob_rva is not None and t0e > blob_rva:
-                g.bad(9, "the trampoline range reaches into the blob: refusing to read it")
-            else:
-                good, seen, missing = sequence_ok(text)
-                g.check(9, good,
-                        "the cache and MMU sequence is present and in order, over %#x-%#x" % (t0s, t0e),
-                        "missing or out of order: %s (seen %s)" % (missing, seen))
+            good, seen, missing = sequence_ok(text_out)
+            g.check(9, good,
+                    "the cache and MMU sequence is present and in order, over %#x-%#x" % (t0s, t0e),
+                    "missing or out of order: %s (seen %s)" % (missing, seen))
 
     # item 10
     digest = sha256(a.pe)

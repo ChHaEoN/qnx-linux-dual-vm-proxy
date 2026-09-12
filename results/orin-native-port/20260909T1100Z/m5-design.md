@@ -217,13 +217,13 @@ Phase 3b. Architect pass, revision 2, 2026-09-11: revision 1 with the review out
 **Layout.** Our own code, written from the PE/COFF specification. The Linux header (GPL-2.0) is precedent only and is not copied.
 - A DOS header whose `e_lfanew` points at the PE header. Machine `0xAA64`. Characteristics `EXECUTABLE_IMAGE | LINE_NUMS_STRIPPED | DEBUG_STRIPPED` (`0x0206`), never `RELOCS_STRIPPED`.
 - A PE32+ optional header: ImageBase 0; SectionAlignment and FileAlignment `0x1000`; Subsystem 10 (EFI application); DllCharacteristics 0; six data directories, all zero.
-- One `.text` section, read-write-execute, holding the code, strings, the embedded kimg and a zero-filled pool. File offsets equal RVAs.
+- ~~One `.text` section, read-write-execute, holding the code, strings, the embedded kimg and a zero-filled pool.~~ **2026-09-12 (§13 decision L): two sections.** `.text` holds the code and the strings, read and execute. `.data` holds the writable statics and the embedded kimg, read and write, never executable. A single read-write-execute section is mapped non-writable by the firmware. File offsets equal RVAs.
 - Freestanding, position-independent code: PC-relative addressing only, no absolute address constants, no relocation records.
 
 **Gate** (`uefi/m5-gate.py`, run by `uefi/build-m5-loader.sh`; any miss fails the build):
 1. `MZ`, `PE\0\0`, Machine `0xAA64`, PE32+ magic `0x20b`, Subsystem 10.
 2. Characteristics bit `0x0001` clear. ImageBase 0, so outside the window.
-3. SectionAlignment and FileAlignment `0x1000`; one section; `SizeOfHeaders` `0x1000`; `SizeOfImage` page-aligned and covering the section.
+3. SectionAlignment and FileAlignment `0x1000`; ~~one section~~ **exactly two sections, a code section that is not writable and a data section that is not executable (2026-09-12, §13 L)**; `SizeOfHeaders` `0x1000`; `SizeOfImage` page-aligned and covering both sections.
 4. The entry RVA lies inside `.text`, before the embedded blob.
 5. Every data directory is zero.
 6. **Position independence, tested.** The linked ELF carries no relocation records, and linking at base 0 and at base `0x100000` produces byte-identical files.
@@ -883,5 +883,11 @@ Both writers are in both builds, so gate item 8 still holds: the T0 build and th
 **J. The exception handler after the exit (§3.3 step 11).** It is a diagnostic, not a control. It writes to the same console as the other post-exit tokens, so a fault taken while that console is unreachable can fault again. Accepted as it stands; §7.3's fault rows are unchanged.
 
 **K. Stale citations.** §3.3's and §4.2's `.gitignore` line numbers no longer match the file, because the `*.log` and `*.kimg` rules moved. They belong with Appendix A's list.
+
+**L. Two sections, not one (2026-09-12, decided by the first T0b run).** §3.4 asked for one read-write-execute section holding everything. Under QEMU's edk2 the loader faulted before printing a single token: a write permission fault at translation level 3 (ESR `0x9600004F`), on `str x20, [x19, #512]`, which is the store of the system table into the loader's first static. The firmware had mapped our one section non-writable, because UEFI image protection derives a section's page attributes from its characteristics, and a writable code section is not honoured.
+- **The layout now:** `.text` is code, read and execute; `.data` carries the writable statics and the embedded payload, read and write, never executable. File offsets still equal RVAs, and both sections stay page-aligned.
+- **The gate now checks it:** item 3 reads both sections' characteristics, so a writable code section or an executable data section fails the build. The defect cannot return unnoticed.
+- **Item 8 unchanged in intent:** the two builds still differ only in the payload, its three constants, and the header fields that follow the payload's size. Those offsets are read from the parsed header rather than hardcoded.
+- **Not a board finding:** no QNX byte was involved. The T0 build embeds the contract probe, and this is our own loader under QEMU.
 
 **What is not decided here.** The board session's terminal (`com3-term.ps1`, D7) is not part of this PC-only step, and neither is any board step.

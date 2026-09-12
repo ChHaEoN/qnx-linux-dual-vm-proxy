@@ -186,11 +186,8 @@ static int guid_eq(const EFI_GUID *a, const EFI_GUID *b)
 {
 	int i;
 
-	if (a->Data1 != b->Data1)
+	if (a->Data1 != b->Data1 || a->Data2 != b->Data2 || a->Data3 != b->Data3)
 		return 0;
-	for (i = 0; i < 2; i++)
-		if (a->Data2[i] != b->Data2[i] || a->Data3[i] != b->Data3[i])
-			return 0;
 	for (i = 0; i < 8; i++)
 		if (a->Data4[i] != b->Data4[i])
 			return 0;
