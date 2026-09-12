@@ -5,7 +5,7 @@
 # ineligible. Invented values in the traceprinter -n default layout; a test input, not a trace,
 # and no measured figure.
 # expect: M4C TIME64 mode=t64 time_events=4 mismatches=0 wraps=0 backsteps=0 backsteps64=0 unknown=0
-# expect: M4C RING state=wrapped wrapped_cpus=1 seq1_cpus=0,2
+# expect: M4C RING state=wrapped wrapped_cpus=1 seq1_cpus=0,2 short_tail_cpus=1,2
 # expect: M4C BUF cpu=2 first_seq=1 last_seq=3 kept=2 gaps=1 restarts=0
 # expect: M4C BUF cpu=1 first_seq=5 last_seq=5 kept=1 gaps=0 restarts=0
 # expect: M4C VCPU threads=1 pid=300 tid=4 cycles_events=3 unattributed_qvm=1

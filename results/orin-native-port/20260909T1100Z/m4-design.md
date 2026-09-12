@@ -1919,4 +1919,18 @@ The review narrowed what the pass shows:
 - sample the post-header unformatted lines in both implementations, instead of only counting them;
 - replace the tracked identifiers named in item 6 with placeholders.
 
+### 14.10 I27: the short tail is recorded, not gated (2026-09-13)
+
+§14.9 item 2 asked for an end-of-window condition on `ring=held`: every CPU with events must have a kept event at or after the end marker, or the window is not held. It was implemented in both implementations and then withdrawn as a gate, because a fixture refuted it.
+
+**What happened.** `m4fix-1` represents a healthy window: `state=held`, four CPUs, nothing wrapped. Its end marker sits at one time, and two of its CPUs emit events only at the very start and then idle, so their last event precedes the marker by a wide margin. The new rule called that window not held.
+
+**Why the rule cannot stand as written.** From the listing alone, a CPU that is idle for the rest of the window is indistinguishable from a CPU that lost its trailing buffer. Flushing writes the buffers that exist; it does not create events. Gating on this would refuse real captures, including any run with a parked or lightly loaded core, which this board has: the board's r1 run passed the rule only because all four CPUs happened to be busy at the end.
+
+**What is in place instead.** Both implementations track a per-CPU `short_tail`, and the `RING` record carries `short_tail_cpus`, naming every CPU whose events stop before the end marker. The r1 review's point is met - that evidence used to sit only in ungated `BUF last_t` fields - and it now appears in a record the parser and the counter cross-check, without failing a window that is merely idle.
+
+**What would gate it.** A signature that separates a lost tail from an idle CPU. The listing does not carry one today: a lost final buffer leaves no gap in the sequence numbers, because the numbers that survive are contiguous. Until the freeze decides otherwise, reporting is the honest option, and §14.9's follow-up list is amended accordingly.
+
+**Verification, stated plainly.** The parser half is exercised by `selftest` on this PC. The counter half is not: `tools/m4count` is an aarch64 ELF and this machine has no host C compiler, so the C change is checked by review only until the §11 TCG rehearsal or a board run. No other §14.9 item is implemented yet.
+
 **Records.** Every file the harness wrote into the record directory ends in `.log` or lies under `out/`, and a directory rule now covers the run directories as well. The figures and the full review are on the unpublished branch.

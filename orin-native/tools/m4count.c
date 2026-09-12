@@ -210,6 +210,7 @@ struct cpurec {
 	uint64_t anchor_t;
 	uint32_t anchor_line;
 	uint8_t  first_known;
+	uint8_t  short_tail;
 	uint8_t  restart_seen;
 	uint8_t  restart_timed;
 	uint8_t  anchor_known;
@@ -1570,6 +1571,14 @@ between_passes(void)
 			if (r->restart_seen && (!r->restart_timed || r->restart_t <= end_t)) {
 				clean = 0;
 			}
+			/* I27 (m4-design.md 14.9 item 2 and 14.10), in lockstep with
+			 * parse-m4.py. A CPU whose events stop before the end marker is
+			 * recorded, not refused: from the listing alone an idle CPU looks
+			 * exactly like one that lost its trailing buffer, because flushing
+			 * writes the buffers that exist and does not create events. */
+			if (!r->first_known || r->last_t < end_t) {
+				r->short_tail = 1;
+			}
 		}
 		if (any_wrapped) {
 			ring_state = RING_WRAPPED;
@@ -2059,8 +2068,9 @@ cpu_list(char *const buf, size_t const size, int const which)
 
 	buf[0] = '\0';
 	for (unsigned c = 0; c < MAX_CPUS; c++) {
-		int const hit = (which == 0) ? (cpus[c].events != 0u && cpus[c].wrapped)
-		                             : (cpus[c].kept != 0u && cpus[c].first_seq == 1u);
+		int const hit = (which == 0)   ? (cpus[c].events != 0u && cpus[c].wrapped)
+		                : (which == 1) ? (cpus[c].kept != 0u && cpus[c].first_seq == 1u)
+		                               : (cpus[c].events != 0u && cpus[c].short_tail);
 
 		if (hit) {
 			int const k = snprintf(buf + used, size - used, "%s%u", (used != 0u) ? "," : "", c);
@@ -2153,11 +2163,13 @@ records(void)
 
 	{
 		char wl[64];
+		char tl[64];
 
 		cpu_list(wl, sizeof(wl), 0);
 		cpu_list(list, sizeof(list), 1);
-		rec("M4C RING w=%s state=%s wrapped_cpus=%s seq1_cpus=%s\n", opt_label,
-		    (ring_state == RING_HELD) ? "held" : ((ring_state == RING_WRAPPED) ? "wrapped" : "unknown"), wl, list);
+		cpu_list(tl, sizeof(tl), 2);
+		rec("M4C RING w=%s state=%s wrapped_cpus=%s seq1_cpus=%s short_tail_cpus=%s\n", opt_label,
+		    (ring_state == RING_HELD) ? "held" : ((ring_state == RING_WRAPPED) ? "wrapped" : "unknown"), wl, list, tl);
 	}
 
 	if (!opt_quiet) {

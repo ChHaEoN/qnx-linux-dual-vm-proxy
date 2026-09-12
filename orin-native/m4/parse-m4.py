@@ -586,7 +586,8 @@ class Listing:
         self.ts = TimeState()
         self.cpu = [{"events": 0, "first_seq": 0, "last_seq": 0, "prev_seq": 0, "kept": 0, "gaps": 0,
                      "restarts": 0, "max_events": 0, "first_t": None, "last_t": None,
-                     "restart_seen": False, "restart_t": None, "wrapped": False} for _ in range(MAX_CPUS)]
+                     "restart_seen": False, "restart_t": None, "wrapped": False,
+                     "short_tail": False} for _ in range(MAX_CPUS)]
         self.mk = {"start": None, "end": None}
         self.mk_dup = 0
         self.hist = {}
@@ -914,6 +915,15 @@ class Listing:
                     clean = False
                 if r["restart_seen"] and (r["restart_t"] is None or r["restart_t"] <= self.end_t):
                     clean = False
+                # I27 (m4-design.md 14.9 item 2 and 14.10), in lockstep with
+                # m4count.c. A CPU whose events stop before the end marker is
+                # recorded, not refused: from the listing alone an idle CPU
+                # looks exactly like one that lost its trailing buffer, because
+                # flushing writes the buffers that exist and does not create
+                # events. Gating on it failed m4fix-1, a healthy window whose
+                # CPUs 2 and 3 idle after the start.
+                if r["last_t"] is None or r["last_t"] < self.end_t:
+                    r["short_tail"] = True
             if any_wrapped:
                 self.ring = "wrapped"
             elif self.start_t < self.end_t and clean:
@@ -1149,8 +1159,10 @@ class Listing:
                          ("dup", self.mk_dup)])
         wrapped = [str(c) for c, r in enumerate(self.cpu) if r["events"] and r["wrapped"]]
         seq1 = [str(c) for c, r in enumerate(self.cpu) if r["kept"] and r["first_seq"] == 1]
+        short_tail = [str(c) for c, r in enumerate(self.cpu) if r["events"] and r["short_tail"]]
         add("RING", [("state", self.ring), ("wrapped_cpus", ",".join(wrapped) or "none"),
-                     ("seq1_cpus", ",".join(seq1) or "none")])
+                     ("seq1_cpus", ",".join(seq1) or "none"),
+                     ("short_tail_cpus", ",".join(short_tail) or "none")])
         if not quiet:
             for c, bf, ev, span in self.rate:
                 add("RATE", [("cpu", c), ("bufs_in_window", bf), ("events_in_window", ev),

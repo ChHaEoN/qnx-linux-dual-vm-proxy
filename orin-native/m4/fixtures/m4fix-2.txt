@@ -6,7 +6,7 @@
 # Invented values in the traceprinter -n default layout; a test input, not a trace, and no
 # measured figure.
 # expect: M4C TIME64 mode=rebuilt time_events=1 mismatches=0 wraps=1 backsteps=0 backsteps64=0 unknown=0
-# expect: M4C RING state=held wrapped_cpus=none seq1_cpus=0
+# expect: M4C RING state=held wrapped_cpus=none seq1_cpus=0 short_tail_cpus=none
 # expect: M4C BUF cpu=0 first_seq=1 last_seq=1 kept=1 gaps=0 restarts=0
 # expect: M4C TRIPLES complete=6 broken=0 alt_order=0 order_ok=5 order_violated=1 in_window=6
 # expect: M4C PAIRS total=5 eligible=2 clean=2 pre=0 blk=0 mig=0 unk=0 broken_between=0 order_violated=2 status_nonzero=0 negative=1 out_of_window=0 not_held=0 untimed=0 capped=0
