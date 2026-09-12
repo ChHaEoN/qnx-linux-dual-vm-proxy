@@ -11,7 +11,10 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 
 ## 2026-09-11 — M4-F: the trace instrument works on the board (r0 and r1), with a partial cross-check
 
-Both functional rungs of M4 passed on the Orin Nano. r0 ran the trace tools under the EL2 host without qvm. r1 ran
+Both functional rungs of M4 passed on the Orin Nano, though under different instrument versions. r0 ran the trace
+tools under the EL2 host without qvm. Its own harness verdict was a fail, caused by a parser defect (I24) rather than
+the board; its pass comes from an offline re-parse with the fixed parser, and re-validating r0 under the instruments
+the freeze will gate is now a freeze-gate item. r1 ran
 M3's full run with a trace window around the IPC pair. Its first attempt stopped at the memory gate before the trace
 was armed. The sizing rules had costed the linear window, which r0's rates selected, as a 512-buffer ring. That was
 an implementation defect, I26: tracelogger's own usage message gives a linear capture's defaults. The fix changed
@@ -20,7 +23,7 @@ only that gate value, and the rerun passed every criterion of m4-design §2.2.
 What the board showed:
 - qvm's Class-10 IDs 0, 1 and 7 were emitted and paired, with one vCPU thread, one clock offset, no order violation
   and no time mismatch.
-- `trcctl -x` stopped the linear capture, and every CPU's tail reached the file.
+- `trcctl -x` stopped the linear capture, and every CPU's tail reached the file, on this one run.
 - Both listings crossed the TCU intact.
 - The image reset itself back to L4T.
 

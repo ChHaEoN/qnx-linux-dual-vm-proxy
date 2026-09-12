@@ -392,7 +392,7 @@ Quick summary for context:
   Dry run 7b is done (2026-09-11): inside a rebuilt TCG QHV host image, qvm's Class-10 IDs 0, 1 and 7 are emitted at default settings, and the plan's ring flags turned out to keep only a short tail (-k, not -S, sizes a ring); record unpublished. ~~Still ahead: the per-exit number on the board (M4).~~ **Decision 2026-09-11 (owner, option B):** each design
   change so far replaced the whole architecture (TCG, then QHV inside TCG, then the native QNX Hypervisor), so earlier
   measurements become architecture-version history, kept and not chased. ~~Still ahead, in order: M4 functional (r0 and
-  r1: the trace instrument works on the board; the timed r2 waits);~~ **2026-09-11: M4-F met.** r0 and r1 passed
+  r1: the trace instrument works on the board; the timed r2 waits);~~ **2026-09-11: M4-F met** (under two different instrument versions: r0's pass is an offline re-parse and its image needs a rebuild, now a freeze-gate item). r0 and r1 passed
   functionally; r1 needed the I26 sizing fix, and its PC cross-check covered only the delivered part of a capped
   listing (m4-design.md §14.8-14.9). Still ahead, in order: M5 functional (a UEFI cold boot that reaches
   startup; the median comparison waits); S1 functional (a Linux guest without a GPU under native qvm); freeze
@@ -473,7 +473,7 @@ Quick summary for context:
    one campaign.** The release-aligned QHV pair this item asked for ran on
    2026-09-09 ([docs/findings.md](docs/findings.md)). It is now A3 history,
    and the twin diff is re-run inside the campaign. In order: ~~M4-F (r0 and
-   r1, after m4-design's §11 TCG rehearsal),~~ M4-F (**met 2026-09-11**), M5-F (a UEFI cold boot that
+   r1, after m4-design's §11 TCG rehearsal),~~ M4-F (**met 2026-09-11**, with the r0 instrument caveat in the plan), M5-F (a UEFI cold boot that
    reaches startup), S1-F (a Linux guest without a GPU under native qvm).
    Then settle the freeze gate and write the v1 manifest. Then run the
    single campaign, native leg and both TCG twin legs, every record stamped

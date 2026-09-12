@@ -394,18 +394,18 @@ Publication is unchanged by this section. §9's open item on already-published n
 
 #### The revised ladder
 
-M0, M1, M2, M1b and M3 (met) → **M4-F** (met 2026-09-11) → **M5-F** → **S1-F** → **freeze v1** → **campaign**.
+M0, M1, M2, M1b and M3 (met) → **M4-F** (met 2026-09-11, with the r0 instrument caveat below) → **M5-F** → **S1-F** → **freeze v1** → **campaign**.
 
 Every rung up to the freeze is functional: it passes or fails on what appears, never on a figure. A rung still keeps what its instruments print, but those figures are not judged, not reported and not carried into the campaign.
 
 **M4-F: the trace instrument works on the board (r0, r1).** The rungs are defined in [m4-design.md](../results/orin-native-port/20260909T1100Z/m4-design.md) §2.
-- **Before r0:** m4-design's §11 TCG rehearsal passes (its decision N7).
+- **Before r0:** m4-design's §11 TCG rehearsal passes (its decision N7). **2026-09-11:** it covered the ring variants. The linear stop path and the I26 gate had no rehearsal variant, and the owner waived a rehearsal before r1's rerun.
 - **r0** runs the trace tools under the EL2 host with no qvm. It passes on the ten gates of m4-design §2.1: landing and startup, the state sequence, the clock verdicts, the counter fixtures, the probe stop, the memory lines, the rate lines, the tool bounds, the TCU transfer and the reset. The memory, rate and speed lines feed r1's image parameters (m4-design §2.4). Their values are sizing inputs, not results.
-- **r1** runs M3's full run inside that ring. **(2026-09-11: as run, inside the linear contingency D1(b), because r0's rates exceeded a 512-buffer ring.)** It passes on the six gates of m4-design §2.2:
+- **r1** runs M3's full run inside that window. **(2026-09-11: as run, the linear contingency D1(b); the sizing rule returned `lin`.)** It passes on the six gates of m4-design §2.2:
   - M3's pass criteria, including the banner and the completed IPC pair;
   - the trace arm, stop and file lines;
   - Class-10 IDs 0, 1 and 7 counted above zero on the board, with one vCPU thread, one offset, and no order violations or time mismatches;
-  - a ring that held;
+  - a window that held;
   - the on-target counter and the PC's parse agreeing pair for pair;
   - both transfer checks.
 
@@ -414,6 +414,7 @@ Every rung up to the freeze is functional: it passes or fails on what appears, n
 - **Deferred to the campaign:** r2 (Q and T1-T5), m4-design's P2-P5, r2's sizing, the PMCCNTR rung (its decision D6(b)) and the emulated Orin-TCG counterpart.
 - **Sizing caveat:** m4-design sizes each rung from the record of the one before (§2.4). If v1 changes the host image, the CPU set or the guest set, r0's and r1's sizing records go stale. The campaign then runs its own sizing rungs on v1.
 - **Met 2026-09-11.** r0 and r1 passed functionally ([m4-design.md](../results/orin-native-port/20260909T1100Z/m4-design.md) §14.6, §14.8-14.9).
+  - **Instrument caveat:** the two rungs passed under different instrument versions. r0's pass is an offline re-parse under a parser that is in no commit, its record does not re-parse under today's parser, and its image needs a rebuild (I25). Re-validating r0 under the frozen instruments is a freeze-gate item.
   - **r1's first attempt** stopped at the memory gate on a sizing defect (I26), and the rerun passed every gate.
   - **An independent review** found no blocker, but it narrowed the claim:
     - r1's PC cross-check covered only the early part of a capped listing;
@@ -460,7 +461,7 @@ v1 is frozen when all of these are settled and written into the manifest:
 6. **Memory map:** the first window, the second window, and the GPU range kept out.
 7. **Guest device sets,** chosen so that no fixed guest wait falls inside a timed interval. [digital-twin-design.md](digital-twin-design.md) §1a shows the rng device's effect under TCG.
 8. **Guest disk:** the RQ-2 diagnostic variant, or one regenerated from clean sources.
-9. **Instruments:** frozen at their source hashes, rehearsed under TCG, parser self-tests passing. **2026-09-11:** this includes m4-design §14.9's gate fixes, and either a whole-window M4 cross-check or the owner's acceptance of r1's partial one.
+9. **Instruments:** frozen at their source hashes, rehearsed under TCG, parser self-tests passing. **2026-09-11:** this includes m4-design §14.9's gate fixes; either a whole-window M4 cross-check or the owner's acceptance of r1's partial one; a rebuilt `m4-r0`, re-validated under the frozen instruments, so both M4-F rungs stand under one version; and three decisions to settle or drop, namely N18, the linear flush-activity record of contingency C2, and the final E3 rule.
 10. **TCG twin legs:** the QEMU release and build on each side, the device set, and `-snapshot`.
 11. **Sample sizes** for every campaign measurement, including the IPC iteration count, and the rules that derive them (m4-design §2.4 for the dwell).
 12. **Stamping and re-runs:** the version stamp and the re-run rule below.
@@ -771,7 +772,7 @@ still run against the black box, at roughly one question per reboot cycle — cl
 | M1 — procnto + user space, then M1b | 3-7 | HIGH | First QNX instruction ever on Tegra234; EL2/GIC/raminfo interactions; blind debugging doubles it. **M1 and M1b met 2026-09-10** |
 | M2 — SMP | 1-2 | LOW-MED | Both known pitfalls pre-empted; cluster-1 wake UNKNOWN. **Met 2026-09-10** |
 | M3 — QHV host + guest, ~~first number~~ | 2-6 | MED-HIGH | ~~INTID 28~~ (wired, M1b); stage-2/ICH on real silicon; ~~plus the watchdog policy, now on the critical path~~ (WDT0 does not fire after kexec). **Met 2026-09-10.** **2026-09-11: a functional pass; its measurement moves to the v1 campaign ([§6](#architecture-versions-and-the-measurement-freeze-decided-2026-09-11))** |
-| M4 — ~~qvm-trace~~ **M4-F: r0, r1 (2026-09-11; met 2026-09-11)** | 1-3 | LOW-MED | The dry run (done 2026-09-11); then ~~11 KB/s transport and the parser~~ **the transport and parser that m4-design.md specifies, exercised by r0 and r1. r2's timed runs move to the campaign (2026-09-11, [§6](#architecture-versions-and-the-measurement-freeze-decided-2026-09-11))** |
+| M4 — ~~qvm-trace~~ **M4-F: r0, r1 (met 2026-09-11; r0 under earlier instruments)** | 1-3 | LOW-MED | The dry run (done 2026-09-11); then ~~11 KB/s transport and the parser~~ **the transport and parser that m4-design.md specifies, exercised by r0 and r1. r2's timed runs move to the campaign (2026-09-11, [§6](#architecture-versions-and-the-measurement-freeze-decided-2026-09-11))** |
 | M5 — ~~optional UEFI cross-check~~ **M5-F: UEFI cold boot to startup (2026-09-11)** | 2-5 | HIGH | PE ImageBase/relocation, `mkifsf_uefi` behaviour. **The median comparison moves to the campaign (2026-09-11, [§6](#architecture-versions-and-the-measurement-freeze-decided-2026-09-11))** |
 | S1-F — Linux guest, no GPU, native qvm **(added 2026-09-11)** | 1-3 weeks after M3 (the research track's estimate, HYPOTHESIS) | not rated | qvm's handling of an arm64 kernel, its device tree and PSCI; ownership of the second RAM window ([§6](#architecture-versions-and-the-measurement-freeze-decided-2026-09-11)) |
 | Freeze v1 **(added 2026-09-11)** | not estimated | UNKNOWN | The owner's settings for the freeze gate; writing the manifest |
