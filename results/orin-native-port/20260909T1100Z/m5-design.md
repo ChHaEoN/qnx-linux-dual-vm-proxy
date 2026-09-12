@@ -420,7 +420,7 @@ Facts only. The decision is D6.
 
 Run §8 in full, with the owner present (§8 item 16).
 - Its board items are read-only.
-- Its bench items (12-14) include the 3.3 V check and the TX wire onto J14 pin 3. They are the only control against F37 (§7.1), so the owner does them, or someone the owner has authorised does them with the owner present.
+- Its bench items (12-14) include the 3.3 V check and the TX wire onto J14 pin 3. They are the only control against F37 (§7.1), so the owner does them, or someone the owner has authorised does them with the owner present. **2026-09-12:** item 12 is now the owner's confirmation of the jumper setting, not a meter reading (their decision).
 
 ### 6.3 S1: staging and baseline (L4T; one ESP file and nothing else)
 
@@ -561,7 +561,7 @@ No durations. The note is kept like M3's record: private until the 4.6(i) consul
 - A capsule applied from the ESP: §7.4. The firmware processes an on-disk capsule and resets when its flag is set (NV `PlatformBm.c` ~1773-1800).
 - A damaged `BOOTAA64.efi` or ESP: §6.3's backups and hash checks, and staging to the ESP root only.
 - Secure Boot keys or a menu password: §7.4.
-- Electrical damage to pin 3: §8 item 12, the 3.3 V check, done by or under the owner (§8 item 16).
+- Electrical damage to pin 3: §8 item 12, the 3.3 V check, done by or under the owner (§8 item 16). **2026-09-12:** with no meter reading, that control is the jumper setting alone.
 
 ### 7.2 Recovery classes
 
@@ -686,7 +686,7 @@ A stale instruction-cache line over the target (R33) has no signature of its own
 11. `od -An -tx1 /proc/device-tree/reserved-memory/ramoops_carveout/reg` still gives base `0x2_725F0000` and size `0x200000` (r/blackbox-verified.md:15-20). `df /boot/efi` shows room for the file several times over.
 
 **Bench**
-12. The adapter's logic level is 3.3 V: its jumper is set, and a meter on its TX pin reads no more than 3.4 V with the adapter on USB and wired to nothing.
+12. The adapter's logic level is 3.3 V: its jumper is set, ~~and a meter on its TX pin reads no more than 3.4 V with the adapter on USB and wired to nothing~~. **2026-09-12 (owner decision): the jumper setting is the control, and no meter reading is taken.** The owner confirms the jumper is set to 3.3 V. TX to ground is never measured, so R29 stays unverified and the only control against F37 is the setting itself. The item returns to a measurement if the adapter is replaced.
 13. Pins counted from J14 pin 1: RX on pin 4 and GND on pin 7, as before; TX onto pin 3 only after item 12 passes. Nothing on pins 8, 10 or 12. No VCC wire.
 14. DC power can be removed and restored by hand, within reach (D5).
 
@@ -729,7 +729,7 @@ A stale instruction-cache line over the target (R33) has no signature of its own
 | R26 | The R36.4.4 L4T binaries read for C8 equal the board's | HYPOTHESIS (same sizes) | Not needed: T0 and P3 test the loader itself |
 | R27 | QEMU's edk2 publishes a device-tree table without `acpi=off` | UNKNOWN | T0b |
 | R28 | `vvfat` accepts a Windows directory | HYPOTHESIS (the driver is present) | T0b |
-| R29 | The adapter's logic is 3.3 V | UNKNOWN until measured | §8 item 12 |
+| R29 | The adapter's logic is 3.3 V | ~~UNKNOWN until measured~~ **UNKNOWN, and it will not be measured (owner decision, 2026-09-12).** The jumper is set to 3.3 V, which on a common FT232RL breakout sets VCCIO, so 3.3 V logic follows from the setting but nothing on this bench confirms it. The owner accepts the residual risk to J14 pin 3 | §8 item 12 |
 | R30 | The NVMe install boots, as a route to repair the ESP | UNKNOWN (never booted, r/harvest-orin.md:74) | Its entry: §8 item 7. Its ESP's `BOOTAA64.efi`: §6.5 step 5. That it boots: only on F35, or in D12's optional session |
 | R31 | Linux does not Oops in the `poweroff` before each cold boot | HYPOTHESIS (§8 item 6) | Each power-off |
 | R32 | The operator follows the menus without a stray choice | — | The key logs; the snapshots; §7.4 |
@@ -850,3 +850,38 @@ No board was contacted, and no QNX-shipped binary was read.
 - **V4:** the `LX` path prefix; §0 "Chosen path"; §1 C4; §2 rule 3; §3.3 steps 1, 12 and 13; §3.4 gate item 9 (the old item 9 is now 10); §3.5 (a new row); §4.2 (two rows); §5.1 T1; §7.3 (a note after F24); §9 R17 and the new R33; §12 Q16.
 - **V5:** §0 "Why A" item 3; §3.1 option A; §3.2 item 4; §6.1's T0 pass line; §11 D1.
 - **Also:** the header.
+
+---
+
+## 13. Implementation decisions (2026-09-12)
+
+These close what §3.3, §3.4 and §6.1 leave to the implementer, before any of it is written. They are adopted by default, as §11's decisions are, and the owner can overturn any of them.
+
+**A. D1 is taken as accepted.** The owner told the orchestrator to continue with M5 on 2026-09-12, and §11 recommends option A. Everything below assumes it: our loader carries the pinned kimg, and the firmware never loads a QNX PE. The plan's M5-F block described an option-B-shaped pass line and named the plan's unknown #12 as a prerequisite; both are corrected there, and #12 stays desk work (§12 Q8).
+
+**B. Toolchain.** The QNX SDP's `ntoaarch64-` cross tools, as the shim build uses, with Python 3 for the gate. No other AArch64 toolchain is installed on this PC, and the design's only toolchain statement points at the shim's.
+
+**C. The post-exit console.** §3.3 sends every token after `ExitBootServices` to the TCU TX mailbox. That address does not exist on QEMU's `virt`, so T0c would print nothing, and a store to it could fault into the loader's own handler, which writes to the same address. The loader therefore chooses its post-exit console once, at step 2, from the device tree it already reads:
+- a root `compatible` naming Tegra 234 selects the TCU mailbox writer, which is the board path and is unchanged;
+- otherwise the loader takes a PL011 base from `stdout-path`, or from the first `arm,pl011` node, and uses a plain data-register writer;
+- if neither is found, the post-exit tokens are dropped, and `M5L start` says which console was chosen.
+
+Both writers are in both builds, so gate item 8 still holds: the T0 build and the board build differ only in the blob and its two constants.
+
+**D. The tail between the blob and `image_size`.** The kimg is shorter than its header's `image_size`, so the allocation exceeds the file. The loader zeroes that tail after the copy. Both CRC32 constants cover the file's bytes only, and the gate's size constant is the file length; `image_size` comes from the header and is what the allocation covers.
+
+**E. Tokens.** Step 4's kimg-header refusal prints `M5L REFUSE kimg`. In `go`, the loader prints the same lines `check` prints before `M5L GO`, so the two records compare line by line.
+
+**F. LoadOptions.** UCS-2, trimmed, compared case-insensitively against `go`, with a leading image path ignored. Anything else, including an empty or malformed option, means `check`. Ambiguity never resolves to `go`.
+
+**G. Gate item 6.** The build script links twice, at base 0 and at `0x100000`, into a scratch directory, and the gate compares the two files byte for byte. The link base is a linker argument, not a second linker script.
+
+**H. The T0 probe.** It prints on the PL011 that the device tree names, then asks for PSCI `SYSTEM_OFF` over HVC, and falls back to a WFI loop if that returns. `run-t0.ps1` bounds every case with its own timeout regardless.
+
+**I. Where T0's records go.** `results/orin-native-port/<utc>/m5/`, git-ignored as a directory since 2026-09-11. The record names QEMU's full build string, not just its release.
+
+**J. The exception handler after the exit (§3.3 step 11).** It is a diagnostic, not a control. It writes to the same console as the other post-exit tokens, so a fault taken while that console is unreachable can fault again. Accepted as it stands; §7.3's fault rows are unchanged.
+
+**K. Stale citations.** §3.3's and §4.2's `.gitignore` line numbers no longer match the file, because the `*.log` and `*.kimg` rules moved. They belong with Appendix A's list.
+
+**What is not decided here.** The board session's terminal (`com3-term.ps1`, D7) is not part of this PC-only step, and neither is any board step.
