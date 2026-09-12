@@ -9,6 +9,36 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-11 — M4-F: the trace instrument works on the board (r0 and r1), with a partial cross-check
+
+Both functional rungs of M4 passed on the Orin Nano. r0 ran the trace tools under the EL2 host without qvm. r1 ran
+M3's full run with a trace window around the IPC pair. Its first attempt stopped at the memory gate before the trace
+was armed. The sizing rules had costed the linear window, which r0's rates selected, as a 512-buffer ring. That was
+an implementation defect, I26: tracelogger's own usage message gives a linear capture's defaults. The fix changed
+only that gate value, and the rerun passed every criterion of m4-design §2.2.
+
+What the board showed:
+- qvm's Class-10 IDs 0, 1 and 7 were emitted and paired, with one vCPU thread, one clock offset, no order violation
+  and no time mismatch.
+- `trcctl -x` stopped the linear capture, and every CPU's tail reached the file.
+- Both listings crossed the TCU intact.
+- The image reset itself back to L4T.
+
+An adversarial review of the pass (16 read-only agents) found no blocker, but it narrowed what the pass shows:
+- **A partial cross-check:** the 1 MiB verbatim block was capped, so the PC's pair-for-pair check covered only the
+  early part of the window, and the statistics cross-check did not run.
+- **Ungated flush evidence:** the evidence that every CPU's tail was flushed sits in fields no gate reads.
+- **Weaker gates:** several parser gates are weaker than the design's wording. They must be fixed before the
+  campaign's timed runs rely on them.
+
+Every GUEST_EXIT on the board carried a non-zero status whose low bits equal the ESR exception class, as under TCG,
+so r1's E3=none stands. The review also found that the harness's COM3 redaction misses the board hostname in its
+local, git-ignored copies.
+
+Under the freeze decision these are functional results, not measurements. The run records and figures are on the
+local branch `m3-results-unpublished`. Next on the M path: M5-F. Details are in
+[m4-design.md](../results/orin-native-port/20260909T1100Z/m4-design.md) §14.8-14.9.
+
 ## 2026-09-11 — Owner answers on the freeze decision's open points, and a stale-document cleanup
 
 The owner answered four points the plan's freeze section had flagged, and asked for stale documents to be cleaned up.

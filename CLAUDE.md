@@ -391,8 +391,10 @@ Quick summary for context:
   measured figure are on the local, unpushed branch m3-results-unpublished until the 4.6(i) consultation; the repo is public.
   Dry run 7b is done (2026-09-11): inside a rebuilt TCG QHV host image, qvm's Class-10 IDs 0, 1 and 7 are emitted at default settings, and the plan's ring flags turned out to keep only a short tail (-k, not -S, sizes a ring); record unpublished. ~~Still ahead: the per-exit number on the board (M4).~~ **Decision 2026-09-11 (owner, option B):** each design
   change so far replaced the whole architecture (TCG, then QHV inside TCG, then the native QNX Hypervisor), so earlier
-  measurements become architecture-version history, kept and not chased. Still ahead, in order: M4 functional (r0 and
-  r1: the trace instrument works on the board; the timed r2 waits); M5 functional (a UEFI cold boot that reaches
+  measurements become architecture-version history, kept and not chased. ~~Still ahead, in order: M4 functional (r0 and
+  r1: the trace instrument works on the board; the timed r2 waits);~~ **2026-09-11: M4-F met.** r0 and r1 passed
+  functionally; r1 needed the I26 sizing fix, and its PC cross-check covered only the delivered part of a capped
+  listing (m4-design.md §14.8-14.9). Still ahead, in order: M5 functional (a UEFI cold boot that reaches
   startup; the median comparison waits); S1 functional (a Linux guest without a GPU under native qvm); freeze
   reference architecture v1; then one measurement campaign on it (the M3 and M4 numbers, the M5 comparison, the twin
   diff), every record stamped with the version. ~~Awaiting the owner's confirmation: the M path ends at M5's functional
@@ -470,8 +472,8 @@ Quick summary for context:
    **2026-09-11 (owner decision): take Phase 3b to the v1 freeze, then run
    one campaign.** The release-aligned QHV pair this item asked for ran on
    2026-09-09 ([docs/findings.md](docs/findings.md)). It is now A3 history,
-   and the twin diff is re-run inside the campaign. In order: M4-F (r0 and
-   r1, after m4-design's §11 TCG rehearsal), M5-F (a UEFI cold boot that
+   and the twin diff is re-run inside the campaign. In order: ~~M4-F (r0 and
+   r1, after m4-design's §11 TCG rehearsal),~~ M4-F (**met 2026-09-11**), M5-F (a UEFI cold boot that
    reaches startup), S1-F (a Linux guest without a GPU under native qvm).
    Then settle the freeze gate and write the v1 manifest. Then run the
    single campaign, native leg and both TCG twin legs, every record stamped
