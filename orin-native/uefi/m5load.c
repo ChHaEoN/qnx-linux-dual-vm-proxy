@@ -432,13 +432,28 @@ EFI_STATUS m5_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *st)
 			break;
 		}
 	}
-	if (fdt == 0 || be32(fdt) != 0xd00dfeedu) {
-		refuse("fdt");
+	/* One token per reason. "REFUSE fdt" alone cannot tell a firmware that
+	 * published no device tree from a tree we misread, and that difference
+	 * decides whether the machine or the loader is at fault. */
+	if (fdt == 0) {
+		b_reset();
+		b_str("M5L fdt tables=");
+		b_dec((UINT64)st->NumberOfTableEntries);
+		b_out();
+		refuse("fdt reason=absent");
+		return EFI_UNSUPPORTED;
+	}
+	if (be32(fdt) != 0xd00dfeedu) {
+		b_reset();
+		b_str("M5L fdt magic=");
+		b_hex(be32(fdt));
+		b_out();
+		refuse("fdt reason=magic");
 		return EFI_UNSUPPORTED;
 	}
 	fdt_size = be32(fdt + 4);
 	if (fdt_size > (16ull << 20)) {
-		refuse("fdt");
+		refuse("fdt reason=size");
 		return EFI_UNSUPPORTED;
 	}
 	b_reset();

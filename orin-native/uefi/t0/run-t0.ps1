@@ -10,7 +10,9 @@
   Cases:
     T0b  -m 8G, `check`                  -> M5L CHECK PASS, then the Shell
     T0c  -m 8G, `check` then `go`        -> M5L-EBS ok, M5L-JUMP, PROBE ...
-    T0d  -m 1536M, `check`               -> M5L REFUSE window reason=gap
+    T0d  -m 1536M, `check`               -> M5L REFUSE window: observed
+           reason=type, because at 1536M the firmware's runtime services sit
+           inside the window
     T0e  a blob byte flipped, `check`    -> M5L REFUSE crc src
     T0f  virtualization=off, `go`        -> M5L REFUSE el=1
 
@@ -22,14 +24,14 @@
 
 .EXAMPLE
   powershell -NoProfile -ExecutionPolicy Bypass -File orin-native\uefi\t0\run-t0.ps1
-  powershell -NoProfile -ExecutionPolicy Bypass -File orin-native\uefi\t0\run-t0.ps1 -Case T0c -AcpiOff
+  powershell -NoProfile -ExecutionPolicy Bypass -File orin-native\uefi\t0\run-t0.ps1 -Case T0c -AcpiOn
 #>
 
 param(
   [ValidateSet('all', 'T0b', 'T0c', 'T0d', 'T0e', 'T0f')][string]$Case = 'all',
   [string]$Qemu = 'E:\qemu-versions\qemu-11.1.0\qemu-system-aarch64.exe',
   [ValidateRange(10, 600)][int]$TimeoutSeconds = 90,
-  [switch]$AcpiOff,
+  [switch]$AcpiOn,
   [string]$OutDir
 )
 
@@ -63,11 +65,18 @@ function New-Esp {
 
   if ($CorruptBlob) {
     # T0e's negative control: flip one byte inside the embedded payload, so the
-    # source CRC must refuse. The offset is the last page of the file, which is
-    # always blob, never header or code.
+    # source CRC must refuse.
+    #
+    # Not the end of the file. The first attempt flipped 64 bytes from the end
+    # and the loader answered CHECK PASS, correctly: the payload is padded to a
+    # page and the CRC covers the payload's own length only (design 13 D), so
+    # the flip landed in padding. The blob starts at RVA 0x6000, file offsets
+    # equal RVAs, and the T0 payload is several hundred bytes, so 0x6100 is
+    # inside it.
     $path = Join-Path $esp 'M5LOAD.EFI'
     $bytes = [System.IO.File]::ReadAllBytes($path)
-    $i = $bytes.Length - 64
+    $i = 0x6100
+    if ($i -ge $bytes.Length) { throw "T0e: offset $i is past the image ($($bytes.Length) bytes)" }
     $bytes[$i] = $bytes[$i] -bxor 0xFF
     [System.IO.File]::WriteAllBytes($path, $bytes)
   }
@@ -87,8 +96,12 @@ function Invoke-Case {
   Copy-Item $vars $scratchVars -Force
 
   $virt = if ($NoVirt) { 'off' } else { 'on' }
+  # acpi=off is required, not optional. With ACPI on, QEMU's edk2 publishes no
+  # device-tree configuration table at all and the loader refuses fdt; with it
+  # off the tree appears and check passes (T0b, 2026-09-12: the design's Q2).
+  # -AcpiOn exists only to reproduce that refusal.
   $machine = "virt,virtualization=$virt,gic-version=3"
-  if ($AcpiOff) { $machine += ',acpi=off' }
+  if (-not $AcpiOn) { $machine += ',acpi=off' }
 
   $qargs = @(
     '-M', $machine,

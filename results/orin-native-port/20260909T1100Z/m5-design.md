@@ -404,17 +404,17 @@ Facts only. The decision is D6.
    - a `fat:` drive holding the T0 build (the `vvfat` driver is present, VERIFIED);
    - serial output to a per-case log, and a timeout.
 
-   In QEMU only, a `startup.nsh` on that FAT drive types the Shell commands. **Never on the board** (§7.4). If QEMU's edk2 publishes no device-tree table, the machine gains `acpi=off` (UNKNOWN which is needed).
+   In QEMU only, a `startup.nsh` on that FAT drive types the Shell commands. **Never on the board** (§7.4). If QEMU's edk2 publishes no device-tree table, the machine gains `acpi=off` ~~(UNKNOWN which is needed)~~. **2026-09-12, answered by T0b: it is needed.** With ACPI on, the firmware publishes no device-tree table and the loader refuses `fdt`; with `acpi=off` the tree is published and `check` passes. `run-t0.ps1` now passes `acpi=off` for every case, and keeps a switch only to reproduce the refusal.
 
 | Case | Setup | Expected |
 |---|---|---|
 | T0b | `-m 8G`; `M5LOAD.EFI check` | `M5L CHECK PASS`, then the Shell prompt. A `REFUSE window` here means QEMU's own allocations sit in the window: record it, raise `-m`, rerun |
 | T0c | as T0b, then `M5LOAD.EFI go` | `M5L-EBS ok`, `M5L-JUMP`, then `PROBE EL=2`, `X1`-`X3` zero, `MAGIC=ok`, `SCTLR_EL2` with M, C and I clear, DAIF all set, `PC` = `80080000`. If QEMU enters apps at EL1, the loader must refuse instead (`REFUSE el=1`); record "EL2 path not testable in QEMU" |
-| T0d | `-m 1536M`, so RAM ends below the window's top | `M5L REFUSE window reason=gap`, then the Shell prompt |
+| T0d | `-m 1536M`, so RAM ends below the window's top | ~~`M5L REFUSE window reason=gap`~~, then the Shell prompt. **2026-09-12, observed: `M5L REFUSE window reason=type`.** At this memory size the firmware places RuntimeServices code and data inside the window, so the rule refuses on type before any gap is reached. The refusal is correct; the expectation was wrong |
 | T0e | a scratch copy of the T0 build with one blob byte flipped | `M5L REFUSE crc src`, then the Shell prompt |
 | T0f | `virtualization=off`; `go` | `M5L REFUSE el=1`, then the Shell prompt |
 
-**T0 passes** when T0a-T0f end as stated, or when T0c is recorded as "EL1 in QEMU" and T0f passes. No QNX byte runs in QEMU. A T0 pass says nothing about cache coherency after the copy (§3.2 item 4): the gate's static check (§3.4 item 9) and R1 cover it.
+**T0 passes** when T0a-T0f end as stated, or when T0c is recorded as "EL1 in QEMU" and T0f passes. **2026-09-12: T0 passed.** T0a's gate passes on both builds. T0b reaches `M5L CHECK PASS`. T0c reaches `M5L-EBS ok`, `M5L-JUMP` and a `PROBE` line whose every contract item holds, at EL2, so the relaxed "EL1 in QEMU" branch was not needed. T0d, T0e and T0f refuse as they should, with the T0d correction above and after a harness defect in T0e was fixed: it had flipped a byte in the payload's page padding, which the CRC does not cover, and the loader rightly passed. Four defects in the loader were found by running it, none by reading it: a folded link-time constant, a pointer table, a single read-write-execute section the firmware refuses to map writable, and GUID fields declared as bytes. The record is private, under §13 decision I. No QNX byte runs in QEMU. A T0 pass says nothing about cache coherency after the copy (§3.2 item 4): the gate's static check (§3.4 item 9) and R1 cover it.
 
 ### 6.2 P1: pre-flight
 
@@ -776,8 +776,8 @@ A stale instruction-cache line over the target (R33) has no signature of its own
 
 | # | Question | Closes by |
 |---|---|---|
-| Q1 | Does QEMU's edk2 load the header, and does it enter applications at EL2? | T0b, T0c |
-| Q2 | Does QEMU's edk2 need `acpi=off` before it publishes the device-tree table? | T0b |
+| Q1 | ~~Does QEMU's edk2 load the header, and does it enter applications at EL2?~~ **Answered 2026-09-12 by T0b: the header loads, and applications are entered at EL2 (`M5L start … el=2`).** | T0b, T0c |
+| Q2 | ~~Does QEMU's edk2 need `acpi=off` before it publishes the device-tree table?~~ **Answered 2026-09-12 by T0b: yes.** | T0b |
 | Q3 | Do NVIDIA's copies of `CoreLoadPeImage`, `EfiBootManagerRefreshAllBootOption`, `EfiBootManagerBoot` and `CoreExitBootServices` match upstream? | A source diff against NVIDIA's edk2 fork at the r36.4.4 tag |
 | Q4 | What do `PcdBootManagerMenuFile`, `PcdBootMenuAppFile` and `PcdBootWatchdogTime` hold in this build, and does opening Setup validate the boot chain? | NV platform `.dsc` and Kconfig files |
 | Q5 | Which terminal type does the firmware console use, and does it decode F11? | NV `.dsc`; otherwise P3 |
@@ -876,7 +876,7 @@ Both writers are in both builds, so gate item 8 still holds: the T0 build and th
 
 **G. Gate item 6.** The build script links twice, at base 0 and at `0x100000`, into a scratch directory, and the gate compares the two files byte for byte. The link base is a linker argument, not a second linker script.
 
-**H. The T0 probe.** It prints on the PL011 that the device tree names, then asks for PSCI `SYSTEM_OFF` over HVC, and falls back to a WFI loop if that returns. `run-t0.ps1` bounds every case with its own timeout regardless.
+**H. The T0 probe.** It prints on the PL011 that the device tree names, then asks for PSCI `SYSTEM_OFF` over HVC, and falls back to a WFI loop if that returns. **2026-09-12, observed:** with no EL3 present, an HVC executed at EL2 traps to EL2 itself, so the call lands in the loader's own vector table, which prints `M5L-EXC` with EC 0x16 and resets. With `-no-reboot` that is how the case ends. It is the probe's shutdown path, not a loader fault. `run-t0.ps1` bounds every case with its own timeout regardless.
 
 **I. Where T0's records go.** `results/orin-native-port/<utc>/m5/`, git-ignored as a directory since 2026-09-11. The record names QEMU's full build string, not just its release.
 

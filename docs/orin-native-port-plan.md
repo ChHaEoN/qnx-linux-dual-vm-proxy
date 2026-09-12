@@ -423,6 +423,15 @@ Every rung up to the freeze is functional: it passes or fails on what appears, n
   - **Those follow-ups** come before the campaign relies on M4 (freeze gate item 9).
 
 **M5-F: a UEFI cold boot reaches startup.** It replaces the optional M5 below and runs under §3.5 Fallback B's rules.
+- **The PC-only half is done (2026-09-12): T0 passed.** The loader, its build, its ten-item gate and the QEMU
+  rehearsal are written and run ([m5-design.md](../results/orin-native-port/20260909T1100Z/m5-design.md) §6.1,
+  §13). Under QEMU the loader is entered at EL2, checks the map, copies the payload, exits boot services and
+  branches: the stand-in payload reports the hand-over contract intact at the link address. The three refusal
+  cases refuse. Two of the design's open questions closed on the way (Q1 and Q2), and four loader defects were
+  found by running it rather than by reading it.
+- **What T0 cannot show:** cache coherency after the copy. QEMU invalidates its own translated code on a guest
+  write, so only the board tests that (risk R33). The gate reads the sequence statically instead.
+- **What remains:** the attended board session, P1 to C, with the owner at the plug.
 - **Prerequisites:** M4-F; ~~unknown #12 answered by a header read only (`readelf`, `od`), never a code read (§9, 4.6(c));~~ the J14 console, for the UEFI Shell. **2026-09-12:** under m5-design's option A the firmware never loads a QNX PE, so unknown #12 is not a prerequisite. It stays desk work (m5-design §12 Q8), and only its first half is answerable that way at all: the second half is a claim about EDK2's behaviour, which no header read reaches. `readelf` also cannot parse PE, so that read would use `od` and a struct reader.
 - **Pass,** all of:
   - the PE, launched from the firmware's built-in UEFI Shell, prints `Entering startup...` on the console **(2026-09-12, option A: the PE is our loader `M5LOAD.EFI`, which carries the pinned kimg; m5-design §3.3 and §13)**;
