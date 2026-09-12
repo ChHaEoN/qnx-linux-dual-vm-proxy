@@ -21,6 +21,31 @@ implementation decisions these files follow).
 | `m5-gate.py` | the ten checks of §3.4; any miss fails the build |
 | `t0/contract-probe.S`, `t0/contract-probe.lds` | the T0 payload, which stands in for the kimg so no QNX byte runs under QEMU |
 | `t0/run-t0.ps1` | the five QEMU cases |
+| `com3-term.ps1` | the board session's terminal: receives byte-exact, sends only when armed |
+
+## The terminal, at the board
+
+`com3-term.ps1` is the only thing in this project that can put a byte on the
+board's UART, so it is built to fail toward silence:
+
+- **Forwarding starts disarmed.** F12 arms and disarms it; F12 itself is never
+  sent. The state is in the window title and printed on every change.
+- **It disarms itself** after the Enter that ends a `go` line — and also after
+  the Enter that ends any line it could not follow. An arrow key or Escape marks
+  the line unreliable, because the firmware's own line editor moves the cursor
+  and this script cannot track that. A line recalled from history therefore
+  costs one extra F12, which is the right price: the first version tracked
+  arrows as text and would have stayed **armed** through `go`, the reset and the
+  firmware's autoboot countdown.
+- **Only ESC, the four arrows, Enter, Backspace and printable ASCII** can ever
+  be sent. Every other key is ignored, so no control character reaches the board.
+- **Ctrl+] or F10 exits**, and the exit test is layout-independent: on layouts
+  where `]` is AltGr+digit, AltGr is Ctrl+Alt, and that keypress must not both
+  exit and send.
+- **Records are never overwritten.** Both logs are created, not truncated, so a
+  retry cannot destroy the previous attempt's record.
+- `-SelfTest` checks the encoder, the tracker and the exit keys with no port, no
+  board and no console input.
 
 `out/` holds build products and is git-ignored: on the board build it carries
 QNX bytes, which are evaluation material under NC QDL v7 4.6(i) and are never
