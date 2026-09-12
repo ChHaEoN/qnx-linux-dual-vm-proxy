@@ -1909,7 +1909,7 @@ The review narrowed what the pass shows:
    - §4.2's argument that `-S` always exceeds the ring is about rings only, and §9 has no row for a linear capture cut at `-S`.
 
 **Before the campaign relies on M4.** These follow-ups have not been run:
-- implement items 3-5 in `parse-m4.py`, `m4count.c` (in lockstep), the ksh and the harness, with a fixture for each new rule (for `held`: a trailing buffer missing on a CPU other than the end marker's); **(2026-09-13: item 3's `crit_5` and `c_stats` bullets are done - I28, §14.11 - and the cross-check now has a self-test, I29, §14.12. Item 2's `held` rule was implemented and then withdrawn as a gate - §14.10. The rest of item 3, and items 4 and 5, stand.)**
+- implement items 3-5 in `parse-m4.py`, `m4count.c` (in lockstep), the ksh and the harness, with a fixture for each new rule (for `held`: a trailing buffer missing on a CPU other than the end marker's); **(2026-09-13: item 3's `crit_5` and `c_stats` bullets are done - I28, §14.11 - with a self-test for the cross-check - I29, §14.12 - and its `crit_2` and `crit_3` bullets - I30, §14.13. Item 2's `held` rule was implemented and then withdrawn as a gate - §14.10. Item 3's `crit_1`, `c_stats`-adjacent `crit_bb` and D3-item-7 bullets, and items 4 and 5, stand.)**
 - derive a linear window's `-S` from its budget, add a linear variant to the TCG builder, and rehearse it under TCG;
 - get a whole-window cross-check, or record the owner's acceptance of r1's partial one. The options are a `v` sized to the selection, several verbatim blocks, or a narrower selection;
 - confirm or reject N18;
@@ -1982,3 +1982,20 @@ The last is I28's regression guard. Under the first form of the reverse walk tha
 **What these do not show.** They check one implementation against itself - the PC's pairs against a block derived from those same pairs - so they fix the rule's behaviour, not the counter's agreement with it. Only a run carrying both blocks does that, and r1 is still the only one. The counter half of the lockstep is untouched here, because the cross-check exists only on the PC.
 
 **Verification.** `selftest` passes the four fixtures and all six cases, and `kshcheck` is unchanged. Re-parsing the r1 record with the refactored parser reproduces the recorded log line for line, apart from the parser's own sha256, the input file names and §14.10's field, so the factoring changed no behaviour.
+
+### 14.13 I30: `crit_2` reads trcctl's result, and `crit_3` asks the PC (2026-09-13)
+
+§14.9 item 3 named two more gates weaker than §2.2's wording. Both are now implemented.
+
+**`crit_2` (§2.2 item 2).** It tested presence: the arm line, `M4 STOP t by=stop`, and a non-empty `.kev`. But the ksh derives `by=stop` from the `.done` file, not from `trcctl`'s own result, so a marker insert or a stop that returned non-zero still read as a clean stop. The board prints one `TRCCTL insert … rc=` line per marker and one `TRCCTL stop … rc=`; the gate now requires both markers and the stop, each with `rc=0`, read from those lines.
+
+**`crit_3` (§2.2 item 3).** Two gaps. TIME64's mismatch check passes a listing carrying no TIME event at all, because zero events cannot mismatch; the counter's `time_events` must now be above zero. And P1 rested on the counter's own assertion, although §2.2 item 3 reads as P1 "on the board" and D2's premise is that the PC checks the counter without trusting it. The PC's reading of the delivered block must now agree: the three qvm ids above zero, one vCPU thread, one clock offset, no order-violated triple, no TIME64 mismatch.
+
+- **Scope, deliberately.** Only properties a capped block can support are asked. Counts over the whole listing - triples, pairs, the totals - could never match a capped `v`, and asking for them would fail every run whose block reached its cap. This does not close §14.9 item 1: the comparison is still partial.
+- **Where the records come from.** The PC's records for the delivered block were computed already but reachable only inside the `v_complete` branch, and a quiet recomputation would omit `QVM`. They are now kept when the block is read, so the confirmation runs on a capped run - which is the only kind r1 produced.
+
+**Verification.** r1 re-parses to `run_verdict=pass` with every criterion passing, and the diff against the recorded log is still only the parser's sha256, the input file names and §14.10's field. Both gates were then shown to bite, on mutated copies of the r1 capture: a stop returning 1 fails `crit_2` and nothing else, and a listing whose counter reports no TIME event fails `crit_3` and nothing else. Those copies are scratch inputs, not records, and are not kept. **No self-test covers either gate** - unlike §14.12's cross-check, they read a whole run record, which `selftest` does not build.
+
+**Two findings for the rest of item 3.**
+- **D3 §8 item 7's pidin listings are observable, but not as written.** The host script runs `pidin -p qvm -f abNli` twice and prints the head of each, but never echoes the command, so searching the capture for the command finds nothing. The evidence is the output: its column header appears once per listing, twice in r1. A gate counts the listings, not the command.
+- **§14.9's "D3 §7 contradicts D3 §8 item 11" resolves on a close reading.** Item 11 asks only that *every STAMP and IPC line* be identical on COM3, CR-stripped. §7's row covers what to do when they differ - flag it in the run note - and concerns the numbers, not the criterion. So the gate to write is that narrow one. The parser's `records_consistency` compares every record-prefixed line, which is broader than item 11 and should stay a record.

@@ -1407,6 +1407,29 @@ def xcheck_pairs_record(L, c_lines, limit, c_capped):
     return f"differ({bad}) orphan={orphan} compared={compared}"
 
 
+def trcctl_bad(lines, markers):
+    """§2.2 item 2, the part the stop ladder cannot show (I30; m4-design.md 14.9
+    item 3). The ksh derives `by=stop` from the `.done` file, so a marker insert
+    or a stop that returned non-zero still read as a clean stop. The board
+    prints one `TRCCTL insert … rc=` line per marker and one `TRCCTL stop … rc=`,
+    and these are what they say."""
+    seen = {}
+    for text in lines:
+        if text.startswith("TRCCTL insert"):
+            d, _ = parse_kv(text)
+            seen[d.get("text", "")] = to_int(d.get("rc"))
+        elif text.startswith("TRCCTL stop"):
+            seen["\0stop"] = to_int(parse_kv(text)[0].get("rc"))
+    why = []
+    for want in list(markers) + ["\0stop"]:
+        name = "stop" if want == "\0stop" else f"insert:{want}"
+        if want not in seen:
+            why.append(f"trcctl_{name}_absent")
+        elif seen[want] != 0:
+            why.append(f"trcctl_{name}_rc:{seen[want]}")
+    return why
+
+
 # ------------------------------------------------------------------ run: capture, records, blocks
 
 RECORD_PREFIXES = ("M4 ", "M4C ", "BWAIT ", "TRCCTL ", "STAMP ", "tcu-cat:", "samples=", "P50=", "sentinel_", "CLK ")
@@ -1945,6 +1968,7 @@ def cmd_run(a):
     v_complete = flt_v_rec is not None and flt_v_rec.get("capped") == "0" and v_status == "ok"
     log("v_complete", "yes" if v_complete else "no")
     L = None
+    pc_v_recs = []
     cmark = rec_first(run_main, "MARK")
     assume_end = None
     if v_capped and cmark and cmark.get("end_t", "-") not in ("-", ""):
@@ -1952,7 +1976,11 @@ def cmd_run(a):
         log("xcheck_window", "counter-end-marker(v-capped)")
     if v_body is not None and v_status == "ok":
         L = Listing(start_marker, end_marker, e3_status0=e3, assume_end_t=assume_end).feed_bytes(v_body)
-        for name, f in L.records(label="pc", quiet=False):
+        # I30 (m4-design.md 14.9 item 3): kept for crit_3's confirmation, which
+        # runs whether or not v is complete. `pc_first` below is scoped to the
+        # v_complete branch, and a quiet call would leave QVM out.
+        pc_v_recs = L.records(label="pc", quiet=False)
+        for name, f in pc_v_recs:
             if name in ("TIME64", "RING", "MARK", "VCPU", "OFFSET", "STATUSSUM", "TRIPLES", "PAIRS"):
                 log(f"pc_v_{name.lower()}", composite((k, v) for k, v in f.items() if k != "w"))
             elif name == "STAT":
@@ -2059,6 +2087,13 @@ def cmd_run(a):
 
     def has(sub):
         return any(sub in t for t in all_texts)
+
+    def pcv_first(name):
+        """The PC's own record for the delivered block, capped or not (I30)."""
+        for n, f in pc_v_recs:
+            if n == name:
+                return f
+        return None
 
     board = not a.rehearsal
     guard = params.get("guard_s", "?")
@@ -2232,6 +2267,9 @@ def cmd_run(a):
             why2.append("stop")
         if to_int(R.kevfile.get("t"), 0) <= 0:
             why2.append("kevfile")
+        # I30: presence was the whole test. Both markers and the stop now have
+        # to have returned 0, read from trcctl's own lines.
+        why2 += trcctl_bad(R.trcctl, (start_marker, end_marker))
         crit("crit_2", not why2, "+".join(why2))
         if variant == "k16":
             why3 = []
@@ -2260,6 +2298,29 @@ def cmd_run(a):
                 why3.append("order")
             if (rec_first(run_main, "TIME64") or {}).get("mismatches") != "0":
                 why3.append("mismatches")
+            # I30 (m4-design.md 14.9 item 3). Two gaps: TIME64's mismatch check
+            # passes a listing that carries no TIME event at all, and P1 rested
+            # on the counter's own assertion. §2.2 item 3 reads as P1 "on the
+            # board", and D2's premise is that the PC checks the counter without
+            # trusting it, so the PC's reading of the delivered block has to
+            # agree. Only properties a capped block can support are checked:
+            # counts over the whole listing could not match and are not asked.
+            if to_int((rec_first(run_main, "TIME64") or {}).get("time_events"), 0) <= 0:
+                why3.append("time_events")
+            if L is None:
+                why3.append("pc-absent")
+            else:
+                pcq = pcv_first("QVM") or {}
+                if not all(to_int(pcq.get(k), 0) > 0 for k in ("enter", "exit", "cycles")):
+                    why3.append("pc-qvm-ids")
+                if (pcv_first("VCPU") or {}).get("threads") != "1":
+                    why3.append("pc-vcpu")
+                if (pcv_first("OFFSET") or {}).get("distinct") != "1":
+                    why3.append("pc-offset")
+                if (pcv_first("TRIPLES") or {}).get("order_violated") != "0":
+                    why3.append("pc-order")
+                if (pcv_first("TIME64") or {}).get("mismatches") != "0":
+                    why3.append("pc-mismatches")
             crit("crit_3", not why3, "+".join(why3))
             crit("crit_4", ring_t == "held", f"ring:{ring_t}")
             why5 = []
