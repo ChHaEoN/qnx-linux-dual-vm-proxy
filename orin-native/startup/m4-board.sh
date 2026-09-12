@@ -29,6 +29,7 @@
 #   m4-board.sh size-r1 R0LOG          parse-m4.py size-r1 --r0-parse R0LOG
 #   m4-board.sh size-r2 R1LOG R0LOG    parse-m4.py size-r2 --r1-parse R1LOG --r0-parse R0LOG
 #   m4-board.sh series L1 L2 L3 L4 L5  parse-m4.py series over five T-run parse logs
+#   m4-board.sh redact-selftest        the redaction, against synthetic values
 #
 # ENVIRONMENT (no host, user, key or path is written into this file)
 #   ORIN_HOST                board commands: user@address of the board (required)
@@ -104,40 +105,108 @@ R_KEY="${ORIN_KEY:-}"
 [ -n "$R_KEY" ] && R_KEYBASE="$(basename "$R_KEY")"
 [ "${#R_KEYBASE}" -ge 6 ] || R_KEYBASE=""
 R_PCUSER="${USERNAME:-${USER:-}}"
-IDENT_RE='([0-9]{1,3}[.]){3}[0-9]{1,3}|[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}'
+
+# The board's own hostname. It is not derivable from ORIN_HOST, which carries
+# the address, and it embeds the login name: the serial console prints it in
+# systemd's banner, getty's banner and the login prompt. Until 2026-09-13 no
+# pattern here matched it, so every PC copy of a COM3 capture carried it while
+# the record claimed the copy had been scrubbed. learn_hostname() fills it in
+# from the board itself, once per command that talks to the board.
+R_HOSTNAME="${M4_BOARD_HOSTNAME:-}"
+
+# An address, but not a version string. The first form insisted only on four
+# dotted numbers, so "MB1 version 01.02.03.04" and a megasas driver version
+# counted as identifying lines and were rewritten, which both destroyed
+# provenance and made the count meaningless. A real address is not glued to a
+# longer token, so the match now requires a non-token character, or an end, on
+# each side.
+# Octets only, 0-255, no leading zero. A boundary alone was not enough: the
+# firmware prints "MB1 version 01.02.03.04", which is space-delimited on both
+# sides and looked exactly like an address. Leading zeros and an octet above
+# 255 are what actually tell the two apart.
+IDENT_OCTET='(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])'
+IDENT_IP="(^|[^-._0-9A-Za-z])$IDENT_OCTET([.]$IDENT_OCTET){3}($|[^-._0-9A-Za-z])"
+IDENT_MAC='[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}'
+IDENT_RE="$IDENT_IP|$IDENT_MAC"
+
+# Ask the board what it calls itself. Read-only, bounded, and never fatal: a
+# board that does not answer leaves R_HOSTNAME empty, and the redaction simply
+# has one pattern fewer.
+learn_hostname() {
+	[ -n "$R_HOSTNAME" ] && return 0
+	[ -n "${ORIN_HOST:-}" ] || return 0
+	R_HOSTNAME="$(timeout 20 ssh "${ssh_poll[@]}" "$ORIN_HOST" hostname </dev/null 2>/dev/null | tr -d "\r\n")"
+	case "$R_HOSTNAME" in
+	*[!A-Za-z0-9._-]*) R_HOSTNAME="" ;;
+	esac
+	[ "${#R_HOSTNAME}" -ge 3 ] || R_HOSTNAME=""
+	return 0
+}
 
 redact() {
-	awk -v u="$R_USER" -v h="$R_HOST" -v k="$R_KEY" -v kb="$R_KEYBASE" -v pu="$R_PCUSER" '
+	awk -v BINMODE=3 -v u="$R_USER" -v h="$R_HOST" -v k="$R_KEY" -v kb="$R_KEYBASE" -v pu="$R_PCUSER" -v hn="$R_HOSTNAME" '
 	function lit(s, a, r,    i, out) {
 		if (a == "") return s
 		out = ""
 		while ((i = index(s, a)) > 0) { out = out substr(s, 1, i - 1) r; s = substr(s, i + length(a)) }
 		return out s
 	}
+	# An octet, not just three digits: no leading zero, and at most 255. This
+	# is what keeps a firmware version string out of the address class.
+	function octet_ok(o,    n) {
+		if (o !~ /^[0-9]+$/) return 0
+		if (length(o) > 1 && substr(o, 1, 1) == "0") return 0
+		n = o + 0
+		return (n <= 255)
+	}
+	# Mask every dotted quad whose four parts are octets, and leave the rest
+	# of the line, including version strings, exactly as it was.
+	function mask_ips(s,    out, rest, tok, parts, i, ok) {
+		out = ""
+		rest = s
+		while (match(rest, /[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+/)) {
+			tok = substr(rest, RSTART, RLENGTH)
+			split(tok, parts, ".")
+			ok = 1
+			for (i = 1; i <= 4; i++) if (!octet_ok(parts[i])) ok = 0
+			out = out substr(rest, 1, RSTART - 1)
+			if (ok) out = out "<ip>"
+			else out = out tok
+			rest = substr(rest, RSTART + RLENGTH)
+		}
+		return out rest
+	}
 	{
 		line = $0
 		line = lit(line, k, "<orin-key>")
 		line = lit(line, kb, "<orin-key>")
+		if (hn != "") line = lit(line, hn, "<orin-host>")
 		if (u != "") { line = lit(line, u "@", "<user>@"); line = lit(line, "/home/" u, "/home/<user>") }
+		if (u != "") line = lit(line, u, "<user>")
 		if (pu != "") { line = lit(line, "Users/" pu, "Users/<user>"); line = lit(line, "Users\\" pu, "Users\\<user>"); line = lit(line, "/home/" pu, "/home/<user>") }
 		line = lit(line, h, "<orin-ip>")
-		gsub(/[0-9][0-9]?[0-9]?[.][0-9][0-9]?[0-9]?[.][0-9][0-9]?[0-9]?[.][0-9][0-9]?[0-9]?/, "<ip>", line)
+		line = mask_ips(line)
 		gsub(/[0-9A-Fa-f][0-9A-Fa-f](:[0-9A-Fa-f][0-9A-Fa-f]){5}/, "<mac>", line)
 		print line
 	}'
 }
 
+# Counts per class, so that "3 identifying lines" can never again mean three
+# firmware version strings. Prints: total addr=N mac=N name=N
 ident_hits() {
-	local f="$1" pats=()
+	local f="$1" pats=() addr mac name total
 	[ -n "$R_USER" ] && pats+=(-e "$R_USER@" -e "/home/$R_USER")
 	[ -n "$R_PCUSER" ] && pats+=(-e "Users/$R_PCUSER" -e "Users\\$R_PCUSER" -e "/home/$R_PCUSER")
 	[ -n "$R_HOST" ] && pats+=(-e "$R_HOST")
 	[ -n "$R_KEY" ] && pats+=(-e "$R_KEY")
 	[ -n "$R_KEYBASE" ] && pats+=(-e "$R_KEYBASE")
-	{
-		grep -aE "$IDENT_RE" "$f"
-		[ "${#pats[@]}" -gt 0 ] && grep -aF "${pats[@]}" "$f"
-	} | wc -l
+	[ -n "$R_HOSTNAME" ] && pats+=(-e "$R_HOSTNAME")
+	addr="$(grep -acE "$IDENT_IP" "$f" 2>/dev/null || echo 0)"
+	mac="$(grep -acE "$IDENT_MAC" "$f" 2>/dev/null || echo 0)"
+	name=0
+	[ "${#pats[@]}" -gt 0 ] && name="$(grep -acF "${pats[@]}" "$f" 2>/dev/null || echo 0)"
+	total=$(( addr + mac + name ))
+	echo "$total addr=$addr mac=$mac name=$name"
 }
 
 # ---------------------------------------------------------------- records
@@ -179,14 +248,34 @@ check_private() {
 	done
 }
 
+# Redact a file in place, byte for byte apart from the redactions themselves.
+# redact() is a line filter and always terminates its output; a capture copied
+# while it is still running can end mid-line, so the one byte gawk adds in that
+# case is taken back here. This is the only place that guarantee lives, so the
+# self-test can check it.
+redact_file() {
+	local f="$1"
+	redact < "$f" > "$f.redact" || return 1
+	if [ -s "$f" ] && [ "$(tail -c 1 "$f" | od -An -tu1 | tr -d " ")" != "10" ] &&
+		[ "$(tail -c 1 "$f.redact" | od -An -tu1 | tr -d " ")" = "10" ]; then
+		head -c -1 "$f.redact" > "$f.redact2" && mv "$f.redact2" "$f.redact"
+	fi
+	mv "$f.redact" "$f"
+}
+
 privacy_scan() {
-	local f="$1" n
-	n="$(ident_hits "$f")"
+	local f="$1" hits n classes before after
+	learn_hostname
+	hits="$(ident_hits "$f")"
+	n="${hits%% *}"
+	classes="${hits#* }"
 	if [ "${n:-0}" -gt 0 ]; then
-		redact < "$f" > "$f.redact" && mv "$f.redact" "$f"
-		rec "privacy $(basename "$f"): $n identifying line(s) redacted in the PC copy (raw sha256 recorded above)"
+		before="$(stat -c %s "$f" 2>/dev/null || echo 0)"
+		redact_file "$f" || die "redaction failed on $(basename "$f")"
+		after="$(stat -c %s "$f" 2>/dev/null || echo 0)"
+		rec "privacy $(basename "$f"): $n identifying line(s) redacted ($classes), bytes $before -> $after, copy sha256=$(sha256sum "$f" | cut -d" " -f1)"
 	else
-		rec "privacy $(basename "$f"): nothing identifying found, copy kept raw"
+		rec "privacy $(basename "$f"): nothing identifying found ($classes), copy kept raw"
 	fi
 }
 
@@ -1049,6 +1138,79 @@ cmd_series() {
 		--cloud-csv "$HERE/../../results/cloud/cloud-ipc-latest.csv" --out-dir "$RECDIR/out"
 }
 
+# ---------------------------------------------------------------- self-test
+#
+# The redaction is the only thing here that decides whether a private record
+# can ever be shown to anyone, and until 2026-09-13 it silently missed the
+# board's hostname while reporting that it had scrubbed the copy. This runs it
+# against synthetic values - never the board's own - and needs no board, no
+# ORIN_HOST and no network.
+
+cmd_redact_selftest() {
+	local d out fail=0 ran=0
+	d="$(mktemp -d)" || die "cannot make a temp directory"
+
+	R_USER=fakeuser
+	R_HOST=203.0.113.7
+	R_KEY=/c/Users/fakepc/.ssh/fakekeyname
+	R_KEYBASE=fakekeyname
+	R_PCUSER=fakepc
+	R_HOSTNAME=fakehost-desktop
+
+	printf 'MB1 version 01.02.03.04 loaded\r\n' > "$d/in"
+	printf 'megasas driver 07.714.04.00-rc1\r\n' >> "$d/in"
+	printf 'qemu 11.1.0 build\r\n' >> "$d/in"
+	printf 'server at 203.0.113.7 replied\r\n' >> "$d/in"
+	printf 'gateway 10.0.2.2 seen\r\n' >> "$d/in"
+	printf 'mac 00:1b:44:11:3a:b7 seen\r\n' >> "$d/in"
+	printf 'fakehost-desktop login:\r\n' >> "$d/in"
+	printf 'systemd[1]: Started on fakehost-desktop\r\n' >> "$d/in"
+	printf 'fakeuser@fakehost-desktop:~$ id\r\n' >> "$d/in"
+	printf '/home/fakeuser/x\r\n' >> "$d/in"
+	printf 'no trailing newline here' >> "$d/in"
+
+	cp "$d/in" "$d/copy"
+	redact_file "$d/copy" || die "redact_file failed in the self-test"
+	redact < "$d/in" > "$d/out"
+
+	check() {
+		ran=$(( ran + 1 ))
+		if [ "$2" = "$3" ]; then
+			echo "  ok    $1"
+		else
+			echo "  FAIL  $1: got [$2] want [$3]"
+			fail=$(( fail + 1 ))
+		fi
+	}
+
+	check "version 01.02.03.04 kept" "$(grep -c '01[.]02[.]03[.]04' "$d/out")" 1
+	check "version 07.714.04.00 kept" "$(grep -c '07[.]714[.]04[.]00' "$d/out")" 1
+	check "version 11.1.0 kept" "$(grep -c 'qemu 11[.]1[.]0 build' "$d/out")" 1
+	check "address masked" "$(grep -c '203[.]0[.]113[.]7' "$d/out")" 0
+	check "slirp address masked" "$(grep -c '10[.]0[.]2[.]2' "$d/out")" 0
+	check "mac masked" "$(grep -c '00:1b:44' "$d/out")" 0
+	check "hostname masked" "$(grep -c 'fakehost-desktop' "$d/out")" 0
+	check "login name masked" "$(grep -c 'fakeuser' "$d/out")" 0
+	check "orin-host placeholder" "$(grep -c '<orin-host>' "$d/out")" 3
+	check "CRs preserved" "$(tr -cd '\r' < "$d/out" | wc -c)" "$(tr -cd '\r' < "$d/in" | wc -c)"
+	# The copy path, not the line filter: redact() always terminates its
+	# output, and redact_file() is what must not change the last byte.
+	check "copy adds no newline" "$(tail -c 1 "$d/copy" | od -An -tu1 | tr -d ' ')" "$(tail -c 1 "$d/in" | od -An -tu1 | tr -d ' ')"
+	check "copy keeps CRs" "$(tr -cd '\r' < "$d/copy" | wc -c)" "$(tr -cd '\r' < "$d/in" | wc -c)"
+
+	out="$(ident_hits "$d/in")"
+	check "ident_hits classes" "$(echo "$out" | grep -c 'addr=2 mac=1 name=')" 1
+
+	rm -rf "$d"
+	echo
+	if [ "$fail" -eq 0 ]; then
+		echo "REDACT SELFTEST PASS $ran checks"
+		return 0
+	fi
+	echo "REDACT SELFTEST FAIL $fail of $ran checks"
+	return 1
+}
+
 # ---------------------------------------------------------------- main
 
 case "${1:-}" in
@@ -1062,5 +1224,6 @@ consistency) { [ $# -eq 3 ] && [ -f "$2" ] && [ -f "$3" ]; } || usage; consisten
 size-r1)     { [ $# -eq 2 ] && [ -f "$2" ]; } || usage; cmd_size r1 "$2" ;;
 size-r2)     { [ $# -eq 3 ] && [ -f "$2" ] && [ -f "$3" ]; } || usage; cmd_size r2 "$2" "$3" ;;
 series)      [ $# -eq 6 ] || usage; shift; cmd_series "$@" ;;
+redact-selftest) [ $# -eq 1 ] || usage; cmd_redact_selftest ;;
 *)           usage ;;
 esac
