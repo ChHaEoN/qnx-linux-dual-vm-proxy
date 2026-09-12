@@ -225,18 +225,27 @@ def split_lines(data, start=0, end=None):
     return out
 
 
-TOKEN_RE = re.compile(r'([A-Za-z_][A-Za-z0-9_]*)=("([^"]*)"|\S*)|(\S+)')
+TOKEN_RE = re.compile(r'([A-Za-z_][A-Za-z0-9_]*)=("([^"]*)"|\'([^\']*)\'|\S*)|(\S+)')
 
 
 def parse_kv(text):
-    """key=value tokens (a value may be "quoted") and bare tokens."""
+    """key=value tokens (a value may be "quoted" or 'quoted') and bare tokens.
+
+    I30 (m4-design.md 14.9 item 3): only the double-quoted form was read, but
+    the board writes single quotes - `M4 CONFIG startup='…' tl_args='…'
+    forms='…'` and `M4 TRACE ARM args='…'`. Those values were being cut at
+    their first space, with the opening quote kept, so `forms='v c'` read as
+    `'v`. Nothing consumed them, which is why no gate saw it; crit_1 compares
+    them against the params file now, so they have to be the value.
+    """
     d = {}
     bare = []
     for m in TOKEN_RE.finditer(text):
         if m.group(1) is not None:
-            d.setdefault(m.group(1), m.group(3) if m.group(3) is not None else m.group(2))
+            quoted = m.group(3) if m.group(3) is not None else m.group(4)
+            d.setdefault(m.group(1), quoted if quoted is not None else m.group(2))
         else:
-            bare.append(m.group(4))
+            bare.append(m.group(5))
     return d, bare
 
 
@@ -1407,6 +1416,61 @@ def xcheck_pairs_record(L, c_lines, limit, c_capped):
     return f"differ({bad}) orphan={orphan} compared={compared}"
 
 
+def startup_order_bad(texts, p_cpus):
+    """§2.2 item 1 / D3 §8 items 1-2: the two orderings `landing_ok` leaves out
+    (I30b; m4-design.md 14.9 item 3). That function checks each token is
+    present, which a run could satisfy with the lines in the wrong order.
+
+    Positions are read within one ordered source. A token that is absent is left
+    to `landing_ok`, which names it; reporting it twice would say less.
+    """
+    def first(sub):
+        for i, t in enumerate(texts):
+            if sub in t:
+                return i
+        return None
+
+    why = []
+    for earlier, later, name in (("T234-SHIM", "JUMP", "shim-before-jump"),
+                                 (f"t234: all {p_cpus} cpus parked in smp_spin", "Starting next program",
+                                  "parked-before-next-program")):
+        ai, bi = first(earlier), first(later)
+        if ai is not None and bi is not None and ai >= bi:
+            why.append(f"order-{name}")
+    return why
+
+
+GUEST_PHASES = ("g_first", "g_devb", "g_net", "g_ifup", "g_sshd", "g_misc", "g_startup_complete")
+GUEST_PHASES_REQUIRED = ("g_first", "g_devb", "g_net", "g_startup_complete")
+
+
+def guest_phase_bad(stamps):
+    """D3 §8 item 6: the guest's phases stamped with non-decreasing `cycles=`,
+    in order, each at or below `banner` (I30b).
+
+    A missing `g_ifup`, `g_sshd` or `g_misc` is an anomaly the run note records
+    and not a failure, so only the phases that are present are ordered. `g_srv`
+    is recorded and never gated, which item 6 states outright: the guest starts
+    the server in the background and never waits for its line, one TCG run lost
+    that line to interleaving while its IPC completed cleanly, and item 8 is the
+    evidence the server was up.
+    """
+    why = []
+    for name in GUEST_PHASES_REQUIRED:
+        if stamps.get(name) is None:
+            why.append(f"phase-{name}-absent")
+    present = [(n, stamps[n]) for n in GUEST_PHASES if stamps.get(n) is not None]
+    for (n0, c0), (n1, c1) in zip(present, present[1:]):
+        if c1 < c0:
+            why.append(f"phase-order:{n0}>{n1}")
+    banner = stamps.get("banner")
+    if banner is not None:
+        late = [n for n, c in present if c > banner]
+        if late:
+            why.append("phase-after-banner:" + ",".join(late[:3]))
+    return why
+
+
 def trcctl_bad(lines, markers):
     """§2.2 item 2, the part the stop ladder cannot show (I30; m4-design.md 14.9
     item 3). The ksh derives `by=stop` from the `.done` file, so a marker insert
@@ -1880,6 +1944,10 @@ def cmd_run(a):
     log("records_source", "blackbox" if texts is bb_recs and bb_recs is not None else "com3")
     R = Records(texts)
     all_texts = [t for off, t in com3_all if not excluded(off)] + ([t for _, t in bb_all] if bb_all else [])
+    # I30b: one ordered source for crit_1's orderings. `all_texts` concatenates
+    # the capture and the black box, so a position in it spans two timelines and
+    # only accidentally gives the right answer. The capture is the fuller one.
+    order_src = [t for off, t in com3_all if not excluded(off)] or ([t for _, t in bb_all] if bb_all else [])
     log("states", ",".join(R.states) or "none")
     log("fail_state", R.fail_state or "none")
     log("fails", ";".join(R.fails).replace(" ", "_") or "none")
@@ -2236,11 +2304,43 @@ def cmd_run(a):
         why1 = []
         if board:
             why1 += landing_ok()
+            why1 += startup_order_bad(order_src, p_cpus)
         cfg_rung = R.config.get("rung")
         if cfg_rung != rung and not (a.rehearsal and cfg_rung in (f"tcg-{variant}", rung)):
             why1.append("config-rung")
         if R.config.get("mode") != "full":
             why1.append("config-mode")
+        # I30b (m4-design.md 14.9 item 3, D3 §8 items 3 and 6). These are the
+        # board run's own evidence, so they are asked of a board run only: the
+        # §11 rehearsal's record is built by `synth-com3`, whose invented
+        # `M4 CONFIG` line carries `synthetic=1` and none of these fields, and
+        # whose console stamps no guest phase. Asking there would fail the
+        # rehearsal for being a rehearsal.
+        if board:
+            # rung and mode were the whole of it. The image records its own
+            # build in `M4 CONFIG`, and the PC holds the `.params` it sized that
+            # image with, so the two are compared field by field: an image built
+            # from other parameters than the ones this parse assumes is a
+            # failure rather than a silent mismatch. The generator enforces
+            # these at build time; this is the run's evidence that the image on
+            # the board is that image.
+            for ck, pk in (("cpus", "p"), ("kind", "kind"), ("iters", "iters"), ("forms", "forms"),
+                           ("transport", "transport"), ("trace_need_mb", "trace_need_mb"), ("tl_args", "tl_args")):
+                want = params.get(pk)
+                if want is not None and R.config.get(ck) != want:
+                    why1.append(f"config-{ck}")
+            # The fields no params file carries: they must at least be recorded,
+            # so the startup line, the -Q mode, the -W policy and the four
+            # sha256s are in the record the run leaves behind (item 3).
+            for ck in ("startup", "q", "w", "A", "cpus", "guest_sha256", "disk_sha256", "conf_sha256",
+                       "client_sha256", "clock"):
+                if not R.config.get(ck):
+                    why1.append(f"config-{ck}-absent")
+            # Item 6, the guest's phases. `g_srv` is recorded and never gated,
+            # which item 6 states outright: the guest starts the server in the
+            # background and one TCG run lost the line to interleaving while its
+            # IPC completed cleanly. Item 8 is the evidence the server was up.
+            why1 += guest_phase_bad(R.stamps)
         for c in ("md5_pre guest", "md5_pre disk", "md5_pre conf", "disk_copy", "md5_post guest", "md5_post disk"):
             if c not in R.checks:
                 why1.append(c.replace(" ", "_"))
@@ -2259,6 +2359,12 @@ def cmd_run(a):
             why1.append("mem_banner")
         if not states_in_order(order_full) or R.fail_state != "none":
             why1.append("states")
+        # I30b: the order walk only positions the states that are present, so a
+        # run that skipped one entirely still passed. Every state of the rung's
+        # sequence has to appear.
+        missing_states = [s for s in order_full if s not in R.states]
+        if missing_states:
+            why1.append("states-missing:" + ",".join(missing_states[:4]))
         crit("crit_1", not why1, "+".join(why1[:12]))
         why2 = []
         if not R.trace_arm:
