@@ -1909,7 +1909,7 @@ The review narrowed what the pass shows:
    - §4.2's argument that `-S` always exceeds the ring is about rings only, and §9 has no row for a linear capture cut at `-S`.
 
 **Before the campaign relies on M4.** These follow-ups have not been run:
-- implement items 3-5 in `parse-m4.py`, `m4count.c` (in lockstep), the ksh and the harness, with a fixture for each new rule (for `held`: a trailing buffer missing on a CPU other than the end marker's);
+- implement items 3-5 in `parse-m4.py`, `m4count.c` (in lockstep), the ksh and the harness, with a fixture for each new rule (for `held`: a trailing buffer missing on a CPU other than the end marker's); **(2026-09-13: item 3's `crit_5` and `c_stats` bullets are done - I28, §14.11, which also records that no self-test exercises the cross-check. Item 2's `held` rule was implemented and then withdrawn as a gate - §14.10. The rest of item 3, and items 4 and 5, stand.)**
 - derive a linear window's `-S` from its budget, add a linear variant to the TCG builder, and rehearse it under TCG;
 - get a whole-window cross-check, or record the owner's acceptance of r1's partial one. The options are a `v` sized to the selection, several verbatim blocks, or a narrower selection;
 - confirm or reject N18;
@@ -1934,3 +1934,28 @@ The review narrowed what the pass shows:
 **Verification, stated plainly.** The parser half is exercised by `selftest` on this PC. The counter half is not: `tools/m4count` is an aarch64 ELF and this machine has no host C compiler, so the C change is checked by review only until the §11 TCG rehearsal or a board run. No other §14.9 item is implemented yet.
 
 **Records.** Every file the harness wrote into the record directory ends in `.log` or lies under `out/`, and a directory rule now covers the run directories as well. The figures and the full review are on the unpublished branch.
+
+### 14.11 I28: the cross-check reads both directions, and what running it found (2026-09-13)
+
+§14.9 item 3 listed three weaknesses in `crit_5`'s cross-check and one in `c_stats`. All four are now implemented in `parse-m4.py`:
+
+- **Both directions.** The walk over the PC's pairs is followed by a walk over the compact block's rows. A row the counter wrote, inside the range the PC could see, for which the PC produced no pair, is counted and named in the record as `orphan`.
+- **A floor.** `compared=0` no longer reads as a match. A comparison of nothing is recorded as `empty` and fails the criterion.
+- **A per-CPU bound.** The bound was the file-order `last_t` of the verbatim block, but the listing is ordered per CPU buffer, so a CPU whose delivered events stop earlier was compared past its own data. Each CPU is now bounded by its own last delivered event.
+- **`c_stats` gates.** §9 treats `c_stats=differ` as a stop before r2; it now demotes `crit_5` instead of being logged and ignored.
+
+The record carries both directions and the compared count, so a thin comparison shows in the parse log instead of hiding behind the word `match`.
+
+**What running it found.** Re-parsed against the board's r1 record, the first form of the reverse walk reported one orphan and failed `crit_5`, where the one-directional rule had passed. The orphan was the new rule's defect, not the counter's. The forward walk bounds a pair by its **exit** time; the reverse walk bounded a row by its **entry** time. A row whose entry falls inside the range and whose exit falls past it is skipped going forward - correctly, because the PC holds no exit event to pair with - and was then counted coming back. r1's verbatim block is capped, so it has exactly one such row, at the truncation boundary.
+
+**How that was established, not assumed.** The parser was driven over the delivered listing on its own. The row's exit lies beyond every CPU's last delivered event and beyond the furthest-reaching pair the PC formed, and no PC pair carries the row's key at all. The PC could not have produced that pair from the data it was given.
+
+**The fix.** The reverse walk bounds a row by its exit, `entry + dwell`, which is what the forward walk bounds a pair by. A row whose dwell is not a number gives no exit to bound, so it is left alone rather than compared past the PC's data. With it, the stricter rule and the looser one agree on the board's record: the re-parse reproduces the recorded parse log line for line, apart from the parser's own sha256, the input file names, and §14.10's new `short_tail_cpus` field. **The r1 pass recorded in §14.9 is unchanged, and was not over-claimed.**
+
+**A note on §14.10.** In that capped verbatim block every CPU's events stop before the end marker, so `short_tail_cpus` names all of them. Had the short tail stayed a gate, it would have refused this record - which is the case §14.10 withdrew it for.
+
+**Where it is not exercised.** No automated self-test covers `xcheck_pairs`. The four fixtures are listings only, with no compact block, so the cross-check reads `n/a` throughout `selftest`. `synth-com3` can build a record carrying both blocks, but it is a manual command. The only exercise this rule has had is the r1 record, by hand. A self-test built from `synth-com3` is a follow-up.
+
+**Lockstep.** `m4count.c` needs no change here: the cross-check is the PC's comparison of its own reading against the counter's, and exists only in `parse-m4.py`.
+
+**Re-parsing a record.** Two things a later re-parse must get right, both learned here. `crit_reset` reads the `--reset-reason` argument and not the capture, so omitting it fails that criterion on a good record. And the harness's PC copy of the COM3 capture was rewritten by the redaction task, so its sha256 no longer matches the `input_com3` line in its own parse log; the raw capture in the same directory still carries the recorded bytes. Re-parse the raw capture.

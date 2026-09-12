@@ -1945,10 +1945,29 @@ def cmd_run(a):
             last_t = int(flt_v_rec["last_t"], 16)
         limit = L.end_t if last_t is None else min(L.end_t, last_t)
         c_capped = flt_c_rec is not None and flt_c_rec.get("capped") == "1"
+
+        # I28 (m4-design.md 14.9 item 3). The bound was the file-order last_t of
+        # the verbatim block, but the listing is ordered per CPU buffer: a CPU
+        # whose delivered events stop earlier would be compared past its own
+        # data, and a pair the PC never saw would count as the counter's fault.
+        # Each CPU is bounded by its own last delivered event.
+        cpu_limit = {}
+        for c, r in enumerate(L.cpu):
+            if r["events"] and r["last_t"] is not None:
+                cpu_limit[c] = min(limit, r["last_t"])
+
+        def in_range(t, cpu):
+            if t is None or t < L.start_t:
+                return False
+            return t <= cpu_limit.get(cpu, limit)
+
         compared = 0
         bad = 0
+        seen = set()
         for p in L.pairs:
-            if p["a"] is None or p["b"] is None or p["a"] < L.start_t or p["b"] > limit:
+            if p["a"] is None or p["b"] is None or p["a"] < L.start_t:
+                continue
+            if not in_range(p["b"], p["cpu_exit"]):
                 continue
             key = ((p["a"] - L.start_t), p["cpu_exit"])
             got = c_lines.get(key)
@@ -1956,12 +1975,44 @@ def cmd_run(a):
                 if not c_capped:
                     bad += 1
                 continue
+            seen.add(key)
             compared += 1
             want = ("unk" if p["cls"].startswith("unk") else p["cls"], "1" if p["reason"] == "eligible" else "0",
                     str(p["dwell"]) if p["dwell"] is not None else "-", str(p["cpu_exit"]), str(p["cpu_entry"]))
             if got != want:
                 bad += 1
-        xp = f"match compared={compared}" if bad == 0 else f"differ({bad}) compared={compared}"
+
+        # The other direction: a row the counter wrote, inside the range the PC
+        # could see, that the PC produced no pair for. The counter's key is one
+        # row per pair, so this is a disagreement, not a duplicate. A capped
+        # compact block is exempt, exactly as the forward walk is.
+        #
+        # The bound is the row's exit, entry + dwell, and not its entry, because
+        # that is what the forward walk bounds a pair by. A row whose entry is
+        # inside the range and whose exit is past it is skipped going forward,
+        # correctly - the PC holds no exit event to pair with - so counting it
+        # coming back would report the truncation as a disagreement. The r1
+        # board record holds exactly one such row (m4-design.md 14.11). A row
+        # whose dwell is not a number gives no exit to bound, so it is left
+        # alone rather than compared past the PC's data.
+        orphan = 0
+        if not c_capped:
+            for key, val in c_lines.items():
+                if key in seen:
+                    continue
+                off, cx = key
+                dwell = to_int(val[2])
+                if dwell is None:
+                    continue
+                if in_range(L.start_t + off + dwell, cx):
+                    orphan += 1
+
+        if bad == 0 and orphan == 0 and compared > 0:
+            xp = f"match compared={compared}"
+        elif compared == 0:
+            xp = f"empty compared=0 orphan={orphan}"
+        else:
+            xp = f"differ({bad}) orphan={orphan} compared={compared}"
     log("xcheck_pairs", xp)
 
     p1zero = []
@@ -2189,9 +2240,16 @@ def cmd_run(a):
             crit("crit_4", ring_t == "held", f"ring:{ring_t}")
             why5 = []
             if not xp.startswith("match"):
+                # I28: "empty compared=0" lands here too. A comparison of
+                # nothing used to read as a match and pass.
                 why5.append("xcheck_pairs")
             if v_complete and xs != "match":
                 why5.append("xcheck_stats")
+            # I28: the compact block's own recount was computed, logged, and
+            # gated by nothing, although section 9 treats c_stats=differ as a
+            # stop before r2.
+            if c_stat.startswith("differ"):
+                why5.append("c_stats")
             crit("crit_5", not why5, "+".join(why5))
             why6 = []
             for b in ("v", "c"):
