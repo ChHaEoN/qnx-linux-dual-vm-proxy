@@ -236,7 +236,7 @@ Quick summary for context:
 | ECU bring-up, profiling, debug | Phase 1 (boot logs, kernel debug) + Phase 2 (latency profiling) |
 | QNX OS for Safety (QOS) — *stand out* | Honest gap: SDP ≠ QOS; framed as "POSIX-realtime proxy" + the README limitations table + `docs/architecture.md` (a dedicated `skills/qnx-safety/` note is still **unwritten** — do not link it) |
 | Hypervisors / virtualization — *stand out* | ~~Phase 3~~ Phase 4 comparison doc: explicit gap analysis vs. real hypervisor. **2026-09-11:** also the QNX Hypervisor host, native on the Orin (Phase 3b) |
-| Bootloaders — *stand out* | ~~Phase 1 (U-Boot for Linux guest, IPL for QNX)~~ **2026-09-11:** no leg has run U-Boot or a Linux guest. The bootloader work is the kexec shim (M0) and the planned M5-F UEFI cold boot (Phase 3b) |
+| Bootloaders — *stand out* | ~~Phase 1 (U-Boot for Linux guest, IPL for QNX)~~ **2026-09-11:** no leg has run U-Boot or a Linux guest. The bootloader work is the kexec shim (M0) and ~~the planned M5-F UEFI cold boot~~ **2026-09-13:** the M5-F UEFI cold boot, which ran and passed: our own EFI loader, launched from the firmware's UEFI Shell, hands the unchanged M1b image to the same shim (Phase 3b) |
 | ASPICE / ISO 26262 — *stand out* | `skills/iso-26262/` + `skills/aspice/` study notes; applied FMEA in `skills/fmea/examples/` |
 
 ---
@@ -394,12 +394,17 @@ Quick summary for context:
   measurements become architecture-version history, kept and not chased. ~~Still ahead, in order: M4 functional (r0 and
   r1: the trace instrument works on the board; the timed r2 waits);~~ **2026-09-11: M4-F met** (under two different instrument versions: r0's pass is an offline re-parse and its image needs a rebuild, now a freeze-gate item). r0 and r1 passed
   functionally; r1 needed the I26 sizing fix, and its PC cross-check covered only the delivered part of a capped
-  listing (m4-design.md §14.8-14.9). Still ahead, in order: M5 functional (a UEFI cold boot that reaches
-  startup; the median comparison waits); S1 functional (a Linux guest without a GPU under native qvm); freeze
+  listing (m4-design.md §14.8-14.9). Still ahead, in order: ~~M5 functional (a UEFI cold boot that reaches
+  startup; the median comparison waits);~~ **2026-09-13: M5-F met** (option A: our loader `M5LOAD.EFI`, carrying the
+  unchanged M1b image, was launched from the firmware's UEFI Shell on a cold boot, reached the shim and startup at EL2
+  and then procnto, and L4T came back with only the per-boot MTC variable changed; one attended `go`, deviations
+  recorded in m5-design.md §14; the M path has ended, so README PR #1 is the owner's to merge; figures unpublished).
+  Still ahead: S1 functional (a Linux guest without a GPU under native qvm); freeze
   reference architecture v1; then one measurement campaign on it (the M3 and M4 numbers, the M5 comparison, the twin
   diff), every record stamped with the version. ~~Awaiting the owner's confirmation: the M path ends at M5's functional
   pass, which sets when README PR #1 can merge.~~ **2026-09-11 (owner):** confirmed. The M path ends at M5-F's
-  functional pass, and README PR #1 can merge then; whether a failed M5-F also ends it is still open. The owner also
+  functional pass, and README PR #1 can merge then; ~~whether a failed M5-F also ends it is still open~~
+  **2026-09-13:** M5-F passed, so that question no longer arises. The owner also
   decided three more points: the M0, M1, M2 and M1b records stay public for now; S1-F needs only the qvm `dryrun` gate
   first, with the GPU checks left to the first GPU stage; and the A2 plain-leg boot diff stays history. Details in
   [the plan's freeze section](docs/orin-native-port-plan.md#architecture-versions-and-the-measurement-freeze-decided-2026-09-11).
@@ -473,8 +478,9 @@ Quick summary for context:
    one campaign.** The release-aligned QHV pair this item asked for ran on
    2026-09-09 ([docs/findings.md](docs/findings.md)). It is now A3 history,
    and the twin diff is re-run inside the campaign. In order: ~~M4-F (r0 and
-   r1, after m4-design's §11 TCG rehearsal),~~ M4-F (**met 2026-09-11**, with the r0 instrument caveat in the plan), M5-F (a UEFI cold boot that
-   reaches startup), S1-F (a Linux guest without a GPU under native qvm).
+   r1, after m4-design's §11 TCG rehearsal),~~ M4-F (**met 2026-09-11**, with the r0 instrument caveat in the plan), ~~M5-F (a UEFI cold boot that
+   reaches startup),~~ M5-F (**met 2026-09-13**, under option A, with the deviations in m5-design.md §14; the M path
+   has ended), S1-F (a Linux guest without a GPU under native qvm).
    Then settle the freeze gate and write the v1 manifest. Then run the
    single campaign, native leg and both TCG twin legs, every record stamped
    `arch=v1;manifest=<sha>`. Regenerating the guest disk from clean sources

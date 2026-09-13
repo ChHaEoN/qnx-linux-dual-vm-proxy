@@ -1,6 +1,8 @@
 # M5 design: a functional UEFI cold boot of the unchanged M1b kimg on the Jetson Orin Nano, through our own EFI loader
 
-Phase 3b. Architect pass, revision 2, 2026-09-11: revision 1 with the review outcomes in §13 applied. This is a read-and-reason design: nothing in it has been built or run. It follows the structure of [m3-design.md](m3-design.md). Its scope is the owner decision of 2026-09-11 (option B): M5 is functional verification only.
+Phase 3b. Architect pass, revision 2, 2026-09-11: revision 1 with the review outcomes in §13 applied. This is a read-and-reason design: ~~nothing in it has been built or run~~ **2026-09-13:** T0 was built and run under QEMU on the PC (§6.1, 2026-09-12), and the board session ran (§14). It follows the structure of [m3-design.md](m3-design.md). Its scope is the owner decision of 2026-09-11 (option B): M5 is functional verification only.
+
+**2026-09-13:** the board session ran, and M5-F was met in it (T3 reached). See §14.
 
 **Path prefixes used below**
 - `lib/` = `C:/Users/<user>/AppData/Local/Temp/orin-native-port-bsp/src/hardware/startup/lib/` (Apache-2.0)
@@ -891,3 +893,155 @@ Both writers are in both builds, so gate item 8 still holds: the T0 build and th
 - **Not a board finding:** no QNX byte was involved. The T0 build embeds the contract probe, and this is our own loader under QEMU.
 
 **What is not decided here.** The board session's terminal (`com3-term.ps1`, D7) is not part of this PC-only step, and neither is any board step.
+
+---
+
+## 14. Board session (2026-09-13)
+
+The public, number-free record of the session. Every duration, time of day, address, size, board-file hash and `boot_id` stays in the session's private record, `results/orin-native-port/<utc>/m5/` (git-ignored, §13 decision I). The run note (§6.10) is written for the local, unpushed branch `m3-results-unpublished`, beside M3's record, and stays off main until the 4.6(i) consultation. Option A as built: `M5LOAD.EFI` carried the unchanged pinned `m1b-p1.kimg`, and the firmware never loaded a QNX PE. The owner was at the plug from P1 to C.
+
+### 14.1 Outcome by step
+
+- **P1.** Every §8 item passed except item 4, which was not performed (§14.3). The owner confirmed items 14 and 16.
+- **S1.** `extlinux.conf` and `BOOTAA64.efi` were backed up and hashed first, and S0 was taken. `M5LOAD.EFI` went into the root of the SD card's ESP (L4T's `/boot/efi`), with its hash matching the gate's. The ESP went from one file to two. `BOOTAA64.efi` was unchanged.
+- **P2: PASS.** This was a cold boot with the TX wire connected, the terminal running and no key pressed. The countdown ran out, `L4TLauncher:` followed and L4T booted. The file persisted with its hash, the ESP listing was S0 plus that file, and `nvbootctrl` and `bios_version` read as in S0. `Δ(S0,S1)`: only the `MTC` variable changed, and `efibootmgr -v` was identical.
+- **P3: PASS on the second attempt.** Attempt 1 missed the ESC window. Attempt 2 carried the deviations in §14.3. It reached the UEFI Shell through Boot Manager's `UEFI Shell` entry. There, `ver`, `map -r` and `ls` ran, and `M5LOAD.EFI check` gave T1 in order with no refusal and `M5L con kind=tcu`. Then came `reset`, and the autoboot met no key. Gate: `Δ(S1,S2)` changed only `MTC`; `efibootmgr -v` equalled S0 apart from `BootCurrent`; the ESP and `nvbootctrl` read as in S1; `extlinux.conf` and `BOOTAA64.efi` hashed as in S0; pstore was empty.
+- **R1: PASS.** The owner chose to run it in the same session. The sequence was `poweroff` (the fixed helper printed READY), a cold boot, ESC, and the menus to the Shell inside the 120 s bound. Then `map -r`, `fs5:`, and `M5LOAD.EFI check`, which gave T1 again with `kind=tcu`. Then `M5LOAD.EFI go`.
+  - **T2, in order:** `M5L GO`, `M5L-EBS ok`, `M5L-JUMP`, `T234-SHIM EL=2` with `PC=0000000080080000` and `DTBMAGIC=00000000edfe0dd0`, `NORMALISED … TCUDROPS=`, `JUMP`, `t234: WDT0 CR=`. No negative token (`BAD-LANDING`, `EXC `, `EL!=2`, `M5L-EXC`, `M5L-EBS FAIL`) appeared between `M5L GO` and the next MB1 banner.
+  - **T3, every token present:** the VHE line; `cpu 0` `HCR_EL2` with E2H and TGE set; `hvtimer cpu 0 verdict=wired`; `Starting next program`; `T234 M1b -P1: procnto up`; `CPU:AARCH64 Release:8.0.0` and a `Cortex-A78ae` line; `SMPCHECK CENSUS PASS`; `SMPCHECK RESULT PASS-DEGRADED cpus=1/6 secs=60 reasons=none`; `T234 M1b -P1: resetting so the log can be recovered`; then the firmware banner and an autoboot to L4T on a new `boot_id`.
+  - Every T2 and T3 token arrived inside §6.6's bounds. No key was armed or sent after `go`, and power was not cut.
+- **§6.7.**
+  - `reset_reason` read `MAINSWRST`.
+  - pstore's `console-ramoops-0` carries the run from the shim line to `resetting`, with no `dmesg-ramoops` record (no Linux Oops).
+  - The file's time matches the earlier shutdown, not the run. Presumably the clock at early boot is restored from the last shutdown before NTP (unverified). The content is this run's: a cold boot came between them.
+- **C.**
+  - `com3-term.ps1` was stopped, and its key log closes with `session-exit`.
+  - The TX wire came off J14 pin 3 (D8). RX on pin 4 and GND on pin 7 stay: the M0-M4 wiring.
+  - **D10 was taken.** The file's hash read back as staged, the file was removed with `sync`, and the ESP listing then equalled S0's.
+  - Kept: `~/m5-backup` on the board, and the PC build `orin-native/uefi/out/M5LOAD.EFI` (git-ignored).
+
+### 14.2 §5.2, item by item
+
+1. T1 in P3 and again in R1: **PASS.**
+2. T2 in R1: **PASS.**
+3. The ESP after R1 is S0 plus exactly `/boot/efi/M5LOAD.EFI` with its staged hash: **PASS.**
+4. **PASS.**
+   - `Δ(S1,S2)` and `Δ(S2,S3)` add no name and remove none.
+   - Each changes only `MTC`, which `Δ(S0,S1)` also changes. No name changed only in `Δ(S2,S3)`, so no warm control S4 was needed.
+   - `efibootmgr -v` equals S0 apart from `BootCurrent`.
+5. A new `boot_id`; the current and active bootloader slot as in S0; `extlinux.conf`, `BOOTAA64.efi` and `bios_version` as in S0: **PASS.**
+
+**Record wording: M5-F met (T3 reached), in one session (P2, P3, R1).** Under the owner's decision of 2026-09-11, the M path ends at this functional pass. README PR #1 is the owner's to merge.
+
+### 14.3 Deviations, and how each was handled
+
+- **§8 item 4, the loopback, was not performed.** The owner decided this at P1, with the TX wire already on J14 pin 3. Refitting pin 3 carries its own risk: R29 is unmeasured, and a miswired pin is F36.
+  - `com3-term.ps1 -SelfTest` ran instead and passed. It covers the key logic, not the wire.
+  - The two residuals were the TX framing on the adapter pin and a stray byte when COM3 opens. P2 was the stated control, and it held. It shows that autoboot survives the running terminal. The terminal was opened while L4T was up, before P2's `poweroff`, so P2 does not test a byte sent at the moment COM3 opens.
+  - P3 then showed typed input reaching the firmware. That settles framing in use, not at the byte level.
+- **P3 attempt 1 missed the ESC window.** Its key log holds only `session-start`, not even an `armed` line, so the keys went to another window.
+  - L4T was let boot fully (§6.5 step 2), no power was cut while the firmware ran, and P3 was repeated from step 1.
+  - No `go` was involved, so §5.3's retry rule applies.
+- **In P3 attempt 2, DC power was cut before the kernel's power-down line** and before the go-ahead to cut was given. COM3 shows no L4T shutdown output, then MB1 reporting a cold boot.
+  - This was an unclean L4T shutdown. It was not a §2 rule 5 event, because that rule covers a cut between power-on and the start of a boot option.
+  - The P3 gate found no state change beyond `MTC`.
+  - The helper's false READY that followed is in §14.6. No second cut was made.
+- **Extra ESCs.** §6.5 step 2 asks for one ESC. Attempt 2 sent several, and R1 sent more than one. Keys pressed before F12, including auto-repeat from a held key, were dropped and logged. The snapshots show no variable change beyond `MTC`.
+- **The 120 s operator bound was exceeded in P3 attempt 2.** The response was to launch a boot option (UEFI Shell, through Boot Manager), never to cut power. The launch itself came well after the bound: until the terminal was armed, the key log holds only dropped keys. R1 reached the Shell inside the bound.
+- **R10 is a datum, not a bound.** In attempt 2, the menu time past the bound drew no watchdog reset on this firmware (r36.4.4): one MB1 banner from the cold boot to `Shell>`, and no `L4TLauncher:`. F5 did not occur. `PcdBootWatchdogTime` itself stays unread (§12 Q4).
+- **Smaller departures from §6.5:**
+  - Step 5.3 went straight to `fs5:` rather than searching upward, because both Shell maps put the SD ESP there.
+  - Step 5.6's optional `memmap` was skipped.
+  - Step 6 was not followed as written (§14.4).
+  - The `reset` line carried a stray trailing backslash (R32, §14.4).
+- **§8 item 6 at P2.** L4T's uptime at P2's `poweroff` was above the item's threshold, because the session paused between S1 and P2 on S0's boot. It was not treated as a stop: the item guards kexec from a long-running L4T, and P2 is a `poweroff` and a DC cold boot. No Oops appeared.
+
+### 14.4 What the session taught, for the campaign's UEFI sessions
+
+- **`com3-term.ps1` arms per line.**
+  - Every F12 that arms marks the typed line untrusted, so that line's Enter disarms the terminal. Every Shell line needs its own F12.
+  - The script's header says a straight-typed line leaves it armed. That held for no line in this session. The behaviour is conservative, not dangerous.
+- **After the Enter on `reset` or `go`, the terminal is already disarmed.** §6.5 step 6's "press F12 at once to disarm" would arm it just as the firmware autoboots, the hazard §2 rule 6 exists for. Operated instead: read the terminal's state line, and press F12 only if it reads ARMED.
+- **Keys typed while disarmed are dropped and logged** as `dropped-disarmed`, including keys pressed before arming. The terminal also needs window focus for the whole hotkey window: P3 attempt 1 shows how that fails.
+- **Before commit 7c2e87d the key log recorded nothing.**
+  - `Write-Key` applied `-f` inside a .NET method call's parentheses, where PowerShell reads the commas as argument separators. The format threw, and an empty catch discarded the error. The send path was unaffected.
+  - The defect was fixed before P3, and P3's gate shows the key log working end to end.
+  - P2's no-key verdict rests on COM3: the countdown completed, no menu text appeared, and `L4TLauncher:` followed.
+- **The Shell ran `reset\` as `reset`.** It did not reject this trailing backslash; other stray characters were not tried. Read each line on screen before its Enter, and match helper patterns loosely.
+- **The Shell's filesystem map was stable.** The Shell's startup map, P3's `map -r` and R1's `map -r` all agree:
+  - FS0 is the firmware volume and FS1 a memory-mapped region.
+  - FS2 and FS3 are NVMe partitions 1 and 10; FS4 and FS5 are SD partitions 1 and 10.
+  - FS5 is the SD card's ESP. FS3 is the NVMe install's ESP, and its `EFI\BOOT\BOOTAA64.efi` is present, so F35's repair route has its file (R30). Whether that route boots stays untested (D12).
+  - This is one board with no added device; a USB device would change the map (C9).
+- **The Shell counts down for a `startup.nsh`.** The countdown ran out with no key, and there is no such file on the SD card's ESP. §7.4 keeps it that way.
+- **Autoboot survives the connected TX wire while the terminal runs** (R15). P2's control boot and the autoboots after P3's `reset` and R1's image reset all met no key and reached L4T. An unplugged adapter with the wire still on was never tried (§7.4).
+- **`nvbootctrl` reports `Capsule update status: 1` in S0 and in every later snapshot.** On this board that is the steady state, not a capsule M5 caused. What the value means was not read.
+- **The `MTC` variable changed in every snapshot interval, and no other variable did.** That is the `Δ(S0,S1)` allowance at work. The snapshots do not bracket each boot: `Δ(S1,S2)` spans several. `BootChainFwCurrent` and `BootCurrent` exist, but their contents did not change across the snapshots, whatever C10's per-boot writes do.
+
+### 14.5 Risks the session answered
+
+- **At P3:**
+  - R2: the firmware loads the loader outside the window (`self=`).
+  - R4: applications are entered at EL2 (`el=2`).
+  - R5: the device-tree table is present at Shell time.
+  - R6: the window, the target and the zone passed the map rules.
+  - R7: ESC, the arrows and typed text reach the firmware through pin 3 and the TCU.
+  - R8: the menus are named Boot Manager and UEFI Shell.
+  - R9: `ver`, `map -r`, `ls` and `reset` work. `memmap` was skipped and `connect` was not needed.
+  - R13: Setup, Boot Manager, the Shell, `check` and `reset` wrote nothing beyond `MTC`.
+- **At P2:** R14 (L4T left the ESP-root file alone) and R15.
+- **At R1 and §6.7:**
+  - R16 (`M5L-EBS ok`) and R17 (`M5L-JUMP`).
+  - R18 and R19 (the shim banner and T2).
+  - R20 (startup accepted the firmware tree: T3 was reached), R21 (the VHE line and `verdict=wired`) and R22 (`verdict=wired`).
+  - R23 (the image's reset, then the autoboot) and R24 (the black box survived).
+  - R11 (the bootloader slot as in S0 after each return).
+- **Across the session:**
+  - R25: §8 item 11 at P1 read the carveout where the shim writes; T1's zone rule passed with no refusal in P3 and R1; and §6.7 read the run back from it.
+  - R31: no Oops or panic line in the `poweroff`s of P2, P3 attempt 1 and R1. It was not observed in P3 attempt 2, where power was cut before the kernel's power-down line.
+- **R10:** a datum only (§14.3).
+- **R33, exercised once.** After §3.3 step 12, the shim's first instruction was fetched and its banner printed. Q16's `ctr=` reading is in the private record.
+- **Still open:**
+  - R12 (never tested, by rule 5).
+  - R29 (unmeasured, though the adapter's TX worked).
+  - R30 (the file is present; the route is not booted).
+  - R32: the operator made stray inputs, but the key logs and snapshots show none changed state.
+
+### 14.6 Session helpers, and the defects running them found
+
+- **Not committed.** The watch and judge helpers were session scripts: `m5-poweroff.sh`, `m5-watch-shell.sh`, `m5-t1.sh`, `p2-gate.sh`, `p3-gate.sh`, `m5-tail.sh`, `m5-watch-l4t.sh`, `m5-after-reset.sh`, `m5-t2t3.sh`, `m5-watch-go.sh` and `r1-gate.sh`. Copies of each helper's final version, with checksums, are kept, git-ignored, in the private record's `tools/`. The notes also name the earlier versions P3 used, of `m5-poweroff.sh` and `m5-after-reset.sh`, but those copies were not kept. The two gate scripts `p2-gate.sh` and `r1-gate.sh` are identified only by `tools/SHA256SUMS`. They are not reviewed code.
+- **`m5-poweroff.sh`** printed READY on COM3 silence with ssh gone. In P3 attempt 2 that silence was the Setup menu idling after a firmware boot.
+  - **Fixed before R1:** READY now requires the kernel's power-down line, and any firmware output after the `poweroff` stops the script with ANOMALY and no offset.
+  - It was validated against real shutdown segments (P2's and P3 attempt 1's, and attempt 2's firmware output), then used in R1.
+  - §6.4 step 3 and §6.5 step 1 still ask only for 30 s of COM3 silence before the power cut. A helper that times a power cut needs a positive marker.
+- **`m5-after-reset.sh`**'s pattern `^reset( .*)?$` rejected the line actually sent, `reset\`. The L4T watch was started by hand over the capture, retroactively, and missed nothing. The pattern was widened to `reset` followed by any non-alphanumeric character.
+- **`m5-t2t3.sh`** passed an escaped parenthesis through `awk -v`, which unescapes it. The unbalanced parenthesis killed awk, and the judging window would have run past the next MB1.
+  - It was found by replay before R1 and replaced by a bracket expression.
+  - Re-tested positively on M4 r1's kexec capture, and negatively on T0c, where the probe's exit must not yield T2.
+- **Cosmetic:** `m5-t1.sh`'s loader summary greps `el=` without an anchor. The `M5L start` line itself read `el=2`, and the order check was unaffected.
+
+### 14.7 What the pass does not show (§10, §5.4)
+
+- **Not repeatability.** One session, one `go`, one board, firmware `36.4.4-gcid-41062509`, one kimg.
+- **No timing.** §6.6's bounds were met, and that is all. No boot, hand-off or firmware duration is reported, and there is no comparison with kexec entry. The medians comparison is deferred to the campaign.
+- **No residual-state comparison.** Nothing shows that the firmware leaves clocks, frequency, the GIC, timers or devices in better order than kexec. Nothing shows DMA quiescence.
+- **T3 was recorded, not required.** M5-F rests on T1, T2 and the state checks. T3's `cpus=1/6` is M1b's one-core `-P1` result. It says nothing about `-P4`, `-P6`, qvm, or M3 and M4 images under UEFI entry.
+- **Cache coherency passing once is not proof of necessity.** R33's pass shows step 12 was enough this time. It does not show the step is needed on this core, or that it always suffices.
+- **The variable check covers only the paths this session took.** It is not a proof that no menu writes a variable.
+- **Not unattended.** An operator opened the Shell, once over the 120 s bound.
+- **R10 is one observation,** not a watchdog bound.
+- **Not option B or A',** not a supported or certified boot, and nothing about DRIVE OS, QNX OS for Safety or any ASIL property.
+- **No figure is published** before the 4.6(i) consultation.
+
+### 14.8 What M5 hands the freeze (§5.5)
+
+- **The highest tier reached under UEFI entry: T3,** in one session.
+- **The path as built needs an operator at the menus,** and this session showed how that step drifts: a missed window, extra ESCs, the bound exceeded once, and a stray character in a Shell line. Making it unattended needs a persistent `Boot####` or a `startup.nsh`, both on §7.4's Never list. The freeze would have to accept one explicitly.
+- **A' stays the one-artefact candidate (C16).** Because T3 was reached, D6's proposal to evaluate A' for v1 applies. The entry-path decision remains the owner's (D6).
+- **The kexec path's costs are unchanged** (plan §3.4).
+- **Next on the path:** S1-F (a Linux guest without a GPU under native qvm, with the qvm `dryrun` gate first), then the v1 freeze, then one campaign.
+- **Stale text, to correct later (list only):**
+  - §6.5 step 6 (the F12 after `reset`).
+  - §6.4 step 3 and §6.5 step 1 (silence alone before the power cut).
+  - `com3-term.ps1`'s header on straight-typed lines.
+  - §5.5's `plan:441`: the freeze gate's entry-path item has moved in the plan.
