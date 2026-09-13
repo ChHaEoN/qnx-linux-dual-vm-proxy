@@ -460,7 +460,7 @@ Every rung up to the freeze is functional: it passes or fails on what appears, n
 - **What runs:** a stock L4T R36.4.7 kernel `Image` with a small busybox initrd, its console on virtio-console. It runs on the TCG QHV host first, then natively.
 - **Prerequisites:**
   - M5-F. This is the owner's order, not a technical dependency.
-  - Checklist 11c: after the `rmmod` quiesce, `/proc/iomem` shows a second RAM window free. The host image then boots with it as a second `add_ram` (K5; §5, `init_raminfo.c`). A GPU range stays out of every `add_ram`.
+  - Checklist 11c: after the `rmmod` quiesce, `/proc/iomem` shows a second RAM window free. The host image then boots with it as a second `add_ram` (K5; §5, `init_raminfo.c`). A GPU range stays out of every `add_ram`. **2026-09-13:** 11c ran (checklist below). The quiesce frees no RAM window, because the map is fixed at boot, but one System RAM range held no reservation on any of three boots. Booting the host image with it as a second `add_ram` is still owed.
   - A qvm `dryrun` of the guest configuration, with its device tree dumped, on the TCG QHV host and with no GPU overlay.
   - The research track also gates S1 on a GPU stream-ID check and on the owner accepting an uncontained GPU. This plan leaves both before the first GPU stage, because S1 has no GPU. **2026-09-11 (owner):** confirmed. Of the research track's gates, S1-F needs only the qvm `dryrun` gate first; the GPU checks wait for the first GPU stage.
 - **Pass,** all of:
@@ -853,9 +853,19 @@ Orin, read-only (`sudo -n` reads only):
   values live in the DT node and the layout was confirmed by reading the memory itself ([blackbox-verified.md](../results/orin-native-port/20260909T1100Z/blackbox-verified.md)).
   Formerly: two sources disagreed (K10) and the black box's
   addressability depends on it.
-- [ ] **11c. After the first `rmmod` session, re-read `/proc/iomem`** and check `dmesg` for SMMU/EMEM faults,
+- [x] **11c. After the first `rmmod` session, re-read `/proc/iomem`** and check `dmesg` for SMMU/EMEM faults,
   to convert K5's exclusive-ownership HYPOTHESIS into evidence and to derive the M3+ second RAM window.
   **2026-09-11: now a prerequisite of S1-F ([§6](#architecture-versions-and-the-measurement-freeze-decided-2026-09-11)).**
+  **2026-09-13: run**, on a freshly booted L4T, with the owner present. The record is in a git-ignored `s1/` run directory.
+  - **Quiesce:** clean again. The isolate and all four `rmmod`s returned 0, with no Oops and no SMMU or EMEM line. This is the second clean run, after M3's P1 retry. nvgpu printed the same PMU-timeout lines while unloading as on 2026-09-10, and no fault followed.
+  - **What changed:** `/proc/iomem` was read before and after the quiesce on the same boot. Every System RAM and reserved line stayed the same; only the GPU and display drivers' MMIO claims went away. M3's P1 diff had compared reads from two different boots, so what it showed was KASLR. The quiesce frees no RAM window: the map is fixed at boot, and the GPU's memory went back to Linux's allocator.
+  - **Across boots:** the three boots compared were the 2026-09-09 harvest (raw/orin-iomem.txt) and the boots just before and after this run. On all three:
+    - the RAM windows were identical;
+    - the fixed reservations did not move: the CMA pool at `0x24a000000`, the swiotlb child of `0xc2000000-0xfffdffff`, the pstore region and the reservations above `0x25a700000`;
+    - only the Linux kernel image (KASLR) and a few page-sized reservations inside `0x26d830000-0x271dfffff` moved.
+  - **Candidate second window:** `0x100000000-0x249ffffff`, which held no reservation on any of the three boots. Linux's KASLR image can land inside it, which matters only while Linux runs.
+  - **Still HYPOTHESIS (K5):** no firmware or BPMP user of that range exists that `/proc/iomem` does not show.
+  - **Not yet tested:** the host image booting with the range as a second `add_ram`, with FreeMem checked in `pidin info`.
 
 First board session, owner decision (not read-only, but no reboot and nothing persistent):
 
