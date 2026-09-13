@@ -1,0 +1,43 @@
+# M1 layout-verification buildfile — a stand-in, not the M1 image.
+#
+# Phase 3b, docs/orin-native-port-plan.md §6.2. This exists so the claim "an IFS
+# built at the address the shim hands control to lays out correctly" is
+# reproducible rather than asserted. It uses the SDP's shipped startup-armv8_fm
+# because startup-t234-orin-nano does not exist yet; armv8_fm cannot boot this
+# board and is not meant to. What it verifies is the container: that mkifs
+# places the preboot stub at the base the shim jumps to, and that the resulting
+# startup_vaddr stays inside the 32-bit field the stub loads it from.
+#
+# Build and inspect (needs the SDP environment):
+#     mkifs m1-placeholder.build m1-placeholder.ifs
+#     dumpifs -v m1-placeholder.ifs
+#
+# Expected: *.boot at 0x80082000, startup_vaddr 0x80083800, compress=0.
+#
+# The base is 0x80082000 because kexec lands the image header at 0x80080000 and
+# the shim occupies the 8 KiB page from there. Change one and you must change
+# the other; build-shim.sh enforces the page size so they cannot drift silently.
+#
+# The real M1 buildfile will differ: startup-t234-orin-nano with its own
+# options (-m, -W, -t plus the library's -D/-P/-Q), the TCU as the debug device,
+# and tcu-cat/stamp in the image. Nothing here is a measurement.
+
+[image=0x80082000]
+[-compress]
+[virtual=aarch64le,raw] .bootstrap = {
+    startup-armv8_fm -vvv -P1
+    PATH=/proc/boot LD_LIBRARY_PATH=/proc/boot
+    [+keeplinked] procnto-smp-instr -v
+}
+[+script] .script = {
+    display_msg "T234 M1 placeholder: procnto up"
+    procmgr_symlink ../../proc/boot/ldqnx-64.so.2 /usr/lib/ldqnx-64.so.2
+    devc-pty
+    pidin info
+}
+[type=link] /usr/lib/ldqnx-64.so.2=/proc/boot/ldqnx-64.so.2
+libc.so.6
+libgcc_s.so.1
+/bin/ksh=ksh
+/bin/pidin=pidin
+/sbin/devc-pty=devc-pty
