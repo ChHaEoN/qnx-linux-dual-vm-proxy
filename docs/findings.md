@@ -9,6 +9,33 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-13 — Owner decision: Phases 2 and 3 are closed as architecture history
+
+The owner closed two phases in chat. Phase 2 (cloud twin IPC and latency) is closed as architecture A1 history, and
+Phase 3 (the hardware twin port on the Orin plain leg) as A2 history, so the README roadmap marks both done. Closed does
+not mean their original targets were met. The cloud leg's reliable runs never reached the 100k-iteration target, and
+KVM-accelerated boot on the Orin never worked; the Orin IPC run also used a rebuilt IFS. Their records are kept as
+architecture-version history and not chased, as the 2026-09-11 freeze decision set out. Neither phase will be redone.
+The v1 campaign's TCG twin legs and IPC runs are campaign work on reference architecture v1, not a reopening of Phase 2
+or 3. Two items stay open, and neither is tracked under those phases any more. The `qvm`/TCG virtio-queue stall is
+still not root-caused, and the IPC sample size is set once, at the v1 freeze. The GICv3/NISV KVM defect is a separate
+filing track, outside reference architecture v1. The README roadmap (branch `readme/phase4-qhv-leg`, draft PR #1) now
+shows Phase 3b's rungs: M0 to M5-F are done, and S1-F, the v1 freeze and the single measurement campaign are ahead.
+CLAUDE.md's Phase status carries matching notes. Nothing was run for this entry. The freeze decision is in
+[orin-native-port-plan.md](orin-native-port-plan.md#architecture-versions-and-the-measurement-freeze-decided-2026-09-11).
+
+## 2026-09-13 — Checklist 11c: the quiesce frees no RAM window (S1-F prerequisite)
+
+Checklist 11c ran on a freshly booted L4T with the owner present, as the first S1-F prerequisite. The `rmmod` quiesce was
+clean again, with no Oops and no SMMU or EMEM line. Reading `/proc/iomem` before and after the quiesce on the same boot
+showed that the quiesce frees no RAM window: every System RAM and reserved line stayed the same, and only the GPU and
+display drivers' MMIO claims went away. The map is fixed at boot. M3's earlier diff had compared two different boots, so
+what it showed was KASLR. Comparing several boots found one System RAM range that held no reservation on any of them;
+it is the candidate second window. K5 is still a HYPOTHESIS: no firmware or BPMP user of that range has been ruled out.
+Booting the host image with the range as a second `add_ram` is still owed, and the S1-F design is in progress. No
+figure is published here; the record is in a git-ignored `s1/` run directory, and the plan's
+[checklist 11c](orin-native-port-plan.md) carries the details.
+
 ## 2026-09-13 — M5-F: a UEFI cold boot reaches startup and procnto, and the M path ends
 
 M5's functional rung passed on the Orin Nano in one attended session, with the owner at the plug from P1 to C. It ran

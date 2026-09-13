@@ -269,8 +269,9 @@ Quick summary for context:
   host (not AWS — Graviton non-metal has no `/dev/kvm`/EL2, see
   [ADR-002](docs/phase2-topology-decision.md)). Curated log:
   [logs/sample-boot/qhv-tcg-host-and-guest-boot.log](logs/sample-boot/qhv-tcg-host-and-guest-boot.log).
-- Phase 2 — Cloud twin IPC + latency benchmark — **partial, real
-  numbers, honestly capped**: the `qvm` virtio-console `hostdev`
+- Phase 2 — Cloud twin IPC + latency benchmark — **~~partial,~~ real
+  numbers, honestly capped; 2026-09-13 (owner): closed as A1 history,
+  target not met**: the `qvm` virtio-console `hostdev`
   runtime-spike is resolved (host `/dev/ptyp0`↔`/dev/ttyp0` pty pair,
   guest `devc-virtio`→`/dev/vcon2`); real measured P50/P99/Max exist
   in [results/cloud/cloud-ipc-latest.csv](results/cloud/cloud-ipc-latest.csv).
@@ -291,8 +292,17 @@ Quick summary for context:
   two-way — see
   [ipc-test/qnx-guest-shmem-probe/README.md](ipc-test/qnx-guest-shmem-probe/README.md).
   The interrupt/notify-driven path was deliberately not attempted.
-- Phase 3 — Hardware twin port to Jetson Orin Nano — **substantial
-  progress, not closed**: Orin Nano flashed (JetPack 6/L4T R36.4.7)
+  **2026-09-13 (owner):** closed as architecture A1 history; the README
+  roadmap marks it done. Closing it does not mean the original target
+  was met: reliable runs never reached the 100k-iteration target. The
+  phase will not be redone. The v1 campaign's TCG twin legs and IPC runs
+  are campaign work on v1, not a reopening of this phase. The `qvm`/TCG
+  virtio-queue stall stays open and is still not root-caused, but it is
+  no longer tracked under this phase; the IPC sample size is set once,
+  at the v1 freeze.
+- Phase 3 — Hardware twin port to Jetson Orin Nano — **~~substantial
+  progress, not closed~~ 2026-09-13 (owner): closed as A2 history,
+  target not met**: Orin Nano flashed (JetPack 6/L4T R36.4.7)
   and SSH-reachable; the plain `qnx-safety-vm` IFS boots under
   **TCG** on real hardware. **KVM-accelerated boot is blocked** by a
   real, root-caused defect — a GICv3 distributor bring-up instruction
@@ -321,6 +331,14 @@ Quick summary for context:
   Honest caveat: this used a **rebuilt** IFS (new TCP server code
   staged in), not the byte-identical Phase-1 image — a real deviation
   from a strict zero-code-change portability claim.
+  **2026-09-13 (owner):** closed as architecture A2 history; the README
+  roadmap marks it done. Closing it does not mean the original target
+  was met: KVM-accelerated boot never worked, and the IPC run used a
+  rebuilt IFS. The phase will not be redone. The v1 campaign's TCG twin
+  legs and IPC runs are campaign work on v1, not a reopening of this
+  phase. The GICv3/NISV KVM defect stays open as a separate filing
+  track, outside reference architecture v1, and is no longer tracked
+  under this phase.
 - Phase 4 — Twin diff + DRIVE OS comparison — **started**:
   `scripts/twin/diff-results.sh` was rewritten to match the CSV schema
   the benchmarks actually produce (the original assumed a shape no
@@ -439,12 +457,15 @@ Quick summary for context:
 
 **Next actions (pick one, they're independent):**
 1. Decide whether to raise the committed cloud-leg run size now that
-   sentinel recovery is proven out to 300 iterations — the cheapest
-   remaining Phase-2 win, and it needs a decision, not a discovery.
+   sentinel recovery is proven out to 300 iterations — ~~the cheapest
+   remaining Phase-2 win,~~ and it needs a decision, not a discovery.
    Root-causing the `qvm`/TCG stall itself stays open behind it.
    **2026-09-11:** under the measurement-freeze decision the cloud-leg
    (A1) numbers are history. The run-size question is now settled once,
    at the v1 freeze, as the campaign's IPC sample size.
+   **2026-09-13 (owner):** Phase 2 is closed as A1 history, so this is
+   no longer Phase-2 work. The run size is a v1 freeze-gate item (sample
+   sizes), and the stall stays open outside the phase.
 2. File the GICv3/NISV defect with QNX/BlackBerry — **now the strongest
    of the three.** As of 2026-09-08 the filing no longer rests on
    disassembling their shipped binary: their own BSP source
