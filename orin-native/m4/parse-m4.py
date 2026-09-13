@@ -2965,6 +2965,62 @@ def cmd_selftest(a):
             good = got.startswith(want)
             log(f"selftest_xcheck_{name}", "ok" if good else f"fail(got:{got.replace(' ', '_')})")
             ok = ok and good
+    # I31 (m4-design.md 14.13 and 14.14): the gate helpers I30 and I30b added
+    # were checked once, by hand, against mutated copies of a board capture that
+    # were scratch inputs and were not kept. These are those checks, made
+    # permanent and compared exactly rather than by prefix, because each helper
+    # returns the list of reasons a criterion will fail for.
+    #
+    # They cover the helpers only. crit_1, crit_2 and crit_3 read a whole run
+    # record, which selftest does not build, so the integration path those
+    # helpers sit in is still uncovered - 14.13's point stands.
+    MK = ("m4-ipc-start", "m4-ipc-end")
+    TRC_OK = ["TRCCTL insert id=20 text=m4-ipc-start rc=0 errno=0",
+              "TRCCTL insert id=21 text=m4-ipc-end rc=0 errno=0",
+              "TRCCTL stop rc=0 errno=0"]
+    PH_OK = {"g_first": 10, "g_devb": 20, "g_net": 30, "g_ifup": 40, "g_sshd": 50,
+             "g_misc": 60, "g_startup_complete": 70, "g_srv": 65, "banner": 80}
+
+    def ph(**over):
+        d = dict(PH_OK)
+        for k, v in over.items():
+            if v is None:
+                d.pop(k, None)
+            else:
+                d[k] = v
+        return d
+
+    order_ok = ["T234-SHIM EL=2", "JUMP", "t234: all 4 cpus parked in smp_spin", "Starting next program"]
+    gate_cases = [
+        # trcctl: presence was the whole test before I30; the rc is now read.
+        ("trcctl_clean", trcctl_bad(TRC_OK, MK), []),
+        ("trcctl_stop_rc", trcctl_bad([t.replace("stop rc=0", "stop rc=1") for t in TRC_OK], MK),
+         ["trcctl_stop_rc:1"]),
+        ("trcctl_marker_rc", trcctl_bad([t.replace("id=20 text=m4-ipc-start rc=0",
+                                                   "id=20 text=m4-ipc-start rc=2") for t in TRC_OK], MK),
+         ["trcctl_insert:m4-ipc-start_rc:2"]),
+        ("trcctl_marker_absent", trcctl_bad(TRC_OK[:1] + TRC_OK[2:], MK),
+         ["trcctl_insert:m4-ipc-end_absent"]),
+        ("trcctl_silent", trcctl_bad([], MK),
+         ["trcctl_insert:m4-ipc-start_absent", "trcctl_insert:m4-ipc-end_absent", "trcctl_stop_absent"]),
+        # startup order: landing_ok proves presence, these two prove order.
+        ("order_clean", startup_order_bad(order_ok, 4), []),
+        ("order_reversed", startup_order_bad([order_ok[1], order_ok[0], order_ok[3], order_ok[2]], 4),
+         ["order-shim-before-jump", "order-parked-before-next-program"]),
+        ("order_absent", startup_order_bad(["nothing here"], 4), []),
+        # guest phases: D3 item 6, including the two things it says not to gate.
+        ("phase_clean", guest_phase_bad(PH_OK), []),
+        ("phase_out_of_order", guest_phase_bad(ph(g_net=15)), ["phase-order:g_devb>g_net"]),
+        ("phase_required_absent", guest_phase_bad(ph(g_devb=None)), ["phase-g_devb-absent"]),
+        ("phase_optional_absent", guest_phase_bad(ph(g_ifup=None, g_sshd=None, g_misc=None)), []),
+        ("phase_srv_late", guest_phase_bad(ph(g_srv=999)), []),
+        ("phase_after_banner", guest_phase_bad(ph(g_misc=999)),
+         ["phase-order:g_misc>g_startup_complete", "phase-after-banner:g_misc"]),
+    ]
+    for name, got, want in gate_cases:
+        good = list(got) == want
+        log(f"selftest_gate_{name}", "ok" if good else f"fail(got:{'+'.join(got) or 'none'})")
+        ok = ok and good
     log("selftest", "pass" if ok else "fail")
     try:
         write_text(out, log.text())
