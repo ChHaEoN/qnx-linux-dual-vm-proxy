@@ -67,16 +67,44 @@ function New-Esp {
     # T0e's negative control: flip one byte inside the embedded payload, so the
     # source CRC must refuse.
     #
-    # Not the end of the file. The first attempt flipped 64 bytes from the end
-    # and the loader answered CHECK PASS, correctly: the payload is padded to a
-    # page and the CRC covers the payload's own length only (design 13 D), so
-    # the flip landed in padding. The blob starts at RVA 0x6000, file offsets
-    # equal RVAs, and the T0 payload is several hundred bytes, so 0x6100 is
-    # inside it.
+    # The offset is derived from the payload itself, never written down. The
+    # first attempt flipped 64 bytes from the end and the loader answered
+    # CHECK PASS, correctly: the payload is padded to a page and the CRC covers
+    # the payload's own length only (design 13 D), so the flip landed in
+    # padding and the case passed for the wrong reason. A literal offset repeats
+    # that silently the moment the payload moves or shrinks - it is a negative
+    # control that can fail open, which is the one way a negative control must
+    # never fail. So the embedded copy is located by its own bytes and the flip
+    # is proved to land inside the CRC'd range.
     $path = Join-Path $esp 'M5LOAD.EFI'
+    $blobFile = Join-Path $uefi 'out\t0\contract-probe.bin'
+    if (-not (Test-Path $blobFile)) { throw "T0e: no T0 payload at $blobFile - rebuild with T0=1" }
     $bytes = [System.IO.File]::ReadAllBytes($path)
-    $i = 0x6100
-    if ($i -ge $bytes.Length) { throw "T0e: offset $i is past the image ($($bytes.Length) bytes)" }
+    $blob = [System.IO.File]::ReadAllBytes($blobFile)
+    if ($blob.Length -lt 64) { throw "T0e: the T0 payload is only $($blob.Length) bytes" }
+    if ($bytes.Length -lt $blob.Length) { throw "T0e: the image is smaller than the payload" }
+
+    # `.blob` carries `.align 12` and is linked last, and this is a flat image
+    # whose file offsets equal its RVAs, so the embedded copy starts on a page
+    # boundary. Only those candidates are tried; if the layout ever stops being
+    # page-aligned this throws instead of flipping a byte somewhere harmless.
+    $page = 4096
+    $hits = @()
+    for ($off = [int]([math]::Floor(($bytes.Length - $blob.Length) / $page)) * $page; $off -ge 0; $off -= $page) {
+      $same = $true
+      for ($k = 0; $k -lt $blob.Length; $k++) {
+        if ($bytes[$off + $k] -ne $blob[$k]) { $same = $false; break }
+      }
+      if ($same) { $hits += $off }
+    }
+    if ($hits.Count -ne 1) {
+      throw ("T0e: expected the payload exactly once on a page boundary, found {0}. " -f $hits.Count) +
+            'Rebuild with T0=1, or check that .blob is still page-aligned and last.'
+    }
+    $start = $hits[0]
+    $i = $start + [int]($blob.Length / 2)
+    if ($i -lt $start -or $i -ge ($start + $blob.Length)) { throw "T0e: derived offset $i is outside the payload" }
+    Write-Host ("T0e: payload at 0x{0:x}, {1} bytes; flipping 0x{2:x}, inside the CRC'd range" -f $start, $blob.Length, $i)
     $bytes[$i] = $bytes[$i] -bxor 0xFF
     [System.IO.File]::WriteAllBytes($path, $bytes)
   }

@@ -1927,7 +1927,15 @@ The review narrowed what the pass shows:
 
 **Why the rule cannot stand as written.** From the listing alone, a CPU that is idle for the rest of the window is indistinguishable from a CPU that lost its trailing buffer. Flushing writes the buffers that exist; it does not create events. Gating on this would refuse real captures, including any run with a parked or lightly loaded core, which this board has: the board's r1 run passed the rule only because all four CPUs happened to be busy at the end.
 
-**What is in place instead.** Both implementations track a per-CPU `short_tail`, and the `RING` record carries `short_tail_cpus`, naming every CPU whose events stop before the end marker. The r1 review's point is met - that evidence used to sit only in ungated `BUF last_t` fields - and it now appears in a record the parser and the counter cross-check, without failing a window that is merely idle.
+**What is in place instead.** Both implementations track a per-CPU `short_tail`, and the `RING` record carries `short_tail_cpus`, naming every CPU whose events stop before the end marker. The r1 review's point is met - that evidence used to sit only in ungated `BUF last_t` fields - and it is now a record, without failing a window that is merely idle.
+
+**Correction (2026-09-13, the same day this section was written).** The sentence above first read "it now appears in a record the parser and the counter cross-check". That was an overclaim, and an audit caught it. Three things are true instead:
+
+- **Nothing compares the field.** `xcheck_stats`'s `compare` list asks the `RING` record for `state` and `wrapped_cpus` only, so `short_tail_cpus` is emitted by both implementations, logged by both, and compared by neither.
+- **On the one board record that carries it, that comparison did not run at all.** `xcheck_stats` is guarded by `v_complete`, and r1's verbatim block was capped.
+- **Adding it to the comparison is not the obvious fix.** The verbatim selection keeps the events inside the marker window, so the PC's last event on a CPU cannot follow the end marker, while the counter reads a whole listing in which a trailing buffer can. The two sides would disagree by construction on exactly the CPUs the field exists to name. A comparable form would have to bound the counter's side to the window too; whether that is worth doing is an open item, not a change made here.
+
+There is a second reason the field has never been compared on a board record: the `m4count` in every image built so far predates this section, so the counter's `RING` line in those records carries no `short_tail_cpus` at all. That is part of the freeze-gate item about validating both rungs under one instrument version.
 
 **What would gate it.** A signature that separates a lost tail from an idle CPU. The listing does not carry one today: a lost final buffer leaves no gap in the sequence numbers, because the numbers that survive are contiguous. Until the freeze decides otherwise, reporting is the honest option, and §14.9's follow-up list is amended accordingly.
 
