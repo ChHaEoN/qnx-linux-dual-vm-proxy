@@ -215,6 +215,12 @@ function Invoke-PythonBounded([string]$Name, [string[]]$PyArgs, [int]$Seconds) {
 $exitCode = 1
 try {
   New-Item -ItemType Directory -Force -Path $runRoot | Out-Null
+  # I38: lin rehearses r1, which runs with E3 none (14.7); an unset -E3 becomes none, and status0 is
+  # refused. Settled before the first log line, so the log names the E3 the image is built with.
+  if ($Variant -eq 'lin') {
+    if (-not $PSBoundParameters.ContainsKey('E3')) { $E3 = 'none' }
+    elseif ($E3 -ne 'none') { Fail "-Variant lin rehearses r1 and needs -E3 none (m4-design.md 14.7), not $E3" }
+  }
   Log ''
   Log ('===== build-m4tcg-image.ps1 start utc=' + (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') + ' =====')
   Log "variant=$Variant tag=$(if ($Tag) { $Tag } else { 'none' }) dir=qhv/m4tcg/host-$vName e3=$E3 grace=$Grace image=rebuilt-host guest=byte-identical"
@@ -233,11 +239,6 @@ try {
     # FMT_NEED = 5 x 21 + 270 + 2 + 32 = 409. TCG-only values, never a board image's.
     'lin'  { $mode = 'full';  $rung = 'r1'; $kind = 'linear'; $tlArgs = '-c -S 21M';          $traceNeed = 54;  $fmtNeed = 409; $cntNeed = 304
              $capV = 1048576; $capC = 524288; $forms = 'v c'; $cntOut = '-v /dev/shmem/flt.v -V 1048576 -c /dev/shmem/flt.c -C 524288' }
-  }
-  # I38: lin rehearses r1, which runs with E3 none (14.7); an unset -E3 becomes none, and status0 is refused.
-  if ($Variant -eq 'lin') {
-    if (-not $PSBoundParameters.ContainsKey('E3')) { $E3 = 'none' }
-    elseif ($E3 -ne 'none') { Fail "-Variant lin rehearses r1 and needs -E3 none (m4-design.md 14.7), not $E3" }
   }
   $sMb = [int]([regex]::Match($tlArgs, '-S (\d+)M').Groups[1].Value)
   if ($E3 -eq 'none') { $cntOut += ' -E none' }

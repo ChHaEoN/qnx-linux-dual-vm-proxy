@@ -67,6 +67,24 @@ case ipc_client_signal
 sub prog=qnx-host-client rc=0 sig=0 => prog=qnx-host-client rc=0 sig=9
 expect crit_1=fail(ipc)
 
+# I40 (14.25): the completion rule, samples <= iters <= samples + recoveries <= iters + 5 warm-up.
+case ipc_recovery_in_warmup
+sub sentinel_recoveries=0 => sentinel_recoveries=1
+expect run_verdict=pass
+
+case ipc_recovery_in_timed_run
+sub samples=15 payload=48 => samples=14 payload=48
+sub sentinel_recoveries=0 => sentinel_recoveries=1
+expect run_verdict=pass
+
+case ipc_sample_missing
+sub samples=15 payload=48 => samples=14 payload=48
+expect crit_1=fail(ipc)
+
+case ipc_recoveries_beyond_warmup
+sub sentinel_recoveries=0 => sentinel_recoveries=6
+expect crit_1=fail(ipc)
+
 case rates_pre_cpu_absent
 del-first SMPCHECK done cpu=2
 expect crit_1=fail(rates-pre:2)

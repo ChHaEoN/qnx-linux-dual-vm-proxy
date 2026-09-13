@@ -215,7 +215,7 @@ python orin-native/m4/parse-m4.py size-r2 --r1-parse results/orin-native-port/<u
 - **send:** block `v`, then block `c`.
 
 **r1 passes, and gates r2, when all of:**
-1. D3 §8 items 1-11 with M4's names: `T234 M4 r1 -P4`, `M4 CONFIG rung=r1 mode=full …`, `M4 CHECK … ok`, the real banner stamp, the IPC completion rule `samples + sentinel_recoveries = 15` with `rc=0 killed=0`, `md5_post` ok, `MAINSWRST`. **2026-09-13 (I30b, I32; §14.14, §14.16):** in full, and with D3 §8 item 12's token list, which `crit_neg` applies. The parser now checks:
+1. D3 §8 items 1-11 with M4's names: `T234 M4 r1 -P4`, `M4 CONFIG rung=r1 mode=full …`, `M4 CHECK … ok`, the real banner stamp, the IPC completion rule ~~`samples + sentinel_recoveries = 15`~~ (**2026-09-13, I40, §14.25:** `samples ≤ 15 ≤ samples + sentinel_recoveries ≤ 15 + 5`, because a recovery in one of the 5 warm-up iterations takes no timed sample) with `rc=0 killed=0`, `md5_post` ok, `MAINSWRST`. **2026-09-13 (I30b, I32; §14.14, §14.16):** in full, and with D3 §8 item 12's token list, which `crit_neg` applies. The parser now checks:
    - **item 3:** every value, not only its presence;
    - **item 5:** the banner in the guest stream `diag` prints, and `cps=31250000` on both stamps;
    - **item 7:** no `rc=` line before `M4 STATE teardown`, and a `pidin` listing in both `report` and `report_ipc`;
@@ -2202,4 +2202,40 @@ Every check below ran on the PC, with no board contact, and no figure is recorde
   - Three doc slips: this section did not exist yet, "one edit", and `m4.build.in`'s marker comment.
 - **Open, and older than this work:** a NUL byte inside a listing line. `m4count`'s `read_line` measures a line with `strlen` after `fgets`, so a mid-line NUL reads as a long line and the drain swallows the next line, while the Python counts both lines normally. traceprinter's text output carries no NUL, and no listing has shown one. A fixture and a fix in both implementations are a freeze-gate candidate.
 
-**TCG rehearsal of `lin` and `r0`** (§11.4): after this change is on main, because the builders need the main checkout's paths.
+**TCG rehearsal of `lin` and `r0` (§11.4).** Both images were built from main at the commit that carries I32-I39, because the builders need the main checkout's paths. Each ran once under QEMU TCG, with QEMU and the parser exiting cleanly, no survivors, and the canonical images unchanged before and after. The figures are emulated and none is recorded.
+
+- **`r0`, attempt 9: `run_verdict=pass`.**
+  - The target counter's `-q` records matched every expectation of all six fixtures (`crit_4`). That covers `m4fix-5`'s `short_tail_cpus` and `m4fix-6`'s unformatted kinds and `cpu_out_of_range`, so the counter half of I35's and I36's lockstep has now run on the target and not only been reviewed.
+  - The probe's STOP returned `rc=0` and read `by=stop` under I33's ladder.
+- **`lin`, attempt 8.** The linear path ran end to end:
+  - the arm line read `kind=linear` with the params' args, and the memory gate passed at the linear need;
+  - both marker inserts and the STOP returned `rc=0`, and the ladder read `by=stop`;
+  - the `.kev` was `within` its budget;
+  - the ring was `held`, with no short tail;
+  - `xcheck_pairs` matched and carried its in-range counts, and `c_stats` matched;
+  - the CSV row took its timestamp from `run-end-epoch`.
+
+  Its parse still read `run_verdict=fail(crit_1)`, on `ipc` alone. The known qvm/TCG virtio stall hit a warm-up iteration, the sentinel recovered it, and D3's completion rule counted the recovery against the timed run. That is a defect in the rule, not in the linear path, and I40 (§14.25) corrects it.
+- **The target's unformatted lines under TCG.** In both rehearsals they were header and blank lines only, so no `SAMPLE sub=unformatted` line was printed. That is a TCG observation: the board's own listing layout is still to be seen.
+- **Not rehearsed:** the linear memory gate's refusal path. The board's first r1 attempt ran that path (§14.8).
+
+### 14.25 I40: the IPC completion rule counts a warm-up recovery wrongly (2026-09-13)
+
+**Found by the `lin` rehearsal (§14.24).** D3 §8 item 8, carried into §2.2 item 1, reads the client's completion as `samples + sentinel_recoveries = 15`. The client does not count that way:
+- **Samples.** A recovered iteration yields no sample, whether it is a warm-up or a timed iteration (client.c:342-345), and a sample is kept only when the iteration index is past the warm-up (client.c:376).
+- **Recoveries.** `sentinel_recoveries` counts every recovery, warm-up included.
+- **The consequence.** A stall in one of the 5 warm-up iterations that the host script passes leaves 15 samples and 1 recovery, and the rule reads that as a failure. The client README's own diagnostic runs show the same arithmetic.
+- **On the board.** A genuine Q or T-run whose stall landed in warm-up would have failed `crit_1`.
+
+**The rule now:** `samples ≤ iters ≤ samples + sentinel_recoveries ≤ iters + 5`.
+- **Left side:** the timed run lost no sample it did not recover.
+- **Right side:** there were no more recoveries than the warm-up and the missing samples can account for.
+- **What it cannot say:** it cannot place a recovery exactly. The client prints the iteration of each recovery on stderr, and the host script shows only the head of that stream.
+
+**Cases.** `m4run-cases.txt` gains four: a recovery in warm-up and a recovery in the timed run, which both pass, and a missing sample and more recoveries than the envelope allows, which both fail `crit_1` on `ipc`.
+
+**The rule's origin.** It came from M3's design, and M3's records are not re-judged here.
+
+**Verification.** `selftest` passes, with 29 run-level cases now. Re-parsed under I40, the `lin` rehearsal's serial log gives `run_verdict=pass`, so nothing but the rule failed it. The `k512` rehearsal's log and the board's r1 record, neither of which had a warm-up recovery, still give `run_verdict=pass`. Only verdicts were read.
+
+**Also in this change:** `build-m4tcg-image.ps1` now settles `lin`'s E3 before its first log line. `attempt8`'s build log names `e3=status0` in its header line, while its image and params carry `none` (`-E none` in the counter options).

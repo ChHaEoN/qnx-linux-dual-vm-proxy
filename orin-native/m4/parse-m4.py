@@ -1531,6 +1531,7 @@ PIN_GUEST = "968029316b940f53580228f44e393877e032e251d78f3c752600cae726a7cf4f"
 PIN_DISK = "cf5b06d0b3cb524201c71440fdda42a18d2636d45938acd8ec95cfa21314216b"
 PIN_CLIENT = "52cb4dcad5a3632f88092289ef68668cc1fc604f150f3e2f8b9f31dc82caa7eb"
 IPC_PAYLOAD = 48            # FRAME_PAYLOAD_BYTES, the client's `samples=` line (D3 §8 item 8)
+IPC_WARMUP = 5              # the warm-up the host script passes: `qnx-host-client @ITERS@ /dev/ttyp0 5` (I40)
 KEV_T = "/dev/shmem/t.kev"
 PIDIN_HEAD_RE = re.compile(r"^\s*pid\s+tid\s+name\b")
 SAMPLES_LINE_RE = re.compile(r"^samples=(\d+) payload=(\d+) cps=(\d+)$")
@@ -2556,8 +2557,14 @@ def cmd_run(a):
         # reads it in the guest stream `diag` prints (D3 §8 item 5). The client's
         # bwait line must also show no signal (item 8).
         client = R.bwait_for("qnx-host-client")
+        # I40 (m4-design.md 14.25): a recovered iteration yields no sample, warm-up
+        # or timed (client.c:342-345, :376), and sentinel_recoveries counts both, so
+        # D3 §8 item 8's samples + recoveries = iters misfires when a stall hits a
+        # warm-up iteration (the §11 lin rehearsal did). The timed run completed when
+        # samples <= iters <= samples + recoveries <= iters + the host script's warm-up.
         if (client is None or client["rc"] != 0 or client["sig"] != 0 or client["killed"] != 0
-                or R.samples is None or R.sentinel is None or R.samples + R.sentinel != iters):
+                or R.samples is None or R.sentinel is None
+                or not (R.samples <= iters <= R.samples + R.sentinel <= iters + IPC_WARMUP)):
             why1.append("ipc")
         why1 += run_lines_bad(order_src, rung=rung, p_cpus=p_cpus, board=board,
                               cps_want=BOARD_CPS if board else None)
