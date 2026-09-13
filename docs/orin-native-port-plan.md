@@ -41,7 +41,7 @@ board). Four came back materially wrong. The corrections that change the plan, n
    still **VENDOR_CLAIM** from an online doc page, and the~~ The "filtered listing fits through the TCU in 1-2 min"
    estimate has never been exercised. ~~A zero-cost dry run inside the existing Windows-TCG QHV image must
    happen before M4 is designed around it.~~ **2026-09-11:** dry run 7b is done. Class-10 IDs 0, 1 and 7 are
-   VERIFIED emitted under TCG, and the run corrected the recipe (§6, M4). The board is unconfirmed; M4-F's r1 checks it.
+   VERIFIED emitted under TCG, and the run corrected the recipe (§6, M4). ~~The board is unconfirmed; M4-F's r1 checks it.~~ **2026-09-11:** M4-F's r1 found them emitted on the board ([m4-design.md](../results/orin-native-port/20260909T1100Z/m4-design.md) §14.9).
 4. **The board-build claim was half right, its symbol gate wrong** (K12). The toolchain question is now
    **settled positively** — the BSP zip's `armv8_fm` board builds unmodified under the win64 SDP 8.0 tooling
    ([`build-armv8_fm.md`](../results/orin-native-port/20260909T1100Z/build-armv8_fm.md), exit 0,
@@ -322,6 +322,7 @@ This section carries no figures. Public figures stay where the inventory below p
 
 ~~**Awaiting owner confirmation.** This section assumes the M path ends at M5's functional pass. That sets when README PR #1 can merge: after M5-F, without waiting for S1, the freeze or the campaign. Until the owner confirms, PR #1 is not merged.~~
 **2026-09-11 (owner):** confirmed. The M path ends at M5-F's functional pass, and README PR #1 can merge then, without waiting for S1, the freeze or the campaign. Still open: whether a failed M5-F also ends the M path (M5-F, "If it fails").
+**2026-09-13:** M5-F was met (below), so the M path has ended and README PR #1 is the owner's to merge. The open question about a failed M5-F no longer arises.
 
 #### Architecture versions
 
@@ -394,18 +395,18 @@ Publication is unchanged by this section. §9's open item on already-published n
 
 #### The revised ladder
 
-M0, M1, M2, M1b and M3 (met) → **M4-F** → **M5-F** → **S1-F** → **freeze v1** → **campaign**.
+M0, M1, M2, M1b and M3 (met) → **M4-F** (met 2026-09-11, with the r0 instrument caveat below) → **M5-F** (met 2026-09-13, under m5-design's option A, with the deviations below) → **S1-F** → **freeze v1** → **campaign**.
 
 Every rung up to the freeze is functional: it passes or fails on what appears, never on a figure. A rung still keeps what its instruments print, but those figures are not judged, not reported and not carried into the campaign.
 
 **M4-F: the trace instrument works on the board (r0, r1).** The rungs are defined in [m4-design.md](../results/orin-native-port/20260909T1100Z/m4-design.md) §2.
-- **Before r0:** m4-design's §11 TCG rehearsal passes (its decision N7).
+- **Before r0:** m4-design's §11 TCG rehearsal passes (its decision N7). **2026-09-11:** it covered the ring variants. The linear stop path and the I26 gate had no rehearsal variant, and the owner waived a rehearsal before r1's rerun.
 - **r0** runs the trace tools under the EL2 host with no qvm. It passes on the ten gates of m4-design §2.1: landing and startup, the state sequence, the clock verdicts, the counter fixtures, the probe stop, the memory lines, the rate lines, the tool bounds, the TCU transfer and the reset. The memory, rate and speed lines feed r1's image parameters (m4-design §2.4). Their values are sizing inputs, not results.
-- **r1** runs M3's full run inside that ring. It passes on the six gates of m4-design §2.2:
+- **r1** runs M3's full run inside that window. **(2026-09-11: as run, the linear contingency D1(b); the sizing rule returned `lin`.)** It passes on the six gates of m4-design §2.2:
   - M3's pass criteria, including the banner and the completed IPC pair;
   - the trace arm, stop and file lines;
   - Class-10 IDs 0, 1 and 7 counted above zero on the board, with one vCPU thread, one offset, and no order violations or time mismatches;
-  - a ring that held;
+  - a window that held;
   - the on-target counter and the PC's parse agreeing pair for pair;
   - both transfer checks.
 
@@ -413,17 +414,47 @@ Every rung up to the freeze is functional: it passes or fails on what appears, n
 - **Fail:** as m4-design §1.7 defines it. If r1 counts zero of any of the three IDs, and the PC's parse agrees over a complete window, M4 takes the INTERRUPT/THREAD fallback and every later number is relabelled. A zero the PC cannot verify means a rerun.
 - **Deferred to the campaign:** r2 (Q and T1-T5), m4-design's P2-P5, r2's sizing, the PMCCNTR rung (its decision D6(b)) and the emulated Orin-TCG counterpart.
 - **Sizing caveat:** m4-design sizes each rung from the record of the one before (§2.4). If v1 changes the host image, the CPU set or the guest set, r0's and r1's sizing records go stale. The campaign then runs its own sizing rungs on v1.
+- **Met 2026-09-11.** r0 and r1 passed functionally ([m4-design.md](../results/orin-native-port/20260909T1100Z/m4-design.md) §14.6, §14.8-14.9).
+  - **Instrument caveat:** the two rungs passed under different instrument versions. r0's pass is an offline re-parse under a parser that is in no commit, its record does not re-parse under today's parser, and its image needs a rebuild (I25). Re-validating r0 under the frozen instruments is a freeze-gate item.
+  - **r1's first attempt** stopped at the memory gate on a sizing defect (I26), and the rerun passed every gate.
+  - **An independent review** found no blocker, but it narrowed the claim:
+    - r1's PC cross-check covered only the early part of a capped listing;
+    - the evidence that every CPU's tail was flushed is not gated;
+    - several parser gates are weaker than m4-design's wording.
+  - **Those follow-ups** come before the campaign relies on M4 (freeze gate item 9).
 
 **M5-F: a UEFI cold boot reaches startup.** It replaces the optional M5 below and runs under §3.5 Fallback B's rules.
-- **Prerequisites:** M4-F; unknown #12 answered by a header read only (`readelf`, `od`), never a code read (§9, 4.6(c)); the J14 console, for the UEFI Shell.
+- **The PC-only half is done (2026-09-12): T0 passed.** The loader, its build, its ten-item gate and the QEMU
+  rehearsal are written and run ([m5-design.md](../results/orin-native-port/20260909T1100Z/m5-design.md) §6.1,
+  §13). Under QEMU the loader is entered at EL2, checks the map, copies the payload, exits boot services and
+  branches: the stand-in payload reports the hand-over contract intact at the link address. The three refusal
+  cases refuse. Two of the design's open questions closed on the way (Q1 and Q2), and four loader defects were
+  found by running it rather than by reading it.
+- **What T0 cannot show:** cache coherency after the copy. QEMU invalidates its own translated code on a guest
+  write, so only the board tests that (risk R33). The gate reads the sequence statically instead.
+- ~~**What remains:** the attended board session, P1 to C, with the owner at the plug.~~ **2026-09-13:** the attended board session ran, P1 to C, with the owner at the plug. See the "Met" bullet below.
+- **Prerequisites:** M4-F; ~~unknown #12 answered by a header read only (`readelf`, `od`), never a code read (§9, 4.6(c));~~ the J14 console, for the UEFI Shell. **2026-09-12:** under m5-design's option A the firmware never loads a QNX PE, so unknown #12 is not a prerequisite. It stays desk work (m5-design §12 Q8), and only its first half is answerable that way at all: the second half is a claim about EDK2's behaviour, which no header read reaches. `readelf` also cannot parse PE, so that read would use `od` and a struct reader.
 - **Pass,** all of:
-  - the PE, launched from the firmware's built-in UEFI Shell, prints `Entering startup...` on the console;
-  - no UEFI variable is written;
+  - the PE, launched from the firmware's built-in UEFI Shell, prints `Entering startup...` on the console **(2026-09-12, option A: the PE is our loader `M5LOAD.EFI`, which carries the pinned kimg; m5-design §3.3 and §13)** **(2026-09-13, as run: under option A that string never prints, because the library's `efi_entry_point` never runs. The equivalent is m5-design §5.1's T2: the shim's `T234-SHIM EL=2` line, then startup's `t234: WDT0 CR=` line; m5-design Appendix A)**;
+  - no UEFI variable is written **(2026-09-13, as run: tested operationally by m5-design §5.2 item 4, because the firmware writes variables on every boot. Between each pair of snapshots, no name was added or removed, and every changed name also changed in the control interval, from the baseline through P2's plain cold boot. Only the MTC variable changed. The check covers only the paths the session took.)**;
   - the ESP gains one new file and nothing else, after `extlinux.conf` and `BOOTAA64.efi` are backed up;
   - the board then boots its unchanged L4T.
 - **Recorded, not required:** the image reaches `procnto up`.
 - **Deferred to the campaign:** the M3 and M4 medians under UEFI entry against kexec entry, the residual-state comparison, and any cold-boot time.
 - **If it fails:** v1 keeps kexec as its only entry path, and the campaign drops the M5 comparison. Whether the M path still counts as ended then is for the owner.
+- **Met 2026-09-13**, in one attended session: P2, P3 and R1 ([m5-design.md](../results/orin-native-port/20260909T1100Z/m5-design.md) §14, "Board session (2026-09-13)"). In the design's wording: M5-F met (T3 reached).
+  - **What ran:** option A. `M5LOAD.EFI`, carrying the unchanged pinned M1b kimg, was launched from the firmware's UEFI Shell on a cold boot. The firmware never loaded a QNX PE.
+  - **The tiers:** T1 in P3 and again in R1; T2 in R1, in order and with no negative token. T3 was reached too: `procnto up`, a stock `pidin info` with `Release:8.0.0`, smpcheck's one-core result, then the image's own reset back to L4T.
+  - **The state checks (m5-design §5.2 items 3-5):** the ESP after R1 was the baseline plus exactly the staged file. `efibootmgr -v` matched the baseline apart from `BootCurrent`. L4T came back on a new boot with its bootloader slot, `extlinux.conf`, `BOOTAA64.efi` and firmware version unchanged. D10 then removed the file.
+  - **Deviations:** P3's first attempt missed the ESC window and was repeated. In its second attempt, DC power came off before L4T's kernel reported its power-down, and the Shell was reached after the 120 s operator bound. No watchdog reset followed. That attempt and R1 both sent more than one ESC where m5-design §6.5 asks for one. P1's terminal loopback (item 4) was not performed, by owner decision.
+  - **Not shown (m5-design §10):**
+    - no timing, and no comparison with kexec entry;
+    - not a cleaner state than kexec leaves, and not DMA quiescence;
+    - one `go` on one board, firmware and kimg, so no repeatability;
+    - not a proof that no menu writes a variable: the check covers only the paths this session took;
+    - not an unattended entry, and nothing about option B or unknown #12.
+  - **For the freeze:** gate item 3 can now weigh a UEFI entry that passed. As built it needs an operator at the firmware menus (m5-design §5.5, D6).
+  - **Figures** stay unpublished until the 4.6(i) consultation (§9): the run note on the local branch `m3-results-unpublished`, the logs in the session's git-ignored record.
 
 **S1-F: a Linux guest without a GPU under native qvm.** S1 comes from the GPU pass-through research track, an unpushed branch described here in words. That track stages the owner's target from S0, a desk feasibility study, to S5, a small model on a passed-through GPU. S1 is its first stage, and it has no GPU. S2-S5 stay outside this plan.
 - **What runs:** a stock L4T R36.4.7 kernel `Image` with a small busybox initrd, its console on virtio-console. It runs on the TCG QHV host first, then natively.
@@ -453,7 +484,7 @@ v1 is frozen when all of these are settled and written into the manifest:
 6. **Memory map:** the first window, the second window, and the GPU range kept out.
 7. **Guest device sets,** chosen so that no fixed guest wait falls inside a timed interval. [digital-twin-design.md](digital-twin-design.md) §1a shows the rng device's effect under TCG.
 8. **Guest disk:** the RQ-2 diagnostic variant, or one regenerated from clean sources.
-9. **Instruments:** frozen at their source hashes, rehearsed under TCG, parser self-tests passing.
+9. **Instruments:** frozen at their source hashes, rehearsed under TCG, parser self-tests passing. **2026-09-11:** this includes m4-design §14.9's gate fixes; either a whole-window M4 cross-check or the owner's acceptance of r1's partial one; a rebuilt `m4-r0`, re-validated under the frozen instruments, so both M4-F rungs stand under one version; and three decisions to settle or drop, namely N18, the linear flush-activity record of contingency C2, and the final E3 rule. **2026-09-13:** §14.9's gate fixes, its linear sizing and its record items are implemented as I27-I39 (m4-design §14.10-14.23), with parser and counter self-tests and a run-level case per rule. C2's flush-activity wording is dropped (I39). Still open from this item: the whole-window cross-check or the owner's acceptance, N18, the final E3 rule, and the rebuilt and re-validated `m4-r0`.
 10. **TCG twin legs:** the QEMU release and build on each side, the device set, and `-snapshot`.
 11. **Sample sizes** for every campaign measurement, including the IPC iteration count, and the rules that derive them (m4-design §2.4 for the dwell).
 12. **Stamping and re-runs:** the version stamp and the re-run rule below.
@@ -663,7 +694,9 @@ kexec-residual-state caveat a finding in its own right.~~ **Superseded 2026-09-1
 functional, as **M5-F** in [the freeze section](#architecture-versions-and-the-measurement-freeze-decided-2026-09-11).
 PASS = the PE reaches `Entering startup...`, no UEFI variable is written, the ESP gains only one new file, and the
 unchanged L4T comes back afterwards. The median comparison moves to the v1 campaign. There, a disagreement still makes
-the kexec-residual-state caveat a finding in its own right.
+the kexec-residual-state caveat a finding in its own right. **2026-09-13:** M5-F was met under m5-design's option A.
+How the pass line above was checked as run, and the session's caveats, are in the M5-F block of
+[the freeze section](#architecture-versions-and-the-measurement-freeze-decided-2026-09-11).
 
 ---
 
@@ -712,7 +745,7 @@ the kexec-residual-state caveat a finding in its own right.
 | 9 | uarta stays clocked after kexec if opened (as root) from Linux | HYPOTHESIS | No zero-code interactive shell; write `devc-tcu` (+2-3 d) |
 | 10 | `gic_v3_gicc_init()` tolerates reading TYPER of unpopulated frames 4/5 en route to 6/7 | **CLOSED 2026-09-10** | Frames 4 and 5 read without fault from CPU0 at EL1 with the library's 32-bit access. They hold affinities `0x10000` and `0x10100`, the two cluster-1 cores this SKU lacks, so the walk passes them and binds frames 6 and 7. No patch needed |
 | 11 | ~~QHV Class-10 event IDs exist as documented on 8.0.x~~ **CLOSED 2026-09-11 for TCG:** IDs 0, 1 and 7 are emitted at qvm's default settings (dry run 7b; the board is unconfirmed) | **VERIFIED** (TCG) | Nothing for the dry run. Formerly: M4 falls back to bounding the dwell with kernel INTERRUPT/THREAD events |
-| 12 | `mkifsf_uefi` emits a loadable AArch64 PE; EDK2 honours a relocation-less ImageBase | UNKNOWN | ~~Only M5 (optional) is lost~~ **2026-09-11:** M5-F fails; v1 keeps kexec as its only entry path, and the campaign drops the M5 comparison |
+| 12 | `mkifsf_uefi` emits a loadable AArch64 PE; EDK2 honours a relocation-less ImageBase | UNKNOWN | ~~Only M5 (optional) is lost~~ ~~**2026-09-11:** M5-F fails; v1 keeps kexec as its only entry path, and the campaign drops the M5 comparison~~ **2026-09-13:** under m5-design's option A, which M5-F ran and passed, the firmware never loads a QNX PE. #12 now gates only option B: a wrong answer costs option B, not M5-F (m5-design Appendix A) |
 
 ---
 
@@ -764,8 +797,8 @@ still run against the black box, at roughly one question per reboot cycle — cl
 | M1 — procnto + user space, then M1b | 3-7 | HIGH | First QNX instruction ever on Tegra234; EL2/GIC/raminfo interactions; blind debugging doubles it. **M1 and M1b met 2026-09-10** |
 | M2 — SMP | 1-2 | LOW-MED | Both known pitfalls pre-empted; cluster-1 wake UNKNOWN. **Met 2026-09-10** |
 | M3 — QHV host + guest, ~~first number~~ | 2-6 | MED-HIGH | ~~INTID 28~~ (wired, M1b); stage-2/ICH on real silicon; ~~plus the watchdog policy, now on the critical path~~ (WDT0 does not fire after kexec). **Met 2026-09-10.** **2026-09-11: a functional pass; its measurement moves to the v1 campaign ([§6](#architecture-versions-and-the-measurement-freeze-decided-2026-09-11))** |
-| M4 — ~~qvm-trace~~ **M4-F: r0, r1 (2026-09-11)** | 1-3 | LOW-MED | The dry run (done 2026-09-11); then ~~11 KB/s transport and the parser~~ **the transport and parser that m4-design.md specifies, exercised by r0 and r1. r2's timed runs move to the campaign (2026-09-11, [§6](#architecture-versions-and-the-measurement-freeze-decided-2026-09-11))** |
-| M5 — ~~optional UEFI cross-check~~ **M5-F: UEFI cold boot to startup (2026-09-11)** | 2-5 | HIGH | PE ImageBase/relocation, `mkifsf_uefi` behaviour. **The median comparison moves to the campaign (2026-09-11, [§6](#architecture-versions-and-the-measurement-freeze-decided-2026-09-11))** |
+| M4 — ~~qvm-trace~~ **M4-F: r0, r1 (met 2026-09-11; r0 under earlier instruments)** | 1-3 | LOW-MED | The dry run (done 2026-09-11); then ~~11 KB/s transport and the parser~~ **the transport and parser that m4-design.md specifies, exercised by r0 and r1. r2's timed runs move to the campaign (2026-09-11, [§6](#architecture-versions-and-the-measurement-freeze-decided-2026-09-11))** |
+| M5 — ~~optional UEFI cross-check~~ **M5-F: UEFI cold boot to startup (2026-09-11)** | 2-5 | HIGH | ~~PE ImageBase/relocation, `mkifsf_uefi` behaviour.~~ **2026-09-13:** under option A, the drivers were the loader, T0 and the board's map at Shell time; ImageBase and `mkifsf_uefi` belong to option B (m5-design Appendix A). **The median comparison moves to the campaign (2026-09-11, [§6](#architecture-versions-and-the-measurement-freeze-decided-2026-09-11))**. **Met 2026-09-13 (M5-F, option A)** |
 | S1-F — Linux guest, no GPU, native qvm **(added 2026-09-11)** | 1-3 weeks after M3 (the research track's estimate, HYPOTHESIS) | not rated | qvm's handling of an arm64 kernel, its device tree and PSCI; ownership of the second RAM window ([§6](#architecture-versions-and-the-measurement-freeze-decided-2026-09-11)) |
 | Freeze v1 **(added 2026-09-11)** | not estimated | UNKNOWN | The owner's settings for the freeze gate; writing the manifest |
 | Campaign on v1 **(added 2026-09-11)** | not estimated | UNKNOWN | Board time for the native leg; TCG time for both twin legs |

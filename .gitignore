@@ -53,6 +53,14 @@ build/
 out/
 artifacts/
 
+# Phase 3b board-run record directories: evaluation output under NC QDL v7 4.6(i).
+# The curated records and designs live directly under results/orin-native-port/<utc>/,
+# never in these per-milestone subdirectories.
+results/orin-native-port/*/m3/
+results/orin-native-port/*/m4/
+results/orin-native-port/*/m5/
+results/orin-native-port/*/s1/
+
 # Logs (allow only the curated samples under logs/sample-boot/)
 *.log
 !logs/sample-boot/*.log

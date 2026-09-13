@@ -21,6 +21,9 @@
     r0    MODE=trace: clock, fixtures, probe, L0, format, count, block v over the console
     k512  MODE=full: 15 IPC iterations in a ring of 512 buffers per CPU (the size that held under TCG)
     k16   MODE=full: the same in a ring of 16 buffers per CPU, built to wrap
+    lin   MODE=full: the same as a linear window (-c -S, D1(b)), sized by §2.4 step 3's
+          linear rule (I37) from a TCG buffer budget, so the linear stop path and the
+          memory gate run under TCG before a board image relies on them (I38, 14.22)
 
   Steps:
     1. the TCG profile values for the §4.1 markers
@@ -46,7 +49,7 @@
   powershell -ExecutionPolicy Bypass -File orin-native\m4\build-m4tcg-image.ps1 -Variant k512 -Tag a
 #>
 param(
-  [ValidateSet('r0','k512','k16')][string]$Variant = 'r0',
+  [ValidateSet('r0','k512','k16','lin')][string]$Variant = 'r0',
   [ValidatePattern('^[a-z0-9]{0,16}$')][string]$Tag = '',
   [ValidateSet('status0','none')][string]$E3 = 'status0',
   [ValidateRange(10, 3600)][int]$Grace = 150
@@ -212,6 +215,12 @@ function Invoke-PythonBounded([string]$Name, [string[]]$PyArgs, [int]$Seconds) {
 $exitCode = 1
 try {
   New-Item -ItemType Directory -Force -Path $runRoot | Out-Null
+  # I38: lin rehearses r1, which runs with E3 none (14.7); an unset -E3 becomes none, and status0 is
+  # refused. Settled before the first log line, so the log names the E3 the image is built with.
+  if ($Variant -eq 'lin') {
+    if (-not $PSBoundParameters.ContainsKey('E3')) { $E3 = 'none' }
+    elseif ($E3 -ne 'none') { Fail "-Variant lin rehearses r1 and needs -E3 none (m4-design.md 14.7), not $E3" }
+  }
   Log ''
   Log ('===== build-m4tcg-image.ps1 start utc=' + (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') + ' =====')
   Log "variant=$Variant tag=$(if ($Tag) { $Tag } else { 'none' }) dir=qhv/m4tcg/host-$vName e3=$E3 grace=$Grace image=rebuilt-host guest=byte-identical"
@@ -224,7 +233,14 @@ try {
              $capV = 1048576; $capC = 524288; $forms = 'v c'; $cntOut = '-v /dev/shmem/flt.v -V 1048576 -c /dev/shmem/flt.c -C 524288' }
     'k16'  { $mode = 'full';  $rung = 'r1'; $kind = 'ring';  $tlArgs = '-r -k 16 -M -S 4M';   $traceNeed = 36;  $fmtNeed = 324; $cntNeed = 304
              $capV = 1048576; $capC = 524288; $forms = 'v c'; $cntOut = '-v /dev/shmem/flt.v -V 1048576 -c /dev/shmem/flt.c -C 524288' }
+    # I38 (m4-design.md 11.2, 14.22): a linear window sized by §2.4 step 3's linear form (I37), each CPU's
+    # buffers plus 2. The TCG per-CPU budget is the k512 ring that held under TCG, so bufs = 2 x (512 + 2):
+    # -S = ceil(1028 x 16 / 1024) + 4 = 21 MiB; the need = max(ring_mb(8), probe cost 0) + 21 + 32 = 54 MiB;
+    # FMT_NEED = 5 x 21 + 270 + 2 + 32 = 409. TCG-only values, never a board image's.
+    'lin'  { $mode = 'full';  $rung = 'r1'; $kind = 'linear'; $tlArgs = '-c -S 21M';          $traceNeed = 54;  $fmtNeed = 409; $cntNeed = 304
+             $capV = 1048576; $capC = 524288; $forms = 'v c'; $cntOut = '-v /dev/shmem/flt.v -V 1048576 -c /dev/shmem/flt.c -C 524288' }
   }
+  $sMb = [int]([regex]::Match($tlArgs, '-S (\d+)M').Groups[1].Value)
   if ($E3 -eq 'none') { $cntOut += ' -E none' }
   Log "profile rung=tcg-$Variant mode=$mode tl_args='$tlArgs' trace_need=$traceNeed fmt_need=$fmtNeed cnt_need=$cntNeed forms='$forms' cnt_out='$cntOut'"
 
@@ -305,7 +321,7 @@ try {
   Write-Lf $confPath $confText
   Log 'check m4-g2.conf equals the as-run printf text: ok'
 
-  foreach ($i in 1..4) {
+  foreach ($i in 1..6) {
     $src = Join-Path $fixDir "m4fix-$i.txt"
     if (-not (Test-Path -LiteralPath $src)) { Fail "fixture m4fix-$i.txt is missing" }
     Write-Lf (Join-Path $stageDir "m4fix-$i.txt") (Read-Text $src)
@@ -337,7 +353,7 @@ try {
     '@CNT_OUT@' = $cntOut; '@FORMS@' = $forms
     '@SEND_V@' = '1800'; '@SEND_T_V@' = '1795'; '@SEND_C@' = '1800'; '@SEND_T_C@' = '1795'
     '@TRANSPORT@' = 'console'
-    '@FIX@' = '/system/bin/m4fix-1.txt /system/bin/m4fix-2.txt /system/bin/m4fix-3.txt /system/bin/m4fix-4.txt'
+    '@FIX@' = '/system/bin/m4fix-1.txt /system/bin/m4fix-2.txt /system/bin/m4fix-3.txt /system/bin/m4fix-4.txt /system/bin/m4fix-5.txt /system/bin/m4fix-6.txt'
   }
   foreach ($key in $subs.Keys) { $ksh = $ksh.Replace($key, [string]$subs[$key]) }
   $left = [regex]::Matches($ksh, '@[A-Z0-9_]+@')
@@ -354,8 +370,8 @@ try {
 
   $params = [ordered]@{
     image = "tcg-$Variant"; rung = $rung; mode = $mode; variant = $Variant; profile = 'tcg'; p = '2'
-    transport = 'console'; iters = '15'; guard_s = '-'; kind = $kind; tl_args = $tlArgs; forms = $forms
-    cap_v = "$capV"; cap_c = "$capC"; e3 = $E3; fixtures = 'm4fix-1.txt,m4fix-2.txt,m4fix-3.txt,m4fix-4.txt'; kimg_sha256 = '-'; ksh_sha256 = (Get-Sha256 $kshPath)
+    transport = 'console'; iters = '15'; guard_s = '-'; kind = $kind; tl_args = $tlArgs; s_mb = "$sMb"; forms = $forms
+    cap_v = "$capV"; cap_c = "$capC"; e3 = $E3; fixtures = 'm4fix-1.txt,m4fix-2.txt,m4fix-3.txt,m4fix-4.txt,m4fix-5.txt,m4fix-6.txt'; kimg_sha256 = '-'; ksh_sha256 = (Get-Sha256 $kshPath)
   }
   $paramsText = "# m4tcg.params: TCG rehearsal parameters (m4-design.md §11.2); emulated, never a board image's.`n"
   foreach ($key in $params.Keys) { $paramsText += "$key=$($params[$key])`n" }
@@ -367,7 +383,7 @@ try {
   foreach ($t in @('bwait', 'trcctl', 'stamp', 'clkcmp', 'm4count')) { $sysLines.Add("[perms=555] bin/$t=$repoFwd/orin-native/tools/$t") }
   $sysLines.Add("[perms=555] bin/m4-host.ksh=$repoFwd/qhv/m4tcg/stage-$vName/m4-host.ksh")
   $sysLines.Add("[perms=444] bin/m4-g2.conf=$repoFwd/qhv/m4tcg/stage-$vName/m4-g2.conf")
-  foreach ($i in 1..4) { $sysLines.Add("[perms=444] bin/m4fix-$i.txt=$repoFwd/qhv/m4tcg/stage-$vName/m4fix-$i.txt") }
+  foreach ($i in 1..6) { $sysLines.Add("[perms=444] bin/m4fix-$i.txt=$repoFwd/qhv/m4tcg/stage-$vName/m4fix-$i.txt") }
   # The script calls $X/rm with X=/system/bin; the canonical system image has no bin/rm (§14).
   $canonSys = @((Read-Text $canonSysBld).Replace("`r`n", "`n").Split("`n") | ForEach-Object { $_.Trim() })
   if (@($canonSys | Where-Object { $_ -match '(^|\]\s*)/?bin/rm=' }).Count -eq 0) { $sysLines.Add('bin/rm=usr/bin/toybox') }

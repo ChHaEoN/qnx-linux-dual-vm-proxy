@@ -1,0 +1,173 @@
+# m4run: synthetic
+# Run-level cases for parse-m4.py selftest (m4-design.md 14.19, I35). Each case builds a SYNTHETIC
+# board r1 record from m4fix-1.txt with synth-com3's board profile, applies its edits, runs `run`
+# on it and compares the parse log. They cover the wiring the helper cases (I31) cannot reach: a
+# rule that is written, but never read by its criterion, fails here. A test input, not a record,
+# with no measured figure.
+#
+# Grammar, one directive per line; blank lines and # lines are ignored:
+#   case NAME                     starts a case
+#   sub OLD => NEW                replace OLD in every console line holding it, on COM3 and the black box
+#   sub-com3 OLD => NEW           the same, on COM3 only
+#   resub REGEX => REPL           re.sub on every console line, both records
+#   del PREFIX                    delete every console line whose text, left-stripped, starts with PREFIX
+#   del-first PREFIX, del-last PREFIX   delete only the first or the last such line
+#   add-after LINE => NEW         insert NEW after the first console line equal to LINE
+#   vbody-del TEXT                drop every listing line holding TEXT from block v, before it is hashed
+#   param KEY=VALUE               set a params key
+#   arg KEY=VALUE                 a run option: blackbox_board_sha256=auto|none|<hex>, reset_reason=TEXT
+#   expect KEY=VALUE              that parse-log line, exactly
+#   expect KEY~TEXT               that parse-log line holds TEXT (a crit_ line must also read fail)
+# Every edit must change at least one line, or the case is itself a failure. Every crit_ line a case
+# names no expectation for must read pass or n/a.
+
+case clean
+expect run_verdict=pass
+expect records_stamp_ipc=identical
+expect blackbox_board_sha256=equal
+expect xcheck_pairs~pc_in_range=
+expect xcheck_pairs~c_in_range=
+
+# ---- I32: crit_1, D3 section 8 items 3, 5, 7, 8, 10 and 11
+
+case config_q
+sub q=el2-host w=keep => q=enable w=keep
+expect crit_1=fail(config-q)
+
+case config_startup
+sub -Q enable,el2-host -m992M => -Q enable -m992M
+expect crit_1=fail(config-startup)
+
+case early_rc
+add-after M4 STATE report => rc=3
+expect crit_1=fail(early-rc)
+
+case pidin_second_absent
+del-last pid tid name
+expect crit_1=fail(pidin-report_ipc-absent)
+
+case banner_outside_guest_stream
+del QNX qnx-guest
+add-after M4 STATE report => QNX qnx-guest 8.0.0 synthetic ARMv8_Foundation_Model aarch64le
+expect crit_1=fail(banner-guest-stream)
+
+case ipc_payload
+sub payload=48 => payload=64
+expect crit_1=fail(ipc-payload:64)
+
+case ipc_cps
+sub payload=48 cps=31250000 => payload=48 cps=1000000000
+expect crit_1=fail(ipc-cps:1000000000)
+
+case ipc_p50_line_absent
+del P50=
+expect crit_1=fail(ipc-p50-line)
+
+case ipc_client_signal
+sub prog=qnx-host-client rc=0 sig=0 => prog=qnx-host-client rc=0 sig=9
+expect crit_1=fail(ipc)
+
+# I40 (14.25): the completion rule, samples <= iters <= samples + recoveries <= iters + 5 warm-up.
+case ipc_recovery_in_warmup
+sub sentinel_recoveries=0 => sentinel_recoveries=1
+expect run_verdict=pass
+
+case ipc_recovery_in_timed_run
+sub samples=15 payload=48 => samples=14 payload=48
+sub sentinel_recoveries=0 => sentinel_recoveries=1
+expect run_verdict=pass
+
+case ipc_sample_missing
+sub samples=15 payload=48 => samples=14 payload=48
+expect crit_1=fail(ipc)
+
+case ipc_recoveries_beyond_warmup
+sub sentinel_recoveries=0 => sentinel_recoveries=6
+expect crit_1=fail(ipc)
+
+case rates_pre_cpu_absent
+del-first SMPCHECK done cpu=2
+expect crit_1=fail(rates-pre:2)
+
+case reset_line_absent
+del T234 M4 r1 -P4: resetting
+expect crit_1=fail(reset-line)
+
+case stamp_cps
+sub STAMP banner cycles=2000 cps=31250000 => STAMP banner cycles=2000 cps=1000000000
+expect crit_1=fail(stamp-cps:banner)
+
+case stamp_ipc_differ_on_com3
+sub-com3 STAMP g_misc cycles=1600 => STAMP g_misc cycles=1601
+expect records_consistency=differ
+expect records_stamp_ipc~differ
+expect crit_1=fail(stamp-ipc:differ)
+
+# ---- I33: crit_2, the arm line, the .kev and a linear window's budget
+
+case arm_kind
+sub M4 TRACE ARM kind=ring => M4 TRACE ARM kind=linear
+expect crit_2=fail(arm-kind)
+
+case arm_args
+sub kind=ring args='-r -k 256 -M -S 20M' => kind=ring args='-r -k 512 -M -S 36M'
+expect crit_2=fail(arm-args)
+
+case kevfile_path
+sub M4 KEVFILE t path=/dev/shmem/t.kev => M4 KEVFILE t path=/dev/shmem/x.kev
+expect crit_2=fail(kevfile-path)
+
+case stop_failed_wiring
+sub TRCCTL stop rc=0 errno=0 => TRCCTL stop rc=-1 errno=22
+sub M4 STOP t by=stop => M4 STOP t by=sigint
+expect crit_2=fail(stop+trcctl_stop_rc:-1)
+expect crit_neg~by=sigint
+
+case linear_clean
+param kind=linear
+param k=lin
+param s_mb=24
+param tl_args=-c -S 24M
+param trace_need_mb=57
+sub kind=ring => kind=linear
+sub -r -k 256 -M -S 20M => -c -S 24M
+sub trace_need_mb=68 => trace_need_mb=57
+expect run_verdict=pass
+expect kevfile_t_budget~kind:linear
+
+case linear_over_budget
+param kind=linear
+param k=lin
+param s_mb=24
+param tl_args=-c -S 24M
+param trace_need_mb=57
+sub kind=ring => kind=linear
+sub -r -k 256 -M -S 20M => -c -S 24M
+sub trace_need_mb=68 => trace_need_mb=57
+resub ^(M4 KEVFILE t path=/dev/shmem/t\.kev bytes=)\d+$ => \g<1>20971520
+expect crit_2=fail(kevfile-over-budget)
+
+# ---- I34: crit_3 asks the PC's reading, and crit_bb the board's own sha256
+
+case counter_time_events_zero
+sub M4C TIME64 w=t mode=t64 time_events=7 => M4C TIME64 w=t mode=t64 time_events=0
+expect crit_3=fail(time_events)
+
+case pc_reading_no_time_events
+vbody-del :TIME
+expect crit_3=fail(pc-time_events)
+
+case pc_reading_no_cycles
+vbody-del :CYCLES
+expect crit_3~pc-triples
+expect crit_5~xcheck_pairs
+
+case blackbox_sha_differs
+arg blackbox_board_sha256=0000000000000000000000000000000000000000000000000000000000000000
+expect blackbox_board_sha256=differ
+expect crit_bb~sha:differ
+
+case blackbox_sha_not_given
+arg blackbox_board_sha256=none
+expect blackbox_board_sha256=unknown
+expect crit_bb~sha:unknown

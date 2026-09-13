@@ -23,7 +23,8 @@
  *   -w  the label every record carries (w=), 1-32 of [A-Za-z0-9_.-]
  *   -s  the start marker text, matched against STR:"<text>" exactly
  *   -e  the end marker text
- *   -q  quiet: IN, TIME64, BUF, RING, VCPU, TRIPLES, PAIRS, the clean STAT, END
+ *   -q  quiet: IN, TIME64, BUF, RING, VCPU, STATUS, STATUSSUM, TRIPLES, PAIRS,
+ *       the clean STAT, END
  *   -v  write the verbatim window selection to VFILE, at most VCAP bytes
  *   -c  write the compact pair list to CFILE, at most CCAP bytes
  *   -P  triple table cap (broken fragments share it), default 1,000,000
@@ -32,9 +33,11 @@
  *
  * Passes over the one file:
  *   1  64-bit host time per CPU, BUFFER sequences, markers, histogram, QVM
- *      counts, THRUNNING attribution, triple assembly per (CPU, thread)
+ *      counts, the GUEST_EXIT status table, THRUNNING attribution, triple
+ *      assembly per (CPU, thread)
  *   2  the THRUNNING events of every thread and every THREAD event of the vCPU
- *      threads, the INTERRUPT events, the per-CPU rates, the start anchors
+ *      threads, the INTERRUPT events, the per-CPU rates, the in-window status
+ *      counts, the start anchors
  *   3  only with -v or -c: the verbatim selection and the compact pair list
  * Records IN to WARN print as soon as pass 2 has ended, before pass 3 writes a
  * byte, and every record is flushed as it is printed: a counter killed by
@@ -64,6 +67,12 @@
  *                  eligibility E1-E8 in order, the first failure named
  *   statistics     nearest rank over eligible pairs of each class and nonblk;
  *                  ns = ticks * 10^9 / cps in 128-bit arithmetic
+ *   status (§14.7) every GUEST_EXIT, paired or not: its status value in a
+ *                  first-seen table of STATUS_KEEP values, the first
+ *                  STATUS_PRINT printed with their count and the count whose
+ *                  time lies in the window; values past the print cap, values
+ *                  past the table and events without a status are summed on
+ *                  STATUSSUM. -E does not change it
  *
  * Exit: 0 parsed; 1 input error (unreadable, no event line), an output file
  * that could not be written, or no memory; 2 usage; 3 a table cap was hit
@@ -108,6 +117,8 @@
 #define SAMPLE_MAX      12u
 #define SAMPLE_CHARS    160u
 #define OFFSETS_KEEP    64u
+#define STATUS_KEEP     64u
+#define STATUS_PRINT    16u
 #define SEQ_KEEP        4096u
 #define ANCHOR_MAX      100000ul
 #define QUOTABLE_N      10000u
@@ -199,6 +210,7 @@ struct cpurec {
 	uint64_t anchor_t;
 	uint32_t anchor_line;
 	uint8_t  first_known;
+	uint8_t  short_tail;
 	uint8_t  restart_seen;
 	uint8_t  restart_timed;
 	uint8_t  anchor_known;
@@ -293,6 +305,12 @@ struct sample {
 	char line[SAMPLE_CHARS + 1u];
 };
 
+struct stval {
+	uint64_t value;
+	uint64_t n;
+	uint64_t in_window;
+};
+
 /* ------------------------------------------------------------------------ */
 /* State                                                                     */
 /* ------------------------------------------------------------------------ */
@@ -321,6 +339,14 @@ static uint64_t g_lines;
 static uint64_t g_bytes;
 static uint64_t g_events;
 static uint64_t g_unformatted;
+/* I36 (m4-design.md 14.20), in lockstep with parse-m4.py: the unformatted lines by
+ * kind, and the first line that is neither header nor blank, so the board's own
+ * layout is seen rather than inferred from a count. */
+static uint64_t g_unfmt_header;
+static uint64_t g_unfmt_blank;
+static uint64_t g_unfmt_other;
+static char     g_unfmt_sample[SAMPLE_CHARS + 1u];
+static int      g_unfmt_sampled;
 static uint64_t g_long;
 static uint64_t g_oor;
 static uint64_t g_cps = DEFAULT_CPS;
@@ -376,6 +402,13 @@ static int            sampled_intr;
 static uint64_t       offsets[OFFSETS_KEEP];
 static size_t         noffsets;
 static int            offsets_overflow;
+
+static struct stval   stvals[STATUS_KEEP];
+static size_t         nstvals;
+static uint64_t       st_missing;
+static uint64_t       st_overflow;
+static uint64_t       st_win_other;
+static uint64_t       st_win_missing;
 
 static uint64_t       tr_complete;
 static uint64_t       tr_broken;
@@ -955,11 +988,34 @@ hist_add(const char *const cls, const char *const sub)
 	hist_hash[s] = (uint32_t)nhist;
 }
 
+/* A SAMPLE's text: up to the line end or SAMPLE_CHARS, double quotes as '. dst holds SAMPLE_CHARS + 1. */
+static void
+sample_copy(char *const dst, const char *const line)
+{
+	size_t j = 0;
+
+	for (const char *p = line; *p != '\0' && *p != '\n' && *p != '\r' && j < SAMPLE_CHARS; p++) {
+		dst[j++] = (*p == '"') ? '\'' : *p;
+	}
+	dst[j] = '\0';
+}
+
+/* I36: a line holding nothing but spaces, tabs and its line end. */
+static int
+blank_line(const char *const line)
+{
+	for (const char *p = line; *p != '\0'; p++) {
+		if (*p != ' ' && *p != '\t' && *p != '\r' && *p != '\n') {
+			return 0;
+		}
+	}
+	return 1;
+}
+
 static void
 sample_add(const char *const sub, const char *const line)
 {
 	struct sample *sm;
-	size_t         j = 0;
 
 	for (size_t i = 0; i < nsamples; i++) {
 		if (strcmp(samples[i].sub, sub) == 0) {
@@ -971,10 +1027,7 @@ sample_add(const char *const sub, const char *const line)
 	}
 	sm = &samples[nsamples++];
 	copy_field(sm->sub, sizeof(sm->sub), sub, strlen(sub));
-	for (const char *p = line; *p != '\0' && *p != '\n' && *p != '\r' && j < SAMPLE_CHARS; p++) {
-		sm->line[j++] = (*p == '"') ? '\'' : *p;
-	}
-	sm->line[j] = '\0';
+	sample_copy(sm->line, line);
 }
 
 static void
@@ -1006,6 +1059,48 @@ offset_add(uint64_t const off)
 	} else {
 		offsets_overflow = 1;
 	}
+}
+
+/*
+ * §14.7, pass 1: every GUEST_EXIT's status, paired or not, in first-seen order. A new
+ * value past STATUS_KEEP distinct ones counts only as overflow. -E never reads this.
+ */
+static void
+status_add(uint64_t const v)
+{
+	for (size_t i = 0; i < nstvals; i++) {
+		if (stvals[i].value == v) {
+			stvals[i].n++;
+			return;
+		}
+	}
+	if (nstvals < STATUS_KEEP) {
+		stvals[nstvals].value     = v;
+		stvals[nstvals].n         = 1;
+		stvals[nstvals].in_window = 0;
+		nstvals++;
+	} else {
+		st_overflow++;
+	}
+}
+
+/* §14.7, pass 2: a GUEST_EXIT whose time lies in the window, against the printed values. */
+static void
+status_window(const char *const args)
+{
+	uint64_t v = 0;
+
+	if (!arg_u64(args, "status", &v)) {
+		st_win_missing++;
+		return;
+	}
+	for (size_t i = 0; i < nstvals && i < STATUS_PRINT; i++) {
+		if (stvals[i].value == v) {
+			stvals[i].in_window++;
+			return;
+		}
+	}
+	st_win_other++;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -1256,8 +1351,13 @@ pass1_event(const struct ev *const e, const char *const line_text, uint32_t cons
 			uint64_t v = 0;
 
 			q_exit++;
-			if (arg_u64(e->args, "status", &v) && v != 0u) {
-				q_status_nonzero++;
+			if (arg_u64(e->args, "status", &v)) {
+				if (v != 0u) {
+					q_status_nonzero++;
+				}
+				status_add(v);
+			} else {
+				st_missing++;
 			}
 			if (arg_u64(e->args, "clockcycles_offset", &v)) {
 				offset_add(v);
@@ -1325,6 +1425,17 @@ pass1(FILE *const f)
 		}
 		if (!parse_event(buf, &e)) {
 			g_unformatted++;
+			if (!seen_event) {
+				g_unfmt_header++;
+			} else if (blank_line(buf)) {
+				g_unfmt_blank++;
+			} else {
+				g_unfmt_other++;
+				if (!g_unfmt_sampled) {
+					sample_copy(g_unfmt_sample, buf);
+					g_unfmt_sampled = 1;
+				}
+			}
 			if (!seen_event && strstr(buf, "TRACE_CYCLES_PER_SEC") != NULL) {
 				uint64_t cps = 0;
 
@@ -1499,6 +1610,14 @@ between_passes(void)
 			if (r->restart_seen && (!r->restart_timed || r->restart_t <= end_t)) {
 				clean = 0;
 			}
+			/* I27 (m4-design.md 14.9 item 2 and 14.10), in lockstep with
+			 * parse-m4.py. A CPU whose events stop before the end marker is
+			 * recorded, not refused: from the listing alone an idle CPU looks
+			 * exactly like one that lost its trailing buffer, because flushing
+			 * writes the buffers that exist and does not create events. */
+			if (!r->first_known || r->last_t < end_t) {
+				r->short_tail = 1;
+			}
 		}
 		if (any_wrapped) {
 			ring_state = RING_WRAPPED;
@@ -1589,6 +1708,9 @@ pass2(FILE *const f)
 			cpus[e.cpu].events_in_window++;
 			if (strcmp(e.cls, "CONTROL") == 0 && strcmp(e.sub, "BUFFER") == 0) {
 				cpus[e.cpu].bufs_in_window++;
+			}
+			if (strcmp(e.cls, "QVM") == 0 && strcmp(e.sub, "GUEST_EXIT") == 0) {
+				status_window(e.args);
 			}
 		}
 
@@ -1985,8 +2107,9 @@ cpu_list(char *const buf, size_t const size, int const which)
 
 	buf[0] = '\0';
 	for (unsigned c = 0; c < MAX_CPUS; c++) {
-		int const hit = (which == 0) ? (cpus[c].events != 0u && cpus[c].wrapped)
-		                             : (cpus[c].kept != 0u && cpus[c].first_seq == 1u);
+		int const hit = (which == 0)   ? (cpus[c].events != 0u && cpus[c].wrapped)
+		                : (which == 1) ? (cpus[c].kept != 0u && cpus[c].first_seq == 1u)
+		                               : (cpus[c].events != 0u && cpus[c].short_tail);
 
 		if (hit) {
 			int const k = snprintf(buf + used, size - used, "%s%u", (used != 0u) ? "," : "", c);
@@ -2009,9 +2132,10 @@ records(void)
 	char list[64];
 
 	rec("M4C IN w=%s path=%s lines=%" PRIu64 " bytes=%" PRIu64 " events=%" PRIu64 " unformatted=%" PRIu64
+	    " unformatted_header=%" PRIu64 " unformatted_blank=%" PRIu64 " unformatted_other=%" PRIu64
 	    " long_lines=%" PRIu64 " cpu_out_of_range=%" PRIu64 " cps=%" PRIu64 " cps_source=%s\n",
-	    opt_label, opt_in, g_lines, g_bytes, g_events, g_unformatted, g_long, g_oor, g_cps,
-	    g_cps_header ? "header" : "default");
+	    opt_label, opt_in, g_lines, g_bytes, g_events, g_unformatted, g_unfmt_header, g_unfmt_blank,
+	    g_unfmt_other, g_long, g_oor, g_cps, g_cps_header ? "header" : "default");
 
 	if (!opt_quiet) {
 		size_t const printed = (nhist < HIST_PRINT) ? nhist : HIST_PRINT;
@@ -2033,6 +2157,10 @@ records(void)
 		}
 		for (size_t i = 0; i < nsamples; i++) {
 			rec("M4C SAMPLE w=%s sub=%s line=\"%s\"\n", opt_label, samples[i].sub, samples[i].line);
+		}
+		/* I36: outside SAMPLE_MAX, so it never displaces a QVM subtype's sample. */
+		if (g_unfmt_sampled) {
+			rec("M4C SAMPLE w=%s sub=unformatted line=\"%s\"\n", opt_label, g_unfmt_sample);
 		}
 	}
 
@@ -2079,11 +2207,13 @@ records(void)
 
 	{
 		char wl[64];
+		char tl[64];
 
 		cpu_list(wl, sizeof(wl), 0);
 		cpu_list(list, sizeof(list), 1);
-		rec("M4C RING w=%s state=%s wrapped_cpus=%s seq1_cpus=%s\n", opt_label,
-		    (ring_state == RING_HELD) ? "held" : ((ring_state == RING_WRAPPED) ? "wrapped" : "unknown"), wl, list);
+		cpu_list(tl, sizeof(tl), 2);
+		rec("M4C RING w=%s state=%s wrapped_cpus=%s seq1_cpus=%s short_tail_cpus=%s\n", opt_label,
+		    (ring_state == RING_HELD) ? "held" : ((ring_state == RING_WRAPPED) ? "wrapped" : "unknown"), wl, list, tl);
 	}
 
 	if (!opt_quiet) {
@@ -2135,6 +2265,30 @@ records(void)
 			rec("M4C OFFSET w=%s distinct=%zu value=%s overflow=1\n", opt_label, noffsets, a);
 		} else {
 			rec("M4C OFFSET w=%s distinct=%zu value=%s\n", opt_label, noffsets, a);
+		}
+	}
+
+	/* §14.7: printed with -q too, because r0's fixture check reads them. */
+	{
+		size_t const printed = (nstvals < STATUS_PRINT) ? nstvals : STATUS_PRINT;
+		uint64_t     other   = st_overflow;
+
+		for (size_t i = 0; i < nstvals; i++) {
+			if (i < printed) {
+				rec("M4C STATUS w=%s value=0x%" PRIx64 " n=%" PRIu64 " in_window=%" PRIu64 "\n", opt_label,
+				    stvals[i].value, stvals[i].n, stvals[i].in_window);
+			} else {
+				other += stvals[i].n;
+			}
+		}
+		if (st_overflow != 0u) {
+			rec("M4C STATUSSUM w=%s distinct=%zu printed=%zu other=%" PRIu64 " missing=%" PRIu64
+			    " in_window_other=%" PRIu64 " in_window_missing=%" PRIu64 " overflow=%" PRIu64 "\n",
+			    opt_label, nstvals, printed, other, st_missing, st_win_other, st_win_missing, st_overflow);
+		} else {
+			rec("M4C STATUSSUM w=%s distinct=%zu printed=%zu other=%" PRIu64 " missing=%" PRIu64
+			    " in_window_other=%" PRIu64 " in_window_missing=%" PRIu64 "\n",
+			    opt_label, nstvals, printed, other, st_missing, st_win_other, st_win_missing);
 		}
 	}
 

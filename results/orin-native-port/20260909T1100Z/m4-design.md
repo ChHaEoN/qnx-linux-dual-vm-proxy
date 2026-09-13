@@ -109,7 +109,7 @@ A pair is **eligible** when all of these hold:
 | E3 | GUEST_EXIT*n* and GUEST_EXIT*n*+1 both carry `status` 0 | [TSC]: a zero status means the entry succeeded, so the ID 7 values are meaningful (DD:117, VENDOR_CLAIM). Non-zero pairs are counted as `status_nonzero` |
 | E4 | `dwell_n ≥ 0` | A negative dwell is a defect, counted as `negative`, never a sample |
 | E5 | `I_n` lies inside the marker window: `H_n(at_exit_n) ≥ t(m4-ipc-start)` and `H_n+1(at_entry_n+1) ≤ t(m4-ipc-end)` | The workload is defined by the markers (DD:315-324) |
-| E6 | The window is intact: both markers present, `ring=held` (§4.5.4), and each CPU's BUFFER sequence contiguous | A wrapped CPU hides THREAD events that would change a class |
+| E6 | The window is intact: both markers present, `ring=held` (§4.5.4), and each CPU's BUFFER sequence contiguous | A wrapped CPU hides THREAD events that would change a class. **2026-09-11 (§14.9 item 2):** `held` carries no end-of-window condition, so this evidences intactness on the window's start side only |
 | E7 | Every event used for triples *n*, *n*+1 and the class of `I_n` has a 64-bit time (§4.5.3) and an attributed thread | Unattributed events cannot be classified |
 | E8 | The counter's stored-event tables were not capped before `I_n` ended (§4.5.6) | A capped table cannot prove a pair clean |
 
@@ -202,27 +202,39 @@ python orin-native/m4/parse-m4.py size-r2 --r1-parse results/orin-native-port/<u
 7. **Rate:** `M4 STOP l0 by=self`; both L0 markers found; `M4C BUF` for CPUs 0-3 with `gaps=0`; `M4C RATE` lines (§4.5.7).
 8. **Speeds:** `BWAIT run prog=traceprinter … killed=0` and `BWAIT run prog=m4count … killed=0` for L0.
 9. **Transfer:** `M4 FLT BEGIN name=v …`; the `tcu-cat:` summary with `drops=0 aborted=0 deadline=0 rc=0`; the PC's `flt_v=ok` (§6.3).
-10. **Reset:** PMC `reset_reason` `MAINSWRST`; black box under 60,000 B; no §7.3 negative token.
+10. **Reset:** PMC `reset_reason` `MAINSWRST`; black box under 60,000 B; no ~~§7.3~~ §7.2 item 9 negative token (reference corrected 2026-09-13). **2026-09-13 (I34):** and the board's own sha256 of the black box equals the copy parsed.
 
 ### 2.2 r1: qvm and the IPC window, a small listing cap
 
 **Image:** `m4-r1-k<K1>` (or `m4-r1-lin` under D1(b)), mode `full`, `ITERS=15`, sized by `size-r1` (§2.4).
 
 **What the host script does:** M3's full run (startup/m3-host.ksh.in:48-165) with these changes (§4.1 has the script):
-- **ipc:** after the grace wait, `MEM trace_pre` and the memory gate; the ring `tracelogger -r -k K1 -M -S <S>M -f /dev/shmem/t.kev` in the background; 2 s settle; marker 20 `m4-ipc-start`; the client, `qnx-host-client 15 /dev/ttyp0 5`, under `bwait -k 240` with its bwait line redirected; marker 21 `m4-ipc-end`; `trcctl -x` at once; the stop ladder. Nothing prints between the start marker and the end of the ladder.
+- **ipc:** after the grace wait, `MEM trace_pre` and the memory gate; the ring `tracelogger -r -k K1 -M -S <S>M -f /dev/shmem/t.kev` in the background (**2026-09-13, I37:** for `m4-r1-lin`, D1(b), the linear `tracelogger -c -S <S(lin)>M -f /dev/shmem/t.kev`, with `S(lin)` from §2.4 step 3 and the gate at `TRACE_NEED_MB(lin)`; the rest of the state is the same); 2 s settle; marker 20 `m4-ipc-start`; the client, `qnx-host-client 15 /dev/ttyp0 5`, under `bwait -k 240` with its bwait line redirected; marker 21 `m4-ipc-end`; `trcctl -x` at once; the stop ladder. Nothing prints between the start marker and the end of the ladder.
 - **release** after `integrity_post`: `slay -f -Q devb-loopback`, `rm -f /dev/shmem/disk-qvm`, MEM.
 - **format** (`bwait -k 600`) and **count**: `m4count` writes `/dev/shmem/flt.v` (verbatim window selection, cap 1,048,576 B) and `/dev/shmem/flt.c` (compact pair list, cap 524,288 B).
 - **send:** block `v`, then block `c`.
 
 **r1 passes, and gates r2, when all of:**
-1. D3 §8 items 1-11 with M4's names: `T234 M4 r1 -P4`, `M4 CONFIG rung=r1 mode=full …`, `M4 CHECK … ok`, the real banner stamp, the IPC completion rule `samples + sentinel_recoveries = 15` with `rc=0 killed=0`, `md5_post` ok, `MAINSWRST`.
-2. `M4 TRACE ARM …`; `M4 STOP t by=stop`; `M4 KEVFILE t path=/dev/shmem/t.kev bytes=…`.
-3. **P1 on the board:** `M4C QVM` with `enter`, `exit` and `cycles` above zero; `M4C VCPU threads=1`; `M4C OFFSET distinct=1`; `M4C TRIPLES … order_violated=0`; `M4C TIME64 … mismatches=0` (§4.5.3 says what it guards, and why it is a gate rather than a cross-check field).
-4. `M4C RING state=held`.
-5. **The two readings agree** (D2, D3): the PC's parse of the delivered block `v` gives the same triples, pairs, classes, eligibility and dwell as the counter's block `c` for every pair wholly inside the delivered range (`xcheck_pairs=match`), and, when `v` is not capped, the same `M4C PAIRS` counts and `M4C STAT` values (`xcheck_stats=match`).
-6. `flt_v=ok` and `flt_c=ok`; `M4C END rc=0`.
+1. D3 §8 items 1-11 with M4's names: `T234 M4 r1 -P4`, `M4 CONFIG rung=r1 mode=full …`, `M4 CHECK … ok`, the real banner stamp, the IPC completion rule ~~`samples + sentinel_recoveries = 15`~~ (**2026-09-13, I40, §14.25:** `samples ≤ 15 ≤ samples + sentinel_recoveries ≤ 15 + 5`, because a recovery in one of the 5 warm-up iterations takes no timed sample) with `rc=0 killed=0`, `md5_post` ok, `MAINSWRST`. **2026-09-13 (I30b, I32; §14.14, §14.16):** in full, and with D3 §8 item 12's token list, which `crit_neg` applies. The parser now checks:
+   - **item 3:** every value, not only its presence;
+   - **item 5:** the banner in the guest stream `diag` prints, and `cps=31250000` on both stamps;
+   - **item 7:** no `rc=` line before `M4 STATE teardown`, and a `pidin` listing in both `report` and `report_ipc`;
+   - **item 8:** `payload=48 cps=31250000`, the `P50=` line and `sig=0`;
+   - **item 10:** four `SMPCHECK done … rate=` lines before and four after;
+   - **item 11:** the reset line, and the STAMP and IPC lines identical in both records (`records_stamp_ipc=identical`). The broader `records_consistency` stays a record (§6.2 step 2).
+2. `M4 TRACE ARM …`; `M4 STOP t by=stop`; `M4 KEVFILE t path=/dev/shmem/t.kev bytes=…`. **2026-09-13 (I30, I33; §14.13, §14.17):**
+   - the arm line's `kind` and `args` equal the params, and its `file` and the `KEVFILE` path are `/dev/shmem/t.kev`;
+   - each `TRCCTL` insert and the stop read `rc=0`, and `by=stop` itself now means trcctl's STOP succeeded (§4.3);
+   - a linear window's `.kev` stays below `S(lin) − 4` MiB (`kevfile_t_budget=…state:within`).
+3. **P1 on the board:** `M4C QVM` with `enter`, `exit` and `cycles` above zero; `M4C VCPU threads=1`; `M4C OFFSET distinct=1`; `M4C TRIPLES … order_violated=0`; `M4C TIME64 … mismatches=0` (§4.5.3 says what it guards, and why it is a gate rather than a cross-check field). **2026-09-13 (I30, I34):** `TIME64 time_events` above zero. The PC's own reading of block `v` must also confirm P1: the three ids, one vCPU thread, one offset, `TRIPLES complete` above zero with `order_violated=0`, and `TIME64 time_events` above zero with `mismatches=0`.
+4. `M4C RING state=held`. **2026-09-13:** `held` has no end-of-window condition. `short_tail_cpus` records the CPUs whose events stop before the end marker (§14.10; fixture m4fix-5, I35).
+5. **The two readings agree** (D2, D3): the PC's parse of the delivered block `v` gives the same triples, pairs, classes, eligibility and dwell as the counter's block `c` for every pair wholly inside the delivered range (`xcheck_pairs=match`), and, when `v` is not capped, the same `M4C PAIRS` counts and `M4C STAT` values (`xcheck_stats=match`). **2026-09-13 (I28, I34; §14.11, §14.18):**
+   - `xcheck_pairs` reads both directions, with each CPU bounded by its own last delivered event;
+   - `compared=0` fails, and so does `c_stats=differ`;
+   - the record carries `pc_in_range` and `c_in_range`.
+6. `flt_v=ok` and `flt_c=ok`; `M4C END rc=0`. **2026-09-13 (I34):** the parser's `crit_bb` also requires the board's own sha256 of its black box, which the harness passes, to equal the copy parsed.
 
-**On fail:** §9. Specifically: `ring=wrapped` at K1 = 256 → build `m4-r1-k512` and rerun r1 once; at 512 → D1(b), `m4-r1-lin`. `M4 FAIL mem_trace` → halve K1 (not below 64) and rerun; below 64 → owner, M3's O7 memory fallback (D3:1331). Any §1.7 zero → §1.7.
+**On fail:** §9. Specifically: `ring=wrapped` at K1 = 256 → build `m4-r1-k512` and rerun r1 once; at 512 → D1(b), `m4-r1-lin`. `M4 FAIL mem_trace` → halve K1 (not below 64) and rerun; below 64 → owner, M3's O7 memory fallback (D3:1331). `m4-r1-lin` has no K1 to halve: its need follows §2.4 step 3's linear rule (I26), and a `mem_trace` fail there goes to the owner. Any §1.7 zero → §1.7.
 
 ### 2.3 r2: Q and five timed runs on one kimg
 
@@ -253,9 +265,14 @@ The parser's `size-r1` and `size-r2` subcommands implement these rules exactly a
 
 1. `need1 = ceil(16 × b0 × 60) + 2`. The factor 16 (budget, HYPOTHESIS) allows qvm and the IPC run to raise the busiest CPU's buffer rate sixteen-fold over idle. 60 s (budget) covers the settle, the client's start and 1 s priming drain, 20 iterations and four 10 s sentinel recoveries (D3:846-848).
 2. `K1 = 256` if `need1 ≤ 256`; `512` if `need1 ≤ 512`; otherwise `lin` (D1(b)).
-3. `ring_mb(K) = ceil(K × 16 × 4 / 1024)` ([use-tl]: about 16 KB per buffer, per CPU; DD:1604). `S(K) = ring_mb(K) + 4` MiB, so `-S` always exceeds the ring (DD:1616). `cost(K) = max(ring_mb(K), ceil(probe_cost_mb × K / 64))`. `TRACE_NEED_MB(K) = cost(K) + S(K) + 32` (32 MB margin, budget).
-4. If `4 × S(K1) × 1,048,576 / tp_bps0 > 600`, step K1 down (512 → 256); at 256 still over: owner decision (raise TP_BOUND, guard recomputed).
-5. `CNT_BOUND1 = 120` if `4 × 5 × S(K1) × 1,048,576 / cnt_bps0 ≤ 120`, else 300. The factor 5 (budget) is text bytes per `.kev` byte, shaped on the unpublished 7b record.
+3. `ring_mb(K) = ceil(K × 16 × 4 / 1024)` ([use-tl]: about 16 KB per buffer, per CPU; DD:1604). `S(K) = ring_mb(K) + 4` MiB, so `-S` always exceeds the ring (DD:1616). `cost(K) = max(ring_mb(K), ceil(probe_cost_mb × K / 64))`. `TRACE_NEED_MB(K) = cost(K) + S(K) + 32` (32 MB margin, budget). **For `lin` (I26, §14.8):** the window passes no `-k`, so the kernel keeps tracelogger's default of 8 buffers per CPU ([use-tl]). `cost(lin) = max(ring_mb(8), ceil(probe_cost_mb))`, which r0's 64-buffer probe bounds, and ~~`TRACE_NEED_MB(lin) = cost(lin) + S(512) + 32`~~. **2026-09-13 (I37, §14.21):** `TRACE_NEED_MB(lin) = cost(lin) + S(lin) + 32`.
+   - **`S(lin) = ceil(bufs(lin) × 16 / 1024) + 4` MiB:** the file the budgeted window writes, plus the ring's 4 MiB margin.
+   - **`bufs(lin) = Σ_c (ceil(16 × b0_c × 60) + 2)`** over the four CPUs, where `b0_c = (bufs_c + 1) / span` is CPU *c*'s own rate. A CPU with no `RATE` record takes `b0`, so an unmeasured CPU is not budgeted as idle.
+   - **Why a sum.** A linear file holds every buffer every CPU writes. The ring rule takes the busiest CPU because `-k` gives one K to every CPU; a linear window has no K.
+   - **What this does not protect.** The sixteen-fold rise stays per CPU (HYPOTHESIS). For a CPU that idles in r0 and carries the vCPU in r1, that is less conservative than `4 × need1`. `crit_2`'s `kevfile-over-budget` (I33) and §9's row catch a window that outgrew its budget.
+   - **Probe cost:** `probe_cost_mb` is a whole number of MiB (the `MEM` lines are whole MB). The size file carries it, and `bufs(lin)` for a linear window, so the generator recomputes this step exactly (§3.4 step 8).
+4. If `4 × S(K1) × 1,048,576 / tp_bps0 > 600`, step K1 down (512 → 256); at 256 still over: owner decision (raise TP_BOUND, guard recomputed). **2026-09-13 (I37):** for `lin` the term is `S(lin)`, and a linear window over the bound goes straight to the owner.
+5. `CNT_BOUND1 = 120` if `4 × 5 × S(K1) × 1,048,576 / cnt_bps0 ≤ 120`, else 300. The factor 5 (budget) is text bytes per `.kev` byte, shaped on the unpublished 7b record. **2026-09-13 (I37):** `S(lin)` for `lin`. A `TRACE_NEED_MB` or `FMT_NEED_MB` of 992 MiB or more can never pass its gate at `-m992M`, so `size-r1` sends it to the owner (exit 3), and the generator refuses it.
 6. `SEND(cap) = ceil(cap / max(0.5 × tcu_bps0, 2000)) + 15` s. If it exceeds 600 s for a block, that block's cap halves until it fits.
 7. The guard follows from §8.1; r1's must be at most 2,700 s, else the caps halve.
 
@@ -272,12 +289,18 @@ The parser's `size-r1` and `size-r2` subcommands implement these rules exactly a
 2. `N_pairs = max(15, ceil(15000 / p1) − 5)`: 1.5 × 10,000 clean pairs, so that P99 is quotable with margin.
 3. `N2 = min(N_pairs, 13200)`. 13,200 keeps `IPC_BOUND2 = 240 + ceil(0.05 × N2)` at most 900 s, with 50 ms per iteration (budget: the client's 20 ms pacing, client.c:317, plus the round trip and recoveries).
 4. `K2 = max(256, ceil(1.5 × beta × (N2 + 5)) + 2)`.
-5. If `K2 > 512`: `N_ring = floor(510 / (1.5 × beta)) − 5`. If `N_ring × p1 ≥ 1200`, set `N2 = N_ring`, `K2 = 512`, and record `p99_target=ring-limited`. Otherwise D1(b): `m4-r2-lin-n<N2>`, with step 3's `N2`.
-6. `TRACE_NEED_MB2 = TRACE_NEED_MB(K2)` with r0's `probe_cost_mb`.
-7. `TP_BOUND2 = min(900, max(120, ceil(4 × tp_ms1 / 1000 × S(K2) / S(K1)) + 60))`; `CNT_BOUND2 = min(600, max(60, ceil(4 × cnt_ms1 / 1000 × S(K2) / S(K1)) + 30))`.
+5. If `K2 > 512`: `N_ring = floor(510 / (1.5 × beta)) − 5`. If `N_ring × p1 ≥ 1200`, set `N2 = N_ring`, `K2 = 512`, and record `p99_target=ring-limited`. Otherwise D1(b): `m4-r2-lin-n<N2>`, with step 3's `N2`. **2026-09-13 (I37):** the ring-limited branch also needs `N_ring ≥ 15`. Otherwise a very high yield could choose fewer than the 15 timed iterations, which the generator refuses.
+6. `TRACE_NEED_MB2 = TRACE_NEED_MB(K2)` with r0's `probe_cost_mb`; under D1(b), step 3's linear rule (I26). **2026-09-13 (I37, §14.21):**
+   - **Linear `-S`:** under D1(b), `S2 = S(lin) = ceil(bufs2 × 16 / 1024) + 4`, with `bufs2 = Σ_c (ceil(1.5 × beta_c × (N2 + 5)) + 2)` and `beta_c = seq_max_c / 20`. A CPU with no `BUF` record takes `beta`.
+   - **Memory fit (new):** the need must not exceed r1's `M4 MEM trace_pre`, the free memory r1 had at the same gate, and `FMT_NEED_MB` must stay below 992 MiB. Step 10 drops N2 until both hold.
+7. ~~`TP_BOUND2 = min(900, max(120, ceil(4 × tp_ms1 / 1000 × S(K2) / S(K1)) + 60))`; `CNT_BOUND2 = min(600, max(60, ceil(4 × cnt_ms1 / 1000 × S(K2) / S(K1)) + 30))`.~~ **2026-09-13 (I37, §14.21):** `S(K2)/S(K1)` assumed that r1's `.kev` was a full ring, and r1's stayed far below `-S` (§14.9), so it understated the growth. The bounds now scale from what r1 measured:
+   - **The prediction:** `kev2 = min(S2 × 2^20, bufs2 × 16 × 1024)` bytes. For a ring, `bufs2 = Σ_c min(K2, ceil(1.5 × beta_c × (N2 + 5)) + 2)`; for a linear window it is step 6's sum.
+   - **`TP_BOUND2 = max(120, ceil(4 × tp_ms1 / 1000 × kev2 / kev1) + 60)`**, where `kev1` is r1's `M4 KEVFILE t bytes`.
+   - **`CNT_BOUND2 = max(60, ceil(4 × cnt_ms1 / 1000 × text2 / text1) + 30)`**, where `text1` is r1's `M4 TEXT t bytes` and `text2 = kev2 × max(5, text1 / kev1)`. The budget ratio 5 stays a floor, so a measured ratio above it raises the bound instead of being ignored.
+   - **No clamp:** a value above 900 s or 600 s is not clamped any more. Step 10 drops N2, and if nothing fits the owner decides, as step 4 does for r1.
 8. `CAP_C2 = 1,048,576`; `CAP_V2 = 131,072`. The rule prints `c_capped_predicted=yes` when `1.5 × (pairs_all1 / 20) × (N2 + 5) × bpp1 > CAP_C2`. The on-target statistics stay complete either way; only the PC recount is limited.
 9. `SEND_C2`, `SEND_V2` by step 6 above with r1's `tcu_bps`.
-10. `GUARD2 = ceil((W(r2) + 125 + 240) / 300) × 300` (§8.1, with its 240 s minimum margin). If it exceeds 3,600 s, N2 drops by 10 % steps until it fits, and K2 is recomputed.
+10. `GUARD2 = ceil((W(r2) + 125 + 240) / 300) × 300` (§8.1, with its 240 s minimum margin). If it exceeds 3,600 s, N2 drops by 10 % steps until it fits, and K2 is recomputed. **2026-09-13 (I37):** the same 10 % steps also run while step 6's need or `FMT_NEED_MB` does not fit, or while step 7's unclamped bounds exceed 900 s and 600 s. If N2 reaches 15 and something still does not fit, `size-r2` exits 3 for the owner, naming what did not fit. The size file carries `size_probe_cost_mb`, `size_lin_bufs`, `size_kev2_pred_bytes` and `size_text_ratio1`, so the generator can recompute step 6.
 11. **Reachability, with the final `N2`** (review V7). `clean_pred = floor(p1 × (N2 + 5))` is the number of eligible clean pairs per run that r1's yield predicts. `p2_reachable=yes` when `clean_pred ≥ 1200` (step 5's floor), else `no`. `p99_reachable=yes` when `clean_pred ≥ 15000` (step 2's target), `short-margin` from 10,000 up to that target, and `no` below 10,000. Both go to stdout and into the size file. With `p2_reachable=no`, `size-r2` exits 3 and writes no size file, because a T-series predicted to miss P2 goes to the owner. With `p99_reachable=no`, it also exits 3 and writes no size file, unless `--accept-low-n` is given. That flag writes `accept_low_n=1`, the owner's acceptance goes into the run note, and every T-run's CSV row carries `;p99=low-n` (§6.4).
 
 **Contingency images** (built only on their branch):
@@ -285,7 +308,7 @@ The parser's `size-r1` and `size-r2` subcommands implement these rules exactly a
 | Id | Image | When | Record as |
 |---|---|---|---|
 | C1 | `m4-r1-k512` | r1 at K1 = 256 shows `ring=wrapped` | r1b; r2 sizes from r1b |
-| C2 | `m4-r1-lin`, `m4-r2-lin-n<N>` | a rule returns `lin` | D1(b): linear capture; the flush activity is recorded (§4.2) |
+| C2 | `m4-r1-lin`, `m4-r2-lin-n<N>` | a rule returns `lin` | D1(b): linear capture; ~~the flush activity is recorded (§4.2)~~ **2026-09-11: §4.2 defines no such record and no code emits one (§14.9 item 4)**. **2026-09-13 (I39): dropped, not defined.** A linear window leaves `KEVFILE` bytes against its budget (`kevfile_t_budget`), `BUF` per CPU and `RING short_tail_cpus`. None of them measures flush activity inside the window, and no record claims to |
 | C3 | `m4-r1-k<K1/2>` | `M4 FAIL mem_trace` | memory-limited ring |
 | C4 | `m4-r0v` (the `-vv` startup line) | r0's black box is 60,000 B or more | a startup-line deviation, as D3 G1 (D3:877) |
 
@@ -390,7 +413,7 @@ The two `<…verbatim…>` lines stand for the M3 text copied unchanged into the
 | `m4-r0` | trace | probe `-r -k 64 -M -S 8M`; L0 linear `-s 10 -S 32M` | — | `v` 262,144 | 2,700 | fixed (this table) |
 | `m4-r1-k<K1>` | full | `-r -k K1 -M -S S(K1)M` | 15 | `v` 1,048,576; `c` 524,288 | 2,700 | `size-r1` (§2.4) |
 | `m4-r2-k<K2>-n<N2>` | full | `-r -k K2 -M -S S(K2)M` | N2 | `c` 1,048,576; `v` 131,072 | `GUARD2` | `size-r2` (§2.4) |
-| `m4-r1-lin`, `m4-r2-lin-n<N>` | full | `-c -S S(512)M` (§4.2, D1(b)) | 15 or N | as r1 or r2 | as r1 or r2 | contingency C2 |
+| `m4-r1-lin`, `m4-r2-lin-n<N>` | full | ~~`-c -S S(512)M`~~ `-c -S S(lin)M` (§4.2, D1(b); **2026-09-13, I37:** `S(lin)` from §2.4 step 3 and r2 step 6) | 15 or N | as r1 or r2 | as r1 or r2 | contingency C2 |
 
 **`<image>.params`** (ASCII `key=value`, one per line, git-ignored beside the kimg), written by the generator and read by `m4-board.sh`, `m4-tloop.ps1` and the parser: `image rung mode p kind k s_mb tl_args tl_bound trace_need_mb fmt_need_mb cnt_need_mb iters ipc_bound banner_bound grace tp_bound cnt_bound hash_bound forms cap_v cap_c send_v send_c send_t_v send_t_c clean_pred p2_reachable p99_reachable accept_low_n ksh_worst_s guard_s return_bound_s capture_s size_file size_sha256 ksh_sha256 kimg_sha256`. The four reachability keys are `-` for r0 and r1. `return_bound_s = guard_s + 300`; `capture_s = return_bound_s + 3000` (review V1). The capture term has two parts. The first is the longest wait `m4-board.sh run` can make once gate A of §7.2 item 3 has passed: 2,180 s, made of the pre-kexec sessions, the kexec session, the one 600 s extension, and 300 s for the operator's no-growth watch. The second is 820 s for the time between starting the capture and starting `run`. The capture is a safety net: it is stopped after `run` returns (§6.1).
 
@@ -438,7 +461,7 @@ The image name (`m4-r1-k256`, …) is derived from the size file, never typed. r
 10. **SDP and inputs** (make-m3-images.sh:634-690): `SDP_FILES` gains `usr/sbin/tracelogger usr/bin/traceprinter lib/libtracelog.so.1 usr/lib/libtraceparser.so.1` (m4dry/build-m4dry-image.ps1:295); the tool check covers `tcu-cat stamp smpcheck bwait trcctl clkcmp m4count`.
 11. **Size check before mkifs.** Sum the `ls` sizes of every file the buildfile names (SDP files, tools, client, guest pair, generated files) plus 262,144 B of slack for headers and startup. Die if `0x80082fa0 + sum > 0x8C000000`. Print the sum.
 12. **mkifs** (make-m3-images.sh:693-709).
-13. **dumpifs `-vv`** (make-m3-images.sh:712-760) with M4's names: 13 script lines; `T234 M4 <rung> -P4`; `bwait -g <guard_s> &`; `ksh /proc/boot/m4-host.ksh`. `IFS_NAMES` = M3's list (:112-124) without `m3-host.ksh m3-fake-guest.txt`, with `trcctl clkcmp m4count m4-host.ksh m4fix-1.txt m4fix-2.txt m4fix-3.txt tracelogger traceprinter libtracelog.so.1 libtraceparser.so.1 cksum rm`, each exactly once. `ABSENT_NAMES` per §3.1 absent; no `.sym`.
+13. **dumpifs `-vv`** (make-m3-images.sh:712-760) with M4's names: 13 script lines; `T234 M4 <rung> -P4`; `bwait -g <guard_s> &`; `ksh /proc/boot/m4-host.ksh`. `IFS_NAMES` = M3's list (:112-124) without `m3-host.ksh m3-fake-guest.txt`, with `trcctl clkcmp m4count m4-host.ksh m4fix-1.txt m4fix-2.txt m4fix-3.txt tracelogger traceprinter libtracelog.so.1 libtraceparser.so.1 cksum rm`, each exactly once. **2026-09-13:** the fixtures are `m4fix-1.txt` to `m4fix-6.txt` (m4fix-4 since I22, m4fix-5 and m4fix-6 since I35 and I36), in this step, in step 9's copy and in step 16's extraction, and the `.params` key `fixtures` names all six. `ABSENT_NAMES` per §3.1 absent; no `.sym`.
 14. **Geometry** (make-m3-images.sh:763-786): `image_paddr=0x80082fa0`, end at or below `0x8C000000`.
 15. **Startup arguments** (make-m3-images.sh:793-849): `-P4`, `-Q enable,el2-host`, one `-A`, argv equal to the buildfile line.
 16. **Byte identity inside the IFS** (make-m3-images.sh:853-884): extract `guest-ifs.bin disk-qvm g2.conf m4-host.ksh m4fix-1.txt m4fix-2.txt m4fix-3.txt`; each sha256 equals its pin or generated file; delete the extraction.
@@ -520,11 +543,13 @@ arm() {
 	( bwait -k "$tb" -r "$S/$n.rec" -o "$S/$n.out" -e "$S/$n.err" -- "$X/tracelogger" "$@" -f "$k" > "$S/$n.b" 2>&1; : > "$S/$n.done" ) &
 }
 # stopladder NAME: STOP, then SIGINT, then SIGKILL; silent (m4-dryrun-design.md D3).
+# 2026-09-13 (I33): the 120 s wait runs only when trcctl's STOP succeeded (§4.3).
 stopladder() {
 	STOPBY=none
 	if [ -e "$S/$1.done" ]; then STOPBY=early; return; fi
-	trcctl -x > "$S/$1.x" 2>&1
-	if bwait -p "$S/$1.done" -t 120 > "$S/$1.s1" 2>&1; then STOPBY=stop; return; fi
+	if trcctl -x > "$S/$1.x" 2>&1; then
+		if bwait -p "$S/$1.done" -t 120 > "$S/$1.s1" 2>&1; then STOPBY=stop; return; fi
+	fi
 	slay -f -Q -s INT tracelogger
 	if bwait -p "$S/$1.done" -t 30 > "$S/$1.s2" 2>&1; then STOPBY=sigint; return; fi
 	slay -f -Q -s KILL tracelogger
@@ -783,7 +808,7 @@ state end
 **`-k` sizes the ring per CPU; `-S` does not** (plan:409-410; DD:1700, VERIFIED under TCG). The rules:
 - r1's `K1` comes from r0's board rate (§2.4); r2's `K2` from r1's buffer sequence numbers. A TCG size is never used (DD:1710-1715).
 - `-S` is always the ring plus 4 MiB, so an undocumented cut at `-S` cannot hide inside the window (DD:1616; R38 of DD:1689 stays untested).
-- **D1(b), a linear window,** replaces the ring only when a rule returns `lin` (K would exceed 512). Its arguments are `-c -S <S(512)>M`, continuous until STOP. That `-c` plus `trcctl -x` ends a linear capture and flushes it is HYPOTHESIS; C2's r1 run tests it before any r2.
+- **D1(b), a linear window,** replaces the ring only when a rule returns `lin` (K would exceed 512). Its arguments are ~~`-c -S <S(512)>M`~~ `-c -S <S(lin)>M` (**2026-09-13, I37:** `S(lin)` is derived from the window's own budget, §2.4 step 3, rather than borrowed from the largest ring; the argument above, that `-S` always exceeds the ring, is about rings only, and for a linear window its counterpart is the 4 MiB margin over the budgeted file, checked after the run as `kevfile_t_budget`), continuous until STOP. That `-c` plus `trcctl -x` ends a linear capture and flushes it is HYPOTHESIS; C2's r1 run tests it before any r2. **2026-09-11 (§14.9 item 2):** the board's r1 rerun supports it on one run. STOP ended tracelogger, and every CPU's last events follow the end marker. The gates prove the flush only for the end marker's CPU; the rest is in fields no gate reads.
 
 **Why the ring only has to hold start marker to STOP.** A ring overwrites its oldest buffers first ([tl], VENDOR_CLAIM; DD:402-404). Every event older than `m4-ipc-start` is dispensable, so the 2 s settle before the start marker costs no window buffer; it exists only so that tracing is enabled before the marker is inserted (7b used the same 2 s and found both markers, DD:1702). What follows the end marker does cost window buffers, so there is **no tail**: `trcctl -x` runs immediately after `m4-ipc-end`. That the end marker, in its CPU's partly filled buffer, is written at STOP is HYPOTHESIS, supported by the trailing buffer STOP wrote under TCG (DD:1600, VERIFIED); r0's probe tests it natively with the same zero tail.
 
@@ -798,7 +823,7 @@ From DD:292-299 and m4dry-host.ksh.in:49-68, with M4's silence rule:
 | Rung | Action | Bound | `STOP … by=` |
 |---|---|---|---|
 | 0 | `.done` already exists before STOP: tracelogger ended by itself (failed to start, or its `bwait -k` bound fired) | — | `early` |
-| 1 | `trcctl -x` (TraceEvent `_NTO_TRACE_STOP`, trcctl.c:66-75) | 120 s | `stop` |
+| 1 | `trcctl -x` (TraceEvent `_NTO_TRACE_STOP`, trcctl.c:66-75); **2026-09-13 (I33):** its 120 s wait runs only when trcctl exits 0, so `stop` means STOP succeeded and tracelogger then ended. A STOP that failed goes straight to rung 2 | 120 s | `stop` |
 | 2 | `slay -f -Q -s INT tracelogger` | 30 s | `sigint` |
 | 3 | `slay -f -Q -s KILL tracelogger` | 10 s | `kill` |
 | — | nothing ended it | — | `none` |
@@ -926,12 +951,12 @@ For each CPU: `bufs_in_window` (BUFFER events with a time inside the markers), `
 | Record | Fields |
 |---|---|
 | `PASS` | `pass= lines= ms=`, one line as each pass ends: passes 1 and 2 before `IN`, pass 3 before `FLT`. Not printed with `-q` |
-| `IN` | `path= lines= bytes= events= unformatted= long_lines= cpu_out_of_range= cps= cps_source=` |
+| `IN` | `path= lines= bytes= events= unformatted= unformatted_header= unformatted_blank= unformatted_other= long_lines= cpu_out_of_range= cps= cps_source=` (the three kinds added 2026-09-13, I36: before the first event line; after it, empty or spaces and tabs only; after it, anything else. They add up to `unformatted`) |
 | `HIST` | `class= sub= n=`, at most 48 lines, keys in first-seen order |
 | `HISTSUM` | `keys= printed=` |
 | `QVM` | `enter= exit= cycles= create_vcpu= intr_raise= intr_lower= timer= other= status_nonzero=` |
 | `QVMOTHER` | `sub= n=`, at most 8 lines |
-| `SAMPLE` | `sub= line="…"`: the first line of each QVM subtype seen, one THRUNNING and one INT_DELIVER, at most 12 lines, each cut at 160 characters, double quotes replaced by `'` |
+| `SAMPLE` | `sub= line="…"`: the first line of each QVM subtype seen, one THRUNNING and one INT_DELIVER, at most 12 lines, each cut at 160 characters, double quotes replaced by `'`. **2026-09-13 (I36):** plus one `sub=unformatted` line outside that cap, the first `unformatted_other` line, so a board run shows the layout §14.9 item 5 could only infer from a count. Not printed with `-q` |
 | `TIME64` | `mode= time_events= mismatches= wraps= backsteps= backsteps64= unknown=` |
 | `BUF` | one per CPU with events: `cpu= first_seq= last_seq= kept= gaps= max_events= first_t=0x… last_t=0x…` |
 | `MARK` | `start=found|absent start_t=0x… start_cpu= end=found|absent end_t=0x… end_cpu= dup=` |
@@ -977,6 +1002,11 @@ Three synthetic listings, `m4/fixtures/m4fix-1.txt` to `-3.txt`, written by hand
 | `m4fix-1` | 4 CPUs, 64-bit `t:`, both markers, BUFFER sequences from 1, one vCPU thread; eight triples giving seven pairs: two clean, one preempted by another thread's THRUNNING, one preempted by THREADY, one blocked by THCONDVAR, one migrated (entry on another CPU), one with a non-zero `status` | `mode=t64`, `ring=held`, `clean=2 pre=2 blk=1 mig=1 status_nonzero=1 eligible=6`; the clean STAT with the two invented dwells at P50, P99 and max |
 | `m4fix-2` | 32-bit `t:` with `msb:` TIME events and one low-word wrap inside the window; one triple failing the order check; one negative dwell | `mode=rebuilt wraps=1 order_violated=1 negative=1`, and the pairs next to them ineligible |
 | `m4fix-3` | CPU 1's first event after the start marker; a BUFFER sequence gap on CPU 2; one unattributed QVM event before any THRUNNING | `ring=wrapped wrapped_cpus=1`, `gaps=1` on CPU 2, `eligible=0`, `unattributed_qvm=1` |
+| `m4fix-4` (I22) | the ring wrapped past the start marker: end marker only, first kept sequences above 1 | `ring=wrapped wrapped_cpus=0,1` |
+| `m4fix-5` (added 2026-09-13, I35) | two CPUs, held; the end marker's CPU ends with its trailing buffer, and the other CPU's events stop before the end marker with no trailing buffer | `ring=held short_tail_cpus=1`: recorded, not refused (§14.10) |
+| `m4fix-6` (added 2026-09-13, I36) | header, blank (empty and whitespace-only) and other unformatted lines, and one event line on CPU 9 | the `IN` kinds, `unformatted_header + unformatted_blank + unformatted_other = unformatted`, `cpu_out_of_range=1` |
+
+**Run-level cases (added 2026-09-13, I35, §14.19).** `m4/fixtures/m4run-cases.txt` is not a listing and no image carries it. `selftest` builds a SYNTHETIC board r1 record from `m4fix-1` for each case, applies the case's edits (usually one; a rule that needs a consistent record takes several), runs `run` over it and compares the parse log, so each gate rule is shown to be read by its criterion.
 
 The PC's `parse-m4.py selftest` checks its own reading of each fixture against the `# expect:` lines, and checks the board's `-q` output for the same fixture against them (§6.2). r0 runs them on the board (§2.1) and §11 under TCG.
 
@@ -1051,10 +1081,10 @@ The first TCU byte follows item 15. The budget (§8.3) keeps items 1-15 well und
 | Rung | Blocks, in order | Caps (B) | Budget time at the 115200-baud ceiling | Budget time at the 5,000 B/s floor |
 |---|---|---|---|---|
 | r0 | `v` (L0 window) | 262,144 | about 23 s | 53 s |
-| r1 | `v` (whole window), `c` (all pairs) | 1,048,576; 524,288 | about 91 s; 46 s | 210 s; 105 s |
+| r1 | `v` (whole window; **2026-09-11: capped early in the window on the board, §14.9 item 1**), `c` (all pairs) | 1,048,576; 524,288 | about 91 s; 46 s | 210 s; 105 s |
 | r2 | `c` (all pairs), `v` (sample) | 1,048,576; 131,072 | about 91 s; 11 s | 210 s; 27 s |
 
-- **D2:** verbatim at r1, so the PC checks the counter without trusting it; compact at r2, once r1's pair-for-pair check passed. r2 keeps a small verbatim sample so every T-run carries an independent spot check.
+- **D2:** verbatim at r1, so the PC checks the counter without trusting it; compact at r2, once r1's pair-for-pair check passed. **2026-09-11 (§14.9 item 1):** on the board's r1 the verbatim block was capped, so this premise is met only over the delivered range. r2 keeps a small verbatim sample so every T-run carries an independent spot check.
 - **D7:** 1 MiB at r1; r2's send bounds come from r1's measured `tcu-cat` rate, and a block whose bound would exceed 600 s has its cap halved (§2.4).
 - **The rate** is 115200 8N1, about 11.5 KB/s at most (plan:232). That `tcu-cat` reaches it is HYPOTHESIS (plan:94); r0 measures it.
 - **D8 (a larger black box):** not implemented. It is considered only if r1's transfer is lossy (§12.3).
@@ -1087,6 +1117,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File orin-native\m4\capture-com3-
 
 ```
 parse-m4.py run --params P --blackbox FILE|none --com3 FILE --run-id ID --out-dir DIR [--csv FILE]
+                [--blackbox-board-sha256 HEX|none] [--run-end-epoch SECONDS]      (2026-09-13: I34, I39)
 parse-m4.py size-r1 --r0-parse LOG [--out FILE]
 parse-m4.py size-r2 --r1-parse LOG --r0-parse LOG [--out FILE]
 parse-m4.py series --parse-logs L1 L2 L3 L4 L5 --csv FILE --cloud-csv FILE --out-dir DIR
@@ -1099,7 +1130,7 @@ parse-m4.py kshcheck FILE | --selftest
 
 **`run`, step by step:**
 1. **Read** the black box and the COM3 file as bytes (latin-1 decoding is lossless); drop the capture's own header and end lines. If a `--- raw capture ended` line comes before the last block's END marker, record `com3_ended_early=yes`.
-2. **Records:** every `M4 `, `M4C `, `BWAIT `, `TRCCTL `, `STAMP `, `tcu-cat:`, `samples=`, `P50=` and `sentinel_` line of each record, CR stripped. `records_consistency=identical|bb-prefix|differ` compares them in order, with the black box's head allowed to end early (startup/m3-board.sh:977-994).
+2. **Records:** every `M4 `, `M4C `, `BWAIT `, `TRCCTL `, `STAMP `, `tcu-cat:`, `samples=`, `P50=` and `sentinel_` line of each record, CR stripped. `records_consistency=identical|bb-prefix|differ` compares them in order, with the black box's head allowed to end early (startup/m3-board.sh:977-994). **2026-09-13 (I32, §14.16), decided:** `records_consistency` stays a record and gates nothing. D3 §7's row for `differ` (flag it in the run note) is about it. What D3 §8 item 11 asks, every STAMP and IPC line identical, is the narrower `records_stamp_ipc=identical|differ(bb:<n>,com3:<m>)|empty|n/a(no-blackbox)`, which compares the `STAMP `, `samples=`, `P50=`, `sentinel_` and client `BWAIT run` lines in order, and which `crit_1` gates on a board run. The two sections do not contradict each other: they describe two comparisons, and only the narrow one is a criterion (§14.13).
 3. **Blocks** (§6.3).
 4. **Independent analysis** of block `v` with §4.5's rules (64-bit time, markers, cover, triples, pairs, classes, eligibility, statistics), written from §4.5, not from `m4count.c`. `v_complete=yes` when the counter's `M4C FLT form=v` line says `capped=0` and `flt_v=ok`.
 5. **Cross-checks:**
@@ -1127,7 +1158,12 @@ For each `M4 FLT BEGIN name=<n>` line (from the black box, else from COM3):
 - **Path:** `--csv`, default `<out-dir>/orin-native-qvm-trace-latest.csv`, git-ignored under `out/` (.gitignore:53). `results/hw/orin-native-qvm-trace-latest.csv` (plan:418) is not git-ignored and the repo is public, so the parser never writes there; the orchestrator moves rows to the local branch `m3-results-unpublished` (plan:502-507).
 - **Schema** (scripts/twin/diff-results.sh:17-19, :57): headerless rows `unix_ts,samples,payload_bytes,p50_ns,p99_ns,max_ns,cycles_per_sec,notes`, one per T-run, LF-terminated, no blank line (diff-results.sh:61-64 reads the last line; :74-81 refuse an empty or header-only file).
 - **Fields:**
-  - `unix_ts`: the COM3 capture's end line as epoch seconds (HYPOTHESIS that this is the intended meaning).
+  - `unix_ts`: ~~the COM3 capture's end line as epoch seconds (HYPOTHESIS that this is the intended meaning)~~. **2026-09-13 (I39, §14.23):** the run's end, as epoch seconds. That source could not work as written (§14.9 item 5): the harness parses while the capture still runs (§6.1, §7.2 item 6), so a harness parse never sees an end line. The sources, in order:
+    1. `--run-end-epoch`, which the harness takes from the PC clock when L4T is back and it copies the records, and records in the board log as `run_end_epoch=`;
+    2. the capture's end line, for a re-parse of a stopped capture;
+    3. for a rehearsal only, the serial file's modification time (`launch-m4tcg.ps1` passes the time QEMU stopped, so a rehearsal normally uses source 1).
+
+    Without any of them a T-run's row is `refused(no-timestamp)`. The source used is logged as `csv_ts_source`.
   - `samples`: eligible clean pairs.
   - `payload_bytes`: `0` (decision N2).
   - `p50_ns`, `p99_ns`, `max_ns`: the clean statistics, from the PC's recomputation of block `c` when `c_stats=match`; otherwise the counter's, with `csv_source=target` in the parse log.
@@ -1177,7 +1213,7 @@ A new file, copied from `startup/m3-board.sh` with the changes below. `m3-board.
 4. **Fresh-boot quiesce rule (new gate).** With `M4_QUIESCE=1`, `run` refuses when L4T's uptime is at or above `M4_QUIESCE_MAX_UPTIME_S` (default 1,800) and says to run `m4-board.sh reboot` first. Grounds: Linux faulted in service teardown and in its own shutdown after hours of uptime, three times, one of them in M3's own `isolate` step (m2-runs.md:126-133; m1b-runs.md:54-58; a third, in the quiesce step of an M3 run, is in the operator notes). The 1,800 s threshold is HYPOTHESIS.
 5. **Return bound.** From `.params` (r0 and r1: 3,000 s). **At the bound,** if the COM3 file grew during the last 60 s and holds no `--- raw capture ended` line, the bound is extended once by 600 s and the extension is recorded: a slow transfer is not a hang. Gate B (item 3) keeps the capture alive through the whole extension and for 300 s after it. Otherwise the M3 message stands: read COM3 first, then power-cycle (m3-board.sh:787-791).
 6. **Step 8 order.** Copy the black box and COM3 to `$RECDIR/<image>-<run>-{blackbox,com3}.log`; run the parser on the raw copies (step 8b); only then run `privacy_scan`, whose redaction could otherwise change a body's bytes.
-7. **Step 8b (new).** `timeout 900 python orin-native/m4/parse-m4.py run --params <image>.params --blackbox <bb> --com3 <com3> --run-id <image>-$M4_RUN_ID --out-dir $RECDIR/out`, and the `M4PC run_verdict=` line into the board log. `M4_RUN_ID` is required: `r0`, `r1`, `q`, `t1` to `t5`.
+7. **Step 8b (new).** `timeout 900 python orin-native/m4/parse-m4.py run --params <image>.params --blackbox <bb> --com3 <com3> --run-id <image>-$M4_RUN_ID --out-dir $RECDIR/out`, and the `M4PC run_verdict=` line into the board log. **2026-09-13 (I34, I39):** the harness also passes `--blackbox-board-sha256`, the board's own `blackbox_sha256` from the return session, and `--run-end-epoch`, the PC clock when it copies the records, which it writes into the board log as `run_end_epoch=`. A later re-parse passes both values from that board log. `M4_RUN_ID` is required: `r0`, `r1`, `q`, `t1` to `t5`.
 8. **`extract_file`.** The line pattern (m3-board.sh:874) gains `M4 (CONFIG|CHECK|FAIL|MEM|QVM|STATE (end|diag)|TRACE|STOP|KEVFILE|TEXT|FLT)`, `M4C (QVM|TIME64|RING|VCPU|OFFSET|TRIPLES|PAIRS|STAT|WARN|FLT|END)`, `TRCCTL ` and `tcu-cat:`. The STAMP, IPC, MEM and rate extractions stay. The G1 size message uses §8.3's gate.
 9. **`NEG_TOKENS`.** M3's list (m3-board.sh:850-857), with `M3 FAIL` matched as `M4 FAIL([^_]|$)`, plus fixed strings `rc=-1` on `TRCCTL` lines, `by=early`, `by=sigint`, `by=kill`, `by=none`, `path=none`, `aborted=1`, `deadline=1`, `state=wrapped`, `state=unknown`, `mem_trace`, `mem_format`, and the patterns `mismatches=[1-9]`, `order_violated=[1-9]`, `drops=[1-9]`, `marker_collision=[1-9]`, `M4C END w=[a-z0-9]+ rc=[13]`. M3's `killed=1` stays.
 10. **`consistency_files`.** The compared lines (m3-board.sh:978) gain `M4C .*`, `M4 (TRACE|STOP|KEVFILE|TEXT|FLT) .*`, `TRCCTL .*` and `tcu-cat: .*`.
@@ -1248,6 +1284,10 @@ For r0 and r1: guard 2,700 s, return 3,000 s, capture 6,000 s.
 | The `-M` object, at most `S(K)` | 20 (K=256), 36 (K=512) | HYPOTHESIS: whether `-M` holds a second copy is UNKNOWN (no source says); budgeted as a full copy | §2.4 |
 | Margin in the gate | 32 | budget | §2.4 |
 | **`TRACE_NEED_MB`** | **68 (256), 100 (512)** | runtime gate on `M4 MEM trace_pre` | §4.1 |
+| **Linear window (D1(b); added 2026-09-13, I37):** kernel buffers at tracelogger's default `-k 8`, `ring_mb(8)`, or r0's probe cost if higher | 1, or `probe_cost_mb` | VENDOR_CLAIM (the default), bounded by r0's 64-buffer probe (I26) | §2.4 step 3 |
+| The linear `.kev` in `/dev/shmem`, at most `S(lin)`; no `-M` object | `S(lin)` = the budgeted file + 4 | budget: the per-CPU sum of §2.4 step 3 (r1) or r2 step 6 (r2) | §2.4 |
+| Margin in the gate | 32 | budget | §2.4 |
+| **`TRACE_NEED_MB(lin)`** | **`cost(lin) + S(lin) + 32`** | runtime gate on `M4 MEM trace_pre`; unvalidated, because no `MEM` line falls inside a window (§14.9 item 4) | §4.1 |
 
 **After teardown and release,** about 512 (guest), 146.3 (disk copy), 21.8 (io-blk cache) and qvm's 16 MiB return (D3:295-298; HYPOTHESIS that each is freed), about 696 MiB. Then:
 
@@ -1260,7 +1300,7 @@ For r0 and r1: guard 2,700 s, return 3,000 s, capture 6,000 s.
 | **Total after release** | **about 490 of about 696 freed** | HYPOTHESIS |
 
 **Format and count gates** (review V4, §4.4). The generator bakes both and recomputes them at §3.4 step 8. Each is checked against a fresh reading taken after the `.kev` exists, so the `.kev` is already inside the free figure:
-- `FMT_NEED_MB = 5 × s + CNT_MB + ceil((cap_v + cap_c) / 2^20) + 32`, with `s` the listing's `-S` in MiB. It is checked against `M4 MEM preformat_<n>`: 404 at K=256, 484 at K=512, and 463 at r0 (L0's `-S 32M`, applied to the probe too).
+- `FMT_NEED_MB = 5 × s + CNT_MB + ceil((cap_v + cap_c) / 2^20) + 32`, with `s` the listing's `-S` in MiB. It is checked against `M4 MEM preformat_<n>`: 404 at K=256, 484 at K=512, and 463 at r0 (L0's `-S 32M`, applied to the probe too). **2026-09-13 (I37):** for a linear window `s = S(lin)`, so the `.kev` row above is at most `S(lin)` and the text row `5 × S(lin)`. A value of 992 MiB or more can never pass at `-m992M`; the sizing rules send it to the owner and the generator refuses it.
 - `CNT_NEED_MB = CNT_MB + ceil((cap_v + cap_c) / 2^20) + 32`. It is checked against `M4 MEM formatted_<n>`, once the text exists: 304 at r1 and r2, 303 at r0.
 
 `M4 MEM` lines at `boot`, `disk`, `banner`, `trace_pre`, `released`, `preformat_<n>`, `formatted_<n>` and `end` (plus `probe_pre`, `probe_armed`, `probe_stopped` at r0) record what really happens. 7b's MB-resolution lines missed a small ring (the unpublished 7b record), which is why r0's probe uses 64 buffers per CPU (about 4 MiB) rather than a smaller ring.
@@ -1309,21 +1349,24 @@ Keyed on the last distinctive line in the black box, COM3, the board log or the 
 | COM3 stops before `BWAIT guard armed`, no reset by the return bound | A hang before the guard | PP | Read the COM3 tail; pull; record the lost black box |
 | `Unable to start "tracelogger" (83)` or `"traceprinter"` | A library missing (UNKNOWN dependencies, as D3 §3.1) | SR-bb | Add the library from `qhvh/` lists; rebuild every image; rerun r0 |
 | `M4 STOP <n> by=early` with a `spawn-failed` or `killed=1` tracelogger line | tracelogger did not start, or its kill bound fired | SR-bb | Read `<n>.err` in the record; fix; rerun the rung |
-| `TRCCTL stop rc=-1 errno=<e>` | STOP refused on the board (TCG accepted it, DD:1597-1599) | SR-bb | Recorded; the ladder falls to SIGINT; owner before r1 if at r0 |
+| `TRCCTL stop rc=-1 errno=<e>` | STOP refused on the board (TCG accepted it, DD:1597-1599) | SR-bb | Recorded; the ladder falls to SIGINT; owner before r1 if at r0. **2026-09-13 (I33):** the ladder no longer waits 120 s for a STOP that failed. It goes straight to SIGINT, so the window reads `by=sigint` and never `by=stop`, and `crit_2` fails on `trcctl_stop_rc` |
+| `kevfile_t_budget=…state:over` (parse log), with or without `MARK end=absent` **(added 2026-09-13, I33)** | A linear window's `.kev` reached the 4 MiB margin below `-S`: it outgrew its budget and may have been cut at `-S` (R38, untested) | SR-bb | Rung not passed (`crit_2`). Re-size from this run's `BUF last_seq` (§2.4 r2 step 6), rebuild, rerun. Owner if the new need then fails `mem_trace` |
+| Parse log `crit_bb=fail(…sha:differ)` or `sha:unknown` **(added 2026-09-13, I34)** | The copy parsed is not the black box the board hashed, or no board sha256 was passed (a re-parse without `--blackbox-board-sha256`) | — | Re-copy the black box from the board, or re-parse with the board log's `blackbox_sha256`; never judge the run on an unverified copy |
+| Parse log `records_stamp_ipc=differ(…)` **(added 2026-09-13, I32)** | A STAMP or IPC line differs between the black box and COM3 (D3 §8 item 11) | — | `crit_1` fails. The black box is the record of the numbers; find the console-path drop before the run counts |
 | `M4 STOP <n> by=sigint` | STOP did not end the ring; SIGINT did | SR-bb | Recorded; the window is usable if `KEVFILE` exists; stop reason goes to the run note |
 | `M4 STOP <n> by=kill` or `by=none`; `KEVFILE <n> path=none` | No `.kev` | SR-bb | Rung not passed; read `<n>.out`, `<n>.err`; fix before rerun |
 | r0 probe `M4C MARK start=absent` or `end=absent` | Markers not captured natively, or the zero-tail end marker was not flushed (§4.2) | SR-bb | Owner: add a 1 s tail (a design amendment) and rerun r0 |
 | r0 probe `kept` above 65 on any CPU | `-k` does not size the ring per CPU on the board | SR-bb | Stop; the §2.4 rules are invalid; owner |
 | r0 or r1 `M4C RING state=wrapped` | The ring overwrote part of the window | SR-bb | r0: owner. r1: contingency C1, then C2 |
 | `M4C RING state=unknown` with both markers and `gaps` above 0 | A BUFFER sequence gap: dropped buffers | SR-bb | Recorded; pairs not eligible; rerun; owner if repeated |
-| `M4 FAIL mem_trace free_mb=… need_mb=…` | Not enough RAM for the ring | SR-bb | Contingency C3 (half K); below 64: owner, M3's O7 (D3:1331) |
+| `M4 FAIL mem_trace free_mb=… need_mb=…` | Not enough RAM for the ring | SR-bb | Contingency C3 (half K); below 64: owner, M3's O7 (D3:1331); a linear window: owner (§2.4 step 3, I26) |
 | `M4 FAIL mem_format name=<n> step=…` | Not enough RAM after release to format or count that listing; nothing was written or sent for it | SR-bb | Read the `MEM` lines. Owner: halve K (C3), or lower `-P`/`-T` with `CNT_MB` recomputed and E8 counting any cap hit; rebuild; rerun |
 | `M4C TIME64 … mismatches=` above 0 | The target's `t:` is not the full count, or the msb logic disagrees | SR-bb | Hold r2; compare with the PC's reading of `v`; fix the counter and parser in lockstep |
 | `M4C QVM enter=0` (or `exit=0`, `cycles=0`) at r1 | No Class-10 event natively | SR-bb | §1.7: verified zero → fallback amendment; unverified → rerun r1 |
 | `M4C VCPU threads=` other than 1 | More than one thread emitted CYCLES | SR-bb | Recorded; pairing is per thread; owner before r2 |
 | `M4C OFFSET distinct=` above 1 | The offset changed inside one qvm instance, against [TSC] | SR-bb | Recorded; dwells stand (offset cancels); window placement suspect; owner |
 | `M4C TRIPLES … order_violated=` above 0 | Host and guest clocks disagree for those triples on silicon | SR-bb | Recorded; E2 excludes them; if most triples fail, owner before r2 |
-| `M4C PAIRS … status_nonzero=` a large share of pairs | E3's reading of `status` is doubtful | SR-bb | Owner decision N5 before r2 |
+| ~~`M4C PAIRS … status_nonzero=` a large share of pairs~~ **2026-09-13 (I39, §14.23):** under `E3=none` that field is always 0 (§14.7), so the row reads the status records: `M4C STATUS` values, or `M4C STATUSSUM missing=` or `overflow=` above 0 | E3's reading of `status` is doubtful, or the board prints a status value the freeze's E3 rule was not built from | SR-bb | Recorded; not a failure at `E3=none`. The owner sets the final E3 rule at the freeze from these records (§14.7, N15) |
 | `M4C WARN clean_tail_bias …` | Preempted plus migrated at least 1 % | SR-bb | Not a failure; the run note says the clean P99 is not a guest-visible tail |
 | `BWAIT run prog=traceprinter … killed=1` | TP bound too small for the board | SR-bb | Rebuild the rung with a larger TP bound (guard recomputed); rerun |
 | `BWAIT run prog=m4count … killed=1` or `M4C END … rc=3` | Counter bound or a table cap hit | SR-bb | The last `M4C PASS` line shows how far a killed counter got (none means pass 1 never ended). Raise `CNT_BOUND` from that, or `-P`/`-T` within §8.2; rebuild; rerun |
@@ -1401,7 +1444,7 @@ Everything below runs on the Windows PC under QEMU TCG, with no board contact, o
 ### 11.2 The variant host (`m4/build-m4tcg-image.ps1`)
 
 ```
-powershell -ExecutionPolicy Bypass -File orin-native\m4\build-m4tcg-image.ps1 -Variant r0|k512|k16 [-Tag <t>]
+powershell -ExecutionPolicy Bypass -File orin-native\m4\build-m4tcg-image.ps1 -Variant r0|k512|k16|lin [-Tag <t>]      (lin added 2026-09-13, I38)
 ```
 
 Derived from `m4dry/build-m4dry-image.ps1` (steps 1-9, :20-34), with only these changes:
@@ -1430,7 +1473,7 @@ Derived from `m4dry/launch-m4dry-tcg.ps1` (steps 1-11), with these changes:
 - **Then runs, bounded by `-ParserSeconds` (default 2,400):** `python orin-native/m4/parse-m4.py run --params qhv/m4tcg/stage-<variant>/m4tcg.params --blackbox none --com3 qhv/m4tcg/attempt<N>/serial-raw.log --com3-format qemu-serial --run-id tcg-<variant>-a<N> --out-dir qhv/m4tcg/attempt<N>/out --csv qhv/m4tcg/attempt<N>/out/rehearsal.csv --rehearsal`. `--com3-format qemu-serial` accepts a file with no capture header; `--rehearsal` marks every board-only criterion `n/a(tcg)`, allows `cps` other than 31,250,000, and writes the CSV row with notes `m4-tcg-rehearsal;emulated;not-a-result`, never to `results/`.
 - Canonical hashes after; `survivors=none` after both QEMU and the parser.
 
-**Order:** `r0`, then `k512`, then `k16`. Each question assumes the one before it holds.
+**Order:** `r0`, then `k512`, then `k16`. Each question assumes the one before it holds. **2026-09-13 (I38):** then `lin` (`-Variant lin`, built with `-E3 none`), the linear window of D1(b): `TL_ARGS='-c -S 21M'`, `KIND=linear`, `TRACE_NEED_MB=54`, `FMT_NEED=409`. The `-S` comes from §2.4 step 3's linear form over a TCG budget: the 512 buffers per CPU that held in `k512`, plus the rule's 2 per CPU, on each of the two CPUs. The builder turns an unset `-E3` into `none` for `lin`, and refuses `status0`. These are TCG-only values and never a board image's.
 
 ### 11.4 Pass criteria
 
@@ -1439,6 +1482,7 @@ Derived from `m4dry/launch-m4dry-tcg.ps1` (steps 1-11), with these changes:
 | `r0` | `M4 FAIL_STATE none`; three `CLK VERDICT` lines `agree` or `agree-within-resolution`; `selftest --m4c <serial>` matches every fixture's `# expect:` lines; probe `STOP p by=stop`, `MARK start=found end=found`, `RING state=held`, `kept` ≤ 65 on CPUs 0 and 1, `TIME64 mismatches=0`; `STOP l0 by=self`; `flt_v=ok` over the console; `run_verdict=pass` with board-only items `n/a(tcg)` |
 | `k512` | The IPC completion rule (15 iterations); `TRACE ARM`, `STOP t by=stop`; `RING state=held`; `QVM` enter, exit and cycles above zero; `VCPU threads=1`; `OFFSET distinct=1`; `TRIPLES … order_violated=0`; `TIME64 mismatches=0`; `flt_v=ok`, `flt_c=ok`; `xcheck_pairs=match` with `compared` above zero; `xcheck_stats=match` when `v` was not capped, else `c_stats=match`; exactly one row in `rehearsal.csv`, and `bash scripts/twin/diff-results.sh results/cloud/cloud-ipc-latest.csv qhv/m4tcg/attempt<N>/out/rehearsal.csv` exits 0 |
 | `k16` | `RING state=wrapped` with `wrapped_cpus` not `none`; `PAIRS eligible=0`; the PC's reading of `v` agrees on `ring`, `wrapped_cpus` and `eligible`; `M4C END rc=0` |
+| `lin` (added 2026-09-13, I38) | `k512`'s row, with: `TRACE ARM kind=linear args='-c -S 21M'` equal to the params; `STOP t by=stop` after `TRCCTL stop rc=0`; `kevfile_t_budget` `state:within`; `RING state=held`, with `short_tail_cpus` recorded; the memory gate passed at the linear need. Built with `-E3 none`, as r1 is |
 | all three | `canonical=ok` before and after; QEMU and parser gone; no `M4 FAIL` other than none |
 | PC only | `selftest` passes; `regress-7b` on one of 7b's git-ignored host-format W2 listings reports equal complete-triple and `offset_order` counts between `parse-m4.py` and `parse-m4dry.py`, with any dwell multiset difference explained by time-order against file-order pairing (§4.5.5) |
 
@@ -1462,7 +1506,7 @@ From plan §7 (plan:436-458), as they bear on M4, plus what this design adds:
 9. **Not publishable** before the 4.6(i) consultation (plan:458).
 10. **Not the guest-visible tail:** the headline uses clean pairs only; preempted and migrated exits are reported beside it (§1.6).
 11. **Not an exit-reason breakdown:** `hw_reason` is recorded, never interpreted.
-12. **Not a complete trace:** a held ring and contiguous buffers show no loss inside the window, not that every exit was traced.
+12. **Not a complete trace:** a held ring and contiguous buffers show no loss inside the window, not that every exit was traced. **2026-09-11 (§14.9 item 2):** and not at the window's end, because `held` has no end-of-window condition.
 13. **Not the IPC benchmark:** IPC figures taken with tracing active are not Phase-2 or M3 results.
 14. **No TCG figure is an M4 number:** §11 validates tooling only.
 
@@ -1740,3 +1784,458 @@ The first native M4 rung ran on the board under the §10 checklist:
   - **Harness fix:** `m4-board.sh run` now copies the params into the record directory (`<run>-params.log`, git-ignored) before any board session.
   - **Until m4-r0 is rebuilt,** the `m4-r0.kimg` on disk is the three-fixture image and does not match the params beside it, so r0 must not be rerun without a rebuild.
 
+### 14.7 N15 decided: E3 off for the functional rungs, and the status values recorded (2026-09-11)
+
+**Owner decision (2026-09-11): option (b) now, option (c) in research, the final E3 at the freeze.**
+- **(b)** The functional rungs run with E3 = `none`, so no pair is refused for its `status`. ~~`PAIRS status_nonzero` still counts the pairs that `status0` would refuse, so both readings stay visible.~~ **Corrected 2026-09-11 (verification):** `PAIRS status_nonzero` is an eligibility reason set only under `-E status0`, so under `E3=none` it always reads 0 in both implementations. What stays visible under `none` is the QVM-level `status_nonzero` count and the `STATUS` and `STATUSSUM` records.
+- **(b), continued.** Every GUEST_EXIT's `status` value is recorded, whether the event pairs or not. The freeze then chooses E3 from the values the board actually prints.
+- **(c)** In parallel, research what the `status` field and its bits mean. Until a QNX source says, the meaning is UNKNOWN. §1.4's reading (a zero status means the entry succeeded) stays VENDOR_CLAIM.
+- **At the freeze** the owner chooses the final E3, before the one measurement campaign. No functional rung is a measurement.
+
+**Why.** Under TCG every GUEST_EXIT in 7b's listings carries a non-zero `status`, so at `status0` no pair is eligible (I4; §14.5 step 5). VERIFIED in the listings; no counts are kept here.
+
+**The records** (`m4count.c` and `parse-m4.py` in lockstep):
+
+| Record | Fields |
+|---|---|
+| `STATUS` | `value=0x<hex> n= in_window=`, one line per distinct `status` value in first-seen file order, at most `STATUS_PRINT` (16) lines. `n` counts every GUEST_EXIT with that value. `in_window` counts those whose 64-bit time lies in `[start_t, end_t]`, and is 0 when the window is unknown |
+| `STATUSSUM` | `distinct= printed= other= missing= in_window_other= in_window_missing=`, plus `overflow=` when it is not 0 |
+
+- **Pass 1** keeps a first-seen table of at most `STATUS_KEEP` (64) distinct values; `distinct` is its size. A further new value adds to `overflow`, and `distinct` is then a lower bound.
+- **Summary counts.**
+  - `other` counts the GUEST_EXIT events whose value is not printed: table places after `STATUS_PRINT`, plus `overflow`.
+  - `missing` counts GUEST_EXIT events without a parseable `status`.
+  - The printed `n`, `other` and `missing` add up to `QVM exit`.
+- **Pass 2** counts each GUEST_EXIT whose time lies in the window: to a printed value's `in_window`, otherwise to `in_window_other`, or to `in_window_missing` when it has no `status`.
+- **Printing.** Both records come after `OFFSET` and before `TRIPLES`, and each is flushed with the other records before pass 3. They are printed under `-q` too, because r0's fixture check reads them (as I3).
+- **`-E`** changes neither record.
+
+**The cross-check** is in `run`'s `xcheck_stats`, so a mismatch fails r1's `crit_5`. **2026-09-11 (§14.9 item 1):** only when `v` is complete. With a capped `v`, `xcheck_stats` reads `n/a` and the STATUS comparison does not run, as happened in the board's r1.
+- **Not compared:** `n`, `distinct` and `other` cover the whole listing, which block `v` does not hold (as I8).
+- **Compared:** the in-window part. Every event in the window is in `v`, in file order. **2026-09-11:** only when `v` is not capped (§14.9 item 1).
+  - The in-window totals and `in_window_missing` must be equal.
+  - A value printed on both sides must have the same `in_window`.
+  - When neither side has an `in_window_other`, the values with in-window events must be the same on both sides.
+  - A target run without `STATUSSUM` fails (`STATUSSUM.absent`).
+- **Logged:** `run` logs the records as `cnt_<w>_status_<value>`, `cnt_<w>_statussum`, `pc_v_status_<value>` and `pc_v_statussum`; `regress-7b` logs them as `m4_status_<value>` and `m4_statussum`. `synth-com3` renders them like every other record.
+
+**Fixtures.** m4fix-1 to m4fix-3 now expect their `STATUS` lines and `STATUSSUM`, derived by hand from the fixture text. m4fix-4 has no GUEST_EXIT and expects the empty `STATUSSUM`. `selftest` checks the parser against them, and `selftest --m4c` checks the counter.
+
+**Image defaults.**
+- **`make-m4-images.sh`:** r1 and r2 default to `e3=none` when the size file does not name `e3`. Their counter then runs with `-E none`, and their `.params` say `e3=none`. A size file that names `e3=status0` still decides.
+- **r0** stays `e3=status0`. It runs no qvm, so E3 does not apply there.
+- **`build-m4tcg-image.ps1`** keeps its `-E3` switch and its `status0` default. A rehearsal meant to match r1 passes `-E3 none`.
+
+**Consequences.**
+- Records from a counter built before this change carry no `STATUS` lines. Re-parsed with this parser, they fail r0's `crit_4` (the new fixture expectations) and r1's `crit_5` (`STATUSSUM.absent`). §14.6's offline re-parse of the r0 board record is therefore not repeatable as it stands. The r0 kimg needs a rebuild anyway (I25).
+- The records add lines to every counter run, so they add to §8.3's black-box budget; the ksh summary does not reprint them. That the addition fits the budget is a HYPOTHESIS until r1's black box shows it.
+- **Before the freeze (N15 follow-ups, from [n15-status-research.md](n15-status-research.md)):**
+  - add a fixture with an ENTER, then an EXIT with no CYCLES, expecting `broken_between`, in both implementations;
+  - decide whether the cross-pair chain `a <= t(EXIT_n) <= t(ENTER_n+1) <= b` becomes an eligibility rule;
+  - decide whether r2's compact pair list also carries `status`;
+  - set the final E3 rule from r1's board status records, plus any aarch64 meaning QNX documents.
+  - The note recommends keeping `none` unless one of those changes it, and reporting dwell per `hw_reason` class rather than excluding classes.
+
+
+### 14.8 Board r1, first attempt: `mem_trace`, and the linear memory rule (I26) (2026-09-11, owner at the plug)
+
+`size-r1` chose `m4-r1-lin` from r0's record, because §2.4 step 2 returned `lin`. The run followed the §10 flow:
+- a fresh L4T boot;
+- `stage PASS` and the p0 kexec gate;
+- the byte-exact COM3 capture before `run`;
+- O4 and O5 adopted.
+
+**What the board showed.** These are functional results under the freeze decision, not measurements:
+- **Landing:** the shim entered at EL2, procnto came up at `-P4`, and the guard armed.
+- **Before the window:** config, preflight, rate_pre, integrity_pre, disk and hostcheck passed, and the guest booted to its banner.
+- **At `ipc`:** the memory gate before arming failed with `M4 FAIL mem_trace`, because free memory was below the image's `trace_need_mb`. No trace was armed, so the attempt has no marker, STOP, `.kev`, counter output or listing.
+- **After the fail,** as designed:
+  - the IPC client ran its iterations untraced and completed;
+  - teardown and `integrity_post` passed;
+  - the remaining states ran to `end`, with `FAIL_STATE mem_trace`.
+- **Return:** the image reset itself (`MAINSWRST`). The black box and COM3 records are identical, the black box stayed under its budget, and no dmesg-ramoops was written.
+- **Verdict:** `run_verdict=fail`. `crit_1` to `crit_6` and `crit_neg` fail, all because no trace ran; `crit_reset` and `crit_bb` pass.
+
+**Cause: the sizing rules' linear branch (I26).**
+- **The defect:** §2.4 step 3 defines `TRACE_NEED_MB(K)` for a ring. For `lin`, `size-r1` and `size-r2` substituted K = 512, the largest ring that D1(b) replaces, so a linear window was costed as a 512-buffer ring scaled from r0's probe.
+- **Why that is wrong:** a linear window passes no `-k`. tracelogger's usage message gives its defaults:
+  - `-k`: 8 kernel buffers per CPU, about 16 KB each;
+  - `-b`: at most 64 dynamic buffers in tracelogger, about 11 KB each.
+  - r0's probe ran with `-k 64` and the same `-b` default, so the probe's measured cost bounds a linear window's.
+- **Fix (commit d916877):**
+  - `cost(lin) = max(ring_mb(8), ceil(probe_cost_mb))`;
+  - `TRACE_NEED_MB(lin) = cost(lin) + S + 32`, with `S = S(512)` as before;
+  - the generator's `ring + S + 32` check uses 8 buffers for `lin`, which is a floor rather than the parser's cost term: the generator has no r0 probe cost, so it cannot recompute the rule;
+  - ring sizing is untouched.
+- **Checks:**
+  - `selftest` passes, though it does not cover sizing.
+  - `size-r1` over r0's valid parse gives a size file that differs from the attempt's params only in `trace_need_mb`.
+  - The generator accepted that file and rebuilt `m4-r1-lin`.
+- **Still HYPOTHESIS:** that `-c` plus `trcctl -x` stops and flushes a linear capture (§4.2). The rerun tests it. **Rerun result (§14.9 item 2):** supported on one run; the gates cover only the end marker's CPU.
+- **If the rerun fails `mem_trace` again,** the owner decides, because a linear window has no K to halve (§2.2, §9).
+
+**Owner decision (2026-09-11):** apply the fix and rerun `m4-r1-lin` the same day, without first rehearsing the linear stop path under TCG. §4.2 already gives that test to the board's r1.
+
+**Records.**
+- Every file the harness writes into the record directory ends in `.log` or lies under `out/`, both git-ignored; since 2026-09-11 a directory rule covers these run directories as well. The I25 params copy is in it.
+- The rebuild replaced the PC's copy of the as-run kimg, so that kimg is kept on the board under a new name.
+- The figures are on the unpublished branch.
+
+### 14.9 Board r1 rerun: pass, and what an independent review narrowed (2026-09-11, owner at the plug)
+
+**The run.** `m4-r1-lin` ran from a power-cycled L4T under the §10 flow, with O4 and O5 adopted. The image was rebuilt with I26 and was otherwise identical to the first attempt's. The memory gate passed, and the linear window was armed.
+
+**What the board showed.** These are functional results under the freeze decision, not measurements:
+- **States:** every state ran in order, with `FAIL_STATE none`. The md5 checks before and after, the disk copy and the guest banner passed. The IPC client completed its iterations inside the traced window.
+- **Trace:**
+  - both markers were inserted;
+  - `trcctl -x` returned 0, and the stop ladder read `by=stop`;
+  - the `.kev` stayed far below `-S`;
+  - traceprinter and the counter ran within their bounds.
+- **P1 on the board:**
+  - GUEST_ENTER, GUEST_EXIT and CYCLES were all counted above zero;
+  - one vCPU thread and one clock offset;
+  - no broken or out-of-order triple, and no TIME64 mismatch;
+  - `ring=held`, with every CPU's buffer sequence starting at 1 and no gap.
+- **Transfer:** blocks `v` and `c` crossed the TCU clean, and the PC's md5, cksum, byte and line counts matched the board's.
+- **Return:** the image reset itself (`MAINSWRST`). The black box and COM3 records are identical, the black box stayed under its budget, and no dmesg-ramoops was written.
+- **Verdict:** every r1 criterion passed, with `run_verdict=pass`. Together with r0, **M4-F passes functionally.**
+- **Instrument caveat.** The two rungs were never validated under one instrument version. r0's pass is an offline re-parse under a parser revision that is in no commit; its own harness run failed on the I24 defect, and its counter predates §14.7's STATUS records, so its record does not re-parse under today's parser. Its kimg also needs a rebuild (I25). r1 passed under the instruments now in the tree. Rebuilding `m4-r0` and re-validating r0 under the frozen instruments is a freeze-gate item.
+
+**N15 on the board.**
+- No GUEST_EXIT had status 0.
+- For every GUEST_EXIT in the delivered listing, the low 6 bits of the status equal `hw_reason`'s ESR exception class, as under TCG ([n15-status-research.md](n15-status-research.md)).
+- One value also carries a bit above the class bits. Its meaning is UNKNOWN.
+- So `E3=none` stays for the functional rungs. A `status0` rule would refuse every pair on the board too.
+
+**Independent review.** Before the pass was recorded, 16 read-only agents audited it in four lenses: the criteria, COM3 and the black box, the linear stop and the cross-check, and privacy. A skeptic re-checked each serious finding. They found no blocker:
+- blocks `v` and `c`, rebuilt from the raw capture, reproduced the board's checks;
+- every §2.2 criterion and every D3 §8 item held in the records.
+
+The review narrowed what the pass shows:
+1. **The cross-check is partial.**
+   - **Coverage:** block `v` reached its cap early in the window. `xcheck_pairs` compared every block-`c` pair wholly inside the delivered range, and all matched, but that range is only the window's early part.
+   - **What did not run:** `xcheck_stats` and §14.7's in-window STATUS comparison. `c_stats` compares the counter only with itself.
+   - **Counter only:** the later pairs, the whole-window PAIRS counts and the in-window STATUS counts.
+   - **Why the pass stands:** §2.2 criterion 5 allows a capped `v`. But D2's premise for r2, that the PC has checked the counter without trusting it, is met only over that range.
+   - **The borrowed end time:** the PC's reading of the capped `v` used the counter's end-marker time (I9, decision N18). That time decided none of the compared pairs, but the pass rests on it: without the borrow the PC's window is unknown, `xcheck_pairs` reads `n/a` and crit_5 fails. N18 is adopted by default under §12.3's convention, and it is still unconfirmed.
+2. **The linear flush is supported, not gated.**
+   - **Evidence:** STOP ended tracelogger, and the last events on every CPU follow the end marker closely.
+   - **Why it is ungated:** that evidence is in the BUF `last_t` fields, which no gate reads. `held` has no end-of-window condition, so crit_2 and crit_4 prove the flush only for the end marker's CPU.
+   - **Scope:** one run, at r1's rate. Behaviour under a write backlog, and at `-S` (R38), stays untested.
+3. **Parser gates are weaker than §2.2's wording.** All of these held in this run when checked by hand, but Q and T1-T5 would inherit the gaps:
+   - **crit_1** checks only a subset of D3 §8 items 1-11. It does not check the CONFIG fields beyond rung and mode (the generator does enforce them at build time), the two startup orderings, the guest-phase order, both pidin listings, the rule against an early rc, payload, cps, the P50 line, the rate lines or the reset line. The states check tests their order and the last state, not that every state is present, and the banner is searched over all texts rather than the guest's stream alone. `records_consistency` is not gated, and on that point D3 §7 contradicts D3 §8 item 11.
+   - **crit_5** accepts `compared=0`. It counts only PC pairs missing from `c`, not `c` lines missing from the PC. Its range bound is the file-order `last_t`, not each CPU's last delivered event.
+   - **`c_stats`** and the harness's black-box sha256 verdict gate nothing.
+   - **crit_3** does not require the PC's own confirmation, and TIME64's check passes when there are no TIME events.
+   - **crit_2** checks presence only, and the ksh derives `by=stop` from `.done` without reading trcctl's rc.
+   - **D3 item 7:** qvm exiting inside the window is not observable in the way that item assumes.
+4. **I26 is incomplete for a linear window.**
+   - **The file term** keeps `S(512)`. That bounded the window that ran, but it is not derived from the budgeted window, and a linear r2 sized by the rules would outgrow it.
+   - **It was load-bearing here.** Derived from `size-r1`'s own budget, the need would have exceeded the memory the board had free, and this run would have failed `mem_trace` again. Derived from the per-CPU sum, the form the review recommends for r2, it would still have passed. So once the follow-up lands, `m4-r1-lin` as configured may not re-pass its own gate.
+   - **Unvalidated cost.** No MEM line falls inside the window, so r1 measures nothing about a linear window's real memory cost. `cost(lin)` and the 32 MB margin stay unvalidated.
+   - **size-r2** still scales the TP and CNT bounds by `S(K2)/S(K1)`, which assumes a full ring's `.kev`.
+   - **Missing linear rows:** §8.2's tables and §2.2's host-script text; the generator's check is only a floor; the TCG builder has no linear variant.
+   - **C2's "flush activity is recorded"** names a record that nothing defines.
+5. **Records.**
+   - **No capture end line:** the raw capture has none, because the harness parses before the capture is stopped. §6.4's CSV timestamp source therefore cannot work for T-runs as written.
+   - **Unformatted lines:** the counter's count equals the listing header plus two lines per CONTROL BUFFER event. That is an inference from the counts. Nobody has seen the lines themselves, nothing reads the count, and both implementations share the §4.5.2 grammar, so a layout it does not parse would be missed by both.
+   - **`M4C WARN clean_tail_bias`** fired (§1.6). All its pairs were migrated ones, consistent with a vCPU runmask that allows all four CPUs. No criterion reads it.
+6. **Privacy (harness).**
+   - The harness's PC COM3 copies still carry the board hostname, which contains the login name.
+   - Its "identifying lines redacted" count was false positives on version strings, and the redaction pass also rewrites line endings.
+   - The parser reads the raw capture, so no verdict is affected, and the copies are git-ignored and unpublished.
+   - A separate task fixes the redaction.
+   - **Already public, and not introduced here:** a tracked script on `origin/main` carries the board's ssh key file name and a `user@address` example. A separate task replaces both with placeholders; the history is the owner's call.
+7. **Design text corrected in place,** with dated notes: §4.2 and §14.8 (the rerun's flush evidence), §5.4 (for r1, `v` was not the whole window), §14.7 (the STATUS cross-check runs only when `v` is complete), and C2. Two small gaps remain:
+   - §2.1 item 10 cites a "§7.3" list that is §7.2 item 9;
+   - §2.2 item 1 leaves out D3 item 12, the token list, which the parser applies anyway;
+   - §4.2's argument that `-S` always exceeds the ring is about rings only, and §9 has no row for a linear capture cut at `-S`.
+
+**Before the campaign relies on M4.** These follow-ups have not been run:
+- implement items 3-5 in `parse-m4.py`, `m4count.c` (in lockstep), the ksh and the harness, with a fixture for each new rule (for `held`: a trailing buffer missing on a CPU other than the end marker's); **(2026-09-13: item 3's `crit_5` and `c_stats` bullets are done - I28, §14.11 - with a self-test for the cross-check - I29, §14.12; its `crit_2` and `crit_3` bullets - I30, §14.13; and most of its `crit_1` bullet - I30b, §14.14. Item 2's `held` rule was implemented and then withdrawn as a gate - §14.10. What still stands: the rest of `crit_1`, which §14.14 lists; `crit_bb`; the D3-item-7 bullet; and items 4 and 5.)** **(2026-09-13, later: the rest of item 3 is done - I32-I34, §14.16-14.18, with the D3-item-7 bullet answered by §14.13's pidin reading - and so is a run-level case for each rule - I35, §14.19. Item 2's fixture is `m4fix-5`, and the item stays a record by the owner's decision. Item 4's linear `-S`, the size-r2 scaling and the generator's exact check are I37, §14.21, and the TCG linear variant is I38, §14.22. Item 5's timestamp source and unformatted-line sampling are I39 and I36. C2's wording is dropped, I39.)**
+- derive a linear window's `-S` from its budget, add a linear variant to the TCG builder, and rehearse it under TCG;
+- get a whole-window cross-check, or record the owner's acceptance of r1's partial one. The options are a `v` sized to the selection, several verbatim blocks, or a narrower selection;
+- confirm or reject N18;
+- define the linear flush-activity record, or drop C2's wording;
+- set the final E3 rule at the freeze (§14.7), now with the board's status evidence;
+- rebuild `m4-r0` (I25) and re-run or re-validate r0 under the frozen instruments, so both rungs stand under one instrument version;
+- sample the post-header unformatted lines in both implementations, instead of only counting them;
+- replace the tracked identifiers named in item 6 with placeholders.
+
+### 14.10 I27: the short tail is recorded, not gated (2026-09-13)
+
+§14.9 item 2 asked for an end-of-window condition on `ring=held`: every CPU with events must have a kept event at or after the end marker, or the window is not held. It was implemented in both implementations and then withdrawn as a gate, because a fixture refuted it.
+
+**What happened.** `m4fix-1` represents a healthy window: `state=held`, four CPUs, nothing wrapped. Its end marker sits at one time, and two of its CPUs emit events only at the very start and then idle, so their last event precedes the marker by a wide margin. The new rule called that window not held.
+
+**Why the rule cannot stand as written.** From the listing alone, a CPU that is idle for the rest of the window is indistinguishable from a CPU that lost its trailing buffer. Flushing writes the buffers that exist; it does not create events. Gating on this would refuse real captures, including any run with a parked or lightly loaded core, which this board has: the board's r1 run passed the rule only because all four CPUs happened to be busy at the end.
+
+**What is in place instead.** Both implementations track a per-CPU `short_tail`, and the `RING` record carries `short_tail_cpus`, naming every CPU whose events stop before the end marker. The r1 review's point is met - that evidence used to sit only in ungated `BUF last_t` fields - and it is now a record, without failing a window that is merely idle.
+
+**Correction (2026-09-13, the same day this section was written).** The sentence above first read "it now appears in a record the parser and the counter cross-check". That was an overclaim, and an audit caught it. Three things are true instead:
+
+- **Nothing compares the field.** `xcheck_stats`'s `compare` list asks the `RING` record for `state` and `wrapped_cpus` only, so `short_tail_cpus` is emitted by both implementations, logged by both, and compared by neither.
+- **On the one board record that carries it, that comparison did not run at all.** `xcheck_stats` is guarded by `v_complete`, and r1's verbatim block was capped.
+- **Adding it to the comparison is not the obvious fix.** The verbatim selection keeps the events inside the marker window, so the PC's last event on a CPU cannot follow the end marker, while the counter reads a whole listing in which a trailing buffer can. The two sides would disagree by construction on exactly the CPUs the field exists to name. A comparable form would have to bound the counter's side to the window too; whether that is worth doing is an open item, not a change made here.
+
+There is a second reason the field has never been compared on a board record: the `m4count` in every image built so far predates this section, so the counter's `RING` line in those records carries no `short_tail_cpus` at all. That is part of the freeze-gate item about validating both rungs under one instrument version.
+
+**What would gate it.** A signature that separates a lost tail from an idle CPU. The listing does not carry one today: a lost final buffer leaves no gap in the sequence numbers, because the numbers that survive are contiguous. Until the freeze decides otherwise, reporting is the honest option, and §14.9's follow-up list is amended accordingly.
+
+**Verification, stated plainly.** The parser half is exercised by `selftest` on this PC. The counter half is not: `tools/m4count` is an aarch64 ELF and this machine has no host C compiler, so the C change is checked by review only until the §11 TCG rehearsal or a board run. No other §14.9 item is implemented yet.
+
+**Records.** Every file the harness wrote into the record directory ends in `.log` or lies under `out/`, and a directory rule now covers the run directories as well. The figures and the full review are on the unpublished branch.
+
+### 14.11 I28: the cross-check reads both directions, and what running it found (2026-09-13)
+
+§14.9 item 3 listed three weaknesses in `crit_5`'s cross-check and one in `c_stats`. All four are now implemented in `parse-m4.py`:
+
+- **Both directions.** The walk over the PC's pairs is followed by a walk over the compact block's rows. A row the counter wrote, inside the range the PC could see, for which the PC produced no pair, is counted and named in the record as `orphan`.
+- **A floor.** `compared=0` no longer reads as a match. A comparison of nothing is recorded as `empty` and fails the criterion.
+- **A per-CPU bound.** The bound was the file-order `last_t` of the verbatim block, but the listing is ordered per CPU buffer, so a CPU whose delivered events stop earlier was compared past its own data. Each CPU is now bounded by its own last delivered event.
+- **`c_stats` gates.** §9 treats `c_stats=differ` as a stop before r2; it now demotes `crit_5` instead of being logged and ignored.
+
+The record carries both directions and the compared count, so a thin comparison shows in the parse log instead of hiding behind the word `match`.
+
+**What running it found.** Re-parsed against the board's r1 record, the first form of the reverse walk reported one orphan and failed `crit_5`, where the one-directional rule had passed. The orphan was the new rule's defect, not the counter's. The forward walk bounds a pair by its **exit** time; the reverse walk bounded a row by its **entry** time. A row whose entry falls inside the range and whose exit falls past it is skipped going forward - correctly, because the PC holds no exit event to pair with - and was then counted coming back. r1's verbatim block is capped, so it has exactly one such row, at the truncation boundary.
+
+**How that was established, not assumed.** The parser was driven over the delivered listing on its own. The row's exit lies beyond every CPU's last delivered event and beyond the furthest-reaching pair the PC formed, and no PC pair carries the row's key at all. The PC could not have produced that pair from the data it was given.
+
+**The fix.** The reverse walk bounds a row by its exit, `entry + dwell`, which is what the forward walk bounds a pair by. A row whose dwell is not a number gives no exit to bound, so it is left alone rather than compared past the PC's data. With it, the stricter rule and the looser one agree on the board's record: the re-parse reproduces the recorded parse log line for line, apart from the parser's own sha256, the input file names, and §14.10's new `short_tail_cpus` field. **The r1 pass recorded in §14.9 is unchanged, and was not over-claimed.**
+
+**A note on §14.10.** In that capped verbatim block every CPU's events stop before the end marker, so `short_tail_cpus` names all of them. Had the short tail stayed a gate, it would have refused this record - which is the case §14.10 withdrew it for.
+
+**Where it is not exercised.** No automated self-test covers `xcheck_pairs`. The four fixtures are listings only, with no compact block, so the cross-check reads `n/a` throughout `selftest`. `synth-com3` can build a record carrying both blocks, but it is a manual command. The only exercise this rule has had is the r1 record, by hand. A self-test built from `synth-com3` is a follow-up. **(2026-09-13: done the same day, by a shorter route than `synth-com3` - I29, §14.12.)**
+
+**Lockstep.** `m4count.c` needs no change here: the cross-check is the PC's comparison of its own reading against the counter's, and exists only in `parse-m4.py`.
+
+**Re-parsing a record.** Two things a later re-parse must get right, both learned here. `crit_reset` reads the `--reset-reason` argument and not the capture, so omitting it fails that criterion on a good record. And the harness's PC copy of the COM3 capture was rewritten by the redaction task, so its sha256 no longer matches the `input_com3` line in its own parse log; the raw capture in the same directory still carries the recorded bytes. Re-parse the raw capture.
+
+### 14.12 I29: the cross-check gets a self-test (2026-09-13)
+
+§14.11 recorded that no automated test reached `xcheck_pairs`. It does now, and it needed no board, no synthetic record and no new fixture.
+
+**What moved.** Two functions came out of `cmd_run`, with the rule unchanged: `compact_rows`, which reads form `c` into the rows `c_stats` sums and the index the cross-check looks pairs up in, and `xcheck_pairs_record(L, c_lines, limit, c_capped)`, the comparison itself. `limit` is the last time the PC could have seen - the window's end, or the delivered listing's last event when block `v` was capped - so a caller stands in for a truncated capture by passing a lower one. That argument is what makes the rule testable without a truncated capture to hand.
+
+**What the self-test does.** `m4fix-1` is a listing, so `compact_list` generates from the PC's own pairs the compact block the counter would have written for it. That block and mutated copies give six cases:
+
+| Case | The block, or the bound | Expected |
+|---|---|---|
+| `agree` | as generated | `match` |
+| `differ` | one row's class changed | `differ(1) orphan=0` |
+| `orphan` | one row added that no pair accounts for | `differ(0) orphan=1` |
+| `capped` | the same, with the block marked capped | `match`; both walks are exempt |
+| `empty` | the bound below the window's start | `empty compared=0`, which fails the criterion |
+| `straddle` | the bound at a row's entry, its exit past it | `match`; the truncation is not a disagreement |
+
+The last is I28's regression guard. Under the first form of the reverse walk that case reads `orphan=1`, which is exactly how the defect reached a board record and failed a run that had passed.
+
+**What these do not show.** They check one implementation against itself - the PC's pairs against a block derived from those same pairs - so they fix the rule's behaviour, not the counter's agreement with it. Only a run carrying both blocks does that, and r1 is still the only one. The counter half of the lockstep is untouched here, because the cross-check exists only on the PC.
+
+**Verification.** `selftest` passes the four fixtures and all six cases, and `kshcheck` is unchanged. Re-parsing the r1 record with the refactored parser reproduces the recorded log line for line, apart from the parser's own sha256, the input file names and §14.10's field, so the factoring changed no behaviour.
+
+### 14.13 I30: `crit_2` reads trcctl's result, and `crit_3` asks the PC (2026-09-13)
+
+§14.9 item 3 named two more gates weaker than §2.2's wording. Both are now implemented.
+
+**`crit_2` (§2.2 item 2).** It tested presence: the arm line, `M4 STOP t by=stop`, and a non-empty `.kev`. But the ksh derives `by=stop` from the `.done` file, not from `trcctl`'s own result, so a marker insert or a stop that returned non-zero still read as a clean stop. The board prints one `TRCCTL insert … rc=` line per marker and one `TRCCTL stop … rc=`; the gate now requires both markers and the stop, each with `rc=0`, read from those lines.
+
+**`crit_3` (§2.2 item 3).** Two gaps. TIME64's mismatch check passes a listing carrying no TIME event at all, because zero events cannot mismatch; the counter's `time_events` must now be above zero. And P1 rested on the counter's own assertion, although §2.2 item 3 reads as P1 "on the board" and D2's premise is that the PC checks the counter without trusting it. The PC's reading of the delivered block must now agree: the three qvm ids above zero, one vCPU thread, one clock offset, no order-violated triple, no TIME64 mismatch.
+
+- **Scope, deliberately.** Only properties a capped block can support are asked. Counts over the whole listing - triples, pairs, the totals - could never match a capped `v`, and asking for them would fail every run whose block reached its cap. This does not close §14.9 item 1: the comparison is still partial.
+- **Where the records come from.** The PC's records for the delivered block were computed already but reachable only inside the `v_complete` branch, and a quiet recomputation would omit `QVM`. They are now kept when the block is read, so the confirmation runs on a capped run - which is the only kind r1 produced.
+
+**Verification.** r1 re-parses to `run_verdict=pass` with every criterion passing, and the diff against the recorded log is still only the parser's sha256, the input file names and §14.10's field. Both gates were then shown to bite, on mutated copies of the r1 capture: a stop returning 1 fails `crit_2` and nothing else, and a listing whose counter reports no TIME event fails `crit_3` and nothing else. Those copies are scratch inputs, not records, and are not kept. **No self-test covers either gate** - unlike §14.12's cross-check, they read a whole run record, which `selftest` does not build. **(2026-09-13: the helpers underneath them are covered now - I31, §14.15. The integration path this sentence is about is not, so the point stands.)**
+
+**Two findings for the rest of item 3.**
+- **D3 §8 item 7's pidin listings are observable, but not as written.** The host script runs `pidin -p qvm -f abNli` twice and prints the head of each, but never echoes the command, so searching the capture for the command finds nothing. The evidence is the output: its column header appears once per listing, twice in r1. A gate counts the listings, not the command.
+- **§14.9's "D3 §7 contradicts D3 §8 item 11" resolves on a close reading.** Item 11 asks only that *every STAMP and IPC line* be identical on COM3, CR-stripped. §7's row covers what to do when they differ - flag it in the run note - and concerns the numbers, not the criterion. So the gate to write is that narrow one. The parser's `records_consistency` compares every record-prefixed line, which is broader than item 11 and should stay a record.
+
+### 14.14 I30b: `crit_1` checks the image it was handed, and the tokenizer that hid two fields (2026-09-13)
+
+§14.9 item 3's `crit_1` bullet listed what §2.2 item 1 asks for and the gate did not check. Most of it is checked now, and writing it turned up a parser defect.
+
+**The tokenizer, found by using it.** `parse_kv` read only the double-quoted form, and the board writes single quotes: `M4 CONFIG startup='…' tl_args='…' forms='…'`, and `M4 TRACE ARM args='…'`. Those values were cut at their first space with the opening quote kept, so `forms='v c'` read as `'v`. **Nothing consumed them, which is why no gate and no record ever showed it** - the defect was invisible exactly because the fields were unused, and it surfaced the moment `crit_1` began comparing them. The fix adds a single-quoted alternative. No `M4C` record carries a quoted value, so every counter comparison is untouched, and r1 re-parses unchanged.
+
+**What `crit_1` now checks.**
+- **That the image is the one this parse assumes** (D3 §8 item 3). The image records its own build in `M4 CONFIG`, and the PC holds the `.params` it sized that image with. Seven fields are compared one by one - the CPU count against `p`, then `kind`, `iters`, `forms`, `transport`, `trace_need_mb` and `tl_args` - and the fields no params file carries (`startup`, the `-Q` mode, the `-W` policy, `clock`, the four sha256s) must at least be recorded. The generator enforces these at build time; this is the run's own evidence that the image on the board was that image.
+- **Every state, not only their order.** `states_in_order` positions the states that are present, so a run that skipped one entirely passed it. The rung's whole sequence must now appear.
+- **The two startup orderings** (items 1-2): the shim line before `JUMP`, and all cores parked before `Starting next program`. `landing_ok` checks that each token is present, which a run could satisfy with the lines in the wrong order. Positions are read inside one ordered source, because `all_texts` concatenates the capture and the black box and a position in it spans two timelines.
+- **The guest's phases** (item 6), non-decreasing and each at or below `banner`. A missing `g_ifup`, `g_sshd` or `g_misc` stays an anomaly to record, and `g_srv` never gates, both as item 6 states.
+
+**Asked of a board run only.** The §11 rehearsal's record is built by `synth-com3`, whose invented CONFIG line carries `synthetic=1` and none of these fields, and whose console stamps no guest phase. Without that guard these checks would fail a rehearsal for being a rehearsal. With it, a synthetic r1 record still parses to `crit_1=pass`, which was checked rather than assumed.
+
+**Verification.** The two new helpers were exercised directly: both orderings reversed, a required phase absent, the three optional phases absent, a phase after `banner`, and `g_srv` after `banner`, which must not gate. Then the board's r1 record - `crit_1=pass`, `run_verdict=pass`, and the diff against the recorded log still the four lines of §14.12. Then three mutated copies of the r1 capture, each failing for its own reason and no other: a changed `iters` in the CONFIG line, a deleted `M4 STATE`, and a guest phase moved ahead of the one before it. Those copies are scratch inputs, not records.
+
+**What is still missing from §2.2 item 1.** Both pidin listings (§14.13 says how they are observable), the rule against an `rc=` line before teardown, `payload` and `cps`, the `P50` line, the rate lines, the reset line, the banner searched over the guest's stream rather than every text, and §14.13's narrow STAMP-and-IPC comparison. `crit_bb` is still a size test only. **(2026-09-13, later: all of these are checked now - I32, §14.16 - and `crit_bb` also requires the board's own sha256 - I34, §14.18.)**
+
+### 14.15 I31: the gate helpers keep their tests (2026-09-13)
+
+§14.13 recorded that the gates I30 added were shown to bite only on mutated copies of the r1 capture, which were scratch inputs and were not kept. The evidence died with the session that produced it. The helpers those gates rest on are pure functions, so their checks are now permanent, in `selftest`.
+
+**What is covered.** Fourteen cases over the three helpers I30 and I30b added, each comparing the **whole list** the helper returns rather than a prefix, because what it returns is the list of reasons a criterion will fail for:
+
+- `trcctl_bad` - a clean run; a stop that returned non-zero; a marker insert that returned non-zero; a marker insert that never appeared; and a run that printed no `TRCCTL` line at all, which must name all three.
+- `startup_order_bad` - the two orderings in order; both reversed, which must name both; and the tokens absent, which must name nothing, because `landing_ok` owns absence and saying it twice says less.
+- `guest_phase_bad` - healthy; a phase before the one ahead of it; a required phase absent; **the three optional phases absent, which must not gate**; **`g_srv` after `banner`, which must not gate**; and a phase genuinely after `banner`, which must name both the order and the lateness. The two non-gates are D3 item 6's own words, and they are the cases most likely to be broken by a later edit, so they are the ones worth pinning.
+
+**The test was itself tested.** All fourteen passed on the first run, which is weak evidence unless the comparison can fail. Checked separately: a wrong reason code, an empty expectation against a real failure, and a non-empty expectation against a clean run all compare unequal, and all three helpers return a list rather than a string, so `list(got) == want` is a real comparison and not an accident of type.
+
+**What is still not covered, exactly.** `crit_1`, `crit_2` and `crit_3` read a whole run record, and `selftest` builds none. So the helpers are tested; their wiring into the criteria is not, nor is the board-only guard, nor `crit_1`'s comparison of `M4 CONFIG` against the `.params`. §14.13's sentence stands for that integration path, and `synth-com3` remains the only route to it.
+
+**Verification.** `selftest` passes twenty-four cases - four fixtures, §14.12's six cross-check cases, and these fourteen - `kshcheck` is unchanged, and re-parsing the r1 record still gives `run_verdict=pass` with the same four differing lines, so `cmd_run` was not touched.
+
+### 14.16 I32: `crit_1` reads the rest of D3 §8, and what `records_consistency` gates (2026-09-13)
+
+§14.14 listed what `crit_1` still did not check. It checks all of it now. One helper, `run_lines_bad`, reads one ordered source, and a second, `config_exact_bad`, compares item 3's values.
+
+- **Item 3, the values.** `q=el2-host`, `w=keep`, `A=1`, `clock=unverified` and the guest, disk and client pins must match. The startup line is read by its options: `-P<p>`, `-Q enable,el2-host`, `-m992M`, `-Wkeep` and exactly one `-A`. Reading options rather than the whole line keeps contingency C4's `-vv` image from failing on its verbosity.
+- **Item 5.** The banner is searched in the guest stream that `diag` prints, not in every text. Both stamps carry `cps=31250000`.
+- **Item 7.** No `rc=` line and no `QVM ended before teardown` may come before `M4 STATE teardown`. A `pidin` listing must appear in `report` and in `report_ipc`, counted by its column header (§14.13).
+- **Item 8.** The `samples=` line carries `payload=48` and the listing's `cps`, the `P50=` line is present, and the client's `BWAIT run` line has `sig=0`.
+- **Item 10.** Four `SMPCHECK done cpu=<i> … rate=` lines in `rate_pre` and four in `rate_post`. They are recorded, not judged for drift, as D3 says.
+- **Item 11.** The build script's reset line after `M4 STATE end`, and the STAMP and IPC lines identical in both records.
+- **Board and rehearsal.** Items 7 and 8 (without `cps`) and item 5's guest stream also hold under TCG, so a rehearsal is asked for them. The rest exists only on a board image and is asked of a board run only: the rate lines, both `cps` values, the reset line, item 3's values and item 11's comparison.
+
+**What `records_consistency` gates: nothing (decided).** §14.9 read D3 §7 and D3 §8 item 11 as contradicting each other, and §14.13 showed that they describe two comparisons. §6.2 step 2 now records the decision:
+- the broad `records_consistency` stays a record, and D3 §7's row applies to it;
+- item 11's criterion is the narrow `records_stamp_ipc`, over the `STAMP `, `samples=`, `P50=`, `sentinel_` and client `BWAIT run` lines, in order.
+
+**One source when COM3 is cut.** `crit_1` reads COM3 because it is the fuller record. When a block's END marker is missing (`com3_ended_early=yes`), everything after that point is hidden, so `crit_1` now reads the black box, which D3 §8 names as the primary record. The parse log names the source in `order_source`. §14.3 step 6's `truncate-c` fault found this: before the change it also failed `crit_1` on `banner-guest-stream`, a reason that described the capture, not the run.
+
+### 14.17 I33: `crit_2` reads what was armed, and `by=stop` means STOP worked (2026-09-13)
+
+- **The arm line.** Its `kind` and `args` must equal the params' `kind` and `tl_args`, and its `file` must be `/dev/shmem/t.kev`. The `KEVFILE` line's path must be the same file, so the listing formatted is the one armed.
+- **The stop ladder (`m4-host.ksh.in`).** The ksh used to set `by=stop` whenever tracelogger's `.done` appeared within 120 s of `trcctl -x`, whatever trcctl returned. The wait now runs only when trcctl exits 0 (trcctl.c:74: exit 1 exactly when TraceEvent returned -1). A failed STOP goes straight to SIGINT, so the window reads `by=sigint`. `by=stop` therefore means STOP succeeded and tracelogger then ended. I30's `trcctl_bad` still reads the printed `rc=` as well, so a STOP that returned neither 0 nor -1 fails `crit_2` too. r0's probe uses the same ladder, so its `STOP p by=stop` carries the same meaning; r0's `crit_5` reads no `TRCCTL` line itself, which is unchanged.
+- **A linear window's budget.** For `kind=linear`, the parse log records `kevfile_t_budget` (`bytes`, `budget_mb = s_mb − 4`, and `state` within, over or unknown). `crit_2` fails on anything but `within`.
+  - **Why 4 MiB.** `-S` is the budgeted file plus 4 MiB (§2.4 step 3). A file inside that margin has outgrown the budget, and a linear capture that reaches `-S` is cut (R38, untested).
+  - **The limit.** This is a proxy for a cut, not proof that none happened. A window that stayed under budget and still lost events at `-S` would not show here, and §9's row pairs it with `MARK end=absent`.
+- **§4.2's argument** that `-S` always exceeds the ring is about rings. A linear window's counterpart is this margin, checked after the run.
+
+### 14.18 I34: the PC's own confirmation, the cross-check's denominators, and the black box's sha256 (2026-09-13)
+
+- **`crit_3`.** I30 made the PC's reading of block `v` confirm P1. It now also requires the PC's `TRIPLES complete` and `TIME64 time_events` above zero, as the counter's are. A mismatch count of zero over no TIME event confirms nothing on either side.
+- **`crit_5`.** I28 made the cross-check read both directions with a per-CPU bound and fail on `compared=0`. Every form of `xcheck_pairs` now also carries `pc_in_range` and `c_in_range`, the pairs each side had inside the range. A thin comparison therefore shows its denominator, not only its agreement. No gate reads the two counts; §14.9 item 1's partial-comparison question stays with the owner.
+- **`crit_bb`.** The harness compared the board's sha256 of its black box with its copy, but the result reached only the board log. `run` now takes `--blackbox-board-sha256`, recomputes the sha256 of the file it actually parses, and logs `blackbox_board_sha256=equal|differ|unknown`. `crit_bb` requires `equal`, as well as the size gate. A re-parse therefore has to pass the board log's value, or `crit_bb` fails on `sha:unknown`; that is deliberate, since an unverified copy is not a record.
+
+### 14.19 I35: run-level cases, and the tail on another CPU (2026-09-13)
+
+**Run-level cases.** §14.13 and §14.15 recorded that no test reached the wiring between a gate helper and its criterion. `m4/fixtures/m4run-cases.txt` now holds one case per rule of I30-I34. `selftest` runs each case in four steps:
+1. **A board-shaped record.** `synth-com3`'s builder, now `synth_record`, gains a `board` profile, which prints every line a board r1 run prints and the board-only criteria read: landing, the image's own `CONFIG`, rate lines, guest phases, `pidin` listings, the reset line and `tcu-cat` summaries. The listing is `m4fix-1`.
+2. **Its edits.** The case applies its edits, usually one; a rule whose record must stay consistent elsewhere takes several, as the linear cases, the failed-stop case and the moved banner do (a substitution on both records or on COM3 only, a deletion, an insertion, a line removed from block `v` before it is hashed, a params key, a run option). An edit that changes no line fails the case, so a typo cannot pass as a test.
+3. **The real parser.** `run` parses the record as a board run.
+4. **The comparison.** The case names the parse-log lines it expects, and every criterion it does not name must pass.
+
+- **The first run of the cases** failed one of them: `arm_args`, whose substitution also matched `CONFIG`'s `tl_args='…'`. `crit_1` duly failed on `config-tl_args`. So the comparison can fail, and the case was corrected rather than the rule.
+- **What they do not show.** Like §14.12's cases, they check the parser against records built from its own reading of a fixture. They fix the rules' wiring, not the counter's agreement with the board.
+- **`synth-com3 --profile board`** exposes the same record as a manual command. The TCG profile also changed: its console now carries the lines I32 asks of a rehearsal, and its `TRCCTL` lines use the markers the params name. I30's `trcctl_bad` had quietly failed a rehearsal record built with 7b's marker names.
+
+**The tail on another CPU (§14.9 item 2).** On 2026-09-13 the owner decided that item 2 stays a record, as I27 left it. `m4fix-5` is the fixture item 2 asked for:
+- **Built to contain:** two CPUs, a held window, and the end marker's CPU ending with its STOP-time trailing buffer, while the other CPU's events stop before the end marker and it has no trailing buffer.
+- **Expected:** `ring=held` with `short_tail_cpus=1`, in both implementations.
+- **Why it cannot gate:** from the listing alone this is the same as a CPU that went idle (§14.10). A gate still needs a signature that separates the two.
+
+### 14.20 I36: the counter's unformatted lines, classified and sampled (2026-09-13)
+
+§14.9 item 5 inferred the counter's unformatted count from a sum, and nobody has seen the lines. Both implementations now split `unformatted` into three kinds:
+- `unformatted_header`: before the first event line;
+- `unformatted_blank`: after it, empty or spaces and tabs only;
+- `unformatted_other`: after it, anything else.
+
+Both also print the first `other` line as `M4C SAMPLE sub=unformatted`, outside the 12-line cap, so it never displaces a QVM subtype's sample.
+- **Fixture.** `m4fix-6` holds each kind, a whitespace-only blank line and one event line on CPU 9, which counts `cpu_out_of_range` and is not unformatted. Its counts were taken by an awk count of the file, not from the parser.
+- **What is known.** 7b's host-format listings, from the PC's `traceprinter.exe`, show one blank line after every `CONTROL BUFFER` event, and the fixtures copy that layout. The target traceprinter's layout is still unseen. The next board run prints its kinds and one sample.
+- **Black box.** The `IN` line grows by three fields and each non-quiet listing by one `SAMPLE` line. At r0, two more fixture runs add their `-q` records. Both additions are within §8.3's margins by estimate (HYPOTHESIS until a board black box shows it).
+
+### 14.21 I37: a linear window sized from its own budget (2026-09-13)
+
+§14.9 item 4 found I26's linear rule incomplete. What changed, with the rules in §2.4 step 3, r2 steps 6, 7 and 10, §3.3 and §8.2:
+- **`S(lin)`** is the file the budgeted window writes, plus 4 MiB. For r1 the budget is the sum over CPUs of each CPU's own sixteen-fold rate, and for r2 the sum of each CPU's `1.5 × beta_c × (N2 + 5)`. `S(512)` is no longer borrowed. The choice of a sum over `4 × max` is argued in §2.4 step 3, with what it does not protect.
+- **`size-r2`'s TP and CNT bounds** scale from r1's measured `KEVFILE` and `TEXT` bytes to a predicted `.kev`, not by `S(K2)/S(K1)`. A bound past its cap no longer clamps silently: N2 drops, or the owner decides.
+- **Memory fit.** `size-r2` checks the need against r1's `M4 MEM trace_pre`. Both sizing rules send a need or `FMT_NEED_MB` of 992 MiB or more to the owner.
+- **The generator's check** now recomputes `s_mb` and `trace_need_mb` exactly, for rings and linear windows, from two keys the size file carries: `size_probe_cost_mb`, in whole MiB, and `size_lin_bufs`. It also refuses a need of 992 MiB or more. A size file written before I37 lacks those keys and is refused with a message to re-run `size-r1` or `size-r2`, which every image rebuilt for the freeze does anyway.
+- **Self-tests.** `selftest` gains five sizing cases over invented parse-log keys. Their expected values were computed by hand from §2.4's text, with inputs chosen so every division and ceiling is exact in binary floating point: r1 ring, r1 linear (with one CPU lacking a `RATE` record), r2 ring-limited, r2 linear, and an r2 whose memory never fits. §14.8 had recorded that no test covered sizing.
+- **§14.9 item 4's prediction, checked.** `size-r1` re-run over the board r0 parse log gives `m4-r1-lin` again. Its new `S(lin)` is larger than the as-run `S(512)`, and its new need is still within the free memory r1 recorded at its gate. Under I37, then, `m4-r1-lin` would have passed its own gate. The check ran on the PC and printed only those comparisons; no figure is recorded here.
+- **Still unvalidated.** `cost(lin)` and the 32 MiB margin: no `MEM` line falls inside a window (§14.9 item 4).
+
+### 14.22 I38: the linear window under TCG (2026-09-13)
+
+`build-m4tcg-image.ps1 -Variant lin` builds the rehearsal host with `KIND=linear`, `TL_ARGS='-c -S 21M'` and the linear gate values (§11.3's order note gives them). The `-S` comes from §2.4 step 3's linear form over a TCG budget: the 512 buffers per CPU that held in `k512`, plus the rule's 2, on each of the two CPUs. The first form of the builder used 512 exactly, which would have left a sound but full window reading `over`; the review below caught it. `lin` builds with `E3=none`, as r1 runs. `launch-m4tcg.ps1 -Variant lin` runs it, and §11.4 has its pass row. The builder and launcher also ship the six fixtures, write `s_mb` into the params for the budget check, and pass `--run-end-epoch` (I39). The rehearsal's result is in §14.24.
+
+### 14.23 I39: records (2026-09-13)
+
+- **The CSV timestamp (§14.9 item 5).** §6.4's source, the capture's end line, could not work: the harness parses while the capture still runs. `unix_ts` now comes from `--run-end-epoch`, which the harness takes from the PC clock when L4T is back and it copies the records. A stopped capture's end line is the second source, and a file's mtime a rehearsal-only third. A T-run without a source writes no row (`refused(no-timestamp)`), and `csv_ts_source` names the source used.
+- **§9's `PAIRS status_nonzero` row** is retargeted to the `STATUS` and `STATUSSUM` records, because that field always reads 0 under `E3=none` (§14.7).
+- **C2's "flush activity is recorded"** is dropped, not defined. No record measures flush activity inside a window, and the ones a linear window does leave are named in C2's row.
+- **Small gaps from §14.9 item 7:**
+  - §2.1 item 10's "§7.3" now reads §7.2 item 9;
+  - §2.2 item 1 names D3 item 12's token list;
+  - §9 has rows for a linear window over its budget, an unverified black-box copy and a STAMP or IPC line that differs between the records.
+
+### 14.24 Verification of I32-I39, and an independent review (2026-09-13)
+
+Every check below ran on the PC, with no board contact, and no figure is recorded.
+
+- **Self-tests.** `selftest` passes: six fixtures, six cross-check cases, fourteen gate-helper cases, 25 run-level cases and five sizing cases. `kshcheck --selftest` passes.
+- **The counter** builds under qcc with `-Wall -Wextra -Werror`. Its own fixture pass runs on the target, in the r0 TCG rehearsal below.
+- **The generator.** `make-m4-images.sh --generate-only` ran from a worktree whose `out/m4` was empty; in the main checkout it would overwrite the as-run params, as I25 did.
+  - Accepted: m4-r0, and synthetic size files for r1 ring, r1 linear, r2 ring-limited and r2 linear. Each passed step 8's recomputation and step 9's generation, fixtures included.
+  - Refused: a need one MiB high, for a ring and for a linear window, and a linear size file without `size_lin_bufs`.
+- **§14.3 step 6's `synth-com3` regression.**
+  - `none`, `crlf` and `bb-cut` pass.
+  - `corrupt-v` fails `flt_v` (`crit_6`), with I30's `pc-absent` in `crit_3` and `crit_5`.
+  - `truncate-c` fails `flt_c` (`crit_6`) and `crit_5`. Since I32's black-box fallback it no longer fails `crit_1`.
+  - The synthetic r0 still fails only `crit_5`.
+- **The board's r1 record.** Its raw capture was re-parsed locally, with the reset reason and the board's sha256 taken from its board log. Every criterion passes: `records_stamp_ipc=identical`, `blackbox_board_sha256=equal`, and a linear budget `within`. Only verdicts were read. The r0 board record is not re-parsed, because it predates §14.7's records.
+- **The `k512` rehearsal's serial log** (§14.5), re-parsed under the new rules, gives `run_verdict=pass`. A real target console therefore shows both `pidin` listings, the banner inside `diag` and the P50 line, as I32 reads them.
+
+**Independent review.** A read-only review of the diff found no blocker.
+- **Its major point:** no real record had been parsed under I32-I34. The r1 re-parse above answers it; the review could not see it.
+- **Fixed before commit:**
+  - `early_rc` read lines from before `M4 STATE config`: Linux's shutdown, the shim and startup. It now reads only the host script's lines.
+  - `order_source` was logged from an object-identity test. It is a boolean now.
+  - `size-r2`'s ring-limited branch could choose an N2 below 15. It now needs `N_ring ≥ 15`.
+  - The TCG `lin` budget left out the rule's 2 buffers per CPU. It is `-S 21M` now.
+  - `lin` could be built with `E3=status0`. It is now refused.
+  - The board log glued a period to `run_end_epoch`. The two are separated.
+  - Three doc slips: this section did not exist yet, "one edit", and `m4.build.in`'s marker comment.
+- **Open, and older than this work:** a NUL byte inside a listing line. `m4count`'s `read_line` measures a line with `strlen` after `fgets`, so a mid-line NUL reads as a long line and the drain swallows the next line, while the Python counts both lines normally. traceprinter's text output carries no NUL, and no listing has shown one. A fixture and a fix in both implementations are a freeze-gate candidate.
+
+**TCG rehearsal of `lin` and `r0` (§11.4).** Both images were built from main at the commit that carries I32-I39, because the builders need the main checkout's paths. Each ran once under QEMU TCG, with QEMU and the parser exiting cleanly, no survivors, and the canonical images unchanged before and after. The figures are emulated and none is recorded.
+
+- **`r0`, attempt 9: `run_verdict=pass`.**
+  - The target counter's `-q` records matched every expectation of all six fixtures (`crit_4`). That covers `m4fix-5`'s `short_tail_cpus` and `m4fix-6`'s unformatted kinds and `cpu_out_of_range`, so the counter half of I35's and I36's lockstep has now run on the target and not only been reviewed.
+  - The probe's STOP returned `rc=0` and read `by=stop` under I33's ladder.
+- **`lin`, attempt 8.** The linear path ran end to end:
+  - the arm line read `kind=linear` with the params' args, and the memory gate passed at the linear need;
+  - both marker inserts and the STOP returned `rc=0`, and the ladder read `by=stop`;
+  - the `.kev` was `within` its budget;
+  - the ring was `held`, with no short tail;
+  - `xcheck_pairs` matched and carried its in-range counts, and `c_stats` matched;
+  - the CSV row took its timestamp from `run-end-epoch`.
+
+  Its parse still read `run_verdict=fail(crit_1)`, on `ipc` alone. The known qvm/TCG virtio stall hit a warm-up iteration, the sentinel recovered it, and D3's completion rule counted the recovery against the timed run. That is a defect in the rule, not in the linear path, and I40 (§14.25) corrects it.
+- **The target's unformatted lines under TCG.** In both rehearsals they were header and blank lines only, so no `SAMPLE sub=unformatted` line was printed. That is a TCG observation: the board's own listing layout is still to be seen.
+- **Not rehearsed:** the linear memory gate's refusal path. The board's first r1 attempt ran that path (§14.8).
+
+### 14.25 I40: the IPC completion rule counts a warm-up recovery wrongly (2026-09-13)
+
+**Found by the `lin` rehearsal (§14.24).** D3 §8 item 8, carried into §2.2 item 1, reads the client's completion as `samples + sentinel_recoveries = 15`. The client does not count that way:
+- **Samples.** A recovered iteration yields no sample, whether it is a warm-up or a timed iteration (client.c:342-345), and a sample is kept only when the iteration index is past the warm-up (client.c:376).
+- **Recoveries.** `sentinel_recoveries` counts every recovery, warm-up included.
+- **The consequence.** A stall in one of the 5 warm-up iterations that the host script passes leaves 15 samples and 1 recovery, and the rule reads that as a failure. The client README's own diagnostic runs show the same arithmetic.
+- **On the board.** A genuine Q or T-run whose stall landed in warm-up would have failed `crit_1`.
+
+**The rule now:** `samples ≤ iters ≤ samples + sentinel_recoveries ≤ iters + 5`.
+- **Left side:** the timed run lost no sample it did not recover.
+- **Right side:** there were no more recoveries than the warm-up and the missing samples can account for.
+- **What it cannot say:** it cannot place a recovery exactly. The client prints the iteration of each recovery on stderr, and the host script shows only the head of that stream.
+
+**Cases.** `m4run-cases.txt` gains four: a recovery in warm-up and a recovery in the timed run, which both pass, and a missing sample and more recoveries than the envelope allows, which both fail `crit_1` on `ipc`.
+
+**The rule's origin.** It came from M3's design, and M3's records are not re-judged here.
+
+**Verification.** `selftest` passes, with 29 run-level cases now. Re-parsed under I40, the `lin` rehearsal's serial log gives `run_verdict=pass`, so nothing but the rule failed it. The `k512` rehearsal's log and the board's r1 record, neither of which had a warm-up recovery, still give `run_verdict=pass`. Only verdicts were read.
+
+**Also in this change:** `build-m4tcg-image.ps1` now settles `lin`'s E3 before its first log line. `attempt8`'s build log names `e3=status0` in its header line, while its image and params carry `none` (`-E none` in the counter options).

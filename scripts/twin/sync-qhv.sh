@@ -35,7 +35,7 @@
 #
 #   SSH_OPTS    extra options passed to both ssh and scp. Needed when the board
 #               uses a key that is not one of ssh's default names, e.g.
-#                 SSH_OPTS="-i ~/.ssh/jetson_orin_nano"
+#                 SSH_OPTS="-i ~/.ssh/<your-orin-key>"
 #               (word-split on purpose so multiple flags work; keep paths
 #               unquoted-safe, i.e. no spaces).
 
@@ -52,7 +52,7 @@ remote_dir="${2:-qhv-output}"
 
 if [[ -z "${ORIN_HOST}" ]]; then
   echo "ERROR: ORIN_HOST not set (env or arg 1). Example:" >&2
-  echo "       ORIN_HOST=nvidia@192.168.178.56 ./scripts/twin/sync-qhv.sh" >&2
+  echo "       ORIN_HOST=nvidia@<orin-ip> ./scripts/twin/sync-qhv.sh" >&2
   exit 1
 fi
 

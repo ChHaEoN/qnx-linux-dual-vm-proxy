@@ -47,7 +47,7 @@ real customer-port work.
 |---|---|---|
 | ⭐ "Experience with **QNX OS for Safety (QOS)**" | Honest gap: SDP ≠ QOS. Framed as a POSIX-realtime proxy in the README limitations table and `docs/architecture.md`; a dedicated QOS-vs-SDP study note is not written yet | 0 |
 | ⭐ "Exposure in **hypervisors and virtualization**" | The QNX Hypervisor (an uncertified Type-1), emulated under QEMU TCG (cloud leg, ADR-002) and running natively on the Orin (Phase 3b, `docs/orin-native-port-plan.md`); gap analysis against DRIVE OS in `docs/drive-os-comparison.md` (Phase 4) | 1, 3b, 4 |
-| ⭐ "Knowledge of **bootloaders**" | Phase 3b: the kexec entry shim from L4T and the planned M5-F UEFI Shell cold boot (`docs/orin-native-port-plan.md` §3 and M5); no U-Boot and no Linux guest boot chain yet | 3b |
+| ⭐ "Knowledge of **bootloaders**" | Phase 3b: the kexec entry shim from L4T and ~~the planned M5-F UEFI Shell cold boot~~ **(2026-09-13: M5-F ran and passed: our own EFI loader, launched from the firmware's UEFI Shell on a cold boot, hands the unchanged M1b image to the same shim and startup; attended, and not a vendor-shaped QNX UEFI boot)** (`docs/orin-native-port-plan.md` §3 and M5); no U-Boot and no Linux guest boot chain yet | 3b |
 | ⭐ "Experience with Automotive **SPICE** and/or **ISO 26262** standards" | Study notes only: `skills/aspice/`, `skills/iso-26262/`, applied FMEA examples in `skills/fmea/examples/`. **Honest framing: study artifacts, not certification evidence.** | 0–4 |
 | ⭐ "Extensively supported customers both onsite and offsite" | Soft requirement; addressed in interview. Customer-port framing of this entire project speaks to the spirit of the bullet. | — |
 

@@ -446,8 +446,14 @@ https://github.com/torvalds/linux/blob/master/arch/arm64/boot/dts/nvidia/tegra23
   written against `armv8_fm` boots at all.
   **2026-09-11 note:** the second is answered. A Tegra234 startup templated
   on `armv8_fm` booted procnto in M1 ([findings.md](findings.md)
-  2026-09-10). The first is still open; M5-F covers a UEFI entry and has not
-  run.
+  2026-09-10). The first is still open; ~~M5-F covers a UEFI entry and has not
+  run.~~ **2026-09-13:** M5-F ran and passed, but under m5-design's option A:
+  our own EFI loader carried the image, so neither an `mkifsf_uefi` image nor
+  `efi_entry_point` ran. The first question stays open, and only an option-B
+  boot can answer it
+  ([m5-design.md](../results/orin-native-port/20260909T1100Z/m5-design.md)
+  §3.1, and §10's "Not option B or A'"). The desk read in m5-design §12 Q8
+  covers only option B's PE header facts, not where its entry point goes.
 
 ---
 

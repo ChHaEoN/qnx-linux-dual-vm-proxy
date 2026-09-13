@@ -9,6 +9,107 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-13 — M5-F: a UEFI cold boot reaches startup and procnto, and the M path ends
+
+M5's functional rung passed on the Orin Nano in one attended session, with the owner at the plug from P1 to C. It ran
+m5-design's option A. Our own EFI loader, `M5LOAD.EFI`, carries the unchanged, pinned M1b image. It was launched from
+the firmware's built-in UEFI Shell on a cold boot, so no Linux and no kexec ran between the cold power-on and the
+loader, and the firmware never loaded a QNX PE. The session staged that one file in the root of the SD card's ESP,
+after backing up and hashing `extlinux.conf` and `BOOTAA64.efi`. A control cold boot with no key (P2) then showed
+that L4T still autobooted with the TX wire on J14 pin 3. The record wording is "M5-F met (T3 reached)".
+
+What the board showed:
+- **T1, in P3 and again in R1:** the loader's `check` mode ran from the Shell and printed `M5L CHECK PASS`, with no
+  refusal and the TCU chosen as its console after boot services exit. The Shell prompt came back.
+- **T2, in R1 (the rung itself):** after `go`, the loader exited boot services and jumped. Then the shim printed
+  `T234-SHIM EL=2`, with the load address and device-tree magic the design expects, then `NORMALISED` and `JUMP`, and
+  startup printed `t234: WDT0 CR=`. The tokens came in order, and no negative token appeared before the next firmware
+  banner.
+- **T3, recorded, not required:** the VHE line, cpu 0 at EL2 with E2H and TGE set, the EL2 virtual timer wired,
+  `procnto up`, a stock `pidin info` with `Release:8.0.0` and a Cortex-A78ae line, and
+  `SMPCHECK RESULT PASS-DEGRADED cpus=1/6 secs=60 reasons=none`. The image then reset itself. The reset reason read
+  `MAINSWRST`, the pstore black box carried the run from the shim line to the reset line, and L4T came back on a new
+  boot.
+- **The §5.2 state checks:** between each pair of snapshots, the only UEFI variable that changed was the MTC counter,
+  which the control interval, from the baseline through P2, also changed. No variable was added or removed, and
+  `efibootmgr -v` matched the baseline apart from `BootCurrent`. After R1 the ESP was the baseline plus exactly the
+  staged file, with its staged hash. L4T came back with its bootloader slot, `extlinux.conf`, `BOOTAA64.efi` and
+  firmware version as before.
+- **Afterwards:** the file was removed from the ESP (D10), and the ESP listing again matches the baseline. The TX wire
+  is off pin 3, so the board is back on the M0-M4 wiring.
+
+Deviations, all recorded:
+- **P1 item 4:** the terminal loopback test was not performed. The owner decided this with the TX wire already
+  fitted. The terminal's self-test ran instead, and P2 was the control for a stray byte when COM3 opens.
+- **P3's first attempt:** it missed the ESC window, because the keys went to another window. L4T was let boot fully,
+  and P3 was repeated.
+- **P3's second attempt:**
+  - DC power was removed and restored before L4T's kernel reported its power-down, which made an unclean shutdown.
+  - More than one ESC was sent where §6.5 asks for one.
+  - The Shell, entered through the Boot Manager, was reached after the 120 s operator bound. No watchdog reset
+    followed, which is a datum for risk R10; `PcdBootWatchdogTime` itself stays unread.
+- **In R1** the Shell was reached within the bound, though more than one ESC was sent again. No key was armed or sent
+  after `go`.
+- **The PC tools:**
+  - The terminal's key log had recorded nothing, ever. It was fixed in 7c2e87d before P3, so P2's no-key verdict rests
+    on the COM3 log.
+  - Three watch-and-judge helpers had defects. Two showed up in live use in P3 and were fixed before R1. The
+    poweroff watcher took the Setup menu's silence for a finished shutdown, after the power had already been cut. The
+    reset watcher's pattern rejected a stray trailing character, so it never handed over, and the L4T watch was
+    started by hand instead, retroactively over the capture. The third, an awk pattern in the T2/T3 judge that could
+    not run, was found in replay before R1. None changed a gate verdict. They are session tools and are not
+    committed.
+
+What this does not show (m5-design §10):
+- No timing, and no comparison with kexec entry. The medians comparison waits for the campaign.
+- That firmware entry leaves cleaner clock, CPU-frequency, GIC, timer or DMA state than kexec does.
+- Repeatability: there was one `go`, on one board, one firmware (r36.4.4) and one image.
+- An unattended entry path: an operator opened the Shell.
+- A proof that no menu writes a variable: the check covers only the paths this session took.
+- Anything about option B, `mkifsf_uefi` or the library's `efi_entry_point`, which never ran.
+- Anything about DRIVE OS, QNX OS for Safety or a supported boot.
+
+**The M path has ended.** The owner confirmed on 2026-09-11 that it ends at M5-F's functional pass, so README PR #1
+can now merge. Merging it is the owner's call. Under the freeze decision this is a functional result, not a
+measurement. The session's figures stay unpublished until the 4.6(i) consultation: the run note on the local
+branch `m3-results-unpublished`, the logs in the session's git-ignored record. Next: S1-F, a Linux guest without a GPU under native qvm, with the qvm `dryrun` gate first. Details
+are in
+[m5-design.md](../results/orin-native-port/20260909T1100Z/m5-design.md) §14, "Board session (2026-09-13)", and in
+[orin-native-port-plan.md](orin-native-port-plan.md#architecture-versions-and-the-measurement-freeze-decided-2026-09-11).
+
+## 2026-09-11 — M4-F: the trace instrument works on the board (r0 and r1), with a partial cross-check
+
+Both functional rungs of M4 passed on the Orin Nano, though under different instrument versions. r0 ran the trace
+tools under the EL2 host without qvm. Its own harness verdict was a fail, caused by a parser defect (I24) rather than
+the board; its pass comes from an offline re-parse with the fixed parser, and re-validating r0 under the instruments
+the freeze will gate is now a freeze-gate item. r1 ran
+M3's full run with a trace window around the IPC pair. Its first attempt stopped at the memory gate before the trace
+was armed. The sizing rules had costed the linear window, which r0's rates selected, as a 512-buffer ring. That was
+an implementation defect, I26: tracelogger's own usage message gives a linear capture's defaults. The fix changed
+only that gate value, and the rerun passed every criterion of m4-design §2.2.
+
+What the board showed:
+- qvm's Class-10 IDs 0, 1 and 7 were emitted and paired, with one vCPU thread, one clock offset, no order violation
+  and no time mismatch.
+- `trcctl -x` stopped the linear capture, and every CPU's tail reached the file, on this one run.
+- Both listings crossed the TCU intact.
+- The image reset itself back to L4T.
+
+An adversarial review of the pass (16 read-only agents) found no blocker, but it narrowed what the pass shows:
+- **A partial cross-check:** the 1 MiB verbatim block was capped, so the PC's pair-for-pair check covered only the
+  early part of the window, and the statistics cross-check did not run.
+- **Ungated flush evidence:** the evidence that every CPU's tail was flushed sits in fields no gate reads.
+- **Weaker gates:** several parser gates are weaker than the design's wording. They must be fixed before the
+  campaign's timed runs rely on them.
+
+Every GUEST_EXIT on the board carried a non-zero status whose low bits equal the ESR exception class, as under TCG,
+so r1's E3=none stands. The review also found that the harness's COM3 redaction misses the board hostname in its
+local, git-ignored copies.
+
+Under the freeze decision these are functional results, not measurements. The run records and figures are on the
+local branch `m3-results-unpublished`. Next on the M path: M5-F. Details are in
+[m4-design.md](../results/orin-native-port/20260909T1100Z/m4-design.md) §14.8-14.9.
+
 ## 2026-09-11 — Owner answers on the freeze decision's open points, and a stale-document cleanup
 
 The owner answered four points the plan's freeze section had flagged, and asked for stale documents to be cleaned up.

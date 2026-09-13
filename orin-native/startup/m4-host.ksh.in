@@ -17,7 +17,7 @@
 ##   @CONF_MD5@ @ITERS@ @IPC_BOUND@ @BANNER_BOUND@ @GRACE@ @GRACE_WAIT@ @KIND@
 ##   @TL_ARGS@ @TL_BOUND@ @TRACE_NEED_MB@ @FMT_NEED@ @CNT_NEED@ @TP_BOUND@
 ##   @CNT_BOUND@ @HASH_BOUND@ @CNT_OUT@ @FORMS@ @SEND_V@ @SEND_T_V@ @SEND_C@
-##   @SEND_T_C@ @TRANSPORT@ (tcu; console) @FIX@ (the fixture paths; four since I24)
+##   @SEND_T_C@ @TRANSPORT@ (tcu; console) @FIX@ (the fixture paths; four since I24, six since I35-I36)
 ## Both builds fail if any @[A-Z0-9_]+@ survives, and both run
 ## orin-native/m4/parse-m4.py kshcheck on the generated script (§3.4 step 9).
 ##
@@ -74,11 +74,15 @@ arm() {
 	( bwait -k "$tb" -r "$S/$n.rec" -o "$S/$n.out" -e "$S/$n.err" -- "$X/tracelogger" "$@" -f "$k" > "$S/$n.b" 2>&1; : > "$S/$n.done" ) &
 }
 # stopladder NAME: STOP, then SIGINT, then SIGKILL; silent (m4-dryrun-design.md D3).
+# I33 (m4-design.md 4.3, 14.17): by=stop means trcctl's STOP succeeded and then
+# tracelogger ended. A STOP that failed goes straight to SIGINT, so a tracelogger
+# that ended for another reason can no longer read as a clean stop.
 stopladder() {
 	STOPBY=none
 	if [ -e "$S/$1.done" ]; then STOPBY=early; return; fi
-	trcctl -x > "$S/$1.x" 2>&1
-	if bwait -p "$S/$1.done" -t 120 > "$S/$1.s1" 2>&1; then STOPBY=stop; return; fi
+	if trcctl -x > "$S/$1.x" 2>&1; then
+		if bwait -p "$S/$1.done" -t 120 > "$S/$1.s1" 2>&1; then STOPBY=stop; return; fi
+	fi
 	slay -f -Q -s INT tracelogger
 	if bwait -p "$S/$1.done" -t 30 > "$S/$1.s2" 2>&1; then STOPBY=sigint; return; fi
 	slay -f -Q -s KILL tracelogger

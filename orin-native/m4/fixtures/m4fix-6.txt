@@ -1,0 +1,27 @@
+# m4fix: synthetic
+# m4fix-6 (m4-design.md 4.5.2, 4.5.8 and 14.20, I36): one CPU. The unformatted lines by kind. A
+# header line comes before the first event line; these comment lines count as header lines. A
+# blank line comes after it and is empty or holds only spaces and tabs. Any other line after it is
+# other. Every counted line is still unformatted, so the three add up to unformatted.
+# The line whose CPU is 9 is an event line outside 0-7: it counts cpu_out_of_range, and not
+# unformatted. The first other line becomes SAMPLE sub=unformatted, which -q does not print.
+# Invented values in the traceprinter -n default layout; a test input, not a trace, and no
+# measured figure.
+# expect: M4C IN lines=27 events=5 unformatted=21 unformatted_header=16 unformatted_blank=3 unformatted_other=2 long_lines=0 cpu_out_of_range=1
+# expect: M4C TIME64 mode=t64 time_events=1 mismatches=0 wraps=0 backsteps=0 backsteps64=0 unknown=0
+# expect: M4C STATUSSUM distinct=0 printed=0 other=0 missing=0 in_window_other=0 in_window_missing=0
+ -- HEADER FILE INFORMATION --
+  TRACE_CYCLES_PER_SEC:: 31250000
+         TRACE_CPU_NUM:: 1
+ -- KERNEL EVENTS --
+t:0x100000000 CPU:00 CONTROL         :TIME               msb:0x00000001 lsb(offset):0x00000000
+t:0x100000000 CPU:00 CONTROL         :BUFFER             sequence = 1, num_events = 4
+
+t:0x100000010 CPU:00 THREAD          :THRUNNING          pid:1 tid:1
+  	 
+ -- this line is neither an event line nor blank --
+t:0x100000020 CPU:09 THREAD          :THRUNNING          pid:1 tid:2
+t:0x100000030 CPU:00 THREAD          :THRUNNING          pid:1 tid:3
+
+ -- nor is this one --
+t:0x100000040 CPU:00 THREAD          :THRUNNING          pid:1 tid:4

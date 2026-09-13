@@ -25,7 +25,7 @@
 #>
 param(
   [Parameter(Mandatory = $true)][ValidateRange(1, 9999)][int]$Attempt,
-  [ValidateSet('r0','k512','k16')][string]$Variant = 'r0',
+  [ValidateSet('r0','k512','k16','lin')][string]$Variant = 'r0',
   [ValidatePattern('^[a-z0-9]{0,16}$')][string]$Tag = '',
   [string]$QemuPath,
   [ValidateRange(60, 86400)][int]$WallSeconds = 7200,
@@ -343,7 +343,10 @@ try {
     LL "QEMU_STOPPED how=$qemuHow exit=$qExit alive_after=$(if ($qGoneMs -lt 0) { 'yes' } else { 'no' }) gone_wait_ms=$qGoneMs pc_ms=$([long]$script:sw.Elapsed.TotalMilliseconds) serial_bytes=$($script:offset)"
   }
 
-  # 9. After the run.
+  # 9. After the run. I39 (m4-design.md 6.4): the parser's CSV row takes this as the run's
+  # end time, the moment QEMU was confirmed stopped, instead of a file's modification time.
+  $runEndEpoch = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+  LL "run_end_epoch=$runEndEpoch"
   if (-not (Test-Canonical 'post')) {
     LL 'canonical_post=CHANGED: something wrote to the canonical images. Stopping everything; tell the owner.'
     throw 'M4TCG-CANONICAL-CHANGED'
@@ -363,6 +366,7 @@ try {
     '--run-id', "tcg-$Variant-a$Attempt",
     '--out-dir', ('"' + ($parseOut -replace '\\','/') + '"'),
     '--csv', ('"' + ((Join-Path $parseOut 'rehearsal.csv') -replace '\\','/') + '"'),
+    '--run-end-epoch', "$runEndEpoch",
     '--rehearsal'
   )
   LL ('parser_cmd=python ' + ($pargs -join ' '))
