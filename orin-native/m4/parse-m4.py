@@ -10,13 +10,14 @@ parse), with the implementation notes of that file's §14. Standard library only
   parse-m4.py run --params P --blackbox FILE|none --com3 FILE --run-id ID --out-dir DIR
                   [--csv FILE] [--com3-format capture|qemu-serial] [--rehearsal]
                   [--reset-reason TEXT] [--fixtures DIR]
+                  [--blackbox-board-sha256 HEX|none] [--run-end-epoch SECONDS]
   parse-m4.py size-r1 --r0-parse LOG [--out FILE]
   parse-m4.py size-r2 --r1-parse LOG --r0-parse LOG [--out FILE] [--accept-low-n]
   parse-m4.py series --parse-logs L1 L2 L3 L4 L5 --csv FILE --cloud-csv FILE --out-dir DIR
   parse-m4.py selftest --fixtures DIR [--m4c FILE] --out-dir DIR
   parse-m4.py regress-7b --listing FILE --out-dir DIR
   parse-m4.py kshcheck FILE | --selftest
-  parse-m4.py synth-com3 --listing FILE --rung r0|r1 --out-dir DIR [...]   (test input, §14)
+  parse-m4.py synth-com3 --listing FILE --rung r0|r1 --out-dir DIR [--profile tcg|board] [...]   (test input, §14)
 
 Output rules (§6.2). Every file written must satisfy git check-ignore -q (a
 read-only query) and must not lie under results/hw/ or results/cloud/; anything
@@ -36,8 +37,10 @@ Exit: 0 done (run: whatever the verdict); 1 an input error or a failed step;
 
 import argparse
 import bisect
+import contextlib
 import hashlib
 import importlib.util
+import io
 import math
 import os
 import re
@@ -272,6 +275,16 @@ def parse_composite(value):
         if sep:
             out[k] = v
     return out
+
+
+def sample_text(line):
+    """A SAMPLE's text, as m4count.c's sample_copy: up to the line end or SAMPLE_CHARS, " as '."""
+    out = []
+    for ch in line:
+        if ch in "\n\r\0" or len(out) >= SAMPLE_CHARS:
+            break
+        out.append("'" if ch == '"' else ch)
+    return "".join(out)
 
 
 class Log:
@@ -587,6 +600,12 @@ class Listing:
         self.bytes = 0
         self.events = 0
         self.unformatted = 0
+        # I36 (m4-design.md 14.20), in lockstep with m4count.c: the unformatted
+        # lines by kind, and the first one that is neither header nor blank.
+        self.unformatted_header = 0
+        self.unformatted_blank = 0
+        self.unformatted_other = 0
+        self.unformatted_sample = None
         self.long_lines = 0
         self.oor = 0
         self.cps = DEFAULT_CPS
@@ -651,6 +670,14 @@ class Listing:
         e = parse_event(line)
         if e is None:
             self.unformatted += 1
+            if not self.seen_event:
+                self.unformatted_header += 1
+            elif line.strip(" \t\r\n") == "":
+                self.unformatted_blank += 1
+            else:
+                self.unformatted_other += 1
+                if self.unformatted_sample is None:
+                    self.unformatted_sample = sample_text(line)
             if not self.seen_event and "TRACE_CYCLES_PER_SEC" in line:
                 v = last_decimal(line)
                 if v:
@@ -691,12 +718,7 @@ class Listing:
     def _sample(self, sub, line):
         if any(s == sub for s, _ in self.samples) or len(self.samples) >= SAMPLE_MAX:
             return
-        out = []
-        for ch in line:
-            if ch in "\n\r\0" or len(out) >= SAMPLE_CHARS:
-                break
-            out.append("'" if ch == '"' else ch)
-        self.samples.append((sub, "".join(out)))
+        self.samples.append((sub, sample_text(line)))
 
     def _frag(self, th, t):
         self.frags.append((th, t if t is not None else 0))
@@ -1134,8 +1156,9 @@ class Listing:
             R.append((name, {"w": label, **{k: str(v) for k, v in fields}}))
 
         add("IN", [("path", "-"), ("lines", self.lines), ("bytes", self.bytes), ("events", self.events),
-                   ("unformatted", self.unformatted), ("long_lines", self.long_lines),
-                   ("cpu_out_of_range", self.oor), ("cps", self.cps),
+                   ("unformatted", self.unformatted), ("unformatted_header", self.unformatted_header),
+                   ("unformatted_blank", self.unformatted_blank), ("unformatted_other", self.unformatted_other),
+                   ("long_lines", self.long_lines), ("cpu_out_of_range", self.oor), ("cps", self.cps),
                    ("cps_source", "header" if self.cps_header else "default")])
         if not quiet:
             keys = list(self.hist.items())
@@ -1150,6 +1173,9 @@ class Listing:
                 add("QVMOTHER", [("sub", sub), ("n", n)])
             for sub, line in self.samples:
                 add("SAMPLE", [("sub", sub), ("line", line)])
+            # I36: outside SAMPLE_MAX, as m4count.c prints it.
+            if self.unformatted_sample is not None:
+                add("SAMPLE", [("sub", "unformatted"), ("line", self.unformatted_sample)])
         ts = self.ts
         add("TIME64", [("mode", ts.mode()), ("time_events", ts.time_events), ("mismatches", ts.mismatches),
                        ("wraps", ts.wraps), ("backsteps", ts.backsteps), ("backsteps64", ts.backsteps64),
@@ -1367,11 +1393,15 @@ def xcheck_pairs_record(L, c_lines, limit, c_capped):
     compared = 0
     bad = 0
     seen = set()
+    # I34 (m4-design.md 14.18): how many pairs each side had inside the range, so
+    # a thin comparison shows its denominator and not only its agreement.
+    pc_in = 0
     for p in L.pairs:
         if p["a"] is None or p["b"] is None or p["a"] < L.start_t:
             continue
         if not in_range(p["b"], p["cpu_exit"]):
             continue
+        pc_in += 1
         key = ((p["a"] - L.start_t), p["cpu_exit"])
         got = c_lines.get(key)
         if got is None:
@@ -1398,22 +1428,24 @@ def xcheck_pairs_record(L, c_lines, limit, c_capped):
     # is not a number gives no exit to bound, so it is left alone rather than
     # compared past the PC's data.
     orphan = 0
-    if not c_capped:
-        for key, val in c_lines.items():
-            if key in seen:
-                continue
-            off, cx = key
-            dwell = to_int(val[2])
-            if dwell is None:
-                continue
-            if in_range(L.start_t + off + dwell, cx):
-                orphan += 1
+    c_in = 0
+    for key, val in c_lines.items():
+        off, cx = key
+        dwell = to_int(val[2])
+        if off is None or dwell is None:
+            continue
+        if not in_range(L.start_t + off + dwell, cx):
+            continue
+        c_in += 1
+        if not c_capped and key not in seen:
+            orphan += 1
 
+    ranges = f"pc_in_range={pc_in} c_in_range={c_in}"
     if bad == 0 and orphan == 0 and compared > 0:
-        return f"match compared={compared}"
+        return f"match compared={compared} {ranges}"
     if compared == 0:
-        return f"empty compared=0 orphan={orphan}"
-    return f"differ({bad}) orphan={orphan} compared={compared}"
+        return f"empty compared=0 orphan={orphan} {ranges}"
+    return f"differ({bad}) orphan={orphan} compared={compared} {ranges}"
 
 
 def startup_order_bad(texts, p_cpus):
@@ -1492,6 +1524,123 @@ def trcctl_bad(lines, markers):
         elif seen[want] != 0:
             why.append(f"trcctl_{name}_rc:{seen[want]}")
     return why
+
+
+# I32 (m4-design.md 14.16): the pins D3 §8 item 3 names, as make-m4-images.sh:94-96 holds them.
+PIN_GUEST = "968029316b940f53580228f44e393877e032e251d78f3c752600cae726a7cf4f"
+PIN_DISK = "cf5b06d0b3cb524201c71440fdda42a18d2636d45938acd8ec95cfa21314216b"
+PIN_CLIENT = "52cb4dcad5a3632f88092289ef68668cc1fc604f150f3e2f8b9f31dc82caa7eb"
+IPC_PAYLOAD = 48            # FRAME_PAYLOAD_BYTES, the client's `samples=` line (D3 §8 item 8)
+KEV_T = "/dev/shmem/t.kev"
+PIDIN_HEAD_RE = re.compile(r"^\s*pid\s+tid\s+name\b")
+SAMPLES_LINE_RE = re.compile(r"^samples=(\d+) payload=(\d+) cps=(\d+)$")
+P50_LINE_RE = re.compile(r"^P50=\d+ ns  P99=\d+ ns  Max=\d+ ns$")
+SMP_DONE_RE = re.compile(r"^SMPCHECK done cpu=(\d+) .*\brate=\d+")
+STAMP_CPS_RE = re.compile(r"^STAMP (qvm_launch|banner) .*\bcps=(\d+)")
+
+
+def config_exact_bad(config, p_cpus):
+    """D3 §8 item 3's values, where I30b asked only that the fields be present
+    (I32; m4-design.md 14.16). The startup line is read by its options, not as a
+    whole, so contingency C4's `-vv` image still passes."""
+    why = []
+    for key, want in (("q", "el2-host"), ("w", "keep"), ("A", "1"), ("clock", "unverified"),
+                      ("guest_sha256", PIN_GUEST), ("disk_sha256", PIN_DISK), ("client_sha256", PIN_CLIENT)):
+        got = config.get(key)
+        if got and got != want:
+            why.append(f"config-{key}")
+    tok = (config.get("startup") or "").split()
+    if tok:
+        q = tok.index("-Q") if "-Q" in tok else -1
+        if (tok[0] != "startup-t234-orin-nano" or f"-P{p_cpus}" not in tok or q < 0 or tok[q + 1:q + 2] != ["enable,el2-host"]
+                or "-Wkeep" not in tok or tok.count("-A") != 1 or "-m992M" not in tok):
+            why.append("config-startup")
+    return why
+
+
+def run_lines_bad(src, *, rung, p_cpus, board, cps_want):
+    """§2.2 item 1's remaining D3 §8 items, read in one ordered source (I32;
+    m4-design.md 14.9 item 3, 14.14, 14.16). Returns the reasons crit_1 fails for.
+
+    Items 5, 7 and 8 hold under TCG too: the banner in the guest stream printed in
+    `diag`, not anywhere in the texts; no `rc=` line and no `QVM ended before
+    teardown` before `M4 STATE teardown`; a `pidin` listing in `report` and in
+    `report_ipc`, counted by its column header, because the host script never
+    echoes the command (14.13); `payload=48`; the P50 line. `board` adds what only
+    a board image prints: four `SMPCHECK done … rate=` lines before and four after
+    (item 10, recorded and not judged for drift), the listing's `cps` on the IPC
+    line and on the two stamps (items 5 and 8), and the build script's reset line
+    after `M4 STATE end` (item 11)."""
+    why = []
+    state = None
+    teardown = end = False
+    early_rc = banner = p50 = reset = False
+    pidin = {"report": 0, "report_ipc": 0}
+    rates = {"rate_pre": set(), "rate_post": set()}
+    samples = None
+    stamp_cps = {}
+    reset_text = f"T234 M4 {rung} -P{p_cpus}: resetting so the log can be recovered"
+    for t in src:
+        if t.startswith("M4 STATE "):
+            state = t[9:].split(" ")[0]
+            teardown = teardown or state == "teardown"
+            end = end or state == "end"
+            continue
+        # Only the host script's own lines: COM3 and the black box also hold
+        # Linux's shutdown, the shim and startup before `M4 STATE config`.
+        if (state is not None and not teardown
+                and (t.startswith("rc=") or t.startswith("M4 QVM ended before teardown"))):
+            early_rc = True
+        if state in pidin and PIDIN_HEAD_RE.match(t):
+            pidin[state] += 1
+        if state in rates:
+            m = SMP_DONE_RE.match(t)
+            if m:
+                rates[state].add(int(m.group(1)))
+        if state == "diag" and BANNER_RE.search(t):
+            banner = True
+        m = SAMPLES_LINE_RE.match(t)
+        if m and samples is None:
+            samples = (int(m.group(2)), int(m.group(3)))
+        if P50_LINE_RE.match(t):
+            p50 = True
+        m = STAMP_CPS_RE.match(t)
+        if m:
+            stamp_cps.setdefault(m.group(1), int(m.group(2)))
+        if end and reset_text in t:
+            reset = True
+    if early_rc:
+        why.append("early-rc")
+    for st, n in pidin.items():
+        if n < 1:
+            why.append(f"pidin-{st}-absent")
+    if not banner:
+        why.append("banner-guest-stream")
+    if samples is None:
+        why.append("ipc-samples-line")
+    else:
+        if samples[0] != IPC_PAYLOAD:
+            why.append(f"ipc-payload:{samples[0]}")
+        if cps_want is not None and samples[1] != cps_want:
+            why.append(f"ipc-cps:{samples[1]}")
+    if not p50:
+        why.append("ipc-p50-line")
+    if board:
+        for st in ("rate_pre", "rate_post"):
+            miss = [str(c) for c in range(p_cpus) if c not in rates[st]]
+            if miss:
+                why.append(f"rates-{st[5:]}:" + ",".join(miss))
+        for k in ("qvm_launch", "banner"):
+            if stamp_cps.get(k) != cps_want:
+                why.append(f"stamp-cps:{k}")
+        if not reset:
+            why.append("reset-line")
+    return why
+
+
+def stamp_ipc_lines(recs):
+    """D3 §8 item 11's narrow comparison: the STAMP and IPC lines, in order (I32)."""
+    return [t for t in recs if t.startswith(("STAMP ", "samples=", "P50=", "sentinel_", "BWAIT run prog=qnx-host-client "))]
 
 
 # ------------------------------------------------------------------ run: capture, records, blocks
@@ -1625,8 +1774,10 @@ class Records:
         self.fail_state = None
         self.mem = {}
         self.trace_arm = False
+        self.trace_arm_f = {}
         self.stops = {}
         self.kevfile = {}
+        self.kevfile_f = {}
         self.text = {}
         self.bwait = []
         self.tcu = {}
@@ -1681,6 +1832,9 @@ class Records:
                 if m:
                     self.mem.setdefault(m.group(1), int(m.group(2)))
             elif text.startswith("M4 TRACE ARM"):
+                if not self.trace_arm:
+                    # I33: kind, args and file are compared with the params (crit_2).
+                    self.trace_arm_f = parse_kv(text)[0]
                 self.trace_arm = True
             elif text.startswith("M4 STOP "):
                 parts = text[8:].split()
@@ -1692,6 +1846,7 @@ class Records:
                     listing = parts[0]
                     d, _ = parse_kv(text)
                     self.kevfile.setdefault(listing, d.get("bytes", d.get("path", "none")))
+                    self.kevfile_f.setdefault(listing, d)
             elif text.startswith("M4 TEXT "):
                 parts = text[8:].split()
                 if parts:
@@ -1879,6 +2034,17 @@ def cmd_run(a):
     log("input_params", f"{os.path.basename(a.params)} sha256:{sha256_file(a.params)}")
     log("input_blackbox", "none" if bb is None else f"{os.path.basename(a.blackbox)} sha256:{sha256_file(a.blackbox)}")
     log("input_com3", f"{os.path.basename(a.com3)} sha256:{sha256_file(a.com3)}")
+    # I34 (m4-design.md 14.18): the board's own sha256 of its black box, which the
+    # harness read on the board, against the copy this parse reads. The harness's
+    # own comparison used to reach the board log only, and gate nothing.
+    bb_sha = "n/a(no-blackbox)"
+    if bb is not None:
+        want_sha = (getattr(a, "blackbox_board_sha256", None) or "").strip().lower()
+        if want_sha in ("", "none"):
+            bb_sha = "unknown"
+        else:
+            bb_sha = "equal" if sha256_file(a.blackbox) == want_sha else "differ"
+    log("blackbox_board_sha256", bb_sha)
     log("run_id", a.run_id)
     log("rung", rung)
     log("mode", mode)
@@ -1942,12 +2108,32 @@ def cmd_run(a):
         texts = bb_recs
     log("records_consistency", consistency)
     log("records_source", "blackbox" if texts is bb_recs and bb_recs is not None else "com3")
+    # I32 (m4-design.md 14.16). D3 §8 item 11 asks that every STAMP and IPC line be
+    # identical on COM3, CR-stripped, and that narrow comparison is what crit_1
+    # gates on a board run. `records_consistency` compares every record-prefixed
+    # line, which is broader than item 11; it stays a record, and D3 §7's row for
+    # `differ` (flag it in the run note) applies to it (14.13).
+    if bb_recs is None:
+        stamp_ipc = "n/a(no-blackbox)"
+    else:
+        sb, sc = stamp_ipc_lines(bb_recs), stamp_ipc_lines(com3_recs)
+        if not sb and not sc:
+            stamp_ipc = "empty"
+        else:
+            stamp_ipc = "identical" if sb == sc else f"differ(bb:{len(sb)},com3:{len(sc)})"
+    log("records_stamp_ipc", stamp_ipc)
     R = Records(texts)
     all_texts = [t for off, t in com3_all if not excluded(off)] + ([t for _, t in bb_all] if bb_all else [])
     # I30b: one ordered source for crit_1's orderings. `all_texts` concatenates
     # the capture and the black box, so a position in it spans two timelines and
     # only accidentally gives the right answer. The capture is the fuller one.
-    order_src = [t for off, t in com3_all if not excluded(off)] or ([t for _, t in bb_all] if bb_all else [])
+    # I32: unless a block's END marker is missing, which hides the rest of the
+    # capture; then the black box, D3 §8's primary record, is read instead.
+    order_src = [t for off, t in com3_all if not excluded(off)]
+    order_from_bb = bool(bb_all) and (ended_early or not order_src)
+    if order_from_bb:
+        order_src = [t for _, t in bb_all]
+    log("order_source", "blackbox" if order_from_bb else "com3")
     log("states", ",".join(R.states) or "none")
     log("fail_state", R.fail_state or "none")
     log("fails", ";".join(R.fails).replace(" ", "_") or "none")
@@ -2143,6 +2329,23 @@ def cmd_run(a):
             ok = v_complete and ring_t == "held" and L is not None and L.q[key] == 0
             p1zero.append(f"{idname}:{'yes' if ok else 'no'}")
     log("p1_zero_verified", ",".join(p1zero) or "n/a(no-zero)")
+
+    # I33 (m4-design.md 14.17): a linear window's .kev against the budget its -S was
+    # sized from (§2.4 step 3). A linear capture that reaches -S is cut (R38,
+    # untested), so a file within the 4 MiB margin of -S has outgrown its budget.
+    kev_budget = None
+    if params.get("kind") == "linear":
+        s_lin = to_int(params.get("s_mb"))
+        kb = to_int((R.kevfile_f.get("t") or {}).get("bytes"))
+        if s_lin is None or s_lin <= LIN_S_MARGIN_MB:
+            kev_budget = "unknown"
+        elif kb is None:
+            kev_budget = "no-kev"
+        else:
+            kev_budget = "within" if kb < (s_lin - LIN_S_MARGIN_MB) * MIB else "over"
+        log("kevfile_t_budget", composite([("kind", "linear"), ("bytes", "-" if kb is None else kb),
+                                            ("budget_mb", "-" if s_lin is None else s_lin - LIN_S_MARGIN_MB),
+                                            ("state", kev_budget)]))
 
     # Step 6: the verdict.
     crits = []
@@ -2349,12 +2552,21 @@ def cmd_run(a):
         ql, bn = R.stamps.get("qvm_launch"), R.stamps.get("banner")
         if ql is None or bn is None or bn <= ql:
             why1.append("stamps")
-        if not any(BANNER_RE.search(t) for t in all_texts):
-            why1.append("banner")
+        # I32: the banner is no longer searched over every text; run_lines_bad
+        # reads it in the guest stream `diag` prints (D3 §8 item 5). The client's
+        # bwait line must also show no signal (item 8).
         client = R.bwait_for("qnx-host-client")
-        if (client is None or client["rc"] != 0 or client["killed"] != 0 or R.samples is None
-                or R.sentinel is None or R.samples + R.sentinel != iters):
+        if (client is None or client["rc"] != 0 or client["sig"] != 0 or client["killed"] != 0
+                or R.samples is None or R.sentinel is None or R.samples + R.sentinel != iters):
             why1.append("ipc")
+        why1 += run_lines_bad(order_src, rung=rung, p_cpus=p_cpus, board=board,
+                              cps_want=BOARD_CPS if board else None)
+        if board:
+            # I32: item 3's values, not only their presence, and item 11's narrow
+            # comparison of the STAMP and IPC lines across the two records.
+            why1 += config_exact_bad(R.config, p_cpus)
+            if stamp_ipc != "identical":
+                why1.append("stamp-ipc:" + stamp_ipc.split("(")[0])
         if "banner" not in R.mem:
             why1.append("mem_banner")
         if not states_in_order(order_full) or R.fail_state != "none":
@@ -2369,10 +2581,25 @@ def cmd_run(a):
         why2 = []
         if not R.trace_arm:
             why2.append("arm")
+        else:
+            # I33 (m4-design.md 14.17): the arm line was a presence test. What was
+            # armed must be what the image was sized for, and the file it names
+            # must be the one formatted afterwards.
+            arm = R.trace_arm_f
+            if params.get("kind") and arm.get("kind") != params["kind"]:
+                why2.append("arm-kind")
+            if params.get("tl_args") and arm.get("args") != params["tl_args"]:
+                why2.append("arm-args")
+            if arm.get("file") != KEV_T:
+                why2.append("arm-file")
         if R.stops.get("t") != "stop":
             why2.append("stop")
         if to_int(R.kevfile.get("t"), 0) <= 0:
             why2.append("kevfile")
+        elif (R.kevfile_f.get("t") or {}).get("path") != KEV_T:
+            why2.append("kevfile-path")
+        if kev_budget is not None and kev_budget != "within":
+            why2.append("kevfile-over-budget" if kev_budget == "over" else f"kevfile-budget-{kev_budget}")
         # I30: presence was the whole test. Both markers and the stop now have
         # to have returned 0, read from trcctl's own lines.
         why2 += trcctl_bad(R.trcctl, (start_marker, end_marker))
@@ -2427,6 +2654,13 @@ def cmd_run(a):
                     why3.append("pc-order")
                 if (pcv_first("TIME64") or {}).get("mismatches") != "0":
                     why3.append("pc-mismatches")
+                # I34 (m4-design.md 14.18): the PC's own complete triples and TIME
+                # events, as the counter's are asked for. A mismatch count of zero
+                # over no TIME event confirms nothing, on either side.
+                if to_int((pcv_first("TRIPLES") or {}).get("complete"), 0) <= 0:
+                    why3.append("pc-triples")
+                if to_int((pcv_first("TIME64") or {}).get("time_events"), 0) <= 0:
+                    why3.append("pc-time_events")
             crit("crit_3", not why3, "+".join(why3))
             crit("crit_4", ring_t == "held", f"ring:{ring_t}")
             why5 = []
@@ -2457,7 +2691,10 @@ def cmd_run(a):
                 crit("crit_p3", all(blocks.get(b, ("absent",))[0] == "ok" for b in ("c", "v")), "blocks")
     if board:
         crit("crit_reset", (a.reset_reason or "").strip() == "MAINSWRST", f"reset:{a.reset_reason or 'unknown'}")
-        crit("crit_bb", bb is not None and len(bb) < BB_GATE, f"blackbox:{'none' if bb is None else len(bb)}")
+        # I34 (m4-design.md 14.18): the size gate, and the board's own sha256 of
+        # its black box against the copy this parse read.
+        crit("crit_bb", bb is not None and len(bb) < BB_GATE and bb_sha == "equal",
+             f"blackbox:{'none' if bb is None else len(bb)}+sha:{bb_sha.split('(')[0]}")
     else:
         crit("crit_reset", True, na="tcg")
         crit("crit_bb", True, na="tcg")
@@ -2477,13 +2714,27 @@ def cmd_run(a):
         cps_list = to_int((rec_first(run_main, "IN") or {}).get("cps"), DEFAULT_CPS)
         p2p3 = all(s == "pass" for k, s in crits if k in ("crit_p2", "crit_p3")) if not a.rehearsal else \
             blocks.get("c", ("absent",))[0] == "ok"
+        # I39 (m4-design.md 6.4, 14.23): unix_ts is the run's end. The harness parses
+        # while the capture still runs, so a harness parse never sees the capture's
+        # end line; it passes the PC clock at its return instead. A file's mtime is
+        # not a defined source on a board run and is kept for a rehearsal only.
+        ts_, ts_src = None, "none"
+        if getattr(a, "run_end_epoch", None) is not None:
+            ts_, ts_src = a.run_end_epoch, "run-end-epoch"
+        elif iso_epoch(cap.get("end_iso")) is not None:
+            ts_, ts_src = iso_epoch(cap.get("end_iso")), "capture-end-line"
+        elif a.rehearsal:
+            ts_, ts_src = int(os.path.getmtime(a.com3)), "com3-mtime(rehearsal)"
         if samples <= 0:
             csv_note = "skipped(no-samples)"
         elif not p2p3:
             csv_note = "skipped(p2-or-p3)"
         elif not a.rehearsal and cps_list != BOARD_CPS:
             csv_note = f"refused(cps:{cps_list})"
+        elif ts_ is None:
+            csv_note = "refused(no-timestamp)"
         else:
+            log("csv_ts_source", ts_src)
             if c_stat == "match":
                 pool, cps_c = pc_from_c["clean"]
                 n = len(pool)
@@ -2493,9 +2744,6 @@ def cmd_run(a):
             else:
                 p50, p99, mx = stat.get("p50_ns"), stat.get("p99_ns"), stat.get("max_ns")
                 log("csv_source", "target")
-            ts_ = iso_epoch(cap.get("end_iso"))
-            if ts_ is None:
-                ts_ = int(os.path.getmtime(a.com3))
             if a.rehearsal:
                 notes = "m4-tcg-rehearsal;emulated;not-a-result"
                 cps_out = cps_list
@@ -2574,6 +2822,19 @@ def trace_need_mb_lin(s, probe_cost_mb):
     return cost + s + 32
 
 
+BUF_KB = 16                 # [use-tl]: about 16 KB per kernel buffer (§2.4 step 3)
+LIN_S_MARGIN_MB = 4         # -S is the budgeted file plus 4 MiB, as a ring's is (§2.4 step 3, §4.2)
+P_BOARD = 4                 # the board image's -P4
+TEXT_PER_KEV = 5            # budget: text listing bytes per .kev byte (§2.4 step 5, §8.2)
+MEM_WINDOW_MB = 992         # -m992M: a memory need at or above it can never pass its gate
+
+
+def lin_s_mb(bufs_total):
+    """I37 (m4-design.md 2.4 step 3, 14.21): a linear window's -S from the buffers its
+    budget allows, summed over the CPUs, plus the ring's 4 MiB margin."""
+    return math.ceil(bufs_total * BUF_KB / 1024) + LIN_S_MARGIN_MB
+
+
 def fmt_need_mb(s, cap_v, cap_c):
     return 5 * s + CNT_MB + math.ceil((cap_v + cap_c) / MIB) + 32
 
@@ -2617,47 +2878,53 @@ def num(d, key):
         raise InputError(f"the parse log has no numeric {key} (value {v!r})")
 
 
-def cmd_size_r1(a):
-    try:
-        r0 = read_parse_log(a.r0_parse)
-        if r0.get("rung") != "r0":
-            raise InputError(f"{a.r0_parse} is not an r0 parse log (rung={r0.get('rung')})")
-        if r0.get("run_verdict") != "pass":
-            print(f"SIZE r1 refused: r0 did not pass ({r0.get('run_verdict')}); the owner reviews r0 first")
-            return 3
-        cps = to_int(parse_composite(r0.get("cnt_l0_in")).get("cps"), DEFAULT_CPS)
-        b0 = 0.0
-        for key, val in r0.items():
-            m = re.match(r"cnt_l0_rate_cpu(\d+)$", key)
-            if not m:
-                continue
-            f = parse_composite(val)
-            span = to_int(f.get("span_ticks"))
-            bufs = to_int(f.get("bufs_in_window"), 0)
-            if span:
-                b0 = max(b0, (bufs + 1) / (span / cps))
-        if b0 <= 0:
-            raise InputError("no L0 RATE records with a span")
-        probe_cost = max(0.0, num(r0, "mem_probe_pre") - num(r0, "mem_probe_armed"))
-        tp0 = parse_composite(r0.get("tp_l0"))
-        cn0 = parse_composite(r0.get("cnt_l0"))
-        tp_bps0 = num(r0, "kevfile_l0") / max(to_int(tp0.get("ms"), 1), 1) * 1000
-        cnt_bps0 = num(r0, "text_l0") / max(to_int(cn0.get("ms"), 1), 1) * 1000
-        tcu_bps0 = num(r0, "tcu_v_bytes_sent") / max(num(r0, "tcu_v_ms"), 1) * 1000
-    except InputError as e:
-        print(f"parse-m4: input error: {e}", file=sys.stderr)
-        return 1
+def size_r1_values(r0):
+    """§2.4 from r0 to r1 over an r0 parse log's M4PC keys: (rc, values, message).
+    rc 3 is a rule that goes to the owner; InputError is a log that cannot be sized from.
+    A pure function, so selftest checks the rule against hand-computed values (I37)."""
+    if r0.get("rung") != "r0":
+        raise InputError(f"not an r0 parse log (rung={r0.get('rung')})")
+    if r0.get("run_verdict") != "pass":
+        return 3, None, f"SIZE r1 refused: r0 did not pass ({r0.get('run_verdict')}); the owner reviews r0 first"
+    cps = to_int(parse_composite(r0.get("cnt_l0_in")).get("cps"), DEFAULT_CPS)
+    rate = {}
+    for key, val in r0.items():
+        m = re.match(r"cnt_l0_rate_cpu(\d+)$", key)
+        if not m:
+            continue
+        f = parse_composite(val)
+        span = to_int(f.get("span_ticks"))
+        bufs = to_int(f.get("bufs_in_window"), 0)
+        if span:
+            rate[int(m.group(1))] = (bufs + 1) / (span / cps)
+    b0 = max(rate.values(), default=0.0)
+    if b0 <= 0:
+        raise InputError("no L0 RATE records with a span")
+    # Whole MiB: the MEM lines are whole MB, and the generator recomputes the rule in integers (I37).
+    probe_cost = max(0, math.ceil(num(r0, "mem_probe_pre") - num(r0, "mem_probe_armed")))
+    tp0 = parse_composite(r0.get("tp_l0"))
+    cn0 = parse_composite(r0.get("cnt_l0"))
+    tp_bps0 = num(r0, "kevfile_l0") / max(to_int(tp0.get("ms"), 1), 1) * 1000
+    cnt_bps0 = num(r0, "text_l0") / max(to_int(cn0.get("ms"), 1), 1) * 1000
+    tcu_bps0 = num(r0, "tcu_v_bytes_sent") / max(num(r0, "tcu_v_ms"), 1) * 1000
+    if min(tp_bps0, cnt_bps0, tcu_bps0) <= 0:
+        raise InputError("a zero traceprinter, counter or tcu rate")
     need1 = math.ceil(16 * b0 * 60) + 2
     k1 = 256 if need1 <= 256 else (512 if need1 <= 512 else "lin")
-    kk = 512 if k1 == "lin" else k1
-    while 4 * s_mb(kk) * MIB / tp_bps0 > 600:
+    # I37 (§2.4 step 3, 14.21): a linear window's file holds every buffer every CPU writes, so its
+    # budget is a sum over the CPUs; a CPU with no RATE record takes the busiest CPU's rate.
+    bufs_lin = sum(math.ceil(16 * rate.get(c, b0) * 60) + 2 for c in range(P_BOARD))
+
+    def s_for(k):
+        return lin_s_mb(bufs_lin) if k == "lin" else s_mb(k)
+
+    while 4 * s_for(k1) * MIB / tp_bps0 > 600:
         if k1 == 512:
-            k1 = kk = 256
+            k1 = 256
             continue
-        print(f"SIZE r1 owner: traceprinter would need more than 600 s at K={k1} (raise TP_BOUND; §2.4 step 4)")
-        return 3
-    s = s_mb(kk)
-    cnt_bound = 120 if 4 * 5 * s * MIB / cnt_bps0 <= 120 else 300
+        return 3, None, f"SIZE r1 owner: traceprinter would need more than 600 s at K={k1} (raise TP_BOUND; §2.4 step 4)"
+    s = s_for(k1)
+    cnt_bound = 120 if 4 * TEXT_PER_KEV * s * MIB / cnt_bps0 <= 120 else 300
     cap_v, cap_c = 1048576, 524288
     while True:
         send_v, send_c = send_s(cap_v, tcu_bps0), send_s(cap_c, tcu_bps0)
@@ -2668,32 +2935,48 @@ def cmd_size_r1(a):
             cap_c //= 2
             continue
         if send_v > 600 or send_c > 600:
-            print("SIZE r1 owner: a block cannot be sent within 600 s at the 65,536 B floor (§2.4 step 6)")
-            return 3
+            return 3, None, "SIZE r1 owner: a block cannot be sent within 600 s at the 65,536 B floor (§2.4 step 6)"
         worst = ksh_worst_full(240, 240, 600, cnt_bound, send_v, send_c)
         guard = guard_for(worst)
         if guard <= 2700:
             break
         if cap_v <= 65536 and cap_c <= 65536:
-            print(f"SIZE r1 owner: the guard {guard} s exceeds 2,700 s at the cap floor (§2.4 step 7)")
-            return 3
+            return 3, None, f"SIZE r1 owner: the guard {guard} s exceeds 2,700 s at the cap floor (§2.4 step 7)"
         cap_v, cap_c = max(65536, cap_v // 2), max(65536, cap_c // 2)
+    trace_need = trace_need_mb_lin(s, probe_cost) if k1 == "lin" else trace_need_mb(k1, probe_cost)
+    fmt_need = fmt_need_mb(s, cap_v, cap_c)
+    if trace_need >= MEM_WINDOW_MB or fmt_need >= MEM_WINDOW_MB:
+        return 3, None, (f"SIZE r1 owner: trace_need_mb={trace_need} or fmt_need_mb={fmt_need} is not below "
+                         f"{MEM_WINDOW_MB} MiB and can never pass its gate (§2.4 step 5, I37)")
     ipc = 240
     values = {
-        "image": f"m4-r1-{'lin' if k1 == 'lin' else 'k%d' % k1}", "rung": "r1", "mode": "full", "p": 4,
+        "image": f"m4-r1-{'lin' if k1 == 'lin' else 'k%d' % k1}", "rung": "r1", "mode": "full", "p": P_BOARD,
         "kind": "linear" if k1 == "lin" else "ring", "k": k1, "s_mb": s,
         "tl_args": f"-c -S {s}M" if k1 == "lin" else f"-r -k {k1} -M -S {s}M",
         "tl_bound": 2 + ipc + 5 + 160 + 30,
-        "trace_need_mb": trace_need_mb_lin(s, probe_cost) if k1 == "lin" else trace_need_mb(kk, probe_cost),
-        "fmt_need_mb": fmt_need_mb(s, cap_v, cap_c), "cnt_need_mb": cnt_need_mb(cap_v, cap_c),
+        "trace_need_mb": trace_need,
+        "fmt_need_mb": fmt_need, "cnt_need_mb": cnt_need_mb(cap_v, cap_c),
         "iters": 15, "ipc_bound": ipc, "banner_bound": 240, "grace": 90, "tp_bound": 600, "cnt_bound": cnt_bound,
         "hash_bound": 20, "forms": "v c", "cap_v": cap_v, "cap_c": cap_c, "send_v": send_v, "send_c": send_c,
         "send_t_v": send_v - 5, "send_t_c": send_c - 5, "clean_pred": "-", "p2_reachable": "-",
         "p99_reachable": "-", "accept_low_n": "-", "ksh_worst_s": worst, "guard_s": guard,
         "return_bound_s": guard + 300, "capture_s": guard + 3300,
-        "size_from_r0_parse_sha256": sha256_file(a.r0_parse), "size_b0": f"{b0:.3f}", "size_need1": need1,
-        "size_probe_cost_mb": f"{probe_cost:.1f}", "size_tp_bps0": f"{tp_bps0:.0f}", "size_cnt_bps0": f"{cnt_bps0:.0f}",
-        "size_tcu_bps0": f"{tcu_bps0:.0f}"}
+        "size_b0": f"{b0:.3f}", "size_need1": need1,
+        "size_probe_cost_mb": probe_cost, "size_lin_bufs": bufs_lin if k1 == "lin" else "-",
+        "size_tp_bps0": f"{tp_bps0:.0f}", "size_cnt_bps0": f"{cnt_bps0:.0f}", "size_tcu_bps0": f"{tcu_bps0:.0f}"}
+    return 0, values, ""
+
+
+def cmd_size_r1(a):
+    try:
+        rc, values, msg = size_r1_values(read_parse_log(a.r0_parse))
+    except InputError as e:
+        print(f"parse-m4: input error: {a.r0_parse}: {e}", file=sys.stderr)
+        return 1
+    if rc:
+        print(msg)
+        return rc
+    values["size_from_r0_parse_sha256"] = sha256_file(a.r0_parse)
     out = a.out or os.path.join(REPO, "orin-native", "shim", "out", "m4", values["image"] + ".size")
     try:
         write_text(out, size_lines(values))
@@ -2707,47 +2990,50 @@ def cmd_size_r1(a):
     return 0
 
 
-def cmd_size_r2(a):
-    try:
-        r0 = read_parse_log(a.r0_parse)
-        r1 = read_parse_log(a.r1_parse)
-        if r1.get("rung") != "r1" or r0.get("rung") != "r0":
-            raise InputError("size-r2 needs an r1 parse log and an r0 parse log")
-        if r1.get("run_verdict") != "pass":
-            print(f"SIZE r2 refused: r1 did not pass ({r1.get('run_verdict')})")
-            return 3
-        if parse_composite(r1.get("cnt_t_ring")).get("state") != "held":
-            print("SIZE r2 owner: r1's ring was not held (§2.4 step 1)")
-            return 3
-        clean1 = to_int(parse_composite(r1.get("cnt_t_pairs")).get("clean"), 0)
-        p1 = clean1 / 20
-        if p1 <= 0:
-            print("SIZE r2 owner: r1 had no eligible clean pair (§2.4 step 1)")
-            return 3
-        seq_max = 0
-        for key, val in r1.items():
-            if re.match(r"cnt_t_buf_cpu\d+$", key):
-                seq_max = max(seq_max, to_int(parse_composite(val).get("last_seq"), 0))
-        beta = seq_max / 20
-        fc = parse_composite(r1.get("cnt_t_flt_c"))
-        pairs_all1 = to_int(fc.get("pairs_total"), 0)
-        bpp1 = to_int(fc.get("bytes"), 0) / max(to_int(fc.get("pairs_written"), 0), 1)
-        probe_cost = max(0.0, num(r0, "mem_probe_pre") - num(r0, "mem_probe_armed"))
-        tp_ms1 = to_int(parse_composite(r1.get("tp_t")).get("ms"), 0)
-        cnt_ms1 = to_int(parse_composite(r1.get("cnt_t")).get("ms"), 0)
-        s1 = to_int(r1.get("param_s_mb"), 0)
-        rates = []
-        for b in ("v", "c"):
-            sent = to_int(r1.get(f"tcu_{b}_bytes_sent"))
-            ms = to_int(r1.get(f"tcu_{b}_ms"))
-            if sent and ms:
-                rates.append((sent, sent / ms * 1000))
-        if not rates or s1 <= 0:
-            raise InputError("r1's parse log lacks the tcu rates or param_s_mb")
-        tcu_bps1 = max(rates)[1]
-    except InputError as e:
-        print(f"parse-m4: input error: {e}", file=sys.stderr)
-        return 1
+def size_r2_values(r0, r1, accept_low_n):
+    """§2.4 from r1 to r2 over the two parse logs' M4PC keys: (rc, values, lines to print).
+    A pure function, so selftest checks the rule against hand-computed values (I37)."""
+    if r1.get("rung") != "r1" or r0.get("rung") != "r0":
+        raise InputError("size-r2 needs an r1 parse log and an r0 parse log")
+    if r1.get("run_verdict") != "pass":
+        return 3, None, [f"SIZE r2 refused: r1 did not pass ({r1.get('run_verdict')})"]
+    if parse_composite(r1.get("cnt_t_ring")).get("state") != "held":
+        return 3, None, ["SIZE r2 owner: r1's ring was not held (§2.4 step 1)"]
+    clean1 = to_int(parse_composite(r1.get("cnt_t_pairs")).get("clean"), 0)
+    p1 = clean1 / 20
+    if p1 <= 0:
+        return 3, None, ["SIZE r2 owner: r1 had no eligible clean pair (§2.4 step 1)"]
+    seq = {}
+    for key, val in r1.items():
+        m = re.match(r"cnt_t_buf_cpu(\d+)$", key)
+        if m:
+            seq[int(m.group(1))] = to_int(parse_composite(val).get("last_seq"), 0)
+    beta = max(seq.values(), default=0) / 20
+    beta_c = {c: v / 20 for c, v in seq.items()}
+    fc = parse_composite(r1.get("cnt_t_flt_c"))
+    pairs_all1 = to_int(fc.get("pairs_total"), 0)
+    bpp1 = to_int(fc.get("bytes"), 0) / max(to_int(fc.get("pairs_written"), 0), 1)
+    probe_cost = max(0, math.ceil(num(r0, "mem_probe_pre") - num(r0, "mem_probe_armed")))
+    tp_ms1 = to_int(parse_composite(r1.get("tp_t")).get("ms"), 0)
+    cnt_ms1 = to_int(parse_composite(r1.get("cnt_t")).get("ms"), 0)
+    # I37 (§2.4 r2 steps 6-7, 14.21): what r1 measured, not what a full ring would have held.
+    kev1 = num(r1, "kevfile_t")
+    text1 = num(r1, "text_t")
+    if kev1 <= 0 or text1 <= 0:
+        raise InputError("r1's KEVFILE or TEXT bytes are zero")
+    rho1 = text1 / kev1
+    mem1 = to_int(r1.get("mem_trace_pre"))
+    if mem1 is None:
+        raise InputError("r1's parse log has no mem_trace_pre")
+    rates = []
+    for b in ("v", "c"):
+        sent = to_int(r1.get(f"tcu_{b}_bytes_sent"))
+        ms = to_int(r1.get(f"tcu_{b}_ms"))
+        if sent and ms:
+            rates.append((sent, sent / ms * 1000))
+    if not rates:
+        raise InputError("r1's parse log lacks the tcu rates")
+    tcu_bps1 = max(rates)[1]
     n_pairs = max(15, math.ceil(15000 / p1) - 5)
     n2 = min(n_pairs, 13200)
     target = "p99"
@@ -2756,15 +3042,26 @@ def cmd_size_r2(a):
         lin = False
         if k2 > 512:
             n_ring = math.floor(510 / (1.5 * beta)) - 5
-            if n_ring * p1 >= 1200:
+            # I37: a ring-limited N2 below the 15 timed iterations is no r2; the generator refuses it.
+            if n_ring >= 15 and n_ring * p1 >= 1200:
                 n2, k2, target = n_ring, 512, "ring-limited"
             else:
                 lin = True
-        kk = 512 if lin else k2
-        s2 = s_mb(kk)
+        # Each CPU's buffers over N2 + 5 iterations, a CPU without a BUF record at the busiest rate.
+        need_c = [math.ceil(1.5 * beta_c.get(c, beta) * (n2 + 5)) + 2 for c in range(P_BOARD)]
+        if lin:
+            bufs2 = sum(need_c)
+            s2 = lin_s_mb(bufs2)
+            need2 = trace_need_mb_lin(s2, probe_cost)
+        else:
+            bufs2 = sum(min(k2, x) for x in need_c)
+            s2 = s_mb(k2)
+            need2 = trace_need_mb(k2, probe_cost)
+        kev2 = min(s2 * MIB, bufs2 * BUF_KB * 1024)
+        tp_raw = math.ceil(4 * tp_ms1 / 1000 * kev2 / kev1) + 60
+        cnt_raw = math.ceil(4 * cnt_ms1 / 1000 * kev2 * max(TEXT_PER_KEV, rho1) / text1) + 30
+        tp2, cnt2 = max(120, tp_raw), max(60, cnt_raw)
         ipc2 = 240 + (5 * n2 + 99) // 100          # ceil(0.05 x N2) in integers, as the generator recomputes it
-        tp2 = min(900, max(120, math.ceil(4 * tp_ms1 / 1000 * s2 / s1) + 60))
-        cnt2 = min(600, max(60, math.ceil(4 * cnt_ms1 / 1000 * s2 / s1) + 30))
         cap_c, cap_v = 1048576, 131072
         send_c, send_v = send_s(cap_c, tcu_bps1), send_s(cap_v, tcu_bps1)
         while send_c > 600 and cap_c > 65536:
@@ -2773,40 +3070,66 @@ def cmd_size_r2(a):
         while send_v > 600 and cap_v > 65536:
             cap_v //= 2
             send_v = send_s(cap_v, tcu_bps1)
+        fmt2 = fmt_need_mb(s2, cap_v, cap_c)
         worst = ksh_worst_full(240, ipc2, tp2, cnt2, send_v, send_c)
         guard2 = guard_for(worst)
-        if guard2 <= 3600 or n2 <= 15:
+        misfit = []
+        if guard2 > 3600:
+            misfit.append(f"guard:{guard2}")
+        if tp_raw > 900:
+            misfit.append(f"tp_bound:{tp_raw}")
+        if cnt_raw > 600:
+            misfit.append(f"cnt_bound:{cnt_raw}")
+        if need2 > mem1:
+            misfit.append(f"trace_need_mb:{need2}>trace_pre:{mem1}")
+        if fmt2 >= MEM_WINDOW_MB:
+            misfit.append(f"fmt_need_mb:{fmt2}")
+        if not misfit or n2 <= 15:
             break
         n2 = max(15, math.floor(n2 * 0.9))
-    if guard2 > 3600 or send_c > 600 or send_v > 600:
-        print(f"SIZE r2 owner: no N2 fits the 3,600 s guard or the 600 s send bound (guard {guard2})")
-        return 3
+    if misfit or send_c > 600 or send_v > 600:
+        why = "+".join(misfit) or "send-bound"
+        return 3, None, [f"SIZE r2 owner: no N2 fits ({why}; §2.4 steps 6, 7 and 10)"]
     clean_pred = math.floor(p1 * (n2 + 5))
     p2 = "yes" if clean_pred >= 1200 else "no"
     p99 = "yes" if clean_pred >= 15000 else ("short-margin" if clean_pred >= 10000 else "no")
     c_capped_pred = "yes" if 1.5 * (pairs_all1 / 20) * (n2 + 5) * bpp1 > cap_c else "no"
-    print(f"SIZE clean_pred={clean_pred} p2_reachable={p2} p99_reachable={p99} p99_target={target}")
+    lines = [f"SIZE clean_pred={clean_pred} p2_reachable={p2} p99_reachable={p99} p99_target={target}"]
     if p2 == "no":
-        print("SIZE r2 owner: predicted to miss P2 (clean_pred below 1,200); no size file written (§2.4 step 11)")
-        return 3
-    if p99 == "no" and not a.accept_low_n:
-        print("SIZE r2 owner: P99 not quotable at this yield; pass --accept-low-n to build anyway (§2.4 step 11)")
-        return 3
-    image = f"m4-r2-{'lin' if lin else 'k%d' % k2}-n{n2}"
+        return 3, None, lines + ["SIZE r2 owner: predicted to miss P2 (clean_pred below 1,200); no size file written (§2.4 step 11)"]
+    if p99 == "no" and not accept_low_n:
+        return 3, None, lines + ["SIZE r2 owner: P99 not quotable at this yield; pass --accept-low-n to build anyway (§2.4 step 11)"]
     values = {
-        "image": image, "rung": "r2", "mode": "full", "p": 4, "kind": "linear" if lin else "ring",
+        "image": f"m4-r2-{'lin' if lin else 'k%d' % k2}-n{n2}", "rung": "r2", "mode": "full", "p": P_BOARD,
+        "kind": "linear" if lin else "ring",
         "k": "lin" if lin else k2, "s_mb": s2, "tl_args": f"-c -S {s2}M" if lin else f"-r -k {k2} -M -S {s2}M",
         "tl_bound": 2 + ipc2 + 5 + 160 + 30,
-        "trace_need_mb": trace_need_mb_lin(s2, probe_cost) if lin else trace_need_mb(kk, probe_cost),
-        "fmt_need_mb": fmt_need_mb(s2, cap_v, cap_c), "cnt_need_mb": cnt_need_mb(cap_v, cap_c),
+        "trace_need_mb": need2, "fmt_need_mb": fmt2, "cnt_need_mb": cnt_need_mb(cap_v, cap_c),
         "iters": n2, "ipc_bound": ipc2, "banner_bound": 240, "grace": 90, "tp_bound": tp2, "cnt_bound": cnt2,
         "hash_bound": 20, "forms": "c v", "cap_v": cap_v, "cap_c": cap_c, "send_v": send_v, "send_c": send_c,
         "send_t_v": send_v - 5, "send_t_c": send_c - 5, "clean_pred": clean_pred, "p2_reachable": p2,
-        "p99_reachable": p99, "accept_low_n": 1 if (p99 == "no" and a.accept_low_n) else 0,
+        "p99_reachable": p99, "accept_low_n": 1 if (p99 == "no" and accept_low_n) else 0,
         "ksh_worst_s": worst, "guard_s": guard2, "return_bound_s": guard2 + 300, "capture_s": guard2 + 3300,
-        "size_from_r0_parse_sha256": sha256_file(a.r0_parse), "size_from_r1_parse_sha256": sha256_file(a.r1_parse),
         "size_p99_target": target, "size_c_capped_predicted": c_capped_pred, "size_beta": f"{beta:.3f}",
-        "size_p1": f"{p1:.3f}", "size_tcu_bps1": f"{tcu_bps1:.0f}"}
+        "size_p1": f"{p1:.3f}", "size_tcu_bps1": f"{tcu_bps1:.0f}", "size_probe_cost_mb": probe_cost,
+        "size_lin_bufs": bufs2 if lin else "-", "size_kev2_pred_bytes": kev2, "size_text_ratio1": f"{rho1:.2f}",
+        "size_mem_trace_pre1": mem1}
+    return 0, values, lines
+
+
+def cmd_size_r2(a):
+    try:
+        rc, values, lines = size_r2_values(read_parse_log(a.r0_parse), read_parse_log(a.r1_parse), a.accept_low_n)
+    except InputError as e:
+        print(f"parse-m4: input error: {e}", file=sys.stderr)
+        return 1
+    for line in lines:
+        print(line)
+    if rc:
+        return rc
+    values["size_from_r0_parse_sha256"] = sha256_file(a.r0_parse)
+    values["size_from_r1_parse_sha256"] = sha256_file(a.r1_parse)
+    image = values["image"]
     out = a.out or os.path.join(REPO, "orin-native", "shim", "out", "m4", image + ".size")
     try:
         write_text(out, size_lines(values))
@@ -2880,6 +3203,153 @@ def cmd_series(a):
 
 # ------------------------------------------------------------------ selftest (§4.5.9)
 
+RUN_CASE_OPS = ("sub", "sub-com3", "resub", "add-after", "del", "del-first", "del-last", "vbody-del", "param", "arg",
+                "expect")
+
+
+def read_run_cases(path):
+    """fixtures/m4run-cases.txt (I35): one run-level case per new rule. The grammar is in the file's header."""
+    cases = []
+    cur = None
+    for raw in iter_raw_lines(read_bytes(path)):
+        line = raw.decode("latin-1").rstrip("\r\n")
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        op, _, rest = line.partition(" ")
+        if op == "case":
+            cur = {"name": rest.strip(), "edits": [], "vdel": [], "params": {}, "args": {}, "exact": {},
+                   "contains": {}}
+            cases.append(cur)
+            continue
+        if cur is None or op not in RUN_CASE_OPS:
+            raise InputError(f"{os.path.basename(path)}: cannot read '{line}'")
+        if op in ("sub", "sub-com3", "resub", "add-after"):
+            x, sep, y = rest.partition(" => ")
+            if not sep or not x:
+                raise InputError(f"{os.path.basename(path)}: '{line}' has no ' => '")
+            cur["edits"].append((op, x, y))
+        elif op in ("del", "del-first", "del-last"):
+            cur["edits"].append((op, rest, None))
+        elif op == "vbody-del":
+            cur["vdel"].append(rest)
+        elif op in ("param", "arg"):
+            k, sep, v = rest.partition("=")
+            if not sep:
+                raise InputError(f"{os.path.basename(path)}: '{line}' has no '='")
+            cur["params" if op == "param" else "args"][k.strip()] = v
+        else:
+            m = re.match(r"^([A-Za-z0-9_]+)([=~])(.*)$", rest)
+            if not m:
+                raise InputError(f"{os.path.basename(path)}: cannot read '{line}'")
+            cur["exact" if m.group(2) == "=" else "contains"][m.group(1)] = m.group(3)
+    return cases
+
+
+def run_case(case, fixtures, out_dir):
+    """One run-level case: a SYNTHETIC board r1 record from m4fix-1, the case's edits, then
+    `run` on it (I35). Returns the reasons the case fails, empty when it holds."""
+    name = case["name"]
+    try:
+        listing = read_bytes(os.path.join(fixtures, "m4fix-1.txt"))
+        com3, bb, params, changed = synth_record(listing, rung="r1", profile="board", e3="none",
+                                                 start_marker="m4-fix-start", end_marker="m4-fix-end",
+                                                 transport="tcu", edits=case["edits"], vbody_del=case["vdel"],
+                                                 params_over=case["params"])
+    except (InputError, re.error) as e:
+        return [f"build:{e}"]
+    labels = [f"{op}:{x}" for op, x, _ in case["edits"]] + [f"vbody-del:{t}" for t in case["vdel"]]
+    idle = [lab for lab, n in zip(labels, changed) if n == 0]
+    if idle:
+        return ["edit-changed-nothing:" + ";".join(idle)]
+    d = os.path.join(out_dir, "runfix", name)
+    paths = {k: os.path.join(d, f"runfix-{name}-{k}.log") for k in ("com3", "blackbox", "params")}
+    try:
+        write_bytes(paths["com3"], com3)
+        write_bytes(paths["blackbox"], bb)
+        write_text(paths["params"], "# SYNTHETIC run-level case (fixtures/m4run-cases.txt); not a record.\n" +
+                   "".join(f"{k}={v}\n" for k, v in params.items()))
+    except Refused as e:
+        return [f"refused:{e}"]
+    sha = case["args"].get("blackbox_board_sha256", "auto")
+    if sha == "auto":
+        sha = hashlib.sha256(bb).hexdigest()
+    ns = argparse.Namespace(params=paths["params"], blackbox=paths["blackbox"], com3=paths["com3"],
+                            run_id=f"runfix-{name}", out_dir=d, csv=None, com3_format="capture", rehearsal=False,
+                            reset_reason=case["args"].get("reset_reason", "MAINSWRST"), fixtures=fixtures,
+                            blackbox_board_sha256=sha, run_end_epoch=None)
+    sink = io.StringIO()
+    with contextlib.redirect_stdout(sink), contextlib.redirect_stderr(sink):
+        rc = cmd_run(ns)
+    if rc != 0:
+        return [f"run-exit:{rc}:{sink.getvalue().strip()[:160]}"]
+    pl = read_parse_log(os.path.join(d, f"runfix-{name}-parse.log"))
+    why = []
+    for k, v in case["exact"].items():
+        if pl.get(k) != v:
+            why.append(f"{k}:got:{pl.get(k)}")
+    for k, v in case["contains"].items():
+        got = pl.get(k)
+        if got is None or v not in got or (k.startswith("crit_") and not got.startswith("fail")):
+            why.append(f"{k}:got:{got}")
+    for k, v in pl.items():
+        if (k.startswith("crit_") and k not in case["exact"] and k not in case["contains"]
+                and v != "pass" and not v.startswith("n/a")):
+            why.append(f"{k}:unexpected:{v}")
+    return why
+
+
+def sizing_cases():
+    """I37 (m4-design.md 2.4, 14.21): invented parse-log keys, and the values §2.4 gives for
+    them, computed by hand from the design's text and not by the code under test. The
+    inputs are chosen so every division and ceiling is exact in binary floating point."""
+    def rate(c, bufs):
+        return f"cpu:{c},bufs_in_window:{bufs},events_in_window:10,span_ticks:250000000"
+
+    def buf(c, seq):
+        return f"cpu:{c},first_seq:1,last_seq:{seq},kept:{seq},gaps:0"
+
+    r0 = {"rung": "r0", "run_verdict": "pass", "cnt_l0_in": "cps:31250000", "mem_probe_pre": "750",
+          "mem_probe_armed": "746", "tp_l0": "rc:0,killed:0,ms:1000", "cnt_l0": "rc:0,killed:0,ms:1000",
+          "kevfile_l0": "10485760", "text_l0": "52428800", "tcu_v_bytes_sent": "500000", "tcu_v_ms": "100000"}
+    r0_ring = dict(r0, **{f"cnt_l0_rate_cpu{c}": rate(c, 1) for c in range(4)})
+    # CPU 3 has no RATE record, so it is budgeted at the busiest CPU's rate: 722 + 242 + 242 + 722.
+    r0_lin = dict(r0, cnt_l0_rate_cpu0=rate(0, 5), cnt_l0_rate_cpu1=rate(1, 1), cnt_l0_rate_cpu2=rate(2, 1))
+    r1_ring = {"rung": "r1", "run_verdict": "pass", "cnt_t_ring": "state:held,wrapped_cpus:none",
+               "cnt_t_pairs": "total:700,eligible:650,clean:600", "cnt_t_buf_cpu0": buf(0, 40),
+               "cnt_t_buf_cpu1": buf(1, 20), "cnt_t_buf_cpu2": buf(2, 10), "cnt_t_buf_cpu3": buf(3, 10),
+               "cnt_t_flt_c": "form:c,bytes:100000,pairs_written:2000,pairs_total:2000",
+               "tp_t": "rc:0,killed:0,ms:2000", "cnt_t": "rc:0,killed:0,ms:3000", "kevfile_t": "2097152",
+               "text_t": "10485760", "tcu_v_bytes_sent": "1000000", "tcu_v_ms": "100000", "mem_trace_pre": "300"}
+    r1_lin = dict(r1_ring, cnt_t_pairs="total:70,eligible:65,clean:60", cnt_t_buf_cpu0=buf(0, 20),
+                  cnt_t_buf_cpu1=buf(1, 0), cnt_t_buf_cpu2=buf(2, 0), cnt_t_buf_cpu3=buf(3, 0),
+                  tp_t="rc:0,killed:0,ms:1000", cnt_t="rc:0,killed:0,ms:1000", mem_trace_pre="900")
+    return [
+        # need1 = 16 x 0.25 x 60 + 2 = 242: K1 = 256, S = 20, need = 16 + 20 + 32; the caps halve once for the guard.
+        ("r1_ring", lambda: size_r1_values(r0_ring),
+         {"image": "m4-r1-k256", "k": "256", "s_mb": "20", "tl_args": "-r -k 256 -M -S 20M", "trace_need_mb": "68",
+          "fmt_need_mb": "403", "cap_v": "524288", "cap_c": "262144", "guard_s": "2700", "size_lin_bufs": "-",
+          "size_probe_cost_mb": "4"}),
+        # need1 = 722 > 512: lin. bufs = 1928, S = ceil(30.125) + 4 = 35, need = max(1, 4) + 35 + 32.
+        ("r1_lin", lambda: size_r1_values(r0_lin),
+         {"image": "m4-r1-lin", "k": "lin", "s_mb": "35", "tl_args": "-c -S 35M", "trace_need_mb": "71",
+          "fmt_need_mb": "478", "guard_s": "2700", "size_lin_bufs": "1928"}),
+        # p1 = 30, beta = 2: ring-limited at N2 = 165, K2 = 512. bufs2 = 512 + 257 + 130 + 130 = 1029, kev2 =
+        # 16859136 B = 8.0390625 x kev1; TP = ceil(8 x 8.0390625) + 60, CNT = ceil(12 x 8.0390625) + 30.
+        ("r2_ring", lambda: size_r2_values(r0_ring, r1_ring, True),
+         {"image": "m4-r2-k512-n165", "k": "512", "s_mb": "36", "iters": "165", "tp_bound": "125",
+          "cnt_bound": "127", "trace_need_mb": "100", "fmt_need_mb": "484", "guard_s": "2400",
+          "size_kev2_pred_bytes": "16859136", "accept_low_n": "1"}),
+        # p1 = 3, beta = 1: N_ring = 335 gives 1005 clean pairs, below 1200, so D1(b) at N2 = 4995. bufs2 = 7502 + 3 x 2,
+        # S = ceil(117.3125) + 4 = 122, need = 4 + 122 + 32; kev2 = 58.65625 x kev1, so TP = 235 + 60 and CNT = 235 + 30.
+        ("r2_lin", lambda: size_r2_values(r0_ring, r1_lin, False),
+         {"image": "m4-r2-lin-n4995", "k": "lin", "s_mb": "122", "tl_args": "-c -S 122M", "trace_need_mb": "158",
+          "tp_bound": "295", "cnt_bound": "265", "fmt_need_mb": "914", "guard_s": "2700", "size_lin_bufs": "7508"}),
+        # r1 had 20 MiB free at its gate: no N2 down to 15 fits, so the owner decides.
+        ("r2_memory_owner", lambda: size_r2_values(r0_ring, dict(r1_lin, mem_trace_pre="20"), True),
+         {"rc": "3", "lines~": "trace_need_mb:"}),
+    ]
+
+
 def cmd_selftest(a):
     log = Log()
     out = os.path.join(a.out_dir, "selftest.log")
@@ -2897,8 +3367,7 @@ def cmd_selftest(a):
             print(f"parse-m4: input error: {e}", file=sys.stderr)
             return 1
         board_runs = fixture_runs_from_lines(texts)
-    for i in (1, 2, 3, 4):
-        name = f"m4fix-{i}.txt"
+    for name in FIXTURE_NAMES:
         path = os.path.join(a.fixtures, name)
         try:
             exp = fixture_expects(path)
@@ -2962,7 +3431,8 @@ def cmd_selftest(a):
             cases.append(("straddle", straddle, index, False, "match compared="))
         for name, lim, idx, capped, want in cases:
             got = xcheck_pairs_record(XL, idx, lim, capped)
-            good = got.startswith(want)
+            # I34: every form also names both sides' in-range counts.
+            good = got.startswith(want) and " pc_in_range=" in got and " c_in_range=" in got
             log(f"selftest_xcheck_{name}", "ok" if good else f"fail(got:{got.replace(' ', '_')})")
             ok = ok and good
     # I31 (m4-design.md 14.13 and 14.14): the gate helpers I30 and I30b added
@@ -2971,9 +3441,8 @@ def cmd_selftest(a):
     # permanent and compared exactly rather than by prefix, because each helper
     # returns the list of reasons a criterion will fail for.
     #
-    # They cover the helpers only. crit_1, crit_2 and crit_3 read a whole run
-    # record, which selftest does not build, so the integration path those
-    # helpers sit in is still uncovered - 14.13's point stands.
+    # They cover the helpers only. The wiring into crit_1, crit_2 and crit_3 is
+    # covered by I35's run-level cases below, on a synthetic board record.
     MK = ("m4-ipc-start", "m4-ipc-end")
     TRC_OK = ["TRCCTL insert id=20 text=m4-ipc-start rc=0 errno=0",
               "TRCCTL insert id=21 text=m4-ipc-end rc=0 errno=0",
@@ -3021,6 +3490,41 @@ def cmd_selftest(a):
         good = list(got) == want
         log(f"selftest_gate_{name}", "ok" if good else f"fail(got:{'+'.join(got) or 'none'})")
         ok = ok and good
+    # I35 (m4-design.md 14.19): the run-level cases. Each builds a SYNTHETIC board
+    # r1 record, applies one rule's edit and runs `run` over it, so a rule that is
+    # written but not read by its criterion fails here, which the helper cases
+    # above cannot show.
+    try:
+        run_cases = read_run_cases(os.path.join(a.fixtures, "m4run-cases.txt"))
+    except InputError as e:
+        log("selftest_run_cases", f"error({str(e).replace(' ', '_')[:120]})")
+        run_cases = []
+    if not run_cases:
+        ok = False
+    for case in run_cases:
+        why = run_case(case, a.fixtures, a.out_dir)
+        log(f"selftest_run_{case['name']}", "ok" if not why else "fail(" + "+".join(why).replace(" ", "_")[:400] + ")")
+        ok = ok and not why
+    # I37 (m4-design.md 14.21): the sizing rules, which no test reached before (14.8).
+    for name, fn, want in sizing_cases():
+        try:
+            rc, values, lines = fn()
+        except InputError as e:
+            log(f"selftest_size_{name}", f"error({str(e).replace(' ', '_')[:80]})")
+            ok = False
+            continue
+        bad = []
+        for k, v in want.items():
+            if k == "rc":
+                got = str(rc)
+            elif k == "lines~":
+                got = v if any(v in line for line in lines) else "+".join(lines)
+            else:
+                got = "-rc%d-" % rc if rc else str(values.get(k))
+            if got != v:
+                bad.append(f"{k}:got:{got}")
+        log(f"selftest_size_{name}", "ok" if not bad else "fail(" + "+".join(bad).replace(" ", "_")[:300] + ")")
+        ok = ok and not bad
     log("selftest", "pass" if ok else "fail")
     try:
         write_text(out, log.text())
@@ -3089,26 +3593,80 @@ def cmd_regress_7b(a):
 
 # ------------------------------------------------------------------ synth-com3 (§14: a test input, never a record)
 
-def cmd_synth_com3(a):
-    base = os.path.normcase(os.path.abspath(os.path.join(REPO, "qhv")))
-    if not os.path.normcase(os.path.abspath(a.out_dir)).startswith(base + os.sep):
-        print("parse-m4: refused: synth-com3 writes under qhv/ only", file=sys.stderr)
-        return 2
-    try:
-        data = read_bytes(a.listing)
-    except InputError as e:
-        print(f"parse-m4: input error: {e}", file=sys.stderr)
-        return 1
+FIXTURE_NAMES = tuple(f"m4fix-{i}.txt" for i in range(1, 7))
+
+SYNTH_EDIT_OPS = ("sub", "sub-com3", "resub", "del", "del-first", "del-last", "add-after")
+
+
+def apply_synth_edits(items, edits, side):
+    """The run-level cases' edits (fixtures/m4run-cases.txt) over one record's console
+    lines; a framed block body is never edited. Returns the lines and, per edit, how
+    many lines it changed on this side."""
+    out = list(items)
+    changed = [0] * len(edits)
+    for i, (op, x, y) in enumerate(edits):
+        if op == "sub-com3" and side != "com3":
+            continue
+        if op in ("sub", "sub-com3", "resub"):
+            rx = re.compile(x) if op == "resub" else None
+            new = []
+            for it in out:
+                if isinstance(it, str):
+                    t2 = rx.sub(y, it) if rx else it.replace(x, y)
+                    if t2 != it:
+                        changed[i] += 1
+                        it = t2
+                new.append(it)
+            out = new
+        elif op in ("del", "del-first", "del-last"):
+            idx = [j for j, it in enumerate(out) if isinstance(it, str) and it.lstrip().startswith(x)]
+            idx = idx[:1] if op == "del-first" else (idx[-1:] if op == "del-last" else idx)
+            changed[i] += len(idx)
+            drop = set(idx)
+            out = [it for j, it in enumerate(out) if j not in drop]
+        elif op == "add-after":
+            for j, it in enumerate(out):
+                if it == x:
+                    out.insert(j + 1, y)
+                    changed[i] += 1
+                    break
+        else:
+            raise InputError(f"unknown synthetic edit {op}")
+    return out, changed
+
+
+def synth_record(data, *, rung, profile="tcg", e3="status0", start_marker="m4d-ipc-start", end_marker="m4d-ipc-end",
+                 vcap=1048576, ccap=524288, transport="console", fault="none", edits=(), vbody_del=(),
+                 params_over=None):
+    """A SYNTHETIC COM3 capture, black box and params around one listing: a test input
+    for the parser's plumbing, never a record (§14, I10). Returns (com3, bb, params,
+    changed), where changed counts, per edit and then per vbody_del entry, the lines
+    it changed on either record.
+
+    profile `tcg` is what the §11 rehearsal parse (--rehearsal) reads. profile
+    `board` (I35, m4-design.md 14.19) adds every line a board r1 run prints that the
+    board-only criteria read - landing, the image's own CONFIG, rate lines, guest
+    phases, the reset line - so a record built from a fixture can be parsed as a
+    board run and each rule shown to be wired into its criterion."""
+    board = profile == "board"
+    if board and rung != "r1":
+        raise InputError("the board profile builds an r1 record only")
     # A target traceprinter writes LF only. The 7b listings were re-made on the PC by
     # traceprinter.exe and end every line in CRLF, so a synthetic target block built
     # from them would carry CR bytes the real one never has, and the PC's CR strip
     # (section 6.2) would then fail flt_v on every fault. Normalise first; the crlf
     # fault still injects CR on the capture side.
     data = data.replace(b"\r\n", b"\n")
-    w = "l0" if a.rung == "r0" else "t"
-    L = Listing(a.start_marker, a.end_marker, e3_status0=(a.e3 == "status0")).feed_bytes(data)
-    vbody, vst = verbatim_selection(data, L, a.vcap)
-    cbody, cst = compact_list(L, a.ccap, w)
+    w = "l0" if rung == "r0" else "t"
+    mode = "trace" if rung == "r0" else "full"
+    L = Listing(start_marker, end_marker, e3_status0=(e3 == "status0")).feed_bytes(data)
+    vbody, vst = verbatim_selection(data, L, vcap)
+    vdel_changed = []
+    for text in vbody_del:
+        kept = [raw for raw in iter_raw_lines(vbody) if text.encode("latin-1") not in raw]
+        vdel_changed.append(len(list(iter_raw_lines(vbody))) - len(kept))
+        vbody = b"".join(kept)
+    cbody, cst = compact_list(L, ccap, w)
     recs = L.records(label=w)
     for name, f in recs:
         if name == "IN":
@@ -3120,49 +3678,86 @@ def cmd_synth_com3(a):
     fc = ("FLT", {"w": w, "form": "c", "file": "/dev/shmem/flt.c", "lines": str(cst["lines"]),
                   "bytes": str(len(cbody)), "capped": str(cst["capped"]),
                   "pairs_written": str(cst["pairs_written"]), "pairs_total": str(cst["pairs_total"])})
-    blocks = [("v", vbody)] if a.rung == "r0" else [("v", vbody), ("c", cbody)]
+    blocks = [("v", vbody)] if rung == "r0" else [("v", vbody), ("c", cbody)]
+    params = {"image": "synthetic", "rung": rung, "mode": mode, "p": 4 if board else 2,
+              "variant": "synthetic-board" if board else "synthetic", "synthetic": 1, "transport": transport,
+              "iters": 15, "guard_s": 2700 if board else "-", "start_marker": start_marker, "end_marker": end_marker,
+              "e3": e3, "fixtures": ",".join(FIXTURE_NAMES)}
+    if board:
+        params.update({"image": "m4-r1-k256", "kind": "ring", "k": 256, "s_mb": 20,
+                       "tl_args": "-r -k 256 -M -S 20M", "trace_need_mb": 68, "forms": "v c"})
     # Every console line below is invented plumbing around the listing (SYNTHETIC, never a record);
-    # it lets run's criteria see the lines a board run would print.
-    mode = "trace" if a.rung == "r0" else "full"
-    console = ["M4 STATE config",
-               f"M4 CONFIG rung={a.rung} mode={mode} synthetic=1 clock=unverified transport={a.transport}",
-               "M4 STATE preflight", "M4 MEM boot 900MB/992MB", "M4 STATE rate_pre", "M4 RATES r0 skipped",
-               "M4 STATE integrity_pre", "M4 CHECK md5_pre guest ok", "M4 CHECK md5_pre disk ok",
-               "M4 CHECK md5_pre conf ok"]
-    if a.rung == "r0":
+    # it lets run's criteria see the lines a board run would print. The console follows the params
+    # as built here; params_over changes only the params file, so a case can make them disagree.
+    console = []
+    if board:
+        console += ["T234-SHIM EL=2 synthetic", "JUMP 0x80080000 synthetic", "Enabling EL2 host hypervisor support (VHE)"]
+        console += [f"t234: cpu {n} el2-host EL2 HCR_EL2=0x408000000" for n in range(4)]
+        console += [f"t234: hvtimer cpu {n} verdict=wired" for n in range(4)]
+        console += ["t234: all 4 cpus parked in smp_spin", "Starting next program", f"T234 M4 {rung} -P4: procnto up",
+                    "BWAIT guard armed secs=2700", "SMPCHECK census hyp qtime_intr=28 hypinfo_flags=0x1",
+                    "SMPCHECK census tick=ok", "SMPCHECK CENSUS PASS", "M4 STATE config",
+                    f"M4 CONFIG rung={rung} mode={mode} startup='startup-t234-orin-nano -vvv -P4 -Q enable,el2-host "
+                    f"-m992M -Wkeep -A -Dtcu' q=el2-host w=keep A=1 cpus=4 guest_sha256={PIN_GUEST} "
+                    f"disk_sha256={PIN_DISK} conf_sha256={'0' * 64} client_sha256={PIN_CLIENT} clock=unverified "
+                    f"kind={params['kind']} tl_args='{params['tl_args']}' iters=15 forms='{params['forms']}' "
+                    f"trace_need_mb={params['trace_need_mb']} transport={transport}"]
+    else:
+        console += ["M4 STATE config",
+                    f"M4 CONFIG rung={rung} mode={mode} synthetic=1 clock=unverified transport={transport}"]
+
+    def rates(tag):
+        if not board:
+            return [f"M4 RATES {tag} skipped"]
+        return [f"SMPCHECK done cpu={c} secs=20 elapsed_ms=20000 samples=20 misplaced=0 backwards=0 iters=20 "
+                f"rate=1 timer0_ms=0 timer0_cpu={c} timer1_ms=0 timer1_cpu={c} pin=ok end=ok" for c in range(4)]
+
+    console += ["M4 STATE preflight", "M4 MEM boot 900MB/992MB", "M4 STATE rate_pre"] + rates("r0")
+    console += ["M4 STATE integrity_pre", "M4 CHECK md5_pre guest ok", "M4 CHECK md5_pre disk ok",
+                "M4 CHECK md5_pre conf ok"]
+    stamps, ipc_lines = [], []
+    if rung == "r0":
         console += ["M4 STATE clock"]
         console += [f"CLK VERDICT mode={m} usable=5 strict=5 res=5 result=agree" for m in ("same0", "same1", "cross")]
         console += ["M4 STATE fixtures"]
-        for i in (1, 2, 3, 4):
-            FL = Listing("m4-fix-start", "m4-fix-end").feed_file(os.path.join(HERE, "fixtures", f"m4fix-{i}.txt"))
+        for fxname in FIXTURE_NAMES:
+            FL = Listing("m4-fix-start", "m4-fix-end").feed_file(os.path.join(HERE, "fixtures", fxname))
             frecs = FL.records(label="fix", quiet=True)
             for fname, ff in frecs:
                 if fname == "IN":
-                    ff["path"] = f"/proc/boot/m4fix-{i}.txt"
+                    ff["path"] = f"/proc/boot/{fxname}"
             console += render_records(frecs) + ["M4C END w=fix rc=0 reason=ok"]
         console += ["M4 STATE disk", "M4 CHECK disk_copy ok", "BWAIT path hit=/dev/qvmdisk0 ms=5",
                     "M4 MEM disk 750MB/992MB", "M4 STATE probe", "M4 MEM probe_pre 750MB/992MB",
                     "M4 MEM probe_armed 746MB/992MB", "TRCCTL stop rc=0 errno=0", "M4 STOP p by=stop",
                     "M4 MEM probe_stopped 742MB/992MB", "M4 STATE l0", "M4 STOP l0 by=self",
                     "M4 STATE teardown", "M4 STATE release", "M4 MEM released 880MB/992MB",
-                    "M4 STATE rate_post", "M4 RATES r1 skipped", "M4 STATE format"]
+                    "M4 STATE rate_post"] + rates("r1") + ["M4 STATE format"]
         runs = [("p", False), (w, True)]
     else:
+        pidin = ["     pid tid name               cpu  ", "  700000   1 qvm                  0  "]
+        stamps = ["STAMP qvm_launch cycles=1000 cps=31250000 cpu=0 mono_ns=0 bytes=0"]
+        if board:
+            stamps += [f"STAMP {n} cycles={c} cps=31250000 cpu=0 mono_ns=0 bytes=0"
+                       for n, c in (("g_first", 1100), ("g_devb", 1200), ("g_net", 1300), ("g_ifup", 1400),
+                                    ("g_sshd", 1500), ("g_misc", 1600), ("g_srv", 1650), ("g_startup_complete", 1700))]
+        stamps += ["STAMP banner cycles=2000 cps=31250000 cpu=0 mono_ns=0 bytes=0"]
+        ipc_lines = ["samples=15 payload=48 cps=31250000", "P50=1000 ns  P99=2000 ns  Max=2000 ns",
+                     "sentinel_recoveries=0 sentinel_bounces=0",
+                     "BWAIT run prog=qnx-host-client rc=0 sig=0 killed=0 ms=1000"]
+        arm_kind = params.get("kind", "ring")
+        arm_args = params.get("tl_args", "synthetic")
         console += ["M4 STATE disk", "M4 CHECK disk_copy ok", "BWAIT path hit=/dev/qvmdisk0 ms=5",
-                    "M4 MEM disk 750MB/992MB", "M4 STATE hostcheck", "M4 STATE window", "M4 STATE report",
-                    "STAMP qvm_launch cycles=1000 cps=31250000 cpu=0 mono_ns=0 bytes=0",
-                    "STAMP banner cycles=2000 cps=31250000 cpu=0 mono_ns=0 bytes=0",
-                    "QNX qnx-guest 8.0.0 synthetic ARMv8_Foundation_Model aarch64le",
-                    "M4 MEM banner 200MB/992MB", "M4 STATE ipc", "M4 MEM trace_pre 200MB/992MB",
-                    "M4 TRACE ARM kind=ring args='synthetic' file=/dev/shmem/t.kev bound=797",
-                    "M4 STATE report_ipc", "TRCCTL insert id=20 text=m4-ipc-start rc=0 errno=0",
-                    "TRCCTL insert id=21 text=m4-ipc-end rc=0 errno=0", "TRCCTL stop rc=0 errno=0",
-                    "M4 STOP t by=stop", "samples=15 payload=48 cps=31250000",
-                    "sentinel_recoveries=0 sentinel_bounces=0",
-                    "BWAIT run prog=qnx-host-client rc=0 sig=0 killed=0 ms=1000",
-                    "M4 STATE teardown", "M4 STATE integrity_post", "M4 CHECK md5_post guest ok",
+                    "M4 MEM disk 750MB/992MB", "M4 STATE hostcheck", "M4 STATE window", "M4 STATE report"]
+        console += stamps + ["M4 MEM banner 200MB/992MB"] + pidin
+        console += ["M4 STATE ipc", "M4 MEM trace_pre 200MB/992MB",
+                    f"M4 TRACE ARM kind={arm_kind} args='{arm_args}' file=/dev/shmem/t.kev bound=437",
+                    "M4 STATE report_ipc", f"TRCCTL insert id=20 text={start_marker} rc=0 errno=0",
+                    f"TRCCTL insert id=21 text={end_marker} rc=0 errno=0", "TRCCTL stop rc=0 errno=0",
+                    "M4 STOP t by=stop"] + ipc_lines + pidin
+        console += ["M4 STATE teardown", "rc=3", "M4 STATE integrity_post", "M4 CHECK md5_post guest ok",
                     "M4 CHECK md5_post disk ok", "M4 STATE release", "M4 MEM released 880MB/992MB",
-                    "M4 STATE rate_post", "M4 RATES r1 skipped", "M4 STATE format"]
+                    "M4 STATE rate_post"] + rates("r1") + ["M4 STATE format"]
         runs = [(w, True)]
     for rw, is_main in runs:
         rrecs = L.records(label=rw)
@@ -3180,68 +3775,89 @@ def cmd_synth_com3(a):
         console += render_records(rrecs)
         if is_main:
             console += [f"M4C PASS w={rw} pass=3 lines={L.lines} ms=1"]
-            console += render_records([fv] + ([fc] if a.rung != "r0" else []))
+            console += render_records([fv] + ([fc] if rung != "r0" else []))
         console += [f"M4C END w={rw} rc=0 reason=ok"]
-    console += ["M4 STATE summary", "M4 FAIL_STATE none", "M4 STATE send"]
-    pre = "\n".join(console) + "\n"
-    com3 = bytearray()
-    bb = bytearray(pre.encode())
-    com3 += pre.encode()
+    console += ["M4 STATE summary"] + stamps + ipc_lines + ["M4 FAIL_STATE none", "M4 STATE send"]
+    items = list(console)
     for name, body in blocks:
-        body_out = body
-        if a.fault == "crlf":
-            body_out = body.replace(b"\n", b"\r\n")
         crc, ln = posix_cksum(body)
-        nlines = body.count(b"\n")
-        hashes = ["BWAIT run prog=md5sum rc=0 sig=0 killed=0 ms=10",
+        items += ["BWAIT run prog=md5sum rc=0 sig=0 killed=0 ms=10",
                   "BWAIT run prog=toybox rc=0 sig=0 killed=0 ms=10",
                   "BWAIT run prog=toybox rc=0 sig=0 killed=0 ms=10",
-                  f"M4 FLT BEGIN name={name} rung={a.rung} lines={nlines} bytes={ln} wc_bytes={ln} "
+                  f"M4 FLT BEGIN name={name} rung={rung} lines={body.count(chr(10).encode())} bytes={ln} wc_bytes={ln} "
                   f"md5={hashlib.md5(body).hexdigest()} cksum={crc}"]
-        text = "\n".join(hashes) + "\n"
-        bb += text.encode()
-        com3 += text.encode()
-        if a.fault == "corrupt-v" and name == "v" and len(body_out) > 10:
-            body_out = body_out[:5] + (b"X" if body_out[5:6] != b"X" else b"Y") + body_out[6:]
-        com3 += f"=M4FLT= BEGIN name={name} rung={a.rung}\n".encode() + body_out
-        if not (a.fault == "truncate-c" and name == "c"):
-            com3 += f"=M4FLT= END name={name}\n".encode()
-        tail = []
-        if a.transport == "tcu":
-            tail = [f"BWAIT run prog=tcu-cat rc=0 sig=0 killed=0 ms=100",
-                    f"tcu-cat: bytes_in=33 bytes_sent=33 drops=0 timeouts=0 max_consecutive=0 aborted=0 deadline=0 ms=5 rc=0",
-                    f"BWAIT run prog=tcu-cat rc=0 sig=0 killed=0 ms=10000",
-                    f"tcu-cat: bytes_in={ln} bytes_sent={ln} drops=0 timeouts=0 max_consecutive=0 aborted=0 deadline=0 ms=10000 rc=0",
-                    f"BWAIT run prog=tcu-cat rc=0 sig=0 killed=0 ms=100",
-                    f"tcu-cat: bytes_in=20 bytes_sent=20 drops=0 timeouts=0 max_consecutive=0 aborted=0 deadline=0 ms=5 rc=0"]
-        tail.append(f"M4 FLT END name={name} rc=0")
-        text = "\n".join(tail) + "\n"
-        bb += text.encode()
-        com3 += text.encode()
-    post = "M4 STATE diag\nM4 FAIL_STATE none\nM4 STATE end\n"
-    bb += post.encode()
-    com3 += post.encode()
-    if a.fault == "bb-cut":
+        items.append(("BODY", name, body))
+        if transport == "tcu":
+            items += ["BWAIT run prog=tcu-cat rc=0 sig=0 killed=0 ms=100",
+                      "tcu-cat: bytes_in=33 bytes_sent=33 drops=0 timeouts=0 max_consecutive=0 aborted=0 deadline=0 ms=5 rc=0",
+                      "BWAIT run prog=tcu-cat rc=0 sig=0 killed=0 ms=10000",
+                      f"tcu-cat: bytes_in={ln} bytes_sent={ln} drops=0 timeouts=0 max_consecutive=0 aborted=0 deadline=0 ms=10000 rc=0",
+                      "BWAIT run prog=tcu-cat rc=0 sig=0 killed=0 ms=100",
+                      "tcu-cat: bytes_in=20 bytes_sent=20 drops=0 timeouts=0 max_consecutive=0 aborted=0 deadline=0 ms=5 rc=0"]
+        items.append(f"M4 FLT END name={name} rc=0")
+    items += ["M4 STATE diag"]
+    if rung != "r0":
+        items += ["QNX qnx-guest 8.0.0 synthetic ARMv8_Foundation_Model aarch64le", "M4 MEM end 880MB/992MB"]
+    items += ["M4 FAIL_STATE none", "M4 STATE end"]
+    if board:
+        items += [f"T234 M4 {rung} -P4: resetting so the log can be recovered"]
+
+    com3_items, ch_com3 = apply_synth_edits(items, list(edits), "com3")
+    bb_items, ch_bb = apply_synth_edits(items, list(edits), "bb")
+
+    def render(side_items, with_bodies):
+        buf = bytearray()
+        for it in side_items:
+            if isinstance(it, str):
+                buf += (it + "\n").encode("latin-1")
+                continue
+            if not with_bodies:
+                continue
+            _, name, body = it
+            body_out = body.replace(b"\n", b"\r\n") if fault == "crlf" else body
+            if fault == "corrupt-v" and name == "v" and len(body_out) > 10:
+                body_out = body_out[:5] + (b"X" if body_out[5:6] != b"X" else b"Y") + body_out[6:]
+            buf += f"=M4FLT= BEGIN name={name} rung={rung}\n".encode() + body_out
+            if not (fault == "truncate-c" and name == "c"):
+                buf += f"=M4FLT= END name={name}\n".encode()
+        return bytes(buf)
+
+    com3 = render(com3_items, True)
+    bb = render(bb_items, False)
+    if fault == "bb-cut":
         bb = bb[:len(bb) // 2]
     now = int(datetime.now(timezone.utc).timestamp())
     iso = datetime.fromtimestamp(now, timezone.utc).isoformat()
     head = f"--- raw capture started on COM3 at 115200, {iso} epoch={now} seconds=6000 ---\n".encode()
     endl = f"\n--- raw capture ended {iso} bytes={len(com3)} ---\n".encode()
-    params = {"image": "synthetic", "rung": a.rung, "mode": "trace" if a.rung == "r0" else "full", "p": 2,
-              "variant": "synthetic", "synthetic": 1, "transport": a.transport, "iters": 15, "guard_s": "-",
-              "start_marker": a.start_marker, "end_marker": a.end_marker, "e3": a.e3,
-              "fixtures": "m4fix-1.txt,m4fix-2.txt,m4fix-3.txt,m4fix-4.txt"}
+    params.update(params_over or {})
+    changed = [max(a, b) for a, b in zip(ch_com3, ch_bb)] + vdel_changed
+    return head + com3 + endl, bb, params, changed
+
+
+def cmd_synth_com3(a):
+    base = os.path.normcase(os.path.abspath(os.path.join(REPO, "qhv")))
+    if not os.path.normcase(os.path.abspath(a.out_dir)).startswith(base + os.sep):
+        print("parse-m4: refused: synth-com3 writes under qhv/ only", file=sys.stderr)
+        return 2
     try:
-        write_bytes(os.path.join(a.out_dir, "synthetic-com3.log"), head + bytes(com3) + endl)
-        write_bytes(os.path.join(a.out_dir, "synthetic-blackbox.log"), bytes(bb))
+        com3, bb, params, _ = synth_record(read_bytes(a.listing), rung=a.rung, profile=a.profile, e3=a.e3,
+                                           start_marker=a.start_marker, end_marker=a.end_marker, vcap=a.vcap,
+                                           ccap=a.ccap, transport=a.transport, fault=a.fault)
+    except InputError as e:
+        print(f"parse-m4: input error: {e}", file=sys.stderr)
+        return 1
+    try:
+        write_bytes(os.path.join(a.out_dir, "synthetic-com3.log"), com3)
+        write_bytes(os.path.join(a.out_dir, "synthetic-blackbox.log"), bb)
         write_text(os.path.join(a.out_dir, "synthetic.params"),
-                   "# SYNTHETIC test input built by parse-m4.py synth-com3 from a TCG listing; not a record.\n" +
+                   "# SYNTHETIC test input built by parse-m4.py synth-com3 from a listing; not a record.\n" +
                    "".join(f"{k}={v}\n" for k, v in params.items()))
     except Refused as e:
         print(f"parse-m4: refused: {e}", file=sys.stderr)
         return 2
     print(f"SYNTH wrote {rel_repo(a.out_dir)}/synthetic-com3.log, synthetic-blackbox.log, synthetic.params "
-          f"(fault={a.fault}, v_bytes={len(vbody)}, c_bytes={len(cbody)})")
+          f"(profile={a.profile}, fault={a.fault}, com3_bytes={len(com3)}, blackbox_bytes={len(bb)})")
     return 0
 
 
@@ -3262,6 +3878,8 @@ def main(argv=None):
     r.add_argument("--rehearsal", action="store_true")
     r.add_argument("--reset-reason")
     r.add_argument("--fixtures")
+    r.add_argument("--blackbox-board-sha256")   # I34: the board's own sha256 of its black box
+    r.add_argument("--run-end-epoch", type=int)  # I39: the run's end, for a T-run's CSV row
 
     s1 = sub.add_parser("size-r1")
     s1.add_argument("--r0-parse", required=True)
@@ -3306,6 +3924,7 @@ def main(argv=None):
     sy.add_argument("--ccap", type=int, default=524288)
     sy.add_argument("--transport", choices=("tcu", "console"), default="console")
     sy.add_argument("--fault", choices=("none", "corrupt-v", "truncate-c", "crlf", "bb-cut"), default="none")
+    sy.add_argument("--profile", choices=("tcg", "board"), default="tcg")   # I35
 
     a = ap.parse_args(argv)
     handlers = {"run": cmd_run, "size-r1": cmd_size_r1, "size-r2": cmd_size_r2, "series": cmd_series,

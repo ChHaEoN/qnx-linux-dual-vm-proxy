@@ -339,6 +339,14 @@ static uint64_t g_lines;
 static uint64_t g_bytes;
 static uint64_t g_events;
 static uint64_t g_unformatted;
+/* I36 (m4-design.md 14.20), in lockstep with parse-m4.py: the unformatted lines by
+ * kind, and the first line that is neither header nor blank, so the board's own
+ * layout is seen rather than inferred from a count. */
+static uint64_t g_unfmt_header;
+static uint64_t g_unfmt_blank;
+static uint64_t g_unfmt_other;
+static char     g_unfmt_sample[SAMPLE_CHARS + 1u];
+static int      g_unfmt_sampled;
 static uint64_t g_long;
 static uint64_t g_oor;
 static uint64_t g_cps = DEFAULT_CPS;
@@ -980,11 +988,34 @@ hist_add(const char *const cls, const char *const sub)
 	hist_hash[s] = (uint32_t)nhist;
 }
 
+/* A SAMPLE's text: up to the line end or SAMPLE_CHARS, double quotes as '. dst holds SAMPLE_CHARS + 1. */
+static void
+sample_copy(char *const dst, const char *const line)
+{
+	size_t j = 0;
+
+	for (const char *p = line; *p != '\0' && *p != '\n' && *p != '\r' && j < SAMPLE_CHARS; p++) {
+		dst[j++] = (*p == '"') ? '\'' : *p;
+	}
+	dst[j] = '\0';
+}
+
+/* I36: a line holding nothing but spaces, tabs and its line end. */
+static int
+blank_line(const char *const line)
+{
+	for (const char *p = line; *p != '\0'; p++) {
+		if (*p != ' ' && *p != '\t' && *p != '\r' && *p != '\n') {
+			return 0;
+		}
+	}
+	return 1;
+}
+
 static void
 sample_add(const char *const sub, const char *const line)
 {
 	struct sample *sm;
-	size_t         j = 0;
 
 	for (size_t i = 0; i < nsamples; i++) {
 		if (strcmp(samples[i].sub, sub) == 0) {
@@ -996,10 +1027,7 @@ sample_add(const char *const sub, const char *const line)
 	}
 	sm = &samples[nsamples++];
 	copy_field(sm->sub, sizeof(sm->sub), sub, strlen(sub));
-	for (const char *p = line; *p != '\0' && *p != '\n' && *p != '\r' && j < SAMPLE_CHARS; p++) {
-		sm->line[j++] = (*p == '"') ? '\'' : *p;
-	}
-	sm->line[j] = '\0';
+	sample_copy(sm->line, line);
 }
 
 static void
@@ -1397,6 +1425,17 @@ pass1(FILE *const f)
 		}
 		if (!parse_event(buf, &e)) {
 			g_unformatted++;
+			if (!seen_event) {
+				g_unfmt_header++;
+			} else if (blank_line(buf)) {
+				g_unfmt_blank++;
+			} else {
+				g_unfmt_other++;
+				if (!g_unfmt_sampled) {
+					sample_copy(g_unfmt_sample, buf);
+					g_unfmt_sampled = 1;
+				}
+			}
 			if (!seen_event && strstr(buf, "TRACE_CYCLES_PER_SEC") != NULL) {
 				uint64_t cps = 0;
 
@@ -2093,9 +2132,10 @@ records(void)
 	char list[64];
 
 	rec("M4C IN w=%s path=%s lines=%" PRIu64 " bytes=%" PRIu64 " events=%" PRIu64 " unformatted=%" PRIu64
+	    " unformatted_header=%" PRIu64 " unformatted_blank=%" PRIu64 " unformatted_other=%" PRIu64
 	    " long_lines=%" PRIu64 " cpu_out_of_range=%" PRIu64 " cps=%" PRIu64 " cps_source=%s\n",
-	    opt_label, opt_in, g_lines, g_bytes, g_events, g_unformatted, g_long, g_oor, g_cps,
-	    g_cps_header ? "header" : "default");
+	    opt_label, opt_in, g_lines, g_bytes, g_events, g_unformatted, g_unfmt_header, g_unfmt_blank,
+	    g_unfmt_other, g_long, g_oor, g_cps, g_cps_header ? "header" : "default");
 
 	if (!opt_quiet) {
 		size_t const printed = (nhist < HIST_PRINT) ? nhist : HIST_PRINT;
@@ -2117,6 +2157,10 @@ records(void)
 		}
 		for (size_t i = 0; i < nsamples; i++) {
 			rec("M4C SAMPLE w=%s sub=%s line=\"%s\"\n", opt_label, samples[i].sub, samples[i].line);
+		}
+		/* I36: outside SAMPLE_MAX, so it never displaces a QVM subtype's sample. */
+		if (g_unfmt_sampled) {
+			rec("M4C SAMPLE w=%s sub=unformatted line=\"%s\"\n", opt_label, g_unfmt_sample);
 		}
 	}
 

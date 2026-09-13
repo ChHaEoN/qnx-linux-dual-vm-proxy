@@ -966,17 +966,26 @@ cmd_run() {
 		rec "run black box copy FAILED: it stays on the board as $IMG-$UTC-blackbox.log"
 		bb=""
 	fi
+	# I39 (m4-design.md 6.4, 14.23): the run's end time for a T-run's CSV row. The capture
+	# is still running here, so its file has no end line; this is the PC clock when L4T
+	# was back and the record was copied.
+	run_end_epoch="$(date +%s)"
 	if cp "$M4_COM3_LOG" "$com3" 2>/dev/null; then
-		rec "run COM3 copied: $(basename "$com3") bytes=$(stat -c %s "$com3") raw_sha256=$(sha256sum "$com3" | cut -d' ' -f1). L4T is back: stop the capture after this command returns"
+		rec "run COM3 copied: $(basename "$com3") bytes=$(stat -c %s "$com3") raw_sha256=$(sha256sum "$com3" | cut -d' ' -f1) run_end_epoch=$run_end_epoch; L4T is back: stop the capture after this command returns"
 	else
 		rec "run COM3 copy FAILED (the capture may hold the file): stop the capture, then copy it as $(basename "$com3")"
 		com3=""
 	fi
 
-	# step 8b: the parser on the raw copies (§7.2 item 7)
+	# step 8b: the parser on the raw copies (§7.2 item 7). I34 (m4-design.md 14.18): the
+	# board's own sha256 of its black box goes with it, so crit_bb compares it with the
+	# copy the parser actually reads.
+	board_bb_sha=""
+	[ -n "$bb" ] && board_bb_sha="$(kv blackbox_sha256 "$out")"
 	if [ -n "$com3" ]; then
 		verdict="$(timeout 900 "$PY_BIN" "$PARSER" run --params "$PARAMS" --blackbox "${bb:-none}" --com3 "$com3" \
-			--run-id "$run_id" --out-dir "$RECDIR/out" --reset-reason "$reason" 2>&1)"
+			--run-id "$run_id" --out-dir "$RECDIR/out" --reset-reason "$reason" \
+			--blackbox-board-sha256 "${board_bb_sha:-none}" --run-end-epoch "$run_end_epoch" 2>&1)"
 		rc=$?
 		printf '%s\n' "$verdict" | grep -E '^(M4PC |parse-m4: )' | rec_pipe
 		rec "run parser rc=$rc (parse log: out/$run_id-parse.log)"

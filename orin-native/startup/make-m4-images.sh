@@ -126,7 +126,7 @@ IFS_NAMES=(
 	libz.so.2 libcrypto.so.3 libqcrypto.so.1.0 qcrypto-openssl-3.so libpci.so.3.0 qcrypto.conf
 	libtracelog.so.1 libtraceparser.so.1
 	tcu-cat stamp bwait smpcheck trcctl clkcmp m4count qnx-host-client m4-host.ksh g2.conf
-	m4fix-1.txt m4fix-2.txt m4fix-3.txt m4fix-4.txt guest-ifs.bin disk-qvm
+	m4fix-1.txt m4fix-2.txt m4fix-3.txt m4fix-4.txt m4fix-5.txt m4fix-6.txt guest-ifs.bin disk-qvm
 	ksh pidin on slay waitfor shutdown devc-pty slogger2 slog2info pipe
 	qvm qvm-check vdev-pl011.so vdev-virtio-console.so vdev-virtio-blk.so vdev-shmem.so
 	devb-loopback toybox cat cp cmp grep head md5sum tail wc
@@ -476,7 +476,7 @@ params_r0() {
 }
 
 params_sized() {
-	local line key val kk s want_image worst caps
+	local line key val kk s want_image worst caps pcost cost
 	STEP="parameters (step 8)"
 	[ -f "$SIZE_FILE" ] || die "no size file $SIZE_FILE"
 	while IFS= read -r line || [ -n "$line" ]; do
@@ -503,18 +503,33 @@ params_sized() {
 	same rung "$RUNG"
 	same mode full
 	same p 4
+	# I37 (m4-design.md 2.4 step 3, 14.21): the memory rule is recomputed, not floored. The size
+	# file carries the two inputs the generator cannot know: r0's probe cost in whole MiB, and for a
+	# linear window the buffers its budget allows, summed over the CPUs.
+	[ -n "${PARAM[size_probe_cost_mb]+set}" ] \
+		|| die "$STEP: size file lacks size_probe_cost_mb; re-run parse-m4.py size-$RUNG (I37)"
+	[[ "${PARAM[size_probe_cost_mb]}" =~ ^[0-9]+(\.0)?$ ]] \
+		|| die "$STEP: size_probe_cost_mb='${PARAM[size_probe_cost_mb]}' is not a whole number of MiB"
+	pcost="${PARAM[size_probe_cost_mb]%.0}"
 	if [ "${PARAM[k]}" = lin ]; then
-		kk=512
 		same kind linear
-		same s_mb "$(s_of_k 512)"
+		[ -n "${PARAM[size_lin_bufs]+set}" ] || die "$STEP: a linear size file lacks size_lin_bufs; re-run parse-m4.py size-$RUNG (I37)"
+		need_int size_lin_bufs 1 1000000
+		same s_mb $(( $(ceil_div $(( ${PARAM[size_lin_bufs]} * 16 )) 1024) + 4 ))
 		same tl_args "-c -S ${PARAM[s_mb]}M"
+		# a linear capture passes no -k, so it keeps tracelogger's default 8 kernel buffers per CPU (I26)
+		cost=$(ring_mb 8)
+		(( pcost > cost )) && cost=$pcost
 	else
 		need_int k 64 512
 		kk="${PARAM[k]}"
 		same kind ring
 		same s_mb "$(s_of_k "$kk")"
 		same tl_args "-r -k $kk -M -S ${PARAM[s_mb]}M"
+		cost=$(ring_mb "$kk")
+		(( $(ceil_div $(( pcost * kk )) 64) > cost )) && cost=$(ceil_div $(( pcost * kk )) 64)
 	fi
+	same trace_need_mb $(( cost + ${PARAM[s_mb]} + 32 ))
 	need_int iters 15 13200
 	need_int ipc_bound 240 900
 	need_int banner_bound 60 900
@@ -530,13 +545,12 @@ params_sized() {
 	same send_t_v $(( ${PARAM[send_v]} - 5 ))
 	same send_t_c $(( ${PARAM[send_c]} - 5 ))
 	same tl_bound $(( 2 + ${PARAM[ipc_bound]} + 5 + 160 + 30 ))
-	# I26: a linear capture passes no -k, so it keeps tracelogger's default 8 kernel buffers per CPU
-	if [ "${PARAM[k]}" = lin ]; then tk=8; else tk="$kk"; fi
-	(( ${PARAM[trace_need_mb]} >= $(ring_mb "$tk") + ${PARAM[s_mb]} + 32 )) \
-		|| die "parameters: trace_need_mb=${PARAM[trace_need_mb]} is below ring + S + 32 MiB (§2.4 step 3)"
 	caps=$(ceil_div $(( ${PARAM[cap_v]} + ${PARAM[cap_c]} )) 1048576)
 	same fmt_need_mb $(( 5 * ${PARAM[s_mb]} + 270 + caps + 32 ))
 	same cnt_need_mb $(( 270 + caps + 32 ))
+	# I37: a need at or above the -m992M window can never pass its runtime gate on the board.
+	(( ${PARAM[trace_need_mb]} < 992 && ${PARAM[fmt_need_mb]} < 992 )) \
+		|| die "parameters: trace_need_mb=${PARAM[trace_need_mb]} or fmt_need_mb=${PARAM[fmt_need_mb]} is not below 992 MiB (§8.2)"
 	worst=$(( 736 + ${PARAM[banner_bound]} + ${PARAM[ipc_bound]} + ${PARAM[tp_bound]} + ${PARAM[cnt_bound]} + ${PARAM[send_v]} + ${PARAM[send_c]} ))
 	same ksh_worst_s "$worst"
 	same guard_s $(( ( (worst + 125 + 240 + 299) / 300 ) * 300 ))
@@ -583,7 +597,8 @@ cnt_out_of() {
 write_params() {
 	local f="$OUT/$IMAGE.params" k
 	# I24 (m4-design.md 14.5): the fixtures this image carries, so the parser expects exactly these.
-	PARAM[fixtures]="m4fix-1.txt,m4fix-2.txt,m4fix-3.txt,m4fix-4.txt"
+	# I35, I36 (14.19, 14.20): m4fix-5 and m4fix-6 join them.
+	PARAM[fixtures]="m4fix-1.txt,m4fix-2.txt,m4fix-3.txt,m4fix-4.txt,m4fix-5.txt,m4fix-6.txt"
 	: > "$f"
 	for k in "${PARAM_KEYS[@]}"; do
 		printf '%s=%s\n' "$k" "${PARAM[$k]:--}" >> "$f"
@@ -599,7 +614,7 @@ generate() {
 	local inj last out
 	STEP="$IMAGE: generate (step 9)"
 
-	for i in 1 2 3 4; do
+	for i in 1 2 3 4 5 6; do
 		[ -f "$FIX_SRC_DIR/m4fix-$i.txt" ] || die "no $FIX_SRC_DIR/m4fix-$i.txt"
 		awk '{ sub(/\r$/, "") } { print }' "$FIX_SRC_DIR/m4fix-$i.txt" > "$OUT/m4fix-$i.txt"
 		head -n 1 "$OUT/m4fix-$i.txt" | grep -qx '# m4fix: synthetic' || die "m4fix-$i.txt lost its '# m4fix: synthetic' first line"
@@ -628,7 +643,9 @@ generate() {
 		FIX1="$(hostpath "$OUT/m4fix-1.txt")" \
 		FIX2="$(hostpath "$OUT/m4fix-2.txt")" \
 		FIX3="$(hostpath "$OUT/m4fix-3.txt")" \
-		FIX4="$(hostpath "$OUT/m4fix-4.txt")"
+		FIX4="$(hostpath "$OUT/m4fix-4.txt")" \
+		FIX5="$(hostpath "$OUT/m4fix-5.txt")" \
+		FIX6="$(hostpath "$OUT/m4fix-6.txt")"
 	{
 		echo "# $IMAGE - M4 rung $RUNG, mode ${PARAM[mode]}."
 		echo "# Generated from orin-native/startup/m4.build.in by make-m4-images.sh: comment"
@@ -670,7 +687,7 @@ generate() {
 		CNT_OUT="$(cnt_out_of)" FORMS="${PARAM[forms]}" \
 		SEND_V="${PARAM[send_v]}" SEND_T_V="${PARAM[send_t_v]}" SEND_C="${PARAM[send_c]}" SEND_T_C="${PARAM[send_t_c]}" \
 		TRANSPORT=tcu \
-		FIX="/proc/boot/m4fix-1.txt /proc/boot/m4fix-2.txt /proc/boot/m4fix-3.txt /proc/boot/m4fix-4.txt"
+		FIX="/proc/boot/m4fix-1.txt /proc/boot/m4fix-2.txt /proc/boot/m4fix-3.txt /proc/boot/m4fix-4.txt /proc/boot/m4fix-5.txt /proc/boot/m4fix-6.txt"
 	no_markers "$ksh"
 	for l in "RUNG=$RUNG" "MODE=${PARAM[mode]}" "P=4" "CPUS=\"0 1 2 3\"" \
 	         "md5ok \"\$S/md5.pre\" $GUEST_MD5 guest md5_pre" \
@@ -976,12 +993,12 @@ check_identity() {
 	rm -rf "$d"
 	mkdir -p "$d"
 	if ! ( cd "$OUT" && dumpifs -x -b -d "$x" -f guest-ifs.bin -f disk-qvm -f g2.conf -f m4-host.ksh \
-	       -f m4fix-1.txt -f m4fix-2.txt -f m4fix-3.txt -f m4fix-4.txt "$IMAGE.ifs" ) > "$OUT/$IMAGE.extract.txt" 2>&1; then
+	       -f m4fix-1.txt -f m4fix-2.txt -f m4fix-3.txt -f m4fix-4.txt -f m4fix-5.txt -f m4fix-6.txt "$IMAGE.ifs" ) > "$OUT/$IMAGE.extract.txt" 2>&1; then
 		rm -rf "$d"
 		tail -n 20 "$OUT/$IMAGE.extract.txt" >&2
 		die "$IMAGE: dumpifs -x failed; see $OUT/$IMAGE.extract.txt"
 	fi
-	for f in guest-ifs.bin disk-qvm g2.conf m4-host.ksh m4fix-1.txt m4fix-2.txt m4fix-3.txt m4fix-4.txt; do
+	for f in guest-ifs.bin disk-qvm g2.conf m4-host.ksh m4fix-1.txt m4fix-2.txt m4fix-3.txt m4fix-4.txt m4fix-5.txt m4fix-6.txt; do
 		case "$f" in
 		guest-ifs.bin) want="$PIN_GUEST" ;;
 		disk-qvm)      want="$PIN_DISK" ;;
@@ -1090,7 +1107,7 @@ echo
 echo "== sha256 (the kimg is what goes to the board; sha256sum it there before kexec)"
 row() { printf '%-18s %-28s %10s  %s\n' "$@"; }
 row kind file bytes sha256
-for f in "$IMAGE.kimg" "$IMAGE.ifs" "$IMAGE.build" "$IMAGE.ksh" "$IMAGE.params" g2-m3.conf m4fix-1.txt m4fix-2.txt m4fix-3.txt m4fix-4.txt; do
+for f in "$IMAGE.kimg" "$IMAGE.ifs" "$IMAGE.build" "$IMAGE.ksh" "$IMAGE.params" g2-m3.conf m4fix-1.txt m4fix-2.txt m4fix-3.txt m4fix-4.txt m4fix-5.txt m4fix-6.txt; do
 	row generated "$f" "$(stat -c %s "$OUT/$f")" "$(sha "$OUT/$f")"
 done
 row input "startup-$BOARD" "$(stat -c %s "$STARTUP_BIN")" "${SUM_A[startup]}"

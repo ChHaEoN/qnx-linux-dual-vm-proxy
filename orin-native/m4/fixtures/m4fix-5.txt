@@ -1,0 +1,44 @@
+# m4fix: synthetic
+# m4fix-5 (m4-design.md 4.5.4, 14.10 and 14.19, I35): two CPUs, 64-bit t:, both markers, BUFFER
+# sequences from 1, nothing wrapped. The end marker is on CPU 0, and CPU 0 ends with the STOP-time
+# trailing buffer, whose sequence restarts at 1 after the end marker (14, I2). CPU 1 is busy until
+# shortly before the end marker and has no trailing buffer, so its events stop before the end
+# marker: the case 14.9 item 2 asked about, a CPU other than the end marker's missing its tail.
+# From the listing alone that is the same as a CPU that went idle, so the window stays held and
+# CPU 1 is named in short_tail_cpus: a record, not a gate (14.10).
+# Invented values in the traceprinter -n default layout; a test input, not a trace, and no
+# measured figure.
+# expect: M4C TIME64 mode=t64 time_events=5 mismatches=0 wraps=0 backsteps=0 backsteps64=0 unknown=0
+# expect: M4C RING state=held wrapped_cpus=none seq1_cpus=0,1 short_tail_cpus=1
+# expect: M4C BUF cpu=0 first_seq=1 last_seq=2 kept=3 gaps=0 restarts=1
+# expect: M4C BUF cpu=1 first_seq=1 last_seq=2 kept=2 gaps=0 restarts=0
+# expect: M4C STATUSSUM distinct=0 printed=0 other=0 missing=0 in_window_other=0 in_window_missing=0
+ -- HEADER FILE INFORMATION --
+  TRACE_CYCLES_PER_SEC:: 31250000
+         TRACE_CPU_NUM:: 2
+ -- KERNEL EVENTS --
+t:0x100000000 CPU:00 CONTROL         :TIME               msb:0x00000001 lsb(offset):0x00000000
+t:0x100000000 CPU:00 CONTROL         :BUFFER             sequence = 1, num_events = 4
+
+t:0x100000000 CPU:01 CONTROL         :TIME               msb:0x00000001 lsb(offset):0x00000000
+t:0x100000000 CPU:01 CONTROL         :BUFFER             sequence = 1, num_events = 4
+
+t:0x100000010 CPU:00 THREAD          :THRUNNING          pid:1 tid:1
+t:0x100000020 CPU:01 THREAD          :THRUNNING          pid:1 tid:2
+t:0x100000064 CPU:00 USREVENT        :EVENT:20           STR:"m4-fix-start", d0:0x00000000 d1:0x00000000 d2:0x00000000 d3:0x00000000
+t:0x100000100 CPU:01 CONTROL         :BUFFER_END         cookie1 = e6e6e6e6, cookie2 = e6e6e6e6
+t:0x100000101 CPU:01 CONTROL         :TIME               msb:0x00000001 lsb(offset):0x00000101
+t:0x100000101 CPU:01 CONTROL         :BUFFER             sequence = 2, num_events = 2
+
+t:0x100000180 CPU:01 THREAD          :THRUNNING          pid:1 tid:4
+t:0x100000200 CPU:00 THREAD          :THRUNNING          pid:1 tid:3
+t:0x100000300 CPU:00 CONTROL         :BUFFER_END         cookie1 = e6e6e6e6, cookie2 = e6e6e6e6
+t:0x100000301 CPU:00 CONTROL         :TIME               msb:0x00000001 lsb(offset):0x00000301
+t:0x100000301 CPU:00 CONTROL         :BUFFER             sequence = 2, num_events = 2
+
+t:0x100000400 CPU:00 USREVENT        :EVENT:21           STR:"m4-fix-end", d0:0x00000000 d1:0x00000000 d2:0x00000000 d3:0x00000000
+t:0x100000420 CPU:00 CONTROL         :BUFFER_END         cookie1 = e6e6e6e6, cookie2 = e6e6e6e6
+t:0x100000421 CPU:00 CONTROL         :TIME               msb:0x00000001 lsb(offset):0x00000421
+t:0x100000421 CPU:00 CONTROL         :BUFFER             sequence = 1, num_events = 2
+
+t:0x100000430 CPU:00 THREAD          :THRUNNING          pid:1 tid:1
