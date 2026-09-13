@@ -299,7 +299,15 @@ function Write-Key {
   if ($Bytes) { $hex = ($Bytes | ForEach-Object { '{0:x2}' -f $_ }) -join ' ' }
   # A key-log failure must never end the session: the received record matters
   # more, and the operator is at the board.
-  try { $kw.WriteLine('{0} {1} {2}' -f ([DateTimeOffset]::UtcNow.ToString('o')), $What, $hex) } catch { }
+  # The extra parentheses are load-bearing. Inside a .NET method call's
+  # parentheses PowerShell reads the commas as argument separators, so without
+  # them `-f` receives only the timestamp, the format string's {1} and {2} have
+  # nothing to fill, and it throws - which the catch below then discards. The
+  # key log recorded nothing at all until this was found, on the M5 board session
+  # of 2026-09-13: p2-keys.log stayed at 0 bytes although AutoFlush is set, and
+  # the line reproduced the same way in isolation. -SelfTest does not reach this
+  # function, so its 40 passing checks could not show it.
+  try { $kw.WriteLine(('{0} {1} {2}' -f ([DateTimeOffset]::UtcNow.ToString('o')), $What, $hex)) } catch { }
 }
 
 function Show-State {
