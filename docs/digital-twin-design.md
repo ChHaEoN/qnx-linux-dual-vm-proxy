@@ -43,13 +43,13 @@ A short table of what crosses the twin boundary:
 |---|---|---|
 | QNX IFS (`output/ifs.bin`) | **Leg-dependent — was silently broken** | Built once on the x86_64 build host (Windows local primary; EC2 fallback) and scp'd to both runtime hosts. **Honest correction:** this row claimed "bit-for-bit identical" as an unconditional invariant, but the Phase-3 Orin IPC run used a **rebuilt** IFS with new TCP server code staged in — so for that measurement the twin's load-bearing invariant did not hold. It *does* hold for the QHV leg (§1a), where both hosts boot the identical `qhv/host/output/{ifs.bin,disk-qemu}` pair verified by `SHA256SUMS` |
 | QNX IPC server (`ipc-test/qnx-server`) source | **Yes** | Same C99; compiled with `qcc` inside QNX guest in both twins |
-| Linux IPC client (`ipc-test/linux-client`) source | **Phase 3 / Orin only** | Per [ADR-002](phase2-topology-decision.md), there is **no Linux guest on the cloud leg** — the cloud initiator is a QNX-host program (`ipc-test/qnx-host-client`). This client runs on L4T natively on the HW twin only |
+| Linux IPC client (`ipc-test/linux-client`) source | **Phase 3 / Orin only** | Per [ADR-002](phase2-topology-decision.md), there is **no Linux guest on the cloud leg** — the cloud initiator is a QNX-host program (`ipc-test/qnx-host-client`). This client runs on L4T natively on the HW twin only. **2026-09-14:** "no Linux guest on the cloud leg" is right for A1. It is stale for v1: v1's TCG twin legs boot v1's guest set, S1's Linux guest included, in a QHV host image ([plan](orin-native-port-plan.md#architecture-versions-and-the-measurement-freeze-decided-2026-09-11), v1 row and campaign item 6) |
 | Wire protocol (sequence + timestamp + payload) | **Yes** | Fixed-width binary frame, ~~version-tagged~~ **2026-09-11:** with no version tag (`ipc-test/common/frame.h`; see §3) |
 | Test harness + benchmark scripts | ~~**Yes**~~ **CSV schema only** | ~~Same `run-bench.sh`;~~ output CSV format is identical. **2026-09-11:** No `run-bench.sh` exists. The legs use different programs and launchers. Only the CSV schema is shared (`results/cloud/header.csv`, `results/hw/header.csv`) |
 | QEMU command line (machine/CPU/mem) | **Mostly** | `-machine virt,gic-version=3 -cpu ... -m 1G` shape is shared; see the accel row for the cloud/Orin split |
 | QEMU acceleration | **TCG on both — for two different reasons** | This row previously read "cloud = tcg; Orin = `-enable-kvm` (KVM works on A78AE)". That is **no longer true and should not be quoted**: Orin's KVM boot is blocked by the GICv3 / `KVM_EXIT_ARM_NISV` defect ([orin-port.md](orin-port.md)), so the plain `qnx-safety-vm` leg runs TCG there *because KVM is broken*. On the **QHV leg** TCG is instead a hard architectural requirement on both sides — QHV needs EL2 for its guest, i.e. nested virtualisation, which ARM KVM does not provide on A78AE. Keep the two apart when reporting: only the QHV leg's TCG-on-both is genuine symmetry |
 | IPC transport | **Different by design** | Cloud: host↔guest `qvm` virtio-console (single-OS QNX↔QNX); Orin: QNX↔Linux virtio-net ~~over KVM bridge~~ **2026-09-11:** over the `br0` bridge, under TCG. The legs no longer share an identical topology — see §4 |
-| Linux Compute side | **Different by design** | Cloud: **no Linux guest** (single QNX guest under QHV); HW: L4T native (host OS). See §2/§3 |
+| Linux Compute side | **Different by design** | Cloud: **no Linux guest** (single QNX guest under QHV); HW: L4T native (host OS). See §2/§3. **2026-09-14:** right for A1, stale for v1: S1 plans a Linux guest under native qvm, and v1's TCG twin legs would boot it in their QHV host image ([plan](orin-native-port-plan.md#architecture-versions-and-the-measurement-freeze-decided-2026-09-11), v1 row and campaign item 6) |
 | Host kernel | **Different by design** | This is exactly the variable being studied |
 | Host CPU | **Different by design** | ~~Graviton3 Neoverse-V1 vs Tegra A78AE — same ARMv8 ISA, different micro-architecture and scheduler context~~ **2026-09-11:** As built, an x86_64 Windows PC against the Tegra A78AE, so the ISA differs too (§1, §5). Graviton3 was the design |
 
@@ -320,7 +320,11 @@ been corrected below.
   partition boundary** — but it does **not** demonstrate the QNX-safety
   ↔ Linux-compute heterogeneity that is the load-bearing mirror of DRIVE
   OS's dual-OS partitioning. That heterogeneity is twinned on **Orin
-  only**.
+  only**. **2026-09-14:** all of this bullet describes A1. It is stale for
+  v1: v1's TCG twin legs boot v1's guest set, S1's Linux guest included,
+  in a QHV host image under QEMU ([plan](orin-native-port-plan.md#architecture-versions-and-the-measurement-freeze-decided-2026-09-11),
+  v1 row and campaign item 6). Under v1 the TCG legs would carry a Linux
+  guest too.
 - **Hardware twin (Orin)** runs Linux Compute as **L4T itself**, the
   native host, and is the **committed home of the heterogeneous QNX↔Linux
   IPC**. This is closer to "real Tegra Linux runs natively"; QNX is the

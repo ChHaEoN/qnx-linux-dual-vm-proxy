@@ -1,10 +1,16 @@
 # g2.conf.allow — TCR-CFG-001 locked-down allow-list for the auto-generated
 # qvm guest config (g2.conf).
 #
-# Phase 1 (study-level). validate-g2conf.sh validates the g2.conf emitted by
-# post_start.custom against this allow-list BEFORE `qvm @g2.conf` runs, and
-# fails CLOSED on any directive whose leading keyword is not listed here.
-# This is the implementable FLOOR (validate-against-locked-template).
+# Phase 1 (study-level). validate-g2conf.sh validates a g2.conf against this
+# allow-list and fails CLOSED on any directive whose leading keyword is not
+# listed here. This is the implementable FLOOR (validate-against-locked-template).
+#
+# 2026-09-14: corrected. This header used to say post_start.custom runs the
+# validator BEFORE `qvm @g2.conf`. The committed snippet
+# (scripts/qhv/post_start.custom) does not: it writes g2.conf and launches
+# qvm with no validator call. No committed script calls validate-g2conf.sh;
+# the Phase-1 gate verification exercised it directly
+# (docs/cyber/phase1-gate-verification.md).
 #
 #   study-only ceiling: in a real programme the config would additionally be
 #   cryptographically SIGNED and the signature verified against a key in a

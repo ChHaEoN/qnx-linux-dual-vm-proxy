@@ -31,7 +31,7 @@ Phase 3b. Architect pass, revision 2, 2026-09-11: revision 1 with the review out
 - **Required:** our startup is reached from a UEFI cold boot (tier T2, §5).
 - **Attempted and recorded:** procnto up and a stock `pidin info` (T3).
 - **Deferred to the post-freeze campaign:** the M3 and M4 medians under UEFI entry against kexec entry (plan:474), and every other timing or residual-state comparison (§5.4).
-- **Informs:** the entry-path item of the freeze gate (plan:441). M5 does not decide it (D6).
+- **Informs:** the entry-path item of the freeze gate (~~plan:441~~ **2026-09-14:** the plan's freeze gate item 3). M5 does not decide it (D6).
 
 **Chosen path: option A.** A small EFI application of our own, `M5LOAD.EFI`, is launched from the firmware's built-in UEFI Shell (`Boot0007`). It embeds the unchanged M1b image `m1b-p1.kimg` (sha256 `cf0715ef…bd2f8e`). It checks the firmware memory map, places the kimg at `0x80080000`, exits Boot Services, cleans the data and instruction caches over the image, turns the MMU off and branches to the shim with the kexec entry contract (plan §3.3). From the shim onward, every byte is the byte that ran M1b's R1 (r/m1b-runs.md, R1 row).
 
@@ -377,7 +377,7 @@ The labels say `M1b` because the kimg is byte-identical. That is expected.
 - Any cold-boot or firmware hand-off duration.
 - An unattended UEFI launch (§5.5).
 
-### 5.5 What M5 hands the freeze (plan:441)
+### 5.5 What M5 hands the freeze (~~plan:441~~ **2026-09-14:** the plan's freeze gate item 3)
 
 Facts only. The decision is D6.
 - The highest tier reached under UEFI entry.
@@ -1044,4 +1044,4 @@ The public, number-free record of the session. Every duration, time of day, addr
   - §6.5 step 6 (the F12 after `reset`).
   - §6.4 step 3 and §6.5 step 1 (silence alone before the power cut).
   - `com3-term.ps1`'s header on straight-typed lines.
-  - §5.5's `plan:441`: the freeze gate's entry-path item has moved in the plan.
+  - §5.5's `plan:441`: the freeze gate's entry-path item has moved in the plan. **2026-09-14:** corrected. §5.5's heading and the owner-scope "Informs" line now cite the plan's freeze gate item 3 by name.

@@ -179,7 +179,7 @@ position-independent, no stack, `x0` preserved in `x20`), in order:
 sudo kexec -s -l t234-shim.kimg ; cat /sys/kernel/kexec_loaded ; kexec -d ; sudo kexec -u
 # 1. quiesce DMA masters (forum precedent: Orin NX kexec needed nvidia_drm unloaded):
 sudo systemctl isolate multi-user.target
-sudo rmmod nvidia_drm nvidia_modeset nvgpu       # ignore failures; then re-read /proc/iomem (K5)
+sudo rmmod nvidia_drm nvidia_modeset nvidia nvgpu   # ignore failures; then re-read /proc/iomem (K5)
 # 2. pin the clock (governor is schedutil, VERIFIED) and pre-arm the uarta fallback (needs sudo, VERIFIED):
 echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
 cat /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_cur_freq        # record it
@@ -188,6 +188,10 @@ sudo stty -F /dev/ttyTHS1 115200 raw ; sudo sh -c 'sleep 100000 < /dev/ttyTHS1' 
 sudo kexec -s -l t234-qnx.kimg
 sudo systemctl kexec            # clean SD unmount, then kernel_kexec()
 ```
+
+**2026-09-14:** step 1's `rmmod` line ~~named three modules, `nvidia_drm nvidia_modeset nvgpu`~~ now names the four
+the procedure uses, `nvidia_drm nvidia_modeset nvidia nvgpu`, as M3's O4 and checklist 11c ran them (m3-design O4 and
+§6.4 P1; s1-design C13).
 
 The synthesis' `systemctl mask --runtime kexec-load.service` step is **removed**: `/etc/default/kexec` has
 `LOAD_KEXEC=false` (VERIFIED), so nothing re-loads a Linux kernel over our payload at shutdown.
@@ -460,7 +464,7 @@ Every rung up to the freeze is functional: it passes or fails on what appears, n
 - **What runs:** a stock L4T R36.4.7 kernel `Image` with a small busybox initrd, its console on virtio-console. It runs on the TCG QHV host first, then natively.
 - **Prerequisites:**
   - M5-F. This is the owner's order, not a technical dependency.
-  - Checklist 11c: after the `rmmod` quiesce, `/proc/iomem` shows a second RAM window free. The host image then boots with it as a second `add_ram` (K5; §5, `init_raminfo.c`). A GPU range stays out of every `add_ram`. **2026-09-13:** 11c ran (checklist below). The quiesce frees no RAM window, because the map is fixed at boot, but one System RAM range held no reservation on any of three boots. Booting the host image with it as a second `add_ram` is still owed.
+  - Checklist 11c: after the `rmmod` quiesce, `/proc/iomem` shows a second RAM window free. The host image then boots with it as a second `add_ram` (K5; §5, `init_raminfo.c`). A GPU range stays out of every `add_ram`. **2026-09-13:** 11c ran (checklist below). The quiesce frees no RAM window, because the map is fixed at boot, but one System RAM range held no reservation on any of three boots. Booting the host image with it as a second `add_ram` is still owed. **2026-09-14:** this bullet names no GPU range. s1-design D18 proposes one, provisional for freeze gate item 6: `0x18A000000`, 3,072 MiB, kept out above a 2,208 MiB second window at `0x100000000`.
   - A qvm `dryrun` of the guest configuration, with its device tree dumped, on the TCG QHV host and with no GPU overlay.
   - The research track also gates S1 on a GPU stream-ID check and on the owner accepting an uncontained GPU. This plan leaves both before the first GPU stage, because S1 has no GPU. **2026-09-11 (owner):** confirmed. Of the research track's gates, S1-F needs only the qvm `dryrun` gate first; the GPU checks wait for the first GPU stage.
 - **Pass,** all of:
@@ -484,7 +488,7 @@ Every rung up to the freeze is functional: it passes or fails on what appears, n
 #### Freeze gate
 
 v1 is frozen when all of these are settled and written into the manifest:
-1. **Rungs:** M4-F, M5-F and S1-F have passed, or M5-F's failure is recorded and v1 is kexec-only.
+1. **Rungs:** M4-F, M5-F and S1-F have passed, or M5-F's failure is recorded and v1 is kexec-only. **2026-09-14:** a provisional S1-F met line ("S1-F met provisionally (Linux only)") satisfies this item only if item 2 chooses Linux only. Otherwise the two-guest rung must pass before v1 is frozen (s1-design §5.2).
 2. **Guest set:** Linux only, or QNX plus Linux. The research track's S1 runs Linux beside the QNX guest. The owner's stated target has no QNX guest: the safety functions run as QNX processes in the host.
 3. **Entry path:** kexec, with its quiesce and governor-pin sequence, or UEFI; and whether the other path stays as the declared M5 comparison.
 4. **CPUs:** the startup `-P` value and each guest's pinning. Either the cluster-1 cores' low busy-loop rate is explained, or cluster 1 is left out.

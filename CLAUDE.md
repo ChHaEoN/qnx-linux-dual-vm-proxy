@@ -69,7 +69,12 @@ the NVIDIA AVOS / DRIVE OS SE role this portfolio targets.
 - VM1 — Compute proxy: Linux aarch64 — **Phase 3 / Orin only** (L4T native). Per
   [ADR-002](docs/phase2-topology-decision.md) there is **no Linux guest on the
   cloud leg** (the cloud Compute-VM premise was falsified — no `/dev/kvm`, host
-  `io-sock` down).
+  `io-sock` down). **2026-09-14:** that holds for A1 and A2, not for v1. S1-F
+  plans a Linux guest without a GPU under native qvm on the Orin, and v1's TCG
+  twin legs would carry it in their QHV host image, so the Windows PC would run a
+  Linux guest too
+  ([the plan's architecture table](docs/orin-native-port-plan.md#architecture-versions-and-the-measurement-freeze-decided-2026-09-11),
+  v1 row; the campaign's TCG twin legs).
 - IPC (cloud leg): QNX-host (`qnx-qhv`) ↔ QNX-guest (`qnx-guest`) over the `qvm`
   `virtio-console` vdev — crosses the real EL2/EL1 partition boundary, TCG-emulated,
   **no** `br0`/tap (host `io-sock` never comes up because the launch line presents no virtio-net/-rng device — a launch-line omission per ADR-002 RQ-4, not an image property; with the devices presented it does). See [ADR-002](docs/phase2-topology-decision.md).
