@@ -467,9 +467,17 @@ Every rung up to the freeze is functional: it passes or fails on what appears, n
   1. Under TCG, `dryrun` accepts the configuration, and the guest then boots to a shell on `hvc0`.
   2. The same configuration, unchanged, reaches a shell on `hvc0` under native qvm on the board.
   3. If v1 keeps the QNX guest beside it, that guest prints its banner and the IPC pair completes. Completion only.
-  4. A ten-minute run ends with qvm alive and the host's memory canaries intact.
+  4. A ten-minute run ends with qvm alive and the host's memory canaries intact. **2026-09-13 (owner, s1-design D10):** the guest must also answer the end-of-hold shell probe; a live qvm alone is not enough. The canaries are defined in s1-design §3.8.
   5. Every run is stamped with the kernel, initrd, device-tree and configuration hashes, the CPU pinning and the RAM windows.
-- **Kill conditions, from the research track:** no second window can be shown free after `rmmod`, which leaves the guest too little RAM for S1 in this layout; or qvm boots no arm64 Linux, and QNX support cannot fix it.
+- **Kill conditions, from the research track:** ~~no second window can be shown free after `rmmod`, which leaves the guest too little RAM for S1 in this layout~~ **2026-09-13:** 11c showed the quiesce frees no window at all. The first condition is now that, on the host-only board rung, the 11c window holds data wrongly while window 1 verifies (s1-design C1, D8); or qvm boots no arm64 Linux, and QNX support cannot fix it (s1-design D17: one request, sent only after the supervising professor agrees).
+- **Design (2026-09-13):** [s1-design.md](../results/orin-native-port/20260909T1100Z/s1-design.md), revision 2. The owner took all of its decisions (D1-D19) as recommended:
+  - Linux only for now; the two-guest rung runs only if v1 keeps the QNX guest.
+  - Entry by kexec.
+  - A provisional second window of 2,208 MiB, with the rest of the 11c range kept out as the GPU range.
+  - Three vCPUs pinned to cores 1-3.
+  - An initrd built from the board's own busybox.
+  
+  Next: copy the board's `Image` and `initrd` (D3), then T0 on the PC. Nothing has been built or run.
 - **Deferred to the campaign:** the research track's own S1 exit criterion, a CPU-only baseline of the small model in the guest; any boot time; IPC statistics; any Linux-guest latency.
 - **Scope:** S1 crosses §1's non-goal "no Linux guest on the native leg", now struck through there. The GPU non-goals stay.
 

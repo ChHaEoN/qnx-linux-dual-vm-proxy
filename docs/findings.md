@@ -9,6 +9,30 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-13 — S1-F design written, and the owner takes every decision as recommended
+
+The S1-F design, [s1-design.md](../results/orin-native-port/20260909T1100Z/s1-design.md) (revision 2), specifies how a
+Linux guest without a GPU is shown under native qvm. The guest is the board's stock L4T R36.4.7 kernel `Image`, with an
+initrd built from the busybox and libraries in the board's own initrd. It runs on the TCG QHV host first, then natively,
+with one configuration byte for byte. The host is entered by kexec. A new startup option, off by default, adds the
+checklist 11c window as a second `add_ram`. It keeps a provisional GPU range out of every `add_ram`, and takes three
+fixed canary ranges out of the allocator, filling them in startup. A host tool injects shell probes whose answer
+differs from their echo, since COM3 is receive-only. The ladder is T0-T3 on the PC, then B0-B5 on the board in two
+attended sessions. Nothing has been built or run.
+
+Three review lenses raised 30 findings, and all were applied. The blocker was that `avoid_ram` would not have kept the
+canary ranges from procnto, because only `alloc_ram` removes a range from the RAM list the kernel receives.
+
+The owner took all nineteen decisions as recommended:
+- Linux only now; the two-guest rung runs only if v1 keeps the QNX guest.
+- D10 tightens plan item 4, so the guest's end probe is required, not only a live qvm.
+- D12: the dumped FDT is private evaluation output.
+- D17: any QNX support request goes through the supervising professor first.
+- No download up front.
+
+Next: copy the board's `Image` and `initrd` to the PC (D3), then T0. Unknowns T1 must answer first: whether qvm accepts
+the EFI-stub `Image` with a bare `load`, and what device tree it generates.
+
 ## 2026-09-13 — Owner decision: Phases 2 and 3 are closed as architecture history
 
 The owner closed two phases in chat. Phase 2 (cloud twin IPC and latency) is closed as architecture A1 history, and
