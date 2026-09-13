@@ -12,9 +12,10 @@
 > over a bridge, with KVM-accelerated boot blocked by a root-caused GICv3
 > defect ([docs/orin-port.md](docs/orin-port.md)). It then booted the cloud
 > leg's hypervisor images, unchanged. The current work, **Phase 3b**, runs the
-> QNX Hypervisor natively on the Orin with no QEMU. After its remaining
-> functional milestones, a Linux guest is added. Then reference architecture
-> v1 is frozen, and the measurements run once on it. One of them is the
+> QNX Hypervisor natively on the Orin with no QEMU. Its M path is complete,
+> ending at M5-F's functional pass. A Linux guest is added next (S1-F, also a
+> functional rung). Then reference architecture v1 is frozen, and the
+> measurements run once on it. One of them is the
 > **twin diff**: what changes when the host bundle (CPU, OS, TCG backend,
 > QEMU build) changes.
 
@@ -81,7 +82,7 @@ are defined in the
                                                      │   at EL2, no QEMU      │
                                                      │  guest: the cloud-leg  │
                                                      │   QNX guest, unchanged │
-                                                     │  next: M4-F, M5-F,     │
+                                                     │  M4-F, M5-F met; next: │
                                                      │   Linux guest (S1),    │
                                                      │   then freeze v1       │
                                                      └────────────────────────┘
@@ -110,7 +111,7 @@ truth; this table is a summary that can lag it.
 | **1** — Cloud twin bring-up: QHV `qvm` hosting a QNX guest under TCG | ✅ done | [qhv-tcg-host-and-guest-boot.log](logs/sample-boot/qhv-tcg-host-and-guest-boot.log) |
 | **2** — Cloud twin IPC + latency | 🟡 **partial** — real P50/P99/Max exist; sample count capped by a `qvm`/TCG virtio-queue stall that is **not root-caused**, but is now *recoverable* (19/19 real stalls recovered). Architecture A1, kept as history: the stall stays open, and the v1 campaign's IPC sample size is fixed at the freeze | [cloud-ipc-latest.csv](results/cloud/cloud-ipc-latest.csv), [qnx-host-client/README.md](ipc-test/qnx-host-client/README.md) |
 | **3** — Hardware twin port (Jetson Orin Nano) | 🟡 **substantial, not closed** — architecture A2, history: heterogeneous QNX↔Linux IPC over a real `br0`/tap bridge works (2 × 100 000 iterations, 0 errors) under **TCG**; **KVM boot is blocked** by a root-caused GICv3 / `KVM_EXIT_ARM_NISV` defect, since reproduced on a second ARM vendor **and reproduced from QNX's own BSP source**: the faulting `str w3,[x0],#4` at GICD+0x420 falls out of `gic_v3.c` built with QNX's own flags, and `-fno-auto-inc-dec` removes all four MMIO writeback stores (compile-verified, boot-unverified — the `qemu-virt` board source is not shipped). The KVM/NISV defect is a separate track, outside reference architecture v1 | [orin-ipc-latest.csv](results/hw/orin-ipc-latest.csv), [orin-port.md](docs/orin-port.md), [aws-a1-metal-kvm-nisv-repro.log](logs/sample-boot/aws-a1-metal-kvm-nisv-repro.log) |
-| **3b** — Native QNX on the Orin Nano (no QEMU) | 🟡 **M3 met 2026-09-10: the QNX Hypervisor boots a QNX guest natively on the board** — [ADR-003](docs/adr-003-hardware-timed-qhv.md) chose a native port as the route to a *hardware-timed* hypervisor number. The QNX kernel and user space booted on the board, entered by `kexec` from L4T with no QEMU and no NVIDIA BSP, and a stock `pidin` reported Release 8.0.0 on a Cortex-A78ae. The same day all six cores came up under QNX, each secondary entering at EL2 through PSCI `CPU_ON`. Then the host moved to EL2 with VHE on every core, and the QNX Hypervisor booted the unmodified cloud-leg QNX guest on it in five timed runs out of five. On 2026-09-11 dry run 7b passed under TCG, and the M4 board tooling was rehearsed there. The same day the project decided how the numbers are taken. The milestone path finishes as functional passes: M4-F shows the trace instrument working on the board, and M5-F is a UEFI cold boot that reaches startup. S1-F then adds a Linux guest without a GPU. After that, reference architecture v1 is frozen and one measurement campaign runs on it. M3 stands as a functional pass. Its figures are history for this architecture and stay on the local branch `m3-results-unpublished`. | [orin-native-port-plan.md](docs/orin-native-port-plan.md), [orin-native/startup/README.md](orin-native/startup/README.md), [results/orin-native-port/](results/orin-native-port/) |
+| **3b** — Native QNX on the Orin Nano (no QEMU) | 🟡 **M path complete 2026-09-13: M4-F and M5-F met, and a UEFI cold boot reaches startup** — [ADR-003](docs/adr-003-hardware-timed-qhv.md) chose a native port as the route to a *hardware-timed* hypervisor number. On 2026-09-10 the QNX kernel and user space booted on the board, entered by `kexec` from L4T with no QEMU and no NVIDIA BSP, and a stock `pidin` reported Release 8.0.0 on a Cortex-A78ae. The same day all six cores came up under QNX, each secondary entering at EL2 through PSCI `CPU_ON`; then the host moved to EL2 with VHE on every core, and the QNX Hypervisor booted the unmodified cloud-leg QNX guest in five timed runs out of five (M3). On 2026-09-11 the project decided how the numbers are taken: the milestone path finishes as functional passes, S1-F adds a Linux guest without a GPU, reference architecture v1 is frozen, and one measurement campaign runs on it. M4-F passed that day: the trace instrument works on the board, though its two rungs passed under different instrument versions and the PC's cross-check covered only part of the window. On 2026-09-13 M5-F passed in one attended session: from the firmware's UEFI Shell our own EFI loader carried the unchanged QNX image to startup at EL2, and the board then booted its unchanged L4T. No figure is judged on these rungs. M3 and later figures are history for this architecture and stay unpublished: the M3 to M5 run records are on the local branch `m3-results-unpublished`. Next: S1-F, then the v1 freeze and the campaign. | [orin-native-port-plan.md](docs/orin-native-port-plan.md), [orin-native/startup/README.md](orin-native/startup/README.md), [results/orin-native-port/](results/orin-native-port/) |
 | **4** — Twin diff + DRIVE OS comparison | 🟡 **history recorded, re-run on v1** — the plain-leg boot diff (A2) and the release-aligned QHV pair (A3) are kept as architecture-version history (TCG throughput, not hardware-timed). The distro QEMU 6.2.0 hang the QHV leg uncovered is a QEMU EL2-timer defect, verified by a reverted-wiring build, not the host. The twin diff runs again in the v1 campaign, and the verdicts in [drive-os-comparison.md](docs/drive-os-comparison.md) wait for it | [digital-twin-design.md](docs/digital-twin-design.md) §1a, §5 |
 | **5** — FuSa & Cybersecurity overlay | ⬜ not started as a dedicated phase (a Phase-1-gate FuSa + Cyber pass *did* run) | [docs/fusa/](docs/fusa/), [docs/cyber/](docs/cyber/), [docs/tara/](docs/tara/) |
 | **6** — Polish, public README, demo recording | ⬜ not started | — |
@@ -269,9 +270,10 @@ The loader is `kexec` from the running L4T, which is the point: no firmware, ESP
 boot-partition or UEFI-variable change, so a power cycle always returns an
 untouched Linux. An 8 KiB page carrying the `Image` header `kexec` insists on is
 prefixed to the QNX image, because a raw IFS cannot host that header itself.
-That holds for the kexec path. The planned UEFI cold-boot rung, M5-F, adds a
-single file to the ESP after backing up the existing boot files, and still
-writes no UEFI variable.
+That holds for the kexec path. The UEFI cold-boot rung, M5-F (below), added a
+single file to the ESP after backing up the existing boot files, changed no UEFI
+variable beyond the one the firmware changes on every boot, and removed the file
+at the end.
 
 Getting there took two milestones and a review that stopped the first attempt:
 
@@ -343,16 +345,43 @@ M3 is a functional pass. Its timing and latency figures stay on the local branch
 `m3-results-unpublished` and count as history for this architecture; the numbers
 are taken again, once, on reference architecture v1.
 
+**The trace instrument.** On 2026-09-11, M4-F showed the tracing the campaign will rely
+on working on the board. One run traced the EL2 host alone. The other put a trace window
+around M3's full run: qvm's hypervisor trace events were emitted and paired, both
+listings crossed the debug console intact, and the image reset itself. The pass is
+narrower than it sounds. The two runs passed under different instrument versions, and
+the PC's cross-check covered only the early part of the window, because the listing it
+compared was capped. Both are items for the freeze gate.
+
+**A cold boot through the firmware.** On 2026-09-13, M5-F entered M1b's unchanged one-core
+EL2 host image with no Linux and no `kexec` in that power cycle. The firmware's built-in
+UEFI Shell, reached by hand through its menus, launched an EFI loader of our own. The
+loader carried the unchanged M1b image, left the firmware and branched to it with the entry
+contract `kexec` uses. The image reached startup at EL2, went on to `procnto` and a stock
+`pidin` on the single core that image uses, and reset itself; the board then booted its
+unchanged L4T. Across the session the ESP gained only the loader file, removed at the end,
+and the only UEFI variable that changed is one the firmware also changes on a control boot
+with no key pressed. The Shell rehearsal needed a second attempt, and that attempt departed
+from the procedure in three ways. Power was cut before L4T had finished shutting down,
+after a helper reported the board ready too early (fixed before the loader run). More than
+one ESC was sent where the procedure asks for one. The operator bound was overrun. The
+loader run also sent more than one ESC, but it reached the Shell inside the bound, and
+every token arrived inside the design's time bounds. All of these are recorded deviations. It is a functional pass from one attended
+session on one board. It times nothing, it was not repeated, and it does not show that the
+firmware leaves cleaner state than `kexec`; the comparison between the two entry paths waits
+for the campaign ([m5-design.md](results/orin-native-port/20260909T1100Z/m5-design.md) §10,
+and §14 for the session).
+
 What this is not, stated plainly: the hypervisor has hosted one QNX guest, not Linux,
-with no device pass-through, on a host entered from Linux rather than cold-booted. No
-per-exit hypervisor number exists. The next rung, M4-F, only has to show the trace
-instrument working on the board; its tooling has been rehearsed under TCG. M5-F then
-tries a UEFI cold boot, and S1-F a Linux guest without a GPU. The two second-cluster
-cores run a busy loop at a fixed, much lower rate whose cause is still open, and the
-freeze needs it explained or those cores left out of v1. The M0 to M1b records and
-captures are in this repo for now. M3 and later figures, including the campaign's,
-stay unpublished until publishing them under the QNX non-commercial licence is
-cleared; the code, the plan and the procedure are here.
+with no device pass-through, and only on a host entered from Linux; the cold boot ran
+the EL2 host image without `qvm` or a guest. No per-exit hypervisor number is judged or
+published. With M5-F the M path is complete. Next is S1-F, a Linux guest without a GPU
+under native `qvm`, then the v1 freeze and one measurement campaign. The two
+second-cluster cores run a busy loop at a fixed, much lower rate whose cause is still
+open, and the freeze needs it explained or those cores left out of v1. The M0 to M1b
+records and captures are in this repo for now. The M3 to M5 run records and every figure
+from M3 on, including the campaign's, stay unpublished until publishing them under the
+QNX non-commercial licence is cleared; the code, the plan and the procedure are here.
 
 ---
 
@@ -372,7 +401,7 @@ proxy can and cannot demonstrate. This table is the load-bearing part:
 | Real-time guarantees | The QEMU legs are TCG-emulation-bound, not hardware-timed; the Orin plain leg adds observable host-scheduler jitter on top. The native leg runs on real cores, but its timings are unpublished and not yet campaign-grade: the CPU frequency is wherever BPMP and Linux left it, the clock is recorded as unverified, and the numbers wait for the v1 campaign. The "Safety VM" framing is POSIX-realtime, not certified RT. |
 | ASIL-D certification | None. SDP 8.0 ≠ QNX OS for Safety (QOS); no safety case, no MISRA-C, no ISO 26262 evidence. |
 | Inter-VM shared memory latency | Cloud leg: host↔guest over the `qvm` virtio-console vdev (crosses the EL2/EL1 boundary, but TCG-emulated — the latency measures emulation cost, not transport cost). Orin plain leg (Phase 3, A2): QNX↔Linux virtio-net → tap → bridge → tap → virtio-net — also TCG-emulated, since the KVM path is blocked, so it is **not** hardware-timed either. Native leg (A4): host to guest over virtio-console under qvm on real cores; figures unpublished, re-measured in the v1 campaign. No sourced DRIVE OS IPC figure is in the repo yet, so no gap is quantified here. See [ADR-002](docs/phase2-topology-decision.md). |
-| Certified bootloader chain | No SecureBoot, no measured boot, no chain-of-trust. |
+| Certified bootloader chain | No SecureBoot, no measured boot, no chain-of-trust. The native leg's UEFI cold boot (M5-F) is an EFI loader of ours launched by hand from the firmware's Shell: not a supported, certified or unattended boot path. |
 
 These are deliberate. Documenting them precisely is the engineering point.
 
@@ -387,7 +416,7 @@ scripts apply depends on the leg, per [ADR-002](docs/phase2-topology-decision.md
 |---|---|
 | Cloud / x86 (QHV host + QNX guest, TCG) | `scripts/build-qhv.bat` → `scripts/launch-qhv-tcg.ps1`; committed config sources in [`scripts/qhv/`](scripts/qhv/) |
 | Hardware (Orin Nano) | [`scripts/orin/`](scripts/orin/): `bootstrap-orin-l4t.sh` → `setup-bridge-orin.sh` → `launch-qnx-on-orin-tcg.sh` |
-| Native (Phase 3b) | `orin-native/`: `shim/`, the `startup/` board directory and image builders ([README](orin-native/startup/README.md)), `qhv/` guest configurations, `tools/` on-target helpers, and the `m4dry/` and `m4/` M4 tooling (dry run, TCG rehearsal, board capture and parser); procedures in [the plan](docs/orin-native-port-plan.md) |
+| Native (Phase 3b) | `orin-native/`: `shim/`, the `startup/` board directory and image builders ([README](orin-native/startup/README.md)), `qhv/` guest configurations, `tools/` on-target helpers, the `m4dry/` and `m4/` M4 tooling (dry run, TCG rehearsal, board capture and parser), and `uefi/`, the M5 UEFI loader with its QEMU rehearsal and the board-session terminal; procedures in [the plan](docs/orin-native-port-plan.md) |
 | QHV leg on the Orin (Phase 4) | `scripts/twin/sync-qhv.sh` (stage the QHV images, checksum-verified, resumable) → `scripts/orin/build-qemu-on-orin.sh` (QEMU ≥ 9.0 is required: the distro 6.2.0 hangs the QHV host on an EL2 timer defect) → `WITH_RNG=1 scripts/orin/launch-qhv-on-orin-tcg.sh 5`; Windows counterpart `scripts/launch-qhv-tcg.ps1 -Runs 5 -StopOnGuestBanner -WithRng` |
 | Twin diff | [`scripts/twin/diff-results.sh`](scripts/twin/diff-results.sh) |
 
@@ -410,8 +439,9 @@ Other prereqs:
 - ~50 GB disk on the build host for the SDP install + IFS output
 - A Jetson Orin Nano Dev Kit (JetPack 6 / L4T R36.4.7) for the hardware twin
 - For the native port: a 3.3 V-logic USB-TTL adapter on the Orin's J14 debug
-  header (never a 5 V-only one), and a way to cut power remotely, because a
-  hung run needs a power cycle
+  header (never a 5 V-only one), with its TX on J14 pin 3 only during an M5
+  session, while the terminal runs, and removed afterwards, and a way to cut
+  power remotely, because a hung run needs a power cycle
 - *Optional:* an AWS account + `aws` CLI, only to repeat the `a1.metal` KVM
   probe. The original design's Graviton runtime leg was never built, and the
   as-built cloud leg runs locally — if you do launch an instance, mind the
@@ -425,7 +455,7 @@ Other prereqs:
 - [x] **Phase 1** — Cloud twin bring-up (SDP 8.0 QHV `qvm` + one QNX guest under QEMU TCG — no Linux guest on this leg, per [ADR-002](docs/phase2-topology-decision.md))
 - [ ] **Phase 2** _(A1, history)_ — Cloud twin IPC + latency benchmark: real P50/P99/Max landed on architecture A1. The `qvm`/TCG stall stays unfixed but recoverable, and the 100k-iteration target is no longer chased: the v1 campaign's IPC sample size is fixed once, at the freeze
 - [ ] **Phase 3** _(A2 recorded; KVM track separate)_ — Hardware twin on Jetson Orin Nano: heterogeneous QNX↔Linux IPC done under TCG (architecture A2, history). KVM boot stays blocked by the GICv3/NISV defect, a separate track outside reference architecture v1. What a defect filing still lacks (a numerically recorded fault PC/IPA, one logged run per QEMU variant) is pinned down by the read-only collector [scripts/diagnose-gicv3-nisv.sh](scripts/diagnose-gicv3-nisv.sh) and its reviewed report in [results/gicv3-nisv-debug/](results/gicv3-nisv-debug/20260909T101030Z/summary.md). The route to a hardware-timed hypervisor number is Phase 3b below, chosen in [ADR-003](docs/adr-003-hardware-timed-qhv.md) (Accepted 2026-09-09) and tracked in [orin-native-port-plan.md](docs/orin-native-port-plan.md)
-- [ ] **Phase 3b** _(M3 met; M4 rehearsed under TCG)_ — Native QNX on the Orin Nano with no QEMU, the route [ADR-003](docs/adr-003-hardware-timed-qhv.md) chose to a hardware-timed hypervisor number. QNX 8.0.0 kernel and user space ran natively on the board, entered by `kexec` from L4T, then on all six cores, then as the hypervisor host at EL2, and then booted the cloud-leg QNX guest under the QNX Hypervisor. Next come functional rungs only: M4-F (the trace instrument works on the board), M5-F (a UEFI cold boot reaches startup) and S1-F (a Linux guest without a GPU under native qvm). Then reference architecture v1 is frozen and one campaign takes the numbers ([plan](docs/orin-native-port-plan.md#architecture-versions-and-the-measurement-freeze-decided-2026-09-11))
+- [ ] **Phase 3b** _(M path complete: M4-F and M5-F met; next S1-F)_ — Native QNX on the Orin Nano with no QEMU, the route [ADR-003](docs/adr-003-hardware-timed-qhv.md) chose to a hardware-timed hypervisor number. QNX 8.0.0 kernel and user space ran natively on the board, entered by `kexec` from L4T, then on all six cores, then as the hypervisor host at EL2, and then booted the cloud-leg QNX guest under the QNX Hypervisor. Two functional rungs then passed: M4-F (the trace instrument works on the board) and M5-F (a UEFI cold boot reaches startup). Next are S1-F (a Linux guest without a GPU under native qvm), the v1 freeze, and one campaign that takes the numbers ([plan](docs/orin-native-port-plan.md#architecture-versions-and-the-measurement-freeze-decided-2026-09-11))
 - [ ] **Phase 4** _(history recorded; re-run on v1)_ — The boot-time diff (A2) and the QHV hypervisor-leg pair (A3) are kept as architecture-version history, and the stock QEMU 6.2 hang the QHV leg uncovered is written up as a QEMU-side EL2-timer defect. The twin diff runs again once, inside the v1 campaign, and the dimension-by-dimension verdicts in [drive-os-comparison.md](docs/drive-os-comparison.md) wait for that campaign
 - [ ] **Phase 5** — FuSa & Cybersecurity overlay (FMEA, ASIL gap, STRIDE)
 - [ ] **Phase 6** — Polish, demo recording, public release
@@ -497,7 +527,8 @@ A 2-minute spoken version is at [docs/interview-narrative.md](docs/interview-nar
 │   ├── startup/                    #   the t234-orin-nano board directory and the M1-M4 image builds
 │   ├── qhv/                        #   native guest configurations
 │   ├── tools/                      #   on-target helpers (console, stamps, SMP and trace tools)
-│   └── m4dry/  m4/                 #   M4 dry run, TCG rehearsal, board capture and parser
+│   ├── m4dry/  m4/                 #   M4 dry run, TCG rehearsal, board capture and parser
+│   └── uefi/                       #   M5 UEFI loader, its QEMU rehearsal, the board-session terminal
 ├── ipc-test/                       # C99: QNX echo servers, QNX host client, Linux client,
 │   │                               #      host + guest vdev-shmem probes, shared frame code
 │   └── common/                     # wire protocol (frame.h) + raw-mode console I/O
@@ -505,7 +536,7 @@ A 2-minute spoken version is at [docs/interview-narrative.md](docs/interview-nar
 ├── results/cloud/  results/hw/     # benchmark CSVs, one schema for both twins
 ├── results/qhv-images-SHA256SUMS.txt  # copy-time SHA-256 of the QHV image pair (values only; images stay out of git)
 ├── results/gicv3-nisv-debug/       # diagnose-gicv3-nisv.sh runs: PASS/FAIL/BLOCKED matrix, decoded ESR, next commands
-├── results/orin-native-port/        # Phase 3b research, compile-only checks, M0-M1b run records, design records (M3's run record is unpublished)
+├── results/orin-native-port/        # Phase 3b research, compile-only checks, M0-M1b run records, design records (the M3-M5 run records are unpublished)
 └── skills/                         # study artefacts (FMEA, ISO 26262, 21434, ASPICE, BSP,
                                     #                 digital twin, Jetson, Tegra virt)
 
