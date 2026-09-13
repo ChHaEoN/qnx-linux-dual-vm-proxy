@@ -8,6 +8,33 @@ The twin design is described in detail in
 [digital-twin-design.md](digital-twin-design.md); this file covers
 the *structural* picture that designs sits on top of.
 
+**Current state (2026-09-13).** The ids below are the rows of the plan's
+[architecture table](orin-native-port-plan.md#architecture-versions).
+- **History, closed (2026-09-13, owner):** A1, the cloud leg (the QNX
+  Hypervisor in QEMU TCG on the Windows PC), and A2, the Orin plain leg (QNX
+  in QEMU TCG beside L4T, IPC over `br0`/tap). Neither is redone. Closed does
+  not mean target met: A1's reliable runs never reached the 100k-iteration
+  target, KVM-accelerated boot on the Orin never worked, and A2's IPC run
+  used a rebuilt IFS. Two items stay open outside those phases: the
+  `qvm`/TCG stall on A1 is still not root-caused, and the GICv3/NISV KVM
+  defect is a separate filing track.
+- **History since the 2026-09-11 freeze decision:** A3, the same hypervisor
+  images in TCG on both hosts. Its twin legs run again only as v1 campaign
+  work.
+- **Current:** A4, the QNX Hypervisor native on the Orin Nano, with no QEMU.
+  The same shim has two entry paths. kexec from L4T carried the shim alone in
+  M0 and every host image in M1-M4. Once, attended, our own EFI loader,
+  launched by hand from the firmware's UEFI Shell, carried only the one-core
+  M1b image, with no `qvm` and no guest (M5-F). No `qvm` host image has been
+  entered through UEFI. The M path has ended.
+- **Next:** S1, the first stage of A5: a Linux guest without a GPU under
+  native `qvm`. Then the freeze of reference architecture v1, and one
+  measurement campaign on it. v1's two TCG twin legs are campaign work on
+  v1, not a reopening of A1-A3.
+
+The cloud-twin and hardware-twin sections below describe A1 and A2 as built.
+The Phase 3b section describes A4 and the planned v1.
+
 ---
 
 ## DRIVE OS reference architecture (the thing being proxied)
@@ -32,6 +59,9 @@ camera ingest; the IPC path is shared memory, not a network.
 ---
 
 ## Cloud twin — hybrid build/runtime
+
+**2026-09-13 (owner):** this section describes A1 as built. A1 is closed as
+architecture history and will not be redone.
 
 QNX SDP 8.0 does not have an arm64 host toolchain. The build-side
 tools (`mkqnximage`, `qcc`, the QNX Software Center) only run on
@@ -121,6 +151,10 @@ architectural improvement.
 
 ## Hardware twin — Jetson Orin Nano Dev Kit
 
+**2026-09-13 (owner):** this section describes A2 as built. A2 is closed as
+architecture history and will not be redone; the Orin's current leg is the
+native one (next section).
+
 The hardware-twin host is a single Jetson Orin Nano Dev Kit
 (Cortex-A78AE × 6, Ampere GPU, 8 GB RAM, NVIDIA L4T / JetPack 6).
 There is no separate build host: the QNX IFS produced on the cloud
@@ -160,14 +194,20 @@ guest is hosted by QEMU TCG on L4T (KVM boot is blocked; see
 [orin-port.md](orin-port.md)), which is host-mediated. The IPC run used an
 IFS rebuilt to stage the TCP server ([orin-port.md](orin-port.md) step 4).
 
-**Why this is the right way to use 8 GB:** running L4T (≈3 GB) +
+~~**Why this is the right way to use 8 GB:**~~ **2026-09-13: why A2 used the
+8 GB this way:** running L4T (≈3 GB) +
 QEMU(QNX, 1 GB) leaves ~4 GB headroom for the userspace
 benchmark + system overhead. Putting Linux in its own QEMU VM as
-well would burn 2 GB extra for no architectural benefit, and would
+well would burn 2 GB extra ~~for no architectural benefit, and would
 make the twin diff harder to interpret (it would no longer be
-isolating "what changes when only the host changes?").
+isolating "what changes when only the host changes?")~~.
+**2026-09-13:** that was A2's rationale, not the current design. The owner's
+target does put Linux in its own guest, under native `qvm` (S1, planned). A
+twin diff also never isolated only the host: "host" is a bundle of CPU, OS,
+TCG backend and QEMU build ([digital-twin-design.md](digital-twin-design.md)
+§1a).
 
-The Orin Nano L4T host is also responsible for **bridge + tap**
+The Orin Nano L4T host ~~is~~ was (**2026-09-13:** on A2) also responsible for **bridge + tap**
 provisioning (`scripts/orin/setup-bridge-orin.sh`, an Orin variant of
 `setup-bridge.sh`; the cloud script is not used on the as-built cloud leg).
 
@@ -175,7 +215,7 @@ provisioning (`scripts/orin/setup-bridge-orin.sh`, an Orin variant of
 
 ## Hardware twin, native — QNX Hypervisor on the Orin Nano (Phase 3b)
 
-*Added 2026-09-11.* The section above runs QNX under QEMU on L4T. Phase 3b
+*Added 2026-09-11.* The section above ~~runs~~ ran (**2026-09-13:** A2, history) QNX under QEMU on L4T. Phase 3b
 runs it on the board with no QEMU at all. The plan's architecture table
 calls this **A4**
 ([orin-native-port-plan.md](orin-native-port-plan.md#architecture-versions)).
@@ -190,14 +230,43 @@ L4T hands over by kexec, then is gone while QNX runs
             (IPC over the qvm virtio-console vdev)
 ```
 
+The host image is entered two ways. Both end in the same shim and the same
+startup:
+
+```
+Entry into the A4 host image, two ways
+├── kexec from a running L4T (M0-M4): M0's shim, then every host image through M4
+│   └── kexec_file_load, then kexec hands over
+│       └── our shim, entered at EL2 → startup → procnto
+└── the firmware's UEFI Shell, by hand (M5-F: attended, one session)
+    └── cold boot → Boot Manager → UEFI Shell → M5LOAD.EFI (our loader)
+        └── copies the payload, exits boot services, branches
+            └── the same shim, entered at EL2 → startup → procnto
+                (only the unchanged one-core M1b host image: no qvm, no guest)
+```
+
 - **What changes against the QEMU twins:** the hypervisor runs on silicon.
   Stage-2 translation, the virtual GIC and the guest timers run on the real
   A78AE, not inside an emulator ([findings.md](findings.md) 2026-09-10).
-- **What it does not have:** L4T, so no Linux Compute side; no GPU; no
-  certified isolation.
-- **Status:** M0, M1, M2, M1b and M3 are met. Under the owner's freeze
-  decision its measurements run in the v1 campaign. M3's figures are A4
-  history and stay on the local branch `m3-results-unpublished`.
+- **What the UEFI entry does not show** ([m5-design.md](../results/orin-native-port/20260909T1100Z/m5-design.md) §14.7):
+  no `qvm` or guest ran under it; no timing, and no comparison with kexec
+  entry; one `go` in one session, so no repeatability; not unattended, since
+  an operator opened the Shell; not a supported or certified boot; and no
+  evidence that the firmware leaves cleaner state than kexec does.
+- **What it does not have:** L4T, ~~so no Linux Compute side;~~ no GPU; no
+  certified isolation. **2026-09-13:** L4T is gone only while QNX runs. There
+  is no Linux side yet: S1's Linux guest is next and has not run. No
+  unattended or supported boot: kexec needs a running L4T, and the UEFI entry
+  needs an operator at the firmware menus. No published timing: its
+  measurements wait for the v1 campaign.
+- **Status:** M0, M1, M2, M1b and M3 are met. **2026-09-13:** M4-F (met
+  2026-09-11: the trace instrument works on the board, with the caveats in
+  [m4-design.md](../results/orin-native-port/20260909T1100Z/m4-design.md)
+  §14.8-14.9) and M5-F (met 2026-09-13) are met too, so the M path has ended.
+  Under the owner's freeze decision its measurements run in the v1 campaign.
+  ~~M3's figures are A4 history and stay~~ Figures from M3 on are A4 history
+  and stay unpublished, on the local branch `m3-results-unpublished` or in
+  git-ignored run records.
 
 **Target: reference architecture v1 (not frozen).** A4's native host plus a
 Linux guest without a GPU under `qvm` (S1), plus two TCG twin legs that boot
@@ -205,9 +274,59 @@ v1's guests in a QHV host image under QEMU. Whether the QNX guest stays beside
 the Linux guest is settled at the freeze. GPU pass-through is a later stage,
 still research only. Details: the plan's architecture table and freeze gate.
 
+**2026-09-13:** the detail below expands that target. Every item in it is
+planned: v1's manifest is not written, and nothing in it has run as a whole.
+
+```
+Reference architecture v1, native leg on the Orin Nano (PLANNED)
+entry path: kexec, UEFI, or both (settled at the freeze)
+└── QNX Hypervisor host: procnto at EL2 (A4's host)
+    ├── host RAM: first window at 0x80000000 (992 MiB default in M1-M5; set at the freeze)
+    │   plus a second add_ram window, candidate 0x100000000-0x249ffffff
+    │   (HYPOTHESIS, K5; no QNX boot with it yet)
+    └── qvm
+        ├── Linux guest, no GPU (S1): L4T kernel + busybox initrd, console on hvc0
+        ├── QNX guest (the cloud leg's): kept or dropped at the freeze
+        └── GPU pass-through: a later stage, research only, not in v1
+
+TCG twin legs (PLANNED): a QHV host image carrying v1's guest set, in QEMU
+├── on the Windows PC
+└── on the Orin, beside L4T
+    (one QEMU release on both, each build recorded, v1's device set, -snapshot)
+```
+
+- **Host:** A4's native host at EL2 with `qvm`. The core split and each
+  guest's pinning are settled at the freeze, including whether the two
+  cluster-1 cores are explained or left out.
+- **Linux guest (S1):** a stock L4T R36.4.7 kernel `Image` with a small
+  busybox initrd, its console on virtio-console. S1-F boots it under the TCG
+  QHV host first, after a `qvm` `dryrun` gate, then natively. Not run yet.
+- **Second RAM window:** checklist 11c (2026-09-13) found that the `rmmod`
+  quiesce frees no RAM window, because the map is fixed at boot. The range
+  above held no reservation on any of three boots. That no firmware or BPMP
+  user of it exists is still a HYPOTHESIS (K5), and booting the host image
+  with it as a second `add_ram` is still owed. A GPU range stays out of every
+  `add_ram`.
+- **QNX guest:** kept beside the Linux guest or dropped, settled at the
+  freeze. The owner's stated target has no QNX guest: the safety functions
+  run as QNX processes in the host.
+- **GPU pass-through:** a later stage of the research track, outside the
+  plan and research only. S1 has no GPU.
+- **TCG twin legs:** the same guest set in a QHV host image under QEMU TCG,
+  on both hosts. They compare two host bundles, not one variable, and their
+  results are labelled emulated time.
+- **Then one campaign on v1,** every record stamped `arch=v1;manifest=<sha>`.
+  Details: the plan's [architecture table](orin-native-port-plan.md#architecture-versions),
+  S1-F block and freeze gate.
+
 ---
 
 ## Why two hosts (cloud-side)?
+
+**2026-09-13 (owner):** this is A1's design reasoning. A1 is closed as
+architecture history and will not be redone; as built, its runtime was the
+Windows PC itself. The build-side half still holds: A4's images are also
+built on the Windows PC and run on the Orin.
 
 **Constraint 1 — `mkqnximage` is x86_64-only.** The QNX SDP 8.0
 host toolchain exists only for x86_64 Linux native and x86_64
@@ -219,9 +338,9 @@ the headache.
 BSP / customer-port engineering on arm64 silicon (Orin, Thor). An
 x86_64-only run would be architecturally off-target. Note (per
 [ADR-002](phase2-topology-decision.md)): the cloud runtime *wanted* KVM
-too, but non-metal Graviton has no `/dev/kvm`, so the cloud leg runs
-under TCG. KVM boot on the Phase-3 Orin twin is blocked too (GICv3/NISV;
-[orin-port.md](orin-port.md)), so that leg also runs TCG. The arm64-on-target
+too, but non-metal Graviton has no `/dev/kvm`, so the cloud leg ~~runs~~
+ran (**2026-09-13:** A1, history) under TCG. KVM boot on the Phase-3 Orin twin is blocked too (GICv3/NISV;
+[orin-port.md](orin-port.md)), so that leg also ~~runs~~ ran (**2026-09-13:** A2, history) TCG. The arm64-on-target
 argument still holds (the IFS is aarch64 either way).
 
 **The IFS is arch-agnostic from the build host's perspective.**
@@ -238,11 +357,16 @@ exactly the day-to-day shape of customer-port BSP work.
 
 ## IPC path detail (cloud leg)
 
+**2026-09-13 (owner):** this section describes A1's IPC path as built. A1 is
+closed as architecture history and will not be redone. The same path shape
+(host client, `qvm` virtio-console vdev, guest server) later ran natively on
+the Orin in M3 (A4).
+
 Per [ADR-002](phase2-topology-decision.md), the cloud-leg IPC path is
 **not** a Linux-bridge / virtio-net path between two guests — that
 design is falsified. The cloud leg crosses the `qvm` partition boundary
 between the QNX *host* and the single QNX *guest*, over the
-`virtio-console` vdev already declared in the live `g2.conf`.
+`virtio-console` vdev already declared in ~~the live~~ A1's (**2026-09-13:** history) `g2.conf`.
 
 ```
 ┌─────────────────────────────────┐        ┌──────────────────────────────┐
@@ -269,25 +393,32 @@ boundary, but the cloud leg is **TCG-emulated**, so the latency it
 yields is dominated by TCG emulation cost — it does **not** measure
 hardware-timed hypervisor IPC. Hardware-timed numbers come from the
 native QNX Hypervisor on the Orin (Phase 3b, section above), in the v1
-campaign; the Phase-3 Orin twin under QEMU runs TCG as well. The
+campaign; the Phase-3 Orin twin under QEMU ~~runs~~ ran (**2026-09-13:** A2, history) TCG as well. The
 heterogeneous QNX↔Linux IPC (the bridged virtio-net path with `tap`/`br0`)
-is committed to **Phase 3 / Orin**, where it runs natively against L4T —
-see that twin's section above.
+~~is committed to **Phase 3 / Orin**, where it runs natively against L4T~~
+ran on **Phase 3 / Orin** against a native L4T client —
+see that twin's section above. **2026-09-13:** that path is A2 history
+too. v1 has no `br0`/tap path: its planned Linux guest runs under `qvm`,
+and neither S1-F nor the planned campaign includes a QNX↔Linux IPC run.
 
 ---
 
 ## What this is NOT (per twin side)
 
-| Aspect | Real DRIVE OS | Cloud twin (designed on AWS Graviton; as built on a Windows PC) | HW twin (Jetson Orin Nano, QEMU on L4T) |
-|---|---|---|---|
-| Partitioner | Type-1 NVIDIA Hypervisor | SDP 8.0 QHV (`qvm`) hosting one QNX guest under QEMU **TCG** (no KVM on cloud; see [ADR-002](phase2-topology-decision.md)) | QEMU TCG on L4T (KVM boot blocked) running QNX alongside native L4T workload |
-| Shared SoC | Yes (Tegra Orin / Thor) | No — pure-virt, no shared peripherals | **Same Tegra family** (A78AE, Ampere) but Jetson SKU; no DRIVE-class FuSa peripherals |
-| Inter-VM IPC | Shared memory + mailbox | host↔guest over `qvm` virtio-console vdev (TCG-emulated EL2 partition boundary; not hardware-timed) | virtio-net through host bridge (Phase 3; heterogeneous QNX↔Linux) |
-| VM-aware scheduling | Yes (partition scheduler) | No — the host OS scheduler schedules everything | No — L4T CFS schedules QEMU thread alongside L4T processes |
-| Real-time | Certified RT path on Safety guest | Best-effort; jitter from host scheduler is observable | Best-effort; A78AE does have hardware RT support but L4T host doesn't expose certified RT |
-| FSI lockstep | Cortex-R52 lockstep cluster | None | None — Jetson SKU has no FSI exposed to user software |
-| Camera / NVDLA / GPU | Real, vGPU-partitioned | None — the emulated `virt` machine has no NVIDIA accelerators | Real Ampere GPU is present but **out of scope** for this project; not exposed to QNX guest |
-| Bootloader chain | SecureBoot + measured boot, certified | None | None — JetPack provides UEFI but no chain-of-trust beyond default |
+**2026-09-13 (owner):** the A1 and A2 columns are architecture history,
+closed and not redone. The native column is A4 as run, with v1's changes
+marked planned.
+
+| Aspect | Real DRIVE OS | Cloud twin, A1 (history; designed on AWS Graviton; as built on a Windows PC) | HW twin, A2 (history; Jetson Orin Nano, QEMU on L4T) | Native, A4 as run (v1 planned) |
+|---|---|---|---|---|
+| Partitioner | Type-1 NVIDIA Hypervisor | SDP 8.0 QHV (`qvm`) hosting one QNX guest under QEMU **TCG** (no KVM on cloud; see [ADR-002](phase2-topology-decision.md)) | QEMU TCG on L4T (KVM boot blocked) running QNX alongside native L4T workload | QNX Hypervisor host (procnto at EL2, `qvm`) on the A78AE, no QEMU; uncertified SDP 8.0, not QNX OS for Safety. v1 (planned) adds a Linux guest |
+| Shared SoC | Yes (Tegra Orin / Thor) | No — pure-virt, no shared peripherals | **Same Tegra family** (A78AE, Ampere) but Jetson SKU; no DRIVE-class FuSa peripherals | The Jetson SKU itself, with L4T gone while QNX runs; no DRIVE-class FuSa peripherals |
+| Inter-VM IPC | Shared memory + mailbox | host↔guest over `qvm` virtio-console vdev (TCG-emulated EL2 partition boundary; not hardware-timed) | virtio-net through host bridge (Phase 3; heterogeneous QNX↔Linux) | host↔QNX guest over the `qvm` virtio-console vdev on silicon (M3: completion only, figures unpublished); no shared-memory path shown on this leg; no QNX↔Linux IPC run, and none planned in S1-F |
+| VM-aware scheduling | Yes (partition scheduler) | No — the host OS scheduler schedules everything | No — L4T CFS schedules QEMU thread alongside L4T processes | `qvm` vCPUs run as host threads under procnto; no partition scheduling shown |
+| Real-time | Certified RT path on Safety guest | Best-effort; jitter from host scheduler is observable | Best-effort; A78AE does have hardware RT support but L4T host doesn't expose certified RT | No real-time property measured or claimed; timing waits for the v1 campaign; the two cluster-1 cores run at a fixed low rate, cause open |
+| FSI lockstep | Cortex-R52 lockstep cluster | None | None — Jetson SKU has no FSI exposed to user software | None |
+| Camera / NVDLA / GPU | Real, vGPU-partitioned | None — the emulated `virt` machine has no NVIDIA accelerators | Real Ampere GPU is present but **out of scope** for this project; not exposed to QNX guest | None; QNX drives no accelerator. v1's Linux guest (planned) has no GPU; pass-through is a later stage, research only |
+| Bootloader chain | SecureBoot + measured boot, certified | None | None — JetPack provides UEFI but no chain-of-trust beyond default | None. Entered by kexec from a running L4T (the shim alone in M0, host images in M1-M4), or once, attended, by our own EFI loader from the firmware's UEFI Shell (M5-F: the one-core M1b image only; no qvm or guest); neither is a chain of trust or a supported boot |
 
 The project's value lives in being *honest* about every row of that
 table on **each side of the twin**, and using the twin diff to study
