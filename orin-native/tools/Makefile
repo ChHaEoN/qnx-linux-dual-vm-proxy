@@ -9,10 +9,13 @@
 # §5.1-5.2); orin-native/m4dry/build-m4dry-image.ps1 builds them with bwait.
 # m4count is M4's on-target counter (m4-design.md §4.5); tcu-cat gained -f, -a,
 # -T and -s for M4 (§5.1) and keeps its old behaviour without them.
+# s1con and memcanary are S1-F's console and canary tools (s1-design.md §3.4,
+# §3.8): s1con is stamp's stream mode with bounded writes, so stamp.c is not
+# edited; memcanary has no physical write mode.
 
 CC      := qcc -Vgcc_ntoaarch64le
 CFLAGS  := -Wall -Wextra -Werror -O2
-TOOLS   := tcu-cat stamp smpcheck bwait clkcmp trcctl m4count
+TOOLS   := tcu-cat stamp smpcheck bwait clkcmp trcctl m4count s1con memcanary
 
 all: $(TOOLS)
 

@@ -135,6 +135,7 @@ main(int argc, char **argv, char **envv)
 {
 	const char *wdt_policy = "keep";
 	const char *hvt_arg    = NULL;
+	const char *ram_arg    = NULL;
 	int         opt;
 
 	add_callout_array(callouts_reboot, sizeof(callouts_reboot));
@@ -158,7 +159,7 @@ main(int argc, char **argv, char **envv)
 	psci_call = psci_smc;
 	in_hvc    = 0;
 
-	while ((opt = getopt(argc, argv, COMMON_OPTIONS_STRING "m:W:t:")) != -1) {
+	while ((opt = getopt(argc, argv, COMMON_OPTIONS_STRING "m:W:t:b:")) != -1) {
 		switch (opt) {
 		case 'm':
 			/*
@@ -184,6 +185,16 @@ main(int argc, char **argv, char **envv)
 			 */
 			hvt_arg = optarg;
 			break;
+		case 'b':
+			/*
+			 * w2 | w2,canary: S1's second RAM window, and with canary
+			 * the three startup-filled canaries (init_raminfo.c). Recorded
+			 * and checked after select_debug, as -t is. Absent, nothing
+			 * changes and nothing new prints. New for S1; no image with
+			 * -b has run.
+			 */
+			ram_arg = optarg;
+			break;
 		default:
 			handle_common_option(opt);
 			break;
@@ -202,6 +213,16 @@ main(int argc, char **argv, char **envv)
 			t234_hvt_policy = T234_HVT_OFF;
 		} else {
 			crash("t234: -t%s is not stop, continue or off\n", hvt_arg);
+		}
+	}
+
+	if (ram_arg != NULL) {
+		if (strcmp(ram_arg, "w2") == 0) {
+			t234_ram_opts = T234_RAMOPT_W2;
+		} else if (strcmp(ram_arg, "w2,canary") == 0) {
+			t234_ram_opts = T234_RAMOPT_W2 | T234_RAMOPT_CANARY;
+		} else {
+			crash("t234: -b%s is not w2 or w2,canary\n", ram_arg);
 		}
 	}
 

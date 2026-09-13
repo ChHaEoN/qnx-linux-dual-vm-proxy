@@ -101,6 +101,31 @@
 #define T234_RAM_BASE       0x80000000ull
 #define T234_RAM_SIZE       0x3E000000ull     /* 992 MiB */
 
+/* ---- S1: window 2 and the provisional GPU range, which together are checklist
+ * 11c's candidate 0x1_0000_0000-0x2_49FF_FFFF: System RAM and unreserved in
+ * /proc/iomem on every boot compared (docs/orin-native-port-plan.md, 11c).
+ * Window 2 is added only under -b (main.c, init_raminfo.c). The GPU range is
+ * never passed to add_ram; it ends below CMA at 0x2_4A00_0000, ramoops at
+ * 0x2_725F_0000 and the black box. Both sizes are provisional for freeze item
+ * 6 (s1-design.md D18): a resize changes this binary and reruns B1 and B2. */
+#define T234_RAM2_BASE      0x100000000ull
+#define T234_RAM2_SIZE      0x8A000000ull     /* 2,208 MiB, ends 0x1_89FF_FFFF */
+#define T234_GPU_BASE       0x18A000000ull
+#define T234_GPU_SIZE       0xC0000000ull     /* 3,072 MiB, ends 0x2_49FF_FFFF */
+
+/* -b values, as bits of t234_ram_opts. w2,canary sets both. */
+#define T234_RAMOPT_W2      0x1u
+#define T234_RAMOPT_CANARY  0x2u
+
+/* ---- S1: the three canaries -b w2,canary takes out of sysram and fills in
+ * startup (s1-design.md §3.3, §3.8): the top of window 1, the bottom of window
+ * 2 and the top of window 2. orin-native/tools/memcanary.c carries the same
+ * table, and make-s1-images.sh checks that the two agree. */
+#define T234_CANARY1_BASE   0xBD000000ull
+#define T234_CANARY2_BASE   0x100000000ull
+#define T234_CANARY3_BASE   0x189000000ull
+#define T234_CANARY_SIZE    0x1000000ull      /* 16 MiB each */
+
 /* ---- The RAM black box: the ramoops console zone, at the carveout base plus
  * the dump area the kernel puts ahead of it. Located and its format read
  * directly out of memory on the running board, not inferred.
@@ -211,6 +236,7 @@ extern const _Uint64t t234_cpu_mpidr[T234_NUM_CPU];
 extern const unsigned t234_cpu_gicr_idx[T234_NUM_CPU];
 extern const _Uint64t t234_cpu_sgi1r[T234_NUM_CPU];
 extern _Uint64t       t234_ram_size_override;
+extern unsigned       t234_ram_opts;
 
 struct t234_ap_diag {
 	_Uint32t	stage;

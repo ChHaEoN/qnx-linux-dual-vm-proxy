@@ -1,0 +1,70 @@
+# SPDX-License-Identifier: MIT
+#
+# s1-conf.allow: the allow-list for the S1 Linux guest configuration,
+# orin-native/s1/s1-linux.conf (Phase 3b).
+#
+# results/orin-native-port/20260909T1100Z/s1-design.md §3.7 (revision 2), with
+# owner decisions D13 and D19. D13: S1 has its own allow-list and gate;
+# scripts/qhv/g2.conf.allow, which TCR-CFG-001 reviewed for the QNX guest, is
+# not edited. D19: one non-GPU FDT overlay may be approved by its sha256.
+# `parse-s1.py conf FILE` is the gate; the S1 generators run it at build time.
+# The configuration file itself carries no comments, so the bytes the gate
+# reads are the bytes every leg stages (§2 rule 2).
+#
+# Format: one entry per line; '#' starts a comment; blank lines are ignored.
+#
+#   <word>                 A configuration keyword. parse-s1.py's grammar says
+#                          where each may stand: system, logger, ram, cpu, load,
+#                          initrd, cmdline and vdev start a line; hostdev, loc
+#                          and intr only follow a vdev line; cluster is only a
+#                          cpu option word, and load is also initrd's option
+#                          word. A word with no place in that grammar makes the
+#                          allow-list itself invalid, and removing a word here
+#                          rejects every line that uses it.
+#   vdev:<type>            A vdev type the configuration may declare (§2 rule 12).
+#   forbid:<word> [<word>] A word, or a sequence of words, that fails the gate
+#                          wherever it stands outside the quoted cmdline, also as
+#                          a '-', ',', ':' or '='-separated part of a longer
+#                          word. The gate refuses an allow-list that drops any
+#                          of the six below, or that allows a forbidden word.
+#   overlay-sha256:<hex>   D19, at most one. With it, the gate accepts exactly one
+#                          line `fdt load /data/s1/<file>` whose PC copy (the
+#                          file of that name beside the configuration, or
+#                          `conf --overlay FILE`) has this sha256, decodes as an
+#                          FDT, names no GPU, SMMU or IOMMU node, property,
+#                          label or string, and targets its fragments by path
+#                          only (parse-s1.py's overlay screen). The owner's hash
+#                          approval stays the primary control. Without it,
+#                          `fdt load` is forbidden like the rest (§7.3).
+#
+# Adding an entry here is a reviewed configuration-surface change.
+
+# --- keywords (§3.7) ---
+system
+logger
+ram
+cpu
+cluster
+load
+initrd
+cmdline
+vdev
+hostdev
+loc
+intr
+
+# --- vdev types: no GPU, pass-through, SMMU, network or block device (§2 rule 12) ---
+vdev:pl011
+vdev:virtio-console
+
+# --- forbidden (§3.7, §7.3) ---
+forbid:pass
+forbid:smmu
+forbid:fdt load
+forbid:virtio-net
+forbid:virtio-blk
+forbid:shmem
+
+# --- D19: approved non-GPU overlay. None is approved. An approval adds one line
+# of this form, and the overlay file is pinned like the configuration:
+# overlay-sha256:<64 hex digits>

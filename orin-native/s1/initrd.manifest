@@ -1,0 +1,95 @@
+# SPDX-License-Identifier: MIT
+#
+# initrd.manifest - the S1-F Linux guest's initrd, option I-a.
+#
+# Phase 3b, results/orin-native-port/20260909T1100Z/s1-design.md sections 3.5
+# and 4.2. Built by mkcpio.py (its docstring defines this grammar):
+#     python mkcpio.py --selftest
+#     python mkcpio.py build initrd.manifest
+# The output goes to out/, which is git-ignored, as is out/l4t/. No Linux or
+# busybox byte is ever committed (the design's Licence status).
+#
+# Source: the board's /boot/initrd (L4T R36.4.7), copied under D3 to
+# out/l4t/initrd. One gzip newc archive, 287 members, one trailer.
+#
+# R11 (the /lib usrmerge links), answered at T0 from the source's own listing
+# (mkcpio.py list out/l4t/initrd):
+#   - busybox's PT_INTERP is /lib/ld-linux-aarch64.so.1. Its DT_NEEDED
+#     entries are libresolv.so.2, libc.so.6 and ld-linux-aarch64.so.1, and it
+#     has no RUNPATH. libc.so.6 needs ld-linux-aarch64.so.1; libresolv.so.2
+#     needs libc.so.6 and ld-linux-aarch64.so.1. (Read from the ELF program
+#     headers and dynamic section of the GPL/LGPL files, never executed.)
+#   - The source reaches the interpreter as lib -> usr/lib, then
+#     usr/lib/ld-linux-aarch64.so.1 -> aarch64-linux-gnu/ld-linux-aarch64.so.1,
+#     and holds the libraries in usr/lib/aarch64-linux-gnu/. Both links are
+#     reproduced below; build refuses unless the source holds each one at the
+#     same path with the same target.
+#   - The source has no etc/ld.so.cache, so its own binaries already find
+#     their libraries through glibc's built-in multiarch directories
+#     (/lib/aarch64-linux-gnu reaches usr/lib/aarch64-linux-gnu through the
+#     lib link). The same layout, with no cache, is what ships here.
+#   - bin -> usr/bin is reproduced as in the source, so the shebang /bin/sh
+#     resolves. sbin -> usr/sbin is left out: nothing here lives in sbin.
+#   - The source's dev/ is empty. dev/console (c 5 1, 0600, as the kernel's
+#     own usr/default_cpio_list) is ours, so the kernel can open a console
+#     for /init before devtmpfs is mounted.
+#
+# R10 (the busybox applets and $(( ))), answered at T0 by this manifest's
+# busybox line, which build checks on every run and prints:
+#   - BusyBox v1.30.1 (Ubuntu 1:1.30.1-7ubuntu3), 249 applets in its name
+#     table, among them sh, ash, mount, echo, cat, uname and sleep.
+#   - The three error texts of busybox's shell/math.c are present, so
+#     FEATURE_SH_MATH is compiled in and ash evaluates $(( )). This is an
+#     inference from strings of the GPL binary; T2's probe 1,
+#     echo S1-SHELL-$((40+2))-OK, is the real test.
+#   - In the source, sh -> dash and echo, cat, mount and sleep are separate
+#     coreutils/util-linux binaries. None of those is copied: every applet
+#     link below points at busybox.
+#
+# Every sha256 is a pin, and build refuses a mismatch. The file modes of the
+# copied members equal the source's (build checks that too). The output pins
+# are the initrd pin the S1 generators carry: a changed input changes them,
+# and so does a different zlib for the gzip pin alone (mkcpio.py says which).
+
+source l4t out/l4t/initrd f0cdcc61064ff6e9ac99b1c4ff02468dbe9cf0c0e9404cf429524d741f6883f8
+
+# Pinned 2026-09-14 from the build after init.sh's /dev/null fix (Python
+# 3.12.10, zlib 1.3.1): the gzip file's sha256, then the cpio stream's.
+# 22 entries; 2,656,256 B of cpio, 1,321,267 B gzip.
+output out/initrd.cpio.gz 44e81ea65903e25a66cafe6b35f28776bba1f6ae8082251cc8a988a689495ab6 3bf6a9878d3a53d752303ddc895c6527ed448494e97bc9bf7b42464ad87d65fe
+
+# Mount points and parents. proc and sys carry the source's 0555.
+dir dev 0755
+dir proc 0555
+dir sys 0555
+dir usr 0755
+dir usr/bin 0755
+dir usr/lib 0755
+dir usr/lib/aarch64-linux-gnu 0755
+
+# Stock bytes from the board initrd.
+file usr/bin/busybox 0755 c6c3cbcb508f2718a81283c7ff150b4d9c2a73d01313805db757d3f11fc31142 l4t usr/bin/busybox
+file usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1 0755 d93175bf8f55407b2c7cd83f47f0cdaf0a2ddfd43cac7e3f59ac1b008708769e l4t usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
+file usr/lib/aarch64-linux-gnu/libc.so.6 0755 265b8b6165b7826077d75a88677dbd37a82bd4f3be9e1fd8a79a6f2e2c38ff4f l4t usr/lib/aarch64-linux-gnu/libc.so.6
+file usr/lib/aarch64-linux-gnu/libresolv.so.2 0644 217089cc3675deec81517e7fb079d5b75eadc6c51efa5c39fe93255b86a39056 l4t usr/lib/aarch64-linux-gnu/libresolv.so.2
+
+# The usrmerge links, each checked against the source (R11).
+link lib usr/lib l4t
+link bin usr/bin l4t
+link usr/lib/ld-linux-aarch64.so.1 aarch64-linux-gnu/ld-linux-aarch64.so.1 l4t
+
+# Applet links (section 3.5): sh mount echo cat uname sleep.
+link usr/bin/sh busybox
+link usr/bin/mount busybox
+link usr/bin/echo busybox
+link usr/bin/cat busybox
+link usr/bin/uname busybox
+link usr/bin/sleep busybox
+
+node dev/console 0600 c 5 1
+
+# Ours.
+file init 0755 2736648fbc5ce165ff942f93020dcfe933c14551879b36c0246ba5ad934d443e local init.sh
+
+# R10 gate: ash is required as well as sh, the name the design's risk uses.
+busybox usr/bin/busybox +math sh ash mount echo cat uname sleep
