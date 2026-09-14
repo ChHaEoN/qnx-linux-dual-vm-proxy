@@ -2261,6 +2261,17 @@ The export block is placed after `FAIL_STATE`, **outside** the `MODE != host` gu
   - **The fill-rate factor is 4,** pre-registered by J6's first stage and fixed for the revision.
   - **The J6 stage's amendment is named `owner-D27`.**
   - **J6c runs in the owner's current session.**
+- **J6c: F39 again, an immediate stop.**
+  - **The first attempt** stopped in the harness before any board session (an unset variable). A crash review with a stubbed dry run followed, and the fixes were pushed before the second attempt.
+  - **The second attempt** ran to its jump and back cleanly with the watcher image.
+- **What J6c's watches showed (HYPOTHESIS where interpreted):**
+  - **c2's corruption is not read instability.** Re-reads were stable: no oscillation, no reverted misreads, no bit-flip classes.
+  - **The writer is not active during QNX's run.** A handful of words healed once at the start, and then c2 did not change through the later watches, before and during the large hold.
+  - **The corrupted words are data-structure shaped** (zeros and pointer-like values dominate). The classes alone cannot say whose structures they are.
+  - **At the jump,** most bad pages were pages Linux held as slab, but whole slab-dense parts of c2 were untouched.
+  - **Window 1 was not written during the watches:** c1 was clean at every scan, and the large hold over sysram verified.
+  - **c3 again carried a small static write,** at a different place from J2's.
+- **What follows.** Three of the revision's four kexec runs are used. §15.6 stops here: the class stays U, and the owner decides. D30's UEFI-entry arm (J7a) is the test that separates a Linux-left writer from one anchored at the window-2 base.
 
 ### 15.7 Claims, failure signatures, risks
 
