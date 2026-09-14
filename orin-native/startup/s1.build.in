@@ -1,0 +1,185 @@
+# S1 — a Linux guest without a GPU under native qvm on the Jetson Orin Nano:
+# M3's host without the QNX guest pair, the board's stock L4T kernel and a
+# busybox initrd staged at /data/s1/, and the second RAM window with its startup
+# canaries switched on.
+#
+# Phase 3b, results/orin-native-port/20260909T1100Z/s1-design.md (revision 2),
+# §3.9 and §4.2. No image generated from this template has run on the board.
+#
+# The s1-*.build buildfiles are generated from this template by
+# make-s1-images.sh under its output directory (orin-native/startup/out/s1/ by
+# default, git-ignored: an IFS carries QNX binaries, the board's Linux Image and
+# the initrd's GPL and LGPL files). Edit the template, never a generated copy.
+# Every comment line is dropped from the generated buildfile, as in M3 and M4.
+#
+#   image    mode  configuration    role (design §6.12)
+#   s1-h1    host  s1-linux.conf    B2: window 2, the canaries, the window-2 allocation; qvm never runs
+#   s1-n1    boot  s1-linux.conf    B3: native dryrun and a shell on hvc0 (pass item 2)
+#   s1-n2    hold  s1-linux.conf    B4: the ten-minute run (pass item 4)
+#   s1-d1    boot  s1-d1.conf       diagnostic after a board-only failure (§5.3); never a pass run
+#   s1-q2    q2    both guests      B5: only after D1 keeps the QNX guest and D14's limit is given
+# s1-m1b-p6 (B1) has no template here: it is M1b's m1b-p6 buildfile byte for
+# byte, built with S1's startup (make-s1-images.sh).
+#
+## THIS FILE IS THE TEMPLATE, not a buildfile. The generator drops every line
+## that begins @D1@ unless the image is s1-d1 and every line that begins @Q2@
+## unless it is s1-q2, strips those prefixes from the lines it keeps, and
+## replaces:
+##   @RUNG@     the image name
+##   @P@        the CPU count, 4
+##   @GUARD@    the guard in seconds, from the generator's bound table (C14)
+##   @B_OPT@    -b w2,canary
+##   @KSH@      the generated host script
+##   @IMAGE@ @INITRD@ @CONF@  orin-native/s1/out/l4t/Image, orin-native/s1/out/initrd.cpio.gz
+##              and orin-native/s1/s1-linux.conf, each checked against its pin
+##   @D1CONF@   the generated s1-d1.conf (s1-d1 only)
+##   @CLIENT@ @G2CONF@ @GUEST_IFS@ @GUEST_DISK@  M3's IPC client, configuration and guest pair (s1-q2 only)
+## and fails if any @[A-Z0-9_]+@ survives. The mode lives only in the host
+## script, so the buildfiles of s1-h1, s1-n1 and s1-n2 differ only in @RUNG@,
+## @GUARD@ and @KSH@.
+##
+## The two blocks marked "verbatim from m3.build.in" are m3.build.in:95-128 and
+## :148-173 with @Q2@ in front of the lines a Linux-only image leaves out
+## (design §3.9); make-s1-images.sh checks that each, prefixes removed, still
+## equals M3's lines, so an s1-q2 image carries M3's set exactly.
+#
+# The base address is not free: kexec places the 8 KiB shim page at 0x80080000,
+# so the image begins right after it (build-shim.sh fails a shim page that is not
+# exactly 8192 bytes).
+[image=0x80082000]
+[-compress]
+
+# M3's startup line (m3.build.in:45) with S1's board option (design §3.3, §3.9):
+# -b w2,canary   window 2 (0x100000000, 2,208 MiB) as a second add_ram, the GPU
+#                range kept out of every add_ram, and the three 16 MiB canaries
+#                taken out of sysram with alloc_ram and filled before procnto
+#                starts. Only PIN_STARTUP_S1 knows -b; the generator resolves
+#                the startup from orin-native/s1/out/startup/ alone.
+[virtual=aarch64le,raw] .bootstrap = {
+    startup-t234-orin-nano -vvv -P@P@ -Q enable,el2-host -m992M -Wkeep -A @B_OPT@ -Dtcu
+    PATH=/proc/boot LD_LIBRARY_PATH=/proc/boot
+    [+keeplinked] procnto-smp-instr -v
+}
+
+# M3's script order (census, then the guard; m3.build.in:56-69), with the S1
+# names and the guard from the bound table. An IFS script is not a shell: no
+# pipes, no redirection, one program per line; the host state machine
+# (s1-host.ksh.in) carries every bounded wait. The label is the image name, so
+# parse-s1.py reads "T234 S1 s1-n1 -P4". The script ends in a warm reset, which
+# keeps the black box.
+[+script] .script = {
+    display_msg "T234 S1 @RUNG@ -P@P@: procnto up"
+    procmgr_symlink ../../proc/boot/ldqnx-64.so.2 /usr/lib/ldqnx-64.so.2
+    procmgr_symlink /proc/boot/ksh /bin/sh
+    smpcheck -i -n @P@
+    bwait -g @GUARD@ &
+    slogger2
+    pipe
+    devc-pty
+    pidin info
+    ksh /proc/boot/s1-host.ksh
+    display_msg "T234 S1 @RUNG@ -P@P@: resetting so the log can be recovered"
+    smpcheck -z 3
+    shutdown -S reboot
+}
+
+# The runtime linker and M3's libraries. io-blk.so and cam-disk.so serve only
+# the QNX guest's disk, so a Linux-only image leaves them out (design §3.9).
+[type=link] /usr/lib/ldqnx-64.so.2=/proc/boot/ldqnx-64.so.2
+ldqnx-64.so.2
+[-autolink]
+# verbatim from m3.build.in:95-128, begin
+libc.so.6
+libgcc_s.so.1
+libsecpol.so.1
+libm.so.3
+libqh.so.1
+libregex.so.1
+libjail.so.1
+libfsnotify.so.1
+libsocket.so.4
+[type=link] libsocket.so=libsocket.so.4
+libfdt.so.1
+[type=link] libfdt.so=libfdt.so.1
+libcam.so.2
+@Q2@io-blk.so
+@Q2@cam-disk.so
+libslog2.so.1
+[type=link] libslog2.so=libslog2.so.1
+libslog2parse.so.1
+libslog2shim.so.1
+libjson.so.1
+# R0 (2026-09-10T21:11Z) stopped at md5_pre: toybox and slog2info printed
+# 'ldd:FATAL: Could not load library libz.so.2'. The loader names only the
+# first missing library, so the rest of the cloud host IFS's [-autolink] set
+# comes too (qhv/host/output/build/ifs.build), with its qcrypto.conf. That
+# host's CONFIG_PATH is not copied: on this bootstrap line mkifs prefixes it to
+# every script command, which the generator's exact-line checks reject.
+libz.so.2
+libcrypto.so.3
+libqcrypto.so.1.0
+qcrypto-openssl-3.so
+libpci.so.3.0
+[uid=0 gid=0 perms=0444] qcrypto.conf={
+openssl-3 tags=*
+}
+# verbatim from m3.build.in:95-128, end
+
+# Ours: the tools (orin-native/tools), the generated host script and the Linux
+# payload. The payload sits at /data/s1/ here and on the TCG host, so the
+# configuration's load and initrd lines are the same bytes on both (design C2).
+# The Image and the initrd are [+raw], opaque bytes to mkifs; the generator
+# extracts every payload file back out of the image and checks its sha256.
+/proc/boot/tcu-cat=tcu-cat
+/proc/boot/stamp=stamp
+/proc/boot/bwait=bwait
+/proc/boot/smpcheck=smpcheck
+/proc/boot/s1con=s1con
+/proc/boot/memcanary=memcanary
+[perms=0444] /proc/boot/s1-host.ksh=@KSH@
+[+raw perms=0444] /data/s1/Image=@IMAGE@
+[+raw perms=0444] /data/s1/initrd.cpio.gz=@INITRD@
+[perms=0444] /data/s1/s1-linux.conf=@CONF@
+@D1@[perms=0444] /data/s1/s1-d1.conf=@D1CONF@
+@Q2@[perms=0555] /proc/boot/qnx-host-client=@CLIENT@
+@Q2@[perms=0444] /proc/boot/g2.conf=@G2CONF@
+@Q2@[+raw perms=0444] /proc/boot/guest-ifs.bin=@GUEST_IFS@
+@Q2@[+raw perms=0444] /proc/boot/disk-qvm=@GUEST_DISK@
+
+# M3's utilities and the hypervisor set, without the guest disk's block stack
+# (s1-q2 keeps it), then the toybox applets the S1 host script adds: base64 for
+# the exports and od (design §3.9), mkdir for s1con's hit directory and rm for
+# the dump it replaces. Still no vpctl, virtio-net, random, io-sock, fs-qnx6,
+# gawk, awk, gzip or trace tools.
+# verbatim from m3.build.in:148-173, begin
+ksh
+pidin
+on
+slay
+waitfor
+shutdown
+devc-pty
+slogger2
+slog2info
+pipe
+qvm
+qvm-check
+vdev-pl011.so
+vdev-virtio-console.so
+@Q2@vdev-virtio-blk.so
+@Q2@vdev-shmem.so
+@Q2@devb-loopback
+toybox
+[type=link] cat=toybox
+[type=link] cp=toybox
+[type=link] cmp=toybox
+[type=link] grep=toybox
+[type=link] head=toybox
+[type=link] md5sum=toybox
+[type=link] tail=toybox
+[type=link] wc=toybox
+# verbatim from m3.build.in:148-173, end
+[type=link] base64=toybox
+[type=link] od=toybox
+[type=link] mkdir=toybox
+[type=link] rm=toybox

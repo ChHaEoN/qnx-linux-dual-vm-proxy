@@ -1,0 +1,461 @@
+## s1-host.ksh.in — the S1 host state machine template (Phase 3b).
+##
+## The script of results/orin-native-port/20260909T1100Z/s1-design.md
+## (revision 2) §6.3-§6.10, printing the tokens of §5.1 as
+## orin-native/s1/parse-s1.py reads them, below these ## lines, which
+## make-s1-images.sh drops. Built from m3-host.ksh.in and m4-host.ksh.in, whose
+## rules it keeps; neither is edited.
+##
+## Profiles and line prefixes. A line that begins @BOARD@ is kept only in the
+## board profile and @TCG@ only in the TCG profile; @DIAG@ only in the board
+## diagnostic s1-d1, which stages its configuration beside the pinned one; @Q2@
+## only in mode q2. A TCG diagnostic (d1, d2) stages its configuration, and d2 its
+## stock initrd, under the pinned names in /data/s1/, as build-s1tcg-image.ps1
+## does, so it needs no prefix. The generator strips the prefix from each line it
+## keeps. A TCG script therefore carries no memcanary
+## asinfo or verify text at all (design §3.8, §7.3, R40), and the generator's
+## profile check reads the text of each generated script, not a runtime branch.
+##
+## Markers the generator replaces (board value; TCG value):
+##   @RUNG@ the image name (s1-n1, ...); tcg-<variant>
+##   @MODE@ host|dryrun|boot|hold|q2    @PROFILE@ board; tcg
+##   @B@ our tools, @X@ QNX tools: /proc/boot; /system/bin
+##   @CONF@ the configuration qvm runs (/data/s1/s1-linux.conf, or a diagnostic's)
+##   @IMAGE_PATH@ @INITRD_PATH@ @BASECONF_PATH@ @DIAG_MD5_ARGS@
+##   @MD5_IMAGE@ @MD5_INITRD@ @MD5_BASECONF@ (the bytes staged at those three
+##   paths) @MD5_CONF@ (s1-d1's own configuration)
+##   the S1 CONFIG fields of §5.2 item 5: @IMAGE_SHA256@ @INITRD_SHA256@
+##   @CONF_SHA256@ @CMDLINE_SHA256@ @INIT_SHA256@ @S1CON_SHA256@
+##   @MEMCANARY_SHA256@ @STAMP_SHA256@ @BWAIT_SHA256@ @STARTUP_SHA256@
+##   @STARTUP_LINE@ @CPU_LINES@ @RAM_LINE@ @WINDOWS@ @CANARIES@ @GUEST_SET@
+##   @HOLD_S@ @GUARD_S@ @GPU_RANGE@ @EXTRA_FIELDS@ (fdt=none on host mode)
+##   the wait bounds of the generator's bound table: @PTY_T@ @ASINFO_K@
+##   @VERIFY_K@ @ALLOC_K@ @HOSTHOLD_S@ @IO_K@ @QC_K@ @DRY_K@ @HASH_K@ @TCU_K@
+##   @READER_T@ @LK@ @LK_WAIT@ @IR@ @IR_REST@ @SHELL_T@ @FILL_T@ @HB_S@ @END_T@
+##   @HOLDV_T@ @HOLD_T@ @HOLD_K@ @HOLD_MIB@ @TD_TERM@ @TD_KILL@ @EOF_T@ @SLOG_K@
+##   @SEND_FDT@ @SEND_FDT_T@ @SEND_LOG@ @SEND_LOG_T@ @SEND_STREAM@
+##   @SEND_STREAM_T@ @MEM_GATE@ @CAP@
+##   mode q2 only: @GUEST_IFS@ @GUEST_DISK@ @G2CONF@ @CLIENT@ @GUEST_MD5@
+##   @DISK_MD5@ @G2CONF_MD5@ @BANNER_T@ @GRACE@ @GRACE_WAIT@ @IPC_K@
+## and fails if any @[A-Z0-9_]+@ survives.
+##
+## Rules (§2 rule 7, as m4-host.ksh.in): no pipe, no command substitution, no
+## backquote, no case-pattern alternation, no nested shell string, no
+## here-document, no arithmetic; every wait is a bwait with a bound; nothing is
+## printed from a qvm launch to the return of its last needle wait, because the
+## TCU callout busy-polls in the writer's context (the waits write their own
+## lines to files); records first, exports next, capped diagnostics last (on TCG
+## the dryrun's fdt and qvmlog exports come before the launch, C16 and §6.3; the
+## board sends them after teardown, §5.1 L2).
+## make-s1-images.sh runs parse-s1.py kshcheck (parse-m4.py's implementation) on
+## every generated script. The probe texts sit inside single quotes, where
+## $(( )) is text for the guest's shell, never arithmetic here.
+##
+## Pairs: the guest's pl011 is on qvm's stdout, which goes to /dev/ttyp2 and is
+## read by stamp on /dev/ptyp2 (hits in /dev/shmem); the virtio-console is the
+## slave /dev/ttyp3, whose master /dev/ptyp3 s1con holds read-write (hits in
+## /dev/shmem/con, so the two tools' open.hit and eof.hit stay apart). Pairs 0
+## and 1 stay the QNX guest's, as in M3 (§3.4).
+# s1-host.ksh: S1 host state machine, generated from s1-host.ksh.in; edit the template.
+S=/dev/shmem
+C=/dev/shmem/con
+B=@B@
+X=@X@
+RUNG=@RUNG@
+MODE=@MODE@
+PROFILE=@PROFILE@
+CONF=@CONF@
+FAIL=
+LAUNCHED=
+LAUNCHED2=
+LOGERR=
+MEMFREE=0
+QA=unknown
+RC=unknown
+TD=none
+
+say()   { echo "S1 $*"; }
+state() { echo "S1 STATE $*"; }
+show()  { for _f in "$@"; do [ -s "$_f" ] && cat "$_f"; done; }
+headc() { [ -s "$2" ] && head -c "$1" "$2"; }
+tailc() { [ -s "$2" ] && tail -c "$1" "$2"; }
+# mem LABEL: FreeMem as pidin prints it, and MEMFREE in whole MiB for the gates
+# only (0 when the unit is neither MB nor GB; a GB figure reads as N000, which is
+# never above the true value). The value itself is never judged on the PC.
+mem() {
+	MEMFREE=0
+	pidin info > "$S/mem.$1" 2>&1
+	while read -r l; do
+		case "$l" in
+		*FreeMem:*) f=${l#*FreeMem:}; f=${f# }; f=${f%% *}; say "MEM $1 $f"; MEMFREE=$f ;;
+		esac
+	done < "$S/mem.$1"
+	case "$MEMFREE" in
+	*[Mm][Bb]*) MEMFREE=${MEMFREE%%[Mm][Bb]*} ;;
+	*[Gg][Bb]*) MEMFREE=${MEMFREE%%[Gg][Bb]*}000 ;;
+	*) MEMFREE=0 ;;
+	esac
+	case "$MEMFREE" in
+	'') MEMFREE=0 ;;
+	*[!0-9]*) MEMFREE=0 ;;
+	esac
+}
+# md5ok FILE MD5 NAME PHASE PATH: the md5sum line for PATH in FILE carries MD5.
+md5ok() {
+	if grep -q "^$2 .*$5" "$1"; then say "CHECK $3 $4 ok"; else say "FAIL $3 $4"; FAIL=${FAIL:-$3_$4}; fi
+}
+@BOARD@# canaries PHASE: memcanary's read-only verify of the three compiled names (§3.8).
+@BOARD@canaries() {
+@BOARD@	bwait -k @VERIFY_K@ -o "$S/can.$1.c1" -e "$S/can.$1.c1.err" -- "$B/memcanary" verify -n c1 > "$S/can.$1.c1.b" 2>&1
+@BOARD@	bwait -k @VERIFY_K@ -o "$S/can.$1.c2" -e "$S/can.$1.c2.err" -- "$B/memcanary" verify -n c2 > "$S/can.$1.c2.b" 2>&1
+@BOARD@	bwait -k @VERIFY_K@ -o "$S/can.$1.c3" -e "$S/can.$1.c3.err" -- "$B/memcanary" verify -n c3 > "$S/can.$1.c3.b" 2>&1
+@BOARD@	show "$S/can.$1.c1" "$S/can.$1.c2" "$S/can.$1.c3"
+@BOARD@	for _c in c1 c2 c3; do
+@BOARD@		[ -s "$S/can.$1.$_c" ] || { say "CANARY $_c tool=no-output"; show "$S/can.$1.$_c.b"; headc 256 "$S/can.$1.$_c.err"; }
+@BOARD@	done
+@BOARD@}
+# xport NAME FILE BOUND DEADLINE: FILE as base64 between S1 BEGIN and S1 END
+# (§5.1 L2; m4dry-host.ksh.in's framing with the S1 prefix). On the board the
+# frame and the body go to the TCU by tcu-cat, which writes the mailbox directly
+# and never enters the black box; the console carries one S1 EXPORT record.
+xport() {
+	n=$1; xf=$2; sb=$3; st=$4
+	if [ ! -s "$xf" ]; then say "EXPORT SKIP name=$n reason=absent-or-empty"; return; fi
+	bwait -k @HASH_K@ -o "$S/x.$n.wc" -e "$S/x.$n.wc.err" -- "$X/wc" -c "$xf" > "$S/x.$n.b1" 2>&1
+	bwait -k @HASH_K@ -o "$S/x.$n.md5" -e "$S/x.$n.md5.err" -- "$X/md5sum" "$xf" > "$S/x.$n.b2" 2>&1
+	bwait -k @HASH_K@ -o "$S/x.$n.b64" -e "$S/x.$n.b64.err" -- "$X/base64" "$xf" > "$S/x.$n.b3" 2>&1
+	XB=none; XM=none
+	[ -s "$S/x.$n.wc" ] && read -r XB rest < "$S/x.$n.wc"
+	[ -s "$S/x.$n.md5" ] && read -r XM rest < "$S/x.$n.md5"
+	if [ ! -s "$S/x.$n.b64" ]; then
+		say "EXPORT SKIP name=$n reason=base64"
+		show "$S/x.$n.b3"
+		headc 256 "$S/x.$n.b64.err"
+		return
+	fi
+@BOARD@	bwait -k @TCU_K@ -o "$S/x.$n.t0o" -e "$S/x.$n.t0e" -- "$B/tcu-cat" -a 50 -s -m "S1 BEGIN name=$n bytes=$XB md5=$XM enc=base64" > "$S/x.$n.t0" 2>&1
+@BOARD@	bwait -k "$sb" -o "$S/x.$n.t1o" -e "$S/x.$n.t1e" -- "$B/tcu-cat" -a 50 -T "$st" -s -f "$S/x.$n.b64" > "$S/x.$n.t1" 2>&1
+@BOARD@	R=$?
+@BOARD@	bwait -k @TCU_K@ -o "$S/x.$n.t2o" -e "$S/x.$n.t2e" -- "$B/tcu-cat" -a 50 -s -m "S1 END name=$n" > "$S/x.$n.t2" 2>&1
+@BOARD@	say "EXPORT name=$n bytes=$XB md5=$XM enc=base64 rc=$R"
+@BOARD@	show "$S/x.$n.t1" "$S/x.$n.t0e" "$S/x.$n.t1e" "$S/x.$n.t2e"
+@TCG@	say "BEGIN name=$n bytes=$XB md5=$XM enc=base64"
+@TCG@	cat "$S/x.$n.b64"
+@TCG@	say "END name=$n"
+}
+
+state config
+say "CONFIG rung=$RUNG mode=$MODE profile=$PROFILE image_sha256=@IMAGE_SHA256@ initrd_sha256=@INITRD_SHA256@ conf_sha256=@CONF_SHA256@ cmdline_sha256=@CMDLINE_SHA256@ init_sha256=@INIT_SHA256@ s1con_sha256=@S1CON_SHA256@ memcanary_sha256=@MEMCANARY_SHA256@ stamp_sha256=@STAMP_SHA256@ bwait_sha256=@BWAIT_SHA256@ startup_sha256=@STARTUP_SHA256@ startup_line='@STARTUP_LINE@' cpu_lines='@CPU_LINES@' ram_line='@RAM_LINE@' windows='@WINDOWS@' canaries=@CANARIES@ guest_set=@GUEST_SET@ hold_s=@HOLD_S@ guard_s=@GUARD_S@ gpu_range=@GPU_RANGE@@EXTRA_FIELDS@"
+
+state preflight
+if [ "$MODE" != host ]; then
+	bwait -p /dev/ptyp2 -t @PTY_T@ > "$S/pf.1" 2>&1 || { say "FAIL preflight /dev/ptyp2"; FAIL=preflight; }
+	bwait -p /dev/ptyp3 -t @PTY_T@ > "$S/pf.2" 2>&1 || { say "FAIL preflight /dev/ptyp3"; FAIL=preflight; }
+fi
+@Q2@bwait -p /dev/ptyp1 -t @PTY_T@ > "$S/pf.3" 2>&1 || { say "FAIL preflight /dev/ptyp1"; FAIL=preflight; }
+@Q2@bwait -p /dev/ttyp0 -t @PTY_T@ > "$S/pf.4" 2>&1 || { say "FAIL preflight /dev/ttyp0"; FAIL=preflight; }
+bwait -p /dev/slog -t 5 > "$S/pf.5" 2>&1 || say "NOTE no /dev/slog"
+bwait -p /dev/pipe -t 5 > "$S/pf.6" 2>&1 || say "NOTE no /dev/pipe"
+mem boot
+
+# L1's memory gate (§5.1): a comparison with the mode's design constant; host
+# mode compares with window 1's 992 MiB instead.
+state gate
+if [ "$MODE" = host ]; then
+	if [ "$MEMFREE" -gt 992 ]; then say "W2 reflected=yes"; else say "W2 reflected=no"; FAIL=${FAIL:-w2_reflected}; fi
+else
+	if [ "$MEMFREE" -ge @MEM_GATE@ ]; then say "GATE mem ok"; else say "FAIL mem_gate need_mb=@MEM_GATE@"; FAIL=${FAIL:-mem_gate}; fi
+fi
+## §6.1 step 6: memcanary's own self-test on the TCG host, in T1's image (fixed vectors,
+## simulated system pages and a heap buffer; it reads no system page and maps no physical
+## memory). A failure does not stop the dryrun; it sets FAIL_STATE at the end. The board runs
+## none, and its script stays byte-identical (these ## lines and the @TCG@ lines are dropped).
+## The pattern avoids the tool's upper-case name: the TCG profile check refuses that text.
+@TCG@state selftest
+@TCG@MCSELF=
+@TCG@bwait -k @QC_K@ -o "$S/mc.self" -e "$S/mc.self.err" -- "$B/memcanary" --selftest > "$S/mc.self.b" 2>&1
+@TCG@show "$S/mc.self" "$S/mc.self.b"
+@TCG@grep -q ' SELFTEST PASS [0-9]' "$S/mc.self" || { say "NOTE memcanary_selftest not-passed"; headc 256 "$S/mc.self.err"; MCSELF=1; }
+
+@BOARD@state asinfo
+@BOARD@bwait -k @ASINFO_K@ -o "$S/asinfo.out" -e "$S/asinfo.err" -- "$B/memcanary" asinfo > "$S/asinfo.b" 2>&1
+@BOARD@show "$S/asinfo.out"
+@BOARD@[ -s "$S/asinfo.out" ] || { show "$S/asinfo.b"; headc 256 "$S/asinfo.err"; }
+@BOARD@if [ "$MODE" = host ]; then
+@BOARD@	pidin syspage=asinfo > "$S/pidin.asinfo" 2>&1
+@BOARD@	headc 4096 "$S/pidin.asinfo"
+@BOARD@fi
+@BOARD@state canary_start
+@BOARD@canaries start
+
+# B2 (§6.7): the window-2 allocation, a minute's wait, and the canaries again.
+@BOARD@if [ "$MODE" = host ]; then
+@BOARD@	state alloc
+@BOARD@	bwait -k @ALLOC_K@ -o "$S/alloc.out" -e "$S/alloc.err" -- "$B/memcanary" alloc -s 1536 > "$S/alloc.b" 2>&1
+@BOARD@	show "$S/alloc.out"
+@BOARD@	[ -s "$S/alloc.out" ] || { show "$S/alloc.b"; headc 256 "$S/alloc.err"; }
+@BOARD@	state host_hold
+@BOARD@	bwait -s @HOSTHOLD_S@ -c "$S/host.hold"
+@BOARD@	state canary_end
+@BOARD@	canaries end
+@BOARD@fi
+
+if [ "$MODE" != host ] && [ -z "$FAIL" ]; then
+	state integrity_pre
+	bwait -k @IO_K@ -o "$S/md5.pre" -e "$S/md5.pre.err" -- "$X/md5sum" @IMAGE_PATH@ @INITRD_PATH@ @BASECONF_PATH@@DIAG_MD5_ARGS@ > "$S/md5.pre.b" 2>&1
+	show "$S/md5.pre"
+	[ -s "$S/md5.pre" ] || { show "$S/md5.pre.b"; headc 256 "$S/md5.pre.err"; }
+	md5ok "$S/md5.pre" @MD5_IMAGE@ image md5_pre @IMAGE_PATH@
+	md5ok "$S/md5.pre" @MD5_INITRD@ initrd md5_pre @INITRD_PATH@
+	md5ok "$S/md5.pre" @MD5_BASECONF@ conf md5_pre @BASECONF_PATH@
+@DIAG@	md5ok "$S/md5.pre" @MD5_CONF@ diagconf md5_pre @CONF@
+fi
+
+# §6.2 step 3 and C3: the dryrun with the FDT dumped. The exit code is recorded,
+# not judged; bwait's own line (prog=qvm, killed=) prints before S1 DRYRUN.
+if [ "$MODE" != host ] && [ -z "$FAIL" ]; then
+	state hostcheck
+	bwait -k @QC_K@ -o "$S/qc.out" -e "$S/qc.err" -- "$X/qvm-check" > "$S/qc.b" 2>&1
+	headc 1024 "$S/qc.out"; headc 1024 "$S/qc.err"
+	state dryrun
+	rm -f /dev/shmem/s1-fdt.dtb
+	bwait -k @DRY_K@ -r "$S/dry.bwait" -o "$S/dry.out" -e "$S/dry.err" -- "$X/qvm" "@$CONF" set fdt-dump-file /dev/shmem/s1-fdt.dtb dryrun
+	DRC=$?
+	cat "$S/dry.out" "$S/dry.err" > "$S/dry.all" 2>&1
+	SAVED=no
+	if grep -q 'FDT saved to' "$S/dry.all"; then [ -s /dev/shmem/s1-fdt.dtb ] && SAVED=yes; fi
+	# logger_errors: lines naming error, fatal or internal as a word, leaving out
+	# lines that name the logger itself (the configuration's own logger line).
+	grep -v -i 'logger' "$S/dry.all" > "$S/dry.nolog" 2>&1
+	grep -c -i -w -E 'error|fatal|internal' "$S/dry.nolog" > "$S/dry.nerr" 2>&1
+	NE=none
+	[ -s "$S/dry.nerr" ] && read -r NE rest < "$S/dry.nerr"
+	FB=none; FM=none
+	if [ -s /dev/shmem/s1-fdt.dtb ]; then
+		bwait -k @HASH_K@ -o "$S/fdt.wc" -e "$S/fdt.wc.err" -- "$X/wc" -c /dev/shmem/s1-fdt.dtb > "$S/fdt.wc.b" 2>&1
+		bwait -k @HASH_K@ -o "$S/fdt.md5" -e "$S/fdt.md5.err" -- "$X/md5sum" /dev/shmem/s1-fdt.dtb > "$S/fdt.md5.b" 2>&1
+		[ -s "$S/fdt.wc" ] && read -r FB rest < "$S/fdt.wc"
+		[ -s "$S/fdt.md5" ] && read -r FM rest < "$S/fdt.md5"
+	fi
+	say "DRYRUN rc=$DRC saved=$SAVED fdt_bytes=$FB fdt_md5=$FM logger_errors=$NE"
+	headc 2048 "$S/dry.all"
+	[ "$SAVED" = yes ] || FAIL=${FAIL:-dryrun}
+	[ "$NE" = 0 ] || LOGERR=1
+fi
+
+# C16, V17 and §6.3: on TCG the dryrun's FDT and qvm's text are exported before the
+# launch, so a run that never reaches teardown still carries its own FDT sha256.
+# The board exports them after teardown, through tcu-cat (§5.1 L2, §6.8).
+@TCG@if [ "$MODE" != host ]; then
+@TCG@	state export
+@TCG@	xport fdt /dev/shmem/s1-fdt.dtb @SEND_FDT@ @SEND_FDT_T@
+@TCG@	xport qvmlog "$S/dry.all" @SEND_LOG@ @SEND_LOG_T@
+@TCG@fi
+
+if [ "$MODE" != host ] && [ "$MODE" != dryrun ] && [ -z "$FAIL" ]; then
+	state readers
+	mkdir -p "$C"
+	stamp -i /dev/ptyp2 -o "$S/s1.pl011" -m @CAP@ -r "$S/s1.stamps" -h "$S" -s 'Booting Linux on physical CPU' -l l_kernel -s 'Run /init as init process' -l l_run_init -s 'Kernel panic' -l l_panic -s 'Reboot failed -- System halted' -l l_rbfail &
+	bwait -p "$S/open.hit" -t @READER_T@ > "$S/rd.1" 2>&1 || { say "FAIL reader pl011"; FAIL=${FAIL:-reader}; }
+	s1con -i /dev/ptyp3 -O -o "$S/s1.hvc" -m @CAP@ -r "$S/s1con.stamps" -h "$C" -d 2 -s 'S1-INIT start' -l i_start -s 'S1-INIT ready' -l i_ready -s 'S1-SHELL-42-OK' -l shell_ok -s 'S1-HB' -l hb -s 'S1-END-43-OK' -l end_ok -w 'i_ready=echo S1-SHELL-$((40+2))-OK' -t '/dev/shmem/probe2.go=echo S1-END-$((42+1))-OK' &
+	bwait -p "$C/open.hit" -t @READER_T@ > "$S/rd.2" 2>&1 || { say "FAIL reader hvc0"; FAIL=${FAIL:-reader}; }
+fi
+
+# §6.3, §6.8: every bound runs from the launch. The l_kernel bound is diagnosis
+# only: at its expiry the wait goes on while l_kernel or i_start has been seen.
+# l_panic, l_rbfail and qvm's exit end every wait at once (F29). Silent from the
+# launch to the last wait's return.
+if [ "$MODE" != host ] && [ "$MODE" != dryrun ] && [ -z "$FAIL" ]; then
+	state launch
+	LAUNCHED=1
+	bwait -s @LK@ -c "$S/lk.expired" &
+	bwait -s @IR@ -c "$S/ir.expired" &
+	( stamp -n -q -l qvm_launch -r "$S/s1.stamps" -x "$X/qvm" "@$CONF" < /dev/null > /dev/ttyp2 2>&1; echo "rc=$?" > "$S/qvm.rc"; : > "$S/qvm_exit.hit" ) &
+	bwait -p "$C/i_ready.hit" -p "$S/l_panic.hit" -p "$S/l_rbfail.hit" -p "$S/qvm_exit.hit" -p "$S/lk.expired" -t @LK_WAIT@ > "$S/w.1" 2>&1
+	GO=
+	[ -e "$S/l_kernel.hit" ] && GO=1
+	[ -e "$C/i_start.hit" ] && GO=1
+	[ -e "$C/i_ready.hit" ] && GO=
+	[ -e "$S/l_panic.hit" ] && GO=
+	[ -e "$S/l_rbfail.hit" ] && GO=
+	[ -e "$S/qvm_exit.hit" ] && GO=
+	[ -n "$GO" ] && bwait -p "$C/i_ready.hit" -p "$S/l_panic.hit" -p "$S/l_rbfail.hit" -p "$S/qvm_exit.hit" -p "$S/ir.expired" -t @IR_REST@ > "$S/w.2" 2>&1
+	GO=
+	[ -e "$C/i_ready.hit" ] && GO=1
+	[ -e "$S/l_panic.hit" ] && GO=
+	[ -e "$S/l_rbfail.hit" ] && GO=
+	[ -e "$S/qvm_exit.hit" ] && GO=
+	[ -n "$GO" ] && bwait -p "$C/shell_ok.hit" -p "$S/l_panic.hit" -p "$S/l_rbfail.hit" -p "$S/qvm_exit.hit" -t @SHELL_T@ > "$S/w.3" 2>&1
+	state report
+	show "$S/w.1" "$S/w.2" "$S/w.3" "$S/s1.stamps" "$S/s1con.stamps"
+	mem launched
+	pidin -p qvm -f abNli > "$S/pq.1" 2>&1; head -n 30 "$S/pq.1"
+@BOARD@	say "GUESTRAM unknown"
+fi
+
+# §6.9 (B4) and §6.4 (T3): a filled host allocation held through ten heartbeats,
+# probe 2, then the allocation's verify. A guest already panicked, halted or gone
+# skips the block, and l_rbfail (a vCPU spinning with qvm alive) skips the verify
+# and the canaries, so teardown comes at once (F29); canary_post still runs.
+if [ "$MODE" = hold ] && [ -n "$LAUNCHED" ] && [ -e "$C/shell_ok.hit" ] && [ ! -e "$S/l_rbfail.hit" ] && [ ! -e "$S/l_panic.hit" ] && [ ! -e "$S/qvm_exit.hit" ]; then
+	state hold
+	bwait -k @HOLD_K@ -o "$S/hold.bo" -e "$S/hold.be" -- "$B/memcanary" hold -s @HOLD_MIB@ -f /dev/shmem/hold.go -T @HOLD_T@ -o /dev/shmem/hold.out > "$S/hold.b" 2>&1 &
+	bwait -p /dev/shmem/hold.out.fill -p "$S/l_rbfail.hit" -t @FILL_T@ > "$S/hold.w1" 2>&1
+	show /dev/shmem/hold.out
+	say "HOLD start secs=@HOLD_S@"
+	for k in 1 2 3 4 5 6 7 8 9 10; do
+		bwait -p "$S/l_panic.hit" -p "$S/l_rbfail.hit" -p "$S/qvm_exit.hit" -t @HB_S@ > "$S/hb.w" 2>&1
+		pidin -p qvm -f abNli > "$S/hb.pq" 2>&1
+		QA=alive; RC=absent
+		[ -e "$S/qvm_exit.hit" ] && QA=gone
+		[ -e "$S/qvm.rc" ] && RC=present
+		[ -e "$S/qvm.rc" ] && QA=gone
+		say "HB k=$k qvm=$QA rc=$RC"
+		[ "$QA" = alive ] || break
+		[ -e "$S/l_rbfail.hit" ] && break
+		[ -e "$S/l_panic.hit" ] && break
+	done
+	mem hb10
+	: > /dev/shmem/probe2.go
+	bwait -p "$C/end_ok.hit" -p "$S/l_panic.hit" -p "$S/l_rbfail.hit" -p "$S/qvm_exit.hit" -t @END_T@ > "$S/end.w" 2>&1
+	QA=alive
+	[ -e "$S/qvm_exit.hit" ] && QA=gone
+	[ -e "$S/qvm.rc" ] && QA=gone
+	say "HOLD end qvm=$QA"
+	if [ ! -e "$S/l_rbfail.hit" ]; then
+		: > /dev/shmem/hold.go
+		bwait -p /dev/shmem/hold.out.done -p "$S/l_rbfail.hit" -t @HOLDV_T@ > "$S/hold.w2" 2>&1
+		[ -s /dev/shmem/hold.out ] && tail -n 1 /dev/shmem/hold.out
+	else
+		say "NOTE hold_verify skipped reason=l_rbfail"
+	fi
+	show "$S/hold.w1" "$S/end.w" "$S/hold.w2" "$S/s1con.stamps"
+@BOARD@	if [ ! -e "$S/l_rbfail.hit" ]; then
+@BOARD@		state canary_hold
+@BOARD@		canaries hold
+@BOARD@	fi
+fi
+
+# §6.10 (B5): M3's QNX sequence beside the Linux guest, completion only. A Linux
+# guest already panicked, halted or gone skips the block, and one that halts during
+# it skips the second launch and the IPC, so teardown comes at once (F29).
+@Q2@if [ "$MODE" = q2 ] && [ -n "$LAUNCHED" ] && [ -e "$C/shell_ok.hit" ] && [ ! -e "$S/l_rbfail.hit" ] && [ ! -e "$S/l_panic.hit" ] && [ ! -e "$S/qvm_exit.hit" ]; then
+@Q2@	state q2_integrity_pre
+@Q2@	bwait -k @IO_K@ -o "$S/q2.md5.pre" -e "$S/q2.md5.pre.err" -- "$X/md5sum" @GUEST_IFS@ @GUEST_DISK@ @G2CONF@ > "$S/q2.md5.pre.b" 2>&1
+@Q2@	show "$S/q2.md5.pre"
+@Q2@	md5ok "$S/q2.md5.pre" @GUEST_MD5@ guest md5_pre @GUEST_IFS@
+@Q2@	md5ok "$S/q2.md5.pre" @DISK_MD5@ disk md5_pre @GUEST_DISK@
+@Q2@	md5ok "$S/q2.md5.pre" @G2CONF_MD5@ g2conf md5_pre @G2CONF@
+@Q2@	state q2_disk
+@Q2@	bwait -k @IO_K@ -o "$S/cp.out" -e "$S/cp.err" -- "$X/cp" @GUEST_DISK@ /dev/shmem/disk-qvm > "$S/cp.b" 2>&1
+@Q2@	if bwait -k @IO_K@ -o "$S/cmp.out" -e "$S/cmp.err" -- "$X/cmp" @GUEST_DISK@ /dev/shmem/disk-qvm > "$S/cmp.b" 2>&1; then
+@Q2@		say "CHECK disk_copy ok"
+@Q2@	else
+@Q2@		say "FAIL disk_copy"; headc 512 "$S/cp.err"; headc 512 "$S/cmp.out"; FAIL=${FAIL:-disk_copy}
+@Q2@	fi
+@Q2@	if [ -z "$FAIL" ]; then
+@Q2@		devb-loopback loopback blksz=512,prefix=qvmdisk,fd=/dev/shmem/disk-qvm
+@Q2@		bwait -p /dev/qvmdisk0 -t 10 > "$S/q2.dev" 2>&1 || { say "FAIL disk_dev"; FAIL=${FAIL:-disk_dev}; }
+@Q2@	fi
+@Q2@	if [ -z "$FAIL" ]; then
+@Q2@		state q2_window
+@Q2@		mkdir -p "$S/q2"
+@Q2@		stamp -i /dev/ptyp1 -o "$S/q2.guest" -m @CAP@ -r "$S/q2.stamps" -h "$S/q2" -s 'Startup complete' -l g_startup_complete -s 'QNX qnx-guest' -l banner &
+@Q2@		bwait -p "$S/q2/open.hit" -t @READER_T@ > "$S/q2.rd" 2>&1 || { say "FAIL reader q2"; FAIL=${FAIL:-reader}; }
+@Q2@	fi
+@Q2@	if [ -z "$FAIL" ] && [ ! -e "$S/l_rbfail.hit" ] && [ ! -e "$S/l_panic.hit" ] && [ ! -e "$S/qvm_exit.hit" ]; then
+@Q2@		state q2_launch
+@Q2@		LAUNCHED2=1
+@Q2@		bwait -s @GRACE@ -c "$S/q2grace.hit" &
+@Q2@		( stamp -n -q -l qvm2_launch -r "$S/q2.stamps" -x "$X/qvm" "@@G2CONF@" < /dev/null > /dev/ttyp1 2>&1; echo "rc=$?" > "$S/qvm2.rc"; : > "$S/qvm2_exit.hit" ) &
+@Q2@		bwait -p "$S/q2/banner.hit" -p "$S/qvm2_exit.hit" -p "$S/l_rbfail.hit" -t @BANNER_T@ > "$S/q2.w" 2>&1
+@Q2@		state q2_report
+@Q2@		show "$S/q2.w" "$S/q2.stamps"
+@Q2@	fi
+@Q2@	if [ -n "$LAUNCHED2" ] && [ -e "$S/q2/banner.hit" ] && [ ! -e "$S/l_rbfail.hit" ]; then
+@Q2@		state q2_ipc
+@Q2@		bwait -p "$S/q2grace.hit" -p "$S/l_rbfail.hit" -t @GRACE_WAIT@ > "$S/q2.g" 2>&1
+@Q2@		if [ ! -e "$S/l_rbfail.hit" ]; then
+@Q2@			bwait -k @IPC_K@ -r "$S/ipc.bwait" -o "$S/ipc.out" -e "$S/ipc.err" -- @CLIENT@ 15 /dev/ttyp0 5 > "$S/ipc.b" 2>&1
+@Q2@			show "$S/ipc.out" "$S/ipc.b"
+@Q2@			headc 2048 "$S/ipc.err"
+@Q2@		fi
+@Q2@		if [ -e "$S/qvm.rc" ] || [ -e "$S/qvm2.rc" ]; then say "BOTH not-alive"; else say "BOTH alive"; fi
+@Q2@	fi
+@Q2@fi
+
+# Teardown (§6.9): qvm's power-button signal, SIGKILL after the bound; which
+# one ended qvm is recorded. qvm.rc prints only after this state line.
+state teardown
+if [ -n "$LAUNCHED" ]; then
+	: > /dev/shmem/hold.go
+	TD=early
+	if [ ! -e "$S/qvm_exit.hit" ]; then
+		TD=term
+		slay -f -Q qvm
+		bwait -p "$S/qvm_exit.hit" -t @TD_TERM@ > "$S/td.1" 2>&1 || { TD=kill; slay -f -Q -s KILL qvm; bwait -p "$S/qvm_exit.hit" -t @TD_KILL@ > "$S/td.2" 2>&1; }
+	fi
+@Q2@	if [ -n "$LAUNCHED2" ] && [ ! -e "$S/qvm2_exit.hit" ]; then
+@Q2@		slay -f -Q qvm
+@Q2@		bwait -p "$S/qvm2_exit.hit" -t @TD_TERM@ > "$S/td.3" 2>&1 || { slay -f -Q -s KILL qvm; bwait -p "$S/qvm2_exit.hit" -t @TD_KILL@ > "$S/td.4" 2>&1; }
+@Q2@	fi
+	show "$S/qvm.rc"
+@Q2@	show "$S/qvm2.rc"
+	say "TEARDOWN by=$TD"
+	bwait -p "$S/eof.hit" -t @EOF_T@ > "$S/td.5" 2>&1 || slay -f -Q stamp
+	bwait -p "$C/eof.hit" -t @EOF_T@ > "$S/td.6" 2>&1 || slay -f -Q s1con
+@Q2@	slay -f -Q devb-loopback
+fi
+@BOARD@if [ -n "$LAUNCHED" ]; then
+@BOARD@	state canary_post
+@BOARD@	canaries post
+@BOARD@fi
+if [ "$MODE" != host ]; then
+	state integrity_post
+	bwait -k @IO_K@ -o "$S/md5.post" -e "$S/md5.post.err" -- "$X/md5sum" @IMAGE_PATH@ @INITRD_PATH@ @BASECONF_PATH@@DIAG_MD5_ARGS@ > "$S/md5.post.b" 2>&1
+	show "$S/md5.post"
+	md5ok "$S/md5.post" @MD5_IMAGE@ image md5_post @IMAGE_PATH@
+	md5ok "$S/md5.post" @MD5_INITRD@ initrd md5_post @INITRD_PATH@
+	md5ok "$S/md5.post" @MD5_BASECONF@ conf md5_post @BASECONF_PATH@
+@DIAG@	md5ok "$S/md5.post" @MD5_CONF@ diagconf md5_post @CONF@
+@Q2@	bwait -k @IO_K@ -o "$S/q2.md5.post" -e "$S/q2.md5.post.err" -- "$X/md5sum" @GUEST_IFS@ @GUEST_DISK@ > "$S/q2.md5.post.b" 2>&1
+@Q2@	show "$S/q2.md5.post"
+@Q2@	md5ok "$S/q2.md5.post" @GUEST_MD5@ guest md5_post @GUEST_IFS@
+@Q2@	md5ok "$S/q2.md5.post" @DISK_MD5@ disk md5_post @GUEST_DISK@
+fi
+
+[ -n "$LOGERR" ] && FAIL=${FAIL:-dryrun_logger_errors}
+@TCG@[ -n "$MCSELF" ] && FAIL=${FAIL:-memcanary_selftest}
+state summary
+show "$S/s1.stamps" "$S/s1con.stamps"
+@Q2@show "$S/q2.stamps"
+say "FAIL_STATE ${FAIL:-none}"
+
+if [ "$MODE" != host ]; then
+@BOARD@	state export
+@BOARD@	xport fdt /dev/shmem/s1-fdt.dtb @SEND_FDT@ @SEND_FDT_T@
+@BOARD@	xport qvmlog "$S/dry.all" @SEND_LOG@ @SEND_LOG_T@
+	if [ -n "$LAUNCHED" ]; then
+@TCG@		state export
+		xport pl011 "$S/s1.pl011" @SEND_STREAM@ @SEND_STREAM_T@
+		xport hvc0 "$S/s1.hvc" @SEND_STREAM@ @SEND_STREAM_T@
+	fi
+fi
+
+# Capped heads only (§3.4 black-box budget): 2,048 B of each stream, and a
+# 1,024 B tail of each when no shell answered. The full streams went above.
+state diag
+if [ -n "$LAUNCHED" ]; then
+	headc 2048 "$S/s1.pl011"
+	headc 2048 "$S/s1.hvc"
+	if [ ! -e "$C/shell_ok.hit" ]; then
+		tailc 1024 "$S/s1.pl011"
+		tailc 1024 "$S/s1.hvc"
+	fi
+fi
+@Q2@[ -n "$LAUNCHED2" ] && headc 2048 "$S/q2.guest"
+bwait -k @SLOG_K@ -o "$S/slog.txt" -e "$S/slog.err" -- "$X/slog2info" > "$S/slog.b" 2>&1
+headc 1024 "$S/slog.txt"
+mem end
+say "FAIL_STATE ${FAIL:-none}"
+state end

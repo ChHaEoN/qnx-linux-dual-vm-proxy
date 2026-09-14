@@ -4,9 +4,11 @@ Phase 3b. Architect pass, revision 2, 2026-09-13 (revision 1 reviewed; outcomes 
 
 **2026-09-13 (owner):** every owner decision in §11, D1-D19, was taken as recommended. Nothing has been built or run yet; the next step is D3's copy of the board's `Image` and `initrd`, then T0.
 
+**2026-09-14:** T0 is implemented, built and gated on the PC, and every gate passed. Nothing has run under QEMU or on the board. The implementation decisions, deviations and gate verdicts are in §14; usage is in `orin-native/s1/README.md`.
+
 **Path prefixes used below**
 - `lib/` = `C:/Users/<user>/AppData/Local/Temp/orin-native-port-bsp/src/hardware/startup/lib/` (Apache-2.0)
-- `board/` = `orin-native/startup/t234-orin-nano/`; `startup/` = `orin-native/startup/`; `tools/` = `orin-native/tools/`; `qhvc/` = `orin-native/qhv/`; `s1/` = `orin-native/s1/` (proposed; it does not exist)
+- `board/` = `orin-native/startup/t234-orin-nano/`; `startup/` = `orin-native/startup/`; `tools/` = `orin-native/tools/`; `qhvc/` = `orin-native/qhv/`; `s1/` = `orin-native/s1/` ~~(proposed; it does not exist)~~ (**2026-09-14:** it exists, §14)
 - `r/` = `results/orin-native-port/20260909T1100Z/`; `plan` = `docs/orin-native-port-plan.md`
 - `RT` = the research track's `results/gpu-passthrough/20260910T1935Z/feasibility.md` on the unpushed branch `research/gpu-passthrough`, cited by line
 - `QH` = `https://www.qnx.com/developers/docs/8.0/com.qnx.doc.hypervisor.user/topic/` (QNX Hypervisor 8.0 user guide). No hypervisor documentation is installed with the SDP on this PC (a search for it found only the mkqnximage qvm templates)
@@ -945,3 +947,300 @@ No board was contacted, nothing was downloaded, and no QNX-shipped binary was re
 - **V29:** §0 "Informs"; §5.5 item 10.
 - **V30:** §5.1 TCG paragraph; §6.4; §6.12 T3 row.
 - **Also:** the header; §4.2 README row (the Never list is §7.3).
+
+---
+
+## 14. Implementation decisions (T0, 2026-09-14)
+
+These record what T0's implementation chose where §3-§6 left the choice open, and every place it departs from the text above. They are adopted by default, as §11's decisions are, and the owner can overturn any of them. **VERIFIED** marks a choice a build, a self-test or a gate showed on the PC. Nothing has run under QEMU or on the board, so no entry carries a figure from a run.
+
+**Sources.** Part 1 is the committed headers of `orin-native/s1/` (`mkcpio.py`, `initrd.manifest`, `init.sh`, `s1-linux.conf`, `s1-conf.allow`, `parse-s1.py`), of `tools/s1con.c` and `tools/memcanary.c`, and the `-b` change in `board/`. Part 2 is `startup/s1.build.in`, `startup/s1-host.ksh.in`, `startup/make-s1-images.sh`, `startup/s1-board.sh`, `s1/build-s1tcg-image.ps1`, `s1/launch-s1tcg.ps1` and `s1/post_start-s1tcg.custom`, with their reviews and the integration gate. Usage is in `orin-native/s1/README.md`.
+
+### 14.1 Inputs, the initrd and the configuration
+
+**A. `python`, never `python3`.** On this PC `python3` is a Microsoft Store alias. Every S1 script calls `python` (3.12); the generator falls back to `py`.
+
+**B. Two initrd pins, and a zlib dependency.** `mkcpio.py` is standard library only and writes a deterministic newc archive: sorted paths, inodes 1..N, zero times and owners, gzip level 9 with no name and mtime 0. The manifest pins both layers:
+- the gzip file, `44e81ea6…495ab6`;
+- the cpio stream inside it, `3bf6a987…87d65fe`.
+
+The cpio bytes depend only on the inputs. The gzip bytes also depend on the zlib build (the pin was taken with Python 3.12's zlib 1.3.1), so a mismatch in the gzip pin alone is reported as exactly that. `init.sh` is pinned in the manifest (`2736648f…4d443e`), so an edit to `/init` changes three pins: `init.sh`'s, the initrd's, and every generator's copy of it. **VERIFIED:** `mkcpio.py --selftest` passed 25 of 25; the build printed `pin=ok`; independent sha256s of the file and of its decompressed stream agree.
+
+**C. R11, answered at T0.** The source initrd reaches the interpreter through `lib -> usr/lib` and `usr/lib/ld-linux-aarch64.so.1 -> aarch64-linux-gnu/ld-linux-aarch64.so.1`, and the shebang through `bin -> usr/bin`. All three links are reproduced, and `build` refuses unless the source holds each at the same path with the same target.
+- `sbin` is left out, because nothing lives there.
+- The source has no `ld.so.cache`, and none ships.
+- `dev/console` (c 5 1, 0600) is ours; the source's `dev/` is empty.
+- The interpreter and `DT_NEEDED` entries were read from the ELF headers of the GPL and LGPL files, never executed.
+
+**VERIFIED** by the build's link checks.
+
+**D. R10, answered at T0 for the applets; `$(( ))` stays T2's.** The manifest's `busybox` line finds busybox's applet name table and requires `sh ash mount echo cat uname sleep` in it. Every applet link points at busybox: the source's `sh` is dash, and its `echo`, `cat`, `mount` and `sleep` are separate binaries, none of them copied. `+math` requires the three error texts of busybox's `shell/math.c`, which is built only with `FEATURE_SH_MATH`. That is an inference from strings of a GPL binary; T2's probe 1 is the real test. **VERIFIED:** checked on every build.
+
+**E. `/init`, and a heartbeat with no counter.** `/init` mounts devtmpfs, proc and sysfs itself; a failed mount is reported, not fatal. It prints `S1-INIT start`, then `S1-INIT ready`, and runs a background heartbeat that prints `S1-HB` every 60 s, twelve times at most, **with no counter**. `/init` uses no `$(( ))` and no `[ ]`, so it cannot depend on what probe 1 tests.
+- The ten heartbeats that item 4 counts are the host script's own `S1 HB k=N qvm=alive rc=absent` lines (§5.1 L6), not the guest's.
+- No redirection names `/dev/null`. A redirection that could fail runs in a subshell, because a failed redirection ends the shell, and init ending panics the kernel.
+
+**F. The configuration and its cmdline pin.** `s1-linux.conf` carries no comments, so the gate reads the bytes every leg stages (§2 rule 2).
+- Its sha256 is `2d639f67…44bc8b9`.
+- `cmdline_sha256` is the sha256 of the cmdline string between its quotes, `da47f63e…4f337638`.
+
+**VERIFIED:** `parse-s1.py conf` gives `gate=pass rejects=0 allow_errors=0`, and `parse-s1.py --selftest` compares the file with §3.7's text byte for byte.
+
+### 14.2 The contracts between the units
+
+**G. `parse-s1.py` is the token contract.** Its module docstring and its `--selftest` synthetic logs define every `S1`, `STAMP` and `BWAIT` line and every export block, and the host script emits exactly those. Where the parser and this design disagree, the parser wins unless it is clearly a bug; review found none.
+- **`S1 CONFIG`** carries every item-5 field (§5.2 item 5): `image_sha256 initrd_sha256 conf_sha256 cmdline_sha256 init_sha256 s1con_sha256 memcanary_sha256 stamp_sha256 bwait_sha256 startup_sha256 startup_line cpu_lines ram_line windows canaries guest_set hold_s guard_s gpu_range`, plus `tcucat_sha256`.
+  - The TCG profile gives the board-only fields placeholders (`startup_sha256=tcg-profile`, `canaries=none`, `gpu_range=none`, `guard_s=none`) and adds `smp=4 not-a-twin-leg`. The board profile adds `cpus=4 q=el2-host A=1`.
+  - Host mode adds `fdt=none`. The diagnostics add `diag=` and `base_conf_sha256=`.
+- **Exports** are framed `S1 BEGIN name=<n> bytes=<n> md5=<hex> enc=base64`, then base64 lines, then `S1 END name=<n>`.
+- **Other records:**
+  - `S1 STATE <name>`, where the names are `hostcheck`, `selftest`, `dryrun`, `export`, `readers`, `launch`, `canary_hold`, `teardown` and `end`.
+  - `S1 FAIL_STATE` (printed twice), and `S1 TEARDOWN by=early|term|kill`.
+  - The host heartbeat `S1 HB k=N qvm=alive rc=absent`.
+  - `memcanary`'s own `S1 ALLOC`, `S1 ASINFO` and `S1 CANARY` lines.
+- **Run options:**
+  - `conf FILE [--allow] [--overlay]`
+  - `fdt DTB [--conf]`
+  - `run LOG --profile tcg|board --mode dryrun|boot|hold|host|q2 [--blackbox] [--out-dir DIR|none] [--conf] [--ref-conf-sha256] [--reset-reason] [--kexec-tree-sha256] [--image] [--initrd]`
+  - `kshcheck FILE|--selftest`, which is `parse-m4.py`'s implementation, imported
+  - `--selftest`
+- **`run`'s exit codes:** 0 a verdict was given, pass or fail; 3 the verdict is refused because item-5 stamps are missing; 1 an input error; 2 a refused output path or a usage error. No FreeMem value and no duration is printed (§2 rule 8).
+
+**VERIFIED:** `--selftest` passed 124 cases. The generator's review ran every generated script under bash, with stub tools, through `parse-s1.py run`: every TCG and board mode gave `pass`, and a negative B3 run (no `S1-INIT ready`) gave `fail failed=L4,L5` with teardown and exports still done. That harness is scratch tooling and is not committed.
+
+**H. The startup's `-b` option and its refusal tokens.**
+- **`-b w2`** adds window 2 after window 1, and prints `t234: ram w2 base=… size=…` and `t234: gpu range base=… size=… not added`.
+- **`-b w2,canary`** also, for c1-c3 in order: takes each out of `ram_list` with `alloc_ram`, names it `s1canary` with `as_add_containing`, fills it, and prints `t234: canary cN base=… size=… filled`.
+- **Any other value** crashes with `t234: -b<value> is not w2 or w2,canary` (F12).
+- **Absent `-b`,** the control flow is unchanged and nothing new prints, which is B1's premise.
+- **The containment refusal** prints `t234: canary cN overlaps image|fdt|shim|blackbox|gpu`, and also **`t234: canary cN overlaps unclaimed`** when a canary lies partly outside both windows, for example because `-m` shrank window 1. F31's list lacks that last token. Every refusal comes before the range is allocated or written.
+- **The constants are also checked at compile time** with `_Static_assert`: window order, the GPU range as the rest of 11c's candidate, each canary inside its window, and c2 and c3 not touching.
+- **The addresses in these lines are formatted unpadded by the board code,** because `kprintf` pads every hex conversion and the parsers match the text.
+
+**VERIFIED:** the build and `build-board.sh`'s symbol gate pass. No refusal path has run.
+
+**I. The S1 startup lives apart from the shared BSP output.** `PIN_STARTUP_S1` (`78153305…3a11103f`) is kept at `orin-native/s1/out/startup/startup-t234-orin-nano`, which is git-ignored.
+- The shared BSP output path keeps the M1b-M4 build (`90bf724c…61896`), because `make-m1b-images.sh` through `make-m4-images.sh` read it. An S1 build is never left there.
+- A rebuild copies its result to `s1/out/startup/` and restores the shared path, verifying both hashes.
+- `make-s1-images.sh` resolves the startup only from S1's directory: its `MKIFS_PATH` is that directory plus `tools/`. When `BSP` is set, the generator checks the shared path against the M1b-M4 pin and never writes it.
+
+**VERIFIED:** both hashes were checked before and after every T0 build. No rebuild was needed, because the board source matches HEAD and no source file is newer than the binary.
+
+**J. `memcanary`'s markers and macro names.** `hold -s MIB -f TRIGGER -T SECS -o FILE` truncates FILE, removes `FILE.fill` and `FILE.done`, and prints nothing on the console (§2 rule 7). It creates `FILE.fill` after the fill line and `FILE.done` after the final line, so a `bwait -p` on a marker never races its line. The host script uses `/dev/shmem/hold.out`, with the trigger `/dev/shmem/hold.go`.
+- **`memcanary.c`'s macros:** `S1_W1_BASE`, `S1_W1_SIZE`, `S1_W2_BASE`, `S1_W2_SIZE`, `S1_GPU_BASE`, `S1_GPU_SIZE`, `S1_CANARY_SIZE`, `S1_CANARY_C1_BASE`, `S1_CANARY_C2_BASE`, `S1_CANARY_C3_BASE`.
+- **The startup header's macros:** `T234_RAM_BASE`, `T234_RAM_SIZE`, `T234_RAM2_BASE`, `T234_RAM2_SIZE`, `T234_GPU_BASE`, `T234_GPU_SIZE`, `T234_CANARY1_BASE` to `T234_CANARY3_BASE`, `T234_CANARY_SIZE`.
+- The generator's constant check maps the two name sets onto each other, onto this design's values and onto `parse-s1.py`'s.
+- `--selftest` prints `MEMCANARY SELFTEST PASS <n> checks`.
+
+**VERIFIED:** the constant check passed, including the overlap and edge rules.
+
+**K. `s1con`'s hit-directory rule.** `s1con` keeps `stamp`'s hit names, `DIR/open.hit` and `DIR/eof.hit`. So `stamp` and `s1con` get different `-h` directories (`/dev/shmem` and `/dev/shmem/con`) and different `-r` files (`s1.stamps` and `s1con.stamps`); otherwise one tool's hit would satisfy a wait meant for the other.
+- `s1con` does not create DIR; the host script runs `mkdir -p` (a toybox link, M).
+- `-O` (read-write) is required with `-w` or `-t`. Without it the device is opened read-only.
+- `write` and `poll-error` are reserved labels.
+- Both binaries are git-ignored by name.
+
+Whether `/dev/shmem` accepts a subdirectory is still open (§14.7).
+
+### 14.3 The generator and the host script
+
+**L. The output root.** `make-s1-images.sh` writes to `--out DIR`, else `$S1_OUT`, else `orin-native/shim/out/s1`. That default is also `s1-board.sh`'s `S1_KIMG_DIR`. The unit was first briefed with `orin-native/startup/out/s1`, and review found the two defaults disagreed.
+- **The guard:** the root must resolve inside the repository, be git-ignored, and lie outside `shim/out/m1b` to `shim/out/m4`, `orin-native/s1/out` and `qhv`. A test run therefore cannot overwrite a real output, the `make-m4-images.sh --generate-only` pitfall. This replaces §6.1 step 5's worktree.
+- A build into another root needs `S1_KIMG_DIR` set to it on the harness's side. `--tcg` writes `<out>/tcg/s1tcg-<variant>/`.
+- `build-shim.sh` still writes `orin-native/shim/out/t234-qnx.kimg`, as in M4, and the generator copies it to `<out>/<img>.kimg`.
+
+**VERIFIED:** each refusal case stopped with a named FAIL before any write: `s1-q2` without `--q2-limit`, a root outside the repository, a root that is not ignored, a root inside `shim/out/m4`, and a limit of `0xBE000000`.
+
+**M. The images and `.params`.**
+- **Startup line:** `s1-h1`, `s1-n1`, `s1-n2` and `s1-d1` share `startup-t234-orin-nano -vvv -P4 -Q enable,el2-host -m992M -Wkeep -A -b w2,canary -Dtcu`, and the script labels `T234 S1 <image> -P4: procnto up` and `T234 S1 <image> -P4: resetting so the log can be recovered`.
+- **Modes:** `s1-m1b-p6` b1, `s1-h1` host, `s1-n1` boot, `s1-n2` hold, `s1-d1` boot, `s1-q2` q2. These match `s1-board.sh`'s step table.
+- **Payload:** `/data/s1/Image`, `/data/s1/initrd.cpio.gz` and `/data/s1/s1-linux.conf` (C2).
+- **Toybox links:** two more than §3.9's `base64` and `od`, namely `mkdir` (K) and `rm`. On the TCG host `rm` is added, because the canonical image lacks it; `grep` and `mkdir` come from the canonical build files.
+- **`.params` keys, in order:** `image rung mode profile p b_opt diag conf conf_sha256 cmdline_sha256 image_sha256 initrd_sha256 init_sha256 s1con_sha256 memcanary_sha256 stamp_sha256 bwait_sha256 tcucat_sha256 smpcheck_sha256 startup_sha256 startup_line mem_gate_mib hold_mib hold_s geometry_limit bounds ksh_worst_s guard_s return_bound_s capture_s build_sha256 ksh_sha256 kimg_sha256 transport q2_limit`. `kimg_sha256` is `-` until the full build wraps the image.
+- **Bounds follow C14:**
+  - `guard_s = ceil((ksh_worst_s + 125 + 240) / 300) × 300`
+  - `return_bound_s = guard_s + 300`
+  - `capture_s = return_bound_s + 3000`
+  - `s1-m1b-p6` has `guard_s=none` and M1b's 1,200 s return bound.
+- **Geometry:** the gate accepts `image_paddr` anywhere in the page at `0x80082000`, where M3 and M4 required exactly `0x80082fa0`, because S1's startup is a different build. The end is capped at `0x8C000000` (or `--q2-limit`) and at c1. The built images have `image_paddr=0x80082fa0`.
+- **Tools** are pinned at their current builds: `s1con`, `memcanary`, `stamp`, `bwait`, `tcu-cat`, and M1b's `smpcheck`.
+
+**N. B1 is proven by a pin, and its label is `T234 M1b -P6`.** `s1-m1b-p6.build` is proven byte for byte equal to M1b's `m1b-p6.build` (`6063a5b9…58e1d8bf`), with M2's re-expansion pin also checked, instead of re-running M1b's one-variable gate. The IFS also carries today's `tcu-cat` and `stamp`, which M2's script never calls. Because the buildfile is M1b's, the image prints `T234 M1b -P6: procnto up` and `T234 M1b -P6: resetting so the log can be recovered`, not §6.6's `T234 m1b-p6 -P6`. **VERIFIED** in the generator's `dumpifs` script check and in M1b's curated capture in `logs/sample-boot/`; `s1-board.sh`'s B1 tokens were corrected at integration.
+
+**O. Guard and return bounds come out above §6.12's estimates.** The generator's bound table counts:
+- each `bwait -k` plus `bwait`'s 5 s kill grace;
+- four exports, each with `wc`, `md5sum`, `base64` and two `tcu-cat` marker lines;
+- three canary verify sets on `s1-n2`.
+
+| Image | Guard / return (generator) | §6.12's estimate | `capture_s` |
+|---|---|---|---|
+| `s1-m1b-p6` | none / 1,200 s | M1b's / 1,200 s | 4,200 s |
+| `s1-h1` | 900 / 1,200 s | 900 / 1,200 s | 4,200 s |
+| `s1-n1` | 2,100 / 2,400 s | 1,800 / 2,100 s | 5,400 s |
+| `s1-n2` | 3,000 / 3,300 s | 2,400 / 2,700 s | 6,300 s |
+| `s1-d1` | 2,100 / 2,400 s | — | 5,400 s |
+
+Accepting these bounds, or tightening the table toward §6.12, is an owner decision (§14.7).
+
+**P. The host script's records and order.**
+- **Four exports:** `fdt`, `qvmlog` (the dryrun's stdout and stderr), `pl011` and `hvc0`. All are base64, because pty output carries CR.
+  - On TCG they go over the console.
+  - On the board the BEGIN, body and END lines go by `tcu-cat -m`, `-f`, `-m`, so they never enter the black box. The console carries one `S1 EXPORT name=<n> bytes=… md5=… enc=base64 rc=…` record per stream.
+- **TCG exports `fdt` and `qvmlog` before the launch** (C16, V17, §6.3), right after `S1 DRYRUN` and with its own `S1 STATE export`; `pl011` and `hvc0` follow teardown. The board exports all four after teardown (§5.1 L2, §6.8). Review caught the first version exporting after teardown on TCG as well.
+- **`logger_errors` is a heuristic,** because qvm's logger format has not been read. It counts dryrun output lines that contain `error`, `fatal` or `internal` as a whole word (case-insensitive), leaving out lines that contain `logger`. A `saved=` other than `yes` stops the run before launch. A nonzero count lets the boot go on and sets `FAIL_STATE dryrun_logger_errors`.
+- **`l_kernel` is a checkpoint, not a stop** (240 s on the board, 900 s on TCG). At its bound the wait goes on to `i_ready` if `l_kernel` or `i_start` was seen. The chained waits' `-t` bounds sum to the `i_ready` bound plus 10 s from the launch, and background timer files are a second limit.
+- **F29 tears down at once.**
+  - The hold and q2 blocks start only when `l_rbfail.hit`, `l_panic.hit` and `qvm_exit.hit` are all absent, and their waits also end on `l_rbfail.hit`.
+  - After the heartbeat loop, `l_rbfail` skips the hold verify (printing `S1 NOTE hold_verify skipped reason=l_rbfail`) and the board's hold canary set.
+  - q2 re-checks all three before its second qvm.
+  - Teardown still writes `hold.go`, and the post-teardown canary verify still runs.
+
+  Review caught this. The bounds are unchanged, because the change only removes waits.
+- **A missed needle does not set `FAIL_STATE`** (`i_ready`, `shell_ok`): the parser's tiers catch it, as they caught M3's banner.
+- **Heartbeat `qvm=alive`** means `qvm.rc` and `qvm_exit.hit` are both absent. `pidin`'s output goes only to a file (§2 rule 7).
+- **Paths on the target:**
+  - `stamp` hits in `/dev/shmem`, `s1con` hits in `/dev/shmem/con`.
+  - Probe 2's trigger `/dev/shmem/probe2.go`; the FDT dump `/dev/shmem/s1-fdt.dtb`.
+  - pl011 through qvm's stdout on `/dev/ttyp2`, read at `/dev/ptyp2`.
+  - virtio-console on the slave `/dev/ttyp3`, whose master `/dev/ptyp3` is held by `s1con -O`.
+
+**Q. The TCG script calls `memcanary --selftest` only (§3.8 against R40).** R40's "answered by" column names `memcanary asinfo` on the TCG host at T0, but §3.8 and §7.3 forbid `asinfo` and `verify` in any TCG script, and §7.3 wins, so R40 is answered at B2.
+- The generator's profile check refuses `asinfo` or `verify` in a TCG script, requires exactly one `memcanary --selftest` in the TCG profile, and refuses a self-test in a board script.
+- The self-test was added at the integration gate: §6.1 step 6 asks for it in T1's image, and no unit ran it. A failure sets `FAIL_STATE=memcanary_selftest` without stopping the dryrun.
+- `parse-s1.py` does not judge the self-test yet, so T1's review reads `MEMCANARY SELFTEST PASS` in the serial log.
+
+**VERIFIED:** the profile check passed on every generated script. The board scripts regenerated byte-identical to those inside the built kimgs, because the explanation sits in `##` template lines.
+
+**R. The diagnostics differ by leg.**
+- **Board `s1-d1`** stages a separate `/data/s1/s1-d1.conf` with the logger widened and `unsupported instruction|register|reference abort` lines added (§5.3, F19). The gate rejects it on those three lines only. It prints its own `conf_sha256`, so `parse-s1.py`'s configuration identity check fails by construction. That is expected: it is never a pass run.
+- **TCG `d1`** widens only the logger line.
+- **TCG `d2`** changes only `rdinit=/bin/sh` and stages the stock L4T initrd.
+
+Both TCG diagnostics are staged under the pinned names, so the parser's md5 line paths stay valid, and both are stamped `diagnostic=yes`.
+
+**S. `s1-q2` is implemented but not built.** The `--q2-limit` gate (`0x8C000000 < limit ≤ 0xBD000000`), the guest pins, PO-E, the `@Q2@` buildfile and script blocks and M3's sequence all exist. They were exercised only by `--generate-only` and `--tcg` with a stand-in limit, and those outputs were removed. D14's limit is still owed (T0 step 7).
+
+### 14.4 The TCG builder and launcher
+
+**T. The build takes `-Mode`.** The mode is compiled into the host script inside the IFS, so it is chosen at build time, and the launcher's `-Mode` must equal the image's `s1tcg.params`.
+- `lin` and `d1` have two modes, so they refuse a build without `-Mode`. `hold`, `q2` and `d2` default to their only mode.
+- T1 and T2 are therefore separate images, `host-lin-dryrun-<tag>` and `host-lin-boot-<tag>`.
+- §6.2 step 1 omits `-Mode`; step 2 omits `-Attempt` and `-Tag`, and both are required.
+- **T1 is:** `build-s1tcg-image.ps1 -Variant lin -Mode dryrun -Tag <t>`, then `launch-s1tcg.ps1 -Attempt <N> -Variant lin -Mode dryrun -Tag <t> -QemuPath <QEMU 11.1.0's qemu-system-aarch64.exe>`.
+
+**U. The TCG host script comes from the generator.** `-HostScript` defaults to `orin-native/shim/out/s1/tcg/s1tcg-<variant>[-<mode>]/s1-host.ksh`. The builder's own template substitution was removed, because it could not resolve the `@BOARD@`, `@TCG@`, `@DIAG@` and `@Q2@` line prefixes.
+- **The builder checks:**
+  - exactly one `MODE=`, `PROFILE=tcg` and `RUNG=tcg-<Variant>` line;
+  - no surviving `@MARKER@`;
+  - no `memcanary asinfo` or `verify`;
+  - every item-5 stamp value it computed is present;
+  - `kshcheck` passes;
+  - the generator's `s1tcg.params` agrees on the mode, `ksh_sha256`, and every payload and tool sha256.
+- `-Tag` is mandatory and must be new: a non-empty host or stage directory is refused, by `-CheckOnly` too.
+- `-CheckOnly` runs the canonical, input-pin, configuration-gate and presence checks, with no copy, make or mkqnximage.
+- `-Grace` is kept so no command line breaks, but it is inert: the q2 grace is the generator's bound table.
+- Every variant keeps the canonical QNX guest pair in the TCG host's data partition, as the M4 builder does. §3.9's removal of that pair applies to board images only.
+- `tcu-cat` is not staged on TCG.
+
+**V. The launcher's end rule, wall bound and records.**
+- **QEMU:** `-smp 4`, stamped `smp=4 not-a-twin-leg` (D5); `-snapshot`; one QEMU at a time.
+- **End rule:** the end grace starts at `S1 STATE end`, not at the first `S1 FAIL_STATE`, because the script prints `FAIL_STATE` twice and the TCG pl011 and hvc0 exports follow the first.
+- **Wall bound:** with no `-WallSeconds`, the wall is `ksh_worst_s + 1,800 s`, taken from the image's params, and an explicit value below that is refused. The old 7,200 s default was below the TCG hold script's worst case.
+- **Records:** `qhv/s1tcg/attempt<N>/serial-raw.log`, `launch.log`, `parse-s1.txt`, `s1-fdt.dtb` and the parser's stdout and stderr logs. No elapsed time and no stream size is logged (§2 rule 8, Q7).
+- **Result:** `LAUNCH_EXIT=0` means QEMU ended, the parser gave a verdict and no process survived. `LAUNCH_VERDICT` carries the parser's verdict line.
+
+### 14.5 The board harness
+
+**W. What `p0` and `run` gate.**
+- **The kexec tree's sha256** is the sha256 of `/sys/firmware/fdt`, the blob `kexec_file_load` starts from. kexec rewrites `/chosen` in its own copy on every load, so the tree actually handed over cannot be read from user space. The source is stamped in both `p0` and `run`. Whether this meaning is acceptable for §5.2 item 5 is open (§14.7).
+- **`p0`** reads and gates §8 items 5-9 and 13, all read-only:
+  - the release, and the `/boot` pins;
+  - the ramoops reg, and `LOAD_KEXEC=false`;
+  - `/proc/iomem`: the top-level line `100000000-25e20dfff : System RAM`, and no other entry starting inside `0x100000000-0x249ffffff`. The CMA line is recorded, not gated;
+  - the kernel configuration items, recorded;
+  - `nvbootctrl`.
+
+  `p0` also requires the dynamic-debug landing line, and exits 1 on any miss. D3's `/boot` pins are constants in the script.
+- **Before any board contact,** `run` checks the PC inputs for every guest mode: `s1-linux.conf` against its pin and the gate; `S1_REF_CONF_SHA256` equal to that pin; and `out/l4t/Image`, `out/l4t/initrd` and `out/initrd.cpio.gz` against theirs. It always passes `--image` and `--initrd` to the parser.
+- **The fresh-boot rule** is enforced through `used-boot-ids.log` in the record directory. Across record directories, the 1,800 s uptime limit is the remaining guard.
+- **Fixed settings:** the quiesce and the governor pin always run. Setting `S1_MAX_UPTIME_S`, `S1_QUIESCE_MAX_UPTIME_S`, `S1_QUIESCE` or `S1_GOVERNOR_PIN` is refused (§7.3). `reboot` and `p1` also read `nvbootctrl`, and exit 4 on a difference (F30).
+- **No board-side copies are left:** the black box and ramoops copies on the board are deleted after a sha256-verified copy to the PC (§2 rule 5).
+
+**X. One COM3 capture per run.** `parse-s1.py run` reads a whole log with first-match rules and has no offset option. Gate A therefore refuses a capture file that already holds a record line, and gate B re-checks just before kexec. Both gates also refuse a capture that is not running: `missing`, `noheader`, `ended` (a closing or read-error footer), `expired` (its header's deadline passed) or `released`. `released` is detected because the capture opens its file with read sharing only, so a write open fails while it runs. **VERIFIED** on this PC with a PowerShell stream opened the same way: denied while held, allowed after release, with size and modification time unchanged.
+
+**Y. Power-cut advice (§2 rule 6a) fails toward no cut.** `advice BOARDLOG` allows a cut only when three things hold: the board log carries `NO RETURN within` (the return bound has passed), the capture is running, and the kexec offset is known.
+- **F25a** also needs the last line after the offset to be one of: recognised image output; Linux's own shutdown text before the first record line (F10's hang before the shim); a base64 body line inside an open export; or no output at all. It also needs no image reset marker (`resetting so the log can be recovered`, `BWAIT guard deadline`) and no firmware banner.
+- **Anything else is F25b:** 10 minutes of silence, and one cut.
+- `parse-s1.py`'s firmware banner texts are a HYPOTHESIS, so they are only a second F25b trigger.
+- **Growth test:** reading growth from the capture file's modification time rests on a HYPOTHESIS, that NTFS updates it on every write while the file is held. A 10 s size sample is taken as well.
+
+Review caught the first version: it could advise F25a after the image's reset, or with a dead capture.
+
+**Z. Records.**
+- `S1_RECORD_DIR` is required for `stage`, `p0`, `p1` and `run`, and must be git-ignored.
+- Each run goes to `<rec>/<step>/`, and a later attempt to `<step>-aN`. An attempt refused before the board changes moves to `<step>-refused-<utc>`, so `<step>/` stays free for the first real run.
+- The parser reads the raw copies; the redaction runs after.
+- `extract` masks every figure: `ms=`, `cycles=`, `cps=`, `mono_ns=` and the `S1 MEM` values.
+- `consistency` checks that the black box's records occur as a subsequence of COM3's.
+- `b1-compare` masks addresses. `parse-s1.py` has no B1 mode, so B1 is judged by the harness's tokens and `b1-compare`.
+- The NO RETURN line prints the `advice` command with a repository-relative path.
+
+**VERIFIED:** `redact-selftest` passed 13 checks and `harness-selftest` 57, on synthetic inputs. Offline `run` refusals used a documentation-range address that was never contacted.
+
+### 14.6 T0 gate verdicts (2026-09-14, PC only)
+
+No board was contacted, no QEMU was started, nothing was downloaded, and no QNX-shipped binary was read. `dumpifs` ran only on our own IFS, to extract our own payload, as the M3 and M4 generators do.
+
+| Step | Verdict | Evidence |
+|---|---|---|
+| Reconcile the generator's TCG outputs with the builder | **PASS** after a fix | The builder could not render the template; it now takes the generator's rendering and cross-checks its params (U) |
+| Reconcile `.params` with `s1-board.sh` | **PASS** after a fix | The B1 label (N); an offline `run` of all five images read each image's params and stopped at the capture check |
+| Reconcile the host-script tokens with `parse-s1.py` and the launcher | **PASS** after two fixes | The end grace and the wall bound (V); the TCG self-test was added (Q) |
+| T0 1, inputs | **PASS** | `Image` and `initrd` equal the D3 pins; `MZ` at 0, `ARMd` at `0x38`, `text_offset` 0, `image_size` `0x029b0000`, flags `0xa` |
+| T0 2, initrd | **PASS** | `mkcpio.py --selftest` 25/25; the build matched both pins (B) |
+| T0 3, configuration | **PASS** | `gate=pass` (F) |
+| T0 4, startup | **PASS**, no rebuild | `PIN_STARTUP_S1` equal; the shared path held the M1b-M4 pin before and after every build; the symbol gate passed (I) |
+| T0 5, generators | **PASS** | `--generate-only` into a scratch root, since removed. Then a full build of `s1-m1b-p6`, `s1-h1`, `s1-n1`, `s1-n2` and `s1-d1` into `orin-native/shim/out/s1`, where every step passed: PO-A, the pins, the constant check, the verbatim ranges, the profile check, `kshcheck` and its self-test with an injected pipe rejected, size, mkifs, `dumpifs`, geometry, the startup arguments read back from the IFS, the payload and host script extracted and re-hashed, the shim wrap, inputs unchanged, and every written file ignored. Each `.params` has `guard_s` and `return_bound_s` |
+| T0 6, tools | **PASS** | `make` found `s1con` and `memcanary` up to date with their pins; both are ignored; `git status` shows no binary. The TCG self-test belongs to T1 (Q) |
+| T0 7, D14's limit | not run | D1's QNX guest and D14 are outstanding (S) |
+| T1's TCG image (`lin`, `dryrun`) | **PASS**, not launched | `BUILD_OK`. The canonical `qhv/host` and `qhv/guest` sums were unchanged before and after. R30 answered for the build: `data.build` names the `Image`, the initrd, the configuration and the guest pair, and mkqnximage succeeded |
+| Final git state | **PASS** | Only the seven part-2 sources are untracked; every build output is ignored; no identifier appears in the sources; no leftover QEMU, mkqnximage or mkifs process |
+
+**Also confirmed by the full build:**
+- mkifs accepts the `/data/s1/` targets, and `dumpifs` lists them as `data/s1/<name>`.
+- `dumpifs -x -b` extracts `Image`, `initrd.cpio.gz`, `s1-linux.conf`, `s1-host.ksh` and `s1-d1.conf` by basename, and each re-hashes to its pin.
+
+**Provenance.** The board kimgs were built before the gate edited `s1-host.ksh.in` and `make-s1-images.sh`. The regenerated board scripts are byte-identical, and the buildfiles are equal once the output root is normalised, so the kimgs are still what the current sources produce. PO-A does not cover the part-2 files, though, so one rebuild from the committed tree before B0 is recommended.
+
+### 14.7 Still open after T0
+
+- **Owner:**
+  - Accept O's bounds, or tighten the table.
+  - Accept the TCG wall rule of V, which gives 4,840 s for `lin-dryrun`, 7,825 s for `lin-boot` and 9,445 s for `hold`.
+  - D14's `--q2-limit`, if D1 keeps the QNX guest.
+- **T1 or T2:**
+  - Whether `/dev/shmem` accepts `mkdir` for `s1con`'s hit directory. A refusal would show as `S1 FAIL reader hvc0`.
+  - qvm's logger line format, and the wording and stream of its FDT-saved message; `logger_errors` may need tuning.
+  - R13's 596 MiB gate under the TCG host's 1 GiB `OPT_RAM` with QEMU's `-m 2G`.
+  - Whether qvm accepts `unsupported <class> abort`, which `s1-d1` uses.
+- **Board harness:**
+  - Whether `/sys/firmware/fdt`'s sha256 is an acceptable kexec-tree stamp (W).
+  - The `/etc/nv_tegra_release` format `p0` assumes: `R36` and `REVISION: 4.7` on its first line.
+  - D3's `/boot` pins as constants in the script, or read from one pinned source.
+  - A B1 mode in `parse-s1.py`.
+- **Parser:** `parse-s1.py` does not yet judge the TCG `memcanary` self-test (Q).
+- **Tooling:** whether the generator review's stub harness becomes a committed PC-side regression.
+
+### 14.8 Stale text above, to correct later (list only)
+
+- **§6.2 steps 1 and 2:** add `-Mode` to the build, and `-Attempt` and `-Tag` to the launch (T).
+- **§6.6:** `T234 m1b-p6 -P6` should be `T234 M1b -P6` (N).
+- **§7.2 F31:** add `unclaimed` to the overlap list (H).
+- **§9:** R40's "answered by" should be B2, not T0's TCG `asinfo` (Q). R10 and R11 were answered at T0 (C, D), except that `$(( ))` stays with T2. R30 was answered for the build by T1's image build (§14.6).
+- **§3.9 "Added":** the toybox links `mkdir` and `rm` (M).
+- **§6.12:** the bound table's values (O).
+- **§6.1 step 5:** the worktree is replaced by the configurable output root (L).
+- **§4.2 rows:**
+  - `build-s1tcg-image.ps1`: `-Mode` is required for `lin` and `d1`, and the host script comes from the generator (T, U).
+  - `launch-s1tcg.ps1`: the end rule and the wall bound (V).
+  - `s1-board.sh`: it also has `reboot`, `advice`, `consistency`, `b1-compare`, `redact-selftest` and `harness-selftest` (W-Z).
