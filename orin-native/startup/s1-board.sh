@@ -123,7 +123,7 @@ PIN_BOOT_INITRD=f0cdcc61064ff6e9ac99b1c4ff02468dbe9cf0c0e9404cf429524d741f6883f8
 # The Image and the L4T initrd are D3's copies (the pins above); the payload initrd is
 # orin-native/s1/initrd.manifest's output pin; the configuration is T2's.
 PIN_PC_INITRD_CPIO=44e81ea65903e25a66cafe6b35f28776bba1f6ae8082251cc8a988a689495ab6
-PIN_CONF=2d639f6737163beab37f3ad1ee955042716496680252694880a3a37a844bc8b9
+PIN_CONF=85d51359229ea4fa9860de76519a523250e71c5c77666821a07e7f4561196e31
 # §8 item 7: ramoops_carveout's reg, two address and two size cells.
 RAMOOPS_REG_HEX=00000002725f00000000000000200000
 
@@ -1474,7 +1474,7 @@ NEG_TOKENS=(
 )
 NEG_PATTERNS=(
 	'S1 FAIL([^_]|$)' 'S1 FAIL_STATE [^n]' 'logger_errors=[1-9]' 'S1 HB k=[0-9]+ qvm=[^a]' 'S1 HB k=[0-9]+ .*rc=[^a]'
-	'S1 HOLD end qvm=[^a]'
+	'S1 HOLD end qvm=[^a]' 'S1 DRYRUN rc=[^0]' '^[[:space:]]*\[[^]]+:[0-9]+] '
 )
 
 # Durations, clock counts and FreeMem values are masked in everything extracted.

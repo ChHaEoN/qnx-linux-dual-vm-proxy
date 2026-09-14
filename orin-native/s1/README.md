@@ -94,6 +94,10 @@ python orin-native/s1/parse-s1.py kshcheck FILE
 synthetic logs define every line the host script prints:
 - `S1 CONFIG` with the item-5 fields;
 - `S1 STATE`, `S1 HB k=N qvm=alive rc=absent` and `S1 FAIL_STATE`;
+- `S1 DRYRUN rc=0 saved=yes … logger_errors=0`, with a `qvmlog` export that
+  holds no line beginning with qvm's `[file:line] ` diagnostic form. Since T1
+  attempt 1 a dryrun with any other exit code, or with such a line, fails L2
+  (design C3 and §14.9);
 - the export framing `S1 BEGIN name=<n> bytes=<n> md5=<hex> enc=base64` …
   `S1 END name=<n>`.
 

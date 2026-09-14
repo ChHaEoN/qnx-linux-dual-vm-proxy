@@ -52,10 +52,12 @@
 ## $(( )) is text for the guest's shell, never arithmetic here.
 ##
 ## Pairs: the guest's pl011 is on qvm's stdout, which goes to /dev/ttyp2 and is
-## read by stamp on /dev/ptyp2 (hits in /dev/shmem); the virtio-console is the
-## slave /dev/ttyp3, whose master /dev/ptyp3 s1con holds read-write (hits in
-## /dev/shmem/con, so the two tools' open.hit and eof.hit stay apart). Pairs 0
-## and 1 stay the QNX guest's, as in M3 (§3.4).
+## read by stamp on /dev/ptyp2 (hits in /dev/shmem). The virtio-console's hostdev
+## is the master /dev/ptyp3, and s1con holds the slave /dev/ttyp3 read-write and
+## raw (-O -R; hits in /dev/shmem/con, so the two tools' open.hit and eof.hit stay
+## apart): design C11's fallback, adopted after T1 attempt 1, where qvm could not
+## open the slave (§14.9). It is M3's IPC wiring (qvm on /dev/ptyp0, the client
+## on /dev/ttyp0). Pairs 0 and 1 stay the QNX guest's, as in M3 (§3.4).
 # s1-host.ksh: S1 host state machine, generated from s1-host.ksh.in; edit the template.
 S=/dev/shmem
 C=/dev/shmem/con
@@ -150,7 +152,7 @@ say "CONFIG rung=$RUNG mode=$MODE profile=$PROFILE image_sha256=@IMAGE_SHA256@ i
 state preflight
 if [ "$MODE" != host ]; then
 	bwait -p /dev/ptyp2 -t @PTY_T@ > "$S/pf.1" 2>&1 || { say "FAIL preflight /dev/ptyp2"; FAIL=preflight; }
-	bwait -p /dev/ptyp3 -t @PTY_T@ > "$S/pf.2" 2>&1 || { say "FAIL preflight /dev/ptyp3"; FAIL=preflight; }
+	bwait -p /dev/ttyp3 -t @PTY_T@ > "$S/pf.2" 2>&1 || { say "FAIL preflight /dev/ttyp3"; FAIL=preflight; }
 fi
 @Q2@bwait -p /dev/ptyp1 -t @PTY_T@ > "$S/pf.3" 2>&1 || { say "FAIL preflight /dev/ptyp1"; FAIL=preflight; }
 @Q2@bwait -p /dev/ttyp0 -t @PTY_T@ > "$S/pf.4" 2>&1 || { say "FAIL preflight /dev/ttyp0"; FAIL=preflight; }
@@ -211,8 +213,9 @@ if [ "$MODE" != host ] && [ -z "$FAIL" ]; then
 @DIAG@	md5ok "$S/md5.pre" @MD5_CONF@ diagconf md5_pre @CONF@
 fi
 
-# §6.2 step 3 and C3: the dryrun with the FDT dumped. The exit code is recorded,
-# not judged; bwait's own line (prog=qvm, killed=) prints before S1 DRYRUN.
+# §6.2 step 3 and C3: the dryrun with the FDT dumped. The exit code is recorded
+# here and judged on the PC, which since T1 attempt 1 accepts only rc=0 (§14.9);
+# bwait's own line (prog=qvm, killed=) prints before S1 DRYRUN.
 if [ "$MODE" != host ] && [ -z "$FAIL" ]; then
 	state hostcheck
 	bwait -k @QC_K@ -o "$S/qc.out" -e "$S/qc.err" -- "$X/qvm-check" > "$S/qc.b" 2>&1
@@ -225,9 +228,16 @@ if [ "$MODE" != host ] && [ -z "$FAIL" ]; then
 	SAVED=no
 	if grep -q 'FDT saved to' "$S/dry.all"; then [ -s /dev/shmem/s1-fdt.dtb ] && SAVED=yes; fi
 	# logger_errors: lines naming error, fatal or internal as a word, leaving out
-	# lines that name the logger itself (the configuration's own logger line).
+	# lines that name the logger itself (the configuration's own logger line), and
+	# every qvm configuration diagnostic, '[file:line] message' at the line start,
+	# whatever its words (T1 attempt 1's form, §14.9). A line counts once: the word
+	# matches lose their diagnostic lines before the two sets are joined and counted.
 	grep -v -i 'logger' "$S/dry.all" > "$S/dry.nolog" 2>&1
-	grep -c -i -w -E 'error|fatal|internal' "$S/dry.nolog" > "$S/dry.nerr" 2>&1
+	grep -i -w -E 'error|fatal|internal' "$S/dry.nolog" > "$S/dry.werr" 2>&1
+	grep -v -E '^\[[^]]+:[0-9]+] ' "$S/dry.werr" > "$S/dry.wonly" 2>&1
+	grep -E '^\[[^]]+:[0-9]+] ' "$S/dry.all" > "$S/dry.diag" 2>&1
+	cat "$S/dry.wonly" "$S/dry.diag" > "$S/dry.errs" 2>&1
+	grep -c '^' "$S/dry.errs" > "$S/dry.nerr" 2>&1
 	NE=none
 	[ -s "$S/dry.nerr" ] && read -r NE rest < "$S/dry.nerr"
 	FB=none; FM=none
@@ -257,7 +267,7 @@ if [ "$MODE" != host ] && [ "$MODE" != dryrun ] && [ -z "$FAIL" ]; then
 	mkdir -p "$C"
 	stamp -i /dev/ptyp2 -o "$S/s1.pl011" -m @CAP@ -r "$S/s1.stamps" -h "$S" -s 'Booting Linux on physical CPU' -l l_kernel -s 'Run /init as init process' -l l_run_init -s 'Kernel panic' -l l_panic -s 'Reboot failed -- System halted' -l l_rbfail &
 	bwait -p "$S/open.hit" -t @READER_T@ > "$S/rd.1" 2>&1 || { say "FAIL reader pl011"; FAIL=${FAIL:-reader}; }
-	s1con -i /dev/ptyp3 -O -o "$S/s1.hvc" -m @CAP@ -r "$S/s1con.stamps" -h "$C" -d 2 -s 'S1-INIT start' -l i_start -s 'S1-INIT ready' -l i_ready -s 'S1-SHELL-42-OK' -l shell_ok -s 'S1-HB' -l hb -s 'S1-END-43-OK' -l end_ok -w 'i_ready=echo S1-SHELL-$((40+2))-OK' -t '/dev/shmem/probe2.go=echo S1-END-$((42+1))-OK' &
+	s1con -i /dev/ttyp3 -O -R -o "$S/s1.hvc" -m @CAP@ -r "$S/s1con.stamps" -h "$C" -d 2 -s 'S1-INIT start' -l i_start -s 'S1-INIT ready' -l i_ready -s 'S1-SHELL-42-OK' -l shell_ok -s 'S1-HB' -l hb -s 'S1-END-43-OK' -l end_ok -w 'i_ready=echo S1-SHELL-$((40+2))-OK' -t '/dev/shmem/probe2.go=echo S1-END-$((42+1))-OK' &
 	bwait -p "$C/open.hit" -t @READER_T@ > "$S/rd.2" 2>&1 || { say "FAIL reader hvc0"; FAIL=${FAIL:-reader}; }
 fi
 

@@ -9,7 +9,7 @@
  *
  * Phase 3b, the S1-F design's §3.4 and §4.2 (results/orin-native-port/
  * 20260909T1100Z/s1-design.md, revision 2). The Linux guest's shell is on hvc0,
- * a virtio-console whose host end is the slave of pty pair 3. COM3 is
+ * a virtio-console whose host end is the master of pty pair 3. COM3 is
  * receive-only, so the only way to show that the shell reads a line is for the
  * host to type one and look for an answer the typed text cannot contain. stamp
  * never writes to its input and is not edited, so its instrument hash holds;
@@ -25,7 +25,7 @@
  * -x are not carried: stamp takes those readings.
  *
  * The hit names are stamp's too: DIR/open.hit and DIR/eof.hit. S1 runs stamp on
- * /dev/ptyp2 while s1con runs on /dev/ptyp3 (design §6.3, §6.8, §6.9), so the two
+ * /dev/ptyp2 while s1con runs on /dev/ttyp3 (design §6.3, §6.8, §6.9), so the two
  * need different -h DIRs, or one tool's open.hit or eof.hit satisfies a wait
  * meant for the other. Give them different -r files as well: a shared record
  * gets two STAMP eof lines that cannot be told apart. s1con does not create DIR.
@@ -48,7 +48,7 @@
  *
  * S1's probe 1 (design §3.4):
  *
- *   s1con -i /dev/ptyp3 -O -o /dev/shmem/s1.hvc -r /dev/shmem/s1con.stamps \
+ *   s1con -i /dev/ttyp3 -O -R -o /dev/shmem/s1.hvc -r /dev/shmem/s1con.stamps \
  *         -h /dev/shmem/con -d 2 -s 'S1-INIT ready' -l i_ready \
  *         -s 'S1-SHELL-42-OK' -l shell_ok \
  *         -w 'i_ready=echo S1-SHELL-$((40+2))-OK' &

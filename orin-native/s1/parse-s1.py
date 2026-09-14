@@ -65,7 +65,8 @@ Record formats this parser expects from the S1 host script (§5.1):
   S1 CHECK image|initrd|conf md5_pre|md5_post ok
   S1 STATE <name>                       (hostcheck and teardown are read)
   BWAIT run prog=qvm rc=.. sig=.. killed=0 ms=..   (bwait's own line, before S1 DRYRUN)
-  S1 DRYRUN rc=<n> saved=yes fdt_bytes=<n> fdt_md5=<hex> logger_errors=0
+  S1 DRYRUN rc=0 saved=yes fdt_bytes=<n> fdt_md5=<hex> logger_errors=0
+                                        (rc is recorded as dryrun_rc=; accepted only as 0)
   STAMP <label> ...                     (stamp's own line)
   S1 HOLD start secs=600 | S1 HOLD end qvm=alive
   S1 ALLOC hold mib=<n> fill=ok [verify=ok]   and a later line with verify=ok
@@ -84,6 +85,9 @@ enc=gzip-base64 adds gz_bytes= and gz_md5= of the gzip layer, as m4dry does;
 enc=text carries raw lines: the md5 is over the body lines exactly as captured,
 trailing blanks kept, one trailing CR (the capture's) removed from each, each
 ending in LF. It frames only LF-only text that ends in LF; anything else is base64.
+A guest mode's qvmlog export (the dryrun's stdout and stderr) must decode, and no
+line of it may begin with qvm's configuration-diagnostic form '[file:line] '
+(C3 as tightened after T1 attempt 1, s1-design.md §14.9).
 
 Item-5 fields required in S1 CONFIG (§5.2 item 5): image_sha256 initrd_sha256
 conf_sha256 cmdline_sha256 init_sha256 s1con_sha256 memcanary_sha256
@@ -188,7 +192,7 @@ DESIGN_CONF = (
     "vdev virtio-console\n"
     " loc 0x20000000\n"
     " intr gic:42\n"
-    " hostdev /dev/ttyp3\n"
+    " hostdev /dev/ptyp3\n"
 )
 
 DESIGN_KEYWORDS = ("system", "logger", "ram", "cpu", "cluster", "load", "initrd", "cmdline", "vdev", "hostdev",
@@ -231,6 +235,20 @@ ITEM5_FIELDS = ("image_sha256", "initrd_sha256", "conf_sha256", "cmdline_sha256"
 
 GUEST_MODES = ("dryrun", "boot", "hold", "q2")
 LAUNCH_MODES = ("boot", "hold", "q2")
+
+# C3 as tightened after T1 attempt 1 (s1-design.md §14.9): a dryrun is accepted only
+# with rc=0, saved=yes, logger_errors=0, a decoded qvmlog export, and no line of that
+# export in qvm's configuration-diagnostic form '[file:line] message' at the line start
+# (attempt 1's was "[/data/s1/s1-linux.conf:14] Unable to open ..."). The host script
+# counts the same lines into logger_errors; the PC counts them again from the export.
+QVM_DIAG_RE = re.compile(r"^\[[^\]]+:[0-9]+\] ")
+DRYRUN_ACCEPT = ("dryrun", "dryrun_rc", "dryrun_rc_not_0", "dryrun_saved", "dryrun_logger_errors",
+                 "qvmlog_export", "dryrun_qvm_diagnostics")
+
+
+def qvm_diagnostics(data):
+    """Lines of qvm's text in the '[file:line] message' form, each CR removed first (§14.9)."""
+    return sum(1 for ln in data.decode("latin-1").split("\n") if QVM_DIAG_RE.match(ln.replace("\r", "")))
 
 # The firmware banner after the image's reset (m5-design.md C12: the hotkey lines of
 # NV PlatformBm.c, then L4TLauncher). The exact texts are HYPOTHESIS: not read here.
@@ -1211,12 +1229,27 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
         need("L2", dm is not None, "dryrun")
         dk = kvs(dm, 1) if dm else {}
         if dm:
-            need("L2", to_int(dk.get("rc")) is not None, "dryrun_rc")
+            # C3: the exit code is recorded (dryrun_rc=) and, since T1 attempt 1, must be 0 (§14.9).
+            drc = to_int(dk.get("rc"))
+            need("L2", drc is not None, "dryrun_rc")
+            need("L2", drc is None or drc == 0, "dryrun_rc_not_0")
             need("L2", dk.get("saved") == "yes", "dryrun_saved")
             need("L2", dk.get("logger_errors") == "0", "dryrun_logger_errors")
             bq = R.all(RX["bwait_qvm"], before=di)
             need("L2", bool(bq), "dryrun_bwait_line")
             need("L2", bool(bq) and bq[-1][1].group(3) == "0", "dryrun_within_bound")
+        put("dryrun_rc", q(dk["rc"]) if dm and dk.get("rc") else "absent")
+        # qvm's own text: a configuration diagnostic fails the dryrun whatever rc says (§14.9).
+        qlog = next((b for b in blocks if b["name"] == "qvmlog" and b["status"] == "ok"), None) or \
+            next((b for b in blocks if b["name"] == "qvmlog"), None)
+        need("L2", qlog is not None, "qvmlog_export")
+        ndiag = None
+        if qlog is not None:
+            need("L2", qlog["status"] == "ok", "qvmlog_export_" + qlog["status"])
+            if qlog["status"] == "ok":
+                ndiag = qvm_diagnostics(qlog["data"])
+                need("L2", ndiag == 0, "dryrun_qvm_diagnostics")
+        put("qvmlog_diagnostics", ndiag if ndiag is not None else "not-decoded")
         need("L2", fdt_blk is not None, "fdt_export")
         if fdt_blk is not None:
             need("L2", fdt_blk["status"] == "ok", "fdt_export_" + fdt_blk["status"])
@@ -1347,8 +1380,10 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
         if hold:
             miss["t3"] = []
             need("t3", R.first(RX["gate_mem"])[0] is not None, "gate_mem")
-            need("t3", not miss.get("L2") or "dryrun_saved" not in miss["L2"] and "dryrun" not in miss["L2"],
-                 "dryrun_saved")
+            # T3's dryrun rule is C3's as tightened after T1 attempt 1 (§14.9), not saved=yes alone.
+            for x in miss.get("L2", []):
+                if x in DRYRUN_ACCEPT or x.startswith("qvmlog_export"):
+                    need("t3", False, x)
             need("t3", "shell_ok" in stamps, "shell_ok")
             for r in miss.get("L6", []):
                 need("t3", False, r)
@@ -1629,13 +1664,14 @@ SYN_HEX = {k: c * 64 for k, c in (("image_sha256", "1"), ("initrd_sha256", "2"),
                                   ("s1con_sha256", "4"), ("memcanary_sha256", "5"), ("stamp_sha256", "6"),
                                   ("bwait_sha256", "7"))}
 SYN_KEXEC = "9" * 64
+SYN_QVMLOG = b"FDT saved to '/dev/shmem/s1-fdt.dtb'\r\n"   # a clean dryrun's text, CRLF as T1 attempt 1's export
 
 
 def syn_stamp(label):
     return f"STAMP {label} cycles=1 cps=31250000 cpu=0 mono_ns=1 bytes=1"
 
 
-def syn_log(profile, mode, dtb, conf_bytes, cmdline, *, enc="base64"):
+def syn_log(profile, mode, dtb, conf_bytes, cmdline, *, enc="base64", qvmlog=SYN_QVMLOG):
     """A synthetic record of one run, as a list of lines (SYNTHETIC; not a record)."""
     board = profile == "board"
     rung = {"host": "s1-h1", "boot": "s1-n1", "hold": "s1-n2", "dryrun": "s1-n1", "q2": "s1-q2"}[mode]
@@ -1707,6 +1743,11 @@ def syn_log(profile, mode, dtb, conf_bytes, cmdline, *, enc="base64"):
         L += [f"S1 BEGIN name=fdt bytes={len(dtb)} md5={md5(dtb)}{extra} enc={enc}"]
         L += [b[k:k + 76] for k in range(0, len(b), 76)]
         L += ["S1 END name=fdt"]
+        if qvmlog is not None:
+            qb = base64.b64encode(qvmlog).decode("ascii")
+            L += [f"S1 BEGIN name=qvmlog bytes={len(qvmlog)} md5={md5(qvmlog)} enc=base64"]
+            L += [qb[k:k + 76] for k in range(0, len(qb), 76)]
+            L += ["S1 END name=qvmlog"]
     L += ["S1 FAIL_STATE none"]
     if board:
         L += [f"T234 S1 {rung} -P4: resetting so the log can be recovered", "",
@@ -1798,7 +1839,7 @@ def selftest():
                                                    "vdev-type-not-allowed"))
     check("conf reject cluster at line start", rejects(base + "cluster _cpu-1\n", "not-a-directive"))
     check("conf reject cpu option not allowed", rejects(base + "cpu runmask 0x2\n", "cpu-option-not-allowed"))
-    check("conf reject hostdev outside vdev", rejects("hostdev /dev/ttyp3\n" + base, "vdev-option-outside-vdev"))
+    check("conf reject hostdev outside vdev", rejects("hostdev /dev/ptyp3\n" + base, "vdev-option-outside-vdev"))
     check("conf reject vdev without loc", rejects(base.replace(" loc 0x20000000\n", ""), "vdev-without-loc"))
     check("conf reject missing cmdline", rejects("".join(ln + "\n" for ln in base.splitlines()
                                                          if not ln.startswith("cmdline")), "missing-required"))
@@ -1933,10 +1974,10 @@ def selftest():
 
     # ---- run
     def run(profile, mode, lines=None, *, bb="auto", ref=True, reset="MAINSWRST", kexec=SYN_KEXEC, tree=None,
-            enc="base64", gate_ok=True, image=None, initrd=None):
+            enc="base64", gate_ok=True, image=None, initrd=None, qvmlog=SYN_QVMLOG):
         blob = fdt_build(tree) if tree is not None else dtb
         if lines is None:
-            lines = syn_log(profile, mode, blob, conf_bytes, cmdline, enc=enc)
+            lines = syn_log(profile, mode, blob, conf_bytes, cmdline, enc=enc, qvmlog=qvmlog)
         data = ("\n".join(lines) + "\n").encode("latin-1")
         bbd = syn_blackbox(lines) if (bb == "auto" and profile == "board") else (bb if bb != "auto" else None)
         return analyze_run(data, profile=profile, mode=mode, conf_bytes=conf_bytes, conf_info=info,
@@ -1952,8 +1993,34 @@ def selftest():
     check("run T1 synthetic passes", r["verdict"] == "pass" and r["step"] == "T1" and has(r, "item1_t1=pass"))
     check("run T1 decodes the fdt export", has(r, "export=name=fdt status=ok") and has(r, "fdt_gating=ok"))
     check("run T1 prints no FreeMem value", not any("1400" in ln for ln in r["lines"]))
+    check("run T1 records dryrun rc 0 and no qvm diagnostic", has(r, "dryrun_rc=0") and
+          has(r, "qvmlog_diagnostics=0"))
     r = run("tcg", "dryrun", tree=syn_tree(cmdline, psci=False))
     check("run T1 with no PSCI node fails", r["verdict"] == "fail" and has(r, "fdt_gate psci=missing"))
+
+    # C3 as tightened after T1 attempt 1 (s1-design.md §14.9).
+    def tier(res, t):
+        return next((ln for ln in res["lines"] if ln.startswith(f"tier_{t}=")), "")
+
+    t1 = syn_log("tcg", "dryrun", dtb, conf_bytes, cmdline)
+    rc64 = ((r"^BWAIT run prog=qvm rc=0 ", "BWAIT run prog=qvm rc=64 "), (r"^S1 DRYRUN rc=0 ", "S1 DRYRUN rc=64 "))
+    r = run("tcg", "dryrun", edit_lines(t1, sub=rc64))
+    check("run T1 dryrun rc=64 fails L2 and item 1 (saved=yes, logger_errors=0)", r["verdict"] == "fail" and
+          has(r, "item1_t1=fail") and "dryrun_rc_not_0" in tier(r, "L2") and has(r, "dryrun_rc=64"))
+    diag = (b"FDT saved to '/dev/shmem/s1-fdt.dtb'\r\n"
+            b"[/data/s1/s1-linux.conf:14] Unable to open '/dev/ttyp3': Interrupted function call\r\n")
+    r = run("tcg", "dryrun", qvmlog=diag)
+    check("run T1 rc=0 with a [file:line] diagnostic in qvmlog fails L2 and item 1", r["verdict"] == "fail" and
+          has(r, "item1_t1=fail") and has(r, "dryrun_rc=0") and has(r, "qvmlog_diagnostics=1") and
+          "dryrun_qvm_diagnostics" in tier(r, "L2") and "dryrun_rc_not_0" not in tier(r, "L2"))
+    r = run("tcg", "dryrun", edit_lines(syn_log("tcg", "dryrun", dtb, conf_bytes, cmdline, qvmlog=diag), sub=rc64))
+    check("run T1 shaped like attempt 1 fails on both rc and the diagnostic", r["verdict"] == "fail" and
+          "dryrun_rc_not_0" in tier(r, "L2") and "dryrun_qvm_diagnostics" in tier(r, "L2"))
+    r = run("tcg", "dryrun", qvmlog=None)
+    check("run T1 without the qvmlog export fails L2", r["verdict"] == "fail" and "qvmlog_export" in tier(r, "L2"))
+    r = run("tcg", "dryrun", qvmlog=SYN_QVMLOG + b"note: [a.conf:2] not at the line start\r\n")
+    check("run T1 counts only [file:line] at the line start", r["verdict"] == "pass" and
+          has(r, "qvmlog_diagnostics=0"))
     r = run("tcg", "boot")
     check("run T2 synthetic passes", r["verdict"] == "pass" and has(r, "item1_t2=pass") and
           has(r, "tier_L5=ok"))
@@ -2032,6 +2099,12 @@ def selftest():
     r = run("tcg", "hold", edit_lines(hl, drop=(r"^S1 HB k=10 ",)))
     check("run T3 nine heartbeats fail", r["verdict"] == "fail" and "heartbeats_k1_to_k10" in
           next(ln for ln in r["lines"] if ln.startswith("tier_L6=")))
+    r = run("tcg", "hold", edit_lines(hl, sub=rc64))
+    check("run T3 with dryrun rc=64 fails t3", r["verdict"] == "fail" and
+          "dryrun_rc_not_0" in next(ln for ln in r["lines"] if ln.startswith("t3=")))
+    r = run("tcg", "hold", qvmlog=diag)
+    check("run T3 with a qvm diagnostic fails t3", r["verdict"] == "fail" and
+          "dryrun_qvm_diagnostics" in next(ln for ln in r["lines"] if ln.startswith("t3=")))
     r = run("tcg", "hold", edit_lines(hl, add_after=((r"^S1 STATE export", "x" * 61000),)))
     check("run T3 black-box text over 60,000 B fails", r["verdict"] == "fail" and has(r, "missing_bb_text=over_60000"))
 
@@ -2047,6 +2120,9 @@ def selftest():
     r = run("board", "boot")
     check("run B3 synthetic passes", r["verdict"] == "pass" and r["step"] == "B3" and has(r, "item2=pass") and
           has(r, "tier_L7=ok") and has(r, "bb_consistent=yes"))
+    r = run("board", "boot", qvmlog=diag)
+    check("run B3 with a qvm diagnostic in qvmlog fails item 2", r["verdict"] == "fail" and has(r, "item2=fail") and
+          "dryrun_qvm_diagnostics" in tier(r, "L2"))
     r = run("board", "boot", ref=False)
     check("run B3 without the T2 conf sha256 fails item 2", r["verdict"] == "fail" and
           has(r, "missing_conf_ref=not_given"))
@@ -2134,7 +2210,7 @@ def selftest():
           buf.getvalue())
     for s in ('bwait -k 60 -o "$S/dry.out" -e "$S/dry.err" -- /proc/boot/qvm @/data/s1/s1-linux.conf '
               'set fdt-dump-file /dev/shmem/s1-fdt.dtb dryrun',
-              "s1con -O -i /dev/ptyp3 -o \"$S/hvc0\" -w 'i_ready=echo S1-SHELL-$((40+2))-OK' &",
+              "s1con -O -R -i /dev/ttyp3 -o \"$S/hvc0\" -w 'i_ready=echo S1-SHELL-$((40+2))-OK' &",
               'bwait -p "$S/shell_ok.hit" -p "$S/l_rbfail.hit" -t 120 || say "FAIL shell_ok"'):
         check(f"kshcheck accepts {s[:40]!r}", not kshcheck_text(s + "\n"))
     for s in ('base64 "$S/s1-fdt.dtb" | tcu-cat', 'F=$(md5sum /data/s1/Image)',

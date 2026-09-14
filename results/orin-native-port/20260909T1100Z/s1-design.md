@@ -100,7 +100,7 @@ Phase 3b. Architect pass, revision 2, 2026-09-13 (revision 1 reviewed; outcomes 
 |---|---|---|---|
 | C1 | Kill condition 1: "no second window can be shown free after `rmmod`" (plan:472); prerequisite (b) likewise (plan:463) | **Stale since 11c.** The quiesce frees no RAM window, because the map is fixed at boot (plan:861). The live test is whether an unreserved System RAM range, stable across boots, can be claimed as a second `add_ram` with FreeMem reflecting it. That is B2 (§6.7). Reworded kill condition, against the one candidate 11c found: on B2, window 2 (inside `0x100000000-0x249ffffff`) holds data wrongly, that is `S1 ALLOC … verify=bad` or a window-2 canary `verify=bad`, with c1 in window 1 verifying in the same run. A startup or tool defect (F12, F13 with a crash message, F15, F28) is fixed and B2 rerun; it is not a kill verdict. Deriving another range is a new design revision, not a step of S1 (D8) | VERIFIED (plan:856-868) |
 | C2 | Pass item 2, "the same configuration, unchanged", against M4's TCG builder, which rewrites the load path (`build-m4tcg-image.ps1:315`) | **Literal identity.** The Linux payload lives at `/data/s1/` on both hosts: TCG through `data_files.custom`, native as absolute IFS paths (§4.2). `dryrun` and `fdt-dump-file` are qvm command-line arguments, documented in that form (QH `vm/variables.html` example). The file's sha256 must match on every leg | VERIFIED (the M4 rewrite); design |
-| C3 | Pass item 1: "`dryrun` accepts the configuration". qvm's exit status after a `dryrun` is undocumented (QH `vm/dryrun.html`) | **Accept means all of:** the documented `FDT saved to` line; a non-empty dump that decodes on the PC with magic `d00dfeed`; no qvm logger line at `error`, `fatal` or `internal`; qvm exited within its bound. The exit code is recorded, not judged | VENDOR_CLAIM (docs silent); design |
+| C3 | Pass item 1: "`dryrun` accepts the configuration". qvm's exit status after a `dryrun` is undocumented (QH `vm/dryrun.html`) | **Accept means all of:** the documented `FDT saved to` line; a non-empty dump that decodes on the PC with magic `d00dfeed`; no qvm logger line at `error`, `fatal` or `internal`; qvm exited within its bound. ~~The exit code is recorded, not judged~~ **2026-09-14:** after T1 attempt 1, accept also needs exit code 0 and no qvm configuration diagnostic, that is no dryrun output line beginning `[file:line] `; the exit code is still recorded. Attempt 1's gate passed a dryrun that exited 64 with such a line (§14.9) | VENDOR_CLAIM (docs silent); design |
 | C4 | Does qvm recognise an EFI-stub arm64 `Image` with a bare `load`? | **UNKNOWN.** QH `vm/load.html` says only that "ELF or Linux image format" files load where their contents say. T1 answers. Contingency: `guest load`. Never gzip the kernel: arm64 has no decompressor (LX `booting.html`), and qvm documents none | VENDOR_CLAIM; UNKNOWN |
 | C5 | What FDT does qvm generate for a Linux guest (memory, PSCI method, timer PPIs, `/chosen` bootargs and initrd, virtio,mmio and pl011 nodes, `kaslr-seed`)? | **UNKNOWN; the docs list none of it** (QH `config/acpi_fdt.html`). T1 dumps it on TCG and B3 on the board, and the PC reads both (§6.2). `psci-supported auto` reads the host's tree (QH variables), so the two dumps are expected to differ (HYPOTHESIS) | UNKNOWN |
 | C6 | Plan: "a small busybox initrd" (plan:460). No static busybox exists on the board, and installing `busybox-static` is a download (BF) | **Still busybox:** the initrd's dynamic busybox with `ld-linux-aarch64.so.1`, `libc.so.6` and `libresolv.so.2`, copied from the stock L4T initrd (§3.5, D2) | VERIFIED (BF) |
@@ -108,7 +108,7 @@ Phase 3b. Architect pass, revision 2, 2026-09-13 (revision 1 reviewed; outcomes 
 | C8 | RT's S1 runs Linux "beside the QNX guest" (RT:324) and gates S1 on G1-G3 with a GPU-overlay G2 (RT:320); the owner's target has no QNX guest (RT:342) | **The plan and owner rule:** the guest set is freeze item 2 (plan:480), and S1-F needs only a no-GPU `dryrun` first (plan:465). Linux only by default, B5 if D1 keeps the QNX guest | VERIFIED |
 | C9 | M3's window-1 budget leaves about 111 MiB (m3-design.md:300-301, HYPOTHESIS) | **Holds for two guests, not for Linux only.** Without the QNX guest pair, its disk copy and the io-blk cache, the Linux-only budget leaves room for a 512 MiB guest in window 1 (§3.3, HYPOTHESIS). Two guests need window 2 | HYPOTHESIS (budget) |
 | C10 | The generators cap the IFS end at `0x8C000000` (`startup/make-m3-images.sh:780-784`; `make-m4-images.sh:845`, `:924-928`) | **A budget rule, not a hardware limit:** it "leaves at least 800 MiB of the window" (m3-design.md:972). Linux only passes it. Two guests exceed it (§4.4), so B5 needs it re-derived (D14) | VERIFIED |
-| C11 | `stamp` never writes to its input or changes termios (m3-design.md:692), and COM3 is receive-only (BF), but a shell needs input | **A new tool, `s1con`,** which holds the pty master, stamps output as `stamp` does, and writes a probe line when a needle fires or a trigger file appears. The virtio-console `hostdev` names the pty slave, so the slave's line discipline sits on qvm's side, as M3's pl011 stdout path already does (`startup/m3-host.ksh.in:97`, `:106`) (§3.4) | VERIFIED (M3 pattern); design |
+| C11 | `stamp` never writes to its input or changes termios (m3-design.md:692), and COM3 is receive-only (BF), but a shell needs input | **A new tool, `s1con`,** which ~~holds the pty master~~ holds one end of pty pair 3, stamps output as `stamp` does, and writes a probe line when a needle fires or a trigger file appears. ~~The virtio-console `hostdev` names the pty slave, so the slave's line discipline sits on qvm's side, as M3's pl011 stdout path already does (`startup/m3-host.ksh.in:97`, `:106`)~~ (§3.4). **2026-09-14:** §3.4's fallback was adopted after T1 attempt 1, where qvm could not open the slave (§14.9): `hostdev /dev/ptyp3`, the master, with `s1con -O -R` on the slave `/dev/ttyp3`. That is M3's IPC wiring: `hostdev /dev/ptyp0` (`qhvc/g2-m3.conf:38`) with the client on `/dev/ttyp0` (`startup/m3-host.ksh.in:53`, `:121`) | VERIFIED (M3 pattern); design |
 | C12 | Pass item 4's "host memory canaries" have no instrument or definition (a repository search finds only plan:470 and m3-design's file checks, m3-design.md:1310, :1328) | **Designed here** (§3.8): reserved-range pattern canaries in both windows, the window-2 allocation check on B2, and M3's md5 checks | VERIFIED (absence) |
 | C13 | The plan's §3.4 command lists three `rmmod` names (plan:182); M3's O4 and 11c used four | **Four:** `nvidia_drm nvidia_modeset nvidia nvgpu`, as 11c ran twice cleanly (plan:860) | VERIFIED |
 | C14 | `m3-board.sh`'s default return bound is 1,200 s (`startup/m3-board.sh:41`) and M3's guard 900 s (`startup/m3.build.in:75`); a ten-minute hold fits neither | **Bounds follow M4's rule:** guard = ceil((ksh worst + 125 + 240) / 300) × 300; return bound = guard + 300 s (m4-design.md:1252, :1264, :1267), read from a per-image params file as `m4-board.sh` does (`startup/m4-board.sh:568-572`) | VERIFIED |
@@ -232,9 +232,9 @@ No disk copy and no io-blk cache: the Linux guest has no block device. Because 5
 
 **Wiring** (Linux guest; pairs 0-1 stay the QNX guest's, as in M3):
 - pl011: `hostdev >-`; qvm's stdout and stderr are redirected to `/dev/ttyp2`; `stamp -i /dev/ptyp2` reads the kernel log and qvm's logger (the M3 pattern, `m3-host.ksh.in:97`, `:106`).
-- virtio-console: `hostdev /dev/ttyp3`, the slave; `s1con` opens master `/dev/ptyp3` read-write.
-  - Why the slave: bytes the host writes to the master reach qvm as input. The slave's echo, if on, returns them to the master, where `s1con` sees its own probe text, which cannot match a needle. Guest output passes the slave's output processing to the master. So no termios change is needed. HYPOTHESIS until T2.
-  - Fallback, if qvm rejects a slave or input stalls in canonical mode: `hostdev /dev/ptyp3` with `s1con -R` on `/dev/ttyp3`, which sets raw mode, as `qnx-host-client` does for IPC (m3-design.md:845). That changes the configuration, so it is decided at T2, before any pass run.
+- virtio-console: `hostdev /dev/ptyp3`, the master, held by qvm; `s1con -O -R` opens the slave `/dev/ttyp3` read-write and sets it raw (**2026-09-14**, C11's fallback, §14.9). ~~`hostdev /dev/ttyp3`, the slave; `s1con` opens master `/dev/ptyp3` read-write.~~
+  - ~~Why the slave: bytes the host writes to the master reach qvm as input. The slave's echo, if on, returns them to the master, where `s1con` sees its own probe text, which cannot match a needle. Guest output passes the slave's output processing to the master. So no termios change is needed. HYPOTHESIS until T2.~~ **Correction 2026-09-14:** T1 attempt 1 refuted this on qvm's side. With the slave as `hostdev` and nothing holding the master during the dryrun, qvm printed `Unable to open '/dev/ttyp3': Interrupted function call` and exited 64 (§14.9). The fallback below is adopted. It is also M3's precedent: qvm holds the master `/dev/ptyp0`, and the host client opens the slave `/dev/ttyp0` (`qhvc/g2-m3.conf:38`; `startup/m3-host.ksh.in:53`, `:121`).
+  - Fallback (~~if qvm rejects a slave or input stalls in canonical mode~~ **adopted 2026-09-14, before T2; T1 runs again as attempt 2**): `hostdev /dev/ptyp3` with `s1con -R` on `/dev/ttyp3`, which sets raw mode, as `qnx-host-client` does for IPC (m3-design.md:845). ~~That changes the configuration, so it is decided at T2, before any pass run.~~ It changes the configuration's sha256, and no pass run had used the old one (§14.9).
 - `devc-pty` provides eight pairs by default (`m3.build.in:78`; m3-design.md:91).
 
 **Needles** (all our text except the kernel's):
@@ -308,8 +308,10 @@ vdev pl011
 vdev virtio-console
  loc 0x20000000
  intr gic:42
- hostdev /dev/ttyp3
+ hostdev /dev/ptyp3
 ```
+
+**2026-09-14:** the last line was ` hostdev /dev/ttyp3`, the slave, until T1 attempt 1; C11's fallback made it the master (§3.4, §14.9). No other line changed, and `cmdline_sha256` is unchanged.
 
 - **Addresses and interrupts** reuse M3's proven plan (`qhvc/g2-m3.conf:31-38`), away from the GICv3 defaults at `0x2f000000` and `0x2f100000` (QH `vdev_gic.html`). Each qvm is its own VM, so the same guest-physical addresses beside the QNX guest are expected to work (HYPOTHESIS; B5 answers).
 - **MMIO transports** (`loc` plus `intr`): the PCI default would add an undocumented host-bridge dependency (QH virtio-console page).
@@ -450,7 +452,7 @@ Every other output path is already ignored (§2 rule 10). T0 step 6 checks the t
 | `hold` | B4 | 852 | `boot` + 256 `hold` allocation |
 | `q2` | B5 | 1,255 | 512 + 512 + 146.3 + 20 + 64, rounded up (§4.5) |
 
-**L2.** `S1 DRYRUN rc=<n> saved=yes fdt_bytes=… fdt_md5=… logger_errors=0`; then after teardown, `S1 BEGIN name=fdt …`, the base64 block through `tcu-cat`, `S1 END name=fdt`. The PC decodes it, checks md5 and magic, and computes its sha256.
+**L2.** `S1 DRYRUN rc=0 saved=yes fdt_bytes=… fdt_md5=… logger_errors=0` (**2026-09-14:** ~~`rc=<n>`~~ `rc=0`, and the `qvmlog` export holds no line beginning `[file:line] `; C3, §14.9); then after teardown, `S1 BEGIN name=fdt …`, the base64 block through `tcu-cat`, `S1 END name=fdt`. The PC decodes it, checks md5 and magic, and computes its sha256.
 
 **L3 (diagnosis only).** `STAMP l_kernel`. Its needle text is HYPOTHESIS (R31); its absence alone never fails an item.
 
@@ -464,7 +466,7 @@ Every other output path is already ignored (§2 rule 10). T0 step 6 checks the t
 
 **B3 and B4 add, if Q14 finds a view:** `S1 GUESTRAM w1=yes|no w2=yes|no` from a capped host-side mapping view of qvm. Otherwise `S1 GUESTRAM unknown`.
 
-**TCG (T1-T3)** uses the same `S1` and `STAMP` lines on the serial log, with `startup=tcg-profile`, `windows=tcg -m 2G`, `smp=4`, no L0 or L7, no `S1 ASINFO` or `S1 CANARY` lines, and `alloc`/`hold` allocations only. **T3's required tokens:** `S1 GATE mem ok`, `S1 DRYRUN … saved=yes`, `STAMP shell_ok`, `S1 HOLD start secs=600`, `S1 ALLOC hold mib=64 fill=ok`, ten `S1 HB k=<1..10> qvm=alive rc=absent`, `STAMP end_ok`, `S1 HOLD end qvm=alive`, `S1 ALLOC hold mib=64 verify=ok`, `S1 CHECK … md5_post ok`, and the parser's `bb_text_bytes` estimate of the board profile's black-box text under 60,000 B (R22).
+**TCG (T1-T3)** uses the same `S1` and `STAMP` lines on the serial log, with `startup=tcg-profile`, `windows=tcg -m 2G`, `smp=4`, no L0 or L7, no `S1 ASINFO` or `S1 CANARY` lines, and `alloc`/`hold` allocations only. **T3's required tokens:** `S1 GATE mem ok`, `S1 DRYRUN … saved=yes` (**2026-09-14:** with `rc=0`, `logger_errors=0` and no qvm diagnostic, as L2), `STAMP shell_ok`, `S1 HOLD start secs=600`, `S1 ALLOC hold mib=64 fill=ok`, ten `S1 HB k=<1..10> qvm=alive rc=absent`, `STAMP end_ok`, `S1 HOLD end qvm=alive`, `S1 ALLOC hold mib=64 verify=ok`, `S1 CHECK … md5_post ok`, and the parser's `bb_text_bytes` estimate of the board profile's black-box text under 60,000 B (R22).
 
 ### 5.2 Pass: plan items 1-5 mapped to evidence
 
@@ -489,7 +491,7 @@ Every other output path is already ignored (§2 rule 10). T0 step 6 checks the t
   1. no `l_kernel` (the kernel never entered: load format or entry). Try `guest load`, then `s1-d1`;
   2. `l_kernel`, no `i_start` (FDT, interrupt, virtio-mmio or initrd problem). `s1-d2` (I-c) separates the initrd;
   3. `i_start`, no `i_ready` (busybox or a library path);
-  4. `i_ready`, no `shell_ok` (the input path: C11's fallback).
+  4. `i_ready`, no `shell_ok` (the input path: ~~C11's fallback~~ **2026-09-14:** C11's fallback is already in use, so this stage points at the raw slave path and the shell itself, §14.9).
   Only stages 1-2 with a valid FDT point at qvm itself.
 - **TCG passes, the board fails:** a board-only difference (the host tree, A78AE registers, PSCI detection, the GIC). `s1-d1` on the board (`unsupported … abort`, `logger … verbose`) is a diagnostic, never a pass run.
   - **Terminal rule:** after `s1-d1`, at most one configuration fix goes through T1, T2 and B3 again. If B3 still fails, board work on S1 stops with "board-only failure; kill condition 2 pending D17" in `r/s1-runs.md`, citing `<rec>/B3/parse-s1.txt` and `<rec>/d1/parse-s1.txt`. D17's request and time box follow; the owner alone declares "QNX support cannot fix it", which records kill condition 2.
@@ -545,11 +547,11 @@ Facts only.
 4. `PC$ parse-s1.py run` decodes `qhv/s1tcg/attempt<N>/s1-fdt.dtb`, checks md5 and magic, and `parse-s1.py fdt` lists the checklist.
    - **Gating:** a memory node covering `0x80000000`/512 MiB; a GICv3 node; an `arm,armv8-timer` node with interrupts; a `virtio,mmio` node at `0x20000000` with interrupts; `/chosen/bootargs` equal to the configuration's cmdline; `linux,initrd-start` and `-end` inside guest RAM; a PSCI node (`compatible` containing `arm,psci`) with a `method` (the guest's panic reboot and its secondaries depend on it, §3.4, §3.6).
    - **Recorded:** the PSCI method value and version compatible; `cpu` nodes and enable-method; a pl011 node at `0x1c090000` and its clocks; `stdout-path`; `kaslr-seed`; the `interrupts` cells for `gic:37` and `gic:42` (which settles INTID against SPI numbering).
-5. **T1 passes** on C3 plus every gating row.
+5. **T1 passes** on C3 plus every gating row. **2026-09-14:** C3 now also needs `rc=0` and no qvm `[file:line]` diagnostic (§14.9).
 
 ### 6.3 T2: boot to a shell (TCG)
 
-`-Mode boot`: T1's steps in full (`mem` gate 596, md5 pre, `qvm-check`, the `dryrun` with `fdt-dump-file`, the export), then launch qvm with stdout on `/dev/ttyp2`, `stamp` on `/dev/ptyp2` (needles including `l_panic` and `l_rbfail`), `s1con -O` on `/dev/ptyp3` with probe 1. Bounds (nested TCG, UNKNOWN speed, so generous), all from the launch: `l_kernel` 900 s (diagnosis only), `i_ready` 1,800 s, `shell_ok` 120 s after `i_ready`. Teardown, md5 post, the capped heads, the full streams, `shutdown`. **T2 passes** on L2, L4 and L5, with the same configuration sha256 as T1 and its own FDT sha256.
+`-Mode boot`: T1's steps in full (`mem` gate 596, md5 pre, `qvm-check`, the `dryrun` with `fdt-dump-file`, the export), then launch qvm with stdout on `/dev/ttyp2`, `stamp` on `/dev/ptyp2` (needles including `l_panic` and `l_rbfail`), ~~`s1con -O` on `/dev/ptyp3`~~ `s1con -O -R` on `/dev/ttyp3` (2026-09-14, C11's fallback, §14.9) with probe 1. Bounds (nested TCG, UNKNOWN speed, so generous), all from the launch: `l_kernel` 900 s (diagnosis only), `i_ready` 1,800 s, `shell_ok` 120 s after `i_ready`. Teardown, md5 post, the capped heads, the full streams, `shutdown`. **T2 passes** on L2, L4 and L5, with the same configuration sha256 as T1 and its own FDT sha256.
 
 ### 6.4 T3: the hold path (TCG)
 
@@ -639,12 +641,12 @@ B1-B5 fit two attended sessions: B0-B2, then B3-B5. A session stops at the first
 | F1 | T0 geometry gate fails | IFS over the cap | Check the initrd size; Linux only must pass |
 | F2 | `S1 DRYRUN saved=no`, a logger `error` naming `load` | `Image` not recognised (C4) | `guest load`; then QNX support |
 | F3 | Logger error naming `cluster` | `_cpu-N` not accepted | Bare `cpu` lines; re-pin; rerun T1 |
-| F4 | Logger error naming `hostdev /dev/ttyp3` | slave rejected | C11 fallback; rerun T1 |
+| F4 | Logger error naming `hostdev /dev/ttyp3` | slave rejected | C11 fallback; rerun T1. **2026-09-14:** seen in T1 attempt 1 as `[/data/s1/s1-linux.conf:14] Unable to open '/dev/ttyp3': Interrupted function call`, and the fallback is adopted (§14.9). The same form naming `/dev/ptyp3` leaves no fallback in this design |
 | F5 | FDT decodes, a gating row missing | Generated tree unusable as-is | Record; a non-GPU `fdt load` overlay only under D19, which changes the configuration and reruns T1; otherwise D17 |
 | F6 | T2: no `l_kernel` by its bound | Kernel not entered | §5.3 stage 1 |
 | F7 | `l_kernel`, then `Kernel panic … VFS` or `No working init found` | Initrd not found, or `/init` or its interpreter missing | `s1-d2`; check the manifest's symlinks |
-| F8 | `i_ready`, no `shell_ok`, the probe echo visible | Shell not reading, or `$(( ))` absent | Check applets; C11 fallback |
-| F9 | `i_ready`, no `shell_ok`, no echo | Input not reaching the guest | C11 fallback |
+| F8 | `i_ready`, no `shell_ok`, the probe echo visible | Shell not reading, or `$(( ))` absent | Check applets; ~~C11 fallback~~ (in use since 2026-09-14, §14.9) |
+| F9 | `i_ready`, no `shell_ok`, no echo | Input not reaching the guest | ~~C11 fallback~~ **2026-09-14:** the fallback is already in use (§14.9); read `s1con`'s write records and any raw-mode error line |
 
 **Board**
 
@@ -723,7 +725,7 @@ B1-B5 fit two attended sessions: B0-B2, then B3-B5. A session stops at the first
 | R6 | The L4T 5.15-tegra kernel boots on a generic tree with no Tegra nodes | HYPOTHESIS (upstream apbmisc bails on non-Tegra; NVIDIA's fork not read) | T2, B3 |
 | R7 | `earlycon=pl011,0x1c090000` works on qvm's pl011 vdev | HYPOTHESIS (QNX's own example uses it) | T2 |
 | R8 | The virtio port becomes `hvc0` | HYPOTHESIS (`HVC_DCC` not built; hvc index not read in source) | T2 |
-| R9 | qvm accepts a pty slave as virtio-console `hostdev`, and input reaches the guest | UNKNOWN | T2 |
+| R9 | ~~qvm accepts a pty slave as virtio-console `hostdev`~~ **2026-09-14:** qvm accepts the pty master `/dev/ptyp3` as virtio-console `hostdev` (it could not open the slave in T1 attempt 1, §14.9), and input reaches the guest through the raw slave | UNKNOWN | T1 attempt 2 (the dryrun), T2 |
 | R10 | Ubuntu's initramfs busybox has `sh`, `mount`, `echo`, `sleep`, `uname` and `$(( ))` | HYPOTHESIS | T0 (applet list from the manifest build), T2 |
 | R11 | The initrd's `/lib` usrmerge links can be reproduced from the source cpio | HYPOTHESIS | T0 |
 | R12 | `cpu cluster _cpu-N` is accepted, and `_cpu-3` exists under `-smp 4` on TCG | UNKNOWN / VENDOR_CLAIM | T1 |
@@ -981,7 +983,7 @@ The cpio bytes depend only on the inputs. The gzip bytes also depend on the zlib
 - No redirection names `/dev/null`. A redirection that could fail runs in a subshell, because a failed redirection ends the shell, and init ending panics the kernel.
 
 **F. The configuration and its cmdline pin.** `s1-linux.conf` carries no comments, so the gate reads the bytes every leg stages (§2 rule 2).
-- Its sha256 is `2d639f67…44bc8b9`.
+- Its sha256 is ~~`2d639f67…44bc8b9`~~ `85d51359…61196e31` since 2026-09-14, when the virtio-console `hostdev` became the master (§14.9).
 - `cmdline_sha256` is the sha256 of the cmdline string between its quotes, `da47f63e…4f337638`.
 
 **VERIFIED:** `parse-s1.py conf` gives `gate=pass rejects=0 allow_errors=0`, and `parse-s1.py --selftest` compares the file with §3.7's text byte for byte.
@@ -1087,7 +1089,7 @@ Accepting these bounds, or tightening the table toward §6.12, is an owner decis
   - On TCG they go over the console.
   - On the board the BEGIN, body and END lines go by `tcu-cat -m`, `-f`, `-m`, so they never enter the black box. The console carries one `S1 EXPORT name=<n> bytes=… md5=… enc=base64 rc=…` record per stream.
 - **TCG exports `fdt` and `qvmlog` before the launch** (C16, V17, §6.3), right after `S1 DRYRUN` and with its own `S1 STATE export`; `pl011` and `hvc0` follow teardown. The board exports all four after teardown (§5.1 L2, §6.8). Review caught the first version exporting after teardown on TCG as well.
-- **`logger_errors` is a heuristic,** because qvm's logger format has not been read. It counts dryrun output lines that contain `error`, `fatal` or `internal` as a whole word (case-insensitive), leaving out lines that contain `logger`. A `saved=` other than `yes` stops the run before launch. A nonzero count lets the boot go on and sets `FAIL_STATE dryrun_logger_errors`.
+- **`logger_errors` is a heuristic,** because qvm's logger format has not been read. It counts dryrun output lines that contain `error`, `fatal` or `internal` as a whole word (case-insensitive), leaving out lines that contain `logger`. A `saved=` other than `yes` stops the run before launch. A nonzero count lets the boot go on and sets `FAIL_STATE dryrun_logger_errors`. **2026-09-14:** it also counts every line that begins with qvm's configuration-diagnostic form `[file:line] `, whatever its words, each line once, because T1 attempt 1's diagnostic named none of the three words. The PC counts the same lines again from the `qvmlog` export, and requires `rc=0` (§14.9).
 - **`l_kernel` is a checkpoint, not a stop** (240 s on the board, 900 s on TCG). At its bound the wait goes on to `i_ready` if `l_kernel` or `i_start` was seen. The chained waits' `-t` bounds sum to the `i_ready` bound plus 10 s from the launch, and background timer files are a second limit.
 - **F29 tears down at once.**
   - The hold and q2 blocks start only when `l_rbfail.hit`, `l_panic.hit` and `qvm_exit.hit` are all absent, and their waits also end on `l_rbfail.hit`.
@@ -1102,7 +1104,7 @@ Accepting these bounds, or tightening the table toward §6.12, is an owner decis
   - `stamp` hits in `/dev/shmem`, `s1con` hits in `/dev/shmem/con`.
   - Probe 2's trigger `/dev/shmem/probe2.go`; the FDT dump `/dev/shmem/s1-fdt.dtb`.
   - pl011 through qvm's stdout on `/dev/ttyp2`, read at `/dev/ptyp2`.
-  - virtio-console on the slave `/dev/ttyp3`, whose master `/dev/ptyp3` is held by `s1con -O`.
+  - virtio-console: ~~on the slave `/dev/ttyp3`, whose master `/dev/ptyp3` is held by `s1con -O`~~ **2026-09-14:** qvm holds the master `/dev/ptyp3`, `s1con -O -R` holds the slave `/dev/ttyp3`, and preflight checks `/dev/ttyp3` (§14.9).
 
 **Q. The TCG script calls `memcanary --selftest` only (§3.8 against R40).** R40's "answered by" column names `memcanary asinfo` on the TCG host at T0, but §3.8 and §7.3 forbid `asinfo` and `verify` in any TCG script, and §7.3 wins, so R40 is answered at B2.
 - The generator's profile check refuses `asinfo` or `verify` in a TCG script, requires exactly one `memcanary --selftest` in the TCG profile, and refuses a self-test in a board script.
@@ -1220,9 +1222,10 @@ No board was contacted, no QEMU was started, nothing was downloaded, and no QNX-
   - D14's `--q2-limit`, if D1 keeps the QNX guest.
 - **T1 or T2:**
   - Whether `/dev/shmem` accepts `mkdir` for `s1con`'s hit directory. A refusal would show as `S1 FAIL reader hvc0`.
-  - qvm's logger line format, and the wording and stream of its FDT-saved message; `logger_errors` may need tuning.
+  - qvm's logger line format, and the wording and stream of its FDT-saved message; `logger_errors` may need tuning. **2026-09-14:** partly answered by T1 attempt 1. The FDT message reads `FDT saved to '<path>'`, and a configuration error prints `[file:line] message`; the export shows CRLF line ends. Both came from the dryrun's stdout and stderr taken together, so the stream is still unknown, and the logger's own format for `error`, `fatal` and `internal` is still unseen (§14.9).
   - R13's 596 MiB gate under the TCG host's 1 GiB `OPT_RAM` with QEMU's `-m 2G`.
   - Whether qvm accepts `unsupported <class> abort`, which `s1-d1` uses.
+  - **2026-09-14:** whether `s1con`'s open of the slave `/dev/ttyp3` returns before qvm holds the master. The readers still start before the launch; if a slave open waits for its master, T2 stops at `S1 FAIL reader hvc0` (§14.9).
 - **Board harness:**
   - Whether `/sys/firmware/fdt`'s sha256 is an acceptable kexec-tree stamp (W).
   - The `/etc/nv_tegra_release` format `p0` assumes: `R36` and `REVISION: 4.7` on its first line.
@@ -1244,3 +1247,39 @@ No board was contacted, no QEMU was started, nothing was downloaded, and no QNX-
   - `build-s1tcg-image.ps1`: `-Mode` is required for `lin` and `d1`, and the host script comes from the generator (T, U).
   - `launch-s1tcg.ps1`: the end rule and the wall bound (V).
   - `s1-board.sh`: it also has `reboot`, `advice`, `consistency`, `b1-compare`, `redact-selftest` and `harness-selftest` (W-Z).
+- **§13, "What did not change":** it names §3.7's configuration text and the console wiring, both changed on 2026-09-14 (§14.9). §13 records revision 2's review and is left as it was.
+
+### 14.9 T1 attempt 1 and the change it caused (2026-09-14)
+
+**What happened.** T1 ran once under TCG, as attempt 1, from the image `host-lin-dryrun-t1a`. Its record is private and git-ignored. `parse-s1.py run` gave `verdict=pass`: the configuration gate passed, the FDT was exported with every gating row present, and `memcanary --selftest` passed. The pass was not clean:
+- bwait's line for qvm and `S1 DRYRUN` both carried `rc=64`, beside `saved=yes` and `logger_errors=0`.
+- qvm's dryrun output, exported as `qvmlog`, was two lines: `FDT saved to '/dev/shmem/s1-fdt.dtb'`, then `[/data/s1/s1-linux.conf:14] Unable to open '/dev/ttyp3': Interrupted function call`. Line 14 is `vdev virtio-console`, which opens the block whose `hostdev /dev/ttyp3` named the slave.
+- Nothing held the master `/dev/ptyp3` during the dryrun: the host script starts its readers only after the dryrun and its export.
+
+**Why the gate passed anyway.** C3 recorded the exit code without judging it. The `logger_errors` heuristic counts only lines naming `error`, `fatal` or `internal`, and qvm's `[file:line] message` diagnostic named none of them.
+
+**Reading (HYPOTHESIS).** Opening a pty slave waits until its master is open, and qvm's open was interrupted while it waited. This was not tested directly. M3 never opened a slave before its master: its pl011 path redirects to `/dev/ttyp1` only after `stamp` holds `/dev/ptyp1` (`startup/m3-host.ksh.in:97`, `:106`), and its IPC client opens `/dev/ttyp0` after qvm holds `/dev/ptyp0` (`qhvc/g2-m3.conf:38`; `startup/m3-host.ksh.in:53`, `:121`).
+
+**What changed.** The orchestrator adopted C11's fallback before T2, under the owner's standing go-ahead for PC-side TCG work, and tightened T1's gate:
+1. **Configuration.** Only the virtio-console `hostdev` changed, to the master `/dev/ptyp3` (§3.7). Its sha256 moved from `2d639f67…44bc8b9` to `85d51359…61196e31`. `cmdline_sha256` is unchanged (`da47f63e…4f337638`). Every pin moved with it: `make-s1-images.sh`, `s1-board.sh`, `build-s1tcg-image.ps1`, and the parser's copy of §3.7.
+2. **Host script.** `s1con -i /dev/ttyp3 -O -R` holds the slave with raw termios, and preflight checks `/dev/ttyp3`. `logger_errors` also counts every dryrun output line that begins `[file:line] `, whatever its words, and each line counts once. Nothing else in the order changed: the dryrun still runs before the readers, and qvm opens the master itself, so its dryrun needs no reader. The pl011 wiring is unchanged, as in M3.
+3. **Parser.** Every dryrun rule (T1's item 1, T2, T3's token rule and the board's L2) needs `rc=0`, `saved=yes`, `logger_errors=0`, a decoded `qvmlog` export, and no line of that export beginning `[file:line] `. The parser prints `dryrun_rc=` and `qvmlog_diagnostics=`, so the exit code is still recorded. Nine self-test cases were added: `rc=64` alone, a diagnostic with `rc=0`, attempt 1's shape, a missing `qvmlog` export, a diagnostic that is not at the line start, T3 with each failure, and B3 with a diagnostic.
+4. **Board harness.** `extract` also lists a `S1 DRYRUN rc=` other than 0, and `[file:line]` lines, among its negative tokens.
+5. **`s1con.c`.** Three comment lines changed: the virtio-console's host end is now the master of pair 3, and the tool's device and the probe-1 example are `/dev/ttyp3` with `-O -R`. The `-R` note already named the slave `/dev/ttyp3`. A scratch compile of the edited source reproduces the binary's pin, `ed4a5a0b…`, so no tool pin moved.
+
+**VERIFIED on the PC:** `parse-s1.py --selftest` passes, and `conf` gives `gate=pass` on the new file. Re-read by the new parser with no outputs written, attempt 1's own log fails L2 on `dryrun_rc_not_0` and `dryrun_qvm_diagnostics`, and item 1 fails with it. The host script's new `logger_errors` lines pass `kshcheck` and count attempt 1's text as one line, but only under Git Bash's grep, not the target's.
+
+**Rebuild.** The generator's PO-A gate refuses to build from sources that differ from git HEAD. The TCG profile, the five board images and a new TCG image (`-Tag t1b`) are therefore rebuilt, and their pins recorded, only once this change is committed.
+
+**What T1 attempt 2 must show.**
+- An image built from that rebuilt TCG profile, whose `S1 CONFIG` carries `conf_sha256=85d51359…`.
+- `BWAIT run prog=qvm … rc=0 … killed=0`, and `S1 DRYRUN rc=0 saved=yes … logger_errors=0`.
+- A decoded `qvmlog` export with no line beginning `[file:line] `.
+- From `parse-s1.py run`: `dryrun_rc=0`, `qvmlog_diagnostics=0`, `tier_L2=ok`, every gating FDT row, `item1_t1=pass` and `verdict=pass`.
+- `MEMCANARY SELFTEST PASS` in the serial log, as in attempt 1.
+
+A diagnostic that names `/dev/ptyp3` instead leaves this design no console fallback (F4).
+
+**Open before T2: the reader order.** The host script still starts `s1con` and waits for its `open.hit` (bound `READER_T`) before the launch. So `s1con` opens the slave `/dev/ttyp3` before qvm holds the master. If a slave open waits for its master, as this section's reading supposes, `s1con` cannot open in time, and T2 stops at `S1 FAIL reader hvc0` before any launch. The adoption kept the order as decided. T1 attempt 2 runs in dryrun mode, starts no reader, and cannot show this either way. The order is owed a decision before T2, and before any board rung that launches. The review of this change named two options. (a) Start `s1con` after the launch and fold its `open.hit` into the needle waits, which changes the bound table and the host script's silence rule. (b) Open with `O_NONBLOCK` and clear it once the open returns, which moves `s1con`'s pin. On (b), a slave whose master is not yet open may refuse the open or give end of file on its first read, which ends `s1con`, so (b) is not safe to adopt untested. It is UNVERIFIED for `devc-pty` either way. M3's order, where the slave is opened only after qvm holds the master, is the only one run so far.
+
+**What this does not show.** Nothing has run with the new wiring. qvm's acceptance of the master, the raw slave path and probe 1 stay untested until attempt 2 and T2.
