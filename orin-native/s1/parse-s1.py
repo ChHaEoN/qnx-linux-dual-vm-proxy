@@ -1499,7 +1499,7 @@ def j7a_loader(recs):
         if not any(g < i and (stop is None or i < stop) for i in refuses):
             counted.append(g)
     out = {"go_i": counted[0] if len(counted) == 1 else None, "counted": len(counted), "checks": {}, "crc32": None,
-           "resmem": [], "neg": []}
+           "resmem": [], "resmem_tree_unparsed": False, "neg": []}
     ck = out["checks"]
     # check_end is M5L CHECK PASS; a J7a parse never prints the word pass (§15.13.7)
     names = ("check_start", "check_run", "go_start", "go_run", "prelude_same", "check_end", "fdt_crc32",
@@ -1551,6 +1551,8 @@ def j7a_loader(recs):
         if m:
             kv, _ = parse_kv(m.group(2))
             out["resmem"].append(dict(kv, name=m.group(1)))
+    # m5load.c's j7a_resmem prints this when /reserved-memory cannot be walked (never a refusal)
+    out["resmem_tree_unparsed"] = any(t == "M5L resmem tree=unparsed" for t in go_body)
     # after the counted GO, in order: M5L-EBS ok, M5L-JUMP, the shim line with its PC, then t234: WDT0
     pos, seq_ok = g, True
     first_ebs = next((i for i in ebs if i > g), None)
@@ -1569,15 +1571,19 @@ def j7a_loader(recs):
     return out
 
 
-def j7a_resmem_summary(resmem):
+def j7a_resmem_summary(resmem, tree_unparsed=False):
     """(resmem_c2, resmem_c2_base) from the go run's UM9 lines: node names over c2 (the name before any
-    unit address, so no address is printed), or none; base yes when such a line reads base=yes."""
+    unit address, so no address is printed), or none; base yes when such a line reads base=yes. When the
+    tree could not be walked (M5L resmem tree=unparsed) or a property did not parse (form=unparsed), the
+    word unparsed is added, so an unread node is never read as no node over c2."""
     over = [r for r in resmem if "c2" in (r.get("over") or "").split(",")]
     names = []
     for r in over:
         n = r["name"].split("@", 1)[0]
         if n not in names:
             names.append(n)
+    if tree_unparsed or any(r.get("form") == "unparsed" for r in resmem):
+        names.append("unparsed")
     return (",".join(names) or "none"), ("yes" if any(r.get("base") == "yes" for r in over) else "no")
 
 
@@ -2101,7 +2107,7 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
             for n, met in j7a["checks"].items():
                 put(f"m5l_{n}", "ok" if met else "missing")
             put("m5l_neg_after_go", ",".join(j7a["neg"]) or "none")
-            rc2, rbase = j7a_resmem_summary(j7a["resmem"])
+            rc2, rbase = j7a_resmem_summary(j7a["resmem"], j7a["resmem_tree_unparsed"])
             put("resmem_c2", q(rc2))
             put("resmem_c2_base", rbase)
             # P2 and P6's facts for canwatch's profile (§15.13.10.3), from c2's two checks
@@ -4480,6 +4486,21 @@ def selftest():
           field(r, "resmem_c2") == "camdbg_carveout" and field(r, "resmem_c2_base") == "yes" and
           field(r, "j7a_c3") == "clean" and field(r, "j7a_stop") == "none" and
           r["lines"][-1] == "verdict=diagnostic complete")
+    def with_resmem(L_, *extra):
+        i_ = L_.index("M5L resmem done")
+        return L_[:i_] + list(extra) + L_[i_:]
+
+    for label, extra in (("M5L resmem tree=unparsed", ("M5L resmem tree=unparsed",)),
+                         ("a form=unparsed property",
+                          ("M5L resmem name=other_node@0 status=okay map=plain prop=reg form=unparsed",))):
+        r = j7(visit=syn_visit(check_=with_resmem(syn_m5l("check"), *extra) + ["M5L CHECK PASS"],
+                               go_=with_resmem(syn_m5l("go"), *extra) + ["M5L GO"]))
+        check(f"run --entry uefi with {label}: complete, resmem_c2 adds unparsed (never read as no node over c2)",
+              r["verdict"] == "diagnostic complete" and field(r, "resmem_c2") == "camdbg_carveout,unparsed" and
+              field(r, "resmem_c2_base") == "yes")
+    check("resmem summary: none only when every property parsed and the tree was walked",
+          j7a_resmem_summary([]) == ("none", "no") and j7a_resmem_summary([], True) == ("unparsed", "no") and
+          j7a_resmem_summary([{"name": "n@1", "status": "okay", "form": "unparsed"}]) == ("unparsed", "no"))
     for label, kw, want in (
             ("M5L variant=j7a", {"go_": syn_m5l("go", variant=False) + ["M5L GO"]}, "m5l_go_run"),
             ("M5L resmem done", {"check_": syn_m5l("check", resmem_done=False) + ["M5L CHECK PASS"],
@@ -4714,7 +4735,7 @@ def selftest():
         quad = re.compile(r"(?<![0-9.])[0-9]{1,3}(?:\.[0-9]{1,3}){3}(?![0-9.])")
         mac = re.compile(r"(?<![0-9A-Fa-f])[0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5}(?![0-9A-Fa-f])")
         outs = ["\n".join(x["lines"]) for x in j7res] + cwtexts_u
-        check("run --entry uefi screens cover every synthetic J7a parse", len(j7res) == 28 and len(cwtexts_u) == 3)
+        check("run --entry uefi screens cover every synthetic J7a parse", len(j7res) == 30 and len(cwtexts_u) == 3)
         for label, bad_ in (("the word pass", lambda t: re.search(r"pass", t, re.IGNORECASE)),
                             # the b2= verdict field is a line of its own (c2_sums' stride bins b0=..b7= are not it)
                             ("a b2= field", lambda t: re.search(r"(?m)^(?:S1PC |S1CW )?b2=", t)),
