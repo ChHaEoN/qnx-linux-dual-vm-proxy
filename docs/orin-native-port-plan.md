@@ -497,6 +497,10 @@ v1 is frozen when all of these are settled and written into the manifest:
 1. **Rungs:** M4-F, M5-F and S1-F have passed, or M5-F's failure is recorded and v1 is kexec-only. **2026-09-14:** a provisional S1-F met line ("S1-F met provisionally (Linux only)") satisfies this item only if item 2 chooses Linux only. Otherwise the two-guest rung must pass before v1 is frozen (s1-design §5.2).
 2. **Guest set:** Linux only, or QNX plus Linux. The research track's S1 runs Linux beside the QNX guest. The owner's stated target has no QNX guest: the safety functions run as QNX processes in the host.
 3. **Entry path:** kexec, with its quiesce and governor-pin sequence, or UEFI; and whether the other path stays as the declared M5 comparison.
+   - **Added 2026-09-14 (owner, D32): DMA quiescence after kexec.** Either s1-design §15's writer diagnosis shows that no write reaches the claimed windows after the chosen entry, or v1 declares the exposure and the campaign carries a watch over window 1.
+     - **Why.** Two S1 board runs found canaries inside window 2 overwritten after kexec. Pages QNX uses in window 1 may be exposed in the same way.
+     - **Until then:** no campaign record claims memory integrity or rests on a clean kexec entry.
+     - **The M0-M5 functional verdicts stand.** They rest on no memory-integrity claim.
 4. **CPUs:** the startup `-P` value and each guest's pinning. Either the cluster-1 cores' low busy-loop rate is explained, or cluster 1 is left out.
 5. **Frequency policy:** implement the PMCCNTR rung, or accept `clock=unverified` as a property of v1.
 6. **Memory map:** the first window, the second window, and the GPU range kept out.

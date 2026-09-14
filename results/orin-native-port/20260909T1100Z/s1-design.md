@@ -2216,6 +2216,15 @@ The export block is placed after `FAIL_STATE`, **outside** the `MODE != host` gu
   - the kexec shutdown trace shows shutdown hooks called for the PCI functions, their root ports, the PCIe controllers, the SD host, the xHCI and the coprocessor drivers. What each hook did is not shown.
 - **Harness defect found:** the COM3 marker extractor misses a marker preceded by stray bytes on the same line. It is report-only, did not affect the verdict, and is fixed before the next J rung.
 - **Class for today: U** (an immediate stop), pending the owner's D31. B2 stays NOT MET on data.
+- **Owner decision, 2026-09-14 (D34, new): F39's immediate stop is waived for J3 and J4 only, today.**
+  - **Scope.** The waiver covers F39 as seen in J2 and nothing else. Every other immediate stop stands, including a second F39 in J4 and any F41, F42, F47 or F49. The budget of two kexec runs today and four for the revision is unchanged.
+  - **How J4 is read under it.** F39 stays data, and J2 is recorded as F39, not F32. §15.6's class Q needs "no F39 in any J rung", so **class Q cannot hold under this waiver.** A clean c2 in J4 is then recorded as "the removable masters implicated for c2 only, with an F39 in the control". A bad c3 in J4 is a second F39 and stops the day. Every J4 outcome is class U until the owner rules on it (D31).
+- **Owner decision, 2026-09-14 (D32): the exposure item is recorded now** in the plan's freeze gate.
+- **Harness correction before J3, with a dated amendment to the pre-registration.** It has two parts:
+  - the COM3 marker matchers now drop stray non-ASCII bytes before a marker, the defect found in J2. Re-extracting J2's own capture finds every marker in order;
+  - the J3 precondition accepts J2's F39 only under D34's waiver, and only when c2 was bad at both checks and c1 was ok at both.
+
+  `J-prereg.log` gains an amendment line with the reason and the new harness hash. **The rule text, the removal set, the decisions and the parser are unchanged,** so nothing that decides a class moved after J2's result.
 
 ### 15.7 Claims, failure signatures, risks
 

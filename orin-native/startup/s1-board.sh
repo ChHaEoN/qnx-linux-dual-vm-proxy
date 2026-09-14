@@ -2267,10 +2267,11 @@ j1_set_rows() {
 # status line quoting a command that holds the text, or another result=, does not count.
 # Reads the whole stream (no early exit: pipefail would turn a SIGPIPE into a miss).
 com3_marker_seen() {
-	tail -c +"$(( ${2:-0} + 1 ))" "$1" 2>/dev/null | tr -d '\r' | awk -v m="$3" '
+	tail -c +"$(( ${2:-0} + 1 ))" "$1" 2>/dev/null | tr -d '\r' | LC_ALL=C awk -v m="$3" '
 	{
 		s = $0
-		sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s)
+		# J2: a marker can share its line with stray non-ASCII bytes left by earlier output
+		sub(/^[ \t]+/, "", s); sub(/^[^ -~]+[ \t]*/, "", s); sub(/[ \t]+$/, "", s)
 		sub(/^\[ *[0-9]+\.[0-9]+\] */, "", s)
 		sub(/^\[ *[CT][0-9]+\] */, "", s)
 		if (s == m) found = 1
@@ -3119,8 +3120,18 @@ j_newest_board() {
 	return 0
 }
 
+# D34 (§15.6.1, owner, 2026-09-14): F39's immediate stop waived for J3 and J4 only. 0 when
+# <rec>/J-waivers.conf holds 'D34_F39=yes' and J2's parse shows c2 bad at both checks with c1
+# ok at both, so the waiver never covers a control whose window-1 canary failed. $1 J2's parse.
+j_waiver_f39() {
+	local w="$RECDIR/J-waivers.conf" p="$1"
+	grep -qx 'D34_F39=yes' "$w" 2>/dev/null || return 1
+	grep -qx 'S1PC c2_start=bad' "$p" 2>/dev/null && grep -qx 'S1PC c2_end=bad' "$p" 2>/dev/null \
+		&& grep -qx 'S1PC c1_start=ok' "$p" 2>/dev/null && grep -qx 'S1PC c1_end=ok' "$p" 2>/dev/null
+}
+
 # §15.4's ladder, as refusals: control after J1 met; b2repeat after J2's F33 or J1's F42 row;
-# j3 after J2's F32; remove after J3 met. $1 the arm.
+# j3 after J2's F32 (or its F39 under D34); remove after J3 met. $1 the arm.
 j_precondition() {
 	local b1 b2 b3 row=""
 	b1="$(j_newest_board J1)"
@@ -3135,7 +3146,13 @@ j_precondition() {
 		{ [ "$row" = F33 ] || { [ -n "$b1" ] && grep -aq '^j1 next=J2b ' "$b1"; }; } \
 			|| die "J2b runs only after J2's F33 or J1's F42 row (§15.4.4); the newest J2 row is ${row:-none}" ;;
 	j3)
-		[ "$row" = F32 ] || die "J3 runs only after J2's F32 (§15.4.5); the newest J2 parse row is ${row:-none}" ;;
+		if [ "$row" = F32 ]; then
+			:
+		elif [ "$row" = F39 ] && j_waiver_f39 "$(dirname "$b2")/parse-s1.txt"; then
+			echo "j3 precondition: J2's row is F39, accepted under D34 (the owner's waiver for J3 and J4 only, §15.6.1; J-waivers.conf sha256=$(j_sha256 "$RECDIR/J-waivers.conf"))"
+		else
+			die "J3 runs only after J2's F32, or after its F39 under D34's waiver with c2 bad at both checks and c1 ok (§15.4.5, §15.6.1); the newest J2 parse row is ${row:-none}"
+		fi ;;
 	remove)
 		{ [ -n "$b3" ] && grep -aq '^j3 RESULT MET' "$b3"; } \
 			|| die "J4 needs J3 met: the newest J3 board log has no 'j3 RESULT MET' (§15.4.6)" ;;
@@ -3300,7 +3317,7 @@ j_stop_units() {
 # The s1wq: marker lines of stdin (CR removed): a printk time or caller id stripped, J1's
 # probe lines left out.
 j_wq_lines() {
-	awk '{ s = $0; sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); sub(/^\[ *[0-9]+\.[0-9]+\] */, "", s); sub(/^\[ *[CT][0-9]+\] */, "", s); if (s ~ /^s1wq: / && s !~ /^s1wq: j1 /) print s }'
+	LC_ALL=C awk '{ s = $0; sub(/^[ \t]+/, "", s); sub(/^[^ -~]+[ \t]*/, "", s); sub(/[ \t]+$/, "", s); sub(/^\[ *[0-9]+\.[0-9]+\] */, "", s); sub(/^\[ *[CT][0-9]+\] */, "", s); if (s ~ /^s1wq: / && s !~ /^s1wq: j1 /) print s }'
 }
 
 # §15.4.6's state from COM3 after the offset, a pure function of the capture and the clock:
@@ -3313,11 +3330,11 @@ j_wq_lines() {
 #   ARMED    no marker yet;  PROGRESS  markers, none of the above
 # $1 the capture, $2 the offset, $3 armed_epoch, $4 now. Prints 'wq state=... ' and 'wq last_marker='.
 wq_state() {
-	tail -c +"$(( $2 + 1 ))" "$1" 2>/dev/null | tr -d '\r' | awk -v armed="$3" -v now="$4" -v sd="$WQ_START_DELAY_S" -v ss="$WQ_SLOT_S" \
+	tail -c +"$(( $2 + 1 ))" "$1" 2>/dev/null | tr -d '\r' | LC_ALL=C awk -v armed="$3" -v now="$4" -v sd="$WQ_START_DELAY_S" -v ss="$WQ_SLOT_S" \
 		-v fr="$WQ_FINAL_READS_S" -v fb="$(wq_fallback_s "$WQ_SLOT_COUNT")" -v nslots="$WQ_SLOT_COUNT" '
 	{
 		s = $0
-		sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s)
+		sub(/^[ \t]+/, "", s); sub(/^[^ -~]+[ \t]*/, "", s); sub(/[ \t]+$/, "", s)
 		if (s ~ /kexec_core: Starting new kernel/ || s ~ /T234-SHIM/) jump = 1
 		m = s
 		sub(/^\[ *[0-9]+\.[0-9]+\] */, "", m); sub(/^\[ *[CT][0-9]+\] */, "", m)
@@ -5015,11 +5032,11 @@ com3_class() {
 # prints 'reset'; a jump (Starting new kernel, a shim line or a record line) prints 'jump';
 # anything else (s1wq: markers, L4T text, nothing) prints 'markers'. $1 file, $2 offset.
 com3_wq_class() {
-	tail -c +"$(( $2 + 1 ))" "$1" 2>/dev/null | tr -d '\r' | awk -v banners="$(printf '%s\n' "${FW_BANNER[@]}")" '
+	tail -c +"$(( $2 + 1 ))" "$1" 2>/dev/null | tr -d '\r' | LC_ALL=C awk -v banners="$(printf '%s\n' "${FW_BANNER[@]}")" '
 	BEGIN { nb = split(banners, B, "\n") }
 	{
 		s = $0
-		sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s)
+		sub(/^[ \t]+/, "", s); sub(/^[^ -~]+[ \t]*/, "", s); sub(/[ \t]+$/, "", s)
 		m = s
 		sub(/^\[ *[0-9]+\.[0-9]+\] */, "", m); sub(/^\[ *[CT][0-9]+\] */, "", m)
 		if (s ~ /kexec_core: Starting new kernel|T234-SHIM/ || s ~ /^(S1 |STAMP |BWAIT |T234 |t234: |tcu-cat:)/) jump = 1
@@ -6256,6 +6273,20 @@ cmd_harness_selftest() {
 	check "precondition: J3 without J2's F32 is refused" "$(wqpre j3)" 1
 	printf 'run image=s1-h1\n' > "$jr2/J2/s1-h1-20260914T010000Z-board.log"; printf 'S1PC j_row=F32\n' > "$jr2/J2/parse-s1.txt"
 	check "precondition: J3 after J2's F32" "$(wqpre j3)" 0
+	printf 'S1PC j_row=F39\nS1PC c1_start=ok\nS1PC c1_end=ok\nS1PC c2_start=bad\nS1PC c2_end=bad\n' > "$jr2/J2/parse-s1.txt"
+	check "precondition: J3 after J2's F39 without D34's waiver is refused" "$(wqpre j3)" 1
+	printf 'D34_F39=yes\n' > "$jr2/J-waivers.conf"
+	check "precondition: J3 after J2's F39 under D34, c2 bad twice and c1 ok" "$(wqpre j3)" 0
+	printf 'S1PC j_row=F39\nS1PC c1_start=bad\nS1PC c1_end=ok\nS1PC c2_start=bad\nS1PC c2_end=bad\n' > "$jr2/J2/parse-s1.txt"
+	check "precondition: D34 does not cover an F39 whose c1 was bad" "$(wqpre j3)" 1
+	rm -f "$jr2/J-waivers.conf"
+	printf 'S1PC j_row=F32\n' > "$jr2/J2/parse-s1.txt"
+	sb="$(printf '\357\277\275\357\277\275[   89.230298] s1wq: begin arm=control final=kexec result=0')"
+	check "j_wq_lines: a marker after stray bytes on its line is kept" "$(printf '%s\n' "$sb" | j_wq_lines)" "s1wq: begin arm=control final=kexec result=0"
+	printf '%s\n' "$sb" > "$jr2/stray-marker.log"
+	com3_marker_seen "$jr2/stray-marker.log" 0 "s1wq: begin arm=control final=kexec result=0"
+	check "com3_marker_seen: a marker after stray bytes is seen" "$?" 0
+	check "j_wq_lines: a marker quoted mid-line is still not a marker" "$(printf 'systemd[1]: echo s1wq: begin arm=x\n' | j_wq_lines | wc -l)" 0
 	check "precondition: J2b after F32 is refused" "$(wqpre b2repeat)" 1
 	check "precondition: J4 without J3 met is refused" "$(wqpre remove)" 1
 	mkdir -p "$jr2/J3"; printf 'j3 RESULT MET wireless-only: synthetic\n' > "$jr2/J3/j3-20260914T020000Z-board.log"
