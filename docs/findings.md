@@ -9,6 +9,73 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-14 — S1-F on the board: B0 and B1 met, B2 not met on data, and the writer diagnosis excludes the removable DMA masters (J1-J4)
+
+S1-F's first board session ran with the owner at the board. B0 and B1 met. B2, the first rung to use the second RAM
+window, was **not met, on data**, at the window's lowest canary, so S1-F stopped and B3-B5 did not run. The owner
+chose to find the writer first (s1-design D8 option 1). The design's revision 3 added diagnostic J rungs, with the rule
+that classifies B2 registered before any of them ran
+([s1-design.md](../results/orin-native-port/20260909T1100Z/s1-design.md) §14.12, §15). Four ran the same day, all on
+B2's unchanged image.
+
+- **B0, pre-flight and staging,** met after two harness corrections, neither a board finding. The `/proc/iomem` gate
+  had failed on the running L4T kernel's own image, which KASLR had placed inside the candidate window; it now excludes
+  only that exact kernel-image entry. The kexec landing check needs dynamic debug, which the board's kernel lacks, so
+  it is recorded as skipped. The shim's own landing check, which resets the board before any QNX code runs, is the
+  guard, together with the parser's entry-PC rule.
+- **B1, the option-off startup,** met: every expected token, no `-b` line, and a clean return to L4T. Against M1b's
+  R2 capture, nothing points at the option-off startup changing QNX's behaviour. A `pidin` thread total differs and
+  is unexplained. B1's output also exposed a harness privacy-scan defect that could keep a copy raw; it was corrected,
+  and the earlier copies were rescanned by hand.
+- **B2, the host with window 2,** not met, on data. Startup added window 2, kept the GPU range out and filled the three
+  canaries before procnto. procnto's address-space view showed both windows in sysram and neither a canary nor the GPU
+  range. c1 (top of window 1) and c3 (top of window 2) verified at both checks, and an allocation in window 2 filled
+  and verified. c2, at the very base of window 2, was bad at both checks, with a different count
+  at each check. By the design's rule that is kill condition 1 for the candidate window. procnto's allocator is not
+  the writer (VERIFIED: the canary is outside sysram).
+- **J1, a census on L4T with no kexec,** met. It resolved the four removable DMA-capable devices: the wireless function
+  that carries the harness's ssh, the xHCI, the Ethernet function and the NVMe drive. None holds a mounted filesystem,
+  swap or the harness's directories. Markers from a shell and from a transient systemd timer both reached COM3, the
+  page-flag snapshot worked, and a runtime shutdown trace printed per-device lines on a reboot.
+- **J2, the matched control,** reproduced c2 bad at both checks. A detached sequence on the board issued the kexec
+  after the same timed slots as the removal arm, with nothing removed, so the two arms differ only in the removal. J2 also found c3,
+  clean in B2, bad at both checks, while c1 verified. That is F39, an immediate stop. The owner waived it for J3 and J4
+  only (D34), and under the waiver the design's quiesce-shortfall class cannot hold.
+- **J3, the removal rehearsed on L4T with no kexec,** met after one gate was re-judged. Every removal step ran, Bus
+  Master read zero on every endpoint and root port, the fallback timer rebooted a board with no network without a
+  power cut, and every removed device came back on the next boot. The harness first printed NOT MET for the xHCI: its
+  return read omitted the xHCI path, so the rebind check had nothing to match, while the same read and a direct one
+  showed the xHCI bound. On the owner's decision J3 was re-judged from its records, the original line kept; the
+  harness read was corrected.
+- **J4, the removal arm,** F36. With all four devices removed, and Bus Master zero on every endpoint and root port
+  before the kexec, c2 was still bad at both checks; c1 and c3 verified. The removable DMA masters are excluded as
+  c2's writer, as this sequence quiesced them.
+
+Across B2, J2 and J4 (record-only observations): c2's mismatch started at the same place each time, and the second
+check's count was lower than the first each time, so some words read back as the expected pattern again. A writer that
+only overwrites cannot do that; one that restores earlier content, or reads that are not stable, can (HYPOTHESIS).
+Linux's use of c2's pages differed by boot and by arm; the corruption did not. The class is U, unresolved (owner,
+D31), and B2 stays not met on data. The owner put the exposure into the plan's freeze gate (item 3, D32): until DMA
+quiescence after kexec is shown for the claimed windows or declared, no campaign record claims memory integrity. The
+M0-M5 functional verdicts stand, because they rest on no memory-integrity claim.
+
+What it shows: the S1 harness, the staging and the option-off startup work on the board. The base of the candidate
+second window did not keep its canary after the quiesce and kexec in any of the three runs. The wireless, xHCI,
+Ethernet and NVMe devices, removed this way, are not what writes it.
+
+What it does not show: which device, firmware or code writes c2, or that it is a writer at all rather than unstable
+reads. J4 gives no evidence on GPU residue, firmware or coprocessors, read instability, or a QNX-side cause. Whether
+the SMMUs were in bypass after kexec, and whether Bus Master stayed clear through the kexec shutdown, rest on log lines
+and upstream behaviour; no register was read after the shutdown began. The canaries sample three small ranges, so
+nothing is shown about the rest of window 2 or of window 1, and the cause of J2's c3 hit is open. No Linux guest has
+run on the board, and there is no timing, isolation or containment claim, and no repeatability beyond these runs.
+
+Next is J6, a read-only watcher image (D27). A second build of the canary tool reports word classes, re-read and heal
+counts and page bitmaps, never canary content, and a large timed hold watches sysram. Then comes the owner's decision
+on a UEFI-entry arm (D30), which separates Linux residue from a writer anchored at window 2's base. The run records are
+private and git-ignored, and no figure is published here. The plan's
+[S1-F block](orin-native-port-plan.md#the-revised-ladder) carries the status.
+
 ## 2026-09-14 — S1-F under TCG: a stock Linux kernel boots as a qvm guest to a working shell (T1-T3)
 
 S1-F's PC half ran, all under QEMU TCG (emulated) on the Windows PC; none of it ran on the board. T0 had built and

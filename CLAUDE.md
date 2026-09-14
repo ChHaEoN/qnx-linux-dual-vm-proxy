@@ -425,8 +425,14 @@ Quick summary for context:
   Still ahead: S1 functional (a Linux guest without a GPU under native qvm) **(2026-09-14: its TCG half passed on the PC,
   under emulation only. After the virtio-console `hostdev` moved to the pty master, qvm's dryrun was clean. The board's
   stock L4T kernel then booted as a qvm guest with three vCPUs, to a busybox shell that answered the host's probe (pass
-  item 1), and the ten-minute hold path was rehearsed. Nothing of S1 has run on the board; B0-B5 are next, with the
-  owner present; s1-design.md §14.9-14.11)**; freeze
+  item 1), and the ten-minute hold path was rehearsed. ~~Nothing of S1 has run on the board; B0-B5 are next, with the
+  owner present;~~ On the board the same day, with the owner present, B0 and B1 met, and B2 was not met on data: the
+  lowest window-2 canary was overwritten after kexec, so S1-F stopped before B3. S1-F is paused in writer diagnosis.
+  J1 met. J2, the matched control, reproduced that canary (c2) and also hit c3 (F39; the owner waived that stop for
+  J3 and J4 only, D34). J3 met after a harness gate defect was re-judged from its records. J4, with the removable DMA
+  masters removed, was F36: they are excluded as c2's writer, and J4 says nothing about the GPU, firmware or a
+  QNX-side cause. Class U, not resolved. Next: J6, a read-only watcher image, then the owner's decision on a UEFI-entry
+  arm; s1-design.md §14.9-14.12 and §15; figures unpublished)**; freeze
   reference architecture v1; then one measurement campaign on it (the M3 and M4 numbers, the M5 comparison, the twin
   diff), every record stamped with the version. ~~Awaiting the owner's confirmation: the M path ends at M5's functional
   pass, which sets when README PR #1 can merge.~~ **2026-09-11 (owner):** confirmed. The M path ends at M5-F's
@@ -510,7 +516,10 @@ Quick summary for context:
    and the twin diff is re-run inside the campaign. In order: ~~M4-F (r0 and
    r1, after m4-design's §11 TCG rehearsal),~~ M4-F (**met 2026-09-11**, with the r0 instrument caveat in the plan), ~~M5-F (a UEFI cold boot that
    reaches startup),~~ M5-F (**met 2026-09-13**, under option A, with the deviations in m5-design.md §14; the M path
-   has ended), S1-F (a Linux guest without a GPU under native qvm).
+   has ended), S1-F (a Linux guest without a GPU under native qvm;
+   **2026-09-14: paused in writer diagnosis**, after B2 was not met on data
+   at the lowest window-2 canary; next J6, a read-only watcher image, then
+   the owner's decision on a UEFI-entry arm; s1-design.md §15).
    Then settle the freeze gate and write the v1 manifest. Then run the
    single campaign, native leg and both TCG twin legs, every record stamped
    `arch=v1;manifest=<sha>`. Regenerating the guest disk from clean sources

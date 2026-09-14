@@ -6,6 +6,8 @@ Phase 3b. Architect pass, revision 2, 2026-09-13 (revision 1 reviewed; outcomes 
 
 **2026-09-14:** T0 is implemented, built and gated on the PC, and every gate passed. Nothing has run under QEMU or on the board. The implementation decisions, deviations and gate verdicts are in §14; usage is in `orin-native/s1/README.md`.
 
+**2026-09-14, revision 3 (owner, D8 option 1):** after B2 was not met on data, the writer is diagnosed first (§15, three adversarial reviews in §15.11). The J rungs' session record is §15.6.1, and the J6 watcher's implementation readings, fixed before its pre-registration, are §15.12. B2 stays NOT MET on data until §15.6's rule says otherwise.
+
 **Path prefixes used below**
 - `lib/` = `C:/Users/<user>/AppData/Local/Temp/orin-native-port-bsp/src/hardware/startup/lib/` (Apache-2.0)
 - `board/` = `orin-native/startup/t234-orin-nano/`; `startup/` = `orin-native/startup/`; `tools/` = `orin-native/tools/`; `qhvc/` = `orin-native/qhv/`; `s1/` = `orin-native/s1/` ~~(proposed; it does not exist)~~ (**2026-09-14:** it exists, §14)
@@ -89,6 +91,7 @@ Phase 3b. Architect pass, revision 2, 2026-09-13 (revision 1 reviewed; outcomes 
 - No isolation claim. Stage-2 containment is qvm's design and no step tests it. DMA is uncontained: the GPU's DMA is CPU-physical with no SMMU in its path even under L4T (RT:54, R3), so the `rmmod` quiesce is its only control; the other masters are untranslated because Linux disables the SMMUs before kexec (RT:81, C7).
 - Not that the guest's RAM came from window 2, and nothing about a guest larger than 512 MiB.
 - Not repeatability, not a supported configuration, and nothing about the GPU.
+- **2026-09-14 (owner, D8 option 1):** writer diagnosis first, §15; B2 stays NOT MET on data until §15.6's rule says otherwise.
 
 ---
 
@@ -124,6 +127,7 @@ Phase 3b. Architect pass, revision 2, 2026-09-13 (revision 1 reviewed; outcomes 
 3. **TCG before board.** No board rung runs before T1-T3 pass. A board-only diagnostic may differ from the configuration (§7, `s1-d1`), but it is never a pass run.
 4. **The startup change is verified in order** (m3-design.md:1088-1092): the option is off by default; `build-board.sh`'s symbol gate passes (`startup/build-board.sh:119-184`); B1 shows that option off changes nothing; B2 runs option on with no qvm. Every later record carries the new startup sha256.
 5. **Board safety as in M3 and M4.** kexec only; no write to QSPI, the ESP, a UEFI variable or the rootfs; nothing persistent on L4T apart from staged kimgs in the home directory. The one possible exception is I-b's board-side build, and only if the owner approves it under D2 (§3.5). Never claim `0x40000000`, `0xBE000000-0xC1FFFFFF`, the swiotlb child, the CMA pool at `0x2_4A00_0000`, ramoops at `0x2_725F_0000`, the black box (`board/init_raminfo.c:45-58`; `board/t234_startup.h:116-119`) or the provisional GPU range `0x1_8A00_0000-0x2_49FF_FFFF` (D18).
+   **2026-09-14 (owner, D8 option 1):** writer diagnosis first, §15; B2 stays NOT MET on data until §15.6's rule says otherwise. §15.4.3 adds the one dated exception to this rule, for the detached sequence's three files.
 6. **Every path ends in a reset.** The image resets itself after the host script. The guard `bwait -g` resets on expiry, and `-A` turns an abnormal kernel end into a PSCI reset (`startup/m3.build.in:35-45`, `:75`). A hang with interrupts masked, or a busy guest with no fan, costs a power cycle, so **the owner is at the plug for every board rung** (m4-design.md:1328-1330, :1396; D15 confirms the schedule only).
 6a. **Power is cut by the class of the last COM3 line, never by the clock alone** (M5's rule 5, m5-design.md:130-134).
    - **Last output is startup, QNX, qvm or guest text, and no firmware banner followed:** the L4T boot option had already started before kexec, so a cut after the §7.2 F25a wait is allowed.
@@ -501,6 +505,7 @@ Every other output path is already ignored (§2 rule 10). T0 step 6 checks the t
 - **B2 fails.** Two kinds, kept apart:
   - **A defect** (F12 option typo, F13 crash with a message, F14 `reflected=no` with `S1 ASINFO` showing no window-2 entry, F15 map refusal, F28 `alloc` map failure, a canary `overlaps` crash): fix startup or the tool; T0; rerun B1 if startup changed, then B2. No kill verdict.
   - **Data** (`S1 ALLOC … verify=bad`, or `c2` or `c3` `verify=bad` while `c1` verifies): kill condition 1 for the 11c candidate (C1), recorded in `r/s1-runs.md` citing `<rec>/B2/parse-s1.txt`. S1-F stops (D8). There is no window-1-only continuation: item 4's layout, B5 and freeze item 6 all need window 2.
+    **2026-09-14 (owner, D8 option 1):** writer diagnosis first, §15; B2 stays NOT MET on data until §15.6's rule says otherwise.
   - F13 as silence with no message cannot be classed from COM3; it is treated as a defect once, and a second silent F13 is recorded as data for D8.
 - **B4 ends early** (`qvm.rc`, `l_panic`, a heartbeat missing, the guard fires): item 4 not met. **A canary `verify=bad`:** item 4 not met; stop board work until the source is found (RT:246).
 - **Retries.** A run that never reached `procnto up` for a harness reason (capture not running, a stuck shutdown) is repeated on the same image. A run that reached the host script is recorded as it happened, never replaced.
@@ -600,7 +605,7 @@ Mode `q2`: FreeMem gate (§4.5); Linux to `shell_ok`; then M3's QNX sequence to 
 | T3 | §5.1's T3 token list | B0 | fix the script; rerun T3 |
 | B0 | §8; `p0` for each image; a fresh `boot_id` | B1 | stop |
 | B1 | §6.6's tokens and the normalised black box equal | B2 | revise the startup change; T0 |
-| B2 | §6.7 | B3 (after a fresh L4T boot) | §5.3: a defect is fixed and rerun; data is kill condition 1 and stops S1-F (D8) |
+| B2 | §6.7 | B3 (after a fresh L4T boot) | §5.3: a defect is fixed and rerun; data is kill condition 1 and stops S1-F (D8). **2026-09-14 (owner, D8 option 1):** writer diagnosis first, §15; B2 stays NOT MET on data until §15.6's rule says otherwise |
 | B3 | item 2 | B4 | §5.3; `s1-d1` diagnostic; its terminal rule (D17) |
 | B4 | item 4 | B5 or record | §7 |
 | B5 | item 3 | record | §7 |
@@ -659,14 +664,14 @@ B1-B5 fit two attended sessions: B0-B2, then B3-B5. A session stops at the first
 | F13 | Crash or silence right after `t234: ram w2`, `t234: gpu range` or a `t234: canary` line | The allocator, `startup_io_map`, syspage or MMU setup rejects RAM above 4 GiB, or the fill faulted | SR or PP (rule 6a) | Stop B2; §5.3's defect path. Record the last line |
 | F14 | `S1 W2 reflected=no`, or `S1 ASINFO sysram_w2=no` | Window 2 not in the allocator | SR | A defect: read the asinfo record; fix; rerun B2 |
 | F15 | `S1 CANARY … refuse=…`, or a `verify` map error | A canary reached `sysram`, has no entry, or `mmap_device_memory` refuses the range | SR | A defect: revise startup or the tool (for example `mmap64` with `MAP_PHYS`); rerun B1 if startup changed, then B2 |
-| F16 | `S1 ALLOC … verify=bad` | Window-2 pages do not hold data | SR | Data: kill condition 1 (C1, D8); stop all board work; K5's hidden-user hypothesis |
+| F16 | `S1 ALLOC … verify=bad` | Window-2 pages do not hold data | SR | Data: kill condition 1 (C1, D8); stop all board work; K5's hidden-user hypothesis. **2026-09-14 (owner, D8 option 1):** writer diagnosis first, §15; B2 stays NOT MET on data until §15.6's rule says otherwise |
 | F17 | B1 black box differs | The option-off path changed startup | SR | Revise; T0 |
 | F18 | TCG passed; board `S1 DRYRUN` logger error | Board host tree or registers | SR | Compare with T1's logger lines; `s1-d1` |
 | F19 | Board `l_kernel` absent, qvm alive | Guest entry fault on A78AE | SR at teardown | `s1-d1` (`unsupported abort`) |
 | F20 | `l_kernel`, then an `Unhandled`/`undefined instruction` oops | An unsupported register (D11) | SR | Record ESR text; D11; a configuration change reruns T1-T2 |
 | F21 | `qvm.rc` before teardown, `l_panic` | Guest panic, `panic=-1` rebooted it | SR | Read the capped tail and COM3 stream |
 | F22 | A heartbeat missing, qvm alive | Host script stalled or qvm hung | SR at guard | Record the last `S1 STATE` |
-| F23 | `S1 CANARY … verify=bad` | A write into a watched range | SR | Item 4 not met; stop board work until explained (RT:246) |
+| F23 | `S1 CANARY … verify=bad` | A write into a watched range | SR | Item 4 not met; stop board work until explained (RT:246). **2026-09-14 (owner, D8 option 1):** writer diagnosis first, §15; B2 stays NOT MET on data until §15.6's rule says otherwise |
 | F24 | `BWAIT guard deadline … expired` | A bound missing | SR-bb | Fix before the next run |
 | F25a | Not back by the return bound; COM3 not growing for 5 minutes; its last output is startup, QNX, qvm or guest text, with no firmware banner after the image's reset | Hang in the image, possibly busy vCPUs and no fan. L4T's boot option had started before kexec | PP | Read COM3 and record the last line; pull power; let L4T boot; reboot once more before any next run |
 | F25b | A firmware banner appeared after the image's reset, and L4T has not answered by the return bound; or no capture was running | A stop in the firmware or before a validated boot | PP only under M5's exception (§2 rule 6a): 10 minutes with no COM3 byte, last output not a menu or prompt, no ssh; one cut; hands-off boot | If that boot also stops, board work stops and the owner decides. Never a second cut |
@@ -734,7 +739,7 @@ B1-B5 fit two attended sessions: B0-B2, then B3-B5. A session stops at the first
 | R14 | `psci-supported auto` finds PSCI on both host trees, so secondaries start | HYPOTHESIS | T1, B3 |
 | R15 | A78AE exposes no system register a 5.15 guest touches that qvm's `register fail` default turns into an oops | UNKNOWN | B3 |
 | R16 | `add_ram` above 4 GiB works in startup, syspage, `init_mmu` and procnto on this board | UNKNOWN (plan:868) | B2 |
-| R17 | No firmware or BPMP user of window 2 hides from `/proc/iomem` (K5) | HYPOTHESIS | B2, B4 canaries (one run each) |
+| R17 | No firmware or BPMP user of window 2 hides from `/proc/iomem` (K5) | HYPOTHESIS | B2, B4 canaries (one run each). **2026-09-14 (owner, D8 option 1):** writer diagnosis first, §15 (R51 refines this row); B2 stays NOT MET on data until §15.6's rule says otherwise |
 | R18 | `mmap_device_memory` maps 16 MiB of an `s1canary` range outside `sysram` read-only, including above 4 GiB | HYPOTHESIS | B2 |
 | R19 | `pidin syspage=asinfo` prints the sysram entries | HYPOTHESIS (view name unread, Q3); supplementary only, `S1 ASINFO` is the gate | B2 |
 | R20 | The smaller kimg lands at `0x80080000` | HYPOTHESIS (M3's larger one did) | B0 `p0`, B3 |
@@ -795,7 +800,7 @@ B1-B5 fit two attended sessions: B0-B2, then B3-B5. A session stops at the first
 | D5 | TCG rehearsal launcher | `-smp 4` in `launch-s1tcg.ps1` only, stamped; keep `-smp 2` with bare `cpu` lines | **`-smp 4`, S1-only.** It keeps the configuration byte-identical; the twin launchers stay untouched (freeze item 10) |
 | D6 | Entry path for S1-F | kexec; UEFI | **kexec.** The proven loop; UEFI needs a TX refit, a loader rebuild and an unchecked window-2 map |
 | D7 | Second window and canaries | a `-b w2,canary` board option that uses `alloc_ram`, an asinfo entry and a startup fill; `-r` startup tokens; window 1 only | **`-b`.** `-r` and `avoid_ram` leave a range in `sysram` (C15), so only `alloc_ram` in the board keeps the canaries from procnto; filling in startup starts the watch before procnto and removes every physical write from user space |
-| D8 | If B2 fails on data (§5.3) | stop S1-F and record kill condition 1 for the 11c candidate; commission a new range derivation from the three-boot `/proc/iomem` comparison, as a new design revision that reruns B1 and B2 | **Stop and record.** 11c found one candidate; another range is new design work, not a retry. A defect is fixed and rerun without a decision. No window-1-only continuation is offered: item 4's layout, B5 and freeze item 6 need window 2 |
+| D8 | If B2 fails on data (§5.3) | stop S1-F and record kill condition 1 for the 11c candidate; commission a new range derivation from the three-boot `/proc/iomem` comparison, as a new design revision that reruns B1 and B2 | **Stop and record.** 11c found one candidate; another range is new design work, not a retry. A defect is fixed and rerun without a decision. No window-1-only continuation is offered: item 4's layout, B5 and freeze item 6 need window 2. **2026-09-14 (owner, D8 option 1):** writer diagnosis first, §15; B2 stays NOT MET on data until §15.6's rule says otherwise |
 | D9 | Shell rule | host-injected probe required; scripted `/init` output enough | **Probe required.** A shell that never read a line is init's script |
 | D10 | Item 4 liveness | require `end_ok` too; qvm alive only (plan text) | **Require `end_ok`.** qvm alive does not mean the guest is alive. This tightens the plan's item and needs the owner's approval |
 | D11 | `unsupported` policy | qvm's defaults; the SDP template's `ignore` | **Defaults.** A fault is visible; `ignore` could hide a real problem. A board-only fault reruns T1-T2 with any change |
@@ -1483,6 +1488,7 @@ The owner was at the board, with the TX wire off. The images are the ones rebuil
 
   memcanary prints only a count, not the mismatching words, so their content cannot yet tell these apart.
 - **What follows, per the design.** S1-F stops, and B3 to B5 do not run. No window-1-only continuation is offered (V14). Under D8, the next step is a new design revision, owned by the owner's decision, which reruns B1 and B2: another range derived from the three-boot `/proc/iomem` comparison, a diagnosis of the writer first, or both. D8 names this record `r/s1-runs.md`. Because S1's figures stay private, the number-free record is this section, and the private run notes sit beside the B2 records.
+  **2026-09-14 (owner, D8 option 1):** writer diagnosis first, §15; B2 stays NOT MET on data until §15.6's rule says otherwise.
 
 **What this does not show.** B0 and B1 show that the harness, the staging and the option-off startup work on the board. B2 shows that 11c's window-2 candidate is not free after the quiesce, at its lowest canary. It does not show that the rest of window 2 is free, since two canaries of 16 MiB sample a range of more than 2 GiB, and the allocation checks its pages only for the moment it holds them. It shows nothing about a Linux guest on the board, and no timing.
 
@@ -2001,6 +2007,8 @@ The export block is placed after `FAIL_STATE`, **outside** the `MODE != host` gu
 
 **Records:** `<rec>/J6r/` or `<rec>/J6c/`: J2's set plus `s1-j1a..d.bin`, the hold's lines, and `canwatch.txt`, the analyzer output with counts and classes only. The parser's `run --diag j1` verdict line reads `diagnostic complete` or `diagnostic incomplete failed=…`, never `pass`.
 
+**2026-09-14 (implementation, before J6's pre-registration):** three reviews of the built watcher found that a one-off misread counted as a writer, that "whole pages healed" counted events rather than pages, and several readings this table leaves open. The engine, two classes and the rows' readings were amended; §15.12 records each as HYPOTHESIS, and the table below is read through §15.12.
+
 | Observation | Conclusion | Next |
 |---|---|---|
 | **F34:** `osc` above 0 **and** `flip2` (same and var together) the majority class **and** `prog` 0 | H3, read instability | stop; memo; class K-r unless J4 was F35 (then U) |
@@ -2318,6 +2326,8 @@ The export block is placed after `FAIL_STATE`, **outside** the `MODE != host` gu
 | F49 | J6: the hold's verify bad | a writer in sysram outside the canaries, or QNX-side | SR | stop; owner; exposure item; Q cannot become final |
 | F25w | after the offset: `s1wq:` markers, and **none** of `fallback firing`, `fallback forcing`, `abort reason=`, `kexec did not happen`, `Restarting system`, `reboot:`, `Starting new kernel`, a shim line or a record line; the fallback deadline plus 1,200 s has passed | L4T is alive with no network, and its fallback did not act | — | §15.7.3 item 6. A reset marker after the offset means a firmware boot may have started: the capture is F25b, not F25w |
 
+**2026-09-14 (implementation, before J6's pre-registration):** F34, F40 and F49 for J6 are read through §15.12: F34 counts reverts beside `osc`; a `watch=fail reason=nomem` on watch c or d is F40.
+
 #### 15.7.3 Recovery when a detached sequence does not reach kexec
 
 In order. The owner stays at the plug throughout. **For any board log with `wq_armed`, `advice` prints NO CUT in every class until `armed_epoch + WQ_FALLBACK_S + 1,200 s` has passed** (§15.5 A1).
@@ -2522,3 +2532,39 @@ If D29 declines, §15 itself is pushed only as a pointer plus these neutral form
 | feasibility | minor | no black-box estimate for `s1-j1` | applied | gate B8.6: worst-case text under the 60,000 B threshold |
 | feasibility | minor | `kpf-decode.py` declared MIT against Apache-2.0 siblings; D28 could export QNX structure content | applied, then corrected at implementation (the siblings are MIT) | MIT SPDX header, matching the siblings; D28 and J7d exclude `pte`, `kva` and any QNX-structure class; J6 stays counts |
 | feasibility | minor | the raw COM3 capture path is unchecked and never redacted | applied | gate A refuses a capture outside the git-ignored record directory; raw capture never copied, quoted or scanned by hand |
+
+---
+
+### 15.12 J6 implementation readings, fixed before J6's pre-registration (2026-09-14)
+
+Phase 3b. Written after the J6 image `s1-j1` was built and three reviews (safety, fidelity, regression) read the watcher, its parser and the harness against §15.4.8, §15.5 B and §15.6. Nothing here has run on the board. Each item is HYPOTHESIS unless marked. Each is fixed in committed code before the first `jrun s1-j1` appends J6's stage to `J-prereg.log`, so no J6 result exists that a reading could be fitted to. D27 left the hold margin and these readings to the implementation.
+
+**A. Amendments to the watcher.** `PIN_MEMCANARY` does not move; `PIN_MEMCANARY_W` does, and T-J1 reruns.
+1. **Reverts.** §15.4.8's three-read rule counted a one-off misread of a good word as a writer. A bad A, then B and C back at the word's last read, gave `prog`, a change, a heal and page bits. A misread at BASE or FINL had no re-read at all. Now a read that differs is read twice more at BASE, in every snapshot and at FINL. When B and C agree on the last read (at BASE: on any value other than A), A did not hold. It counts `revert`, and also `revert_flip2` when A differs from them in one or two bits. Nothing else is counted or marked, and the last read is not updated. A misread repeated in B or C still reads as `osc` or `prog`. **Not shown:** that a restore faster than two reads is never a revert; R71's caveat applies to `revert` as it does to `osc`.
+2. **Whole pages.** "Whole pages healed together" is now `whole_heal`: a page whose every word healed in one snapshot counts once. The parser's earlier test, `healed` at least 512 per healed page, counted heal events, so one toggling word could meet it. A restore that straddles a scan is missed; the row is positive-only.
+3. **A new line** follows `watch=time`: `S1 CANARY <n> watch=reread label=<l> revert=<n> revert_flip2=<n> whole_heal=<n>`. `reads=` gains `revert`: `prog` over `osc` over `revert` over `stable`. The export file is unchanged: 1,632 B, and its tail stays four counts.
+4. **The dump file** must be exactly `/dev/shmem/j1<label>.bin` for the watch's own `-l`. A watch cannot create the hold's trigger or overwrite the hold's output or another label's file.
+5. **Class precedence.** The 32-bit all-ones value is `small32` ahead of `pte` and the pointer rules, which would read it as a descriptor or a DRAM pointer.
+
+**B. Readings the design text left open, as implemented.**
+1. A-A-C counts as `prog`. Every change event is exactly one of `osc`, `prog` and `stable`, and the parser refuses a console whose three do not sum to `changed_words`.
+2. `writer=ongoing` when FINL still differed after its re-reads, or when the last change fell in the last quarter of the snapshots; otherwise `stopped`. A change seen only at FINL is not in `changed_words` and sets no page bit.
+3. `content=` lists every class other than `other` that holds at least a quarter of FINL's bad words, most first. It reads `unclassified` when none does and `none` when there is no bad word.
+4. The export header also carries the requested count, the deadline and the stop reason.
+5. **F34:** `prog` 0; `osc` or `revert` above 0; `flip2` (same and var together) dominant in the bad set when the set has words; and more than half the reverts `revert_flip2` when there are any. "Dominant" is read as elsewhere in the table, the largest class with ties included, not a strict majority.
+6. **F34 and the live-writer row are exclusive.** F34 needs `prog` 0, and it takes precedence over "changed words with stable re-reads": an `osc` keeps a marginal read as the last read, and the next snapshot then re-reads the stored word as a stable change.
+7. **`writer-none`** also needs no revert on c2's watches ("c2 clean at every scan").
+8. **Ring-record's stride arm:** at least 8 bad words, with the two largest of the eight bins above half of them.
+9. **Fill-rate:** `differs` when one rate exceeds the factor times the other and the larger has at least 8 change events. Below that floor the result is `below-floor`, which fires no row. A zero baseline is otherwise compared as it is.
+
+**C. The hold's margin (D27).** `J1_HOLD_MIB` is windows 1 and 2's sysram, less the three canaries, less a 256 MiB margin. The margin's rows are design estimates, recorded in `make-s1-images.sh`: the IFS, procnto and the early processes, the script's tools, the two 16 MiB copies each of watches c and d, the hold's page tables, `/dev/shmem`, and slack. A short margin shows as the hold's `map=fail` (F28), or as `watch=fail reason=nomem` on watch c or d, which allocate after the fill (F40). Either is diagnostic incomplete for an image reason. Such a run reached `procnto up`, so under §15.6 it counts as J6's kexec run, not a harness-reason retry. A rerun at a smaller hold is a new image and a new stage, and needs the owner (D27).
+
+**D. The harness.**
+1. **J6's stage never re-emits J2's `prereg <file> sha256=` lines,** so the s1-h1 checks keep reading J2's registration and its dated amendments. The stage records its own hashes of the three tracked files and of `WQ_FUNCS`. When the harness differs from J2's registration, the stage opens with an amendment line in the D34 and J3 form (`by=`, `commit=`, `reason=`, old and new hashes), and the owner names it with `S1_J6_AMEND_BY`. A changed `WQ_FUNCS` also needs `S1_J6_WQ_CHANGED=yes`.
+2. **An `s1-j1` run is checked against its own arm's stage,** the newest block that ends in its arm line, never the file's last lines. A stage that no longer matches the harness or the image may be superseded under `S1_J6_AMEND_BY`, and only while the arm has no board log.
+3. **The stage is appended after gate A,** so a refused capture registers nothing.
+4. **J6's precondition** also needs T-J1 met with the image's `memcanary-w` pin. When J2's row holds F39, it also needs the owner's `D34_J6=yes`, because D34 waived that stop for J3 and J4 only. The precondition line prints the kexec runs so far. §15.6's budget stays the owner's count, since harness-reason retries do not count.
+
+**E. Generator and T-J1.** The profile check refuses any hold in `s1-j1` other than its own and the template's single B4 line. The black-box estimate counts nine lines a watch. T-J1's host script needs no FAIL form of either self-test line. The parser needs the watcher's PASS followed by memcanary's own PASS with the larger count, because a failure in memcanary's own checks inside `memcanary-w` changes only the second line.
+
+**What this does not show:** that the readings are right. They are fixed before any J6 result, which is all a pre-registration can do. Whether `revert` separates read instability from a fast restoring writer is R71's open question, and J7a stays the decisive H1-versus-H2 arm.
