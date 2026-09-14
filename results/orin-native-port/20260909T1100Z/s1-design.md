@@ -2225,6 +2225,11 @@ The export block is placed after `FAIL_STATE`, **outside** the `MODE != host` gu
   - the J3 precondition accepts J2's F39 only under D34's waiver, and only when c2 was bad at both checks and c1 was ok at both.
 
   `J-prereg.log` gains an amendment line with the reason and the new harness hash. **The rule text, the removal set, the decisions and the parser are unchanged,** so nothing that decides a class moved after J2's result.
+- **J3: every step and gate met, except one gate that the harness read wrongly.**
+  - **What met.** The removal sequence ran all nine slots with no Oops or overrun. Bus Master read zero on every endpoint and single-child root port before the end. The fallback timer fired and brought back a board with no network, without a power cut (R59, quiesced). Every removed device came back on the next boot (R58).
+  - **The defect.** The harness printed `NOT MET F41-xhci` because its return read did not pass the xHCI path, so the xHCI rebind check had no line to match. The same read shows the xHCI's buses bound to their driver, and a direct read confirmed it.
+  - **The fix.** The return read passes the path, with a self-test.
+  - **Owner decision (2026-09-14).** J3 is re-judged from its own records: the original line is kept, a dated re-judged line is appended, and J4 runs.
 
 ### 15.7 Claims, failure signatures, risks
 

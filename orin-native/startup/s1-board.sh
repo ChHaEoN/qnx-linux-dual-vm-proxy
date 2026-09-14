@@ -3744,7 +3744,9 @@ j3_rows() {
 # parser. Exit 0 (MET or NOT MET), 5 when the sequence aborted, 4 on F30. Reads j_detached's locals.
 j3_return() {
 	local out pr rows res newrec
-	out="$(board 120 b_identity b_pstore b_slots 'b_pci_state return')" || rec "j3 warning: the return read ended with rc=$?"
+	# J3 (2026-09-14): without XHCI_PATH the read printed no 'xhci return' line, and the xHCI
+	# rebind gate failed on a board whose xHCI was bound again
+	out="$(board 120 b_identity b_pstore b_slots "XHCI_PATH=$(printf '%q' "$WQG_XHCI_PATH") b_pci_state return")" || rec "j3 warning: the return read ended with rc=$?"
 	printf '%s\n' "$out" | grep -E '^(boot_id|uptime_s)=|^pstore ' | rec_pipe
 	pr="$base-pci-return.log"
 	{
@@ -6287,6 +6289,7 @@ cmd_harness_selftest() {
 	com3_marker_seen "$jr2/stray-marker.log" 0 "s1wq: begin arm=control final=kexec result=0"
 	check "com3_marker_seen: a marker after stray bytes is seen" "$?" 0
 	check "j_wq_lines: a marker quoted mid-line is still not a marker" "$(printf 'systemd[1]: echo s1wq: begin arm=x\n' | j_wq_lines | wc -l)" 0
+	check "j3's return read passes XHCI_PATH to b_pci_state (the F41-xhci gate defect)" "$(grep -c '^[[:space:]]*out="$(board 120 b_identity b_pstore b_slots "XHCI_PATH=' "$HERE/$PROG")" 1
 	check "precondition: J2b after F32 is refused" "$(wqpre b2repeat)" 1
 	check "precondition: J4 without J3 met is refused" "$(wqpre remove)" 1
 	mkdir -p "$jr2/J3"; printf 'j3 RESULT MET wireless-only: synthetic\n' > "$jr2/J3/j3-20260914T020000Z-board.log"
