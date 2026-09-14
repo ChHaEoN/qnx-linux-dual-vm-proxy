@@ -146,7 +146,9 @@ PIN_MEMCANARY=d3749ffff064f5a3b7f9c4de9afb6bd849c22824a9531e2fc4b50d894bde5dc4
 # own pin above never moves. The sha256 of the memcanary-w built beside gate B8.1's
 # determinism builds (the same toolchain and flags, identical in two scratch builds and the
 # tree), set in the commit that adds the watcher; pins_tools refuses any other binary.
-PIN_MEMCANARY_W=544c48453e106715e4fc78f69a79a97606547a337b1f79466979a0cdbe3537ea
+# 2026-09-14, before J6's pre-registration: moved with the watcher's revert, whole_heal, dump-name
+# and class-precedence amendments (s1-design §15.12); gate B8.1 re-run, PIN_MEMCANARY unchanged.
+PIN_MEMCANARY_W=197b66ff6b31a38b6f1099544866f58c726236187fb2c0a8d0a5ed2c78259e4e
 PIN_STAMP=b41cde750fea863d549c6978f08098e59189a705555cb76f681ec8a5b0c450bb
 PIN_BWAIT=81daef09bfbb4cac6931a0f67d1ef2336a0b4a239a621312addd59dff9a98eca
 PIN_TCUCAT=2dd6099a9d9dac3f7ad25d8e573553097d1fef74990c445578267b874dff066e
@@ -188,6 +190,8 @@ B2_ALLOC_MIB=1536
 #      8  /dev/shmem: the four bitmaps (about 2 KiB each), pidin, bwait and slog2info output
 #    112  slack for procnto's allocator and whatever this list misses
 #    256  in all. Too small a margin shows as map=fail, F28: diagnostic incomplete, no verdict.
+#         Watches c and d allocate their two copies after the fill, so it can also show as
+#         watch=fail reason=nomem on c or d: F40, incomplete for an image reason (s1-design §15.12).
 # By pigeonhole on the design sizes (R70), 2,896 MiB covers at least 1,920 of window 2's
 # 2,176 MiB outside the canaries and at least 720 of window 1's 976; where procnto places the
 # pages is HYPOTHESIS (R75). constant_check holds the sum and memcanary's 3,072 MiB limit.
@@ -1079,7 +1083,8 @@ gen_ksh() {
 # no canary, asinfo or TCU text; a board script calls verify only with c1, c2 and c3, each
 # at least once, and asinfo once. alloc only with -s 1536 on the board, and never in s1-j1;
 # hold only with the profile's size, except s1-j1's own hold (trigger /dev/shmem/j1hold.go),
-# which only s1-j1 may carry, once, with J1_HOLD_MIB. memcanary-w only with DIAG j1: on the
+# which only s1-j1 may carry, once, with J1_HOLD_MIB; s1-j1 on the board also carries exactly
+# one other hold, the template's B4 line, unreachable in host mode. memcanary-w only with DIAG j1: on the
 # board exactly the four watch calls of J1_WATCH_ROWS, each with a compiled name, the
 # bounded flags in their order, its dump at /dev/shmem/j1<label>.bin and no address; on
 # TCG exactly one --selftest. The tool name is matched as a whole word, so memcanary-w is
@@ -1156,7 +1161,10 @@ profile_scan() {
 						if (!j1 || prof != "board") bad = bad " line" NR ":hold-j1-outside-j1"
 						else if (w[2] != "-s" || w[3] != j1hold) bad = bad " line" NR ":hold-j1-" w[3]
 						j1holds++
-					} else if (w[2] != "-s" || w[3] != hold) bad = bad " line" NR ":hold-" w[3]
+					} else {
+						if (w[2] != "-s" || w[3] != hold) bad = bad " line" NR ":hold-" w[3]
+						holds++
+					}
 				} else if (w[1] == "--selftest") {
 					# §6.1 step 6: the self-test runs on the TCG host only.
 					if (prof != "tcg") bad = bad " line" NR ":selftest-in-board"
@@ -1175,6 +1183,8 @@ profile_scan() {
 			if (j1 && prof == "board") {
 				for (lab in want) if (seen_w[lab] != 1) bad = bad " watch-rows-" lab "-" (seen_w[lab] + 0)
 				if (j1holds != 1) bad = bad " j1-hold-calls-" (j1holds + 0)
+				# one B4 hold line from the template, unreachable in host mode, and no other
+				if (holds != 1) bad = bad " b4-hold-calls-" (holds + 0)
 			}
 			if (j1 && prof == "tcg" && wself != 1) bad = bad " w-selftest-calls-" (wself + 0)
 			print (bad == "" ? "ok" : bad)
@@ -1254,6 +1264,8 @@ profile_selftest() {
 	pst_case "$h1" board "" memcanary-w-outside-j1 add "$wl"
 	pst_case "$j1" board j1 "hold-j1-$((J1_HOLD_MIB - 1))" sub "hold -s $J1_HOLD_MIB -f /dev/shmem/j1hold.go" \
 		"hold -s $((J1_HOLD_MIB - 1)) -f /dev/shmem/j1hold.go"
+	pst_case "$j1" board j1 b4-hold-calls-2 add \
+		"bwait -k 60 -o \"\$S/x.bo\" -e \"\$S/x.be\" -- \"\$B/memcanary\" hold -s ${HOLD_MIB_OF[board]} -f /dev/shmem/x.go -T 900 -o /dev/shmem/x.out > \"\$S/x.b\" 2>&1 &"
 	pst_case "$j1" board j1 watch-rows-d-0 del "-n c1 -l d "
 	pst_case "$j1" board j1 alloc-in-j1 add "$al"
 	pst_case "$tj" tcg j1 w-selftest-calls-2 add "$sl"
@@ -1282,8 +1294,8 @@ bb_worst_j1() {
 	t=$(( t + line_b + bwait_b + err_b + 4096 ))
 	# canaries start and end: each verify line, and its tool=no-output path
 	t=$(( t + 2 * 3 * (line_b + line_b + bwait_b + err_b) ))
-	# four watches: 8 lines at the tool's limit, and the failure path
-	t=$(( t + 4 * (8 * wline_b + bwait_b + err_b) ))
+	# four watches: 9 lines at the tool's limit (8 on success, one fail line), and the failure path
+	t=$(( t + 4 * (9 * wline_b + bwait_b + err_b) ))
 	# the hold: its fill and verify lines, its failure path, the two wait lines
 	t=$(( t + 2 * line_b + bwait_b + err_b + 2 * bwait_b ))
 	# four exports: S1 EXPORT and four shown status files, and the skip path

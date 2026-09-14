@@ -191,13 +191,16 @@ fi
 @TCG@grep -q ' SELFTEST PASS [0-9]' "$S/mc.self" || { say "NOTE memcanary_selftest not-passed"; headc 256 "$S/mc.self.err"; MCSELF=1; }
 ## §15.5 B8.5 (T-J1): the watcher's own self-test, in the TCG j1 image only, beside
 ## memcanary's. memcanary-w --selftest prints 'MEMCANARY-W SELFTEST PASS <m> checks' and
-## then memcanary's own line, whose count includes the watcher's checks, so a failed watcher
-## check turns both lines into FAIL forms and the pattern below misses. parse-s1.py judges
-## the watcher's own line (T-J1). watch never runs under TCG (§15.4.8).
+## then memcanary's own line, whose count includes the watcher's checks. A failed watcher
+## check turns both lines into FAIL forms, but a failed check of memcanary's own turns only
+## the second, so the script needs a PASS form and no FAIL form in the file. parse-s1.py
+## needs the watcher's PASS followed by that second line's PASS (T-J1). watch never runs
+## under TCG (§15.4.8).
 @TCG@@J1@MCWSELF=
 @TCG@@J1@bwait -k @QC_K@ -o "$S/mcw.self" -e "$S/mcw.self.err" -- "$B/memcanary-w" --selftest > "$S/mcw.self.b" 2>&1
 @TCG@@J1@show "$S/mcw.self" "$S/mcw.self.b"
 @TCG@@J1@grep -q ' SELFTEST PASS [0-9]' "$S/mcw.self" || { say "NOTE memcanary_w_selftest not-passed"; headc 256 "$S/mcw.self.err"; MCWSELF=1; }
+@TCG@@J1@[ -z "$MCWSELF" ] && grep -q ' SELFTEST FAIL [0-9]' "$S/mcw.self" && { say "NOTE memcanary_w_selftest not-passed"; MCWSELF=1; }
 
 @BOARD@state asinfo
 @BOARD@bwait -k @ASINFO_K@ -o "$S/asinfo.out" -e "$S/asinfo.err" -- "$B/memcanary" asinfo > "$S/asinfo.b" 2>&1

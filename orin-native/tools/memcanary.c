@@ -85,30 +85,37 @@
  * this file with -DMEMCANARY_WATCH. Every addition sits under that macro, so the
  * plain build stays byte-identical to its pin (§15.5 B8.1). It adds one mode:
  *
- *   memcanary-w watch -n c1|c2|c3 -l LABEL -i MS -c COUNT -T SECS -d /dev/shmem/j1NAME
+ *   memcanary-w watch -n c1|c2|c3 -l LABEL -i MS -c COUNT -T SECS -d /dev/shmem/j1LABEL.bin
  *
  * LABEL is [a-z0-9]{1,8}; MS 0-60000 is the sleep before each snapshot; COUNT is
  * 1-100000 snapshots; SECS 1-3600 is the deadline, counted from the end of BASE;
- * NAME is [a-z0-9._-]{1,32} with no "..". A hex or any other address is refused
- * like any unknown name. watch keeps verify's refusals and its PROT_READ
- * mapping; its only writes are two heap copies of the range (BASE and the last
- * read) and one small file. It reads every word once (BASE), then takes
- * snapshots until COUNT or the deadline: a word that differs from its last read
- * is read twice more at once and counted osc (A-B-A), stable (A-A-A) or prog
- * (anything else: A-B-B, A-B-C, A-A-C), and healed when the last read is the
- * pattern. Nothing is printed inside the loop (§2 rule 7). A final read (FINL)
- * gives the bad set, which is classified by word class (first match wins), by
- * in-page offset modulo 64, and by byte signatures scanned at every offset of
- * each bad extent; signatures are positive-only. Then one file write, and seven
- * lines, each under 255 bytes at maximum field widths:
+ * the file is /dev/shmem/j1 with this watch's own LABEL and .bin, exactly, so a
+ * watch never writes the hold's files or another label's. A hex or any other
+ * address is refused like any unknown name. watch keeps verify's refusals and
+ * its PROT_READ mapping; its only writes are two heap copies of the range (BASE
+ * and the last read) and one small file. It reads every word once (BASE), then
+ * takes snapshots until COUNT or the deadline, then reads every word once more
+ * (FINL). A word read that differs from what it is compared with (the pattern at
+ * BASE, its last read after) is read twice more at once, B and C. When B and C
+ * agree on the last read (at BASE: on any value other than the first read), the
+ * first read did not hold: it is counted revert, and revert_flip2 when it
+ * differed in 1-2 bits, and nothing else. Otherwise a snapshot counts the change
+ * as osc (A-B-A), stable (A-A-A) or prog (anything else: A-B-B, A-B-C, A-A-C),
+ * healed when C is the pattern, and whole_heal once for each page whose words
+ * all healed in that snapshot; C becomes the last read. Nothing is printed inside
+ * the loop (§2 rule 7). FINL gives the bad set, which is classified by word class
+ * (first match wins), by in-page offset modulo 64, and by byte signatures scanned
+ * at every offset of each bad extent; signatures are positive-only. Then one file
+ * write, and eight lines, each under 255 bytes at maximum field widths:
  *
  *   S1 CANARY <n> watch=base label=<l> bad=<n> pages=<n> first_off=0x<hex> last_off=0x<hex>
  *   S1 CANARY <n> watch=time label=<l> snaps=<n> changed_snaps=<n> changed_words=<n> healed=<n> osc=<n> prog=<n> stable=<n> stop=count|deadline
+ *   S1 CANARY <n> watch=reread label=<l> revert=<n> revert_flip2=<n> whole_heal=<n>
  *   S1 CANARY <n> watch=words label=<l> bad=<n> zero=<n> ones=<n> flip2_same=<n> flip2_var=<n> flip8=<n> pat_same=<n> pat_other=<n>
  *   S1 CANARY <n> watch=words2 label=<l> hi_pat=<n> lo_pat=<n> pte=<n> kva=<n> ptr_self=<n> ptr_ram=<n> u32page=<n> small32=<n> other=<n>
  *   S1 CANARY <n> watch=stride label=<l> b0=<n> ... b7=<n>
  *   S1 CANARY <n> watch=bytes label=<l> ascii_runs=<n> ascii_bytes=<n> ipv4=<n> beacon=<n> trb_evt=<n>
- *   S1 CANARY <n> watch=verdict label=<l> writer=none|static|stopped|ongoing heal=no|yes reads=stable|osc|prog content=<list>|unclassified|none
+ *   S1 CANARY <n> watch=verdict label=<l> writer=none|static|stopped|ongoing heal=no|yes reads=stable|revert|osc|prog content=<list>|unclassified|none
  *   S1 CANARY <n> watch=fail label=<l> reason=nomem|dump-open|dump-write errno=<n>
  *
  * The file holds offsets and counts only, never a word value or a byte: a 64 B
@@ -667,8 +674,8 @@ cmd_hold(unsigned const mib, const char *const trigger, unsigned const secs, con
 #define CW_COUNT_MAX        100000u
 #define CW_SECS_MAX         3600u
 #define CW_LABEL_MAX        8u
-#define CW_NAME_MAX         32u
 #define CW_DUMP_PREFIX      "/dev/shmem/j1"
+#define CW_DUMP_SUFFIX      ".bin"
 #define CW_FILE_VERSION     1u
 #define CW_FILE_HEAD        64u
 #define CW_FILE_TAIL        32u
@@ -736,7 +743,9 @@ unmix64(uint64_t const v)
  *     granule), and an output address bits[47:12] in DRAM;
  *   kva: the top 16 bits all ones; ptr_self: inside this canary; ptr_ram: inside DRAM;
  *   u32page: below 4 GiB and page-aligned; small32: below 4 GiB otherwise (ring indices, counters
- *     and queue headers; HYPOTHESIS on such layouts). */
+ *     and queue headers; HYPOTHESIS on such layouts). The 32-bit all-ones value, a common invalid
+ *     index, is small32 ahead of pte and the pointer rules, which would otherwise read it as a
+ *     descriptor into DRAM (a reading added before J6's pre-registration; HYPOTHESIS). */
 static enum cw_class
 cw_classify(uint64_t const v, uint64_t const off, uint64_t const b, uint64_t const cbase)
 {
@@ -771,6 +780,9 @@ cw_classify(uint64_t const v, uint64_t const off, uint64_t const b, uint64_t con
 	}
 	if ((uint32_t)v == (uint32_t)p) {
 		return K_LO_PAT;
+	}
+	if (v == 0xFFFFFFFFull) {
+		return K_SMALL32;
 	}
 	if ((v & 3u) == 3u && (v & 0x000F000000000000ull) == 0 && oa >= S1_W1_BASE && oa < S1_DRAM_END) {
 		return K_PTE;
@@ -819,24 +831,15 @@ cw_label_ok(const char *const s)
 	return 1;
 }
 
-/* /dev/shmem/j1 then [a-z0-9._-]{1,32}, with no ".." anywhere. */
+/* Exactly /dev/shmem/j1LABEL.bin for this watch's own label, already checked by cw_label_ok: never the
+ * hold's trigger or output files, which share the /dev/shmem/j1 prefix, and never another label's file. */
 static int
-cw_dump_ok(const char *const s)
+cw_dump_ok(const char *const s, const char *const label)
 {
-	size_t const pre = sizeof(CW_DUMP_PREFIX) - 1u;
-	size_t const n   = strlen(s);
+	char      want[sizeof(CW_DUMP_PREFIX) + CW_LABEL_MAX + sizeof(CW_DUMP_SUFFIX)];
+	int const n = snprintf(want, sizeof(want), "%s%s%s", CW_DUMP_PREFIX, label, CW_DUMP_SUFFIX);
 
-	if (n <= pre || n - pre > CW_NAME_MAX || strncmp(s, CW_DUMP_PREFIX, pre) != 0 || strstr(s, "..") != NULL) {
-		return 0;
-	}
-	for (size_t i = pre; i < n; i++) {
-		char const c = s[i];
-
-		if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-')) {
-			return 0;
-		}
-	}
-	return 1;
+	return n > 0 && (size_t)n < sizeof(want) && strcmp(s, want) == 0;
 }
 
 /* One word source: the device mapping, or a self-test's scripted buffer. */
@@ -872,6 +875,9 @@ struct cw_state {
 	uint64_t     osc;
 	uint64_t     prog;
 	uint64_t     stable;
+	uint64_t     revert;             /* re-reads that did not hold their first read: BASE, snapshots and FINL */
+	uint64_t     revert_flip2;       /* reverts whose first read differed in 1-2 bits from the re-reads */
+	uint64_t     whole_heal;         /* (snapshot, page) pairs in which every word of the page healed */
 	uint64_t     last_change;        /* the last snapshot with a change, from 1; 0 for none */
 	enum cw_stop stop;
 	uint64_t     final_diff;         /* words whose FINL read differs from their last read */
@@ -894,18 +900,40 @@ bit_set(uint8_t *const map, uint64_t const page)
 	map[page / 8u] |= (uint8_t)(1u << (page % 8u));
 }
 
-/* BASE: one read of every word, kept as base and prev, and its bad words against the pattern. */
+/* A revert: a first read a that the two re-reads, both c, did not repeat. */
+static void
+cw_revert(struct cw_state *const st, uint64_t const a, uint64_t const c)
+{
+	st->revert++;
+	if (__builtin_popcountll(a ^ c) <= 2) {
+		st->revert_flip2++;
+	}
+}
+
+/* BASE: one read of every word, kept as base and prev, and its bad words against the pattern. A read
+ * that differs from the pattern is read twice more at once; when those two agree on another value,
+ * the first read is a revert, and the last read is the one kept. */
 static void
 cw_base(struct cw_state *const st, const struct cw_src *const src)
 {
 	uint64_t last_page = UINT64_MAX;
 
 	for (uint64_t i = 0; i < st->nwords; i++) {
-		uint64_t const a = src->read(src->ctx, i);
+		uint64_t const p = splitmix64(st->cbase + i * 8u);
+		uint64_t       a = src->read(src->ctx, i);
 
+		if (a != p) {
+			uint64_t const b = src->read(src->ctx, i);
+			uint64_t const c = src->read(src->ctx, i);
+
+			if (b == c && c != a) {
+				cw_revert(st, a, c);
+			}
+			a = c;
+		}
 		st->base[i] = a;
 		st->prev[i] = a;
-		if (a != splitmix64(st->cbase + i * 8u)) {
+		if (a != p) {
 			if (st->base_bad == 0) {
 				st->first_off = i * 8u;
 			}
@@ -919,39 +947,51 @@ cw_base(struct cw_state *const st, const struct cw_src *const src)
 	}
 }
 
-/* One snapshot. A word whose read A differs from its last read is read twice more at once, B and C:
- * stable A-A-A, osc A-B-A (a marginal read), prog otherwise (A-B-B, A-B-C, A-A-C: a writer in
- * progress); healed when C is the pattern. C becomes the last read. */
+/* One snapshot. A word whose read A differs from its last read is read twice more at once, B and C.
+ * B and C both the last read: A did not hold, a revert, and nothing else is counted or marked.
+ * Otherwise a change: stable A-A-A, osc A-B-A (a marginal read), prog otherwise (A-B-B, A-B-C,
+ * A-A-C: a writer in progress); healed when C is the pattern, and whole_heal when every word of
+ * the page healed in this snapshot. C becomes the last read. */
 static void
 cw_snap(struct cw_state *const st, const struct cw_src *const src)
 {
-	uint64_t changed = 0;
+	uint64_t changed    = 0;
+	uint64_t page_heals = 0;
 
 	st->snaps++;
 	for (uint64_t i = 0; i < st->nwords; i++) {
 		uint64_t const a = src->read(src->ctx, i);
-		uint64_t       b;
-		uint64_t       c;
 
-		if (a == st->prev[i]) {
-			continue;
+		if (a != st->prev[i]) {
+			uint64_t const b = src->read(src->ctx, i);
+			uint64_t const c = src->read(src->ctx, i);
+
+			if (b == c && c == st->prev[i]) {
+				cw_revert(st, a, c);
+			} else {
+				if (a == b && b == c) {
+					st->stable++;
+				} else if (b != a && c == a) {
+					st->osc++;
+				} else {
+					st->prog++;
+				}
+				bit_set(st->changed_ever, i / CW_WORDS_PER_PAGE);
+				if (c == splitmix64(st->cbase + i * 8u)) {
+					st->healed++;
+					page_heals++;
+					bit_set(st->healed_ever, i / CW_WORDS_PER_PAGE);
+				}
+				st->prev[i] = c;
+				changed++;
+			}
 		}
-		b = src->read(src->ctx, i);
-		c = src->read(src->ctx, i);
-		if (a == b && b == c) {
-			st->stable++;
-		} else if (b != a && c == a) {
-			st->osc++;
-		} else {
-			st->prog++;
+		if (i % CW_WORDS_PER_PAGE == CW_WORDS_PER_PAGE - 1u) {
+			if (page_heals == CW_WORDS_PER_PAGE) {
+				st->whole_heal++;
+			}
+			page_heals = 0;
 		}
-		bit_set(st->changed_ever, i / CW_WORDS_PER_PAGE);
-		if (c == splitmix64(st->cbase + i * 8u)) {
-			st->healed++;
-			bit_set(st->healed_ever, i / CW_WORDS_PER_PAGE);
-		}
-		st->prev[i] = c;
-		changed++;
 	}
 	if (changed != 0) {
 		st->changed_snaps++;
@@ -960,7 +1000,8 @@ cw_snap(struct cw_state *const st, const struct cw_src *const src)
 	}
 }
 
-/* FINL: one more read of every word into prev; nothing else is counted from it but final_diff. */
+/* FINL: one more read of every word into prev. A read that differs from the last one is read twice
+ * more at once: both the last read, a revert; otherwise final_diff, and the last re-read is kept. */
 static void
 cw_final(struct cw_state *const st, const struct cw_src *const src)
 {
@@ -968,8 +1009,15 @@ cw_final(struct cw_state *const st, const struct cw_src *const src)
 		uint64_t const v = src->read(src->ctx, i);
 
 		if (v != st->prev[i]) {
-			st->final_diff++;
-			st->prev[i] = v;
+			uint64_t const b = src->read(src->ctx, i);
+			uint64_t const c = src->read(src->ctx, i);
+
+			if (b == c && c == st->prev[i]) {
+				cw_revert(st, v, c);
+			} else {
+				st->final_diff++;
+				st->prev[i] = c;
+			}
 		}
 	}
 }
@@ -1133,7 +1181,7 @@ cw_writer(const struct cw_state *const st)
 static const char *
 cw_reads(const struct cw_state *const st)
 {
-	return (st->prog != 0) ? "prog" : (st->osc != 0) ? "osc" : "stable";
+	return (st->prog != 0) ? "prog" : (st->osc != 0) ? "osc" : (st->revert != 0) ? "revert" : "stable";
 }
 
 /* The content field: every class but other that holds at least a quarter of FINL's bad words, most
@@ -1174,7 +1222,7 @@ cw_content(const struct cw_state *const st, char *const list, size_t const cap)
 	}
 }
 
-enum cw_line { W_BASE, W_TIME, W_WORDS, W_WORDS2, W_STRIDE, W_BYTES, W_VERDICT, W_NLINE };
+enum cw_line { W_BASE, W_TIME, W_REREAD, W_WORDS, W_WORDS2, W_STRIDE, W_BYTES, W_VERDICT, W_NLINE };
 
 static int
 cw_format(char *const line, size_t const cap, enum cw_line const which, const char *const name,
@@ -1193,6 +1241,10 @@ cw_format(char *const line, size_t const cap, enum cw_line const which, const ch
 		             " healed=%llu osc=%llu prog=%llu stable=%llu stop=%s", name, label, CW_U(st->snaps),
 		             CW_U(st->changed_snaps), CW_U(st->changed_words), CW_U(st->healed), CW_U(st->osc),
 		             CW_U(st->prog), CW_U(st->stable), (st->stop == STOP_COUNT) ? "count" : "deadline");
+		break;
+	case W_REREAD:
+		n = snprintf(line, cap, "S1 CANARY %s watch=reread label=%s revert=%llu revert_flip2=%llu whole_heal=%llu",
+		             name, label, CW_U(st->revert), CW_U(st->revert_flip2), CW_U(st->whole_heal));
 		break;
 	case W_WORDS:
 		n = snprintf(line, cap, "S1 CANARY %s watch=words label=%s bad=%llu zero=%llu ones=%llu flip2_same=%llu"
@@ -1666,6 +1718,7 @@ cw_selftest(void)
 	static const char *const    want[W_NLINE] = {
 		"S1 CANARY c2 watch=base label=t1 bad=2 pages=2 first_off=0x18 last_off=0x12c0",
 		"S1 CANARY c2 watch=time label=t1 snaps=4 changed_snaps=2 changed_words=7 healed=2 osc=1 prog=3 stable=3 stop=count",
+		"S1 CANARY c2 watch=reread label=t1 revert=4 revert_flip2=2 whole_heal=0",
 		"S1 CANARY c2 watch=words label=t1 bad=5 zero=1 ones=1 flip2_same=1 flip2_var=1 flip8=0 pat_same=0 pat_other=0",
 		"S1 CANARY c2 watch=words2 label=t1 hi_pat=0 lo_pat=0 pte=0 kva=0 ptr_self=0 ptr_ram=0 u32page=0 small32=1 other=0",
 		"S1 CANARY c2 watch=stride label=t1 b0=2 b1=0 b2=2 b3=0 b4=0 b5=0 b6=1 b7=0",
@@ -1679,6 +1732,9 @@ cw_selftest(void)
 		{ "-d", "/dev/shmem/j2b.bin" }, { "-d", "/tmp/j1b.bin" }, { "-d", "/dev/shmem/j1" },
 		{ "-d", "/dev/shmem/j1../x" }, { "-d", "/dev/shmem/j1a/b" }, { "-d", "/dev/shmem/j1a..b" },
 		{ "-d", "/dev/shmem/J1b.bin" }, { "-d", "/dev/shmem/j1abcdefghijklmnopqrstuvwxyz0123456" },
+		{ "-d", "/dev/shmem/j1hold.go" }, { "-d", "/dev/shmem/j1hold.out" }, { "-d", "/dev/shmem/j1hold.out.fill" },
+		{ "-d", "/dev/shmem/j1c.bin" }, { "-d", "/dev/shmem/j1b.bin.x" }, { "-d", "/dev/shmem/j1b.go" },
+		{ "-d", "/dev/shmem/j1b" }, { "-d", "/dev/shmem/j1.bin" }, { "-d", "/dev/shmem/j1b.bin/" },
 		{ "-n", NULL }, { "-l", NULL }, { "-i", NULL }, { "-c", NULL }, { "-T", NULL }, { "-d", NULL },
 	};
 	static const char *const    addresses[] = { "0x100000000", "0x272770000", "272770000", "4294967296", "0xbd000000" };
@@ -1697,7 +1753,8 @@ cw_selftest(void)
 		{ splitmix64(S1_CANARY_C3_BASE + 0x10u), p, K_PAT_OTHER },
 		{ splitmix64(S1_CANARY_C1_BASE + S1_CANARY_SIZE - 8u), p, K_PAT_OTHER },
 		{ splitmix64(S1_CANARY_C2_BASE + 0x44u), p, K_OTHER }, { splitmix64(S1_CANARY_C2_BASE + S1_CANARY_SIZE), p, K_OTHER },
-		{ 0x100001003ull, p, K_PTE }, { 0x80000003ull, p, K_PTE }, { 0xFFFFFFFFull, p, K_PTE },
+		{ 0x100001003ull, p, K_PTE }, { 0x80000003ull, p, K_PTE }, { 0xFFFFFFFFull, p, K_SMALL32 },
+		{ 0xBFFFFFFFull, p, K_PTE },
 		{ 0x300001003ull, p, K_OTHER }, { 0x0001000100001003ull, p, K_OTHER }, { 0x100001001ull, p, K_PTR_SELF },
 		{ 0xFFFF800012345678ull, p, K_KVA }, { 0xFFFF000000000003ull, p, K_KVA },
 		{ S1_CANARY_C2_BASE + 0x1234u, p, K_PTR_SELF }, { 0x200000010ull, p, K_PTR_RAM }, { 0x80000000ull, p, K_PTR_RAM },
@@ -1787,11 +1844,16 @@ cw_selftest(void)
 	sc.w     = w;
 	src.read = cw_read_script;
 	src.ctx  = &sc;
+	/* word 5's first BASE read does not hold: its re-reads agree on the pattern, 2 bits away */
+	cw_arm(&sc, 5u, splitmix64(S1_CANARY_C2_BASE + 40u) ^ 3u, splitmix64(S1_CANARY_C2_BASE + 40u),
+	       splitmix64(S1_CANARY_C2_BASE + 40u));
 	cw_base(&st, &src);
 	check(st.base_bad == 2u && st.base_pages == 2u && st.first_off == 0x18u && st.last_off == 0x12C0u,
 	      "watch: BASE counts two bad words on two pages");
+	check(st.revert == 1u && st.revert_flip2 == 1u && st.base[5] == splitmix64(S1_CANARY_C2_BASE + 40u),
+	      "watch: a BASE read that its re-reads do not repeat is a revert, not a bad word");
 	cw_snap(&st, &src);
-	check(st.snaps == 1u && st.changed_words == 0 && st.changed_snaps == 0 && st.last_change == 0,
+	check(st.snaps == 1u && st.changed_words == 0 && st.changed_snaps == 0 && st.last_change == 0 && st.revert == 1u,
 	      "watch: an unchanged snapshot counts nothing");
 	w[10] = 0;
 	cw_arm(&sc, 20u, 0x1234u, splitmix64(S1_CANARY_C2_BASE + 160u), 0x1234u);
@@ -1801,17 +1863,28 @@ cw_selftest(void)
 	w[40] = splitmix64(S1_CANARY_C2_BASE + 320u) ^ 3u;
 	cw_arm(&sc, 50u, 0x88u, 0x88u, 0x1234u);
 	w[50] = 0x1234u;
+	/* two misreads of good words, on page 0 and on page 1: reverts, never changes */
+	cw_arm(&sc, 60u, splitmix64(S1_CANARY_C2_BASE + 480u) ^ 1u, splitmix64(S1_CANARY_C2_BASE + 480u),
+	       splitmix64(S1_CANARY_C2_BASE + 480u));
+	cw_arm(&sc, 700u, splitmix64(S1_CANARY_C2_BASE + 5600u) ^ 0xFF00u, splitmix64(S1_CANARY_C2_BASE + 5600u),
+	       splitmix64(S1_CANARY_C2_BASE + 5600u));
 	cw_snap(&st, &src);
 	check(st.changed_words == 5u && st.stable == 1u && st.osc == 1u && st.prog == 3u && st.healed == 0
 	      && st.last_change == 2u, "watch: stable A-A-A, osc A-B-A, and prog A-B-B, A-B-C and A-A-C");
+	check(st.revert == 3u && st.revert_flip2 == 2u && st.changed_ever[0] == 0x01u && st.healed == 0,
+	      "watch: a read whose re-reads return to the last read is a revert: no change, heal or page bit");
 	w[3] = splitmix64(S1_CANARY_C2_BASE + 24u);
 	cw_snap(&st, &src);
 	check(st.changed_words == 7u && st.stable == 3u && st.healed == 2u && st.changed_snaps == 2u && st.last_change == 3u,
 	      "watch: a bad word and an oscillating word heal");
 	cw_snap(&st, &src);
+	/* word 90's FINL read does not hold either: a revert, not a final difference */
+	cw_arm(&sc, 90u, ~splitmix64(S1_CANARY_C2_BASE + 720u), splitmix64(S1_CANARY_C2_BASE + 720u),
+	       splitmix64(S1_CANARY_C2_BASE + 720u));
 	cw_final(&st, &src);
 	st.stop = STOP_COUNT;
-	check(st.snaps == 4u && st.final_diff == 0, "watch: FINL equals the last snapshot");
+	check(st.snaps == 4u && st.final_diff == 0 && st.revert == 4u && st.revert_flip2 == 2u,
+	      "watch: FINL equals the last snapshot, its one misread a revert");
 	cw_summarise(&st);
 	check(st.final_bad == 5u && st.cls[K_ZERO] == 1u && st.cls[K_ONES] == 1u && st.cls[K_FLIP2_VAR] == 1u
 	      && st.cls[K_SMALL32] == 1u && st.cls[K_FLIP2_SAME] == 1u, "watch: FINL's five bad words by class");
@@ -1878,6 +1951,38 @@ cw_selftest(void)
 	}
 	check(ok, "watch: 16 consecutive bad words put two in each stride bin");
 
+	/* whole_heal: page 1 zero at BASE, healed in halves over two snapshots (no whole heal), zeroed
+	 * again, then healed in one snapshot (one whole heal). */
+	memset(&st, 0, sizeof(st));
+	memset(&sc, 0, sizeof(sc));
+	st.cbase  = S1_CANARY_C2_BASE;
+	st.nwords = CW_ST_WORDS;
+	st.base   = b;
+	st.prev   = q;
+	sc.w      = w;
+	for (uint64_t i = 0; i < CW_ST_WORDS; i++) {
+		w[i] = (i < CW_WORDS_PER_PAGE) ? splitmix64(S1_CANARY_C2_BASE + i * 8u) : 0;
+	}
+	cw_base(&st, &src);
+	for (uint64_t i = CW_WORDS_PER_PAGE; i < CW_WORDS_PER_PAGE + CW_WORDS_PER_PAGE / 2u; i++) {
+		w[i] = splitmix64(S1_CANARY_C2_BASE + i * 8u);
+	}
+	cw_snap(&st, &src);
+	for (uint64_t i = CW_WORDS_PER_PAGE + CW_WORDS_PER_PAGE / 2u; i < CW_ST_WORDS; i++) {
+		w[i] = splitmix64(S1_CANARY_C2_BASE + i * 8u);
+	}
+	cw_snap(&st, &src);
+	check(st.base_bad == CW_WORDS_PER_PAGE && st.healed == CW_WORDS_PER_PAGE && st.whole_heal == 0,
+	      "watch: a page healed over two snapshots is not a whole heal");
+	memset(w + CW_WORDS_PER_PAGE, 0, CW_WORDS_PER_PAGE * sizeof(w[0]));
+	cw_snap(&st, &src);
+	for (uint64_t i = CW_WORDS_PER_PAGE; i < CW_ST_WORDS; i++) {
+		w[i] = splitmix64(S1_CANARY_C2_BASE + i * 8u);
+	}
+	cw_snap(&st, &src);
+	check(st.healed == 2u * CW_WORDS_PER_PAGE && st.whole_heal == 1u && st.revert == 0 && st.changed_snaps == 4u,
+	      "watch: a page whose every word healed in one snapshot is one whole heal");
+
 	/* The verdict fields. */
 	memset(&mx, 0, sizeof(mx));
 	ok = (strcmp(cw_writer(&mx), "none") == 0);
@@ -1901,11 +2006,13 @@ cw_selftest(void)
 	check(ok, "watch: writer none, static, stopped and ongoing, at the last-quarter boundary and after FINL");
 	memset(&mx, 0, sizeof(mx));
 	ok = (strcmp(cw_reads(&mx), "stable") == 0);
+	mx.revert = 1u;
+	ok &= (strcmp(cw_reads(&mx), "revert") == 0);
 	mx.osc = 1u;
 	ok &= (strcmp(cw_reads(&mx), "osc") == 0);
 	mx.prog = 1u;
 	ok &= (strcmp(cw_reads(&mx), "prog") == 0);
-	check(ok, "watch: reads stable, osc, and prog over osc");
+	check(ok, "watch: reads stable, revert, osc over revert, and prog over osc");
 	memset(&mx, 0, sizeof(mx));
 	cw_content(&mx, list, sizeof(list));
 	ok = (strcmp(list, "none") == 0);
@@ -1949,6 +2056,9 @@ cw_selftest(void)
 	mx.osc           = mx.changed_words;
 	mx.prog          = mx.changed_words;
 	mx.stable        = mx.changed_words;
+	mx.revert        = mx.changed_words + 2u * (S1_CANARY_SIZE / 8u);
+	mx.revert_flip2  = mx.revert;
+	mx.whole_heal    = (uint64_t)CW_COUNT_MAX * CW_PAGES;
 	mx.stop          = STOP_DEADLINE;
 	for (size_t k = 0; k < K_NCLASS; k++) {
 		mx.cls[k] = S1_CANARY_SIZE / 8u;
@@ -1977,13 +2087,18 @@ cw_selftest(void)
 	     && a.ms == 1000u && a.count == 180u && a.secs == 190u && strcmp(a.dump, "/dev/shmem/j1b.bin") == 0;
 	ok &= (cw_try("-i", "0", NULL, NULL, &a) == 0) && (cw_try("-i", "60000", NULL, NULL, &a) == 0);
 	ok &= (cw_try("-c", "100000", NULL, NULL, &a) == 0) && (cw_try("-T", "3600", NULL, NULL, &a) == 0);
-	ok &= (cw_try("-l", "abcdefgh", NULL, NULL, &a) == 0);
-	ok &= (cw_try("-d", "/dev/shmem/j1abcdefghijklmnopqrstuvwxyz012345", NULL, NULL, &a) == 0);
-	check(ok, "watch: good command lines and their boundaries parse");
+	{
+		char *argv[] = { "memcanary-w", "watch", "-n", "c2", "-l", "abcdefgh", "-i", "1000", "-c", "180", "-T", "190",
+		                 "-d", "/dev/shmem/j1abcdefgh.bin" };
+
+		ok &= (cw_parse(14, argv, &a) == 0) && strcmp(a.dump, "/dev/shmem/j1abcdefgh.bin") == 0;
+	}
+	check(ok, "watch: good command lines and their boundaries parse, each file named by its own label");
 	ok = 1;
 	for (size_t i = 0; i < sizeof(bad_args) / sizeof(bad_args[0]); i++) {
 		ok &= (cw_try(bad_args[i][0], bad_args[i][1], NULL, NULL, &a) == 2);
 	}
+	ok &= (cw_try("-l", "abcdefgh", NULL, NULL, &a) == 2);   /* a good label with label b's file */
 	ok &= (cw_try(NULL, NULL, "-l", "c", &a) == 2) && (cw_try(NULL, NULL, "-s", "16", &a) == 2);
 	ok &= (cw_try(NULL, NULL, "-o", "/dev/shmem/j1x", &a) == 2) && (cw_try(NULL, NULL, "extra", NULL, &a) == 2);
 	check(ok, "watch: out-of-range, malformed, missing, repeated and unknown arguments refused");
@@ -2183,8 +2298,8 @@ usage(void)
 	        "  MIB is 1-3072 and SECS 1-86400; hold writes FILE, then FILE.fill and FILE.done\n"
 	        "  no mode writes physical memory, and none takes an address\n");
 #ifdef MEMCANARY_WATCH
-	fprintf(stderr, "       memcanary-w watch -n c1|c2|c3 -l LABEL -i MS -c COUNT -T SECS -d /dev/shmem/j1NAME\n"
-	                "  LABEL is [a-z0-9]{1,8}, MS 0-60000, COUNT 1-100000, SECS 1-3600, NAME [a-z0-9._-]{1,32}\n");
+	fprintf(stderr, "       memcanary-w watch -n c1|c2|c3 -l LABEL -i MS -c COUNT -T SECS -d /dev/shmem/j1LABEL.bin\n"
+	                "  LABEL is [a-z0-9]{1,8}, MS 0-60000, COUNT 1-100000, SECS 1-3600; -d names this LABEL's file\n");
 #endif
 	return 2;
 }
@@ -2248,7 +2363,7 @@ cw_parse(int const argc, char **const argv, struct cw_args *const a)
 		}
 	}
 	if (a->name == NULL || a->label == NULL || a->dump == NULL || !have_i || !have_c || !have_t
-	    || !cw_label_ok(a->label) || !cw_dump_ok(a->dump)) {
+	    || !cw_label_ok(a->label) || !cw_dump_ok(a->dump, a->label)) {
 		return 2;
 	}
 	return 0;

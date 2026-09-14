@@ -109,7 +109,7 @@ run --diag j1 --arm control|remove --fill-factor F [--hold-mib MIB] [--kpf HEADE
          line, N equal to J1_HOLD_MIB (make-s1-images.sh's, which its constant check compares with
          this file's) on both and to --hold-mib when given: hold=ok|bad (else timeout,
          timeout-bad, map-fail (F28), absent, multiple, unread, mib-differs);
-         watches a, b, c and d (§15.4.8's table below): each exactly the seven success lines once,
+         watches a, b, c and d (§15.4.8's table below): each exactly the eight success lines once,
          base to verdict in that order, on its table canary, and consistent within themselves
          (watch_<l>=ok; else absent, fail, malformed, multiple, incomplete, wrong-canary, order,
          inconsistent problems=...);
@@ -126,11 +126,14 @@ run --diag j1 --arm control|remove --fill-factor F [--hold-mib MIB] [--kpf HEADE
          F49   the hold's verify=bad, or verify=timeout data=bad (also readable when incomplete);
          F40   incomplete; no row below is read then.
          The rest are read over c2's watches a, b and c summed (the parser's reading of the
-         table, pre-registered here):
-         F34                 osc above 0, prog 0, and flip2_same + flip2_var above half of bad;
-         live-writer         prog above 0, or changed_words above 0 with stable above 0;
-         restoring-writer    healed above 0 with pat_same|pat_other dominant, or a whole-page heal
-                             (canwatch's necessary condition, on any c2 watch);
+         table, pre-registered here; s1-design §15.12):
+         F34                 prog 0; osc + revert above 0; flip2 (flip2_same + flip2_var) dominant
+                             when bad is above 0; revert_flip2 above half of revert when revert is
+                             above 0;
+         live-writer         prog above 0, or changed_words above 0 with stable above 0 when F34
+                             does not hold (F34 takes precedence: the two never print together);
+         restoring-writer    healed above 0 with pat_same|pat_other dominant, or whole_heal above 0
+                             (a page whose every word healed in one snapshot, on any c2 watch);
          ring-record         small32|hi_pat|lo_pat dominant, or bad at least 8 with the two
                              largest stride bins above half of bad;
          cpu-side            ptr_ram|u32page dominant and coincide=yes; cpu-side-lean when
@@ -138,8 +141,8 @@ run --diag j1 --arm control|remove --fill-factor F [--hold-mib MIB] [--kpf HEADE
          qnx-shaped          pte|kva dominant;
          positive-signature  ipv4 + beacon + trb_evt above 0 on any of the four watches
                              (positive-only: an absence excludes nothing);
-         fill-rate           canwatch's fill-rate row differs;
-         writer-none         every c2 watch writer=none;
+         fill-rate           canwatch's fill-rate row differs (below-floor fires no row);
+         writer-none         every c2 watch writer=none, and revert 0 (c2 clean at every scan);
          writer-static       no c2 watch stopped or ongoing, and at least one static;
          no-row              none of the above.
        "Dominant": the group's largest class count is above 0 and no class outside the group is
@@ -149,9 +152,11 @@ run --diag j1 --arm control|remove --fill-factor F [--hold-mib MIB] [--kpf HEADE
 run --diag j1 on --profile tcg --mode dryrun (§15.5 B8.5): step=T-J1, the TCG j1 variant. T1's
        items (conf_gate, profile, L2, fdt_gating, conf_identity), item 5, a 64-hex
        memcanary_w_sha256 in S1 CONFIG, and exactly one
-       'MEMCANARY-W SELFTEST PASS <n> checks' line with n above 0 and no FAIL form
-       (cw_selftest=ok|failed|absent|multiple). A watch line fails profile, as asinfo and canary
-       lines do. --arm, --fill-factor, --hold-mib and --kpf are usage errors here. No j_row.
+       'MEMCANARY-W SELFTEST PASS <n> checks' line with n above 0 and no FAIL form, whose next
+       'MEMCANARY SELFTEST' line (memcanary's own, which memcanary-w prints after it) is a PASS
+       counting more than n (cw_selftest=ok|failed|absent|multiple|unpaired). A watch line fails
+       profile, as asinfo and canary lines do. --arm, --fill-factor, --hold-mib and --kpf are
+       usage errors here. No j_row.
 
 canwatch LOG --fill-factor F [--bin-dir DIR] [--kpf HEADER]... [--out-dir DIR|none]
        (§15.5 B7) The J6 analyzer: counts, classes and page bitmaps only; it never reads or
@@ -162,14 +167,16 @@ canwatch LOG --fill-factor F [--bin-dir DIR] [--kpf HEADER]... [--out-dir DIR|no
        an export body cannot change; and the cross-check of every count with the console lines.
        For each accepted bitmap: pages set, first and last page, runs, and per-MiB page counts;
        per watch the whole-page-heal condition healed >= 512 x healed pages (necessary, not
-       sufficient). With --kpf (kpf-decode.py headers of the boot that jumped: one, or a
-       prequiesce and postquiesce pair, checked as kpf-decode checks them): each bitmap's pages by
+       sufficient; a record beside the console's whole_heal, which the row reads). With --kpf
+       (kpf-decode.py headers of the boot that jumped: one, or a prequiesce and postquiesce pair,
+       checked as kpf-decode checks them): each bitmap's pages by
        kpageflags class, and coincide: the union of bad_final and changed_ever over c2's watches
        a-c, yes when more than half of its pages were held (not free, not nopage) in the
        prequiesce snapshot (R45: a record of Linux's CPU-side ownership, weak evidence). The
        fill-rate row: label c's changed_words per snapshot against label b's, differs when
-       either rate exceeds F times the other (exact rational arithmetic; F a decimal >= 1,
-       pre-registered in J-prereg.log). Output: S1CW key=value lines on stdout and in
+       either rate exceeds F times the other and the larger count is at least FILL_MIN_WORDS
+       (8); below-floor when they differ with fewer, and within otherwise (exact rational
+       arithmetic; F a decimal >= 1, pre-registered in J-prereg.log). Output: S1CW key=value lines on stdout and in
        OUT/canwatch.txt (OUT = --out-dir or LOG's directory, git-ignored; none writes nothing),
        the last S1CW result=complete, or result=incomplete failed=... (console, export or
        bin_vs_log per label). A kpf refusal is recorded and never makes it incomplete: a snapshot
@@ -179,11 +186,12 @@ canwatch LOG --fill-factor F [--bin-dir DIR] [--kpf HEADER]... [--out-dir DIR|no
 Watcher records (memcanary-w, §15.4.8; each at most 255 B, fields in exactly this order):
   S1 CANARY <c> watch=base label=<l> bad=<n> pages=<n> first_off=0x<hex> last_off=0x<hex>
   S1 CANARY <c> watch=time label=<l> snaps=<n> changed_snaps=<n> changed_words=<n> healed=<n> osc=<n> prog=<n> stable=<n> stop=count|deadline
+  S1 CANARY <c> watch=reread label=<l> revert=<n> revert_flip2=<n> whole_heal=<n>
   S1 CANARY <c> watch=words label=<l> bad=<n> zero=<n> ones=<n> flip2_same=<n> flip2_var=<n> flip8=<n> pat_same=<n> pat_other=<n>
   S1 CANARY <c> watch=words2 label=<l> hi_pat=<n> lo_pat=<n> pte=<n> kva=<n> ptr_self=<n> ptr_ram=<n> u32page=<n> small32=<n> other=<n>
   S1 CANARY <c> watch=stride label=<l> b0=<n> b1=<n> b2=<n> b3=<n> b4=<n> b5=<n> b6=<n> b7=<n>
   S1 CANARY <c> watch=bytes label=<l> ascii_runs=<n> ascii_bytes=<n> ipv4=<n> beacon=<n> trb_evt=<n>
-  S1 CANARY <c> watch=verdict label=<l> writer=none|static|stopped|ongoing heal=no|yes reads=stable|osc|prog content=<list>|unclassified|none
+  S1 CANARY <c> watch=verdict label=<l> writer=none|static|stopped|ongoing heal=no|yes reads=stable|revert|osc|prog content=<list>|unclassified|none
   S1 CANARY <c> watch=fail label=<l> reason=nomem|dump-open|dump-write errno=<n>
 A watch= line is never one of B2's canary checks: every rule of the steps above reads the S1
 CANARY lines without watch=, so B2's six_verify_* semantics are unchanged.
@@ -193,8 +201,10 @@ d on c1, 1,000 ms, 60. Consistency a console watch must show (the parser's readi
             bad > 0: both offsets 8-aligned, first <= last < 16 MiB, (last - first) / 8 + 1 >= bad;
   time      snaps <= the table count, and snaps = count when stop=count; changed_snaps <= snaps;
             changed_snaps = 0 exactly when changed_words = 0 (changed_words counts change events,
-            one per word per snapshot); osc + prog + stable <= changed_words (the A-A-C re-read is
-            none of the three); healed <= changed_words;
+            one per word per snapshot); osc + prog + stable = changed_words (each change event is
+            exactly one of them, A-A-C is prog, and a revert is none); healed <= changed_words;
+  reread    revert_flip2 <= revert; whole_heal x 512 <= time's healed; whole_heal <= time's
+            changed_snaps x 4096;
   words     the 16 word classes of words and words2 sum to words' bad (first match wins);
   stride    b0..b7 sum to words' bad;
   bytes     ascii_bytes >= 16 x ascii_runs; all five 0 when words' bad is 0;
@@ -202,7 +212,7 @@ d on c1, 1,000 ms, 60. Consistency a console watch must show (the parser's readi
             0 and words' bad equal to it), or ongoing (memcanary-w's final read differed from the
             last snapshot, which no console count shows); when changed_words > 0: stopped or
             ongoing; heal=yes exactly when healed > 0; reads=prog when prog > 0, else osc when
-            osc > 0, else stable; content=none exactly when words' bad is 0; otherwise
+            osc > 0, else revert when revert > 0, else stable; content=none exactly when words' bad is 0; otherwise
             unclassified alone, or tokens that are word classes, flip2, ascii_runs, ipv4, beacon
             or trb_evt.
 
@@ -502,7 +512,7 @@ WATCH_LABELS = {"a": ("c2", 0, 100000), "b": ("c2", 1000, 180), "c": ("c2", 1000
 # The same table's deadlines (-T, seconds), which the export's header carries.
 WATCH_DEADLINE_S = {"a": 20, "b": 190, "c": 190, "d": 70}
 WATCH_C2 = ("a", "b", "c")
-WATCH_KINDS = ("base", "time", "words", "words2", "stride", "bytes", "verdict")   # a complete watch, in order
+WATCH_KINDS = ("base", "time", "reread", "words", "words2", "stride", "bytes", "verdict")   # a complete watch, in order
 _NUM = r"[0-9]{1,20}"                           # memcanary-w prints its u64 counts in decimal
 _WORDS1 = ("zero", "ones", "flip2_same", "flip2_var", "flip8", "pat_same", "pat_other")
 _WORDS2 = ("hi_pat", "lo_pat", "pte", "kva", "ptr_self", "ptr_ram", "u32page", "small32", "other")
@@ -512,11 +522,12 @@ WATCH_FIELDS = {
     "base": (("bad", _NUM), ("pages", _NUM), ("first_off", r"0x[0-9a-f]{1,8}"), ("last_off", r"0x[0-9a-f]{1,8}")),
     "time": tuple((k, _NUM) for k in ("snaps", "changed_snaps", "changed_words", "healed", "osc", "prog", "stable"))
     + (("stop", "count|deadline"),),
+    "reread": tuple((k, _NUM) for k in ("revert", "revert_flip2", "whole_heal")),
     "words": (("bad", _NUM),) + tuple((k, _NUM) for k in _WORDS1),
     "words2": tuple((k, _NUM) for k in _WORDS2),
     "stride": tuple((f"b{k}", _NUM) for k in range(8)),
     "bytes": tuple((k, _NUM) for k in ("ascii_runs", "ascii_bytes") + SIGNATURES),
-    "verdict": (("writer", "none|static|stopped|ongoing"), ("heal", "no|yes"), ("reads", "stable|osc|prog"),
+    "verdict": (("writer", "none|static|stopped|ongoing"), ("heal", "no|yes"), ("reads", "stable|revert|osc|prog"),
                 ("content", r"[a-z0-9_]+(?:,[a-z0-9_]+)*")),
     "fail": (("reason", "nomem|dump-open|dump-write"), ("errno", _NUM)),
 }
@@ -548,6 +559,12 @@ CW_SIZE = CW_HEAD.size + len(CW_MAPS) * CW_MAP_BYTES + CW_TAIL.size
 CW_REASONS = ("short", "magic", "version", "page-count", "size", "name", "label", "base", "reserved", "interval",
               "request", "snaps", "counts", "healed-not-changed", "console-absent", "console-mismatch")
 CW_SELFTEST_RE = re.compile(r"^MEMCANARY-W SELFTEST (?:PASS ([0-9]+) checks|FAIL ([0-9]+) of ([0-9]+) checks)$")
+# memcanary's own self-test line; memcanary-w prints it right after its watcher line, counting both sets.
+MC_SELFTEST_RE = re.compile(r"^MEMCANARY SELFTEST (?:PASS ([0-9]+) checks|FAIL ([0-9]+) of ([0-9]+) checks)$")
+# The fill-rate row's floor: rates that differ by the factor are read as differs only when the larger
+# of labels b and c has at least this many change events; below it the result is below-floor, which
+# fires no row (a reading added before J6's pre-registration; HYPOTHESIS on what a stray change is).
+FILL_MIN_WORDS = 8
 CW_LIMIT = ("counts, classes and page bitmaps only: no word value, byte or pointer value is read or printed "
             "(s1-design.md 15.4.8); page classes from kpageflags describe Linux's CPU-side ownership only (R45)")
 EXPORT_REC_RE = re.compile(r"^S1 EXPORT name=(\S+)(?: (.*))?$")
@@ -1797,9 +1814,15 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
         put("item5", "ok" if not miss["item5"] else "bad " + ",".join(miss["item5"]))
     if diag == "j1" and not board:
         # §15.5 B8.5: T-J1, the TCG j1 variant's dryrun and memcanary-w's self-test; never pass.
+        # memcanary-w prints its watcher line, then memcanary's own line, which counts both sets of checks:
+        # ok needs the watcher's PASS and, as the next such line after it, a PASS with a larger count
         sl = R.all(CW_SELFTEST_RE)
         cw_self = ("absent" if not sl else "multiple" if len(sl) > 1 else
-                   "ok" if sl[0][1].group(1) is not None and int(sl[0][1].group(1)) > 0 else "failed")
+                   "failed" if sl[0][1].group(1) is None or int(sl[0][1].group(1)) == 0 else "ok")
+        if cw_self == "ok":
+            nxt = [m for i, m in R.all(MC_SELFTEST_RE) if i > sl[0][0]]
+            cw_self = ("unpaired" if not nxt else "ok" if nxt[0].group(1) is not None and
+                       int(nxt[0].group(1)) > int(sl[0][1].group(1)) else "failed")
         put("cw_selftest", cw_self)
         mcw = (cfg or {}).get("memcanary_w_sha256", "").lower()
         put("memcanary_w_sha256", mcw if HEX64_RE.match(mcw) else "absent")
@@ -2098,15 +2121,27 @@ def _bits(mask):
 
 
 def cw_time_ok(snaps, changed_snaps, changed_words, healed, osc, prog, stable):
-    """The time counts' own relations on the console (an export's tail carries only changed_words and healed)."""
+    """The time counts' own relations on the console (an export's tail carries only changed_words and healed).
+
+    memcanary.c's cw_snap counts every change event as exactly one of osc, prog and stable (A-A-C is
+    prog), so their sum is changed_words; a revert is not a change and is none of them.
+    """
     return (changed_snaps <= snaps and (changed_snaps == 0) == (changed_words == 0) and
-            osc + prog + stable <= changed_words and healed <= changed_words)
+            osc + prog + stable == changed_words and healed <= changed_words)
+
+
+def cw_reread_ok(t, r):
+    """The reread line's relations with the time line: revert_flip2 <= revert; every whole heal is 512
+    heals of one page in one changing snapshot, so whole_heal x 512 <= healed and whole_heal <=
+    changed_snaps x 4096."""
+    return (r["revert_flip2"] <= r["revert"] and r["whole_heal"] * WWORDS <= t["healed"] and
+            r["whole_heal"] <= t["changed_snaps"] * WPAGES)
 
 
 def cw_console_problems(label, f):
     """Names of the relations one parsed watch breaks (the docstring's consistency table)."""
     count = WATCH_LABELS[label][2]
-    b, t, w, w2, s, y, v = (f[k] for k in WATCH_KINDS)
+    b, t, r, w, w2, s, y, v = (f[k] for k in WATCH_KINDS)
     bad = w["bad"]
     p = []
     if not (b["pages"] <= min(b["bad"], WPAGES) and (b["bad"] == 0) == (b["pages"] == 0) and
@@ -2121,6 +2156,8 @@ def cw_console_problems(label, f):
     if not cw_time_ok(t["snaps"], t["changed_snaps"], t["changed_words"], t["healed"], t["osc"], t["prog"],
                       t["stable"]):
         p.append("time_counts")
+    if not cw_reread_ok(t, r):
+        p.append("reread_counts")
     if bad > WPAGES * WWORDS or sum(w[k] for k in _WORDS1) + sum(w2[k] for k in _WORDS2) != bad:
         p.append("words_sum")
     if sum(s[f"b{k}"] for k in range(8)) != bad:
@@ -2138,7 +2175,7 @@ def cw_console_problems(label, f):
         p.append("verdict_writer")
     if (v["heal"] == "yes") != (t["healed"] > 0):
         p.append("verdict_heal")
-    if v["reads"] != ("prog" if t["prog"] else "osc" if t["osc"] else "stable"):
+    if v["reads"] != ("prog" if t["prog"] else "osc" if t["osc"] else "revert" if r["revert"] else "stable"):
         p.append("verdict_reads")
     toks = v["content"].split(",")
     if bad == 0:
@@ -2354,7 +2391,12 @@ def cw_fill_rate(labs, factor):
     if not tb["snaps"] or not tc["snaps"]:
         return "not-computed", detail + " reason=no-snapshots"
     rb, rc = Fraction(tb["changed_words"], tb["snaps"]), Fraction(tc["changed_words"], tc["snaps"])
-    return ("differs" if rc > factor * rb or rb > factor * rc else "within"), detail
+    if not (rc > factor * rb or rb > factor * rc):
+        return "within", detail
+    # a rate against a zero or near-zero one: differs only with FILL_MIN_WORDS change events on the larger side
+    if max(tb["changed_words"], tc["changed_words"]) < FILL_MIN_WORDS:
+        return "below-floor", detail + f" floor={FILL_MIN_WORDS}"
+    return "differs", detail
 
 
 def cw_coincide(facts, kpf):
@@ -2431,9 +2473,10 @@ def cw_analyze(labs, bins, factor, kpf_paths=(), log_recs=None):
         lines += [cw_bitmap_line(l, fx, m) for m in CW_MAPS]
         hp = _pop(fx["maps"]["healed_ever"])
         whole = "n/a" if hp == 0 else "consistent" if fx["tail"]["healed"] >= WWORDS * hp else "no"
-        fx["whole_page_heal"] = whole == "consistent"
+        # the row reads memcanary-w's whole_heal (a page healed in one snapshot); this event count is a record
+        wh = labs[l]["f"]["reread"]["whole_heal"] if labs[l]["f"] is not None else "-"
         lines.append(f"heal label={l} healed_pages={hp} healed={fx['tail']['healed']} whole_page={whole} "
-                     f"condition=necessary-only")
+                     f"condition=necessary-only whole_heal={wh}")
     lines.append(f"kpf result={kstat}" + (f" tags={','.join(kpf)}" if kpf else ""))
     if kpf:
         K = _kpf()
@@ -2486,14 +2529,16 @@ def j1_hold(holds, hold_mib):
 
 def j6_sums(labs, labels):
     """The counts the J6 rows read, summed over the given (parsed) watches."""
-    s = dict.fromkeys(("bad_base", "bad", "changed_words", "healed", "osc", "prog", "stable") + WORD_CLASSES +
-                      SIGNATURES + tuple(f"b{k}" for k in range(8)), 0)
+    s = dict.fromkeys(("bad_base", "bad", "changed_words", "healed", "osc", "prog", "stable", "revert", "revert_flip2",
+                       "whole_heal") + WORD_CLASSES + SIGNATURES + tuple(f"b{k}" for k in range(8)), 0)
     for l in labels:
         f = labs[l]["f"]
         s["bad_base"] += f["base"]["bad"]
         s["bad"] += f["words"]["bad"]
         for k in ("changed_words", "healed", "osc", "prog", "stable"):
             s[k] += f["time"][k]
+        for k in ("revert", "revert_flip2", "whole_heal"):
+            s[k] += f["reread"][k]
         for k in _WORDS1:
             s[k] += f["words"][k]
         for k in _WORDS2:
@@ -2531,11 +2576,19 @@ def j6_rows(checks, labs, hold_bad, complete, cw):
     s = j6_sums(labs, WATCH_C2)
     d = j6_dom_counts(s)
     bad = s["bad"]
-    if s["osc"] > 0 and s["prog"] == 0 and 2 * (s["flip2_same"] + s["flip2_var"]) > bad:
+    # F34 (s1-design §15.12): no read in progress; some read that did not hold (osc or a revert); flip2
+    # dominant in FINL's bad set when it has words; and most reverts 1-2 bit flips when there are any
+    f34 = (s["prog"] == 0 and s["osc"] + s["revert"] > 0 and (bad == 0 or j6_dominant(d, ("flip2",))) and
+           (s["revert"] == 0 or 2 * s["revert_flip2"] > s["revert"]))
+    if f34:
         rows.append("F34")
-    if s["prog"] > 0 or (s["changed_words"] > 0 and s["stable"] > 0):
+    # F34 takes precedence over live-writer's stable arm: an osc keeps a marginal read as the last read,
+    # and the next snapshot re-reads the stored word as a stable change (HYPOTHESIS, beside R71). A
+    # prog above 0 excludes F34, so the two rows never print together.
+    if s["prog"] > 0 or (s["changed_words"] > 0 and s["stable"] > 0 and not f34):
         rows.append("live-writer")
-    if (s["healed"] > 0 and j6_dominant(d, LEAN_RESTORING)) or any(cw["facts"][l]["whole_page_heal"] for l in WATCH_C2):
+    # whole pages healed together: memcanary-w's whole_heal, a page whose every word healed in one snapshot
+    if (s["healed"] > 0 and j6_dominant(d, LEAN_RESTORING)) or s["whole_heal"] > 0:
         rows.append("restoring-writer")
     top2 = sum(sorted(s[f"b{k}"] for k in range(8))[-2:])
     if j6_dominant(d, LEAN_RING) or (bad >= STRIDE_MIN_BAD and 2 * top2 > bad):
@@ -2552,8 +2605,10 @@ def j6_rows(checks, labs, hold_bad, complete, cw):
     if cw["fill"][0] == "differs":
         rows.append("fill-rate")
     writers = {labs[l]["f"]["verdict"]["writer"] for l in WATCH_C2}
+    # writer-none is "c2 clean at every scan" (§15.4.8), so a read that did not hold (a revert) rules it out
     if writers == {"none"}:
-        rows.append("writer-none")
+        if s["revert"] == 0:
+            rows.append("writer-none")
     elif not writers & {"stopped", "ongoing"}:
         rows.append("writer-static")
     return rows or ["no-row"], s
@@ -2832,10 +2887,12 @@ def syn_watch(label, **kw):
     """(console lines, export bytes) of one memcanary-w watch, consistent by construction (SYNTHETIC; not a record).
 
     kw: classes {class: n} (words' bad is their sum), bad_base (default that bad), the time
-    counts (snaps, changed_snaps, changed_words, healed, osc, prog, stable), stride (eight
-    bins; default the bad words at offsets 0, 8, 16 ... in turn), sig {ascii_runs,
-    ascii_bytes, ipv4, beacon, trb_evt}, writer, content, and the page lists bad_pages,
-    changed_pages, healed_pages (defaults: the first pages the count needs, page 0, page 0).
+    counts (snaps, changed_snaps, changed_words, healed, osc, prog, stable; stable defaults to
+    changed_words less osc and prog, as memcanary.c counts), the reread counts (revert,
+    revert_flip2, whole_heal; default 0), stride (eight bins; default the bad words at offsets
+    0, 8, 16 ... in turn), sig {ascii_runs, ascii_bytes, ipv4, beacon, trb_evt}, writer, content,
+    and the page lists bad_pages, changed_pages, healed_pages (defaults: the first pages the
+    count needs, page 0, page 0).
     """
     name, interval, count = WATCH_LABELS[label]
     cls = dict.fromkeys(WORD_CLASSES, 0)
@@ -2846,19 +2903,23 @@ def syn_watch(label, **kw):
     t.update((k, kw[k]) for k in list(t) if k in kw)
     if t["changed_words"] and not t["changed_snaps"]:
         t["changed_snaps"] = 1
+    if "stable" not in kw:
+        t["stable"] = max(t["changed_words"] - t["osc"] - t["prog"], 0)
+    rr = {k: kw.get(k, 0) for k in ("revert", "revert_flip2", "whole_heal")}
     bad_base = kw.get("bad_base", bad)
     stride = list(kw.get("stride", [bad // 8 + (1 if k < bad % 8 else 0) for k in range(8)]))
     sig = dict.fromkeys(("ascii_runs", "ascii_bytes") + SIGNATURES, 0)
     sig.update(kw.get("sig", {}))
     cwords = t["changed_words"]
     writer = kw.get("writer") or (("none" if bad_base == 0 and bad == 0 else "static") if cwords == 0 else "stopped")
-    reads = "prog" if t["prog"] else "osc" if t["osc"] else "stable"
+    reads = "prog" if t["prog"] else "osc" if t["osc"] else "revert" if rr["revert"] else "stable"
     pfx = f"S1 CANARY {name} watch="
     lines = [
         f"{pfx}base label={label} bad={bad_base} pages={-(-bad_base // WWORDS)} first_off=0x0 "
         f"last_off=0x{8 * max(bad_base - 1, 0):x}",
         f"{pfx}time label={label} " + " ".join(f"{k}={v}" for k, v in t.items()) +
         f" stop={'count' if t['snaps'] == count else 'deadline'}",
+        f"{pfx}reread label={label} " + " ".join(f"{k}={v}" for k, v in rr.items()),
         f"{pfx}words label={label} bad={bad} " + " ".join(f"{k}={cls[k]}" for k in _WORDS1),
         f"{pfx}words2 label={label} " + " ".join(f"{k}={cls[k]}" for k in _WORDS2),
         f"{pfx}stride label={label} " + " ".join(f"b{k}={v}" for k, v in enumerate(stride)),
@@ -3458,17 +3519,36 @@ def selftest():
     r = j6(c2w(classes={"small32": 16}, changed_words=4, prog=2, stable=2))
     check("run --diag j1 prog with small32 dominant: live-writer and ring-record",
           j6_is(r, "complete", ["live-writer", "ring-record"]))
-    r = j6(c2w(classes={"pat_same": 10, "pat_other": 6}, changed_words=2, healed=2))
+    r = j6(c2w(classes={"pat_same": 10, "pat_other": 6}, changed_words=2, osc=2, healed=2))
     check("run --diag j1 healed with pat_same dominant: restoring-writer", j6_is(r, "complete", ["restoring-writer"]))
     heal = {"a": other16, "c": other16, "b": {"classes": {"other": 16}, "changed_words": 1100, "changed_snaps": 20,
-                                              "healed": 1100, "changed_pages": (0, 1), "healed_pages": (0, 1)}}
+                                              "osc": 1100, "healed": 1100, "whole_heal": 2, "changed_pages": (0, 1),
+                                              "healed_pages": (0, 1)}}
     r = j6(heal)
-    check("run --diag j1 healed >= 512 x healed pages on one watch: restoring-writer (b changes and c does not: "
-          "fill-rate too)", j6_is(r, "complete", ["restoring-writer", "fill-rate"]))
+    check("run --diag j1 whole_heal above 0 on one watch: restoring-writer (b changes and c does not: fill-rate too)",
+          j6_is(r, "complete", ["restoring-writer", "fill-rate"]))
+    heal["b"] = dict(heal["b"], whole_heal=0)
+    r = j6(heal)
+    check("run --diag j1 healed >= 512 x healed pages but no page healed in one snapshot: no restoring-writer",
+          j6_is(r, "complete", ["fill-rate"]))
     heal["b"] = dict(heal["b"], healed=600)
     r = j6(heal)
     check("run --diag j1 a heal short of whole pages, other classes, mixed writers: fill-rate only",
           j6_is(r, "complete", ["fill-rate"]))
+    r = j6(c2w(revert=6, revert_flip2=5))
+    check("run --diag j1 reverts, most of them 1-2 bit flips, and no bad word or change: F34, and no writer-none",
+          j6_is(r, "complete", ["F34"]))
+    r = j6(c2w(revert=6, revert_flip2=3))
+    check("run --diag j1 reverts not mostly 1-2 bit flips: neither F34 nor writer-none", j6_is(r, "complete", ["no-row"]))
+    r = j6(c2w(classes={"flip2_same": 6, "zero": 5, "other": 5}, changed_words=4, osc=4, writer="ongoing"))
+    check("run --diag j1 flip2 dominant but not above half of bad: F34 (dominance, as the other rows read it)",
+          j6_is(r, "complete", ["F34"]))
+    r = j6(c2w(classes={"flip2_same": 12, "flip2_var": 4}, changed_words=20, osc=10, stable=10, writer="ongoing"))
+    check("run --diag j1 osc with stable re-reads and flip2 dominant: F34 takes precedence over live-writer",
+          j6_is(r, "complete", ["F34"]))
+    r = j6(c2w(classes={"flip2_var": 1}, changed_words=600, changed_snaps=100, osc=600, healed=600, writer="ongoing"))
+    check("run --diag j1 one toggling word with 600 heals on one page: F34, not restoring-writer",
+          j6_is(r, "complete", ["F34"]))
     r = j6(c2w(classes={"other": 16}, stride=(16, 0, 0, 0, 0, 0, 0, 0)))
     check("run --diag j1 one dominant stride bin: ring-record", j6_is(r, "complete", ["ring-record", "writer-static"]))
     r = j6(c2w(classes={"other": 16}))
@@ -3482,16 +3562,23 @@ def selftest():
     r = j6({"a": {"classes": {"other": 16}, "sig": {"ipv4": 1}}, "b": other16, "c": other16})
     check("run --diag j1 a positive signature: positive-signature",
           j6_is(r, "complete", ["positive-signature", "writer-static"]))
-    fill = {"a": other16, "b": {"classes": {"other": 16}, "changed_words": 10},
-            "c": {"classes": {"other": 16}, "changed_words": 100}}
+    fill = {"a": other16, "b": {"classes": {"other": 16}, "changed_words": 10, "osc": 10},
+            "c": {"classes": {"other": 16}, "changed_words": 100, "osc": 100}}
     r = j6(fill)
     check("run --diag j1 label c's change rate above factor 2 times label b's: fill-rate",
           j6_is(r, "complete", ["fill-rate"]) and field(r, "fillrate").startswith("'differs "))
     r = j6(fill, factor="10")
     check("run --diag j1 a rate exactly the factor times the other is within: no-row",
           j6_is(r, "complete", ["no-row"]) and field(r, "fillrate").startswith("'within "))
-    r = j6(dict(fill, c={"classes": {"other": 16}, "changed_words": 15}))
+    r = j6(dict(fill, c={"classes": {"other": 16}, "changed_words": 15, "osc": 15}))
     check("run --diag j1 rates within the factor: no-row", j6_is(r, "complete", ["no-row"]))
+    r = j6(dict(fill, b=other16, c={"classes": {"other": 16}, "changed_words": FILL_MIN_WORDS - 1,
+                                    "osc": FILL_MIN_WORDS - 1}))
+    check("run --diag j1 a rate against a zero one, under FILL_MIN_WORDS change events: below-floor, no row",
+          j6_is(r, "complete", ["no-row"]) and field(r, "fillrate").startswith("'below-floor "))
+    r = j6(dict(fill, b=other16, c={"classes": {"other": 16}, "changed_words": FILL_MIN_WORDS, "osc": FILL_MIN_WORDS}))
+    check("run --diag j1 a rate against a zero one at FILL_MIN_WORDS change events: fill-rate",
+          j6_is(r, "complete", ["fill-rate"]) and field(r, "fillrate").startswith("'differs "))
     r = j6(hold=("fill=ok", "verify=bad first_off=0x28 words=2"))
     check("run --diag j1 the hold's verify=bad: F49, still complete",
           j6_is(r, "complete", ["F49", "writer-none"]) and field(r, "hold") == "bad")
@@ -3574,6 +3661,16 @@ def selftest():
                                          r"\1 content=unclassified"),)))
     check("run --diag j1 content other than none on a watch with no bad word is inconsistent",
           j6_is(r, "incomplete", ["F40"], ("watch_d",)) and "verdict_content" in field(r, "watch_d"))
+    r = j6(lines_=edit_lines(j6l, sub=((r"^(S1 CANARY c2 watch=reread label=b revert=0 revert_flip2=)0 ", r"\g<1>1 "),)))
+    check("run --diag j1 revert_flip2 above revert is inconsistent (the export's tail has no reread count)",
+          j6_is(r, "incomplete", ["F40"], ("watch_b",)) and "reread_counts" in field(r, "watch_b") and
+          field(r, "export_j1b") == "ok")
+    r = j6(c2w(classes={"other": 16}, changed_words=4, stable=2))
+    check("run --diag j1 osc, prog and stable that do not sum to changed_words are inconsistent",
+          j6_is(r, "incomplete", ["F40"], ("watch_a", "watch_b", "watch_c")) and "time_counts" in field(r, "watch_a"))
+    r = j6(lines_=edit_lines(j6l, drop=(r"^S1 CANARY c2 watch=reread label=c ",)))
+    check("run --diag j1 a watch without its reread line is incomplete",
+          j6_is(r, "incomplete", ["F40"], ("watch_c",)) and field(r, "watch_c") == "incomplete")
 
     # kpf-decode.py headers: c2's first 16 pages as slab (held) or free, for cpu-side.
     K = _kpf()
@@ -3621,7 +3718,7 @@ def selftest():
         check("run --diag j1 two prequiesce headers are kpf-decode's tag refusal",
               j6_is(r, "complete", ["cpu-side-lean", "writer-static"]) and field(r, "kpf") == "'refused reason=tag'")
         check("run --diag j1 no J6 parse prints a b2= field, verdict=pass, or pass on any line but conf_gate's",
-              len(j6res) == 48 and all(not has(x, "b2=") and not any("verdict=pass" in ln for ln in x["lines"]) and
+              len(j6res) == 59 and all(not has(x, "b2=") and not any("verdict=pass" in ln for ln in x["lines"]) and
                                        all(ln.startswith("conf_gate=") for ln in x["lines"]
                                            if re.search(r"=pass\b", ln)) for x in j6res))
 
@@ -3786,11 +3883,24 @@ def selftest():
     def with_line(*extra):
         return edit_lines(t1l, add_after=tuple((r"^S1 GATE mem ok$", x) for x in extra))
 
-    r = tj(with_line(cw_pass))
+    cw_pair = (cw_pass, "MEMCANARY SELFTEST PASS 170 checks")   # memcanary-w's two lines, as it prints them
+    r = tj(with_line(*cw_pair))
     check("run --diag j1 T-J1 synthetic: complete, step T-J1, cw_selftest ok, no item1_t1 pass",
           r["verdict"] == "diagnostic complete" and r["step"] == "T-J1" and field(r, "cw_selftest") == "ok" and
           r["lines"][-1] == "verdict=diagnostic complete" and not has(r, "item1_t1=") and "j_row" not in r)
-    r = tj(edit_lines(t1_plain, add_after=((r"^S1 GATE mem ok$", cw_pass),)))
+    r = tj(with_line("MEMCANARY SELFTEST PASS 47 checks", *cw_pair))
+    check("run --diag j1 T-J1 memcanary's own line before the watcher's, then the pair: ok",
+          field(r, "cw_selftest") == "ok")
+    r = tj(with_line("MEMCANARY SELFTEST PASS 47 checks", cw_pass))
+    check("run --diag j1 T-J1 the watcher's PASS with no line after it: unpaired, incomplete",
+          field(r, "cw_selftest") == "unpaired" and r["verdict"] == "diagnostic incomplete")
+    r = tj(with_line(cw_pass, "MEMCANARY SELFTEST FAIL 1 of 170 checks"))
+    check("run --diag j1 T-J1 the watcher's PASS then memcanary's own FAIL (a base check failed): failed",
+          field(r, "cw_selftest") == "failed" and r["verdict"] == "diagnostic incomplete")
+    r = tj(with_line(cw_pass, "MEMCANARY SELFTEST PASS 120 checks"))
+    check("run --diag j1 T-J1 a second PASS that does not count more than the watcher's: failed",
+          field(r, "cw_selftest") == "failed")
+    r = tj(edit_lines(t1_plain, add_after=tuple((r"^S1 GATE mem ok$", x) for x in cw_pair)))
     check("run --diag j1 T-J1 without the memcanary_w_sha256 stamp: incomplete",
           r["verdict"] == "diagnostic incomplete" and field(r, "memcanary_w_sha256") == "absent" and
           r["lines"][-1] == "verdict=diagnostic incomplete failed=memcanary_w_sha256")
@@ -3814,7 +3924,7 @@ def selftest():
     check("run --diag j1 T-J1 a dryrun logger error fails L2: incomplete",
           "L2" in r["lines"][-1].split("failed=", 1)[-1].split(","))
     check("run --diag j1 no T-J1 parse prints verdict=pass or pass on any line but conf_gate's",
-          len(tjres) == 9 and all(not any("verdict=pass" in ln for ln in x["lines"]) and
+          len(tjres) == 13 and all(not any("verdict=pass" in ln for ln in x["lines"]) and
                                   all(ln.startswith("conf_gate=") for ln in x["lines"] if re.search(r"=pass\b", ln))
                                   for x in tjres))
     r = run("board", "boot")

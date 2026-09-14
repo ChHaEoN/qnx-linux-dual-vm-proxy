@@ -14,6 +14,10 @@
 # edited; memcanary has no physical write mode.
 # memcanary-w is J6's watcher (s1-design.md §15.4.8, §15.5 B2): the same
 # memcanary.c with -DMEMCANARY_WATCH, so memcanary itself keeps its pin.
+# PIN_MEMCANARY and PIN_MEMCANARY_W (make-s1-images.sh) assume the source is
+# compiled under the name memcanary.c: a byte-identical copy under another name
+# built to a different sha256 in a scratch rebuild (the binary most likely
+# records the source file name; HYPOTHESIS). The output name does not matter.
 
 CC      := qcc -Vgcc_ntoaarch64le
 CFLAGS  := -Wall -Wextra -Werror -O2
