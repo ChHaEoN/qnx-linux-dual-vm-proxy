@@ -2201,6 +2201,22 @@ The export block is placed after `FAIL_STATE`, **outside** the `MODE != host` gu
 
 ---
 
+#### 15.6.1 Session record, 2026-09-14 (number-free)
+
+- **J1 met.** The census resolved all four removal-set members, none holding a mounted filesystem, swap, `$HOME` or the kimg directory. A `/dev/kmsg` marker and a transient timer's marker both reached COM3 (R57 and R59, unquiesced). The page-flag probe worked (R60), and the runtime trace printed per-device shutdown lines on a reboot, within the go rule (R56 and R73, for a reboot). Result: `next=J2`, trace go.
+- **J2 ran to its jump and back cleanly.** The start margin was met. The detached sequence ran all nine slots with no overrun, issued the kexec from its unit, and the image reset back to L4T. The bootloader slot state was unchanged, and the sequence files were removed.
+- **J2's canaries:**
+  - c1 verified at both checks;
+  - c2 was bad at both checks, as in B2;
+  - **c3, clean in B2, was bad at both checks with an unchanged count.**
+
+  The parser gave `j_row=F39`. **F39 is an immediate stop (§15.6): J3 and J4 did not run,** and the exposure item is raised for the owner (D32).
+- **Record-only observations (HYPOTHESIS, one run):**
+  - at the jump, both failing canaries sat on pages Linux held (slab for c2; page cache that appeared during the quiesce for c3), while c1 sat on free pages;
+  - the kexec shutdown trace shows shutdown hooks called for the PCI functions, their root ports, the PCIe controllers, the SD host, the xHCI and the coprocessor drivers. What each hook did is not shown.
+- **Harness defect found:** the COM3 marker extractor misses a marker preceded by stray bytes on the same line. It is report-only, did not affect the verdict, and is fixed before the next J rung.
+- **Class for today: U** (an immediate stop), pending the owner's D31. B2 stays NOT MET on data.
+
 ### 15.7 Claims, failure signatures, risks
 
 #### 15.7.1 Claims (the §9 table continues)
