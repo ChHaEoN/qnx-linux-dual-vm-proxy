@@ -87,6 +87,55 @@ on failure `M5L-EBS FAIL` or `M5L-EXC ESR=… ELR=…`.
 
 The T0 payload prints `PROBE EL=… X0=… X1=… X2=… X3=… MAGIC=… SCTLR_EL2=… DAIF=… PC=…`.
 
+## J7a: the UEFI-entry arm (`M5L_J7A`)
+
+Design: [`s1-design.md`](../../results/orin-native-port/20260909T1100Z/s1-design.md)
+§15.13.3 (UM1-UM10) and §15.13.4 (the image, the loader, T0). Everything J7a
+adds to `m5load.c` sits behind the compile-time switch `M5L_J7A`; with it off,
+the object is M5's byte for byte (UM8, checked by D0b). `m5load-head.S` is not
+touched.
+
+| File | Role |
+|---|---|
+| `m5load-rules.h` | the pure J7a rules, included only under `M5L_J7A`: the window-2 sweep, the canary rule, the tree-overlap rule and the reserved-memory walk; no static data, no stored pointer, no allocation |
+| `t0/pad-like.py` | `T0_PAD_LIKE`: pads the probe to a kimg's length and copies its `image_size`, reading only the header our shim wrote |
+| `t0/t0u-rules.c`, `t0/run-t0u.ps1` | T0u: the rules compiled for the host (MSVC) and run on synthetic maps and trees |
+
+Build in a git worktree, never in the main checkout, whose `out/` holds M5's
+gated loader:
+
+```sh
+M5L_J7A=1 T0=1 T0_PAD_LIKE=<kimg> ./orin-native/uefi/build-m5-loader.sh
+M5L_J7A=1 KIMG=<kimg> KIMG_SHA256=<J6c's registered kimg_sha256> ./orin-native/uefi/build-m5-loader.sh
+M5L_J7A=1 T0=1 T0_PAD_LIKE=<kimg> T0_FORCE=um6-first OUT_DIR=<scratch> ./orin-native/uefi/build-m5-loader.sh
+```
+
+The gate adds item 11 (the window-2 and canary constants equal
+`t234_startup.h`'s) and item 12 (no `T0_FORCE` build as a board build; a J7a
+board build must match a J7a T0 build outside the blob and constants), and
+item 8 compares builds of the same variant only.
+
+J7a adds these lines before `ExitBootServices`:
+
+| Token | Meaning |
+|---|---|
+| `M5L variant=j7a` | directly after the start line, whose grammar is unchanged |
+| `M5L self w2=yes\|no canary=none\|c1\|c2\|c3` | the loader's own pages against window 2 and the canaries |
+| `M5L fdt addr=… size=… crc32=…` | the tree stamp; `M5L REFUSE fdt reason=w2\|canary` when the tree lies in window 2 or over c1 |
+| `M5L resmem name=… status=… map=… prop=… over=… base=…`, `… form=unparsed`, `M5L resmem done` | class-only report of `/reserved-memory` children over window 2 or a canary; never a refusal |
+| `M5L canary cN preclaim=ok` | UM4's claim of each canary; on failure `M5L canary cN preclaim=fail status=…`, the descriptors over it, `M5L REFUSE canary cN status=…` |
+| `M5L map …` over window 2 | UM5's descriptors, in the existing form |
+| `M5L REFUSE w2 reason=gap\|type\|rt at=…`, `M5L REFUSE canary cN reason=type at=…` | UM5's sweep and canary rule |
+| `M5L W2 PASS` | before `M5L CHECK PASS`, so `check` and `go` print the same prelude |
+| `M5L REFUSE w2-final` | UM6 failed on the first try; everything released, back to the Shell. A later-try failure takes the existing `M5L-EBS FAIL` and reset |
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File orin-native\uefi\t0\run-t0.ps1 -Variant j7a `
+  -LoaderDir <worktree>\orin-native\uefi\out\t0 -SwitchOffDir <switch-off T0 build> `
+  -ForceFirstDir <um6-first build> -ForceLaterDir <um6-later build>
+powershell -NoProfile -ExecutionPolicy Bypass -File orin-native\uefi\t0\run-t0u.ps1
+```
+
 ## Never (m5-design §7.4, binding on this code and on the session)
 
 - Never write a UEFI variable, `Boot####` or `BootOrder`; never run `bcfg`,

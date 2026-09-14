@@ -499,7 +499,7 @@ def diag_row(diag, checks, complete):
 # Revision 3's J6 watcher (s1-design.md §15.4.8, §15.5 B7): memcanary-w's console lines and its
 # page-bitmap exports, read by run --diag j1 and canwatch. Counts, classes and page bitmaps only:
 # no word value, byte or pointer value leaves the target, so none is read or printed here.
-J1_STEPS = {("board", "host"): {"control": "J6c", "remove": "J6r"}, ("tcg", "dryrun"): {None: "T-J1"}}
+J1_STEPS = {("board", "host"): {"control": "J6c", "remove": "J6r", "uefi": "J7a"}, ("tcg", "dryrun"): {None: "T-J1"}}
 J1_ARMS = ("control", "remove")
 J1_RUNG = "s1-j1"
 J1_HOLD_MIB = 2896      # make-s1-images.sh's J1_HOLD_MIB, s1-j1's hold size (its constant check compares the two)
@@ -569,6 +569,78 @@ CW_LIMIT = ("counts, classes and page bitmaps only: no word value, byte or point
             "(s1-design.md 15.4.8); page classes from kpageflags describe Linux's CPU-side ownership only (R45)")
 EXPORT_REC_RE = re.compile(r"^S1 EXPORT name=(\S+)(?: (.*))?$")
 FACTOR_RE = re.compile(r"^[0-9]{1,6}(?:\.[0-9]{1,6})?$")
+
+# Revision 3's J7a (s1-design.md §15.13): s1-j1, unchanged, entered from the UEFI Shell by the M5L_J7A
+# loader. `run --diag j1 --entry uefi --arm uefi` reads one COM3 segment; `--entry kexec` (the default)
+# leaves every earlier parse byte-identical (R92). The loader's lines are m5load.c's and §15.13.3's
+# UM2-UM9; they reach COM3 through the firmware console, so CSI sequences are stripped before matching.
+ENTRIES = ("kexec", "uefi")
+J7A_ARM = "uefi"
+CSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+M5L_RX = {
+    "start": re.compile(r"^M5L start mode=(check|go) el=([0-9]+)(?!\S)"),
+    "variant": re.compile(r"^M5L variant=j7a$"),
+    "self": re.compile(r"^M5L self w2=(yes|no) canary=(none|c1|c2|c3)$"),
+    # m5load.c's b_hex: lowercase hex without 0x or leading zeros; crc32=fail is no stamp
+    "fdt": re.compile(r"^M5L fdt addr=\S+ size=\S+ crc32=([0-9a-f]{1,8})$"),
+    "crc_src": re.compile(r"^M5L crc src=ok$"),
+    "crc_dst": re.compile(r"^M5L crc dst=ok$"),
+    "resmem": re.compile(r"^M5L resmem name=(\S+) (.*)$"),
+    "resmem_done": re.compile(r"^M5L resmem done$"),
+    "preclaim": re.compile(r"^M5L canary (c1|c2|c3) preclaim=ok$"),
+    "w2": re.compile(r"^M5L W2 PASS$"),
+    "check": re.compile(r"^M5L CHECK PASS$"),
+    "go": re.compile(r"^M5L GO$"),
+    "refuse": re.compile(r"^M5L REFUSE(?!\S)"),
+}
+# m5load-head.S's post-exit tokens, printed on the TCU after ExitBootServices (searched, not anchored).
+M5L_EBS_RE = re.compile(r"M5L-EBS(?!\S)")
+M5L_EBS_OK_RE = re.compile(r"M5L-EBS ok(?!\S)")
+M5L_JUMP_RE = re.compile(r"M5L-JUMP(?!\S)")
+# §15.13.7: zero of these after the counted M5L GO (text before it is unconstrained); any s1wq: marker too.
+J7A_NEG_AFTER_GO = (("m5l_exc", re.compile(r"M5L-EXC")), ("ebs_fail", re.compile(r"M5L-EBS FAIL")),
+                    ("bad_landing", re.compile(r"BAD-LANDING")), ("exc", re.compile(r"EXC ")),
+                    ("el_not_2", re.compile(r"EL!=2")), ("kexec", re.compile(r"kexec_core: Starting new kernel")),
+                    ("s1wq", WQ_MARK_RE))
+J7A_ROWS = ("clean", "bad", "bad-partial", "bad-unstable", "revert-only", "unsettled", "F39c1", "F39c3", "F49", "F62",
+            "incomplete")
+J7A_FLIP_PAT = ("flip2_same", "flip2_var", "flip8", "pat_same", "pat_other")
+# §15.13.10.3 P7: pages in common at least this fraction of each side's bad_final set (a design constant).
+P7_SHARE = Fraction(1, 2)
+J6C_REF_FILES = ("parse-s1.txt", "canwatch.txt", "s1-j1a.bin", "s1-j1b.bin", "s1-j1c.bin")
+
+
+def content_rule(counts, bad):
+    """memcanary.c's cw_content over counts (class -> n): every class but other holding at least a quarter
+    of bad, most first, ties in class order; 'none' with no bad word and 'unclassified' when none holds."""
+    if bad == 0:
+        return "none"
+    got = [k for k in WORD_CLASSES if k != "other" and counts.get(k, 0) and counts[k] * 4 >= bad]
+    got.sort(key=lambda k: -counts[k])        # sort is stable, so ties stay in class order
+    return ",".join(got) or "unclassified"
+
+
+def c2_f34(s):
+    """§15.12 B5's F34 over j6_sums' counts: prog 0; osc or revert above 0; flip2 dominant in the bad set
+    when it has words; more than half the reverts revert_flip2 when there are any."""
+    d = j6_dom_counts(s)
+    return (s["prog"] == 0 and s["osc"] + s["revert"] > 0 and (s["bad"] == 0 or j6_dominant(d, ("flip2",))) and
+            (s["revert"] == 0 or 2 * s["revert_flip2"] > s["revert"]))
+
+
+def p7_compare(mask_j7a, mask_j6c):
+    """§15.13.10.3 P7 on two page bitmaps (bit p = page p of c2): (same, common, only_j7a, only_j6c, presence_same).
+    same needs the per-MiB presence vector identical and the pages in common at least P7_SHARE of each set."""
+    per = MIB // WPAGE
+
+    def presence(mask):
+        return {p // per for p in _bits(mask)}
+
+    common = _pop(mask_j7a & mask_j6c)
+    n7, n6 = _pop(mask_j7a), _pop(mask_j6c)
+    pres = presence(mask_j7a) == presence(mask_j6c)
+    same = pres and common >= P7_SHARE * n7 and common >= P7_SHARE * n6 and n7 > 0 and n6 > 0
+    return same, common, n7 - common, n6 - common, pres
 
 
 # ------------------------------------------------------------------ conf: the gate (§3.7)
@@ -1403,10 +1475,119 @@ def is_subsequence(sub, seq):
     return k == len(sub), (-1 if k == len(sub) else k)
 
 
+def j7a_loader(recs):
+    """J7a's loader lines in one COM3 segment (s1-design.md §15.13.7). Returns a dict:
+
+    go_i (index of the counted M5L GO, or None), counted (how many GOs were counted), checks
+    ({name: True when met}), crc32 (the fdt stamp or None), resmem (the go run's resmem lines as
+    {field: text} dicts) and neg (names of negative tokens after the counted GO).
+
+    A GO is counted when no M5L REFUSE comes after it before the next M5L-EBS token (or before the
+    next M5L start line or the segment's end when no EBS follows). The Shell visit is the text after
+    the last firmware banner before the counted GO's start line; its last check run before that start
+    line is T1'. Lines are CSI-stripped and left-stripped first. Nothing here reads a value.
+    """
+    lines = [(i, CSI_RE.sub("", t).lstrip(" \t")) for i, t in recs]
+    starts = [(i, m.group(1), m.group(2)) for i, t in lines for m in [M5L_RX["start"].match(t)] if m]
+    gos = [i for i, t in lines if M5L_RX["go"].match(t)]
+    refuses = [i for i, t in lines if M5L_RX["refuse"].match(t)]
+    ebs = [i for i, t in lines if M5L_EBS_RE.search(t)]
+    counted = []
+    for g in gos:
+        nxt_start = next((i for i, _m, _e in starts if i > g), None)
+        stop = next((i for i in ebs if i > g), nxt_start)
+        if not any(g < i and (stop is None or i < stop) for i in refuses):
+            counted.append(g)
+    out = {"go_i": counted[0] if len(counted) == 1 else None, "counted": len(counted), "checks": {}, "crc32": None,
+           "resmem": [], "neg": []}
+    ck = out["checks"]
+    # check_end is M5L CHECK PASS; a J7a parse never prints the word pass (§15.13.7)
+    names = ("check_start", "check_run", "go_start", "go_run", "prelude_same", "check_end", "fdt_crc32",
+             "after_go", "neg_after_go")
+    for n in names:
+        ck[n] = False
+    if out["go_i"] is None:
+        return out
+    g = out["go_i"]
+    go_start = next((i for i, mode, _e in reversed(starts) if i < g), None)
+    if go_start is None or dict((i, (m, e)) for i, m, e in starts)[go_start] != ("go", "2"):
+        return out
+    ck["go_start"] = True
+    banner = max((i for i, t in lines if i < go_start and any(b in t for b in FW_BANNER)), default=-1)
+    chk = [(i, e) for i, m, e in starts if m == "check" and banner < i < go_start]
+    if chk and chk[-1][1] == "2":
+        ck["check_start"] = True
+    chk_i = chk[-1][0] if chk else None
+
+    def run_lines(a, b):
+        """The M5L lines strictly between index a and index b (the start line excluded)."""
+        return [t for i, t in lines if a < i < b and t.startswith("M5L ")]
+
+    def run_ok(body):
+        """UM2 directly after the start line, then the checks every run needs, with no refusal."""
+        if len(body) < 2 or not M5L_RX["variant"].match(body[0]):
+            return False
+        sm = M5L_RX["self"].match(body[1])
+        pre = [M5L_RX["preclaim"].match(t).group(1) for t in body if M5L_RX["preclaim"].match(t)]
+        need = ("crc_src", "crc_dst", "resmem_done", "w2")
+        return (sm is not None and sm.group(2) == "none" and pre == ["c1", "c2", "c3"] and
+                all(sum(1 for t in body if M5L_RX[k].match(t)) == 1 for k in need) and
+                not any(M5L_RX["refuse"].match(t) for t in body))
+
+    go_body = run_lines(go_start, g)
+    ck["go_run"] = run_ok(go_body)
+    if chk_i is not None:
+        cend = next((i for i, t in lines if chk_i < i < go_start and M5L_RX["check"].match(t)), None)
+        ck["check_end"] = cend is not None
+        chk_body = run_lines(chk_i, cend if cend is not None else go_start)
+        ck["check_run"] = run_ok(chk_body)
+        ck["prelude_same"] = cend is not None and chk_body == go_body
+    fdts = [M5L_RX["fdt"].match(t) for t in go_body if M5L_RX["fdt"].match(t)]
+    if len(fdts) == 1:
+        out["crc32"] = fdts[0].group(1).lower()
+        ck["fdt_crc32"] = True
+    for t in go_body:
+        m = M5L_RX["resmem"].match(t)
+        if m:
+            kv, _ = parse_kv(m.group(2))
+            out["resmem"].append(dict(kv, name=m.group(1)))
+    # after the counted GO, in order: M5L-EBS ok, M5L-JUMP, the shim line with its PC, then t234: WDT0
+    pos, seq_ok = g, True
+    first_ebs = next((i for i in ebs if i > g), None)
+    for rx, pc in ((M5L_EBS_OK_RE, False), (M5L_JUMP_RE, False), (RX["shim"], True), (RX["wdt0"], False)):
+        j = next((i for i, t in lines if i > pos and rx.search(t)), None)
+        if j is None or (rx is M5L_EBS_OK_RE and j != first_ebs):
+            seq_ok = False
+            break
+        if pc and not any(RX["shim_pc"].search(t) for i, t in lines if j <= i <= j + 3):
+            seq_ok = False
+            break
+        pos = j
+    ck["after_go"] = seq_ok
+    out["neg"] = [n for n, rx in J7A_NEG_AFTER_GO if any(i > g and rx.search(t) for i, t in lines)]
+    ck["neg_after_go"] = not out["neg"]
+    return out
+
+
+def j7a_resmem_summary(resmem):
+    """(resmem_c2, resmem_c2_base) from the go run's UM9 lines: node names over c2 (the name before any
+    unit address, so no address is printed), or none; base yes when such a line reads base=yes."""
+    over = [r for r in resmem if "c2" in (r.get("over") or "").split(",")]
+    names = []
+    for r in over:
+        n = r["name"].split("@", 1)[0]
+        if n not in names:
+            names.append(n)
+    return (",".join(names) or "none"), ("yes" if any(r.get("base") == "yes" for r in over) else "no")
+
+
 def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_data=None, ref_conf_sha256=None,
                 reset_reason=None, kexec_tree_sha256=None, pc_image=None, pc_initrd=None, diag=None, arm=None,
-                fill_factor=None, hold_mib=None, kpf_paths=()):
+                fill_factor=None, hold_mib=None, kpf_paths=(), entry="kexec", loader_sha256=None):
     """The §5.1 tiers and §5.2 items of one run. Returns a dict: lines, blocks, verdict, refused.
+
+    entry uefi is J7a (s1-design.md §15.13.7): diag j1, arm uefi, board host mode, one COM3 segment,
+    loader_sha256 in place of kexec_tree_sha256. entry kexec (the default) changes nothing.
 
     conf_gate_ok is conf_check's result for conf_bytes; pc_image and pc_initrd are
     the PC's payload bytes, or None when not given. diag is None, or j2, j2b or j4
@@ -1415,6 +1596,14 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
     pre-registered fill_factor, and optionally hold_mib and kpf_paths (the dict adds
     j_row), or T-J1 on a TCG dryrun log with none of those.
     """
+    if entry not in ENTRIES:
+        raise InputError(f"--entry {entry!r} is not kexec or uefi (s1-design.md 15.13.7)")
+    uefi = entry == "uefi"
+    if uefi and (diag != "j1" or (profile, mode) != ("board", "host") or arm != J7A_ARM):
+        raise InputError("--entry uefi reads J7a's segment only: --diag j1 --arm uefi --profile board --mode host "
+                         "(s1-design.md 15.13.7)")
+    if arm == J7A_ARM and not uefi:
+        raise InputError("--arm uefi needs --entry uefi (s1-design.md 15.13.7)")
     if diag == "j1":
         steps = J1_STEPS.get((profile, mode))
         if steps is None or arm not in steps:
@@ -1440,7 +1629,8 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
             miss[comp].append(reason)
 
     miss["conf_gate"] = [] if conf_gate_ok else ["conf_fails_gate"]
-    put("conf_gate", "pass" if conf_gate_ok else "fail")
+    # a J7a parse never prints pass (s1-design.md §15.13.7); every earlier parse keeps its word
+    put("conf_gate", ("ok" if uefi else "pass") if conf_gate_ok else "fail")
     ram_base, ram_size = parse_ram(conf_info["ram"])
     end_i = len(raw)
     reset_i, reset_m = R.first(RX["reset"])
@@ -1456,12 +1646,15 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
     def verify_of(m):
         return kvs(m, 2).get("verify")
 
-    # --- L0 (board)
+    # --- L0 (board). Under --entry uefi the loader's lines come first and are read from the counted GO on
+    # (§15.13.7: text before it is unconstrained); under kexec l0_after is None and nothing changes.
+    j7a = j7a_loader(recs) if uefi else None
+    l0_after = j7a["go_i"] if uefi else None
     rung = None
     if board:
         miss["L0"] = []
-        pos = None
-        i, _ = R.first(RX["shim"])
+        pos = l0_after
+        i, _ = R.first(RX["shim"], after=l0_after)
         need("L0", i is not None, "shim")
         if i is not None:
             need("L0", any(RX["shim_pc"].search(t) for j, t in recs if i <= j <= i + 3), "shim_pc")
@@ -1485,7 +1678,7 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
         j, _ = R.first(RX["config"], after=pos)
         need("L0", j is not None, "config_after_guard")
         for name, rx in NEG_L0:
-            need("L0", R.first(rx, before=reset_i)[0] is None, "neg_" + name)
+            need("L0", R.first(rx, after=l0_after, before=reset_i)[0] is None, "neg_" + name)
 
     # --- L1
     miss["L1"] = []
@@ -1732,7 +1925,11 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
         missing += [f for f in ITEM5_FIELDS if not cfg.get(f)]
     if mode == "host" and (cfg or {}).get("fdt") != "none":
         missing.append("fdt=none")
-    if board and not HEX64_RE.match((kexec_tree_sha256 or "").lower()):
+    if board and uefi:
+        # §15.13.7 item 5 under UEFI entry: the loader's sha256 stands where the kexec tree's did
+        if not HEX64_RE.match((loader_sha256 or "").lower()):
+            missing.append("loader_sha256")
+    elif board and not HEX64_RE.match((kexec_tree_sha256 or "").lower()):
         missing.append("kexec_tree_sha256")
     miss["item5"] = []
     if guest:
@@ -1764,8 +1961,15 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
         put("guestram", q(gr.group(1)) if gr else "absent")
     if board:
         put("rung", rung or "unknown")
-        put("kexec_tree_sha256", kexec_tree_sha256.lower() if kexec_tree_sha256 and not
-            "kexec_tree_sha256" in missing else "missing")
+        if uefi:
+            # §15.13.7 item 5: entry, the loader's sha256 and the tree stamp (its figure stays in this private file)
+            put("entry", "uefi")
+            put("loader_sha256", loader_sha256.lower() if loader_sha256 and "loader_sha256" not in missing
+                else "missing")
+            put("fdt_crc32", j7a["crc32"] or "absent")
+        else:
+            put("kexec_tree_sha256", kexec_tree_sha256.lower() if kexec_tree_sha256 and not
+                "kexec_tree_sha256" in missing else "missing")
     put("fdt_sha256", fdt_sha or ("none" if mode == "host" else "missing"))
 
     # --- tiers, items, verdict
@@ -1864,7 +2068,7 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
                              hi["d"] < verify_i) else "bad"
         b2_alloc = "present" if R.first(RX["alloc"])[0] is not None else "none"
         hold_mibs = {int(m.group(1)) for _, m in holds}
-        cw = cw_analyze(labs, cw_bins_from_blocks(blocks), fill_factor, kpf_paths)
+        cw = cw_analyze(labs, cw_bins_from_blocks(blocks), fill_factor, kpf_paths, entry=entry)
         l1_records = [x for x in miss["L1"] if not x.startswith("canary_start_")]
         put("L1_records", "ok" if not l1_records else "missing " + ",".join(l1_records))
         for k in CANARY_CHECKS:
@@ -1887,11 +2091,40 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
         put("kpf", q(cw["kpf"]))
         put("fillrate", q(" ".join(cw["fill"])))
         put("coincide", q(" ".join(cw["coincide"])))
-        shim_i = R.first(RX["shim"])[0]
-        issuing = "yes" if R.first(WQ_ISSUING_RE, before=shim_i)[0] is not None else "no"
-        reset_marker = "yes" if R.first(WQ_RESET_RE)[0] is not None else "no"
-        put("wq_kexec_issuing", issuing)
-        put("wq_reset_marker", reset_marker)
+        if uefi:
+            # §15.13.7: no kexec markers apply; no s1wq: marker may appear anywhere in the segment
+            markers = "present" if R.first(WQ_MARK_RE)[0] is not None else "none"
+            put("wq_kexec_issuing", "n/a-uefi")
+            put("wq_reset_marker", "n/a-uefi")
+            put("wq_markers", markers)
+            put("m5l_counted_go", "one" if j7a["counted"] == 1 else "none" if not j7a["counted"] else "multiple")
+            for n, met in j7a["checks"].items():
+                put(f"m5l_{n}", "ok" if met else "missing")
+            put("m5l_neg_after_go", ",".join(j7a["neg"]) or "none")
+            rc2, rbase = j7a_resmem_summary(j7a["resmem"])
+            put("resmem_c2", q(rc2))
+            put("resmem_c2_base", rbase)
+            # P2 and P6's facts for canwatch's profile (§15.13.10.3), from c2's two checks
+            c2kv = {}
+            for k in ("start", "end"):
+                part = [] if start_before is None else [m for i, m in cans if m.group(1) == "c2" and
+                                                        (i < start_before if k == "start" else i > end_after)]
+                c2kv[k] = kvs(part[0], 2) if len(part) == 1 else {}
+            fo = c2kv["start"].get("first_off")
+            # none: the start check verified, so no first mismatch exists there (P2 then differs)
+            fo_ok = bool(re.match(r"^0x[0-9a-fA-F]{1,16}$", fo or ""))    # memcanary prints first_off in hex
+            put("c2_start_anchor", "none" if checks["c2_start"] == "ok" else
+                "n/a" if checks["c2_start"] != "bad" or not fo_ok else
+                "first-word" if int(fo, 16) == 0 else "other")
+            words = {k: (0 if checks[f"c2_{k}"] == "ok" else to_int(c2kv[k].get("words"))
+                         if checks[f"c2_{k}"] == "bad" else None) for k in ("start", "end")}
+            put("c2_check_words", "n/a" if None in words.values() else f"start:{words['start']},end:{words['end']}")
+        else:
+            shim_i = R.first(RX["shim"])[0]
+            issuing = "yes" if R.first(WQ_ISSUING_RE, before=shim_i)[0] is not None else "no"
+            reset_marker = "yes" if R.first(WQ_RESET_RE)[0] is not None else "no"
+            put("wq_kexec_issuing", issuing)
+            put("wq_reset_marker", reset_marker)
         want = [("conf_gate", not miss["conf_gate"]), ("L0", not miss["L0"]), ("L1_records", not l1_records),
                 ("L7", not miss["L7"]), ("item5", not refused and not miss["item5"]), ("rung_j1", rung == J1_RUNG),
                 ("memcanary_w_sha256", bool(HEX64_RE.match(mcw))), ("b2_alloc_line", b2_alloc == "none")]
@@ -1900,9 +2133,14 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
         want += [(f"watch_{l}", labs[l]["status"] == "ok") for l in WATCH_LABELS]
         want.append(("watch_order", order == "ok"))
         want += [(f"export_j1{l}", cw["export"][l] == "ok") for l in WATCH_LABELS]
-        want += [("wq_kexec_issuing", issuing == "yes"), ("wq_reset_marker", reset_marker == "no")]
+        if uefi:
+            want.append(("wq_markers", markers == "none"))
+            want.append(("m5l_counted_go", j7a["counted"] == 1))
+            want += [(f"m5l_{n}", met) for n, met in j7a["checks"].items()]
+        else:
+            want += [("wq_kexec_issuing", issuing == "yes"), ("wq_reset_marker", reset_marker == "no")]
         dfailed = [k for k, ok_ in want if not ok_]
-        rows, sums = j6_rows(checks, labs, hold_bad, not dfailed, cw)
+        rows, sums = j6_rows(checks, labs, hold_bad, not dfailed, cw, entry=entry)
         if sums is not None:
             dom = j6_dom_counts(sums)
             top = max(dom.values())
@@ -1912,9 +2150,24 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
         step = J1_STEPS[(profile, mode)][arm]
         verdict = "diagnostic " + ("incomplete" if dfailed else "complete")
         put("j_row", row)
+        res = {"lines": out, "blocks": blocks, "verdict": verdict, "refused": refused, "step": step, "j_row": row}
+        if uefi:
+            # §15.13.10.1-2: the run's reading; F62 is a reset that is not MAINSWRST after procnto up and
+            # before the image's reset line. Never pass, never b2=.
+            f62 = (rung is not None and reset_m is None and reset_reason is not None and
+                   "MAINSWRST" not in reset_reason)
+            filled_c2 = R.first(CANARY_FILL_RE["c2"], after=l0_after)[0] is not None
+            jr = j7a_rows(checks, labs, hold, hold_bad, not dfailed, filled_c2, f62)
+            put("j7a_c2", jr["c2"])
+            put("j7a_c3", jr["c3"])
+            put("j7a", ",".join(jr["rows"]))
+            put("j7a_class", jr["class"])
+            put("j7a_stop", ",".join(jr["stop"]) or "none")
+            res["j7a"] = ",".join(jr["rows"])
+            res["j7a_class"] = jr["class"]
         put("step", step)
         put("verdict", verdict + ("" if not dfailed else " failed=" + ",".join(dfailed)))
-        return {"lines": out, "blocks": blocks, "verdict": verdict, "refused": refused, "step": step, "j_row": row}
+        return res
     if diag is not None:
         # §15.5 A3: B2's records, read without their canary values; never pass, never b2=.
         checks = {}
@@ -1987,7 +2240,7 @@ def run_report(a_log, data, bb_data, a_blackbox, conf_path, conf_bytes, allow_by
         head += [f"input_kpf={rel_repo(p)} " + (f"sha256={sha256(PM.read_bytes(p))}" if os.path.isfile(p) else "absent")
                  for p in j1["kpf"]] or ["input_kpf=none"]
     head.append(f"profile={profile} mode={mode}" + (f" diag={diag}" if diag is not None else "") +
-                (f" arm={j1['arm']}" if j1 else ""))
+                (f" arm={j1['arm']}" if j1 else "") + (" entry=uefi" if j1 and j1.get("entry") == "uefi" else ""))
     return "".join(out_line("S1PC " + ln) + "\n" for ln in head + res["lines"])
 
 
@@ -2022,6 +2275,25 @@ def cmd_run(a):
     hold_mib = getattr(a, "hold_mib", None)
     kpf = list(getattr(a, "kpf", None) or [])
     j1_opts = arm is not None or fill_factor is not None or hold_mib is not None or bool(kpf)
+    entry = getattr(a, "entry", None) or "kexec"
+    loader_sha256 = getattr(a, "loader_sha256", None)
+    if entry == "uefi":
+        if diag != "j1" or (a.profile, a.mode) != ("board", "host") or arm != J7A_ARM:
+            print("parse-s1: usage: --entry uefi reads J7a's segment: --diag j1 --arm uefi --profile board "
+                  "--mode host (s1-design.md 15.13.7)", file=sys.stderr)
+            return 2
+        if not HEX64_RE.match(loader_sha256 or ""):
+            print("parse-s1: usage: --entry uefi needs --loader-sha256, the staged loader's sha256 in 64 lowercase "
+                  "hex digits (s1-design.md 15.13.7)", file=sys.stderr)
+            return 2
+        if kpf or getattr(a, "kexec_tree_sha256", None):
+            print("parse-s1: usage: --entry uefi takes no --kpf and no --kexec-tree-sha256: no Linux ran in the "
+                  "entered power cycle (s1-design.md 15.13.7)", file=sys.stderr)
+            return 2
+    elif arm == J7A_ARM or loader_sha256 is not None:
+        print("parse-s1: usage: --arm uefi and --loader-sha256 need --entry uefi (s1-design.md 15.13.7)",
+              file=sys.stderr)
+        return 2
     if diag in DIAG_STEPS and (a.profile, a.mode) != ("board", "host"):
         print("parse-s1: usage: --diag j2|j2b|j4 reads B2's image: --profile board --mode host "
               "(s1-design.md 15.5 A3)", file=sys.stderr)
@@ -2041,7 +2313,7 @@ def cmd_run(a):
                 print(out_line(f"parse-s1: usage: --diag j1 needs the pre-registered --fill-factor: {e}"),
                       file=sys.stderr)
                 return 2
-            if arm not in J1_ARMS or len(kpf) > 2:
+            if arm not in (J1_ARMS if entry == "kexec" else (J7A_ARM,)) or len(kpf) > 2:
                 print("parse-s1: usage: --diag j1 needs --arm control|remove, and takes at most two --kpf "
                       "headers (s1-design.md 15.4.8)", file=sys.stderr)
                 return 2
@@ -2059,8 +2331,8 @@ def cmd_run(a):
                       conf_gate_ok=gate_ok, bb_data=bb_data, ref_conf_sha256=a.ref_conf_sha256,
                       reset_reason=a.reset_reason, kexec_tree_sha256=a.kexec_tree_sha256, pc_image=pc_image,
                       pc_initrd=pc_initrd, diag=diag, arm=arm, fill_factor=fill_factor, hold_mib=hold_mib,
-                      kpf_paths=kpf)
-    j1 = ({"arm": arm, "fill_factor": fill_factor, "hold_mib": hold_mib, "kpf": kpf}
+                      kpf_paths=kpf, entry=entry, loader_sha256=loader_sha256)
+    j1 = ({"arm": arm, "fill_factor": fill_factor, "hold_mib": hold_mib, "kpf": kpf, "entry": entry}
           if diag == "j1" and a.profile == "board" else None)
     text = run_report(a.log, data, bb_data, a.blackbox, conf_path, conf_bytes, allow_bytes, res, a.profile, a.mode,
                       pins=(("image", a.image, pc_image), ("initrd", a.initrd, pc_initrd)), diag=diag, j1=j1)
@@ -2427,18 +2699,22 @@ def cw_bitmap_line(label, fx, m):
             f"per_mib={','.join(str(x) for x in per)}")
 
 
-def cw_analyze(labs, bins, factor, kpf_paths=(), log_recs=None):
+def cw_analyze(labs, bins, factor, kpf_paths=(), log_recs=None, entry="kexec"):
     """The analyzer: canwatch's lines (key=value, no prefix) and the facts run --diag j1 reads.
 
     bins maps each label to the export's bytes, or to a status text when there are none
     (absent, truncated, mismatch(...)). log_recs, canwatch's only, maps a label to LOG's
     (bytes, md5) record or None; a file that does not match it is counted as failed.
     Returns lines, failed, facts (accepted exports), export (label -> ok or the refusal),
-    kpf (status), fill and coincide ((result, detail) each).
+    kpf (status), fill and coincide ((result, detail) each). Under entry uefi (J7a) no Linux
+    ran in the power cycle: kpf is not-applicable and the coincidence line is not printed.
     """
     lines = [f"limit: {CW_LIMIT}"]
     failed, facts, export = [], {}, {}
-    kstat, kpf = cw_kpf_load(list(kpf_paths))
+    if entry == "uefi":
+        kstat, kpf = "not-applicable", {}
+    else:
+        kstat, kpf = cw_kpf_load(list(kpf_paths))
     for l, (name, _interval, _count) in WATCH_LABELS.items():
         L = labs[l]
         data = bins.get(l, "absent")
@@ -2488,8 +2764,11 @@ def cw_analyze(labs, bins, factor, kpf_paths=(), log_recs=None):
                                  f"free={free} " + " ".join(f"{c}={n[i]}" for i, c in enumerate(K.CLASSES)))
     fill = cw_fill_rate(labs, factor)
     lines.append(f"fillrate result={fill[0]} {fill[1]}")
-    coincide = cw_coincide(facts, kpf) if kpf else ("not-computed", "reason=no-kpf")
-    lines.append(f"coincide result={coincide[0]} {coincide[1]} record_only=yes")
+    if entry == "uefi":
+        coincide = ("suppressed", "entry=uefi")
+    else:
+        coincide = cw_coincide(facts, kpf) if kpf else ("not-computed", "reason=no-kpf")
+        lines.append(f"coincide result={coincide[0]} {coincide[1]} record_only=yes")
     lines.append("result=" + ("complete" if not failed else "incomplete failed=" + ",".join(failed)))
     return {"lines": lines, "failed": failed, "facts": facts, "export": export, "kpf": kstat, "fill": fill,
             "coincide": coincide}
@@ -2562,11 +2841,83 @@ def j6_dominant(d, group):
     return top > 0 and all(v <= top for k, v in d.items() if k not in group)
 
 
-def j6_rows(checks, labs, hold_bad, complete, cw):
-    """(rows, c2 sums or None): every row of §15.4.8's table that holds, stops first (docstring)."""
+def c1_watch_bad_of(labs):
+    """A c1 watch line (base or words, parsed or not) with bad above 0."""
+    return any(int(fields["bad"]) > 0 for L in labs.values() for kind in ("base", "words")
+               for _i, canary, fields in L["lines"].get(kind, ()) if canary == "c1")
+
+
+def j7a_rows(checks, labs, hold, hold_bad, complete, filled_c2, f62):
+    """§15.13.10.1-2's reading of one counted J7a run. Returns rows (J7A_ROWS, reading first, then F39c1,
+    F39c3, F49, F62), c2 (clean|bad|revert-only|unsettled|bad-partial|unread), c3 (clean|hit|unread),
+    class (per run: K-w, K-r(u), E-candidate, none, unsettled, U) and stop (the immediate stops).
+
+    complete: bad when c2 is bad at either check, a c2 watch's base bad is above 0, or a c2 change event
+    had stable re-reads; else revert-only on a revert or an oscillation; else clean with both checks ok
+    and writer=none on every c2 watch. Anything else (prog or a FINL-only change with no stable re-read,
+    revert or oscillation) is 'unsettled': §15.13.10.1 names no state for it, so it is left to the owner.
+    Not complete: bad-partial when c2's filled line was printed and a parse-valid check reads c2 bad.
+    bad or bad-partial with F34 on c2's parsed watches is bad-unstable.
+    """
+    parsed = [l for l in WATCH_C2 if labs[l]["f"] is not None]
+    s = j6_sums(labs, parsed)
+    f34 = bool(parsed) and c2_f34(s)
+    c2_checks = (checks["c2_start"], checks["c2_end"])
+    c1_bad = c1_watch_bad_of(labs) or "bad" in (checks["c1_start"], checks["c1_end"])
+    c3_checks = (checks["c3_start"], checks["c3_end"])
+    c3 = "hit" if "bad" in c3_checks else "clean" if c3_checks == ("ok", "ok") else "unread"
     rows = []
-    c1_watch_bad = any(int(fields["bad"]) > 0 for L in labs.values() for kind in ("base", "words")
-                       for _i, canary, fields in L["lines"].get(kind, ()) if canary == "c1")
+    if complete:
+        fs = [labs[l]["f"] for l in WATCH_C2]
+        if "bad" in c2_checks or any(f["base"]["bad"] > 0 for f in fs) or s["stable"] > 0:
+            c2 = "bad"
+            rows.append("bad-unstable" if f34 else "bad")
+        elif s["revert"] > 0 or s["osc"] > 0:
+            c2 = "revert-only"
+            rows.append("revert-only")
+        elif c2_checks == ("ok", "ok") and all(f["verdict"]["writer"] == "none" for f in fs):
+            c2 = "clean"
+            if not c1_bad and hold == "ok" and not f62:
+                rows.append("clean")
+        else:
+            c2 = "unsettled"
+            rows.append("unsettled")
+    else:
+        c2 = "bad-partial" if filled_c2 and "bad" in c2_checks else "unread"
+        if c2 == "bad-partial":
+            rows.append("bad-unstable" if f34 else "bad-partial")
+        rows.append("incomplete")
+    if c1_bad:
+        rows.append("F39c1")
+    if c3 == "hit":
+        rows.append("F39c3")
+    if hold_bad:
+        rows.append("F49")
+    if f62:
+        rows.append("F62")
+    if "bad-unstable" in rows:
+        cls = "K-r(u)"
+    elif "bad" in rows or "bad-partial" in rows:
+        cls = "K-w"
+    elif "clean" in rows:
+        cls = "E-candidate"
+    elif "unsettled" in rows:
+        cls = "unsettled"
+    elif "revert-only" in rows:
+        cls = "none"
+    else:
+        cls = "U"
+    return {"rows": rows, "c2": c2, "c3": c3, "class": cls, "stop": [x for x in ("F39c1", "F49") if x in rows],
+            "f34": f34}
+
+
+def j6_rows(checks, labs, hold_bad, complete, cw, entry="kexec"):
+    """(rows, c2 sums or None): every row of §15.4.8's table that holds, stops first (docstring).
+
+    Under entry uefi (J7a) no Linux ran in the power cycle, so the Linux-page-coincidence rows
+    (cpu-side, cpu-side-lean) are suppressed (s1-design.md §15.13.7 P7)."""
+    rows = []
+    c1_watch_bad = c1_watch_bad_of(labs)
     if c1_watch_bad or any(checks[f"{c}_{k}"] == "bad" for c in ("c1", "c3") for k in ("start", "end")):
         rows.append("F39")
     if hold_bad:
@@ -2578,8 +2929,7 @@ def j6_rows(checks, labs, hold_bad, complete, cw):
     bad = s["bad"]
     # F34 (s1-design §15.12): no read in progress; some read that did not hold (osc or a revert); flip2
     # dominant in FINL's bad set when it has words; and most reverts 1-2 bit flips when there are any
-    f34 = (s["prog"] == 0 and s["osc"] + s["revert"] > 0 and (bad == 0 or j6_dominant(d, ("flip2",))) and
-           (s["revert"] == 0 or 2 * s["revert_flip2"] > s["revert"]))
+    f34 = c2_f34(s)
     if f34:
         rows.append("F34")
     # F34 takes precedence over live-writer's stable arm: an osc keeps a marginal read as the last read,
@@ -2625,6 +2975,109 @@ def write_canwatch(out_dir, text, check=True):
     return p
 
 
+def parse_fields(data):
+    """The S1PC key=value lines of a parse-s1.txt (bytes) as a dict, the last line of each key."""
+    out = {}
+    for ln in data.decode("utf-8", "replace").replace("\r", "").split("\n"):
+        if ln.startswith("S1PC ") and "=" in ln:
+            k, v = ln[5:].split("=", 1)
+            out[k] = v
+    return out
+
+
+def sums_of(text):
+    """The integer key=value tokens of a c2_sums line (dominant= and any other word dropped)."""
+    return {k: int(v) for k, v in (t.split("=", 1) for t in (text or "").split() if "=" in t) if v.isdigit()}
+
+
+def j7a_profile(labs, facts, run, ref_sums, ref_facts):
+    """§15.13.10.3's profile of a bad or bad-partial J7a run against J6c. Returns (lines, kw_sub).
+
+    labs and facts are J7a's (cw_watches, cw_analyze's accepted exports); run is J7a's parse-s1.txt
+    fields (c2_start_anchor, c2_check_words, j7a); ref_sums is J6c's c2_sums (from its registered
+    parse-s1.txt) and ref_facts J6c's accepted watch exports. P4 reads memcanary's content rule
+    over the c2 sums of both runs, since J6c's registered files carry sums, not content= tokens.
+    """
+    it = {}
+    fs = [labs[l]["f"] for l in WATCH_C2]
+    allc2 = all(f is not None for f in fs)
+    s = j6_sums(labs, WATCH_C2) if allc2 else None
+    fa = labs["a"]["f"]
+    it["P1"] = "n/a" if fa is None else "same" if fa["base"]["bad"] > 0 else "differs"
+    anc = run.get("c2_start_anchor", "n/a")
+    it["P2"] = "n/a" if anc == "n/a" else "same" if anc == "first-word" else "differs"
+    it["P3"] = ("n/a" if not allc2 else
+                "same" if not c2_f34(s) and all(f["verdict"]["reads"] == "stable" for f in fs) else "differs")
+    if not allc2 or not ref_sums or "bad" not in ref_sums:
+        it["P4"] = "n/a"
+    else:
+        same4 = (content_rule(s, s["bad"]) == content_rule(ref_sums, ref_sums["bad"]) and
+                 sum(s[k] for k in J7A_FLIP_PAT) == 0)
+        it["P4"] = "same" if same4 else "differs"
+    it["P5"] = "n/a" if not allc2 else "same" if all(f["verdict"]["writer"] != "ongoing" for f in fs) else "differs"
+    m = re.match(r"^start:([0-9]+),end:([0-9]+)$", run.get("c2_check_words", ""))
+    it["P6"] = "n/a" if not m else "same" if int(m.group(2)) <= int(m.group(1)) else "differs"
+    lines = []
+    if "a" in facts and "a" in ref_facts:
+        for mp in ("bad_final", "changed_ever"):
+            same, common, only7, only6, pres = p7_compare(facts["a"]["maps"][mp], ref_facts["a"]["maps"][mp])
+            if mp == "bad_final":
+                it["P7"] = "same" if same else "differs"
+            lines.append(f"p7 map={mp} " + (f"result={it['P7']} " if mp == "bad_final" else "") +
+                         f"pages_common={common} only_j7a={only7} only_j6c={only6} "
+                         f"mib_presence={'same' if pres else 'differs'}" +
+                         (f" share={P7_SHARE}" if mp == "bad_final" else " record_only=yes"))
+    else:
+        it["P7"] = "n/a"
+        lines.append("p7 map=bad_final result=n/a reason=watch-a-export-not-accepted")
+    lines = [f"profile item={k} result={v}" for k, v in it.items()] + lines
+    diff = [k for k, v in it.items() if v == "differs"]
+    na = [k for k, v in it.items() if v == "n/a"]
+    reading = (run.get("j7a") or "").split(",")
+    if "bad-partial" in reading or any(it[k] == "n/a" for k in ("P1", "P2", "P7")):
+        kw_sub = "partial"
+    elif all(it[k] == "same" for k in ("P1", "P2", "P7")):
+        kw_sub = "anchored"
+    else:
+        kw_sub = "differs"
+    lines.append("profile_vs_j6c=" + ("same" if not diff and not na else "differs:" + (",".join(diff) or "none")))
+    lines.append("profile_na=" + (",".join(na) or "none"))
+    lines.append(f"kw_sub={kw_sub}")
+    return lines, kw_sub
+
+
+def j6c_ref_check(ref_dir, pairs):
+    """Refused unless every J6C_REF_FILES file in ref_dir hashes as its registered NAME=HEX pair."""
+    want = {}
+    for p in pairs:
+        name, _, hx = p.partition("=")
+        if name not in J6C_REF_FILES or not HEX64_RE.match(hx) or name in want:
+            raise Refused(f"--ref-sha256 {q(p)} is not NAME=<64 lowercase hex> for one of {','.join(J6C_REF_FILES)}")
+        want[name] = hx
+    if set(want) != set(J6C_REF_FILES):
+        raise Refused("--ref-sha256 must name each of " + ",".join(J6C_REF_FILES) + " once (s1-design.md 15.13.7)")
+    got = {}
+    for name in J6C_REF_FILES:
+        path = os.path.join(ref_dir, name)
+        if not os.path.isfile(path):
+            raise Refused(f"the J6c reference file {name} is absent")
+        got[name] = PM.read_bytes(path)
+        if sha256(got[name]) != want[name]:
+            raise Refused(f"the J6c reference file {name} does not match its registered sha256 (s1-design.md 15.13.7)")
+    return got
+
+
+def cmd_j6c_refs(a):
+    """The J6c reference files' sha256, for J7a's stage to register (s1-design.md §15.13.8)."""
+    for name in J6C_REF_FILES:
+        path = os.path.join(a.dir, name)
+        if not os.path.isfile(path):
+            print(out_line(f"parse-s1: input error: the J6c reference file {name} is absent"), file=sys.stderr)
+            return 1
+        sys.stdout.write(out_line(f"S1REF file={name} sha256={sha256(PM.read_bytes(path))}") + "\n")
+    return 0
+
+
 def cmd_canwatch(a):
     try:
         factor = cw_factor(a.fill_factor)
@@ -2636,6 +3089,19 @@ def cmd_canwatch(a):
         print("parse-s1: usage: canwatch takes one --kpf header, or a prequiesce and a postquiesce pair",
               file=sys.stderr)
         return 2
+    entry = getattr(a, "entry", None) or "kexec"
+    ref_dir = getattr(a, "ref_j6c", None)
+    ref_pairs = list(getattr(a, "ref_sha256", None) or [])
+    run_parse = getattr(a, "run_parse", None)
+    if entry == "uefi":
+        if kpf or not ref_dir or not run_parse:
+            print("parse-s1: usage: canwatch --entry uefi needs --ref-j6c, the five --ref-sha256 pairs and "
+                  "--run-parse, and takes no --kpf (s1-design.md 15.13.7)", file=sys.stderr)
+            return 2
+    elif ref_dir or ref_pairs or run_parse:
+        print("parse-s1: usage: --ref-j6c, --ref-sha256 and --run-parse belong to canwatch --entry uefi",
+              file=sys.stderr)
+        return 2
     data = PM.read_bytes(a.log)
     recs, blocks, _, _ = split_log(data)
     for blk in blocks:
@@ -2645,6 +3111,17 @@ def cmd_canwatch(a):
     bin_dir = a.bin_dir or os.path.dirname(os.path.abspath(a.log))
     head = [f"parser={rel_repo(__file__)} sha256={sha256(open(__file__, 'rb').read())}",
             f"input_log={rel_repo(a.log)} sha256={sha256(data)} bytes={len(data)}"]
+    if entry == "uefi":
+        refs = j6c_ref_check(ref_dir, ref_pairs)
+        run_bytes = PM.read_bytes(run_parse)
+        run = parse_fields(run_bytes)
+        if f" sha256={sha256(data)} " not in f" {run.get('input_log', '')} ":
+            raise Refused("--run-parse is not the J7a parse of this log (its input_log sha256 differs)")
+        if run.get("step") != "J7a":
+            raise Refused("--run-parse is not a J7a parse (step is not J7a)")
+        head.append("entry=uefi")
+        head += [f"input_ref_j6c file={name} registered=match" for name in J6C_REF_FILES]
+        head.append(f"input_run_parse={rel_repo(run_parse)} sha256={sha256(run_bytes)}")
     bins = {}
     for l in WATCH_LABELS:
         p = os.path.join(bin_dir, export_filename(f"j1{l}"))
@@ -2657,7 +3134,20 @@ def cmd_canwatch(a):
     head += [f"input_kpf={rel_repo(p)} " + (f"sha256={sha256(PM.read_bytes(p))}" if os.path.isfile(p) else "absent")
              for p in kpf] or ["input_kpf=none"]
     head.append(f"fill_factor={a.fill_factor}")
-    res = cw_analyze(labs, bins, factor, kpf, cw_log_records(R, blocks))
+    res = cw_analyze(labs, bins, factor, kpf, cw_log_records(R, blocks), entry=entry)
+    if entry == "uefi":
+        reading = (run.get("j7a") or "").split(",")
+        if "bad-unstable" not in reading and ("bad" in reading or "bad-partial" in reading):
+            ref_facts = {}
+            for l in WATCH_C2:
+                fx, reason, _ = cw_decode(refs[f"s1-j1{l}.bin"], l)
+                if reason is None:
+                    ref_facts[l] = fx
+            plines, _ = j7a_profile(labs, res["facts"], run, sums_of(parse_fields(refs["parse-s1.txt"]).get("c2_sums")),
+                                    ref_facts)
+        else:
+            plines = ["profile=not-computed reason=reading-not-bad j7a=" + (run.get("j7a") or "absent")]
+        res["lines"] = res["lines"][:-1] + plines + res["lines"][-1:]
     text = "".join(out_line("S1CW " + ln) + "\n" for ln in head + res["lines"])
     out_dir = None if a.out_dir == "none" else (a.out_dir or os.path.dirname(os.path.abspath(a.log)))
     if out_dir is not None:
@@ -3927,6 +4417,313 @@ def selftest():
           len(tjres) == 13 and all(not any("verdict=pass" in ln for ln in x["lines"]) and
                                   all(ln.startswith("conf_gate=") for ln in x["lines"] if re.search(r"=pass\b", ln))
                                   for x in tjres))
+    # ---- run --diag j1 --entry uefi and canwatch --entry uefi: J7a (s1-design.md §15.13.7, §15.13.10).
+    # SYNTHETIC; not a record. J6's synthetic capture with its kexec markers removed and the loader's
+    # Shell visit (m5load.c's lines, with CSI sequences) placed before the shim line.
+    J7_LOADER = "b" * 64
+
+    def syn_m5l(mode, *, variant=True, self_line="M5L self w2=no canary=none", crc32="1a2b3c4d",
+                preclaims=("c1", "c2", "c3"), resmem_done=True, w2=True):
+        L_ = [f"M5L start mode={mode} el=2 ctr=8444c004 self=ff000000+2000000"]
+        if variant:
+            L_.append("M5L variant=j7a")
+        L_ += [self_line, "M5L fdt addr=fe000000 size=20000" + (f" crc32={crc32}" if crc32 else ""),
+               "M5L con kind=tcu base=3c10000",
+               "M5L resmem name=camdbg_carveout@100000000 status=disabled map=no-map prop=alloc-ranges over=c2 base=yes"]
+        if resmem_done:
+            L_.append("M5L resmem done")
+        L_ += ["M5L crc src=ok", "M5L crc dst=ok"] + [f"M5L canary {c} preclaim=ok" for c in preclaims]
+        L_.append("M5L map type=Conventional start=100000000 pages=8a000 attr=f")
+        if w2:
+            L_.append("M5L W2 PASS")
+        return L_
+
+    def syn_visit(check_=None, go_=None, after=("M5L-EBS ok", "M5L-JUMP")):
+        v = ["\x1b[0m\x1b[2J\x1b[1;1HESC to enter Setup.", "F11 to enter Boot Manager Menu.",
+             "\x1b[1;37;40mShell> \x1b[0mfs5:", "FS5:\\> M5LOAD.EFI check"]
+        v += check_ if check_ is not None else syn_m5l("check") + ["M5L CHECK PASS"]
+        v += ["FS5:\\> M5LOAD.EFI go"] + (go_ if go_ is not None else syn_m5l("go") + ["M5L GO"])
+        return v + list(after)
+
+    def syn_j7a(watches=None, hold=("fill=ok", "verify=ok"), visit=None, before=()):
+        base, bins_ = syn_j6_log(conf_bytes, cmdline, watches=watches, hold=hold)
+        base = [ln for ln in base if ln not in SYN_WQ_MARKS]
+        return base[:1] + list(before) + (visit if visit is not None else syn_visit()) + base[1:], bins_
+
+    j7res = []
+
+    def j7(lines_=None, *, reset="MAINSWRST", loader=J7_LOADER, **kw):
+        if lines_ is None:
+            lines_ = syn_j7a(**kw)[0]
+        data_ = ("\n".join(lines_) + "\n").encode("latin-1")
+        res = analyze_run(data_, profile="board", mode="host", conf_bytes=conf_bytes, conf_info=info,
+                          conf_gate_ok=True, bb_data=syn_blackbox(lines_), reset_reason=reset, diag="j1", arm="uefi",
+                          fill_factor="4", entry="uefi", loader_sha256=loader)
+        j7res.append(res)
+        return res
+
+    def j7_failed(res):
+        last = res["lines"][-1]
+        return last.split("failed=", 1)[1].split(",") if "failed=" in last else []
+
+    r = j7()
+    check("run --entry uefi synthetic J7a: complete, step J7a, j7a=clean, E-candidate, UEFI item 5, no kexec keys",
+          r["verdict"] == "diagnostic complete" and r["step"] == "J7a" and r["j7a"] == "clean" and
+          field(r, "j7a") == "clean" and field(r, "j7a_class") == "E-candidate" and field(r, "entry") == "uefi" and
+          field(r, "loader_sha256") == J7_LOADER and field(r, "fdt_crc32") == "1a2b3c4d" and
+          field(r, "kexec_tree_sha256") is None and field(r, "wq_kexec_issuing") == "n/a-uefi" and
+          field(r, "wq_markers") == "none" and field(r, "kpf") == "not-applicable" and
+          field(r, "conf_gate") == "ok" and field(r, "m5l_counted_go") == "one" and
+          all(field(r, f"m5l_{n}") == "ok" for n in ("check_start", "check_run", "go_start", "go_run",
+                                                     "prelude_same", "check_end", "fdt_crc32", "after_go",
+                                                     "neg_after_go")) and
+          field(r, "resmem_c2") == "camdbg_carveout" and field(r, "resmem_c2_base") == "yes" and
+          field(r, "j7a_c3") == "clean" and field(r, "j7a_stop") == "none" and
+          r["lines"][-1] == "verdict=diagnostic complete")
+    for label, kw, want in (
+            ("M5L variant=j7a", {"go_": syn_m5l("go", variant=False) + ["M5L GO"]}, "m5l_go_run"),
+            ("M5L resmem done", {"check_": syn_m5l("check", resmem_done=False) + ["M5L CHECK PASS"],
+                                 "go_": syn_m5l("go", resmem_done=False) + ["M5L GO"]}, "m5l_go_run"),
+            ("M5L W2 PASS", {"go_": syn_m5l("go", w2=False) + ["M5L GO"]}, "m5l_go_run"),
+            ("a preclaim=ok", {"go_": syn_m5l("go", preclaims=("c1", "c2")) + ["M5L GO"]}, "m5l_go_run"),
+            ("M5L-EBS ok", {"after": ("M5L-JUMP",)}, "m5l_after_go"),
+            ("the fdt stamp", {"check_": syn_m5l("check", crc32=None) + ["M5L CHECK PASS"],
+                               "go_": syn_m5l("go", crc32=None) + ["M5L GO"]}, "m5l_fdt_crc32"),
+            ("M5L CHECK PASS", {"check_": syn_m5l("check")}, "m5l_check_end")):
+        r = j7(visit=syn_visit(**kw))
+        check(f"run --entry uefi without {label}: incomplete, failed names {want}, j7a incomplete",
+              r["verdict"] == "diagnostic incomplete" and want in j7_failed(r) and "incomplete" in r["j7a"].split(","))
+    lj, _ = syn_j7a(visit=syn_visit(after=("M5L-EBS ok",)))
+    lj = edit_lines(lj, add_after=((r"^T234-SHIM EL=2 ", "M5L-JUMP"),))
+    r = j7(lj)
+    check("run --entry uefi with M5L-JUMP after the shim line: incomplete (after_go)",
+          r["verdict"] == "diagnostic incomplete" and "m5l_after_go" in j7_failed(r))
+    r = j7(visit=syn_visit(go_=syn_m5l("go") + ["M5L GO", "M5L GO"]))
+    check("run --entry uefi with two counted M5L GO lines: incomplete (counted_go multiple)",
+          r["verdict"] == "diagnostic incomplete" and field(r, "m5l_counted_go") == "multiple" and
+          "m5l_counted_go" in j7_failed(r))
+    for neg in ("EXC ESR=0000000096000045", "M5L-EXC ESR=1", "kexec_core: Starting new kernel", "s1wq: begin arm=x"):
+        lj, _ = syn_j7a()
+        r = j7(edit_lines(lj, add_after=((r"^t234: WDT0 ", neg),)))
+        check(f"run --entry uefi a negative token after GO ({neg.split()[0]}): incomplete",
+              r["verdict"] == "diagnostic incomplete" and "m5l_neg_after_go" in j7_failed(r))
+    lj, _ = syn_j7a(before=["EXC in firmware text before any go", "s1-looking text is unconstrained here"])
+    r = j7(lj)
+    check("run --entry uefi text before the counted GO is unconstrained (an EXC token there): complete",
+          r["verdict"] == "diagnostic complete")
+    first_visit = syn_visit(go_=syn_m5l("go") + ["M5L GO", "M5L REFUSE w2-final", "Shell> reset"], after=())
+    r = j7(before=first_visit)
+    check("run --entry uefi a GO refused by w2-final, then a counted GO in a new Shell visit: the later one only",
+          r["verdict"] == "diagnostic complete" and field(r, "m5l_counted_go") == "one" and r["j7a"] == "clean")
+    c2bad = "S1 CANARY c2 verify=bad first_off=0x0 words=1"
+    lj, _ = syn_j7a()
+    lj = edit_lines(sub_nth(lj, r"^S1 CANARY c2 verify=ok$", c2bad, 0), drop=(r"^S1 CANARY c2 watch=\S+ label=c ",))
+    r = j7(lj)
+    check("run --entry uefi a c2 verify=bad start check then a missing watch: bad-partial, K-w",
+          r["verdict"] == "diagnostic incomplete" and r["j7a"] == "bad-partial,incomplete" and
+          field(r, "j7a_class") == "K-w" and field(r, "j7a_c2") == "bad-partial")
+    lj, _ = syn_j7a()
+    lj = edit_lines(lj, drop=(r"^S1 CANARY c2 watch=\S+ label=c ",))
+    r = j7(lj)
+    check("run --entry uefi a missing watch with c2 clean at its checks: incomplete, U",
+          r["j7a"] == "incomplete" and field(r, "j7a_class") == "U" and field(r, "j7a_c2") == "unread")
+    bad_both = edit_lines(syn_j7a(watches=c2w(classes={"zero": 10, "kva": 6}))[0],
+                          sub=((r"^S1 CANARY c2 verify=ok$", c2bad),))
+    r = j7(bad_both)
+    check("run --entry uefi complete with c2 bad: bad, K-w, the anchor and word facts for canwatch",
+          r["verdict"] == "diagnostic complete" and r["j7a"] == "bad" and field(r, "j7a_class") == "K-w" and
+          field(r, "c2_start_anchor") == "first-word" and field(r, "c2_check_words") == "start:1,end:1")
+    r = j7(edit_lines(syn_j7a(watches=c2w(classes={"flip2_same": 12, "flip2_var": 4}, changed_words=20, osc=20,
+                                          writer="ongoing"))[0], sub=((r"^S1 CANARY c2 verify=ok$", c2bad),)))
+    check("run --entry uefi c2 bad with F34 on its watches: bad-unstable, K-r(u)",
+          r["j7a"] == "bad-unstable" and field(r, "j7a_class") == "K-r(u)")
+    r = j7(watches=c2w(revert=6, revert_flip2=5))
+    check("run --entry uefi reverts only: revert-only, class none", r["j7a"] == "revert-only" and
+          field(r, "j7a_class") == "none")
+    r = j7(watches=c2w(classes={"other": 16}, bad_base=0, changed_words=2, prog=2, stable=0))
+    check("run --entry uefi a prog-only c2 change with no stable re-read: unsettled (left to the owner)",
+          r["verdict"] == "diagnostic complete" and r["j7a"] == "unsettled" and field(r, "j7a_class") == "unsettled")
+    r = j7(watches={"d": {"classes": {"zero": 16}}})
+    check("run --entry uefi a c1 watch bad: F39c1 (an immediate stop), no clean token, class U",
+          r["j7a"] == "F39c1" and field(r, "j7a_class") == "U" and field(r, "j7a_stop") == "F39c1" and
+          field(r, "j7a_c2") == "clean")
+    r = j7(sub_nth(syn_j7a()[0], r"^S1 CANARY c3 verify=ok$", "S1 CANARY c3 verify=bad first_off=0x8 words=2", 1))
+    check("run --entry uefi c3 bad with c2 clean: clean,F39c3, still E-candidate, c3=hit",
+          r["j7a"] == "clean,F39c3" and field(r, "j7a_class") == "E-candidate" and field(r, "j7a_c3") == "hit")
+    r = j7(hold=("fill=ok", "verify=bad first_off=0x28 words=2"))
+    check("run --entry uefi the hold verify=bad: F49, no clean token, class U", r["j7a"] == "F49" and
+          field(r, "j7a_stop") == "F49" and field(r, "j7a_class") == "U")
+    no_reset = edit_lines(syn_j7a()[0], drop=(r"resetting so the log can be recovered", r"^ESC to enter Setup\.$",
+                                              r"^F11 to enter", r"^Enter to continue"))
+    r = j7(no_reset, reset="POR")
+    check("run --entry uefi a reset that is not MAINSWRST after procnto up, before the reset line: F62, U",
+          r["j7a"] == "incomplete,F62" and field(r, "j7a_class") == "U")
+    r = j7(edit_lines(no_reset, sub=((r"^S1 CANARY c2 verify=ok$", c2bad),)), reset="POR")
+    check("run --entry uefi F62 with c2 bad at a printed check: bad-partial, K-w",
+          r["j7a"] == "bad-partial,incomplete,F62" and field(r, "j7a_class") == "K-w")
+    r = j7(loader="")
+    check("run --entry uefi without a loader sha256: item 5 refused", r["refused"] and
+          field(r, "item5") == "refused missing=loader_sha256" and field(r, "loader_sha256") == "missing")
+    for kw, why in (({"arm": "control"}, "--entry uefi with --arm control"), ({"entry": "kexec"}, "--arm uefi under kexec")):
+        try:
+            args_ = dict(profile="board", mode="host", conf_bytes=conf_bytes, conf_info=info, conf_gate_ok=True,
+                         diag="j1", arm="uefi", fill_factor="4", entry="uefi", loader_sha256=J7_LOADER)
+            args_.update(kw)
+            analyze_run(b"", **args_)
+            check(f"run {why} is an input error", False)
+        except InputError:
+            check(f"run {why} is an input error", True)
+    kx, _ = syn_j6_log(conf_bytes, cmdline)
+    kxd = ("\n".join(kx) + "\n").encode("latin-1")
+    kxa = dict(profile="board", mode="host", conf_bytes=conf_bytes, conf_info=info, conf_gate_ok=True,
+               bb_data=syn_blackbox(kx), reset_reason="MAINSWRST", kexec_tree_sha256=SYN_KEXEC, diag="j1",
+               arm="control", fill_factor="2")
+    check("run --entry kexec given explicitly prints exactly the default parse (R92)",
+          analyze_run(kxd, **kxa)["lines"] == analyze_run(kxd, entry="kexec", **kxa)["lines"])
+
+    # P7 on synthetic bitmaps: J6c's pages 0-9 in c2's first MiB; the share is at least half of each set
+    j6pages = sum(1 << p for p in range(10))
+    for label, pages, want in (("at the threshold (5 of 5 and 5 of 10)", range(5), True),
+                               ("below it (4 of 10)", range(4), False),
+                               ("above it (10 of 12 and 10 of 10)", range(12), True),
+                               ("with a page in another MiB", list(range(5)) + [3 * 256], False)):
+        got = p7_compare(sum(1 << p for p in pages), j6pages)
+        check(f"canwatch P7 {label}: {'same' if want else 'differs'}", got[0] is want)
+    check("canwatch P7 counts common, only-J7a and only-J6c pages", p7_compare(sum(1 << p for p in range(12)),
+                                                                              j6pages)[1:4] == (10, 2, 0))
+
+    # the command line: usage refusals, and canwatch's profile end to end in a temporary directory
+    ud = tempfile.mkdtemp(prefix="s1pc-j7a-")
+    try:
+        def put_file(name, blob):
+            p_ = os.path.join(ud, name)
+            os.makedirs(os.path.dirname(p_), exist_ok=True)
+            with open(p_, "wb") as fh:
+                fh.write(blob)
+            return p_
+
+        j7log = put_file("j7a/com3.log", ("\n".join(bad_both) + "\n").encode("latin-1"))
+        j7bb = put_file("j7a/blackbox.log", syn_blackbox(bad_both))
+
+        def j7cmd(**kw):
+            ns = dict(log=j7log, profile="board", mode="host", blackbox=j7bb, out_dir="none", conf=None,
+                      ref_conf_sha256=None, reset_reason="MAINSWRST", kexec_tree_sha256=None, image=None, initrd=None,
+                      diag="j1", arm="uefi", fill_factor="4", hold_mib=None, kpf=None, entry="uefi",
+                      loader_sha256=J7_LOADER)
+            ns.update(kw)
+            b = io.StringIO()
+            with contextlib.redirect_stdout(b), contextlib.redirect_stderr(io.StringIO()):
+                rc_ = cmd_run(argparse.Namespace(**ns))
+            return rc_, b.getvalue()
+
+        rc, j7text = j7cmd()
+        check("run cmd --entry uefi: exit 0, head names entry=uefi and arm uefi, j7a=bad, verdict last",
+              rc == 0 and "S1PC profile=board mode=host diag=j1 arm=uefi entry=uefi\n" in j7text and
+              "S1PC j7a=bad\n" in j7text and "S1PC step=J7a\n" in j7text and
+              j7text.endswith("S1PC verdict=diagnostic complete\n"))
+        for label, kw in (("--arm uefi without --entry uefi", {"entry": None}),
+                          ("--entry uefi without --loader-sha256", {"loader_sha256": None}),
+                          ("--entry uefi with a short --loader-sha256", {"loader_sha256": "b" * 63}),
+                          ("--entry uefi with --kpf", {"kpf": [j7bb]}),
+                          ("--entry uefi with --kexec-tree-sha256", {"kexec_tree_sha256": SYN_KEXEC}),
+                          ("--entry uefi with --arm control", {"arm": "control"}),
+                          ("--entry uefi with --diag j2", {"diag": "j2", "arm": None}),
+                          ("--loader-sha256 under kexec", {"entry": None, "arm": "control"})):
+            check(f"run cmd {label} is a usage error", j7cmd(**kw)[0] == 2)
+        j7parse = put_file("j7a/parse-s1.txt", j7text.encode("utf-8"))
+        _, j7bins = syn_j7a(watches=c2w(classes={"zero": 10, "kva": 6}))
+        for l, blob in j7bins.items():
+            put_file(f"j7a/{export_filename('j1' + l)}", blob)
+        # J6c's reference: the same watcher lay-down under kexec, its parse, a canwatch file and the exports
+        k6 = edit_lines(syn_j6_log(conf_bytes, cmdline, watches=c2w(classes={"zero": 10, "kva": 6}))[0],
+                        sub=((r"^S1 CANARY c2 verify=ok$", c2bad),))
+        k6d = ("\n".join(k6) + "\n").encode("latin-1")
+        k6res = analyze_run(k6d, **dict(kxa, bb_data=syn_blackbox(k6)))
+        put_file("j6c/parse-s1.txt", run_report(os.path.join(ud, "j6c", "com3.log"), k6d, None, None, DEFAULT_CONF,
+                                                conf_bytes, allow_text.encode("latin-1"), k6res, "board",
+                                                "host").encode("utf-8"))
+        put_file("j6c/canwatch.txt", b"S1CW result=complete\n")
+        k6bins = syn_j6_log(conf_bytes, cmdline, watches=c2w(classes={"zero": 10, "kva": 6}))[1]
+        for l in WATCH_C2:
+            put_file(f"j6c/s1-j1{l}.bin", k6bins[l])
+        refdir = os.path.join(ud, "j6c")
+        pairs = [f"{n}={sha256(PM.read_bytes(os.path.join(refdir, n)))}" for n in J6C_REF_FILES]
+
+        def cwu(**kw):
+            ns = dict(log=j7log, fill_factor="4", bin_dir=os.path.join(ud, "j7a"), kpf=None, out_dir="none",
+                      entry="uefi", ref_j6c=refdir, ref_sha256=pairs, run_parse=j7parse)
+            ns.update(kw)
+            b = io.StringIO()
+            with contextlib.redirect_stdout(b), contextlib.redirect_stderr(io.StringIO()):
+                rc_ = cmd_canwatch(argparse.Namespace(**ns))
+            return rc_, b.getvalue()
+
+        rc, cwt = cwu()
+        check("canwatch --entry uefi on a bad run with J6c's lay-down: anchored, profile same, kpf not-applicable, "
+              "no coincide line, result last",
+              rc == 0 and "S1CW kw_sub=anchored\n" in cwt and "S1CW profile_vs_j6c=same\n" in cwt and
+              "S1CW profile_na=none\n" in cwt and "S1CW kpf result=not-applicable\n" in cwt and
+              "S1CW coincide" not in cwt and cwt.count("S1CW profile item=") == 7 and
+              "S1CW p7 map=bad_final result=same " in cwt and "S1CW entry=uefi\n" in cwt and
+              cwt.endswith("S1CW result=complete\n"))
+        cwtexts_u = [cwt]
+        moved = syn_j7a(watches={"a": {"classes": {"zero": 10, "kva": 6}, "bad_pages": (3 * 256,)},
+                                 "b": {"classes": {"zero": 10, "kva": 6}}, "c": {"classes": {"zero": 10, "kva": 6}}})
+        put_file("j7a/s1-j1a.bin", moved[1]["a"])
+        mlines = edit_lines(moved[0], sub=((r"^S1 CANARY c2 verify=ok$", c2bad),))
+        j7log2 = put_file("j7a/com3-moved.log", ("\n".join(mlines) + "\n").encode("latin-1"))
+        _, mtext = j7cmd(log=j7log2, blackbox=put_file("j7a/bb-moved.log", syn_blackbox(mlines)))
+        rc, cwt = cwu(log=j7log2, run_parse=put_file("j7a/parse-moved.txt", mtext.encode("utf-8")))
+        cwtexts_u.append(cwt)
+        check("canwatch --entry uefi on a bad run with a different page set: P7 differs, kw_sub differs",
+              rc == 0 and "S1CW profile item=P7 result=differs\n" in cwt and "S1CW kw_sub=differs\n" in cwt and
+              "S1CW profile_vs_j6c=differs:P7\n" in cwt)
+        for l, blob in j7bins.items():
+            put_file(f"j7a/{export_filename('j1' + l)}", blob)
+        clean_lines = syn_j7a()[0]
+        j7log3 = put_file("j7a/com3-clean.log", ("\n".join(clean_lines) + "\n").encode("latin-1"))
+        _, ctext = j7cmd(log=j7log3, blackbox=put_file("j7a/bb-clean.log", syn_blackbox(clean_lines)))
+        for l, blob in syn_j7a()[1].items():
+            put_file(f"j7a/{export_filename('j1' + l)}", blob)
+        rc, cwt = cwu(log=j7log3, run_parse=put_file("j7a/parse-clean.txt", ctext.encode("utf-8")))
+        cwtexts_u.append(cwt)
+        check("canwatch --entry uefi on a clean run: no profile, kw_sub not printed",
+              rc == 0 and "S1CW profile=not-computed reason=reading-not-bad j7a=clean\n" in cwt and "kw_sub" not in cwt)
+        for label, kw in (("with --kpf", {"kpf": [j7bb]}), ("without --ref-j6c", {"ref_j6c": None}),
+                          ("without --run-parse", {"run_parse": None}),
+                          ("--ref-j6c under kexec", {"entry": None})):
+            check(f"canwatch {label} is a usage error", cwu(**kw)[0] == 2)
+        for label, kw in (("a reference file that does not match its registered sha256",
+                           {"ref_sha256": [p if not p.startswith("canwatch.txt=") else "canwatch.txt=" + "0" * 64
+                                           for p in pairs]}),
+                          ("a missing --ref-sha256 pair", {"ref_sha256": pairs[:-1]}),
+                          ("a run parse of another log", {"log": j7log3})):
+            try:
+                cwu(**kw)
+                check(f"canwatch --entry uefi refuses {label}", False)
+            except Refused:
+                check(f"canwatch --entry uefi refuses {label}", True)
+        b = io.StringIO()
+        with contextlib.redirect_stdout(b):
+            rc = cmd_j6c_refs(argparse.Namespace(dir=refdir))
+        check("j6c-refs prints the five registered names with their sha256",
+              rc == 0 and b.getvalue().count("S1REF file=") == 5 and all(f"S1REF {p.replace('=', ' sha256=', 1)}"
+                                                                         .replace("S1REF ", "S1REF file=", 1) in
+                                                                         b.getvalue() for p in pairs))
+        value_hex = re.compile(r"(?<![0-9A-Fa-f])(?:0[xX])?[0-9A-Fa-f]{16}(?![0-9A-Fa-f])")
+        quad = re.compile(r"(?<![0-9.])[0-9]{1,3}(?:\.[0-9]{1,3}){3}(?![0-9.])")
+        mac = re.compile(r"(?<![0-9A-Fa-f])[0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5}(?![0-9A-Fa-f])")
+        outs = ["\n".join(x["lines"]) for x in j7res] + cwtexts_u
+        check("run --entry uefi screens cover every synthetic J7a parse", len(j7res) == 28 and len(cwtexts_u) == 3)
+        for label, bad_ in (("the word pass", lambda t: re.search(r"pass", t, re.IGNORECASE)),
+                            # the b2= verdict field is a line of its own (c2_sums' stride bins b0=..b7= are not it)
+                            ("a b2= field", lambda t: re.search(r"(?m)^(?:S1PC |S1CW )?b2=", t)),
+                            ("a 16-hex-digit value", value_hex.search),
+                            ("a dotted quad", quad.search), ("a MAC form", mac.search)):
+            check(f"run --entry uefi and canwatch --entry uefi print no {label}", not any(bad_(t) for t in outs))
+    finally:
+        shutil.rmtree(ud, ignore_errors=True)
+
     r = run("board", "boot")
     check("run B3 synthetic passes", r["verdict"] == "pass" and r["step"] == "B3" and has(r, "item2=pass") and
           has(r, "tier_L7=ok") and has(r, "bb_consistent=yes"))
@@ -4076,10 +4873,14 @@ def main(argv=None):
     r.add_argument("--initrd")
     r.add_argument("--diag", choices=DIAG_CHOICES,
                    help="J diagnostic parse: j2|j2b|j4 of B2's image (15.5 A3), j1 of s1-j1 or T-J1 (15.5 B7)")
-    r.add_argument("--arm", choices=J1_ARMS, help="--diag j1 on the board: jrun's arm (J6c or J6r)")
+    r.add_argument("--arm", choices=J1_ARMS + (J7A_ARM,),
+                   help="--diag j1 on the board: jrun's arm (J6c or J6r), or uefi with --entry uefi (J7a)")
     r.add_argument("--fill-factor", help="--diag j1 on the board: the pre-registered fill-rate factor (>= 1)")
     r.add_argument("--hold-mib", type=int, help="--diag j1 on the board: the generator's @J1_HOLD_MIB@")
     r.add_argument("--kpf", action="append", help="--diag j1 on the board: a kpf-decode.py header (at most two)")
+    r.add_argument("--entry", choices=ENTRIES, default=None,
+                   help="kexec (the default) or uefi: J7a's segment, with --diag j1 --arm uefi (15.13.7)")
+    r.add_argument("--loader-sha256", help="--entry uefi: the staged loader's sha256 (item 5 under UEFI entry)")
 
     w = sub.add_parser("canwatch")
     w.add_argument("log")
@@ -4087,6 +4888,14 @@ def main(argv=None):
     w.add_argument("--bin-dir")
     w.add_argument("--kpf", action="append")
     w.add_argument("--out-dir")
+    w.add_argument("--entry", choices=ENTRIES, default=None, help="kexec (the default) or uefi (J7a, 15.13.7)")
+    w.add_argument("--ref-j6c", help="--entry uefi: J6c's record directory (the reference profile)")
+    w.add_argument("--ref-sha256", action="append",
+                   help="--entry uefi: NAME=HEX, J6c's registered sha256 of each of " + ", ".join(J6C_REF_FILES))
+    w.add_argument("--run-parse", help="--entry uefi: this J7a run's parse-s1.txt (its reading)")
+
+    j = sub.add_parser("j6c-refs")
+    j.add_argument("dir")
 
     k = sub.add_parser("kshcheck")
     k.add_argument("file", nargs="?")
@@ -4098,7 +4907,8 @@ def main(argv=None):
     if not a.cmd:
         ap.print_usage(sys.stderr)
         return 2
-    handlers = {"conf": cmd_conf, "fdt": cmd_fdt, "run": cmd_run, "canwatch": cmd_canwatch, "kshcheck": cmd_kshcheck}
+    handlers = {"conf": cmd_conf, "fdt": cmd_fdt, "run": cmd_run, "canwatch": cmd_canwatch, "kshcheck": cmd_kshcheck,
+                "j6c-refs": cmd_j6c_refs}
     try:
         return handlers[a.cmd](a)
     except Refused as e:

@@ -71,6 +71,18 @@
 #                                      STALLED) of a j3 or jrun board log, from S1_COM3_LOG
 #   s1-board.sh kpf-decode HEADER [HEADER] | --selftest
 #                                      orin-native/s1/kpf-decode.py on b_kpf_snap headers
+#   s1-board.sh j7a pre s1-j1          J7a (§15.13): PC gates (clean tree, gate.txt items 1-12, the blob,
+#                                      D0a's reference, T0, com3-term -SelfTest, T-J1, conf, COM3 users),
+#                                      then read-only board checks; F65 on a short ESP before any write
+#   s1-board.sh j7a stage              backups (X4), S0, scp to ~, b_esp_stage (one ESP file, X2)
+#   s1-board.sh j7a ctl                gate A, poweroff, READY, the control cold boot with the TX refit, S1
+#   s1-board.sh j7a go s1-j1           gate A (by segment offset), the J7a stage of J-prereg.log, S2,
+#                                      poweroff, READY (DRAM_OFF_S), the watch, the return records
+#   s1-board.sh j7a return BOARDLOG    re-enters an interrupted go's return reads, idempotently
+#   s1-board.sh j7a clean              b_esp_clean (S1_J7A_TX_REMOVED=yes), ~/M5LOAD.EFI absent, nvbootctrl
+#   s1-board.sh j7a-status BOARDLOG    the J7a watch states from S1_COM3_LOG (no board contact)
+#                                      J7a needs D30, D34_J7A, D35, D38, D45=esp, D46, Q20_BRANCH, D0A_REFERENCE,
+#                                      T0_RECORD and M5_RECORD in <rec>/J-waivers.conf, and J7a-rule-15.13.md
 #
 # IMAGES (the step each one is, §6.12)
 #   s1-m1b-p6 B1 (no S1 host script; no parser)   s1-h1 B2 (host)
@@ -120,6 +132,11 @@
 #   S1_J_L4T_CONSOLE       yes: after an exit-5 (no kexec) return of jrun or j3, copy the
 #                          previous console as -l4t-console-ramoops.log (scanned, never a
 #                          black box, never parsed); unset: not copied
+#   S1_J7A_ID              j7a: the session's UTC stamp, one per board session (§15.13.7)
+#   S1_J7A_LOADER          j7a: the worktree's built M5LOAD.EFI (gate.txt beside it)
+#   S1_J7A_TX_REMOVED      j7a clean: yes, the owner removed the TX wire with the terminal running
+#   S1_J7A_ESP_REMOVE      j7a clean after F66 only: exactly /boot/efi/M5LOAD.EFI
+#   S1_J7A_*, J7A_*        any other: REFUSED (J7a's bounds and constants are fixed, §15.13.6.1)
 #   S1_WQ_*                REFUSED: the detached-sequence constants are fixed by
 #                          the design (§15.4.3); unset any S1_WQ_ variable
 #
@@ -143,6 +160,8 @@
 # aborted or its fallback fired, no kexec happened, a harness-reason retry
 # (§15.5 A1). A J rung's 3 also covers F37 (an immediate stop) and a return with
 # no jump, abort or fallback marker and no shim line; neither is a retry.
+# 6 (j7a, §15.13.7) the attempt ended before a counted go (a missed ESC, a refusal, SHELL-AFTER-GO, no
+# READY or an ANOMALY): not counted; 7 (j7a) a counted go never reached procnto up (F55, counted).
 
 set -uo pipefail
 
@@ -156,7 +175,10 @@ ON_DIE=""
 die()   { echo "$PROG: FAIL: $*" >&2; [ -n "${REC:-}" ] && printf '%s\n' "FAIL: $*" | redact >> "$REC"; [ -n "$ON_DIE" ] && "$ON_DIE"; exit 1; }
 # J6c (2026-09-14): a set -u stop (status 127) skipped ON_DIE and left a crashed attempt's records
 # in place. No path exits 127 on purpose, so only that status runs the handler here.
-trap '__rc=$?; if [ "$__rc" = 127 ] && [ -n "${ON_DIE:-}" ]; then __f="$ON_DIE"; ON_DIE=""; "$__f"; fi' EXIT
+trap '__rc=$?; [ -n "${J7A_TMPS:-}" ] && rm -rf $J7A_TMPS; if [ "$__rc" = 127 ] && [ -n "${ON_DIE:-}" ]; then __f="$ON_DIE"; ON_DIE=""; "$__f"; fi' EXIT
+# §15.13.7 P13: temporary files outside the record directory that hold raw COM3 segment bytes; the
+# EXIT trap removes them, so an interrupted j7a return leaves no raw segment anywhere
+J7A_TMPS=""
 note()  { echo "$PROG: $*" >&2; }
 utc_now() { date -u +%Y%m%dT%H%M%SZ; }
 iso_now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
@@ -194,6 +216,38 @@ WQ_SLOT_S=30
 WQ_STEP_TIMEOUT_S=25
 WQ_FINAL_READS_S=60
 WQ_ISSUE_WAIT_S=180
+
+# §15.13.6.1: J7a's wait bounds and design constants (not results), fixed by the design and refused
+# if set in the environment, like the WQ_ constants. Only the four S1_J7A_ variables §15.13.7 names
+# may be set; any other S1_J7A_ variable would change a bound or a design constant and is refused.
+for v in J7A_LOADER_EXPECT_S J7A_LOADER_CUT_S J7A_PROMPT_AFTER_S J7A_DRAM_OFF_S J7A_CTL_OFF_S J7A_ESP_MARGIN_B \
+	J7A_READY_QUIET_S J7A_READY_BOUND_S J7A_GO_COUNT_S J7A_CAP J7A_ESP_PATH J7A_D0_PREFIX; do
+	if [ -n "${!v+x}" ]; then
+		echo "$PROG: FAIL: $v is set: J7a's bounds and design constants are fixed by s1-design.md (§15.13.6.1); unset it" >&2
+		exit 1
+	fi
+done
+for v in "${!S1_J7A_@}"; do
+	case "$v" in
+	S1_J7A_ID|S1_J7A_LOADER|S1_J7A_TX_REMOVED|S1_J7A_ESP_REMOVE) ;;
+	*) echo "$PROG: FAIL: $v is set: only S1_J7A_ID, S1_J7A_LOADER, S1_J7A_TX_REMOVED and S1_J7A_ESP_REMOVE configure j7a; bounds and constants are fixed (§15.13.7); unset it" >&2
+	   exit 1 ;;
+	esac
+done
+J7A_LOADER_EXPECT_S=120          # LOADER_EXPECT_S: a silent stretch while the loader runs (F63 past it)
+J7A_LOADER_CUT_S=300             # LOADER_CUT_S: no byte this long before a completed loader run (first cut point)
+J7A_PROMPT_AFTER_S=60            # PROMPT_AFTER_S: a completed loader run to the Shell prompt
+J7A_DRAM_OFF_S=300               # DRAM_OFF_S: unpowered time before every counted go (R95)
+J7A_CTL_OFF_S=10                 # the control boot's unpowered wait
+J7A_ESP_MARGIN_B=4194304         # ESP_MARGIN, 4 MiB above the loader rounded up to a cluster
+J7A_READY_QUIET_S=30             # X6: COM3 silence after the power-down line
+J7A_READY_BOUND_S=240            # the poweroff watch's bound (m5-design §14.6's helper)
+J7A_GO_COUNT_S=10                # COUNTED: M5L GO then this long with neither a refusal nor a prompt
+J7A_CAP=2                        # D38: at most two counted go runs in revision 3
+J7A_ESP_PATH=/boot/efi/M5LOAD.EFI
+J7A_D0_PREFIX=600996f            # D0a's reference commit (§15.13.4, 2026-09-14)
+EXIT_J7A_NOGO=6                  # the attempt ended before a counted go
+EXIT_J7A_F55=7                   # a counted go never reached procnto up (F55, counted)
 
 # §8 item 5 and D3: the board's /boot files, as copied to the PC.
 PIN_BOOT_IMAGE=b844b7cfaafd071a25f1dc91d2ad1d7369008c28ce84b25625efc425825a2120
@@ -265,9 +319,19 @@ learn_hostname() {
 # -v processes backslash escapes in the value, and an SSID may hold a backslash. It
 # is used only when it is at least 3 bytes long (a 1-2 byte name would over-redact;
 # a J subcommand refuses a shorter one up front, ssid_len_ok).
+# §15.13.7 Privacy (J7a): the efi class masks a firmware MAC written without separators
+# (MAC: or MAC( and 12 hex digits), EUI-64 groups, and a boot-option line that names an
+# NVMe device (the NVMe device-path form, a UEFI line naming NVMe, or an efibootmgr BootNNNN
+# line naming it), masked whole. Firmware screens reach COM3 through CSI sequences, which
+# can split an identifier: a line holding an escape byte is also judged on its normalised
+# text (CSI and OSC removed, cursor positioning as a line break and as nothing), and is
+# replaced whole when that text still holds an identifier after the line-wise masks. From
+# the first clear-screen or cursor-home sequence on, the same test runs per screen region
+# (the text between two such sequences), and a hit masks the whole region, keeping only its
+# line breaks. Input with no escape byte takes exactly the earlier line-wise path.
 redact() {
 	awk -v BINMODE=3 -v u="$R_USER" -v h="$R_HOST" -v k="$R_KEY" -v kb="$R_KEYBASE" -v pu="$R_PCUSER" -v hn="$R_HOSTNAME" '
-	BEGIN { sd = ENVIRON["S1_REDACT_SSID"] }
+	BEGIN { sd = ENVIRON["S1_REDACT_SSID"]; esc = sprintf("%c", 27); mode = 0; nb = 0 }
 	function lit(s, a, r,    i, out) {
 		if (a == "") return s
 		out = ""
@@ -295,8 +359,23 @@ redact() {
 		}
 		return out rest
 	}
-	{
-		line = $0
+	function mask_mac_word(s,    out, rest) {
+		out = ""
+		rest = s
+		while (match(rest, /MAC[:(][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]/)) {
+			out = out substr(rest, 1, RSTART + 3) "<mac>"
+			rest = substr(rest, RSTART + RLENGTH)
+		}
+		return out rest
+	}
+	function boot_mask(s,    cr, head) {
+		cr = ""
+		if (substr(s, length(s), 1) == "\r") { cr = "\r"; s = substr(s, 1, length(s) - 1) }
+		head = ""
+		if (match(s, /Boot[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][*]?/)) head = substr(s, RSTART, RLENGTH) " "
+		return head "<boot-option-masked>" cr
+	}
+	function red(line,    lo) {
 		if (length(sd) >= 3) line = lit(line, sd, "<ssid>")
 		line = lit(line, k, "<orin-key>")
 		line = lit(line, kb, "<orin-key>")
@@ -306,36 +385,125 @@ redact() {
 		if (pu != "") { line = lit(line, "Users/" pu, "Users/<user>"); line = lit(line, "Users\\" pu, "Users\\<user>"); line = lit(line, "/home/" pu, "/home/<user>") }
 		line = lit(line, h, "<orin-ip>")
 		line = mask_ips(line)
+		gsub(/[0-9A-Fa-f][0-9A-Fa-f][-:][0-9A-Fa-f][0-9A-Fa-f][-:][0-9A-Fa-f][0-9A-Fa-f][-:][0-9A-Fa-f][0-9A-Fa-f][-:][0-9A-Fa-f][0-9A-Fa-f][-:][0-9A-Fa-f][0-9A-Fa-f][-:][0-9A-Fa-f][0-9A-Fa-f][-:][0-9A-Fa-f][0-9A-Fa-f]/, "<eui64>", line)
 		gsub(/[0-9A-Fa-f][0-9A-Fa-f](:[0-9A-Fa-f][0-9A-Fa-f]){5}/, "<mac>", line)
 		gsub(/[0-9A-Fa-f][0-9A-Fa-f](-[0-9A-Fa-f][0-9A-Fa-f]){5}/, "<mac>", line)
 		gsub(/enx[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]/, "enx<mac>", line)
-		print line
+		line = mask_mac_word(line)
+		lo = tolower(line)
+		if (line ~ /NVMe[(]/ || (line ~ /UEFI/ && lo ~ /nvme/) || (line ~ /Boot[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]/ && lo ~ /nvme/)) line = boot_mask(line)
+		return line
+	}
+	function norm(s, cupto,    t) {
+		t = s
+		gsub(/\033\][^\007\033]*(\007|\033\\)/, "", t)
+		gsub(/\033\[[0-9]*(;[0-9]*)?[Hf]/, cupto, t)
+		gsub(/\033\[[0-9;?]*[A-Za-z]/, "", t)
+		gsub(/\033/, "", t)
+		return t
+	}
+	function holds_ident(s,    n, parts, i, p, v) {
+		for (v = 1; v <= 2; v++) {
+			n = split(norm(s, v == 1 ? "\n" : ""), parts, /[\r\n]/)
+			for (i = 1; i <= n; i++) {
+				p = parts[i]
+				gsub(/<(ssid|orin-key|orin-host|user|orin-ip|ip|mac|eui64|boot-option-masked|screen-masked|line-masked)>/, " ", p)
+				if (red(p) != p) return 1
+			}
+		}
+		return 0
+	}
+	function linemode(line,    r) {
+		r = red(line)
+		if (index(line, esc) && holds_ident(r)) return "<line-masked>" (substr(line, length(line), 1) == "\r" ? "\r" : "")
+		return r
+	}
+	function region(seg,    n, parts, i, r, keep) {
+		if (seg == "") return ""
+		n = split(seg, parts, "\n")
+		r = ""
+		for (i = 1; i <= n; i++) r = r (i > 1 ? "\n" : "") red(parts[i])
+		if (!index(seg, esc) || !holds_ident(r)) return r
+		keep = seg
+		gsub(/[^\r\n]/, "", keep)
+		return "<screen-masked>" keep
+	}
+	{
+		if (!mode && $0 ~ /\033\[(2J|1;1H|;H|H)/) mode = 1
+		if (mode) buf[++nb] = $0
+		else print linemode($0)
+	}
+	END {
+		if (nb == 0) exit
+		s = buf[1]
+		for (i = 2; i <= nb; i++) s = s "\n" buf[i]
+		s = s "\n"
+		out = ""
+		while (1) {
+			if (match(s, /\033\[(2J|1;1H|;H|H)/)) { seg = substr(s, 1, RSTART - 1); bnd = substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH) }
+			else { seg = s; bnd = ""; s = "" }
+			out = out region(seg) bnd
+			if (bnd == "") break
+		}
+		printf "%s", out
 	}'
 }
 
-# Counts per class. Prints: total addr=N mac=N name=N ssid=N
+# §15.13.7: the efi class (redact's masks, as grep -E): a MAC without separators after MAC:
+# or MAC(, EUI-64 groups, and a boot-option line naming an NVMe device. Masked text never
+# matches it again (<mac>, <eui64>, <boot-option-masked>).
+IDENT_EFI='MAC[:(][0-9A-Fa-f]{12}|[0-9A-Fa-f]{2}([-:][0-9A-Fa-f]{2}){7}|NVMe[(]|UEFI.*[Nn][Vv][Mm][Ee]|[Nn][Vv][Mm][Ee].*UEFI|Boot[0-9A-Fa-f]{4}.*[Nn][Vv][Mm][Ee]'
+
+# $1 what cursor positioning becomes ('\n' or ''): the text with CSI and OSC sequences
+# removed, as redact normalises it (§15.13.7). Reads stdin whole, writes stdout.
+norm_text() {
+	awk -v BINMODE=3 -v cup="$1" 'BEGIN { RS = "^$" } {
+		t = $0
+		gsub(/\033\][^\007\033]*(\007|\033\\)/, "", t)
+		gsub(/\033\[[0-9]*(;[0-9]*)?[Hf]/, cup, t)
+		gsub(/\033\[[0-9;?]*[A-Za-z]/, "", t)
+		gsub(/\033/, "", t)
+		printf "%s", t
+	}'
+}
+
+# Counts per class. Prints: total addr=N mac=N name=N ssid=N efi=N
 # The ssid class (§15.5 A4) is counted whenever S1_REDACT_SSID is set and at least 3
 # bytes, so a copy whose only identifier is the SSID is never kept raw by privacy_scan.
+# A file holding an escape byte is also counted on its two normalised forms (cursor
+# positioning as a line break, and as nothing), and each class reports the largest count.
 ident_hits() {
-	local f="$1" pats=() addr mac name ssid sv total
+	local f="$1" pats=() addr=0 mac=0 name=0 ssid=0 efi=0 sv total src=() s x tmpd=""
 	[ -n "$R_USER" ] && pats+=(-e "$R_USER@" -e "/home/$R_USER")
 	[ -n "$R_PCUSER" ] && pats+=(-e "Users/$R_PCUSER" -e "Users\\$R_PCUSER" -e "/home/$R_PCUSER")
 	[ -n "$R_HOST" ] && pats+=(-e "$R_HOST")
 	[ -n "$R_KEY" ] && pats+=(-e "$R_KEY")
 	[ -n "$R_KEYBASE" ] && pats+=(-e "$R_KEYBASE")
 	[ -n "$R_HOSTNAME" ] && pats+=(-e "$R_HOSTNAME")
+	sv="${S1_REDACT_SSID:-}"
+	src=("$f")
+	if grep -q $'\033' "$f" 2>/dev/null; then
+		tmpd="$(mktemp -d 2>/dev/null)" || tmpd=""
+		if [ -n "$tmpd" ]; then
+			norm_text '\n' < "$f" > "$tmpd/n1" && norm_text '' < "$f" > "$tmpd/n2" && src+=("$tmpd/n1" "$tmpd/n2")
+		fi
+	fi
 	# grep -c prints 0 and exits 1 when nothing matches: '|| echo 0' made that
 	# "0<newline>0", the sum failed, and a file with hits in another class was kept raw.
-	addr="$(grep -acE "$IDENT_IP" "$f" 2>/dev/null)"
-	mac="$(grep -acE "$IDENT_MAC" "$f" 2>/dev/null)"
-	name=0
-	[ "${#pats[@]}" -gt 0 ] && name="$(grep -acF "${pats[@]}" "$f" 2>/dev/null)"
-	ssid=0
-	sv="${S1_REDACT_SSID:-}"
-	[ "${#sv}" -ge 3 ] && ssid="$(grep -acF -- "$sv" "$f" 2>/dev/null)"
-	addr="${addr:-0}" mac="${mac:-0}" name="${name:-0}" ssid="${ssid:-0}"
-	total=$(( addr + mac + name + ssid ))
-	echo "$total addr=$addr mac=$mac name=$name ssid=$ssid"
+	for s in "${src[@]}"; do
+		x="$(grep -acE "$IDENT_IP" "$s" 2>/dev/null)"; [ "${x:-0}" -gt "$addr" ] && addr="$x"
+		x="$(grep -acE "$IDENT_MAC" "$s" 2>/dev/null)"; [ "${x:-0}" -gt "$mac" ] && mac="$x"
+		x="$(grep -acE "$IDENT_EFI" "$s" 2>/dev/null)"; [ "${x:-0}" -gt "$efi" ] && efi="$x"
+		if [ "${#pats[@]}" -gt 0 ]; then
+			x="$(grep -acF "${pats[@]}" "$s" 2>/dev/null)"; [ "${x:-0}" -gt "$name" ] && name="$x"
+		fi
+		if [ "${#sv}" -ge 3 ]; then
+			x="$(grep -acF -- "$sv" "$s" 2>/dev/null)"; [ "${x:-0}" -gt "$ssid" ] && ssid="$x"
+		fi
+	done
+	[ -n "$tmpd" ] && rm -rf "$tmpd"
+	total=$(( addr + mac + name + ssid + efi ))
+	echo "$total addr=$addr mac=$mac name=$name ssid=$ssid efi=$efi"
 }
 
 # ---------------------------------------------------------------- records
@@ -1449,7 +1617,7 @@ board() {
 			"${IMG:-}" "$RDIR" "${UTC:-}" "${KEXEC_MODE:-s}" 1 "${RAMOOPS:-}" "${RMFILES:-}"
 		printf '%s\n' 'case "$RDIR" in "") KD="$HOME" ;; /*) KD="$RDIR" ;; *) KD="$HOME/$RDIR" ;; esac' 'K="$KD/$IMG.kimg"'
 		# shellcheck disable=SC2086  # a list of function names
-		declare -f $BOARD_FUNCS
+		declare -f $BOARD_FUNCS ${BOARD_EXTRA_FUNCS:-}   # the extra list is set by the j7a commands only (§15.13.7)
 		printf '%s\n' "$@"
 	} | timeout "$secs" ssh "${ssh_work[@]}" "$ORIN_HOST" 'bash -s' | tr -d '\r'
 }
@@ -1593,13 +1761,16 @@ capture_left_s() {
 # Prints one word: running, missing, noheader, ended, expired (the header's
 # deadline has passed with no footer) or released (no process holds the file).
 capture_state() {
-	local f="$1" head epoch secs
+	local f="$1" kind="${2:-}" head epoch secs
 	[ -f "$f" ] || { echo missing; return; }
 	head="$(head -n 1 "$f" 2>/dev/null | tr -d '\r')"
 	case "$head" in "--- raw capture started"*) ;; *) echo noheader; return ;; esac
 	if tail -n +2 "$f" | tr -d '\r' | grep -aq -e '^--- raw capture '; then echo ended; return; fi
 	epoch="$(printf '%s\n' "$head" | sed -n 's/.* epoch=\([0-9][0-9]*\) .*/\1/p')"
 	secs="$(printf '%s\n' "$head" | sed -n 's/.* seconds=\([0-9][0-9]*\) .*/\1/p')"
+	# §15.13.7 P1: com3-term.ps1 writes seconds=0 (a terminal has no deadline). For kind j7a only,
+	# that header means "no deadline", and running rests on the write-open test below
+	if [ "$kind" = j7a ] && [ "$secs" = 0 ]; then secs=""; fi
 	if [ -n "$epoch" ] && [ -n "$secs" ] && (( epoch + secs <= $(date +%s) )); then echo expired; return; fi
 	case "${ADVICE_CAPTURE_HELD:-}" in
 	yes) ;;
@@ -2232,7 +2403,8 @@ ssid_refusal() {
 # ---- used-captures ledger (§15.5 A1): each COM3 capture is used once.
 capture_used() {
 	[ -n "$RECDIR" ] && [ -f "$RECDIR/used-captures.log" ] || return 1
-	grep -qxF "$(basename "$1")" "$RECDIR/used-captures.log"
+	# the first field: a J7a segment line ('<name> j7a segment=...', §15.13.7) also marks its capture used
+	awk -v n="$(basename "$1")" '{ sub(/\r$/, "") } $1 == n { f = 1 } END { exit !f }' "$RECDIR/used-captures.log"
 }
 mark_capture() {
 	[ -n "$RECDIR" ] || return 0
@@ -5672,6 +5844,24 @@ com3_advice() {
 cmd_advice() {
 	local off=-1 bl="${1:-}" name bound=unknown wq="" armed="" fbs="" cut=""
 	[ -n "${S1_COM3_LOG:-}" ] || die "S1_COM3_LOG must name the COM3 capture to classify"
+	# §15.13.9: a J7a board log has its own offsets and rows
+	if [ -n "$bl" ] && grep -aq '^j7a com3_bytes_before_poweroff=' "$bl"; then
+		local jo jr jg jrb jssh=""
+		j_norm_capture
+		if ! grep -aq "^j7a com3_log=$(basename "$S1_COM3_LOG") phase=" "$bl"; then
+			echo "advice NO CUT: the board log names another capture, so its offsets do not apply to $(basename "$S1_COM3_LOG"): the owner decides (§15.13.9)"
+			return 0
+		fi
+		jo="$(sed -n 's/^j7a com3_bytes_before_poweroff=\([0-9][0-9]*\)$/\1/p' "$bl" | tail -n 1)"
+		jr="$(sed -n 's/^j7a poweroff_ready com3_bytes_at_ready=\([0-9][0-9]*\) .*/\1/p' "$bl" | tail -n 1)"
+		jg="$(sed -n 's/^j7a go_counted com3_bytes_at_go=[0-9]* go_epoch=\([0-9][0-9]*\)$/\1/p' "$bl" | tail -n 1)"
+		jrb="$(sed -n 's/^j7a return_bound_s=\([0-9][0-9]*\)$/\1/p' "$bl" | tail -n 1)"
+		if [ -n "${ADVICE_SSH:-}" ]; then jssh="$ADVICE_SSH"
+		elif [ -n "${ORIN_HOST:-}" ]; then [[ "$(read_boot_id)" =~ ^[0-9a-f-]{36}$ ]] && jssh=answered || jssh=silent
+		else jssh=unchecked; fi
+		j7a_advice "$S1_COM3_LOG" "$jo" "$jr" "$jg" "${jrb:-0}" "$(date +%s)" 0 "$jssh" | redact
+		return 0
+	fi
 	if [ -n "$bl" ]; then
 		if grep -aqE '^(run|p1|reboot|jrun|j3) NO RETURN within' "$bl"; then bound=passed; else bound=not_reached; fi
 		off="$(sed -n 's/^run com3_bytes_before_kexec=\([0-9][0-9]*\)$/\1/p; s/^j3 com3_bytes_before_arm=\([0-9][0-9]*\)$/\1/p' "$bl" | tail -n 1)"
@@ -5693,6 +5883,1390 @@ cmd_advice() {
 	fi
 	ADVICE_F25W_CUT="$cut" com3_advice "$S1_COM3_LOG" "$off" 0 "$bound" "$armed" "$fbs" | redact
 }
+
+# ---------------------------------------------------------------- J7a: the UEFI-entry arm (§15.13)
+#
+# s1-design.md §15.13.6-§15.13.9. One com3-term.ps1 session per board session; the harness never
+# opens COM3 and reads the file com3-term holds shared. Phases write their COM3 byte offsets; a
+# segment is [offset before poweroff, end of return reads). Raw segment bytes are only ever read
+# through a pipe or a mktemp file outside the record directory that the EXIT trap removes (P13).
+# No function here writes a UEFI variable, and the only ESP write is J7A_ESP_PATH (X2).
+
+# One KEY=value from <rec>/J-waivers.conf (the last line wins), CR stripped. $1 KEY.
+j7a_conf() { sed -n "s/^$1=//p" "$RECDIR/J-waivers.conf" 2>/dev/null | tr -d '\r' | tail -n 1; }
+
+# The key log com3-term.ps1 writes beside its -Out file when -KeyLog is not given. $1 the capture.
+j7a_keylog_path() { printf '%s\n' "$1.keys.log"; }
+
+# Raw bytes [$2, $3) of file $1 to stdout ($3 empty: to the end). Never written to a file here.
+j7a_seg_read() {
+	local f="$1" a="$2" b="${3:-}"
+	if [ -n "$b" ]; then
+		tail -c +"$(( a + 1 ))" "$f" 2>/dev/null | head -c "$(( b - a ))"
+	else
+		tail -c +"$(( a + 1 ))" "$f" 2>/dev/null
+	fi
+}
+
+# COM3 text for matching: CR, NUL, OSC and CSI removed (§15.13.7 P6), one line per line.
+j7a_clean() {
+	tr -d '\000' | LC_ALL=C awk '{ gsub(/\r/, ""); gsub(/\033\][^\007]*\007/, ""); gsub(/\033\[[0-9;?]*[A-Za-z]/, ""); gsub(/\033/, ""); print }'
+}
+
+# The end offset of the last J7a segment recorded for capture $1 in used-captures.log (0 if none).
+j7a_last_seg_end() {
+	[ -f "$RECDIR/used-captures.log" ] || { echo 0; return; }
+	awk -v n="$(basename "$1")" '{ sub(/\r$/, "") } $1 == n && $2 == "j7a" { for (i = 3; i <= NF; i++) if ($i ~ /^end=[0-9]+$/) { v = substr($i, 5) + 0; if (v > m) m = v } } END { print m + 0 }' "$RECDIR/used-captures.log"
+}
+
+# 0 when capture $1 was used by a rung other than J7a (a plain name line, §15.13.15).
+j7a_capture_kexec_used() {
+	[ -f "$RECDIR/used-captures.log" ] || return 1
+	awk -v n="$(basename "$1")" '{ sub(/\r$/, "") } $1 == n && NF == 1 { f = 1 } END { exit !f }' "$RECDIR/used-captures.log"
+}
+
+# Records one segment: $1 capture, $2 segment id, $3 start, $4 end. A segment id is used once.
+j7a_mark_segment() {
+	local n
+	n="$(basename "$1")"
+	if [ -f "$RECDIR/used-captures.log" ] && awk -v n="$n" -v s="segment=$2" '{ sub(/\r$/, "") } $1 == n && $3 == s { f = 1 } END { exit !f }' "$RECDIR/used-captures.log"; then
+		return 1
+	fi
+	printf '%s j7a segment=%s start=%s end=%s\n' "$n" "$2" "$3" "$4" >> "$RECDIR/used-captures.log"
+	check_private "$RECDIR/used-captures.log"
+}
+
+# §15.13.7 P1 and P10: gate A for the j7a phases. Uses S1_COM3_LOG and S1_REDACT_SSID. The capture must
+# be a com3-term.ps1 capture (seconds=0 header) inside the record directory, with its key log beside it
+# starting session-start, running, never used by a kexec rung, and with no record line or s1wq: marker
+# after the end of the last J7a segment recorded for it. The capture-life check of the kexec gates does
+# not apply (a terminal has no deadline). Prints one 'j7agate' line; returns non-zero on a refusal.
+j7a_gate_a() {
+	local kind="$1" f="${S1_COM3_LOG:-}" sv head kl cs from
+	sv="$(ssid_refusal "${S1_REDACT_SSID:-}")"
+	if [ -n "$sv" ]; then echo "j7agate $kind FAIL: $sv"; return 1; fi
+	if [ -z "$f" ] || [ ! -f "$f" ]; then echo "j7agate $kind FAIL: S1_COM3_LOG must name the running com3-term.ps1 capture"; return 1; fi
+	if ! capture_inside_recdir "$f"; then echo "j7agate $kind FAIL: S1_COM3_LOG is not inside the git-ignored record directory (§15.5 A1)"; return 1; fi
+	head="$(head -n 1 "$f" 2>/dev/null | tr -d '\r')"
+	case "$head" in
+	"--- raw capture started"*" seconds=0 ---") ;;
+	*) echo "j7agate $kind FAIL: the capture header is not com3-term.ps1's (seconds=0): J7a uses one terminal session per board session (§15.13.7 P1)"; return 1 ;;
+	esac
+	kl="$(j7a_keylog_path "$f")"
+	if [ ! -f "$kl" ] || ! head -n 1 "$kl" | tr -d '\r' | grep -q ' session-start'; then
+		echo "j7agate $kind FAIL: no key log beside the capture starting with session-start ($(basename "$kl"))"; return 1
+	fi
+	if j7a_capture_kexec_used "$f"; then echo "j7agate $kind FAIL: $(basename "$f") was used by a kexec rung: a J7a capture and a kexec capture are never shared (§15.13.15)"; return 1; fi
+	cs="$(capture_state "$f" j7a)"
+	if [ "$cs" != running ]; then echo "j7agate $kind FAIL: the capture is $cs, not running: start com3-term.ps1 from PowerShell"; return 1; fi
+	from="$(j7a_last_seg_end "$f")"
+	if j7a_seg_read "$f" "$from" | tr -d '\r' | grep -aqE '^[[:space:]]*(S1 |STAMP |BWAIT |T234 |T234-SHIM|t234: )|s1wq:'; then
+		echo "j7agate $kind FAIL: the capture holds record lines or s1wq: markers after the last recorded J7a segment (end=$from): a segment of another run is not recorded (§15.13.7 P10)"; return 1
+	fi
+	echo "j7agate $kind ok: terminal=seconds0 keylog=present running=yes kexec_used=no records_after_last_segment=no from=$from inside_record_dir=yes ssid=set"
+	return 0
+}
+
+# §15.13.7 P8 and X6: the poweroff watch's classification over COM3 after offset $2 of file $1. $3 the
+# seconds since the last COM3 growth, $4 the seconds since the poweroff, $5 ssh gone (1|0). READY needs
+# the kernel's power-down line, no firmware text after the offset, J7A_READY_QUIET_S of silence, the
+# same time since the poweroff, and ssh gone; any firmware text after the offset is ANOMALY (F60).
+# Bracket expressions only, never escaped parentheses. Prints 'ready_state=READY|ANOMALY|WAIT down=yes|no'.
+j7a_ready_class() {
+	local f="$1" off="$2" quiet="$3" el="$4" gone="$5" t down=no
+	t="$(j7a_seg_read "$f" "$off" | j7a_clean)"
+	if printf '%s\n' "$t" | grep -aqE 'MB1 [(]version|Jetson UEFI firmware|ESC +to enter Setup|L4TLauncher:'; then
+		echo "ready_state=ANOMALY down=$(printf '%s\n' "$t" | grep -aq 'reboot: Power down' && echo yes || echo no)"
+		return 0
+	fi
+	printf '%s\n' "$t" | grep -aq 'reboot: Power down' && down=yes
+	if [ "$down" = yes ] && (( quiet >= J7A_READY_QUIET_S && el >= J7A_READY_QUIET_S )) && [ "$gone" = 1 ]; then
+		echo "ready_state=READY down=yes"
+	else
+		echo "ready_state=WAIT down=$down"
+	fi
+}
+
+# §15.13.7 j7a_watch_go's states over COM3, as a pure reading of file $1 from byte offset $2 (the offset
+# before the poweroff). $3 the image name (for procnto up). Prints one 'j7a_state NAME off=N' line per
+# state, the first time it holds, in COM3 order; 'j7a_neg off=N' per negative token after COUNTED; and a
+# closing 'j7a_summary' line. Offsets are absolute byte offsets of the line's start. The time-based
+# COUNTED (J7A_GO_COUNT_S after M5L GO) and SLOWLOAD need a clock and are decided by the live watch.
+j7a_go_states() {
+	local f="$1" off="$2" img="${3:-s1-j1}"
+	# BINMODE=3: MSYS gawk would otherwise drop each CR on input, and every byte offset after a CRLF
+	# line would be short by one
+	j7a_seg_read "$f" "$off" | LC_ALL=C awk -v BINMODE=3 -v base="$off" -v img="$img" '
+	function st(n) { if (!(n in seen)) { seen[n] = pos; order[++no] = n; print "j7a_state " n " off=" pos }; last = n }
+	function isprompt(s) { return (s ~ /^Shell>/ || s ~ /^FS[0-9]+:[^ ]*>/) }
+	BEGIN { pos = base; no = 0; counted = 0; go = 0; t1 = 0; reset = 0; neg = 0; negall = 0; ebsfail = 0; refgo = 0 }
+	{
+		raw = $0
+		s = raw
+		gsub(/\r/, "", s); gsub(/\033\][^\007]*\007/, "", s); gsub(/\033\[[0-9;?]*[A-Za-z]/, "", s); gsub(/\033/, "", s)
+		sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s)
+		if (s != "") {
+			if (!("FIRMWARE" in seen)) st("FIRMWARE")
+			if (s ~ /ESC +to enter Setup/) {
+				if (reset && counted) { if (!("BANNER" in seen)) st("BANNER") }
+				else { st("HOTKEY"); t1 = 0; ck = 0 }
+			}
+			if (!counted && s ~ /MB1 [(]version|Jetson UEFI firmware/) { t1 = 0; ck = 0 }
+			if (counted && (reset || ebsfail) && s ~ /MB1 [(]version|Jetson UEFI firmware/ && !("BANNER" in seen)) st("BANNER")
+			if (s ~ /L4TLauncher:/) {
+				if (counted) { if ("BANNER" in seen || reset) st("L4T"); else st("L4T") }
+				else if (!("SHELL" in seen) || go == 0) { if (!("SHELL" in seen)) st("MISSED"); else st("L4T-NOGO") }
+			}
+			if (!counted && (isprompt(s) || s ~ /UEFI Interactive Shell/)) {
+				if (go && !refgo_prompt) { st("SHELL-AFTER-GO"); refgo_prompt = 1 }
+				else if (!go) st("SHELL")
+			}
+			if (!counted && s ~ /(^|> *)memmap *$/) st("MEMMAP")
+			if (s ~ /^M5L start mode=check/) { ck = 1; want = "variant"; np = 0; w2 = 0; fdt = 0; rd = 0; self = 0; csrc = 0; cdst = 0 }
+			else if (s ~ /^M5L start mode=go/) { go = 1; st("GO"); if (!t1) st("GO-WITHOUT-T1") }
+			else if (ck && s ~ /^M5L /) {
+				if (want == "variant") { if (s == "M5L variant=j7a") want = "self"; else { ck = 0; st("T1-INCOMPLETE") } }
+				else if (want == "self") { if (s ~ /^M5L self w2=(yes|no) canary=none$/) { self = 1; want = "" } else { ck = 0; st("T1-INCOMPLETE") } }
+				# a hex stamp only: the loader prints crc32=fail when CalculateCrc32 fails, and the parser
+				# reads that run as incomplete (m5l_fdt_crc32), so T1 must not let it reach go
+				if (s ~ /^M5L fdt addr=.* crc32=[0-9a-f]+$/) fdt = 1
+				if (s ~ /^M5L crc src=ok/) csrc = 1
+				if (s ~ /^M5L crc dst=ok/) cdst = 1
+				if (s == "M5L resmem done") rd = 1
+				if (s ~ /^M5L canary c[123] preclaim=ok$/) np++
+				if (s == "M5L W2 PASS") w2 = 1
+				if (s ~ /^M5L REFUSE/) { ck = 0; st("REFUSE") }
+				if (s == "M5L CHECK PASS") {
+					ck = 0
+					if (self && fdt && csrc && cdst && rd && np == 3 && w2) { t1 = 1; st("T1") } else st("T1-INCOMPLETE")
+				}
+			}
+			if (go && !counted) {
+				if (s ~ /^M5L REFUSE/) { refgo = 1; st("REFUSE-GO") }
+				if (s == "M5L GO" || s ~ /^M5L GO /) { if (!refgo) st("M5L-GO") }
+				if (s ~ /M5L-EBS ok/) { counted = 1; st("COUNTED") }
+				if (s ~ /M5L-EBS FAIL/) { counted = 1; ebsfail = 1; st("COUNTED"); neg++; print "j7a_neg off=" pos " token=M5L-EBS-FAIL" }
+			} else if (counted) {
+				if (s ~ /M5L-JUMP/) st("JUMP")
+				if (s ~ /^T234-SHIM EL=2/) st("SHIM")
+				if (s ~ /^t234: WDT0/) st("WDT0")
+				if (s ~ /^t234: canary c3 .*filled/) st("FILLED")
+				if (index(s, "T234 S1 " img " -P4: procnto up") == 1) st("PROCNTO")
+				if (s ~ /^S1 /) { if (!("RECORDS" in seen)) st("RECORDS") }
+				if (s ~ /^S1 BEGIN /) { if (!("EXPORT" in seen)) st("EXPORT") }
+				if (s ~ /resetting so the log can be recovered|BWAIT guard deadline/) { reset = 1; st("RESET") }
+				if (!("BANNER" in seen) && s ~ /M5L-EXC|BAD-LANDING|EXC |EL!=2|kexec_core: Starting new kernel|s1wq:/) { neg++; print "j7a_neg off=" pos " token=negative" }
+			}
+		}
+		pos += length(raw) + 1
+	}
+	END { printf "j7a_summary last=%s counted=%s go=%s t1=%s negatives=%d end=%d\n", (last == "" ? "none" : last), (counted ? "yes" : "no"), (go ? "yes" : "no"), (t1 ? "yes" : "no"), neg, pos }'
+}
+
+# The offset of state $2 in j7a_go_states output $1, or empty.
+j7a_state_off() { printf '%s\n' "$1" | sed -n "s/^j7a_state $2 off=\\([0-9][0-9]*\\)\$/\\1/p" | head -n 1; }
+j7a_has_state() { printf '%s\n' "$1" | grep -q "^j7a_state $2 off="; }
+
+# §15.13.7 j7a_keylog_check. $1 key log, $2 the number of its lines before this segment (entries after
+# it are judged), $3 and $4 the epoch window in which COM3 showed firmware or Shell text (keys sent
+# outside it were sent while L4T, its shutdown or a login prompt was the last COM3 class; $4 0 = open),
+# $5 yes when the watch recorded SHELL-AFTER-GO. Decodes every sent entry, applies Backspace (08),
+# reconstructs each line at its Enter, and checks it against the allowlist. A pager q with no Enter
+# (memmap, R90) is accepted when the next printable byte starts a new line. Prints
+# 'keylog entries=N sends=N lines=N result=ok|F64 reason=... f59=yes|no'.
+j7a_keylog_check() {
+	local kl="$1" skip="${2:-0}" wfrom="${3:-0}" wto="${4:-0}" sag="${5:-no}"
+	[ -f "$kl" ] || { echo "keylog entries=0 sends=0 lines=0 result=F64 reason=no-key-log f59=no"; return 0; }
+	tr -d '\r' < "$kl" | TZ=UTC LC_ALL=C awk -v skip="$skip" -v wf="$wfrom" -v wt="$wto" -v sag="$sag" '
+	function ep(ts,   d) { d = ts; gsub(/[-T:]/, " ", d); return mktime(substr(d, 1, 19)) }
+	function bad(r) { if (res == "ok") { res = "F64"; reason = r } }
+	function allowed(l) { return (l == "" || l == "map -r" || l == "fs5:" || l == "ls M5LOAD.EFI" || l == "memmap" || l == "q" || l == "M5LOAD.EFI check" || l == "M5LOAD.EFI go" || l == "reset") }
+	BEGIN { res = "ok"; reason = "none"; f59 = "no"; buf = ""; sends = 0; lines = 0; n = 0; after = 0; sagarm = 0; sagline = "" }
+	NR <= skip { next }
+	{
+		n++
+		what = $2
+		if (after && (what == "armed" || what == "sent")) {
+			if (sag != "yes") f59 = "yes"
+			else if (what == "armed") { sagarm++; if (sagarm > 1) f59 = "yes" }
+		}
+		if (what != "sent") next
+		sends++
+		t = ep($1)
+		if (t < wf + 0 || (wt + 0 > 0 && t >= wt + 0)) bad("sent-outside-firmware-text")
+		hex = ""
+		for (i = 3; i <= NF; i++) hex = hex (i > 3 ? " " : "") $i
+		if (after && sag == "yes") {
+			if (hex == "0d") { if (sagline != "reset") f59 = "yes"; sagline = "done" }
+			else if (hex ~ /^[2-7][0-9a-f]$/ && sagline != "done") sagline = sagline sprintf("%c", strtonum("0x" hex))
+			else f59 = "yes"
+			if (sagarm == 0) f59 = "yes"
+			next
+		}
+		if (hex == "0d") {
+			lines++
+			if (!allowed(buf)) bad("line-not-allowed")
+			if (buf == "M5LOAD.EFI go") after = 1
+			buf = ""
+		} else if (hex == "08") {
+			if (length(buf) > 0) buf = substr(buf, 1, length(buf) - 1)
+		} else if (hex == "1b" || hex ~ /^1b 5b 4[1-4]$/) {
+			if (buf == "q") buf = ""
+			if (buf != "") bad("escape-inside-a-typed-line")
+		} else if (hex ~ /^[2-7][0-9a-f]$/ && hex != "7f") {
+			if (buf == "q") buf = ""
+			buf = buf sprintf("%c", strtonum("0x" hex))
+		} else {
+			bad("key-not-allowed")
+		}
+	}
+	END {
+		if (buf != "" && buf != "q") bad("unterminated-printable")
+		printf "keylog entries=%d sends=%d lines=%d result=%s reason=%s f59=%s\n", n, sends, lines, res, reason, f59
+	}'
+}
+
+# Snapshot helpers (§15.13.8). A snapshot file holds b_efi_snap's lines: 'efivar SHA NAME', 'espfile SHA
+# PATH' and 'efisnap KEY=VALUE'. $1 file, $2 key.
+j7a_snap_val() { sed -n "s/^efisnap $2=//p" "$1" 2>/dev/null | tr -d '\r' | head -n 1; }
+j7a_snap_vars() { awk '{ sub(/\r$/, "") } $1 == "efivar" { print $3 " " $2 }' "$1" 2>/dev/null | LC_ALL=C sort; }
+j7a_snap_esp() { awk '{ sub(/\r$/, "") } $1 == "espfile" { print $3 " " $2 }' "$1" 2>/dev/null | LC_ALL=C sort; }
+
+# Δ(A,B) over efivars: prints 'added NAME', 'removed NAME', 'changed NAME'. $1 A, $2 B.
+j7a_snap_delta() {
+	LC_ALL=C join -a1 -a2 -e MISSING -o 0,1.2,2.2 <(j7a_snap_vars "$1") <(j7a_snap_vars "$2") \
+		| awk '$2 == "MISSING" { print "added " $1; next } $3 == "MISSING" { print "removed " $1; next } $2 != $3 { print "changed " $1 }'
+}
+
+# §15.13.8's return state gate (m5-design §5.2 items 3-5), for the pair $3,$4 against the control pair
+# $1,$2 (S0,S1). $5 the loader's staged sha256, $6 yes when the file must be present on the ESP (no after
+# close). Prints 'state_gate ... result=ok|warm-control|F57 reasons=...'. warm-control: a name changed only
+# in Δ($3,$4), not in the control delta (§15.13.8: s1-board.sh reboot, S4, compare).
+j7a_state_gate() {
+	local s0="$1" s1="$2" a="$3" b="$4" sha="$5" present="${6:-yes}" reasons="" res=ok ctl d n k want got
+	ctl="$(j7a_snap_delta "$s0" "$s1" | awk '$1 == "changed" { print $2 }')"
+	d="$(j7a_snap_delta "$a" "$b")"
+	printf '%s\n' "$d" | grep -q '^added ' && reasons="$reasons,efivar-added"
+	printf '%s\n' "$d" | grep -q '^removed ' && reasons="$reasons,efivar-removed"
+	for n in $(printf '%s\n' "$d" | awk '$1 == "changed" { print $2 }'); do
+		printf '%s\n' "$ctl" | grep -qxF -- "$n" || { res=warm-control; }
+	done
+	[ -n "$(j7a_snap_val "$b" efibootmgr_sha256)" ] && [ "$(j7a_snap_val "$b" efibootmgr_sha256)" = "$(j7a_snap_val "$s0" efibootmgr_sha256)" ] || reasons="$reasons,efibootmgr"
+	for k in extlinux_sha256 bootaa64_sha256 bios_version; do
+		got="$(j7a_snap_val "$b" "$k")"
+		[ -n "$got" ] && [ "$got" = "$(j7a_snap_val "$s0" "$k")" ] || reasons="$reasons,$k"
+	done
+	want="$(j7a_snap_esp "$s0" | grep -vF -- "$J7A_ESP_PATH " )"
+	[ "$present" = yes ] && want="$(printf '%s\n%s\n' "$want" "$J7A_ESP_PATH $sha" | grep -v '^$' | LC_ALL=C sort)"
+	got="$(j7a_snap_esp "$b")"
+	[ "$want" = "$got" ] || reasons="$reasons,esp"
+	[ -n "$reasons" ] && res=F57
+	echo "state_gate pair=$(basename "$a"),$(basename "$b") control=$(basename "$s0"),$(basename "$s1") efivar_changes=$(printf '%s\n' "$d" | grep -c '^changed ') control_changes=$(printf '%s\n' "$ctl" | grep -c .) result=$res reasons=${reasons#,}"
+}
+
+# How many counted J7a go runs the record directory holds (the budget key, §15.13.7). j_kexec_runs
+# is unchanged and never counts them: J7a writes no 'run com3_bytes_before_kexec=' line.
+j7a_counted_runs() {
+	local f n=0
+	for f in "$RECDIR"/J7a-*/*-board.log; do
+		[ -f "$f" ] && grep -aq '^j7a go_counted ' "$f" && n=$(( n + 1 ))
+	done
+	echo "$n"
+}
+
+# 0 when any J7a record shows F62 (the harness line, or the parser's j7a=F62).
+j7a_f62_seen() {
+	local f
+	for f in "$RECDIR"/J7a-*/*-board.log; do [ -f "$f" ] && grep -aq '^j7a F62 ' "$f" && return 0; done
+	for f in "$RECDIR"/J7a-[0-9]*/parse-s1.txt; do [ -f "$f" ] && grep -aqE '(^|[ ,=])j7a=F62([ ,]|$)' "$f" && return 0; done
+	return 1
+}
+
+# §15.13.7 j7a_precondition, as refusals, from J-waivers.conf and the J rows. Prints one line.
+j7a_precondition() {
+	local r4 r6 q20 d47 c
+	j_waiver D30 || die "J7a needs D30 (the owner's UEFI arm): 'D30=yes' is not in J-waivers.conf (§15.13.7)"
+	j_waiver D34_J7A || die "J2's and J6c's rows hold F39: J7a needs the owner's 'D34_J7A=yes' in J-waivers.conf (D39, §15.13.7)"
+	j_waiver D35 || die "J7a needs D35 (§15.13 accepted): 'D35=yes' is not in J-waivers.conf"
+	j_waiver D38 || die "J7a needs D38 (the run cap and the deciding rule): 'D38=yes' is not in J-waivers.conf"
+	[ "$(j7a_conf D45)" = esp ] || die "J7a needs D45=esp in J-waivers.conf (the SD ESP root; any other route needs a reviewed amendment)"
+	j_waiver D46 || die "J7a needs D46 (peripherals removed, DRAM_OFF_S): 'D46=yes' is not in J-waivers.conf"
+	r4="$(j_step_row J4)"
+	j_row_has "$r4" F36 || die "J7a follows J4's F36 (§15.13.1); J4's row is ${r4:-none}"
+	r6="$(j_step_row J6c)"
+	j_row_has "$r6" live-writer || die "J7a needs J6c's row to carry the live-writer label (§15.13.1); J6c's row is ${r6:-none}"
+	q20="$(j7a_conf Q20_BRANCH)"
+	case "$q20" in
+	a|c) ;;
+	b)
+		d47="$(j7a_conf D47)"
+		[ -n "$d47" ] || die "Q20 is branch (b): the owner's D47 must be recorded in J-waivers.conf before J7a (§15.13.4)"
+		die "Q20 is branch (b) with D47=$d47: s1-j1 cannot run unchanged, and this harness carries no -Wdisable variant (§15.13.4); the owner decides" ;;
+	*) die "J-waivers.conf holds no Q20_BRANCH=a|b|c: the Q20 branch is recorded before J7a (§15.13.4)" ;;
+	esac
+	c="$(j7a_counted_runs)"
+	echo "j7a precondition: D30 D34_J7A D35 D38 D45=esp D46 taken; J4=F36; J6c live-writer; q20_branch=$q20; kexec_runs_before=$(j_kexec_runs) j7a_counted_before=$c (cap $J7A_CAP, outside §15.6's kexec count); J-waivers.conf sha256=$(j_sha256 "$RECDIR/J-waivers.conf")"
+}
+
+# The go refusals of the budget: a third counted go, and any go after F62 on the same image (D42).
+j7a_go_budget_gate() {
+	local c
+	c="$(j7a_counted_runs)"
+	(( c < J7A_CAP )) || die "J7a's cap is $J7A_CAP counted go runs (D38) and $c are recorded: no further go"
+	! j7a_f62_seen || die "an F62 is recorded for J7a: the unchanged image is not retried (D42)"
+	return 0
+}
+
+# DRAM-off record (§15.13.8 -dram-off.log, R95): READY's epoch, the first firmware byte's epoch after
+# READY, and whether the unpowered time could have reached $3 seconds. Prints key=value lines.
+j7a_dram_off_lines() {
+	local ready="$1" first="$2" need="$3" gap
+	gap=$(( first - ready ))
+	echo "dram_off ready_epoch=$ready first_fw_byte_epoch=$first bound_s=$need"
+	if (( gap >= need )); then
+		echo "dram_off bound=possible (the power was restored no earlier than the bound allows; the owner's stated cut and restore times are recorded by hand in j7a-note.log)"
+	else
+		echo "dram_off bound=VIOLATED (firmware output began before the design wait could have passed after READY: DRAM_OFF_S was not met, §15.13.15)"
+	fi
+}
+
+# ---- j7a board functions (§15.13.7, §15.13.8). Sent only by the j7a commands (BOARD_EXTRA_FUNCS), so
+# every other command's generated script is unchanged. S1_ESP_ROOT exists for the self-tests' fixture
+# only and is never set on the board. None writes a UEFI variable; b_esp_stage and b_esp_clean touch
+# exactly one ESP path, never through a wildcard.
+
+# The snapshot set (§15.13.8). No boot-option description leaves the board: efibootmgr is a
+# board-computed sha256 of 'efibootmgr -v' without BootCurrent, plus entry numbers, active flags,
+# a class word per entry and BootOrder.
+b_efi_snap() {
+	local root="${S1_ESP_ROOT:-/boot/efi}" o
+	b_identity | sed 's/^/efisnap /'
+	o="$(sudo -n efibootmgr -v 2>/dev/null)"
+	echo "efisnap efibootmgr_rc=$([ -n "$o" ] && echo 0 || echo 1)"
+	echo "efisnap efibootmgr_sha256=$(printf '%s\n' "$o" | grep -v '^BootCurrent' | sha256sum | cut -d' ' -f1)"
+	echo "efisnap bootorder=$(printf '%s\n' "$o" | sed -n 's/^BootOrder: *//p' | tr -d ' ')"
+	printf '%s\n' "$o" | awk '/^Boot[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]/ {
+		num = substr($1, 5, 4); act = (substr($1, 9, 1) == "*") ? "yes" : "no"; l = tolower($0); k = "other"
+		if (l ~ /uefi shell/) k = "shell"; else if (l ~ /nvme/) k = "nvme"; else if (l ~ /sd card|sdcard|mmc|sd[0-9]|[( ]sd[) ]/) k = "sd"
+		print "efisnap boot num=" num " active=" act " kind=" k }'
+	sudo -n sh -c 'cd /sys/firmware/efi/efivars 2>/dev/null && for f in *; do [ -f "$f" ] && echo "efivar $(sha256sum < "$f" | cut -c1-64) $f"; done'
+	sudo -n find "$root" -type f -exec sha256sum {} + 2>/dev/null | awk '{ q = $2; sub(/^[*]/, "", q); print "espfile " $1 " " q }'
+	echo "efisnap extlinux_sha256=$(sha256sum /boot/extlinux/extlinux.conf 2>/dev/null | cut -d' ' -f1)"
+	echo "efisnap bootaa64_sha256=$(sudo -n sha256sum "$root/EFI/BOOT/BOOTAA64.efi" 2>/dev/null | cut -d' ' -f1)"
+	echo "efisnap bios_version=$(tr -d '\n' < /sys/class/dmi/id/bios_version 2>/dev/null)"
+	echo "efisnap secureboot=$(od -An -tu1 /sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c 2>/dev/null | awk '{ print $NF }')"
+	echo "efisnap esp_avail_kb=$(df -Pk "$root" 2>/dev/null | awk 'NR == 2 { print $4 }')"
+	echo "efisnap esp_cluster_b=$(stat -f -c %S "$root" 2>/dev/null)"
+	echo "efisnap ramoops_reg=$(od -An -tx1 /proc/device-tree/reserved-memory/ramoops_carveout/reg 2>/dev/null | tr -d ' \n')"
+	echo "efisnap esp_listing_sha256=$(sudo -n find "$root" -type f -exec sha256sum {} + 2>/dev/null | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"
+	b_pstore | sed 's/^/efisnap /'
+	b_slots
+}
+
+# The ESP listing's sha256 (sorted), as b_efi_snap computes it.
+b_esp_listing_sha() { sudo -n find "${S1_ESP_ROOT:-/boot/efi}" -type f -exec sha256sum {} + 2>/dev/null | LC_ALL=C sort | sha256sum | cut -d' ' -f1; }
+
+# §15.13.7 b_esp_stage, in order; any failure is F65. J7A_SHA, J7A_BYTES, J7A_MARGIN_B and J7A_S0_ESP
+# (S0's listing sha256) are set on the command line.
+b_esp_stage() {
+	local root="${S1_ESP_ROOT:-/boot/efi}" src="$HOME/M5LOAD.EFI" dst cl av need got rc=0 now
+	dst="$root/M5LOAD.EFI"
+	[ -f "$src" ] || { echo "esp_stage=F65 reason=no-staging-copy wrote=no"; return 1; }
+	[ "$(sha256sum "$src" | cut -d' ' -f1)" = "$J7A_SHA" ] || { echo "esp_stage=F65 reason=staging-copy-hash wrote=no"; return 1; }
+	if sudo -n test -e "$dst"; then echo "esp_stage=F65 reason=leftover-file wrote=no (only clean may run)"; return 1; fi
+	[ "$(b_esp_listing_sha)" = "$J7A_S0_ESP" ] || { echo "esp_stage=F57 reason=listing-not-S0 wrote=no"; return 1; }
+	cl="$(stat -f -c %S "$root" 2>/dev/null)"
+	av="$(df -Pk "$root" 2>/dev/null | awk 'NR == 2 { print $4 }')"
+	if ! [[ "$cl" =~ ^[1-9][0-9]*$ ]] || ! [[ "$av" =~ ^[0-9]+$ ]]; then echo "esp_stage=F65 reason=space-unread wrote=no"; return 1; fi
+	need=$(( (J7A_BYTES + cl - 1) / cl * cl + J7A_MARGIN_B ))
+	if (( av * 1024 < need )); then echo "esp_stage=F65 reason=short wrote=no"; return 1; fi
+	echo "esp_stage space=ok"
+	sudo -n cp "$src" "$dst" || rc=1
+	sync || rc=1
+	got="$(sudo -n sha256sum "$dst" 2>/dev/null | cut -d' ' -f1)"
+	if [ "$rc" != 0 ] || [ "$got" != "$J7A_SHA" ]; then
+		sudo -n rm -f "$dst"
+		sync
+		now="$(b_esp_listing_sha)"
+		if [ "$now" = "$J7A_S0_ESP" ] && ! sudo -n test -e "$dst"; then
+			echo "esp_stage=F65 reason=$([ "$rc" != 0 ] && echo cp-or-sync || echo readback-hash) removed=yes listing=S0"
+		else
+			echo "esp_stage=F57 reason=removal-did-not-restore-S0 removed=unknown listing=differs"
+		fi
+		return 1
+	fi
+	rm -f "$src"
+	echo "esp_stage=ok readback_sha256=$got staging_copy_removed=$([ -e "$src" ] && echo no || echo yes)"
+}
+
+# §15.13.7 b_esp_clean. J7A_SHA, J7A_S0_ESP set on the command line; J7A_REMOVE=yes only when the owner
+# authorised removing that one path after F66 (the PC checks S1_J7A_ESP_REMOVE's exact value).
+b_esp_clean() {
+	local root="${S1_ESP_ROOT:-/boot/efi}" dst got others
+	dst="$root/M5LOAD.EFI"
+	# a sha256sum that marks binary mode writes '*path' (Git Bash does): the path compare strips it
+	others="$(sudo -n find "$root" -type f -exec sha256sum {} + 2>/dev/null | awk -v p="$dst" '{ q = $2; sub(/^[*]/, "", q) } q != p' | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"
+	if ! sudo -n test -e "$dst"; then
+		[ "$(b_esp_listing_sha)" = "$J7A_S0_ESP" ] && echo "esp_clean=ok removed=absent listing=S0" || echo "esp_clean=F57 reason=listing-not-S0 removed=absent"
+		return 0
+	fi
+	[ "$others" = "$J7A_S0_ESP" ] || { echo "esp_clean=F57 reason=another-file-differs deleted=nothing"; return 1; }
+	got="$(sudo -n sha256sum "$dst" 2>/dev/null | cut -d' ' -f1)"
+	if [ "$got" != "$J7A_SHA" ] && [ "${J7A_REMOVE:-}" != yes ]; then
+		echo "esp_clean=hash-mismatch F66 deleted=nothing"
+		return 1
+	fi
+	sudo -n rm "$dst"
+	sync
+	if [ "$(b_esp_listing_sha)" = "$J7A_S0_ESP" ] && ! sudo -n test -e "$dst"; then
+		echo "esp_clean=ok removed=yes listing=S0$([ "$got" != "$J7A_SHA" ] && echo ' authorised=owner')"
+	else
+		echo "esp_clean=F57 reason=listing-not-S0-after-removal"
+		return 1
+	fi
+}
+
+# X4: M5's kept backups reused only when both hash as the live files; otherwise ~/j7a-backup is written.
+# J7A_WRITE=yes lets it write; without it the function only reports (pre is read-only).
+b_j7a_backup() {
+	local root="${S1_ESP_ROOT:-/boot/efi}" ex bo m5e m5b d
+	ex="$(sha256sum /boot/extlinux/extlinux.conf 2>/dev/null | cut -d' ' -f1)"
+	bo="$(sudo -n sha256sum "$root/EFI/BOOT/BOOTAA64.efi" 2>/dev/null | cut -d' ' -f1)"
+	for d in m5-backup j7a-backup; do
+		m5e="$(sha256sum "$HOME/$d/extlinux.conf" 2>/dev/null | cut -d' ' -f1)"
+		m5b="$(sha256sum "$HOME/$d/BOOTAA64.efi" 2>/dev/null | cut -d' ' -f1)"
+		if [ -n "$ex" ] && [ -n "$bo" ] && [ "$m5e" = "$ex" ] && [ "$m5b" = "$bo" ]; then
+			echo "backup=ok dir=$d extlinux_sha256=$ex bootaa64_sha256=$bo"
+			return 0
+		fi
+	done
+	if [ "${J7A_WRITE:-}" != yes ]; then echo "backup=none-matching (stage writes ~/j7a-backup)"; return 0; fi
+	mkdir -p "$HOME/j7a-backup" && cp /boot/extlinux/extlinux.conf "$HOME/j7a-backup/" && sudo -n cp "$root/EFI/BOOT/BOOTAA64.efi" "$HOME/j7a-backup/" \
+		&& sudo -n chown "$(id -u):$(id -g)" "$HOME/j7a-backup/BOOTAA64.efi" || { echo "backup=FAIL"; return 1; }
+	m5e="$(sha256sum "$HOME/j7a-backup/extlinux.conf" | cut -d' ' -f1)"
+	m5b="$(sha256sum "$HOME/j7a-backup/BOOTAA64.efi" | cut -d' ' -f1)"
+	[ "$m5e" = "$ex" ] && [ "$m5b" = "$bo" ] && echo "backup=written dir=j7a-backup extlinux_sha256=$ex bootaa64_sha256=$bo" || { echo "backup=FAIL hash"; return 1; }
+}
+
+# j7a pre's read-only board checks (a leftover staged file is reported, never removed here).
+b_j7a_pre() {
+	local root="${S1_ESP_ROOT:-/boot/efi}"
+	echo "j7apre leftover=$(sudo -n test -e "$root/M5LOAD.EFI" && echo yes || echo no)"
+	echo "j7apre home_copy=$([ -e "$HOME/M5LOAD.EFI" ] && echo yes || echo no)"
+	b_j7a_backup | sed 's/^/j7apre /'
+}
+
+# The planned poweroff (X6). J7A_WANT_BOOT is the boot_id the PC expects.
+b_poweroff() {
+	local b
+	b="$(cat /proc/sys/kernel/random/boot_id)"
+	if [ "$b" != "$J7A_WANT_BOOT" ]; then echo "poweroff=refused boot_id_differs"; return 1; fi
+	echo "poweroff=issuing"
+	sudo -n systemctl poweroff
+	echo "poweroff_rc=$?"
+}
+
+J7A_FUNCS="b_efi_snap b_esp_listing_sha b_esp_stage b_esp_clean b_j7a_backup b_j7a_pre b_poweroff"
+
+# ---- j7a commands: shared setup
+
+J7A_SESS=""; J7A_LOADER=""; J7A_LSHA=""; J7A_LBYTES=""; J7A_GATE=""
+
+# Common setup for every j7a phase. $1 the phase. Sets J7A_SESS (<rec>/J7a-session-<S1_J7A_ID>),
+# the loader's path, sha256 and size, and the extra board functions.
+j7a_setup() {
+	local phase="$1"
+	need_host
+	need_record_dir
+	j_norm_capture
+	[[ "${S1_J7A_ID:-}" =~ ^[0-9]{8}T[0-9]{6}Z$ ]] || die "S1_J7A_ID must be the session's UTC stamp (YYYYMMDDTHHMMSSZ): one attempt id for pre, stage, ctl, go, return and clean (§15.13.7)"
+	J7A_SESS="$RECDIR/J7a-session-$S1_J7A_ID"
+	mkdir -p "$J7A_SESS" || die "cannot create $(basename "$J7A_SESS")"
+	BOARD_EXTRA_FUNCS="$J7A_FUNCS"
+	IMG=s1-j1
+	UTC="$(utc_now)"
+	if [ "$phase" != clean ] || [ -n "${S1_J7A_LOADER:-}" ]; then
+		J7A_LOADER="${S1_J7A_LOADER:-}"
+		J7A_LOADER="${J7A_LOADER//\\//}"
+		[ -n "$J7A_LOADER" ] && [ -f "$J7A_LOADER" ] || die "S1_J7A_LOADER must name the worktree's built M5LOAD.EFI (§15.13.4)"
+		[ "$(basename "$J7A_LOADER")" = M5LOAD.EFI ] || die "S1_J7A_LOADER must be a file named M5LOAD.EFI (the ESP name, §15.13.4)"
+		J7A_GATE="$(dirname "$J7A_LOADER")/gate.txt"
+		J7A_LSHA="$(j_sha256 "$J7A_LOADER")"
+		J7A_LBYTES="$(stat -c %s "$J7A_LOADER")"
+	fi
+}
+
+# The newest phase board log of this session. $1 phase (pre|stage|ctl|clean).
+j7a_phase_log() { ls -1 "$J7A_SESS"/"$1"-*-board.log 2>/dev/null | tail -n 1; }
+
+# 0 when phase $1's newest board log ends with its RESULT ok line.
+j7a_phase_ok() { local f; f="$(j7a_phase_log "$1")"; [ -n "$f" ] && grep -aq "^j7a $1 RESULT ok" "$f"; }
+
+# The session's S0 snapshot file (written by stage).
+j7a_s0() { printf '%s\n' "$J7A_SESS/snap-s0.log"; }
+
+# Takes one snapshot into $1 (redacted) and records its summary. $2 the label.
+j7a_snap() {
+	local dest="$1" label="$2" out
+	out="$(board 180 b_efi_snap)" || { rec "j7a snapshot $label FAILED (rc=$?)"; return 1; }
+	printf '# %s: evaluation output, NC QDL v7 4.6(i), unpublished\n' "$(basename "$dest")" > "$dest"
+	printf '%s\n' "$out" | redact >> "$dest"
+	check_private "$dest"
+	rec "j7a snapshot $label: $(basename "$dest") efivars=$(grep -c '^efivar ' "$dest") espfiles=$(grep -c '^espfile ' "$dest") boot_id=$(j7a_snap_val "$dest" boot_id) sha256=$(j_sha256 "$dest")"
+	printf '%s\n' "$out" | grep -E '^(slots_rc=|slots )' > "$dest.slots"
+	return 0
+}
+
+# §15.13.7 j7a pre's PC gates. Dies on a refusal; records each line.
+j7a_pc_gates() {
+	local f items i d0 t0 tj1 conf="$S1DIR/s1-linux.conf" c users j6k
+	git_paths_clean "$HERE" "$HERE/$PROG" "$PARSER" "$S1DIR/kpf-decode.py" "$HERE/../uefi/com3-term.ps1" "$HERE/../uefi/build-m5-loader.sh" "$HERE/../uefi/m5-gate.py" "$HERE/../uefi/m5load-rules.h" \
+		|| die "the tree is dirty for s1-board.sh, parse-s1.py, kpf-decode.py, com3-term.ps1, build-m5-loader.sh, m5-gate.py or m5load-rules.h: J7a runs committed code (§15.13.7)"
+	[ -f "$HERE/../uefi/m5load-rules.h" ] || die "no orin-native/uefi/m5load-rules.h: the J7a loader is not committed (§15.13.4)"
+	rec "j7a pc tree=clean head=$(git -C "$HERE" rev-parse HEAD 2>/dev/null || echo unknown)"
+	[ -f "$J7A_GATE" ] || die "no gate.txt beside S1_J7A_LOADER"
+	for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+		grep -aqE "^M5G item=$i +PASS" "$J7A_GATE" || die "the loader's gate.txt has no PASS for item $i (items 1-12 must pass, §15.13.4)"
+	done
+	! grep -aqE '^M5G item=[0-9]+ +(FAIL|SKIP)' "$J7A_GATE" || die "the loader's gate.txt holds a FAIL or SKIP item"
+	grep -aq '^M5G build=board' "$J7A_GATE" || die "the loader's gate.txt is not a board build's"
+	rec "j7a pc gate.txt items 1-12 PASS sha256=$(j_sha256 "$J7A_GATE") loader_sha256=$J7A_LSHA"
+	find_python || die "no working python 3.8+"
+	c="$("$PY_BIN" -c 'import sys
+k = open(sys.argv[1], "rb").read(); p = open(sys.argv[2], "rb").read()
+n = p.count(k); print("blob_matches=%d" % n)' "$KIMG" "$J7A_LOADER" 2>&1)"
+	[ "$c" = "blob_matches=1" ] || die "the loader does not carry s1-j1.kimg exactly once ($c): its blob is not the pinned image (§15.13.4)"
+	j6k="$(j6_block_value control 'prereg j6 params sha256=' | sed -n 's/.* kimg_sha256=//p')"
+	[ -n "$j6k" ] && [ "$j6k" = "$KIMG_SHA" ] || die "s1-j1.kimg sha256 $KIMG_SHA is not the kimg_sha256 J6c's stage registered (${j6k:-none}) (D36)"
+	rec "j7a pc blob: the loader carries s1-j1.kimg once; kimg_sha256 equals J6c's registered one and the params'"
+	d0="$(j7a_conf D0A_REFERENCE)"
+	[ -n "$d0" ] && d0="$(git -C "$HERE" rev-parse --verify -q "$d0^{commit}" 2>/dev/null)"
+	case "$d0" in "$J7A_D0_PREFIX"*) ;; *) die "J-waivers.conf's D0A_REFERENCE does not name commit $J7A_D0_PREFIX (D0a's reference, §15.13.4)" ;; esac
+	t0="$(j7a_conf T0_RECORD)"
+	[[ "$t0" =~ ^[A-Za-z0-9._-]+$ ]] && { [ -e "$RECDIR/$t0" ] || [ -e "$(dirname "$J7A_LOADER")/t0/$t0" ]; } \
+		|| die "J-waivers.conf's T0_RECORD must name the T0 record, present in the record directory or the loader's out/t0 (§15.13.4)"
+	rec "j7a pc d0_reference=$d0 t0_record=$t0"
+	c="$(j7a_com3term_selftest)" || die "com3-term.ps1 -SelfTest did not pass: $c"
+	rec "j7a pc com3-term.ps1 sha256=$(j_sha256 "$HERE/../uefi/com3-term.ps1") $c"
+	tj1="$(j6_tj1_met)" || die "T-J1 has not met with s1-j1.params' memcanary_w_sha256 (§15.13.7)"
+	rec "j7a pc $tj1"
+	[ "$(j_sha256 "$conf")" = "$PIN_CONF" ] || die "orin-native/s1/s1-linux.conf is not T2's pin (§8 PC item 2)"
+	c="$(timeout 120 "$PY_BIN" "$PARSER" conf "$conf" 2>&1)" || die "'parse-s1.py conf' refuses s1-linux.conf"
+	rec "j7a pc conf gate=pass (no kexec tree under UEFI entry)"
+	users="$(j7a_com3_users)"
+	case "$users" in
+	"qemu=0 capture_raw=0 com3_term=1") rec "j7a pc com3 users: $users" ;;
+	*) die "COM3 users are not exactly one com3-term.ps1 session with no QEMU or capture-com3-raw.ps1 ($users)" ;;
+	esac
+}
+
+# com3-term.ps1 -SelfTest from Git Bash. Prints the result line; non-zero unless SELFTEST PASS.
+j7a_com3term_selftest() {
+	local p out
+	p="$(cygpath -w "$HERE/../uefi/com3-term.ps1" 2>/dev/null || printf '%s' "$HERE/../uefi/com3-term.ps1")"
+	out="$(timeout 120 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$p" -SelfTest 2>&1 | tr -d '\r' | grep -a '^SELFTEST ' | tail -n 1)"
+	echo "${out:-no SELFTEST line}"
+	case "$out" in "SELFTEST PASS"*) return 0 ;; *) return 1 ;; esac
+}
+
+# Counts the PC's COM3 users by command line: QEMU, capture-com3-raw.ps1 and com3-term.ps1 sessions.
+j7a_com3_users() {
+	local l
+	l="$(timeout 60 powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process | ForEach-Object { \$_.CommandLine }" 2>/dev/null | tr -d '\r')"
+	printf 'qemu=%s capture_raw=%s com3_term=%s\n' \
+		"$(printf '%s\n' "$l" | grep -ac 'qemu-system')" \
+		"$(printf '%s\n' "$l" | grep -ac 'capture-com3-raw[.]ps1')" \
+		"$(printf '%s\n' "$l" | grep -a 'com3-term[.]ps1' | grep -acv -- '-SelfTest\|Get-CimInstance')"
+}
+
+# §15.13.7 j7a pre s1-j1: PC gates, then read-only board checks.
+cmd_j7a_pre() {
+	local out f pre need cl av bootorder first
+	j7a_setup pre
+	resolve_kimg s1-j1
+	j_read_decisions
+	f="$J7A_SESS/pre-$UTC-board.log"
+	rec_open "$f"
+	rec "j7a pre image=s1-j1 session=$(basename "$J7A_SESS") utc=$UTC"
+	j7a_precondition | rec_pipe
+	[ "${PIPESTATUS[0]}" = 0 ] || exit 1
+	j7a_pc_gates
+	learn_hostname
+	out="$(board 180 b_efi_snap b_j7a_pre)" || die "board unreachable (rc=$?); nothing was changed"
+	printf '%s\n' "$out" | grep -v '^efivar \|^espfile ' | grep -v '^efisnap boot ' | rec_pipe
+	pre="$J7A_SESS/snap-pre-$UTC.log"
+	printf '%s\n' "$out" | grep -E '^(efivar|espfile|efisnap) ' | redact > "$pre"
+	check_private "$pre"
+	[ "$(kv 'j7apre leftover' "$out")" = no ] || die "/boot/efi/M5LOAD.EFI is present: only '$PROG j7a clean' may run (§15.13.7)"
+	[ "$(j7a_snap_val "$pre" secureboot)" = 0 ] || die "SecureBoot is not read as off"
+	[ "$(j7a_snap_val "$pre" ramoops_reg)" = "$RAMOOPS_REG_HEX" ] || die "the ramoops carveout is not RAMOOPS_REG_HEX (§8 item 7)"
+	j7a_bios_gate "$pre"
+	grep -q '^efisnap boot num=[0-9A-Fa-f]* active=[a-z]* kind=shell$' "$pre" || die "efibootmgr shows no UEFI Shell entry"
+	grep -q '^efisnap boot num=[0-9A-Fa-f]* active=[a-z]* kind=nvme$' "$pre" || die "efibootmgr shows no NVMe entry"
+	bootorder="$(j7a_snap_val "$pre" bootorder)"
+	first="${bootorder%%,*}"
+	grep -qi "^efisnap boot num=$first active=[a-z]* kind=sd$" "$pre" || die "BootOrder does not start with the SD entry"
+	cl="$(j7a_snap_val "$pre" esp_cluster_b)"; av="$(j7a_snap_val "$pre" esp_avail_kb)"
+	[[ "$cl" =~ ^[1-9][0-9]*$ ]] && [[ "$av" =~ ^[0-9]+$ ]] || die "F65: the ESP's cluster size or free space could not be read"
+	need=$(( (J7A_LBYTES + cl - 1) / cl * cl + J7A_ESP_MARGIN_B ))
+	(( av * 1024 >= need )) || die "F65: the ESP is short for the loader plus ESP_MARGIN: J7a cannot run on this design (D45); nothing was written"
+	rec "j7a pre esp_space=ok (loader rounded to a cluster plus ESP_MARGIN)"
+	rec "j7a pre backup: $(kv 'j7apre backup' "$out" | cut -d' ' -f1)"
+	slots_check "$(printf '%s\n' "$out" | grep -E '^(slots_rc=|slots )')" "$J7A_SESS/pre-$UTC-nvbootctrl.log"
+	slots_report "j7a pre" "$J7A_SESS/pre-$UTC-nvbootctrl.log"
+	case "$SLOTS_STATE" in same|first) ;; differ) exit 4 ;; *) die "nvbootctrl was not read" ;; esac
+	rec "j7a pre RESULT ok"
+	check_private "$REC"
+}
+
+# bios_version equal to M5's firmware: M5's S0 reading in the record named by J-waivers.conf's M5_RECORD.
+j7a_bios_gate() {
+	local snap="$1" m5 v
+	m5="$(j7a_conf M5_RECORD)"
+	v="$(j7a_snap_val "$snap" bios_version)"
+	[ -n "$v" ] || die "bios_version was not read"
+	[[ "$m5" =~ ^results/orin-native-port/[0-9A-Za-z]+/m5$ ]] && [ -f "$HERE/../../$m5/s0-bios.log" ] \
+		|| die "J-waivers.conf's M5_RECORD must name M5's private record directory (results/orin-native-port/<utc>/m5) holding s0-bios.log"
+	tr -d '\r' < "$HERE/../../$m5/s0-bios.log" | grep -aqxF -- "$v" || die "bios_version differs from M5's firmware reading (§15.13.7)"
+	rec "j7a bios_version equals M5's S0 reading"
+}
+
+# §15.13.7 j7a stage: backups (X4), S0, scp to ~, b_esp_stage.
+cmd_j7a_stage() {
+	local out s0 esp0 rc d n
+	j7a_setup stage
+	resolve_kimg s1-j1
+	j7a_phase_ok pre || die "j7a pre has not passed in this session"
+	rec_open "$J7A_SESS/stage-$UTC-board.log"
+	rec "j7a stage session=$(basename "$J7A_SESS") loader_sha256=$J7A_LSHA"
+	out="$(J7A_WRITE=yes board 120 'J7A_WRITE=yes b_j7a_backup')" || die "backup step failed (rc=$?)"
+	printf '%s\n' "$out" | rec_pipe
+	case "$out" in backup=ok*|backup=written*) ;; *) die "backups neither verified nor written (X4)" ;; esac
+	d="$(printf '%s\n' "$out" | sed -n 's/.* dir=\([a-z0-9-]*\) .*/\1/p')"
+	for n in extlinux.conf BOOTAA64.efi; do
+		if timeout 120 scp "${ssh_work[@]}" "$ORIN_HOST:$d/$n" "$J7A_SESS/stage-backup-$n.log" </dev/null >/dev/null 2>&1; then
+			rec "j7a stage backup copy $n sha256=$(j_sha256 "$J7A_SESS/stage-backup-$n.log")"
+		else
+			rec "j7a stage backup copy $n FAILED (the board keeps ~/$d)"
+		fi
+	done
+	[ -f "$J7A_SESS/stage-backup-extlinux.conf.log" ] && privacy_scan "$J7A_SESS/stage-backup-extlinux.conf.log"
+	s0="$(j7a_s0)"
+	[ -f "$s0" ] && die "this session already holds S0: a session stages once (C, then a new session)"
+	j7a_snap "$s0" S0 || die "S0 could not be taken; nothing was written to the ESP"
+	esp0="$(j7a_snap_val "$s0" esp_listing_sha256)"
+	[[ "$esp0" =~ ^[0-9a-f]{64}$ ]] || die "S0's ESP listing hash was not read"
+	grep -q "^espfile [0-9a-f]* $J7A_ESP_PATH\$" "$s0" && die "S0 already lists $J7A_ESP_PATH: run clean"
+	j_scp 300 "$J7A_LOADER" "$ORIN_HOST:M5LOAD.EFI" || die "scp of the loader to ~ failed; the ESP is untouched"
+	rec "j7a stage X4: ~/M5LOAD.EFI written as the staging copy"
+	out="$(board 180 "J7A_SHA=$J7A_LSHA J7A_BYTES=$J7A_LBYTES J7A_MARGIN_B=$J7A_ESP_MARGIN_B J7A_S0_ESP=$esp0 b_esp_stage")"
+	rc=$?
+	printf '%s\n' "$out" | rec_pipe
+	case "$out" in
+	*esp_stage=ok*) ;;
+	*esp_stage=F57*) rec "j7a stage F57: the ESP removal did not restore S0. IMMEDIATE STOP: stop all board work; the owner decides (§15.13.7)"; check_private "$REC"; exit 3 ;;
+	*) rec "j7a stage F65 (rc=$rc): the file was removed and the listing verified as S0 where it was written; J7a cannot run on this design (D45)"; check_private "$REC"; exit 3 ;;
+	esac
+	rec "j7a stage loader_sha256=$J7A_LSHA esp_listing_s0_sha256=$esp0"
+	rec "j7a stage RESULT ok"
+	check_private "$REC"
+}
+
+# §15.13.7 j7a clean: b_esp_clean, ~/M5LOAD.EFI absent, b_slots, the key-log allowlist over the session.
+cmd_j7a_clean() {
+	local out s0 esp0 sha rm="" kc
+	j7a_setup clean
+	[ "${S1_J7A_TX_REMOVED:-}" = yes ] || die "clean needs S1_J7A_TX_REMOVED=yes: the owner removes the TX wire from pin 3 with the terminal still running (§15.13.6 C)"
+	if [ -n "${S1_J7A_ESP_REMOVE+x}" ]; then
+		j7a_remove_ok "$S1_J7A_ESP_REMOVE" || die "S1_J7A_ESP_REMOVE must be exactly $J7A_ESP_PATH (no other path, no wildcard; F66)"
+		rm=yes
+	fi
+	s0="$(j7a_s0)"
+	[ -f "$s0" ] || die "this session holds no S0: nothing was staged"
+	esp0="$(j7a_snap_val "$s0" esp_listing_sha256)"
+	sha="$(sed -n 's/^j7a stage loader_sha256=\([0-9a-f]\{64\}\) .*/\1/p' "$(j7a_phase_log stage)" 2>/dev/null | tail -n 1)"
+	[[ "$sha" =~ ^[0-9a-f]{64}$ ]] || die "no staged loader sha256 in this session's stage log"
+	rec_open "$J7A_SESS/clean-$UTC-board.log"
+	rec "j7a clean session=$(basename "$J7A_SESS") tx_removed=yes esp_remove_authorised=${rm:-no}"
+	out="$(board 120 "J7A_SHA=$sha J7A_S0_ESP=$esp0 J7A_REMOVE=${rm:-no} b_esp_clean" 'echo "home_copy=$([ -e "$HOME/M5LOAD.EFI" ] && echo present || echo absent)"' 'sudo -n find /boot/efi -type f -exec sha256sum {} +' b_slots)"
+	printf '%s\n' "$out" | grep -v '^slots\|/boot/efi/' | rec_pipe
+	printf '%s\n' "$out" | grep ' /boot/efi/' | redact > "$J7A_SESS/c-espfiles.log"
+	check_private "$J7A_SESS/c-espfiles.log"
+	if [ -n "${S1_COM3_LOG:-}" ] && [ -f "$(j7a_keylog_path "$S1_COM3_LOG")" ]; then
+		kc="$(j7a_keylog_check "$(j7a_keylog_path "$S1_COM3_LOG")" 0 0 0 no)"
+		rec "j7a clean $kc (whole session, allowlist only)"
+	fi
+	slots_check "$(printf '%s\n' "$out" | grep -E '^(slots_rc=|slots )')" "$J7A_SESS/clean-$UTC-nvbootctrl.log"
+	slots_report "j7a clean" "$J7A_SESS/clean-$UTC-nvbootctrl.log"
+	case "$out" in
+	*esp_clean=ok*) ;;
+	*esp_clean=hash-mismatch*) rec "j7a clean F66: a different file at the staged path; nothing deleted. The owner may authorise removing that one path with S1_J7A_ESP_REMOVE=$J7A_ESP_PATH"; check_private "$REC"; exit 3 ;;
+	*) rec "j7a clean F57: the ESP is not S0 (another file differs, or the removal did not restore it). IMMEDIATE STOP"; check_private "$REC"; exit 3 ;;
+	esac
+	[ "$(kv home_copy "$out")" = absent ] || { rec "j7a clean: ~/M5LOAD.EFI is still present: remove it by hand (X4)"; exit 3; }
+	[ "$SLOTS_STATE" = differ ] && exit 4
+	rec "j7a clean esp_clean=ok RESULT ok"
+	check_private "$REC"
+}
+
+# ---- j7a: poweroff, READY and the control boot
+
+J7A_READY=""; J7A_READY_OFF=""; J7A_READY_EPOCH=""; J7A_FW_EPOCH=""
+
+# §15.13.7: issue the planned poweroff on the expected boot, then watch COM3 from offset $2 until READY,
+# ANOMALY (F60) or the bound. $1 the expected boot_id. Sets J7A_READY (READY|ANOMALY|NOTREADY),
+# J7A_READY_OFF and J7A_READY_EPOCH. Records every outcome.
+j7a_poweroff_ready() {
+	local want="$1" off="$2" out t0 now sz last lastch gone=0 cls
+	out="$(board 30 "J7A_WANT_BOOT=$want b_poweroff")"
+	printf '%s\n' "$out" | rec_pipe
+	case "$out" in *poweroff=issuing*) ;; *) J7A_READY=NOTREADY; rec "j7a poweroff NOT issued: the board is not on the expected boot or did not answer"; return 1 ;; esac
+	t0=$(date +%s); last=$(stat -c %s "$S1_COM3_LOG" 2>/dev/null || echo 0); lastch=$t0
+	while :; do
+		sleep 2
+		now=$(date +%s)
+		sz=$(stat -c %s "$S1_COM3_LOG" 2>/dev/null || echo 0)
+		if [ "$sz" != "$last" ]; then last=$sz; lastch=$now; fi
+		if [ "$gone" = 0 ] && [ -z "$(read_boot_id)" ]; then gone=1; fi
+		cls="$(j7a_ready_class "$S1_COM3_LOG" "$off" $(( now - lastch )) $(( now - t0 )) "$gone")"
+		case "$cls" in
+		ready_state=READY*)
+			J7A_READY=READY; J7A_READY_OFF="$sz"; J7A_READY_EPOCH="$now"
+			rec "j7a poweroff_ready com3_bytes_at_ready=$sz ready_epoch=$now ($cls, ssh gone)"
+			return 0 ;;
+		ready_state=ANOMALY*)
+			J7A_READY=ANOMALY
+			rec "j7a ANOMALY F60: firmware text after the poweroff offset ($cls): L4T rebooted instead of powering off. NO CUT: let L4T boot; not counted; retry once (§15.13.12)"
+			return 1 ;;
+		esac
+		if (( now - t0 >= J7A_READY_BOUND_S )); then
+			J7A_READY=NOTREADY
+			rec "j7a NOT READY at the $J7A_READY_BOUND_S s bound ($cls, ssh_gone=$gone): NO CUT; the owner reads COM3 (§15.13.9)"
+			return 1
+		fi
+	done
+}
+
+# Waits for the first COM3 byte after offset $1 (the owner restores power), bounded by $2 seconds. Sets
+# J7A_FW_EPOCH. 0 when a byte came.
+j7a_wait_first_byte() {
+	local off="$1" bound="$2" t0 now
+	t0=$(date +%s)
+	while :; do
+		now=$(date +%s)
+		if (( $(stat -c %s "$S1_COM3_LOG" 2>/dev/null || echo 0) > off )); then J7A_FW_EPOCH=$now; rec "j7a first_fw_byte_epoch=$now"; return 0; fi
+		(( now - t0 >= bound )) && return 1
+		sleep 1
+	done
+}
+
+# §15.13.7 j7a_watch_fw ctl over COM3 from offset $1: the banner, the countdown and L4TLauncher: with no
+# menu or Shell text. Prints ok, F58 or timeout.
+j7a_fw_class() {
+	local t
+	t="$(j7a_seg_read "$S1_COM3_LOG" "$1" | j7a_clean)"
+	if printf '%s\n' "$t" | grep -aqE 'Boot Manager|Device Manager|Boot Maintenance Manager|Shell>|UEFI Interactive Shell'; then echo F58; return; fi
+	if printf '%s\n' "$t" | grep -aq 'L4TLauncher:'; then echo ok; return; fi
+	echo waiting
+}
+
+# §15.13.7 j7a ctl: the control cold boot with the TX refit.
+cmd_j7a_ctl() {
+	local out old off kl0 fw t0 s1 g
+	j7a_setup ctl
+	j7a_phase_ok stage || die "j7a stage has not passed in this session"
+	rec_open "$J7A_SESS/ctl-$UTC-board.log"
+	g="$(j7a_gate_a ctl)" || die "gate A: ${g#*FAIL: }"
+	rec "$g"
+	out="$(board 30 b_identity)" || die "board unreachable"
+	old="$(kv boot_id "$out")"
+	[[ "$old" =~ ^[0-9a-f-]{36}$ ]] || die "no boot_id read"
+	mark_boot "$old" j7a-ctl
+	off=$(stat -c %s "$S1_COM3_LOG")
+	kl0=$(wc -l < "$(j7a_keylog_path "$S1_COM3_LOG")" | tr -dc 0-9)
+	rec "j7a com3_log=$(basename "$S1_COM3_LOG") phase=ctl"
+	rec "j7a com3_bytes_before_poweroff=$off"
+	rec "j7a keylog_lines_before_poweroff=$kl0"
+	if ! j7a_poweroff_ready "$old" "$off"; then
+		[ "$J7A_READY" = ANOMALY ] && { wait_new_boot_id "$old" "$(date +%s)" 0 0; rec "j7a ctl back boot_id=${NEW_BOOT_ID:-none} after F60"; }
+		check_private "$REC"; exit "$EXIT_J7A_NOGO"
+	fi
+	echo "READY: cut DC, fit TX on J14 pin 3 (owner, with DC removed), wait at least $J7A_CTL_OFF_S s, restore; press nothing" >&2
+	rec "j7a ctl READY printed: cut DC, fit TX (owner), restore"
+	j7a_wait_first_byte "$J7A_READY_OFF" 1800 || { rec "j7a ctl: no COM3 byte within 1800 s of READY (m5-design F36 if the power was restored: remove the wire, power cycle)"; check_private "$REC"; exit "$EXIT_J7A_NOGO"; }
+	t0=$(date +%s)
+	while :; do
+		fw="$(j7a_fw_class "$J7A_READY_OFF")"
+		[ "$fw" != waiting ] && break
+		(( $(date +%s) - t0 >= 300 )) && { fw=timeout; break; }
+		sleep 2
+	done
+	rec "j7a ctl firmware watch=$fw"
+	if [ "$fw" = F58 ]; then
+		rec "j7a ctl F58: menu or Shell text with no key sent: no go until one validated L4T boot; fix the wire (§15.13.12). NO CUT: leave the menu with Continue"
+		check_private "$REC"; exit 3
+	fi
+	RETURN_BOUND=600
+	wait_new_boot_id "$old" "$(date +%s)" 0 0 || { rec "j7a ctl NO RETURN within 600 s: advice by the COM3 class (§15.13.9)"; check_private "$REC"; exit 2; }
+	rec "j7a ctl back new_boot_id=$NEW_BOOT_ID"
+	s1="$J7A_SESS/snap-s1.log"
+	[ -f "$s1" ] && s1="$J7A_SESS/snap-s1-$UTC.log"
+	j7a_snap "$s1" S1 || die "S1 could not be taken"
+	g="$(j7a_state_gate "$(j7a_s0)" "$(j7a_s0)" "$(j7a_s0)" "$s1" "$(sed -n 's/^j7a stage loader_sha256=\([0-9a-f]\{64\}\) .*/\1/p' "$(j7a_phase_log stage)" | tail -n 1)" yes)"
+	rec "j7a ctl $g"
+	j7a_snap_delta "$(j7a_s0)" "$s1" | sed 's/^/j7a ctl delta(S0,S1) /' | rec_pipe
+	[ "$s1" = "$J7A_SESS/snap-s1.log" ] || cp "$s1" "$J7A_SESS/snap-s1.log"
+	slots_check "$(cat "$s1.slots")" "$J7A_SESS/ctl-$UTC-nvbootctrl.log"
+	slots_report "j7a ctl" "$J7A_SESS/ctl-$UTC-nvbootctrl.log"
+	j7a_mark_segment "$S1_COM3_LOG" "ctl-$UTC" "$off" "$(stat -c %s "$S1_COM3_LOG")" || rec "j7a ctl segment id already recorded"
+	[ "$SLOTS_STATE" = differ ] && exit 4
+	case "$g" in *result=F57*) rec "j7a ctl F57: the state after the control boot is not S0 plus the file (§15.13.8): IMMEDIATE STOP"; check_private "$REC"; exit 3 ;; esac
+	rec "j7a ctl RESULT ok"
+	check_private "$REC"
+}
+
+# ---- j7a: the go phase
+
+# The J7a reference directory: J6c's newest board log's directory.
+j7a_j6c_dir() { local b; b="$(j_newest_board J6c)"; [ -n "$b" ] && dirname "$b"; }
+
+# The five J6c reference pairs as registered in J-prereg.log's J7a stage ($1), never recomputed here:
+# one NAME=HEX per line, for canwatch --entry uefi's --ref-sha256 (§15.13.7, §15.13.8). canwatch refuses
+# unless all five are given and each file still hashes as registered.
+j7a_ref_pairs() {
+	[ -f "$1" ] || return 0
+	awk '$0 == "prereg stage=j7a" { on = 1; next } on && /^prereg stage=/ { on = 0 } on && $1 == "prereg" && $2 == "j7a" && $3 == "ref_j6c" && $5 ~ /^sha256=[0-9a-f]+$/ && !seen[$4]++ { print $4 "=" substr($5, 8) }' "$1"
+}
+
+# §15.13.8 j7a_prereg_append: the J7a stage of J-prereg.log, written once, before the first go, after gate
+# A. It never re-emits J2's or J6's lines. A later go verifies it against the harness, parser, rules
+# header, loader and J6c reference, and refuses a mismatch (an amendment is the owner's, by hand).
+j7a_prereg_lines() {
+	local j6c l
+	j6c="$(j7a_j6c_dir)"
+	echo "prereg j7a head=$(git -C "$HERE" rev-parse HEAD 2>/dev/null || echo unknown) tree=$(git_paths_clean "$HERE" "$HERE/$PROG" "$PARSER" "$S1DIR/kpf-decode.py" "$HERE/../uefi/com3-term.ps1" "$HERE/../uefi/m5load-rules.h" && echo clean || echo DIRTY)"
+	echo "prereg j7a s1-board.sh sha256=$(j_sha256 "$HERE/$PROG")"
+	echo "prereg j7a parse-s1.py sha256=$(j_sha256 "$PARSER")"
+	echo "prereg j7a kpf-decode.py sha256=$(j_sha256 "$S1DIR/kpf-decode.py")"
+	echo "prereg j7a com3-term.ps1 sha256=$(j_sha256 "$HERE/../uefi/com3-term.ps1")"
+	echo "prereg j7a m5load-rules.h sha256=$(j_sha256 "$HERE/../uefi/m5load-rules.h")"
+	echo "prereg j7a image=s1-j1 entry=uefi arm=uefi"
+	echo "prereg j7a loader_sha256=$J7A_LSHA blob_sha256=$KIMG_SHA gate_sha256=$(j_sha256 "$J7A_GATE") d0_reference=$(git -C "$HERE" rev-parse --verify -q "$(j7a_conf D0A_REFERENCE)^{commit}" 2>/dev/null) t0_record=$(j7a_conf T0_RECORD)"
+	echo "prereg j7a rule_text=J7a-rule-15.13.md sha256=$(j_sha256 "$RECDIR/J7a-rule-15.13.md")"
+	echo "prereg j7a constants loader_expect_s=$J7A_LOADER_EXPECT_S loader_cut_s=$J7A_LOADER_CUT_S prompt_after_s=$J7A_PROMPT_AFTER_S dram_off_s=$J7A_DRAM_OFF_S esp_margin_b=$J7A_ESP_MARGIN_B go_count_s=$J7A_GO_COUNT_S cap=$J7A_CAP"
+	for l in parse-s1.txt canwatch.txt s1-j1a.bin s1-j1b.bin s1-j1c.bin; do
+		echo "prereg j7a ref_j6c $l sha256=$(j_sha256 "$j6c/$l")"
+	done
+	echo "prereg j7a fill_rate_factor=$(j6_prereg_factor)"
+	echo "prereg j7a q20_branch=$(j7a_conf Q20_BRANCH)"
+	echo "prereg j7a peripherals=ethernet-cable-removed board-usb-removed m2-wireless-fitted (D46)"
+	echo "prereg j7a decisions D30=$(j7a_conf D30) D34_J7A=$(j7a_conf D34_J7A) D35=$(j7a_conf D35) D38=$(j7a_conf D38) D45=$(j7a_conf D45) D46=$(j7a_conf D46) waivers_sha256=$(j_sha256 "$RECDIR/J-waivers.conf")"
+}
+
+j7a_prereg_append() {
+	local f="$RECDIR/J-prereg.log" cur reg
+	[ -f "$RECDIR/J7a-rule-15.13.md" ] || die "no J7a-rule-15.13.md in the record directory: §15.13.6.1, §15.13.10 and §15.13.11's text is registered by hash before the first go (§15.13.8)"
+	[ -f "$(j7a_j6c_dir)/canwatch.txt" ] || die "no J6c canwatch.txt: the reference profile is registered before the first go (§15.13.8)"
+	[[ "$(j6_prereg_factor)" = 4 ]] || die "the registered fill-rate factor is not 4 (§15.13.8: unchanged)"
+	cur="$(j7a_prereg_lines)"
+	if grep -qx 'prereg stage=j7a' "$f" 2>/dev/null; then
+		reg="$(awk '$0 == "prereg stage=j7a" { b = ""; on = 1; next } on && /^prereg stage=/ { on = 0 } on && /^prereg j7a / { b = b $0 "\n" } END { printf "%s", b }' "$f" | grep -v '^prereg j7a head=')"
+		[ "$reg" = "$(printf '%s\n' "$cur" | grep -v '^prereg j7a head=')" ] \
+			|| die "J-prereg.log's J7a stage no longer matches the harness, parser, loader, rule text or J6c reference: restore them; an amendment is the owner's, in the D34 form (§15.13.8)"
+		echo "prereg j7a ok sha256=$(j_sha256 "$f")"
+		return 0
+	fi
+	grep -qx 'prereg stage=j2' "$f" 2>/dev/null || die "J-prereg.log holds no J2 pre-registration"
+	[ "$(j7a_counted_runs)" = 0 ] || die "a counted J7a go exists but no J7a stage: the record directory is inconsistent"
+	printf 'prereg stage=j7a\nprereg j7a utc=%s by=first-go reason=J7a pre-registration before its first go\n%s\n' "$(utc_now)" "$cur" >> "$f"
+	check_private "$f"
+	echo "prereg j7a appended sha256=$(j_sha256 "$f")"
+}
+
+# The loader phase and idle state for SLOWLOAD and advice: prints 'running' while a launch has no completed
+# run (an echoed launch line or an M5L line that is not CHECK PASS, M5L GO or a refusal is last), 'done'
+# after a completion, 'none' otherwise. $1 cleaned text.
+j7a_loader_phase() {
+	printf '%s\n' "$1" | awk '
+	{ s = $0; sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s) }
+	s ~ /(^|> *)M5LOAD([.]EFI)? +(check|go)$/ { p = "running"; next }
+	s ~ /^M5L (CHECK PASS|GO)$/ || s ~ /^M5L REFUSE/ { p = "done"; next }
+	s ~ /M5L-EBS|M5L-JUMP|^T234-SHIM/ { p = "exited"; next }
+	s ~ /^M5L / { if (p != "exited") p = "running"; next }
+	(s ~ /^Shell>/ || s ~ /^FS[0-9]+:[^ ]*>/) && p != "exited" { p = "prompt"; next }
+	END { print (p == "" ? "none" : p) }'
+}
+
+# A go line in the key log after line $2: prints the epoch of the Enter that ends 'M5LOAD.EFI go'.
+j7a_keylog_go_epoch() {
+	[ -f "$1" ] || return 0
+	tr -d '\r' < "$1" | TZ=UTC awk -v skip="$2" '
+	NR <= skip || $2 != "sent" { next }
+	{ h = ""; for (i = 3; i <= NF; i++) h = h (i > 3 ? " " : "") $i }
+	h == "0d" { if (b == "M5LOAD.EFI go") { d = $1; gsub(/[-T:]/, " ", d); print mktime(substr(d, 1, 19)); exit } b = ""; next }
+	h == "08" { b = substr(b, 1, length(b) - 1); next }
+	h ~ /^[2-7][0-9a-f]$/ { b = b sprintf("%c", strtonum("0x" h)) }'
+}
+
+J7A_WATCH_END=""; J7A_GO_OFF=""; J7A_GO_EPOCH=""; J7A_STATES=""
+
+# §15.13.7 j7a_watch_go. $1 old boot_id, $2 the poweroff offset, $3 the key log lines before it, $4 the
+# params' return_bound_s. Logs each state with its offset and epoch, SLOWLOAD (F63) per silent stretch,
+# the §15.13.6.1 bounds as they pass, the COUNTED budget key (moving the record to J7a-N), negatives,
+# SHELL-AFTER-GO, and ends with J7A_WATCH_END: MISSED, REFUSE, SHELL-AFTER-GO, L4T-NOGO, BACK, NORETURN.
+j7a_watch_go() {
+	local old="$1" off="$2" kl0="$3" rb="$4" kl states s n seen="" now sz last lastch slow=0 txt ph mgo_e="" goe="" bid t0 counted=no b line dram=""
+	local -A BND=()
+	kl="$(j7a_keylog_path "$S1_COM3_LOG")"
+	t0=$(date +%s); last=$(stat -c %s "$S1_COM3_LOG"); lastch=$t0
+	while :; do
+		sleep 2
+		now=$(date +%s)
+		sz=$(stat -c %s "$S1_COM3_LOG" 2>/dev/null || echo 0)
+		if [ "$sz" != "$last" ]; then last=$sz; lastch=$now; slow=0; fi
+		if [ -z "$J7A_FW_EPOCH" ] && (( sz > J7A_READY_OFF )); then
+			J7A_FW_EPOCH=$now
+			rec "j7a first_fw_byte_epoch=$now"
+			dram="$(j7a_dram_off_lines "$J7A_READY_EPOCH" "$now" "$J7A_DRAM_OFF_S")"
+			printf '%s\n' "$dram" | rec_pipe
+			printf '%s\n' "$dram" | grep -q 'bound=VIOLATED' && { echo "DRAM_OFF_S NOT MET: do not enter the Shell; let L4T autoboot; this attempt is not counted (§15.13.15)" >&2; rec "j7a DRAM_OFF_S not met: the operator does not enter the Shell"; }
+		fi
+		states="$(j7a_go_states "$S1_COM3_LOG" "$J7A_READY_OFF" "$IMG")"
+		J7A_STATES="$states"
+		while IFS= read -r line; do
+			case "$line" in j7a_state\ *|j7a_neg\ *) ;; *) continue ;; esac
+			case " $seen " in *" $line "*) continue ;; esac
+			seen="$seen $line"
+			rec "j7a watch ${line#j7a_} epoch=$now"
+			case "$line" in j7a_neg*) rec "j7a NEGATIVE token after COUNTED (${line#j7a_neg })" ;; esac
+		done <<< "$states"
+		[ -z "$goe" ] && goe="$(j7a_keylog_go_epoch "$kl" "$kl0")" && [ -n "$goe" ] && rec "j7a go_enter epoch=$goe"
+		if [ -z "$mgo_e" ] && j7a_has_state "$states" M5L-GO; then mgo_e=$now; fi
+		txt="$(j7a_seg_read "$S1_COM3_LOG" "$J7A_READY_OFF" | j7a_clean)"
+		ph="$(j7a_loader_phase "$txt")"
+		if [ "$ph" = running ] && (( now - lastch > J7A_LOADER_EXPECT_S )) && [ "$slow" = 0 ]; then
+			slow=1
+			rec "j7a SLOWLOAD F63: a loader silent stretch past LOADER_EXPECT_S ($J7A_LOADER_EXPECT_S s): recorded; wait; not a cut and not F55 (§15.13.12)"
+		fi
+		if j7a_has_state "$states" MISSED; then J7A_WATCH_END=MISSED; break; fi
+		if [ "$counted" = no ] && { j7a_has_state "$states" REFUSE || j7a_has_state "$states" T1-INCOMPLETE; } && ! j7a_has_state "$states" GO; then
+			J7A_WATCH_END=REFUSE; break
+		fi
+		if [ "$counted" = no ] && j7a_has_state "$states" SHELL-AFTER-GO; then J7A_WATCH_END=SHELL-AFTER-GO; break; fi
+		if [ "$counted" = no ] && j7a_has_state "$states" L4T-NOGO; then J7A_WATCH_END=L4T-NOGO; break; fi
+		if [ "$counted" = no ]; then
+			if j7a_has_state "$states" COUNTED; then
+				counted=yes
+			elif [ -n "$mgo_e" ] && (( now - mgo_e >= J7A_GO_COUNT_S )) && ! j7a_has_state "$states" REFUSE-GO; then
+				counted=yes
+			fi
+			if [ "$counted" = yes ]; then
+				J7A_GO_OFF="$(j7a_state_off "$states" M5L-GO)"; J7A_GO_OFF="${J7A_GO_OFF:-$(j7a_state_off "$states" COUNTED)}"
+				J7A_GO_EPOCH="${goe:-${mgo_e:-$now}}"
+				j7a_counted_move
+				rec "j7a go_counted com3_bytes_at_go=$J7A_GO_OFF go_epoch=$J7A_GO_EPOCH"
+				rec "j7a return_bound_s=$rb"
+			fi
+		fi
+		if [ "$counted" = yes ]; then
+			j7a_bound_check "$states" "$now"
+			if j7a_has_state "$states" L4T || j7a_has_state "$states" BANNER || (( now - J7A_GO_EPOCH >= 600 )); then
+				bid="$(read_boot_id)"
+				if [[ "$bid" =~ ^[0-9a-f-]{36}$ ]] && [ "$bid" != "$old" ]; then NEW_BOOT_ID="$bid"; J7A_WATCH_END=BACK; break; fi
+			fi
+			if (( now >= J7A_GO_EPOCH + rb + 600 )); then J7A_WATCH_END=NORETURN; break; fi
+		elif (( now - t0 >= 7200 )); then
+			J7A_WATCH_END=NORETURN; break
+		fi
+	done
+	rec "j7a watch end=$J7A_WATCH_END counted=$counted"
+}
+
+# The §15.13.6.1 bounds after a counted go, each recorded once when it passes with its token missing.
+j7a_bound_check() {
+	local states="$1" now="$2" e shim reset k
+	e="$J7A_GO_EPOCH"
+	j7a_bound1 "$states" "$now" JUMP $(( e + 60 )) "M5L-EBS ok and M5L-JUMP, 60 s after M5L GO"
+	shim="$(j7a_state_epoch SHIM)"
+	if [ -n "$shim" ]; then
+		j7a_bound1 "$states" "$now" WDT0 $(( shim + 20 )) "t234: WDT0, 20 s after the shim line"
+		j7a_bound1 "$states" "$now" FILLED $(( shim + 60 )) "canary c3 filled, 60 s after the shim line"
+		j7a_bound1 "$states" "$now" PROCNTO $(( shim + 120 )) "procnto up, 120 s after the shim line"
+	else
+		j7a_bound1 "$states" "$now" SHIM $(( e + 70 )) "the shim line, 10 s after M5L-JUMP"
+	fi
+	reset="$(j7a_state_epoch RESET)"
+	[ -n "$reset" ] && j7a_bound1 "$states" "$now" BANNER $(( reset + 60 )) "a firmware banner, 60 s after the reset line"
+	return 0
+}
+j7a_state_epoch() { sed -n "s/^j7a watch state $1 off=[0-9]* epoch=\\([0-9][0-9]*\\)\$/\\1/p" "$REC" 2>/dev/null | head -n 1; }
+j7a_bound1() {
+	local states="$1" now="$2" st="$3" at="$4" what="$5"
+	j7a_has_state "$states" "$st" && return 0
+	(( now > at )) || return 0
+	grep -aq "^j7a BOUND PASSED $st " "$REC" 2>/dev/null && return 0
+	rec "j7a BOUND PASSED $st (wait bound, not a result): $what; NO CUT by the clock (§15.13.9)"
+}
+
+# COUNTED moves this attempt's directory from J7a-nogo-<utc> to J7a-<n> (n = counted before + 1).
+j7a_counted_move() {
+	local n to
+	n=$(( $(j7a_counted_runs) + 1 ))
+	to="$RECDIR/J7a-$n"
+	[ -e "$to" ] && to="$RECDIR/J7a-$n-a$UTC"
+	if mv "$SD" "$to"; then SD="$to"; REC="$to/$(basename "$REC")"; base="$SD/$(basename "$base")"; fi
+}
+
+# §15.13.7 j7a go s1-j1.
+cmd_j7a_go() {
+	local out old off kl0 g pre rb pstore_before="" s2 base name SD
+	j7a_setup go
+	resolve_kimg s1-j1
+	j7a_phase_ok ctl || die "j7a ctl (the control boot with the TX refit) has not passed in this session"
+	j7a_precondition >/dev/null || exit 1
+	j7a_go_budget_gate
+	[ "$(sed -n 's/^j7a stage loader_sha256=\([0-9a-f]\{64\}\) .*/\1/p' "$(j7a_phase_log stage)" | tail -n 1)" = "$J7A_LSHA" ] \
+		|| die "S1_J7A_LOADER is not the loader this session staged"
+	rb="$(param return_bound_s)"
+	SD="$RECDIR/J7a-nogo-$UTC"
+	mkdir -p "$SD" || die "cannot create $(basename "$SD")"
+	name="s1-j1-$UTC"; base="$SD/$name"
+	rec_open "$base-board.log"
+	rec "j7a go image=s1-j1 session=$(basename "$J7A_SESS") utc=$UTC loader_sha256=$J7A_LSHA"
+	j7a_precondition | rec_pipe
+	rec "j7a uptime gate: not applied (§15.13.7 P11: the L4T instance is powered off and DRAM left unpowered before the entered power cycle)"
+	g="$(j7a_gate_a go)" || die "gate A: ${g#*FAIL: }"
+	rec "$g"
+	pre="$(j7a_prereg_append)" || exit 1
+	rec "j7a $pre"
+	s2="$SD/$name-s2.log"
+	j7a_snap "$s2" S2 || die "S2 could not be taken; nothing was changed"
+	pstore_before="$(grep '^efisnap pstore ' "$s2" | sed 's/^efisnap //')"
+	old="$(j7a_snap_val "$s2" boot_id)"
+	[[ "$old" =~ ^[0-9a-f-]{36}$ ]] || die "no boot_id in S2"
+	slots_check "$(cat "$s2.slots")" "$base-nvbootctrl-pre.log"
+	slots_report "j7a go" "$base-nvbootctrl-pre.log"
+	[ "$SLOTS_STATE" = differ ] && exit 4
+	mark_boot "$old" j7a
+	off=$(stat -c %s "$S1_COM3_LOG")
+	kl0=$(wc -l < "$(j7a_keylog_path "$S1_COM3_LOG")" | tr -dc 0-9)
+	rec "j7a com3_log=$(basename "$S1_COM3_LOG") phase=go"
+	rec "j7a com3_bytes_before_poweroff=$off"
+	rec "j7a keylog_lines_before_poweroff=$kl0"
+	J7A_FW_EPOCH=""
+	if ! j7a_poweroff_ready "$old" "$off"; then
+		[ "$J7A_READY" = ANOMALY ] && { RETURN_BOUND=900; wait_new_boot_id "$old" "$(date +%s)" 0 0; rec "j7a go back boot_id=${NEW_BOOT_ID:-none} after F60 (not counted)"; }
+		check_private "$REC"; exit "$EXIT_J7A_NOGO"
+	fi
+	echo "READY: cut DC for at least DRAM_OFF_S ($J7A_DRAM_OFF_S s), note the times, restore" >&2
+	rec "j7a READY printed: cut DC for at least DRAM_OFF_S, note the times, restore"
+	j7a_watch_go "$old" "$off" "$kl0" "$rb"
+	printf '%s\n' "$(grep -a '^dram_off \|^j7a first_fw_byte_epoch=\|^j7a poweroff_ready ' "$REC" | sed 's/^/  /')" > "$base-dram-off.log"
+	check_private "$base-dram-off.log"
+	case "$J7A_WATCH_END" in
+	MISSED|REFUSE|SHELL-AFTER-GO|L4T-NOGO)
+		case "$J7A_WATCH_END" in
+		MISSED) rec "j7a MISSED: L4TLauncher: before Shell text: not counted (exit 6); let L4T boot, repeat from J7a-go" ;;
+		REFUSE) rec "j7a REFUSE in check (F50-F52, F54 by its line): type reset, no go, stop, owner; not counted (exit 6)" ;;
+		SHELL-AFTER-GO) rec "j7a shell_after_go F61$(j7a_has_state "$J7A_STATES" REFUSE-GO && echo ' and F53'): not counted; the operator arms once and types reset; the session runs C (exit 6)" ;;
+		L4T-NOGO) rec "j7a L4T returned with no counted go: not counted (exit 6)" ;;
+		esac
+		RETURN_BOUND=1800
+		wait_new_boot_id "$old" "$(date +%s)" 0 0 && rec "j7a back new_boot_id=$NEW_BOOT_ID (uncounted attempt)"
+		j7a_return "$old" "$off" "$kl0" uncounted
+		exit "$EXIT_J7A_NOGO" ;;
+	NORETURN)
+		rec "j7a NO RETURN within the watch's bound. Power-cut advice by the COM3 class (§15.13.9), never by the clock alone: '$(repo_rel "$HERE/$PROG") advice $(repo_rel "$REC")'"
+		check_private "$REC"; exit 2 ;;
+	esac
+	j7a_return "$old" "$off" "$kl0" counted
+}
+
+# ---- j7a: the return (§15.13.6 J7a-return, §15.13.8)
+
+# A temporary directory outside the record directory, removed by the EXIT trap (P13). Called in the
+# current shell (never inside $(...)), so the trap's list holds it. Sets J7A_T.
+J7A_T=""
+j7a_tmpdir() {
+	J7A_T="$(mktemp -d 2>/dev/null)" || die "cannot make a temporary directory"
+	if [ -n "$RECDIR" ] && case "$(cd "$J7A_T" && pwd)/" in "$RECDIR"/*) true ;; *) false ;; esac; then
+		rm -rf "$J7A_T"; die "the temporary directory lies inside the record directory (P13)"
+	fi
+	J7A_TMPS="$J7A_TMPS $J7A_T"
+}
+
+# §15.13.7: S1_J7A_ESP_REMOVE may only name the staged path exactly. 0 when $1 is acceptable.
+j7a_remove_ok() { [ "$1" = "$J7A_ESP_PATH" ]; }
+
+# §15.13.6 J7a-return, idempotent per attempt ('j7a return done' ends it). $1 old boot_id, $2 the poweroff
+# offset, $3 the key log lines before it, $4 counted|uncounted. Reads SD, REC, base, name and the watch's
+# J7A_STATES. Reads reset_reason, the black box, pstore, nvbootctrl, S3 and the state gate; the key-log
+# allowlist; the segment through a temporary file outside the record directory for the parser and
+# canwatch; the redacted segment copy; the resmem and memmap blocks; the segment ledger. Exit 7 for F55.
+j7a_return() {
+	local old="$1" off="$2" kl0="$3" kind="$4" out reason bb lsha s0 s1 s3 s4 g kc wfrom wto sag end t seg rsha pargs cwargs p verdict rc cw row j6c
+	local states="${J7A_STATES:-}" kl f55=no warm reasons n
+	grep -aq '^j7a return done' "$REC" 2>/dev/null && { rec "j7a return: already done for this attempt"; return 0; }
+	kl="$(j7a_keylog_path "$S1_COM3_LOG")"
+	end=$(stat -c %s "$S1_COM3_LOG")
+	[ -n "$states" ] || states="$(j7a_go_states "$S1_COM3_LOG" "$off" "$IMG")"
+	rec "j7a return kind=$kind segment_start=$off segment_end=$end"
+	# the key-log allowlist: keys are allowed only while firmware or Shell text was COM3's last class
+	wfrom="$(sed -n 's/^j7a first_fw_byte_epoch=\([0-9][0-9]*\)$/\1/p' "$REC" | head -n 1)"
+	wto="$(j7a_state_epoch L4T)"; [ -n "$wto" ] || wto="$(j7a_state_epoch MISSED)"; [ -n "$wto" ] || wto="$(j7a_state_epoch L4T-NOGO)"
+	sag=no; j7a_has_state "$states" SHELL-AFTER-GO && sag=yes
+	kc="$(j7a_keylog_check "$kl" "$kl0" "${wfrom:-0}" "${wto:-0}" "$sag")"
+	rec "j7a $kc"
+	case "$kc" in
+	*result=ok*) tail -n +"$(( kl0 + 1 ))" "$kl" > "$base-keys-allowlist-checked-unredacted.log"; check_private "$base-keys-allowlist-checked-unredacted.log"
+	             rec "j7a key log copy: $(basename "$base-keys-allowlist-checked-unredacted.log") (allowlist-checked, unredacted: typed bytes are hex)" ;;
+	*) rec "j7a F64: the key log is not copied into a J7a directory; flagged for the owner; the run's reading is unaffected (§15.13.7)" ;;
+	esac
+	case "$kc" in *f59=yes*) rec "j7a F59: an armed or sent entry after the Enter on go other than SHELL-AFTER-GO's arm and reset: deviation recorded" ;; esac
+	# board reads: black box, reset_reason, pstore, S3, nvbootctrl
+	out="$(board 180 b_after)" || rec "j7a return read ended rc=$?"
+	printf '%s\n' "$out" | rec_pipe
+	reason="$(kv reset_reason "$out")"
+	rec "j7a reset_reason=${reason:-unread}"
+	if [ "$kind" = counted ]; then
+		if j7a_has_state "$states" PROCNTO; then
+			if [ -n "$reason" ] && [ "$reason" != MAINSWRST ] && ! j7a_has_state "$states" RESET; then
+				rec "j7a F62 reset_reason=$reason after procnto up and before the image's reset line: counted; c2 by the partial rule; no retry of the unchanged image (D42)"
+			fi
+		else
+			f55=yes
+			rec "j7a F55: a counted go never reached procnto up: counted; no reading; J7a ends for the session; D42 (§15.13.12)"
+		fi
+		if j7a_has_state "$states" COUNTED && printf '%s\n' "$states" | grep -q '^j7a_neg '; then rec "j7a negatives after COUNTED: $(printf '%s\n' "$states" | grep -c '^j7a_neg ')"; fi
+	fi
+	bb="$base-blackbox.log"
+	if [ "$kind" = counted ] && timeout 300 scp "${ssh_work[@]}" "$ORIN_HOST:$IMG-$UTC-blackbox.log" "$bb" </dev/null >/dev/null 2>&1; then
+		lsha="$(j_sha256 "$bb")"
+		if [ "$lsha" = "$(kv blackbox_sha256 "$out")" ]; then
+			rec "j7a black box copied sha256=$lsha, equal to the board's"
+			RMFILES="$IMG-$UTC-blackbox.log" board 60 b_rmfiles | rec_pipe
+		else
+			rec "j7a black box copy differs from the board's: the board keeps it"
+		fi
+	else
+		bb=""
+		RMFILES="$IMG-$UTC-blackbox.log" board 60 b_rmfiles >/dev/null 2>&1
+		[ "$kind" = counted ] && rec "j7a black box copy FAILED"
+	fi
+	s3="$base-s3.log"
+	j7a_snap "$s3" S3 || rec "j7a S3 could not be taken"
+	slots_check "$(cat "$s3.slots" 2>/dev/null)" "$base-nvbootctrl-post.log"
+	slots_report "j7a return" "$base-nvbootctrl-post.log"
+	s0="$(j7a_s0)"; s1="$J7A_SESS/snap-s1.log"
+	g="$(j7a_state_gate "$s0" "$s1" "$base-s2.log" "$s3" "$J7A_LSHA" yes)"
+	rec "j7a $g"
+	case "$g" in
+	*result=warm-control*)
+		rec "j7a warm control: a variable changed only in Δ(S2,S3) (§15.13.8): reboot, S4, compare"
+		out="$(board 30 b_reboot)"; printf '%s\n' "$out" | rec_pipe
+		RETURN_BOUND=900
+		if wait_new_boot_id "$(j7a_snap_val "$s3" boot_id)" "$(date +%s)" 0 0; then
+			s4="$base-s4.log"
+			j7a_snap "$s4" S4
+			warm=ok
+			for n in $(j7a_snap_delta "$base-s2.log" "$s3" | awk '$1 == "changed" { print $2 }'); do
+				j7a_snap_delta "$s0" "$s1" | grep -qx "changed $n" && continue
+				j7a_snap_delta "$s3" "$s4" | grep -qx "changed $n" || warm=F57
+			done
+			rec "j7a warm control result=$warm"
+			[ "$warm" = F57 ] && g="state_gate result=F57 reasons=warm-control"
+		else
+			rec "j7a warm control: no new boot_id within the bound"; g="state_gate result=F57 reasons=warm-control-no-return"
+		fi ;;
+	esac
+	# the segment: raw bytes only through a temporary file outside the record directory (P13)
+	j7a_tmpdir
+	t="$J7A_T"
+	seg="$t/$name-segment-com3.log"
+	j7a_seg_read "$S1_COM3_LOG" "$off" "$end" > "$seg"
+	rsha="$(j_sha256 "$seg")"
+	rec "j7a segment raw_range=[$off,$end) raw_sha256=$rsha (the raw bytes are not kept)"
+	j7a_seg_read "$S1_COM3_LOG" "$off" "$end" | redact > "$base-com3-segment-redacted.log"
+	check_private "$base-com3-segment-redacted.log"
+	j7a_clean < "$seg" | grep -a '^M5L resmem ' | redact > "$base-resmem.txt"
+	j7a_clean < "$seg" | awk '/(^|> *)memmap *$/ { on = 1 } on { print } on && (/^Shell>/ || /^FS[0-9]+:[^ ]*> *$/) && !/memmap/ { on = 0 }' | redact > "$base-memmap.txt"
+	[ -s "$base-memmap.txt" ] || rm -f "$base-memmap.txt"
+	check_private "$base-resmem.txt" "$base-memmap.txt"
+	if [ "$kind" = counted ] && find_python; then
+		cp "$PARAMS" "$base-params.log" && check_private "$base-params.log"
+		pargs=(run "$seg" --profile board --mode host --out-dir "$SD" --conf "$S1DIR/s1-linux.conf" --entry uefi --arm uefi --loader-sha256 "$J7A_LSHA" --diag j1 --fill-factor "$(j6_prereg_factor)" --hold-mib "$(param j1_hold_mib)")
+		[ -n "$bb" ] && pargs+=(--blackbox "$bb")
+		[ -n "$reason" ] && pargs+=(--reset-reason "$reason")
+		verdict="$(timeout 900 "$PY_BIN" "$PARSER" "${pargs[@]}" 2>&1)"; rc=$?
+		printf '%s\n' "$verdict" | grep -E '^(S1PC |parse-s1: )' | rec_pipe
+		rec "j7a parser rc=$rc (its record: $(basename "$SD")/parse-s1.txt)"
+		j6c="$(j7a_j6c_dir)"
+		cwargs=(canwatch "$seg" --fill-factor "$(j6_prereg_factor)" --bin-dir "$SD" --out-dir "$SD" --entry uefi --ref-j6c "$j6c" --run-parse "$SD/parse-s1.txt")
+		while IFS= read -r p; do [ -n "$p" ] && cwargs+=(--ref-sha256 "$p"); done < <(j7a_ref_pairs "$RECDIR/J-prereg.log")
+		verdict="$(timeout 900 "$PY_BIN" "$PARSER" "${cwargs[@]}" 2>&1)"; rc=$?
+		printf '%s\n' "$verdict" | grep -E '^parse-s1: ' | rec_pipe
+		cw="$(grep -a '^S1CW result=' "$SD/canwatch.txt" 2>/dev/null | tail -n 1)"
+		rec "j7a canwatch rc=$rc ${cw:-S1CW result=unwritten}"
+		[ -f "$SD/canwatch.txt" ] && { check_private "$SD/canwatch.txt"; privacy_scan "$SD/canwatch.txt"; }
+		row="$(sed -n 's/^S1PC j_row=//p' "$SD/parse-s1.txt" 2>/dev/null | tail -n 1)"
+		rec "j7a j_row=${row:-none}"
+	elif [ "$kind" = counted ]; then
+		rec "j7a parser NOT run: no python"
+	else
+		rec "j7a parser not run: uncounted attempt (§15.13.11)"
+	fi
+	rm -rf "$t"
+	rec "j7a absent on purpose: kpf not-applicable (no Linux ran in the entered power cycle); no -iomem-postrmmod, -pci-*, -wq* or -trace.txt; no kexec tree; no raw segment file"
+	[ -n "$bb" ] && privacy_scan "$bb"
+	privacy_scan "$base-com3-segment-redacted.log"
+	j7a_mark_segment "$S1_COM3_LOG" "$(basename "$SD")-$UTC" "$off" "$end" || rec "j7a segment id already recorded"
+	rec "j7a return done"
+	check_private "$REC"
+	[ "$SLOTS_STATE" = differ ] && { rec "j7a F30: STOP ALL BOARD WORK (exit 4)"; exit 4; }
+	case "$g" in *result=F57*) rec "j7a F57: the return state gate failed: IMMEDIATE STOP, whatever the canaries show (§15.13.10.1 V6)"; exit 3 ;; esac
+	[ "$f55" = yes ] && exit "$EXIT_J7A_F55"
+	return 0
+}
+
+# §15.13.7 j7a return BOARDLOG: re-enters go's return reads for an interrupted watch, idempotently.
+cmd_j7a_return() {
+	local bl="$1" off kl0 old name base SD states
+	j7a_setup return
+	resolve_kimg s1-j1
+	[ -f "$bl" ] || die "no board log $bl"
+	grep -aq "^j7a com3_log=$(basename "$S1_COM3_LOG") phase=go" "$bl" || die "the board log names another capture: S1_COM3_LOG must be the capture of that go"
+	off="$(sed -n 's/^j7a com3_bytes_before_poweroff=\([0-9][0-9]*\)$/\1/p' "$bl" | tail -n 1)"
+	kl0="$(sed -n 's/^j7a keylog_lines_before_poweroff=\([0-9][0-9]*\)$/\1/p' "$bl" | tail -n 1)"
+	J7A_READY_OFF="$(sed -n 's/^j7a poweroff_ready com3_bytes_at_ready=\([0-9][0-9]*\) .*/\1/p' "$bl" | tail -n 1)"
+	[ -n "$off" ] && [ -n "$kl0" ] && [ -n "$J7A_READY_OFF" ] || die "the board log has no poweroff, key-log or READY offset"
+	SD="$(cd "$(dirname "$bl")" && pwd)"; REC="$SD/$(basename "$bl")"
+	name="$(basename "$bl" -board.log)"; base="$SD/$name"
+	UTC="${name#s1-j1-}"
+	old="$(j7a_snap_val "$base-s2.log" boot_id)"
+	states="$(j7a_go_states "$S1_COM3_LOG" "$J7A_READY_OFF" s1-j1)"
+	J7A_STATES="$states"
+	if grep -aq '^j7a go_counted ' "$REC"; then j7a_return "$old" "$off" "$kl0" counted; else j7a_return "$old" "$off" "$kl0" uncounted; fi
+}
+
+# j7a-status BOARDLOG: the watch states from COM3 (no board contact).
+cmd_j7a_status() {
+	local bl="$1" ro
+	[ -n "${S1_COM3_LOG:-}" ] || die "S1_COM3_LOG must name the capture"
+	j_norm_capture
+	ro="$(sed -n 's/^j7a poweroff_ready com3_bytes_at_ready=\([0-9][0-9]*\) .*/\1/p' "$bl" | tail -n 1)"
+	[ -n "$ro" ] || ro="$(sed -n 's/^j7a com3_bytes_before_poweroff=\([0-9][0-9]*\)$/\1/p' "$bl" | tail -n 1)"
+	[ -n "$ro" ] || die "the board log holds no j7a offset"
+	j7a_go_states "$S1_COM3_LOG" "$ro" s1-j1
+}
+
+# ---- j7a: power-cut advice (§15.13.9)
+
+# $1 capture, $2 the poweroff offset, $3 READY's offset (empty: no READY recorded), $4 go_epoch (empty: no
+# counted go recorded), $5 return_bound_s, $6 now, $7 last growth epoch (0 none), $8 ssh answered|silent|
+# unchecked. Never advises a cut while ssh answers. Prints 'advice' lines.
+j7a_advice() {
+	local f="$1" off="$2" ready="$3" goe="$4" rb="${5:-0}" now="$6" grow="${7:-0}" ssh="$8" cs mt idle txt last menu=no st ph banner=no counted=no
+	echo "advice j7a ssh=$ssh poweroff_offset=$off ready_offset=${ready:-none} go_epoch=${goe:-none}"
+	if [ "$ssh" = answered ]; then echo "advice NO CUT: L4T answers ssh (§15.13.9)"; return 0; fi
+	cs="$(capture_state "$f" j7a)"
+	if [ "$cs" != running ]; then
+		echo "advice NO CUT: no capture is running (capture=$cs), so the class cannot be read; M5's exception needs COM3 evidence. Start a fresh capture, watch it 10 minutes, then run advice again (§15.13.9 last row)"
+		return 0
+	fi
+	mt=$(stat -c %Y "$f" 2>/dev/null || echo 0); (( grow > mt )) && mt=$grow
+	idle=$(( now - mt ))
+	txt="$(j7a_seg_read "$f" "$off" | j7a_clean)"
+	last="$(printf '%s\n' "$txt" | grep -av '^[[:space:]]*$' | grep -av '^--- raw capture' | tail -n 1)"
+	printf '%s\n' "$last" | grep -aqE 'Shell>|:[^ ]*>[[:space:]]*$|login:|[Pp]assword:|Boot Manager|Setup|Select|Press|Continue|seconds to skip' && menu=yes
+	echo "advice j7a com3_silent_s=$idle last_is_menu_or_prompt=$menu"
+	if [ -z "$ready" ]; then
+		if printf '%s\n' "$txt" | grep -aqE 'MB1 [(]version|Jetson UEFI firmware|ESC +to enter Setup|L4TLauncher:'; then
+			echo "advice NO CUT (F60): firmware text after the poweroff offset with no READY: L4T rebooted instead of powering off; let L4T boot; not counted"
+		elif printf '%s\n' "$txt" | grep -aq 'reboot: Power down'; then
+			echo "advice NO CUT: the power-down line is on COM3 but the harness recorded no READY: the owner decides"
+		else
+			echo "advice NO CUT: poweroff issued, no power-down line yet (§15.13.9)"
+		fi
+		return 0
+	fi
+	st="$(j7a_go_states "$f" "$ready" s1-j1)"
+	if ! j7a_has_state "$st" FIRMWARE; then
+		echo "advice READY: the planned DC cycle (owner, X6), unpowered for at least DRAM_OFF_S ($J7A_DRAM_OFF_S s) before a counted go"
+		return 0
+	fi
+	{ j7a_has_state "$st" COUNTED || [ -n "$goe" ]; } && counted=yes
+	if [ "$counted" = no ] && j7a_has_state "$st" M5L-GO && ! j7a_has_state "$st" REFUSE-GO && ! j7a_has_state "$st" SHELL-AFTER-GO; then
+		echo "advice NO CUT: M5L GO is on COM3 but no go_epoch is recorded (the watch did not count it): the owner decides (§15.13.9)"
+		return 0
+	fi
+	if [ "$counted" = no ]; then
+		if j7a_has_state "$st" SHELL-AFTER-GO; then
+			echo "advice NO CUT (SHELL-AFTER-GO, F61): the operator arms once, types reset, presses Enter, confirms disarmed, and presses nothing more"
+			return 0
+		fi
+		ph="$(j7a_loader_phase "$txt")"
+		case "$ph" in
+		running)
+			if printf '%s\n' "$txt" | grep -aqE 'Synchronous Exception|Exception Type|X64 Exception|!!!! '; then
+				echo "advice ONE CUT ALLOWED (class P): an edk2 exception dump while the loader ran (m5-design F9b); the Shell launch validated the boot. Record the last line"
+			elif (( idle >= J7A_LOADER_CUT_S )); then
+				echo "advice ONE CUT ALLOWED (class P): no byte for LOADER_CUT_S ($J7A_LOADER_CUT_S s) before a completed loader run; the Shell launch validated the boot. Record the last line"
+			elif (( idle > J7A_LOADER_EXPECT_S )); then
+				echo "advice NO CUT (F63): a loader silent stretch past LOADER_EXPECT_S; recorded; wait"
+			else
+				echo "advice NO CUT: the loader is running"
+			fi ;;
+		done)
+			if (( idle >= J7A_PROMPT_AFTER_S )); then
+				echo "advice ONE CUT ALLOWED (class P): a completed loader run with no Shell prompt within PROMPT_AFTER_S (m5-design F9). Record the last line"
+			else
+				echo "advice NO CUT YET: a completed loader run; the Shell prompt has $(( J7A_PROMPT_AFTER_S - idle )) s left"
+			fi ;;
+		*)
+			if [ "$menu" = yes ]; then
+				echo "advice NO CUT: firmware, a menu or a prompt before the loader: never, except m5-design §2 rule 5's single cut, which excludes a menu or prompt; leave a menu with Continue or a boot option"
+			elif [ "$ssh" != silent ]; then
+				echo "advice NO CUT YET: ssh was not checked (§15.13.9)"
+			elif (( idle >= 600 )); then
+				echo "advice ONE CUT ALLOWED under m5-design §2 rule 5 (a firmware that has stopped): 10 minutes with no byte, the last output not a menu or prompt, no ssh. Never a second cut"
+			else
+				echo "advice NO CUT: firmware before the Shell launch (never, except §2 rule 5's single cut after 10 minutes of silence)"
+			fi ;;
+		esac
+		j7a_after_cut_note
+		return 0
+	fi
+	if [ -z "$goe" ]; then echo "advice NO CUT: a counted go with no go_epoch in the board log: the owner decides"; return 0; fi
+	if j7a_has_state "$st" RESET || j7a_has_state "$st" BANNER; then
+		if [ "$menu" = yes ]; then echo "advice NO CUT: the last output is a menu, a prompt or the countdown (m5-design §2 rule 5's exception excludes it)"
+		elif [ "$ssh" != silent ]; then echo "advice NO CUT YET: ssh was not checked"
+		elif (( idle >= 600 )); then echo "advice ONE CUT ALLOWED under m5-design §2 rule 5's exception and rule 6a's second case: 10 minutes with no byte after the image's reset or a banner, not a menu or prompt, no ssh. Never a second cut"
+		else echo "advice NO CUT YET: COM3 last grew $idle s ago; the exception needs 600 s"
+		fi
+	elif j7a_has_state "$st" SHIM; then
+		if (( now < goe + rb )); then
+			echo "advice NO CUT until go_epoch + return_bound_s ($(( goe + rb - now )) s from now): the watches and the hold are silent by design, and the hold's dwell bound reaches 10 minutes (§15.13.9)"
+		elif [ "$menu" = yes ]; then echo "advice NO CUT: the last line is a menu or prompt"
+		elif [ "$ssh" != silent ]; then echo "advice NO CUT YET: ssh was not checked"
+		elif (( idle >= 600 )); then echo "advice ONE CUT ALLOWED: the return bound has passed and COM3 has been silent 10 minutes with the last line not a menu or prompt. Never a second cut"
+		else echo "advice NO CUT YET: the return bound has passed; COM3 last grew $idle s ago, 600 s needed"
+		fi
+	else
+		if (( now >= goe + 600 )) && (( idle >= 600 )) && [ "$menu" = no ] && [ "$ssh" = silent ]; then
+			echo "advice ONE CUT ALLOWED: a counted go with no T234-SHIM, go_epoch + 600 s passed with no new byte and no banner (m5-design F17, F20; X7). Never a second cut"
+		else
+			echo "advice NO CUT YET: a counted go with no shim needs go_epoch + 600 s and 600 s of silence with no banner (now $(( now - goe )) s after go, silent $idle s)"
+		fi
+	fi
+	j7a_after_cut_note
+	return 0
+}
+
+j7a_after_cut_note() {
+	echo "advice after any cut other than the planned one: record the last COM3 line; let L4T boot to a validated state; read nvbootctrl against the first reading (F30 or m5-design F33 stops all board work); it is a §15.6 immediate stop for J7a; never a second cut"
+}
+
+# ---- j7a: end of the pure helpers
 
 # ---------------------------------------------------------------- self-tests
 #
@@ -5758,7 +7332,7 @@ cmd_redact_selftest() {
 	check "ident_hits zero classes sum" "$(echo "$out" | grep -cE '^[1-9][0-9]* addr=0 mac=0 name=[1-9]')" 1
 	check "ident_hits one line" "$(echo "$out" | wc -l)" 1
 	printf 'nothing to see\n' > "$d/clean"
-	check "ident_hits clean" "$(ident_hits "$d/clean" 2>&1)" "0 addr=0 mac=0 name=0 ssid=0"
+	check "ident_hits clean" "$(ident_hits "$d/clean" 2>&1)" "0 addr=0 mac=0 name=0 ssid=0 efi=0"
 
 	# §15.5 A4: the SSID redaction class. S1_REDACT_SSID is read through awk ENVIRON, so a
 	# backslash in it is literal; it is used only at 3 bytes or more; and it is counted in
@@ -5774,7 +7348,7 @@ cmd_redact_selftest() {
 	out="$(export S1_REDACT_SSID='ab'; redact < "$d/ssidonly")"
 	check "a 1-2 byte SSID is not applied (refused)" "$(printf '%s\n' "$out" | grep -c 'CoffeeShop-WiFi')" 1
 	out="$(export S1_REDACT_SSID='ab'; ident_hits "$d/ssidonly")"
-	check "a short SSID is not counted" "$(printf '%s\n' "$out" | grep -c ' ssid=0$')" 1
+	check "a short SSID is not counted" "$(printf '%s\n' "$out" | grep -c ' ssid=0 ')" 1
 
 	printf '%s\n' 'connected to net\wifi now' > "$d/ssidbs"
 	out="$(export S1_REDACT_SSID='net\wifi'; redact < "$d/ssidbs")"
@@ -5800,6 +7374,68 @@ cmd_redact_selftest() {
 	out="$(redact < "$d/enx")"
 	check "a MAC-based interface name (enx + 12 hex) is masked" "$(printf '%s\n' "$out" | grep -c 'enx00005e')/$(printf '%s\n' "$out" | grep -c 'if=enx<mac> ')" "0/1"
 	check "ident_hits counts a MAC-based interface name" "$(ident_hits "$d/enx" | grep -cE ' mac=1 ')" 1
+
+	# §15.13.7 Privacy (J7a): the efi class on documentation-reserved values (RFC 7042 MAC and
+	# EUI-64 ranges, fake drive names), and CSI normalisation. SYNTHETIC; no record is read here.
+	printf 'UEFI PXEv4 (MAC:00005E005301)\r\n' > "$d/efimac"
+	printf 'PciRoot(0x0)/Pci(0x1,0x0)/MAC(00005E005302,0x1)\r\n' >> "$d/efimac"
+	printf 'eui 00-00-5E-EF-10-00-00-02 seen\r\n' >> "$d/efimac"
+	out="$(redact < "$d/efimac")"
+	check "efi: a MAC after MAC: or MAC( is masked" "$(printf '%s\n' "$out" | grep -cE '00005E00530[12]')/$(printf '%s\n' "$out" | grep -cE 'MAC[:(]<mac>')" "0/2"
+	check "efi: EUI-64 groups are masked" "$(printf '%s\n' "$out" | grep -c '00-00-5E-EF')/$(printf '%s\n' "$out" | grep -c '<eui64>')" "0/1"
+	check "efi: ident_hits counts the efi class" "$(ident_hits "$d/efimac" | sed -n 's/.* efi=\([0-9]*\)$/\1/p')" 3
+	redact < "$d/efimac" > "$d/efimac.red"
+	check "efi: nothing of the efi class is left after redaction" "$(ident_hits "$d/efimac.red" | sed -n 's/.* efi=\([0-9]*\)$/\1/p')" 0
+
+	printf 'UEFI FakeVendor NVMe FAKEMODEL FAKESERIAL0001\r\n' > "$d/nvme"
+	printf 'Boot0003* FakeVendor FAKESERIAL0002\tPciRoot(0x0)/Pci(0x0,0x0)/NVMe(0x1,00-00-5E-EF-10-00-00-03)\n' >> "$d/nvme"
+	printf 'Boot0001* UEFI SD Device\tVenHw(0000)\n' >> "$d/nvme"
+	out="$(redact < "$d/nvme")"
+	check "efi: a boot-option line naming an NVMe device is masked whole" "$(printf '%s\n' "$out" | grep -c 'FAKESERIAL')/$(printf '%s\n' "$out" | grep -c '<boot-option-masked>')" "0/2"
+	check "efi: an efibootmgr line keeps only its BootNNNN token" "$(printf '%s\n' "$out" | grep -c '^Boot0003\* <boot-option-masked>$')" 1
+	check "efi: a boot option naming no NVMe device is kept" "$(printf '%s\n' "$out" | grep -c 'UEFI SD Device')" 1
+	check "efi: ident_hits counts the NVMe boot-option lines" "$(ident_hits "$d/nvme" | sed -n 's/.* efi=\([0-9]*\)$/\1/p')" 2
+
+	printf 'UEFI HTTPv4 (MAC:0000\033[0m5E005304)\r\n' > "$d/csimac"
+	out="$(redact < "$d/csimac")"
+	check "efi: a MAC split by a colour sequence masks its line whole" "$(printf '%s\n' "$out" | grep -c '5E005304')/$(printf '%s\n' "$out" | grep -c '<line-masked>')" "0/1"
+	check "efi: ident_hits counts a colour-split MAC" "$(ident_hits "$d/csimac" | sed -n 's/.* efi=\([0-9]*\)$/\1/p')" 1
+
+	printf '\033[0;37;40m\033[2J\033[5;10HBoot Manager\033[6;10HUEFI PXEv4 (MAC:00005E\033[7;1H005305)\r\n' > "$d/screen"
+	printf 'Enter to select\r\n' >> "$d/screen"
+	printf '\033[2J\033[3;1HContinue\r\n' >> "$d/screen"
+	out="$(redact < "$d/screen")"
+	check "efi: a MAC split by cursor positioning masks its screen region" "$(printf '%s\n' "$out" | grep -c '005305')/$(printf '%s\n' "$out" | grep -c '00005E')/$(printf '%s\n' "$out" | grep -c '<screen-masked>')" "0/0/1"
+	check "efi: the masked region keeps its line breaks" "$(redact < "$d/screen" | tr -cd '\n' | wc -c)/$(redact < "$d/screen" | tr -cd '\r' | wc -c)" "$(tr -cd '\n' < "$d/screen" | wc -c)/$(tr -cd '\r' < "$d/screen" | wc -c)"
+	check "efi: a later screen region with no identifier is kept" "$(printf '%s\n' "$out" | grep -c 'Continue')" 1
+	check "efi: ident_hits counts the cursor-split MAC on normalised text" "$(ident_hits "$d/screen" | sed -n 's/.* efi=\([0-9]*\)$/\1/p')" 1
+	redact < "$d/screen" > "$d/screen.red"
+	check "efi: nothing of the efi class is left in the masked screen" "$(ident_hits "$d/screen.red" | sed -n 's/.* efi=\([0-9]*\)$/\1/p')" 0
+
+	printf '[\033[0;32m  OK  \033[0m] Started fake unit\r\n' > "$d/csiok"
+	check "a coloured line with no identifier stays byte-identical" "$(redact < "$d/csiok" | od -An -tx1 | tr -d ' \n')" "$(od -An -tx1 < "$d/csiok" | tr -d ' \n')"
+	printf '\033[2J\033[1;1HShell> map -r\r\nfs5: fake mapping\r\n' > "$d/csiscreen"
+	check "a screen with no identifier stays byte-identical" "$(redact < "$d/csiscreen" | od -An -tx1 | tr -d ' \n')" "$(od -An -tx1 < "$d/csiscreen" | tr -d ' \n')"
+
+	# §15.13.7 R91: a count-only replay over M5's private P2, P3 and R1 COM3 captures, in place, when
+	# S1_M5_REPLAY_DIR names their directory. Counts only; the captures are never copied or
+	# committed, and the redacted stream goes only to this self-test's own temp directory.
+	if [ -n "${S1_M5_REPLAY_DIR:-}" ]; then
+		local cap before after
+		for cap in p2-com3.log p3-com3.log r1-com3.log; do
+			if [ ! -f "$S1_M5_REPLAY_DIR/$cap" ]; then
+				check "replay $cap is present" no yes
+				continue
+			fi
+			before="$(ident_hits "$S1_M5_REPLAY_DIR/$cap")"
+			redact < "$S1_M5_REPLAY_DIR/$cap" > "$d/replay"
+			after="$(ident_hits "$d/replay")"
+			rm -f "$d/replay"
+			echo "  count $cap before: $before"
+			echo "  count $cap after:  $after"
+			check "replay $cap: zero efi hits after redaction" "$(printf '%s\n' "$after" | sed -n 's/.* efi=\([0-9]*\)$/\1/p')" 0
+		done
+	fi
 
 	rm -rf "$d"
 	echo
@@ -7218,6 +8854,251 @@ cmd_harness_selftest() {
 	check "a backslash capture path is normalised and still resolves inside the record directory" \
 		"$( S1_COM3_LOG="$g"; j_norm_capture; capture_inside_recdir "$S1_COM3_LOG" && basename "$S1_COM3_LOG" )" "j-cap.log"
 
+	# ---- J7a (§15.13.7, §15.13.9), all synthetic: temp record directories, synthetic captures, key logs,
+	# snapshots and an ESP fixture. No board, no COM3, no network.
+	local j7 j7b j7p jc jk jg jst n7 kf wf espd esph lsha s0e sn
+	n7=$(date +%s)
+	j7="$d/j7rec"; mkdir -p "$j7"; j7="$(cd "$j7" && pwd)"
+	jc="$j7/com3-j7a.log"; jk="$jc.keys.log"
+	printf -- '--- raw capture started on COMX at 115200, 2026-09-14T00:00:00.0000000+00:00 epoch=%s seconds=0 ---\n' "$n7" > "$jc"
+	printf '2026-09-14T00:00:00.0000000+00:00 session-start \n' > "$jk"
+	check "j7a P1: a seconds=0 capture still reads expired to the kexec gates" "$(capture_state "$jc")" expired
+	check "j7a P1: a seconds=0 capture reads running for kind j7a" "$(capture_state "$jc" j7a)" running
+	check "j7a P1: a seconds=0 capture fails the kexec gate A" "$(has "$(RECDIR="$j7"; RETURN_BOUND=1200; S1_COM3_LOG="$jc" j_capture_gate control 9)" FAIL)" yes
+	check "j7a constants: exit codes 6 and 7, cap 2, DRAM_OFF_S 300, LOADER_EXPECT/CUT/PROMPT 120/300/60, margin 4 MiB" \
+		"$EXIT_J7A_NOGO/$EXIT_J7A_F55/$J7A_CAP/$J7A_DRAM_OFF_S/$J7A_LOADER_EXPECT_S/$J7A_LOADER_CUT_S/$J7A_PROMPT_AFTER_S/$J7A_ESP_MARGIN_B" "6/7/2/300/120/300/60/4194304"
+	S1_J7A_FOO=1 bash "$0" redact-selftest >/dev/null 2>&1
+	check "j7a env: an S1_J7A_ variable outside the four is refused" "$?" 1
+	J7A_DRAM_OFF_S=1 bash "$0" redact-selftest >/dev/null 2>&1
+	check "j7a env: a J7a constant override is refused" "$?" 1
+	S1_J7A_ID=20260914T000000Z bash "$0" redact-selftest >/dev/null 2>&1
+	check "j7a env: S1_J7A_ID is allowed" "$?" 0
+
+	# gate A (P1, P10)
+	out="$(RECDIR="$j7"; S1_COM3_LOG="$jc" j7a_gate_a ctl)"
+	check "j7a gate A: a com3-term capture with its key log passes" "$(has "$out" 'j7agate ctl ok')" yes
+	mv "$jk" "$jk.x"
+	check "j7a gate A: no key log is refused" "$(has "$(RECDIR="$j7"; S1_COM3_LOG="$jc" j7a_gate_a ctl)" 'no key log')" yes
+	mv "$jk.x" "$jk"
+	printf -- '--- raw capture started on COMX at 115200, 2026-09-14T00:00:00Z epoch=%s seconds=6000 ---\n' "$n7" > "$j7/raw.log"
+	cp "$jk" "$j7/raw.log.keys.log"
+	check "j7a gate A: a capture-com3-raw header is refused" "$(has "$(RECDIR="$j7"; S1_COM3_LOG="$j7/raw.log" j7a_gate_a ctl)" "not com3-term.ps1's")" yes
+	check "j7a gate A: a missing SSID is refused" "$(has "$(RECDIR="$j7"; S1_REDACT_SSID=''; S1_COM3_LOG="$jc" j7a_gate_a ctl)" 'S1_REDACT_SSID is unset')" yes
+	printf 'T234-SHIM EL=2 PC=0000000080080000\r\nT234 S1 s1-j1 -P4: procnto up\r\n' >> "$jc"
+	check "j7a gate A: J7a-1's records with no recorded segment refuse J7a-2" "$(has "$(RECDIR="$j7"; S1_COM3_LOG="$jc" j7a_gate_a go)" 'after the last recorded J7a segment')" yes
+	( RECDIR="$j7"; j7a_mark_segment "$jc" J7a-1-20260914T000000Z 0 "$(stat -c %s "$jc")" )
+	check "j7a gate A: two runs in one capture pass once J7a-1's segment is recorded" "$(has "$(RECDIR="$j7"; S1_COM3_LOG="$jc" j7a_gate_a go)" 'j7agate go ok')" yes
+	check "j7a ledger: a segment id is used once" "$( RECDIR="$j7"; j7a_mark_segment "$jc" J7a-1-20260914T000000Z 0 1 && echo again || echo refused )" refused
+	check "j7a ledger: a J7a segment line marks the capture used for the kexec ledger" "$(RECDIR="$j7"; capture_used "$jc" && echo used || echo free)" used
+	printf 'S1 CANARY c2 verify=bad\r\n' >> "$jc"
+	check "j7a gate A: new records after the recorded segment refuse again" "$(has "$(RECDIR="$j7"; S1_COM3_LOG="$jc" j7a_gate_a go)" 'FAIL')" yes
+	j7b="$d/j7b"; mkdir -p "$j7b"; j7b="$(cd "$j7b" && pwd)"
+	head -n 1 "$jc" > "$j7b/c.log"; cp "$jk" "$j7b/c.log.keys.log"; printf 'c.log\n' > "$j7b/used-captures.log"
+	check "j7a gate A: a capture a kexec rung used is refused" "$(has "$(RECDIR="$j7b"; S1_COM3_LOG="$j7b/c.log" j7a_gate_a ctl)" 'used by a kexec rung')" yes
+
+	# READY and ANOMALY (P8, X6)
+	printf -- '--- raw capture started ---\n[  100.000000] reboot: Power down\r\n' > "$j7/r.log"
+	check "j7a READY: the power-down line, silence, ssh gone" "$(j7a_ready_class "$j7/r.log" 0 40 40 1)" "ready_state=READY down=yes"
+	check "j7a READY: not while ssh answers" "$(j7a_ready_class "$j7/r.log" 0 40 40 0)" "ready_state=WAIT down=yes"
+	check "j7a READY: not before 30 s of silence" "$(j7a_ready_class "$j7/r.log" 0 10 40 1)" "ready_state=WAIT down=yes"
+	printf -- '--- raw capture started ---\n[  100.000000] systemd-shutdown: Syncing filesystems\r\n' > "$j7/r2.log"
+	check "j7a READY: silence alone is never READY" "$(j7a_ready_class "$j7/r2.log" 0 400 400 1)" "ready_state=WAIT down=no"
+	printf '\033[2J\033[1;1HMB1 (version synthetic)\r\n' >> "$j7/r2.log"
+	check "j7a ANOMALY: firmware text after the poweroff (F60)" "$(j7a_ready_class "$j7/r2.log" 0 400 400 1 | cut -d' ' -f1)" "ready_state=ANOMALY"
+
+	# the watch states, with CSI and menu lines
+	jg="$j7/go.log"
+	{
+		printf -- '--- raw capture started on COMX at 115200, x epoch=%s seconds=0 ---\n' "$n7"
+		printf '\033[2J\033[1;1HESC   to enter Setup.\r\n\033[5;3HBoot Manager\r\nUEFI Interactive Shell v2.2\r\nShell> map -r\r\nFS5:\\> memmap\r\n'
+		printf 'FS5:\\> M5LOAD.EFI check\r\n'
+		for m in check go; do
+			[ "$m" = go ] && printf 'FS5:\\> M5LOAD.EFI go\r\n'
+			printf 'M5L start mode=%s el=2 ctr=1 self=2\r\nM5L variant=j7a\r\nM5L self w2=no canary=none\r\nM5L fdt addr=1 size=2 crc32=3\r\nM5L crc src=ok\r\nM5L crc dst=ok\r\nM5L resmem done\r\nM5L map type=7 start=1 pages=1 attr=0\r\n' "$m"
+			printf 'M5L canary c1 preclaim=ok\r\nM5L canary c2 preclaim=ok\r\nM5L canary c3 preclaim=ok\r\nM5L W2 PASS\r\n'
+			[ "$m" = check ] && printf 'M5L CHECK PASS\r\n'
+		done
+		printf 'M5L GO\r\nM5L-EBS ok\r\nM5L-JUMP\r\nT234-SHIM EL=2 PC=0000000080080000\r\nt234: WDT0 CR=0 SR=0\r\nt234: canary c3 base=0 filled\r\nT234 S1 s1-j1 -P4: procnto up\r\n'
+		printf 'S1 CANARY c2 verify=ok\r\nS1 BEGIN name=j1a bytes=1 md5=0 enc=base64\r\nT234 S1 s1-j1 -P4: resetting so the log can be recovered\r\nMB1 (version synthetic)\r\nESC   to enter Setup.\r\nL4TLauncher: synthetic\r\n'
+	} > "$jg"
+	jst="$(j7a_go_states "$jg" 0 s1-j1)"
+	check "j7a watch: every state of a complete go, in COM3 order" "$(printf '%s\n' "$jst" | sed -n 's/^j7a_state \([^ ]*\) .*/\1/p' | tr '\n' ' ')" \
+		"FIRMWARE HOTKEY SHELL MEMMAP T1 GO M5L-GO COUNTED JUMP SHIM WDT0 FILLED PROCNTO RECORDS EXPORT RESET BANNER L4T "
+	check "j7a watch: offsets are byte offsets of the line start" "$(j7a_state_off "$jst" SHIM)" "$(( $(grep -abo 'T234-SHIM EL=2' "$jg" | head -n 1 | cut -d: -f1) ))"
+	check "j7a watch: no negative token in a clean go" "$(printf '%s\n' "$jst" | grep -c '^j7a_neg ')" 0
+	sed 's/M5L resmem done/M5L resmem half/' "$jg" > "$j7/g-t1.log"
+	check "j7a watch: a check without M5L resmem done is T1-INCOMPLETE, and go is GO-WITHOUT-T1" \
+		"$(j7a_has_state "$(j7a_go_states "$j7/g-t1.log" 0)" T1-INCOMPLETE && echo y)/$(j7a_has_state "$(j7a_go_states "$j7/g-t1.log" 0)" GO-WITHOUT-T1 && echo y)" "y/y"
+	sed 's/crc32=3/crc32=fail/' "$jg" > "$j7/g-crc.log"
+	check "j7a watch: a check whose fdt stamp reads crc32=fail is T1-INCOMPLETE (the parser needs a hex stamp)" \
+		"$(j7a_has_state "$(j7a_go_states "$j7/g-crc.log" 0)" T1-INCOMPLETE && echo y)/$(j7a_has_state "$(j7a_go_states "$j7/g-crc.log" 0)" T1 && echo y)" "y/"
+	{
+		printf 'prereg stage=j6\nprereg j7a ref_j6c parse-s1.txt sha256=%s\n' "$(printf '0%.0s' $(seq 64))"
+		printf 'prereg stage=j7a\n'
+		for l in parse-s1.txt canwatch.txt s1-j1a.bin s1-j1b.bin s1-j1c.bin; do printf 'prereg j7a ref_j6c %s sha256=%s\n' "$l" "$(printf 'a%.0s' $(seq 64))"; done
+		printf 'prereg j7a fill_rate_factor=4\nprereg stage=later\nprereg j7a ref_j6c canwatch.txt sha256=%s\n' "$(printf 'b%.0s' $(seq 64))"
+	} > "$j7/prereg.log"
+	check "j7a canwatch refs: the five pairs come from the J7a stage only, once each, as NAME=HEX" \
+		"$(j7a_ref_pairs "$j7/prereg.log" | sed 's/=a*$/=A/' | tr '\n' ' ')" "parse-s1.txt=A canwatch.txt=A s1-j1a.bin=A s1-j1b.bin=A s1-j1c.bin=A "
+	check "j7a canwatch refs: no prereg log gives no pair" "$(j7a_ref_pairs "$j7/absent-prereg.log" | wc -l | tr -d ' ')" 0
+	printf -- '--- raw capture started ---\nESC   to enter Setup.\r\nL4TLauncher: synthetic\r\n' > "$j7/miss.log"
+	check "j7a watch: L4TLauncher: before Shell text is MISSED" "$(j7a_has_state "$(j7a_go_states "$j7/miss.log" 0)" MISSED && echo MISSED)" MISSED
+	printf -- '--- raw capture started ---\nShell> \r\nM5L start mode=check el=2\r\nM5L variant=j7a\r\nM5L self w2=no canary=none\r\nM5L REFUSE w2 reason=gap at=0\r\nShell> \r\n' > "$j7/ref.log"
+	check "j7a watch: a refusal in check is REFUSE, not counted" "$(j7a_has_state "$(j7a_go_states "$j7/ref.log" 0)" REFUSE && echo y)/$(j7a_has_state "$(j7a_go_states "$j7/ref.log" 0)" COUNTED && echo y)" "y/"
+	head -n "$(grep -n 'M5L GO' "$jg" | head -n 1 | cut -d: -f1)" "$jg" > "$j7/w2f.log"
+	printf 'M5L REFUSE w2-final\r\nFS5:\\> \r\n' >> "$j7/w2f.log"
+	jst="$(j7a_go_states "$j7/w2f.log" 0)"
+	check "j7a watch: w2-final after M5L GO then a prompt is SHELL-AFTER-GO, uncounted" \
+		"$(j7a_has_state "$jst" REFUSE-GO && echo y)/$(j7a_has_state "$jst" SHELL-AFTER-GO && echo y)/$(j7a_has_state "$jst" COUNTED && echo y)" "y/y/"
+	head -n "$(grep -n 'mode=go' "$jg" | head -n 1 | cut -d: -f1)" "$jg" > "$j7/pre.log"
+	printf 'M5L variant=j7a\r\nM5L REFUSE fdt reason=w2\r\nFS5:\\> \r\n' >> "$j7/pre.log"
+	check "j7a watch: a refusal before M5L GO then a prompt is SHELL-AFTER-GO" "$(j7a_has_state "$(j7a_go_states "$j7/pre.log" 0)" SHELL-AFTER-GO && echo y)" y
+	sed 's/M5L-EBS ok/M5L-EBS FAIL/' "$jg" > "$j7/ebsf.log"; printf 'M5L-EBS FAIL\r\n' >> "$j7/ebsf.log"
+	jst="$(j7a_go_states "$j7/ebsf.log" 0)"
+	check "j7a watch: M5L-EBS FAIL counts once and is a negative token" "$(printf '%s\n' "$jst" | grep -c '^j7a_state COUNTED ')/$(printf '%s\n' "$jst" | grep -c '^j7a_neg ')" "1/1"
+	sed 's/^t234: WDT0 CR=0 SR=0/EXC  synthetic\r/' "$jg" > "$j7/neg.log"
+	check "j7a watch: EXC after COUNTED is a negative token" "$(j7a_go_states "$j7/neg.log" 0 | grep -c '^j7a_neg ')" 1
+	check "j7a loader phase: an echoed launch with no completion is running" "$(j7a_loader_phase "$(printf 'FS5:\\> M5LOAD.EFI check\nM5L start mode=check el=2\n')")" running
+	check "j7a loader phase: CHECK PASS completes" "$(j7a_loader_phase "$(printf 'M5L start mode=check el=2\nM5L CHECK PASS\n')")" done
+
+	# advice (§15.13.9)
+	printf -- '--- raw capture started on COMX at 115200, x epoch=%s seconds=0 ---\nShell> \r\nFS5:\\> M5LOAD.EFI check\r\nM5L start mode=check el=2\r\n' "$n7" > "$j7/adv.log"
+	touch -d "@$(( n7 - 200 ))" "$j7/adv.log"
+	out="$(j7a_advice "$j7/adv.log" 0 0 "" 0 "$n7" 0 silent)"
+	check "j7a advice: a slow valid load (between LOADER_EXPECT_S and LOADER_CUT_S) is F63 only, no cut" "$(has "$out" 'NO CUT (F63)')/$(has "$out" 'CUT ALLOWED')" "yes/no"
+	touch -d "@$(( n7 - 400 ))" "$j7/adv.log"
+	check "j7a advice: LOADER_CUT_S of no byte before a completed run allows one cut (class P)" "$(has "$(j7a_advice "$j7/adv.log" 0 0 "" 0 "$n7" 0 silent)" 'ONE CUT ALLOWED (class P)')" yes
+	check "j7a advice: never a cut while ssh answers" "$(has "$(j7a_advice "$j7/adv.log" 0 0 "" 0 "$n7" 0 answered)" 'NO CUT: L4T answers ssh')" yes
+	touch -d "@$(( n7 - 900 ))" "$j7/w2f.log"
+	check "j7a advice: SHELL-AFTER-GO is NO CUT" "$(has "$(j7a_advice "$j7/w2f.log" 0 0 "" 0 "$n7" 0 silent)" 'NO CUT (SHELL-AFTER-GO')" yes
+	head -n "$(grep -n 'procnto up' "$jg" | head -n 1 | cut -d: -f1)" "$jg" > "$j7/shim.log"
+	touch -d "@$(( n7 - 900 ))" "$j7/shim.log"
+	check "j7a advice: shim seen, before go_epoch + return_bound_s: NO CUT whatever the silence" "$(has "$(j7a_advice "$j7/shim.log" 0 0 "$(( n7 - 1000 ))" 2100 "$n7" 0 silent)" 'NO CUT until go_epoch + return_bound_s')" yes
+	check "j7a advice: shim seen, the return bound passed and 10 minutes silent: one cut" "$(has "$(j7a_advice "$j7/shim.log" 0 0 "$(( n7 - 3000 ))" 2100 "$n7" 0 silent)" 'ONE CUT ALLOWED: the return bound has passed')" yes
+	printf -- '--- raw capture started on COMX at 115200, x epoch=%s seconds=0 ---\n[  1.000000] systemd-shutdown: x\r\n' "$n7" > "$j7/po.log"
+	check "j7a advice: poweroff issued, no power-down line: NO CUT" "$(has "$(j7a_advice "$j7/po.log" 0 "" "" 0 "$n7" 0 silent)" 'no power-down line yet')" yes
+	check "j7a advice: READY with no firmware byte: the planned DC cycle" "$(has "$(j7a_advice "$j7/po.log" 0 "$(stat -c %s "$j7/po.log")" "" 0 "$n7" 0 silent)" 'the planned DC cycle')" yes
+	printf 'MB1 (version synthetic)\r\n' >> "$j7/po.log"; touch -d "@$(( n7 - 700 ))" "$j7/po.log"
+	check "j7a advice: firmware text before READY is F60, NO CUT" "$(has "$(j7a_advice "$j7/po.log" 0 "" "" 0 "$n7" 0 silent)" 'NO CUT (F60)')" yes
+	check "j7a advice: a stopped firmware before the Shell launch, 10 minutes silent, not a menu: rule 5's single cut" "$(has "$(j7a_advice "$j7/po.log" 0 0 "" 0 "$n7" 0 silent)" 'rule 5 (a firmware that has stopped)')" yes
+	check "j7a advice: a board log naming another capture is NO CUT" \
+		"$(printf 'j7a com3_log=other.log phase=go\nj7a com3_bytes_before_poweroff=0\n' > "$j7/bl.log"; has "$(ADVICE_SSH=silent S1_COM3_LOG="$j7/po.log" cmd_advice "$j7/bl.log")" 'names another capture')" yes
+
+	# the key-log allowlist (P12)
+	kf="$j7/k.log"
+	wf=$(TZ=UTC date -d '2026-09-14T00:00:05Z' +%s)
+	klsend() { local ts="$1" s="$2" i c; for (( i = 0; i < ${#s}; i++ )); do c="${s:i:1}"; printf '%s sent %02x\n' "$ts" "'$c" >> "$kf"; done; [ "${3:-}" = enter ] && printf '%s sent 0d\n' "$ts" >> "$kf"; return 0; }
+	klok() {
+		printf '2026-09-14T00:00:00.0+00:00 session-start \n2026-09-14T00:00:10.0+00:00 armed \n2026-09-14T00:00:10.0+00:00 sent 1b\n2026-09-14T00:00:11.0+00:00 sent 1b 5b 42\n2026-09-14T00:00:11.0+00:00 sent 0d\n' > "$kf"
+		for l in 'map -r' 'fs5:' 'ls M5LOAD.EFI' 'memmap'; do klsend 2026-09-14T00:00:12.0+00:00 "$l" enter; done
+		klsend 2026-09-14T00:00:13.0+00:00 q
+		klsend 2026-09-14T00:00:14.0+00:00 'mapx'; printf '2026-09-14T00:00:14.0+00:00 sent 08\n' >> "$kf"; klsend 2026-09-14T00:00:14.0+00:00 ' -r' enter
+		klsend 2026-09-14T00:00:15.0+00:00 'M5LOAD.EFI check' enter
+		klsend 2026-09-14T00:00:16.0+00:00 'M5LOAD.EFI go' enter
+		printf '2026-09-14T00:00:16.0+00:00 disarmed-after-go \n' >> "$kf"
+	}
+	klok
+	check "j7a keylog: a clean session passes (ESC, arrows, Backspace, the pager q, the allowed lines)" "$(j7a_keylog_check "$kf" 0 "$wf" 0 no | sed 's/.* result=/result=/')" "result=ok reason=none f59=no"
+	klok; klsend 2026-09-14T00:00:15.5+00:00 'dmem 0' enter
+	check "j7a keylog: a typed free-text line is F64" "$(has "$(j7a_keylog_check "$kf" 0 "$wf" 0 no)" 'result=F64 reason=line-not-allowed')" yes
+	klok; klsend 2026-09-14T00:00:01.0+00:00 'fs5:' enter
+	check "j7a keylog: a line typed while L4T text is last is F64" "$(has "$(j7a_keylog_check "$kf" 0 "$wf" 0 no)" 'result=F64 reason=sent-outside-firmware-text')" yes
+	printf '2026-09-14T00:00:00.0+00:00 session-start \n' > "$kf"; klsend 2026-09-14T00:00:10.0+00:00 'x'
+	check "j7a keylog: a stray printable byte is F64" "$(has "$(j7a_keylog_check "$kf" 0 "$wf" 0 no)" 'result=F64 reason=unterminated-printable')" yes
+	klok; printf '2026-09-14T00:00:30.0+00:00 armed \n' >> "$kf"; klsend 2026-09-14T00:00:31.0+00:00 reset enter; printf '2026-09-14T00:00:31.0+00:00 disarmed-line-unknown \n' >> "$kf"
+	check "j7a keylog: SHELL-AFTER-GO's single arm and reset are accepted, F59 not raised" "$(j7a_keylog_check "$kf" 0 "$wf" 0 yes | sed 's/.* result=/result=/')" "result=ok reason=none f59=no"
+	check "j7a keylog: the same keys without SHELL-AFTER-GO raise F59" "$(has "$(j7a_keylog_check "$kf" 0 "$wf" 0 no)" 'f59=yes')" yes
+
+	# snapshots and the return state gate (§15.13.8)
+	sn="$j7/sn"; mkdir -p "$sn"
+	printf 'efisnap efibootmgr_sha256=aa\nefisnap extlinux_sha256=bb\nefisnap bootaa64_sha256=cc\nefisnap bios_version=v1\nefivar 11 MTC-x\nefivar 22 Other-x\nespfile e1 /boot/efi/EFI/BOOT/BOOTAA64.efi\n' > "$sn/s0"
+	sed 's/^efivar 11 MTC-x/efivar 12 MTC-x/' "$sn/s0" > "$sn/s1"; printf 'espfile 5a /boot/efi/M5LOAD.EFI\n' >> "$sn/s1"
+	cp "$sn/s1" "$sn/s2"
+	sed 's/^efivar 12 MTC-x/efivar 13 MTC-x/' "$sn/s1" > "$sn/s3"
+	check "j7a state gate: a change inside the control delta and the ESP at S0 plus the file: ok" "$(has "$(j7a_state_gate "$sn/s0" "$sn/s1" "$sn/s2" "$sn/s3" 5a yes)" 'result=ok reasons=')" yes
+	sed 's/^efivar 22 Other-x/efivar 23 Other-x/' "$sn/s3" > "$sn/s3w"
+	check "j7a state gate: a name changed only in Δ(S2,S3) asks for a warm control" "$(has "$(j7a_state_gate "$sn/s0" "$sn/s1" "$sn/s2" "$sn/s3w" 5a yes)" 'result=warm-control')" yes
+	{ cat "$sn/s3"; printf 'espfile 99 /boot/efi/EXTRA.EFI\n'; } > "$sn/s3e"
+	check "j7a state gate: an extra ESP file is F57" "$(has "$(j7a_state_gate "$sn/s0" "$sn/s1" "$sn/s2" "$sn/s3e" 5a yes)" 'result=F57 reasons=esp')" yes
+	sed 's/^efisnap efibootmgr_sha256=aa/efisnap efibootmgr_sha256=ab/' "$sn/s3" > "$sn/s3b"
+	check "j7a state gate: a different efibootmgr hash is F57" "$(has "$(j7a_state_gate "$sn/s0" "$sn/s1" "$sn/s2" "$sn/s3b" 5a yes)" 'efibootmgr')" yes
+	{ cat "$sn/s3"; printf 'efivar 77 New-x\n'; } > "$sn/s3a"
+	check "j7a state gate: an added variable is F57" "$(has "$(j7a_state_gate "$sn/s0" "$sn/s1" "$sn/s2" "$sn/s3a" 5a yes)" 'efivar-added')" yes
+	check "j7a state gate: after close the listing must be S0 exactly" "$(has "$(j7a_state_gate "$sn/s0" "$sn/s1" "$sn/s2" "$sn/s0" 5a no)" 'result=ok')" yes
+
+	# b_esp_stage and b_esp_clean on a fixture ESP (sudo, df, stat -f, cp and sync are stubs)
+	espd="$d/esp"; esph="$d/esphome"; mkdir -p "$espd/EFI/BOOT" "$esph"
+	printf 'boot\n' > "$espd/EFI/BOOT/BOOTAA64.efi"
+	espput() { printf 'loader\n' > "$esph/M5LOAD.EFI"; }
+	esprun() {
+		(
+			S1_ESP_ROOT="$espd"; HOME="$esph"
+			sudo() { [ "$1" = -n ] && shift; "$@"; }
+			df() { printf 'Filesystem 1K-blocks Used Available Capacity Mounted\n/dev/x 100 1 %s 1%% /x\n' "${FX_AVAIL:-100000}"; }
+			stat() { if [ "$1" = -f ]; then echo 4096; else command stat "$@"; fi; }
+			sync() { return "${FX_SYNC:-0}"; }
+			cp() { case "${FX_CP:-}" in fail) printf 'part' > "$2"; return 1 ;; bad) printf 'other\n' > "$2"; return 0 ;; esac; command cp "$@"; }
+			"$@"
+		)
+	}
+	espput; lsha="$(j_sha256 "$esph/M5LOAD.EFI")"
+	s0e="$(esprun b_esp_listing_sha)"
+	for g in short:FX_AVAIL=1 cp:FX_CP=fail hash:FX_CP=bad sync:FX_SYNC=1; do
+		espput
+		out="$(export ${g#*:}; J7A_SHA="$lsha" J7A_BYTES=7 J7A_MARGIN_B="$J7A_ESP_MARGIN_B" J7A_S0_ESP="$s0e" esprun b_esp_stage)"
+		check "j7a b_esp_stage: a ${g%%:*} failure is F65, leaves no file and the listing equal to S0" \
+			"$(has "$out" 'esp_stage=F65')/$([ -e "$espd/M5LOAD.EFI" ] && echo present || echo absent)/$([ "$(esprun b_esp_listing_sha)" = "$s0e" ] && echo S0 || echo differs)" "yes/absent/S0"
+	done
+	espput
+	out="$(J7A_SHA="$lsha" J7A_BYTES=7 J7A_MARGIN_B="$J7A_ESP_MARGIN_B" J7A_S0_ESP="$s0e" esprun b_esp_stage)"
+	check "j7a b_esp_stage: a good copy reads back its hash and removes the staging copy" "$(has "$out" 'esp_stage=ok')/$(has "$out" 'staging_copy_removed=yes')" "yes/yes"
+	printf 'tampered\n' > "$espd/M5LOAD.EFI"
+	out="$(J7A_SHA="$lsha" J7A_S0_ESP="$s0e" J7A_REMOVE=no esprun b_esp_clean)"
+	check "j7a b_esp_clean: a mismatched hash deletes nothing without the owner's authorisation (F66)" "$(has "$out" 'hash-mismatch F66')/$([ -e "$espd/M5LOAD.EFI" ] && echo kept)" "yes/kept"
+	out="$(J7A_SHA="$lsha" J7A_S0_ESP="$s0e" J7A_REMOVE=yes esprun b_esp_clean)"
+	check "j7a b_esp_clean: with the owner's authorisation that one path is removed and the listing is S0" "$(has "$out" 'esp_clean=ok removed=yes listing=S0')" yes
+	check "j7a clean: S1_J7A_ESP_REMOVE refuses a wildcard and any other path" "$(j7a_remove_ok '/boot/efi/*' && echo a)$(j7a_remove_ok /boot/efi/EFI/BOOT/BOOTAA64.efi && echo b)$(j7a_remove_ok /boot/efi/M5LOAD.EFI && echo ok)" ok
+	espput; J7A_SHA="$lsha" J7A_BYTES=7 J7A_MARGIN_B="$J7A_ESP_MARGIN_B" J7A_S0_ESP="$s0e" esprun b_esp_stage >/dev/null
+	printf 'x\n' > "$espd/EXTRA.EFI"
+	out="$(J7A_SHA="$lsha" J7A_S0_ESP="$s0e" esprun b_esp_clean)"
+	check "j7a b_esp_clean: another ESP file is F57 and nothing is deleted" "$(has "$out" 'esp_clean=F57 reason=another-file-differs')/$([ -e "$espd/M5LOAD.EFI" ] && echo kept)" "yes/kept"
+	rm -f "$espd/EXTRA.EFI"; J7A_SHA="$lsha" J7A_S0_ESP="$s0e" esprun b_esp_clean >/dev/null
+
+	# P13: raw segment bytes only outside the record directory, removed when a return is interrupted
+	out="$( eval "$(trap -p EXIT)"; RECDIR="$j7"; j7a_tmpdir; printf 'raw\n' > "$J7A_T/s1-j1-x-segment-com3.log"; echo "$J7A_T"; exit 3 )"
+	check "j7a P13: an interrupted return leaves no temporary segment" "$([ -n "$out" ] && [ ! -e "$out" ] && echo removed || echo left)" removed
+	check "j7a P13: no raw segment file in the record directory" "$(find "$j7" -name '*segment-com3.log' | wc -l | tr -d ' ')" 0
+	check "j7a P13: the return writes the segment through j7a_tmpdir only" "$(awk '/^j7a_return\(\) \{/,/^}/' "$HERE/$PROG" | grep -c 'j7a_seg_read "\$S1_COM3_LOG" "\$off" "\$end" > "\$seg"')/$(awk '/^j7a_return\(\) \{/,/^}/' "$HERE/$PROG" | grep -c 'seg="\$t/')" "1/1"
+
+	# budget, F62, the kexec count, the precondition, DRAM-off and P11
+	out="$( RECDIR="$j7b"; mkdir -p "$j7b/J7a-1"; printf 'j7a go_counted com3_bytes_at_go=1 go_epoch=1\n' > "$j7b/J7a-1/s1-j1-20260914T000000Z-board.log"; echo "$(j_kexec_runs)/$(j7a_counted_runs)" )"
+	check "j7a budget: j_kexec_runs does not count J7a, j7a_counted_runs does" "$out" "0/1"
+	( RECDIR="$j7b"; j7a_go_budget_gate ) >/dev/null 2>&1
+	check "j7a budget: a second go after one counted run is allowed" "$?" 0
+	( RECDIR="$j7b"; mkdir -p "$j7b/J7a-2"; cp "$j7b/J7a-1/"*-board.log "$j7b/J7a-2/"; j7a_go_budget_gate ) >/dev/null 2>&1
+	check "j7a budget: a third counted go is refused" "$?" 1
+	( RECDIR="$j7b"; rm -rf "$j7b/J7a-2"; printf 'j7a F62 reset_reason=synthetic\n' >> "$j7b/J7a-1/s1-j1-20260914T000000Z-board.log"; j7a_go_budget_gate ) >/dev/null 2>&1
+	check "j7a budget: a go after F62 on the same image is refused" "$?" 1
+	j7p="$d/j7p"; mkdir -p "$j7p/J4" "$j7p/J6c"; j7p="$(cd "$j7p" && pwd)"
+	printf 'x\n' > "$j7p/J4/s1-h1-20260914T010000Z-board.log"; printf 'S1PC j_row=F36\n' > "$j7p/J4/parse-s1.txt"
+	printf 'x\n' > "$j7p/J6c/s1-j1-20260914T020000Z-board.log"; printf 'S1PC j_row=F39,live-writer,writer-static\n' > "$j7p/J6c/parse-s1.txt"
+	printf 'D30=yes\nD34_J7A=yes\nD35=yes\nD38=yes\nD45=esp\nD46=yes\nQ20_BRANCH=a\n' > "$j7p/J-waivers.conf"
+	check "j7a precondition: every decision, J4 F36, J6c live-writer and a Q20 branch: accepted" "$(has "$( RECDIR="$j7p"; j7a_precondition 2>&1 )" 'q20_branch=a; kexec_runs_before=0 j7a_counted_before=0')" yes
+	sed -i '/^D34_J7A=/d' "$j7p/J-waivers.conf"
+	( RECDIR="$j7p"; j7a_precondition ) >/dev/null 2>&1
+	check "j7a precondition: without D34_J7A it is refused" "$?" 1
+	printf 'D34_J7A=yes\nQ20_BRANCH=b\n' >> "$j7p/J-waivers.conf"
+	check "j7a precondition: Q20 branch (b) is refused" "$(has "$( RECDIR="$j7p"; j7a_precondition 2>&1 )" 'branch (b)')" yes
+	printf 'Q20_BRANCH=c\n' >> "$j7p/J-waivers.conf"; printf 'S1PC j_row=F35\n' > "$j7p/J4/parse-s1.txt"
+	( RECDIR="$j7p"; j7a_precondition ) >/dev/null 2>&1
+	check "j7a precondition: J4 other than F36 is refused" "$?" 1
+	check "j7a DRAM-off: firmware output at least DRAM_OFF_S after READY is possible" "$(has "$(j7a_dram_off_lines 1000 1400 300)" 'bound=possible')" yes
+	check "j7a DRAM-off: firmware output sooner is VIOLATED" "$(has "$(j7a_dram_off_lines 1000 1100 300)" 'bound=VIOLATED')" yes
+	check "j7a P11: go applies no uptime gate; kexec rungs keep theirs" \
+		"$(awk '/^cmd_j7a_go\(\) \{/,/^}/' "$HERE/$PROG" | grep -c 'uptime_gate "')/$(awk '/^j_detached\(\) \{/,/^}/' "$HERE/$PROG" | grep -c 'uptime_gate "')" "0/1"
+	check "j7a: no B* or J6* directory is created by the J7a tests (j7p's J4 and J6c are fixtures)" "$(ls -1 "$j7" "$j7b" | grep -cE '^(B|J6)')/$(ls -1 "$j7p" | grep -cE '^(B|J6)')" "0/1"
+	check "j7a: the board functions are sent only by j7a commands" "$(grep -c 'BOARD_EXTRA_FUNCS="\$J7A_FUNCS"' "$HERE/$PROG")/$(printf '%s\n' "$BOARD_FUNCS" | grep -c 'b_esp_stage')" "1/0"
+
 	if [ -f "$S1DIR/kpf-decode.py" ] && find_python; then
 		bash "$0" kpf-decode --selftest >/dev/null 2>&1
 		check "kpf-decode --selftest" "$?" 0
@@ -7253,6 +9134,17 @@ j3)          [ $# -eq 1 ] || usage; cmd_j3 ;;
 jrun)        [ $# -eq 3 ] || usage; cmd_jrun "$2" "$3" ;;
 wq-status)   { [ $# -eq 2 ] && [ -f "$2" ]; } || usage; cmd_wq_status "$2" ;;
 kpf-decode)  { [ $# -eq 2 ] || [ $# -eq 3 ]; } || usage; cmd_kpf_decode "${@:2}" ;;
+j7a)
+	case "${2:-}:$#" in
+	pre:3)    [ "$3" = s1-j1 ] || usage; cmd_j7a_pre ;;
+	go:3)     [ "$3" = s1-j1 ] || usage; cmd_j7a_go ;;
+	stage:2)  cmd_j7a_stage ;;
+	ctl:2)    cmd_j7a_ctl ;;
+	clean:2)  cmd_j7a_clean ;;
+	return:3) [ -f "$3" ] || usage; cmd_j7a_return "$3" ;;
+	*)        usage ;;
+	esac ;;
+j7a-status)  { [ $# -eq 2 ] && [ -f "$2" ]; } || usage; cmd_j7a_status "$2" ;;
 redact-selftest)  [ $# -eq 1 ] || usage; cmd_redact_selftest ;;
 harness-selftest) [ $# -eq 1 ] || usage; cmd_harness_selftest ;;
 *)           usage ;;

@@ -5,7 +5,7 @@
 #
 # Phase 3b, results/orin-native-port/20260909T1100Z/m5-design.md §4.2 and §6.1
 # step 1, with §13's decisions B (the SDP cross toolchain) and G (two link
-# bases, compared by the gate).
+# bases, compared by the gate). The J7a options are s1-design.md §15.13.4.
 #
 # USAGE
 #   KIMG=orin-native/shim/out/m1b/m1b-p1.kimg \
@@ -14,14 +14,32 @@
 #
 #   T0=1 embeds t0/contract-probe instead of the kimg and writes to out/t0/.
 #   Nothing else differs between the two builds (§3.4 gate item 8), and no QNX
-#   byte is in the T0 build at all.
+#   byte is in the T0 build at all. KIMG and KIMG_SHA256 are needed only for a
+#   board build.
+#
+# J7a (s1-design.md §15.13.4)
+#   M5L_J7A=1              compile with -DM5L_J7A and gate with --variant j7a
+#                          (items 11 and 12 apply, item 8 compares J7a builds
+#                          only). Build it in a worktree, never in the main
+#                          checkout, whose out/ holds M5's gated loader.
+#   T0=1 T0_PAD_LIKE=<kimg>  pad the contract probe to the kimg's file length
+#                          and copy the kimg's image_size into the probe's
+#                          header; only header bytes our shim wrote are read.
+#   T0_FORCE=um6-first|um6-later  T0l only: accepted only with T0=1 and
+#                          M5L_J7A=1; defines M5L_T0_FORCE. Gate item 12
+#                          refuses such an image as a board build.
+#   OUT_DIR=<dir>          write to <dir> instead of out/ or out/t0/ (the
+#                          T0_FORCE builds use separate scratch directories).
+#   COMPARE=<pe>           the other build's PE for item 8, instead of the
+#                          default sibling (out/M5LOAD.EFI or out/t0/M5LOAD.EFI;
+#                          none by default for a T0_FORCE build).
 #
 # ENVIRONMENT
 #   QNX_BASE   the SDP install (default: $HOME/qnx800), as build-shim.sh
 #   QNX_HOST, QNX_TARGET  derived from QNX_BASE when not already set
 #
-# OUTPUT, all under orin-native/uefi/out/, which is git-ignored because the
-# board build carries QNX bytes:
+# OUTPUT, all under orin-native/uefi/out/ (or OUT_DIR), which is git-ignored
+# because the board build carries QNX bytes:
 #   M5LOAD.EFI      the flat PE that gets staged
 #   m5load.elf      the linked ELF the gate reads
 #   gate.txt        the gate's report
@@ -35,15 +53,41 @@ PROG="$(basename "$0")"
 
 die() { echo "$PROG: FAIL: $*" >&2; exit 1; }
 note() { echo "$PROG: $*" >&2; }
-
-[ -n "${KIMG:-}" ] && [ -n "${KIMG_SHA256:-}" ] || {
-	echo "usage: KIMG=<path> KIMG_SHA256=<sha> [T0=1] $0" >&2
+usage() {
+	echo "usage: KIMG=<path> KIMG_SHA256=<sha> [T0=1] [M5L_J7A=1] $0" >&2
+	echo "       T0=1 [M5L_J7A=1] [T0_PAD_LIKE=<kimg>] [T0_FORCE=um6-first|um6-later] $0" >&2
 	exit 2
 }
 
 T0="${T0:-0}"
+J7A="${M5L_J7A:-0}"
+T0_PAD_LIKE="${T0_PAD_LIKE:-}"
+T0_FORCE="${T0_FORCE:-}"
+
+case "$T0" in 0|1) ;; *) usage ;; esac
+case "$J7A" in 0|1) ;; *) usage ;; esac
+
+if [ "$T0" != 1 ]; then
+	[ -n "${KIMG:-}" ] && [ -n "${KIMG_SHA256:-}" ] || usage
+	[ -z "$T0_PAD_LIKE" ] || die "T0_PAD_LIKE is accepted only with T0=1"
+	[ -z "$T0_FORCE" ] || die "T0_FORCE is accepted only with T0=1"
+fi
+
+FORCE_DEF=""
+case "$T0_FORCE" in
+	"") ;;
+	um6-first) FORCE_DEF=1 ;;
+	um6-later) FORCE_DEF=2 ;;
+	*) usage ;;
+esac
+[ -z "$T0_FORCE" ] || [ "$J7A" = 1 ] || die "T0_FORCE needs M5L_J7A=1"
+
+VARIANT=m5
+[ "$J7A" = 1 ] && VARIANT=j7a
+
 OUT="$HERE/out"
 [ "$T0" = 1 ] && OUT="$HERE/out/t0"
+[ -n "${OUT_DIR:-}" ] && OUT="$OUT_DIR"
 mkdir -p "$OUT"
 
 # ---------------------------------------------------------------- toolchain
@@ -86,6 +130,12 @@ if [ "$T0" = 1 ]; then
 	"$LD" -T "$HERE/t0/contract-probe.lds" -static -nostdlib --build-id=none \
 		-o "$OUT/contract-probe.elf" "$OUT/contract-probe.o"
 	"$OBJCOPY" -O binary "$OUT/contract-probe.elf" "$BLOB"
+	if [ -n "$T0_PAD_LIKE" ]; then
+		[ -f "$T0_PAD_LIKE" ] || die "T0_PAD_LIKE=$T0_PAD_LIKE does not exist"
+		cp "$BLOB" "$OUT/contract-probe-raw.bin"
+		"$PY" "$HERE/t0/pad-like.py" "$OUT/contract-probe-raw.bin" "$T0_PAD_LIKE" "$BLOB" >&2 ||
+			die "could not pad the probe like $T0_PAD_LIKE"
+	fi
 else
 	BLOB="$KIMG"
 	[ -f "$BLOB" ] || die "KIMG=$BLOB does not exist"
@@ -125,8 +175,12 @@ note "blob len=$BLOB_LEN crc32=$BLOB_CRC image_size=$BLOB_IMAGE_SIZE"
 # ---------------------------------------------------------------- compile
 CFLAGS="-c -O2 -ffreestanding -fno-builtin -fno-stack-protector -fno-pic -fno-pie -fno-jump-tables"
 CFLAGS="$CFLAGS -mcmodel=small -mstrict-align -fno-common -Wall -Wextra -Werror -std=gnu99"
+# The J7a switches are appended, never inserted: with both off, the compile line
+# is M5's, so the switch-off object is M5's (UM8).
+[ "$J7A" = 1 ] && CFLAGS="$CFLAGS -DM5L_J7A"
+[ -n "$FORCE_DEF" ] && CFLAGS="$CFLAGS -DM5L_T0_FORCE=$FORCE_DEF"
 
-note "compiling"
+note "compiling (variant=$VARIANT${T0_FORCE:+ force=$T0_FORCE})"
 # shellcheck disable=SC2086  # CFLAGS is ours and is meant to word-split
 "$CC" $CFLAGS -o "$OUT/m5load.o" "$HERE/m5load.c"
 "$CC" -c -x assembler-with-cpp -o "$OUT/m5load-head.o" "$HERE/m5load-head.S"
@@ -150,14 +204,23 @@ note "running the gate"
 GATE_ARGS=(--pe "$OUT/M5LOAD.EFI" --alt "$OUT/M5LOAD-alt.bin" --elf "$OUT/m5load.elf"
 	--blob "$BLOB" --blob-len "$BLOB_LEN" --blob-crc "$BLOB_CRC"
 	--objdump "$(command -v "$OBJDUMP")" --out "$OUT/gate.txt")
+GATE_ARGS+=(--variant "$VARIANT" --force "${T0_FORCE:-none}"
+	--rules-src "$HERE/m5load-rules.h" --startup-h "$HERE/../startup/t234-orin-nano/t234_startup.h")
 if [ "$T0" = 1 ]; then
 	GATE_ARGS+=(--build t0)
-	[ -f "$HERE/out/M5LOAD.EFI" ] && GATE_ARGS+=(--compare "$HERE/out/M5LOAD.EFI")
 else
 	GATE_ARGS+=(--build board --blob-sha256 "$KIMG_SHA256")
-	[ -f "$HERE/out/t0/M5LOAD.EFI" ] && GATE_ARGS+=(--compare "$HERE/out/t0/M5LOAD.EFI")
+fi
+if [ -n "${COMPARE:-}" ]; then
+	GATE_ARGS+=(--compare "$COMPARE")
+elif [ -n "$T0_FORCE" ]; then
+	note "T0_FORCE build: no default compare build (item 8 skips)"
+elif [ "$T0" = 1 ]; then
+	if [ -f "$HERE/out/M5LOAD.EFI" ]; then GATE_ARGS+=(--compare "$HERE/out/M5LOAD.EFI"); fi
+else
+	if [ -f "$HERE/out/t0/M5LOAD.EFI" ]; then GATE_ARGS+=(--compare "$HERE/out/t0/M5LOAD.EFI"); fi
 fi
 
 "$PY" "$HERE/m5-gate.py" "${GATE_ARGS[@]}" || die "the gate refused this build; see $OUT/gate.txt"
 
-echo "BUILD_OK build=$([ "$T0" = 1 ] && echo t0 || echo board) out=$OUT/M5LOAD.EFI sha256=$(sha_of "$OUT/M5LOAD.EFI")"
+echo "BUILD_OK build=$([ "$T0" = 1 ] && echo t0 || echo board) variant=$VARIANT force=${T0_FORCE:-none} out=$OUT/M5LOAD.EFI sha256=$(sha_of "$OUT/M5LOAD.EFI")"

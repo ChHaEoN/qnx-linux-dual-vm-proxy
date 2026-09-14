@@ -3,10 +3,11 @@
 """m5-gate.py - the header gate for M5LOAD.EFI.
 
 Phase 3b, results/orin-native-port/20260909T1100Z/m5-design.md section 3.4, as
-amended by section 13 decision L (two sections, not one).
+amended by section 13 decision L (two sections, not one), and s1-design.md
+section 15.13.4 (J7a: items 8 by variant, 11 and 12).
 build-m5-loader.sh runs it and any miss fails the build.
 
-The ten items, in the design's order:
+The twelve items, in the design's order:
 
   1  MZ, PE\\0\\0, Machine 0xAA64, PE32+ magic 0x20b, Subsystem 10.
   2  Characteristics bit 0x0001 (RELOCS_STRIPPED) clear; ImageBase 0.
@@ -21,10 +22,19 @@ The ten items, in the design's order:
   7  The blob's sha256 equals the pin; the length and CRC32 constants equal
      values computed from the blob itself.
   8  The T0 build and the board build differ only in the blob, its constants,
-     and the header fields that are a function of the payload's size.
+     and the header fields that are a function of the payload's size. Builds
+     are compared only within one variant. For J7a the T0 build is padded like
+     the kimg (T0_PAD_LIKE), so the size fields must be identical too: blob and
+     constants only.
   9  The cache and MMU sequence, read statically, over the trampoline's symbol
      range only - never over the blob (NC QDL v7 4.6(c)).
   10 Print the output's sha256, which is the value that gets staged.
+  11 (J7a, UM1) The window-2 and canary constants in m5load-rules.h equal
+     board/t234_startup.h's T234_RAM2_* and T234_CANARY* defines.
+  12 (J7a) No T0-only force switch in a board build: the ELF defines no
+     m5_t0_force and --force is none; the declared variant is the one the
+     image carries; and a J7a board build was compared (item 8) with a J7a T0
+     build and differs from it only in the blob and constants.
 
 Item 3's characteristics check exists because the first T0b run faulted on the
 first write to an in-image static: a single read-write-execute section was
@@ -37,6 +47,7 @@ Standard library only. Every check that cannot be performed fails closed.
 import argparse
 import hashlib
 import os
+import re
 import struct
 import subprocess
 import sys
@@ -49,6 +60,11 @@ SCN_CNT_INIT_DATA = 0x00000040
 SCN_MEM_EXECUTE = 0x20000000
 SCN_MEM_READ = 0x40000000
 SCN_MEM_WRITE = 0x80000000
+
+# The J7a variant's first own line (UM2). Its bytes sit in .text, before the
+# blob, and in no other build.
+J7A_MARK = b"M5L variant=j7a"
+FORCE_SYMBOL = "m5_t0_force"
 
 
 class Gate:
@@ -163,6 +179,12 @@ def sha256(path):
         return hashlib.sha256(fh.read()).hexdigest()
 
 
+def variant_of(image, blob_rva):
+    """j7a when the J7a marker sits before the blob, else m5."""
+    head = image[:blob_rva] if blob_rva else image
+    return "j7a" if J7A_MARK in head else "m5"
+
+
 # ----------------------------------------------------------------- item 9
 
 SEQUENCE = ["dc\tcivac", "dsb\tsy", "ic\tiallu", "dsb\tsy", "isb", "msr\tsctlr_el2", "isb", "br\t"]
@@ -193,6 +215,59 @@ def sequence_ok(text):
     return (not want), seen, want
 
 
+# ----------------------------------------------------------------- item 11
+
+DEFINE_RE = r"^[ \t]*#[ \t]*define[ \t]+%s[ \t]+(0[xX][0-9A-Fa-f]+|[0-9]+)[uUlL]*\b"
+
+
+def parse_defines(path, names):
+    """{name: int} for each '#define NAME <integer>' line; a name that is
+    missing or defined twice is absent from the result."""
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        text = fh.read()
+    out = {}
+    for n in names:
+        hits = re.findall(DEFINE_RE % re.escape(n), text, flags=re.M)
+        if len(hits) == 1:
+            out[n] = int(hits[0], 0)
+    return out
+
+
+def item11(g, a):
+    rules_names = ["M5L_W2_START", "M5L_W2_END", "M5L_CANARY_C1", "M5L_CANARY_C2",
+                   "M5L_CANARY_C3", "M5L_CANARY_SIZE", "M5L_CANARY_PAGES"]
+    board_names = ["T234_RAM2_BASE", "T234_RAM2_SIZE", "T234_CANARY1_BASE", "T234_CANARY2_BASE",
+                   "T234_CANARY3_BASE", "T234_CANARY_SIZE"]
+    if not a.rules_src or not a.startup_h:
+        g.bad(11, "the J7a build needs --rules-src and --startup-h")
+        return
+    try:
+        r = parse_defines(a.rules_src, rules_names)
+        b = parse_defines(a.startup_h, board_names)
+    except OSError as e:
+        g.bad(11, "cannot read the sources: %s" % e)
+        return
+    missing = [n for n in rules_names if n not in r] + [n for n in board_names if n not in b]
+    if missing:
+        g.bad(11, "missing or duplicated defines: %s" % missing)
+        return
+    pairs = [
+        ("M5L_W2_START", r["M5L_W2_START"], "T234_RAM2_BASE", b["T234_RAM2_BASE"]),
+        ("M5L_W2_END", r["M5L_W2_END"], "T234_RAM2_BASE+T234_RAM2_SIZE",
+         b["T234_RAM2_BASE"] + b["T234_RAM2_SIZE"]),
+        ("M5L_CANARY_C1", r["M5L_CANARY_C1"], "T234_CANARY1_BASE", b["T234_CANARY1_BASE"]),
+        ("M5L_CANARY_C2", r["M5L_CANARY_C2"], "T234_CANARY2_BASE", b["T234_CANARY2_BASE"]),
+        ("M5L_CANARY_C3", r["M5L_CANARY_C3"], "T234_CANARY3_BASE", b["T234_CANARY3_BASE"]),
+        ("M5L_CANARY_SIZE", r["M5L_CANARY_SIZE"], "T234_CANARY_SIZE", b["T234_CANARY_SIZE"]),
+        ("M5L_CANARY_PAGES*0x1000", r["M5L_CANARY_PAGES"] * PAGE, "T234_CANARY_SIZE",
+         b["T234_CANARY_SIZE"]),
+    ]
+    diff = ["%s != %s" % (x, y) for x, xv, y, yv in pairs if xv != yv]
+    g.check(11, not diff,
+            "window 2 and the three canaries in m5load-rules.h equal t234_startup.h (%d checks)" % len(pairs),
+            "constants differ: %s" % diff)
+
+
 # ----------------------------------------------------------------- main
 
 def main():
@@ -208,6 +283,12 @@ def main():
     ap.add_argument("--compare", help="the other build's PE, for item 8")
     ap.add_argument("--objdump", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--variant", choices=["m5", "j7a"], default="m5",
+                    help="the variant the build script compiled (M5L_J7A)")
+    ap.add_argument("--force", choices=["none", "um6-first", "um6-later"], default="none",
+                    help="the T0_FORCE the build script compiled")
+    ap.add_argument("--rules-src", help="m5load-rules.h, for item 11")
+    ap.add_argument("--startup-h", help="board/t234_startup.h, for item 11")
     a = ap.parse_args()
 
     g = Gate()
@@ -297,32 +378,60 @@ def main():
     elif len(blob) != a.blob_len or crc != a.blob_crc:
         g.bad(7, "len=%d/%d crc=%#x/%#x" % (len(blob), a.blob_len, crc, a.blob_crc))
 
-    # item 8: only meaningful when both builds exist
+    # item 8: only meaningful when both builds exist, and only within a variant
+    own_variant = variant_of(pe_bytes, blob_rva)
+    item8_ran = False
+    item8_ok = False
     if a.compare and os.path.exists(a.compare):
         with open(a.compare, "rb") as fh:
             other = fh.read()
-        const_syms = [syms.get(n) for n in ("m5_blob_len", "m5_blob_crc32", "m5_blob_image_size")]
-        const_ok = all(s is not None for s in const_syms)
-        allowed = set()
-        if const_ok:
-            for s in const_syms:
-                allowed.update(range(s, s + 8))
-        # The header fields that are a function of the payload's size must
-        # differ when the payloads differ: SizeOfCode, SizeOfInitializedData,
-        # SizeOfImage, and each section's VirtualSize and SizeOfRawData. Their
-        # offsets come from the parsed header, never from a constant, so a
-        # layout change cannot quietly widen this exemption.
-        for off in (pe.opt_off + 4, pe.opt_off + 8, pe.opt_off + 56):
-            allowed.update(range(off, off + 4))
-        for s in pe.sections:
-            allowed.update(range(s["off"] + 8, s["off"] + 12))
-            allowed.update(range(s["off"] + 16, s["off"] + 20))
-        head = min(len(pe_bytes), len(other), blob_rva or 0)
-        diffs = [i for i in range(head) if pe_bytes[i] != other[i] and i not in allowed]
-        g.check(8, const_ok and not diffs,
-                "the two builds differ only in the blob, its three constants and the size fields",
-                "differing offsets outside the blob, constants and size fields: %s" % (
-                    [hex(d) for d in diffs[:8]] if const_ok else "constant symbols missing"))
+        # The compare image's own blob offset is not known here (no symbols for it), and it differs
+        # between variants (the J7a code is larger), so this build's offset would cut a J7a image
+        # before its marker and read it as m5. Scan the whole image: the marker is the loader's own
+        # line, compiled only under M5L_J7A, and no blob (the T0 probe or a kimg) carries that text.
+        other_variant = variant_of(other, None)
+        if other_variant != own_variant:
+            g.lines.append("M5G item=8  SKIP the compare build is variant %s, this build is %s" % (
+                other_variant, own_variant))
+        else:
+            const_syms = [syms.get(n) for n in ("m5_blob_len", "m5_blob_crc32", "m5_blob_image_size")]
+            const_ok = all(s is not None for s in const_syms)
+            allowed = set()
+            if const_ok:
+                for s in const_syms:
+                    allowed.update(range(s, s + 8))
+            if own_variant == "m5":
+                # The header fields that are a function of the payload's size
+                # must differ when the payloads differ: SizeOfCode,
+                # SizeOfInitializedData, SizeOfImage, and each section's
+                # VirtualSize and SizeOfRawData. Their offsets come from the
+                # parsed header, never from a constant, so a layout change
+                # cannot quietly widen this exemption.
+                for off in (pe.opt_off + 4, pe.opt_off + 8, pe.opt_off + 56):
+                    allowed.update(range(off, off + 4))
+                for s in pe.sections:
+                    allowed.update(range(s["off"] + 8, s["off"] + 12))
+                    allowed.update(range(s["off"] + 16, s["off"] + 20))
+                same_len = True
+            else:
+                # J7a: the T0 build is padded like the kimg, so the files are
+                # the same length and the size fields are not exempt.
+                same_len = len(pe_bytes) == len(other)
+            head = min(len(pe_bytes), len(other), blob_rva or 0)
+            diffs = [i for i in range(head) if pe_bytes[i] != other[i] and i not in allowed]
+            item8_ran = True
+            if own_variant == "m5":
+                item8_ok = g.check(8, const_ok and not diffs,
+                                   "the two builds differ only in the blob, its three constants and the size fields",
+                                   "differing offsets outside the blob, constants and size fields: %s" % (
+                                       [hex(d) for d in diffs[:8]] if const_ok else "constant symbols missing"))
+            else:
+                item8_ok = g.check(8, const_ok and not diffs and same_len,
+                                   "variant j7a: the two builds differ only in the blob and its constants "
+                                   "(size fields and file length identical)",
+                                   "variant j7a: same_length=%s; differing offsets outside the blob and constants: %s" % (
+                                       same_len,
+                                       [hex(d) for d in diffs[:8]] if const_ok else "constant symbols missing"))
     else:
         g.lines.append("M5G item=8  SKIP the other build is not present yet")
 
@@ -345,6 +454,48 @@ def main():
     # item 10
     digest = sha256(a.pe)
     g.ok(10, "sha256=%s" % digest)
+
+    # item 11 (J7a only)
+    if a.variant == "j7a":
+        item11(g, a)
+    else:
+        g.lines.append("M5G item=11 SKIP variant m5 (M5L_J7A off)")
+
+    # item 12: no force switch in a board build; the variant is what it claims
+    force_sym = FORCE_SYMBOL in syms
+    fails = []
+    if a.variant != own_variant:
+        fails.append("declared variant %s, but the image carries %s" % (a.variant, own_variant))
+    if a.build == "board":
+        if a.force != "none":
+            fails.append("a board build declared --force %s" % a.force)
+        if force_sym:
+            fails.append("the ELF defines %s: a T0_FORCE build presented as a board build" % FORCE_SYMBOL)
+        if own_variant == "j7a":
+            if not item8_ran:
+                fails.append("no J7a T0 build was compared (item 8 did not run within the variant)")
+            elif not item8_ok:
+                fails.append("it differs from the J7a T0 build outside the blob and constants")
+            if a.compare:
+                other_elf = os.path.join(os.path.dirname(a.compare), "m5load.elf")
+                if os.path.exists(other_elf):
+                    try:
+                        osyms, _ = elf_symbols(other_elf)
+                        if FORCE_SYMBOL in osyms:
+                            fails.append("the compare build is a T0_FORCE build")
+                    except (OSError, ValueError) as e:
+                        fails.append("cannot read the compare build's ELF: %s" % e)
+    else:
+        if (a.force != "none") != force_sym:
+            fails.append("--force %s but %s is %s in the ELF" % (
+                a.force, FORCE_SYMBOL, "defined" if force_sym else "absent"))
+        if a.force != "none" and own_variant != "j7a":
+            fails.append("a force switch outside the J7a variant")
+    g.check(12, not fails,
+            "build=%s variant=%s force=%s%s" % (
+                a.build, own_variant, "none" if not force_sym else a.force,
+                ", compared with a J7a T0 build" if (a.build == "board" and own_variant == "j7a") else ""),
+            "; ".join(fails))
 
     report = "\n".join(g.lines) + "\n"
     with open(a.out, "w", encoding="utf-8", newline="\n") as fh:
