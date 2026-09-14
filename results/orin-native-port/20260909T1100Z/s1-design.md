@@ -2585,3 +2585,962 @@ Phase 3b. Written after the J6 image `s1-j1` was built and three reviews (safety
 **E. Generator and T-J1.** The profile check refuses any hold in `s1-j1` other than its own and the template's single B4 line. The black-box estimate counts nine lines a watch. T-J1's host script needs no FAIL form of either self-test line. The parser needs the watcher's PASS followed by memcanary's own PASS with the larger count, because a failure in memcanary's own checks inside `memcanary-w` changes only the second line.
 
 **What this does not show:** that the readings are right. They are fixed before any J6 result, which is all a pre-registration can do. Whether `revert` separates read instability from a fast restoring writer is R71's open question, and J7a stays the decisive H1-versus-H2 arm.
+
+### 15.13 J7a: the UEFI-entry arm (D30, 2026-09-14)
+
+Phase 3b. **Proposed as §15.13 of `results/orin-native-port/20260909T1100Z/s1-design.md`.** It is the "short J7a design" D30 asks for (§15.6.1, last bullet). Nothing in it has been built or run. It creates no code, configuration or image, and no board step runs before the owner approves it (D35).
+
+**How it was written.** It is a synthesis of four desk analyses, and §15.13.18 records where they disagreed and what was chosen:
+- the UEFI path (M5's option A carrying `s1-j1`);
+- firmware memory in window 2;
+- harness and records;
+- rules and classification.
+
+The draft was then reviewed through three lenses (safety, power of the reading, feasibility). §15.13.20 records every required change and what happened to it.
+
+**Hard rules kept while writing.** No board contact, no download, no repository edit, no QNX-shipped binary read.
+
+**Evidence classes** are as in §15's header, including "VERIFIED (private record)" and "reported VERIFIED". "VERIFIED (source)" means this design, an analysis or a review read our own committed source. "Class only" means a private value was compared and only the comparison's outcome is written here.
+
+**Number-free, as §15.** This text contains:
+- no count, offset, page-class figure, register value, descriptor address or type seen in a run;
+- no hash of a private record or of a build output;
+- no uptime, boot id or duration from a run;
+- no file size or free-space figure from a record or a build;
+- no MAC, drive identifier, IP, SSID, user name or hostname.
+
+Addresses are the design constants already public in §3.3 and m5-design §3.3. Durations, margins and thresholds are design constants. Run counts and the clean-run probabilities follow §15.4.6's precedent.
+
+---
+
+#### 15.13.1 Purpose, the owner's decision, the question
+
+**Decision (owner, 2026-09-14, D30).** After J6c, the owner chose J7a. The design has to settle four things: the rule-5 exceptions (the ESP write), the TX refit, firmware use of window 2 (§3.2, never checked), and how the result is read under §15.6.
+
+**The one question J7a answers.** Is c2's corruption caused by something Linux leaves behind at kexec, or by something anchored at c2's address (window 2's base, physical `0x1_0000_0000`)? Anchored means firmware, a coprocessor, the secure world, fixed-address hardware, or QNX itself.
+
+**What a UEFI entry separates, and what it does not.** On a DC cold boot entered through the firmware's UEFI Shell, no Linux runs in the power cycle whose memory startup fills and watches:
+- DRAM is repowered, and stays unpowered for a design wait long enough to argue decay (§15.13.6, R95);
+- every device Linux drove is reset;
+- nothing is left by Linux's shutdown, its SMMU handling, its kexec tree or its page layout.
+
+The shim, startup, `memcanary-w`, the host script and the hold then run byte for byte as in J6c.
+
+J7a therefore separates **"the writer needs the kexec path in this power cycle"** from **"it does not"**. It does not separate Linux residue from anchoring in general: a writer anchored at window 2's base whose activity depends on the L4T boot option, on PSCI history or on how long the board has run would also disappear under UEFI entry (§15.13.2 confounds, §15.13.17). A bad result says anchored-or-UEFI-reachable; its profile against J6c (§15.13.10.3) says which is more likely.
+
+**§15.6's classes it decides** (amended in §15.13.10):
+- **E:** J4 is F36, and J7a is clean;
+- **K-w:** J4 is F36, a J6c run shows a live writer, and J7a is bad.
+
+Both preconditions are already met (VERIFIED, private record): J4 is F36, and J6c's parser row carries the live-writer label.
+
+**Scope.**
+- **In:** one image under one new entry path; the firmware-memory check that must pass before any `go`; a read-only report of the firmware tree's reserved-memory nodes over the canaries; the loader rebuild; the harness, parser and privacy changes; the board procedure and its rules; the pre-registered reading; one desk read of WDT0's control register class (Q20) before D35.
+- **Out:**
+  - any change to startup, window 2, the canaries, `memcanary` or `memcanary-w`, or `s1-j1` (unless Q20's branch (b) and D47 say otherwise);
+  - UEFI entry for S1-F itself (D6 is unchanged; freeze item 3 is not decided here);
+  - option A' or B;
+  - any SMMU, GPU or MMIO read by the loader;
+  - any value export (D28);
+  - any timing;
+  - revision 4.
+
+---
+
+#### 15.13.2 What J7a tests, and what it does not
+
+**What it tests.** The same watcher image, entered once through the firmware instead of Linux's kexec.
+- **A bad c2** is positive evidence that the writer does not need Linux in the power cycle.
+- **A clean c2** is negative evidence, and weak alone. c2 was bad in all four kexec runs (B2, J2, J4, J6c). Under a uniform prior over four exchangeable bad runs, **the chance of one clean run if entry has no effect** is about one in six, and of two clean runs about one in twenty. These are not false-E rates, and the runs are not strictly exchangeable: B2, J2 and J4 used `s1-h1`, J6c used `s1-j1`. Hence §15.13.10's asymmetric rule.
+
+| Hypothesis (§15.3) | Under UEFI entry | What J7a can say |
+|---|---|---|
+| H1 GPU residue | the GPU is repowered and nvgpu never ran | bad excludes it; clean fits it, along with every other kexec-path state |
+| H2 firmware, coprocessor or secure-world user of the address | still present: BPMP, SPE and RCE firmware start on both paths. E13's `camdbg_carveout`, a disabled node, is the only node in Linux's live tree whose allocation range starts at window 2's base | bad fits it; UM9 reports whether the firmware tree QNX receives declares a node over c2 |
+| H3 read instability | still present | the J6 re-read rules re-test it (K-r(u)) |
+| H4, H4s removable masters | already excluded by J4 as quiesced; under UEFI, not driven by Linux, and for J7a the Ethernet cable and board USB devices are removed (D46) | — |
+| H5 QNX-side, anchored at window 2's `ram` entry | still present: startup, procnto and the host script are identical | bad fits it; J7e (revision 4) separates it from H2 |
+
+**"Only the entry path changed" is false in detail.** These differ between J6c and J7a. They are confounds, recorded and not controlled:
+- the tree at `x0` (the firmware's tree as published at Shell time, not Linux's kexec copy of the tree L4TLauncher's boot used);
+- **the boot option:** kexec runs follow an L4TLauncher boot, which may make the firmware apply tree fixups or carve-outs and set coprocessor state; J7a boots the UEFI Shell;
+- our loader and its cache and MMU sequence, instead of kexec's relocator;
+- **PSCI history:** under kexec, Linux took the secondaries through `CPU_OFF` before the jump, and startup's `CPU_ON` then reached cores with that secure-side history; under UEFI, `CPU_ON` reaches never-started cores. J6c's corruption falls in the window after the fill that contains `init_smp` (VERIFIED (source): `main.c` calls `t234_init_raminfo`, then `hypervisor_init`, then `init_smp`);
+- GIC, timer and WDT0 state as the firmware leaves them (WDT0's inherited control register differs, class only, §15.13.4);
+- CPU frequency and EMC state set by the firmware, not the harness's pinned governor;
+- **time since cold power-on and thermal state at the fill:** hours of L4T uptime under kexec, minutes under UEFI;
+- which UEFI drivers ran (NVMe, SD, xHCI, possibly the network function) and whether they stopped DMA at `ExitBootServices` (R82);
+- SMMU state as the firmware leaves it;
+- the peripheral set (D46: the Ethernet cable and board USB devices removed for J7a; the M.2 wireless card stays, R96);
+- DRAM history: a cold power cycle after an unpowered design wait, not a running L4T. It matters only if startup's fill did not land on some pages (§15.13.10.3, R95).
+
+**What a J7a result does not show,** whatever it is (the full list is §15.13.17):
+- the writer's identity;
+- which kexec-path state causes E, or that E excludes an anchored writer that the kexec path switches on;
+- DMA quiescence under UEFI outside the canaries and the hold's coverage;
+- that UEFI entry is valid for S1-F;
+- repeatability beyond the runs made.
+
+---
+
+#### 15.13.3 The firmware-memory check that must pass first
+
+**The causal window.** Startup fills c1-c3 after `ExitBootServices`, the loader and the shim, and before procnto (VERIFIED (source): `startup/t234-orin-nano/main.c`, `t234_init_raminfo` before `hypervisor_init`; the fill loop in `init_raminfo.c`). The fill is write-only with the MMU off and has no read-back (VERIFIED (source): `init_raminfo.c`, the fill loop). J6c's private note puts the kexec-entry corruption in the same window: after the fill and before QNX's first check, then static. So:
+
+| Stage | Can it write c2? | Does it matter to the canary result? |
+|---|---|---|
+| Firmware start, menus, Shell, `memmap` | yes, any firmware allocation | **No,** if the fill lands: the fill overwrites it |
+| Loader up to `ExitBootServices` (image, pools, the target copy) | the firmware places them | **No,** for the same reason |
+| After the exit: the loader's trampoline, then the shim | no RAM store in window 2 in either (VERIFIED (source): `uefi/m5load-head.S`, `shim/t234-shim.S`) | would matter, but none exists |
+| Startup fill, then procnto and the host script | **any live owner:** firmware runtime code (only if called; nothing calls it, R83), the secure world, coprocessors, a firmware-started device still doing DMA, QNX | **Yes.** This is J7a's window |
+
+So the check has one job: make sure no firmware-owned memory with a **live owner after `ExitBootServices`** lies over a canary or anywhere in window 2, and that the canaries stay free until the exit.
+
+**The gap, as built.** M5's loader prints and judges only descriptors that overlap window 1, the black-box zone or the tree. It never looks at window 2, c2 or c3 (VERIFIED (source): `uefi/m5load.c`, the map step). That is §3.2's "never checked", confirmed in code.
+
+**Indirect evidence so far, for the L4T boot option only.**
+- L4T's Linux takes its RAM from the UEFI memory map (reported VERIFIED, `harvest-orin.md`).
+- Its `/proc/iomem` has shown window 2 as plain System RAM on every boot compared, with no reservation but Linux's own image (VERIFIED (private record), `p0-iomemhi-*`, `diag/d0-note.log`; plan 11c).
+- How arm64 Linux turns EFI types into iomem entries, and whether a Shell launch sees the same runtime and reserved layout, stay HYPOTHESIS (R80).
+
+##### Treatment by memory type (the map at `check`, and the map passed to `ExitBootServices`)
+
+`RT` means the `EFI_MEMORY_RUNTIME` attribute.
+
+| Type over the range | Live owner after the exit | Over c1, c2 or c3 | Elsewhere in window 2 |
+|---|---|---|---|
+| ConventionalMemory | none | allowed, and pre-claimed by the loader (UM4) | allowed |
+| LoaderData covering a canary whose UM4 claim returned success | ours; no store after the exit | **required form after UM4** | — |
+| Other LoaderCode or LoaderData (the Shell's file buffer, our image, pools) | none; nothing runs from it after the shim | refused through the pre-claim: F54 if the loader's own `self` range overlaps, otherwise F51 | allowed; `M5L self w2=yes` is printed and recorded |
+| BootServicesCode or BootServicesData | free by specification (VENDOR_CLAIM); **residual:** a firmware driver's DMA buffer if its device is not stopped (R82) | refused, through the pre-claim (F51) | allowed and printed; a J7a F49 cites them (§15.13.10.5) |
+| RuntimeServices*, any descriptor with RT, Reserved, Unusable, ACPIMemoryNVS, MemoryMappedIO*, PalCode, PersistentMemory, UnacceptedMemory, unknown | the firmware, the secure world or hardware | **refused** (F50) | **refused** (F50) |
+| ACPIReclaimMemory | none, but unexpected in DT mode | refused (F50) | refused (F50), as window 1's rule |
+| Gap (no descriptor) | a carve-out the firmware withholds | refused (F50) | refused (F50) |
+
+**Why "claim success" and not "exactly our claim".** The firmware merges adjacent descriptors of the same type, so the map cannot show that a LoaderData descriptor is exactly one claim. It does not need to: `AllocateAddress` succeeds only when every page was ConventionalMemory (R81), and pages already allocated cannot be allocated again. A canary whose claim returned success and whose covering descriptors are LoaderData is therefore ours until the exit.
+
+##### UM1-UM10: loader requirements for J7a
+
+The `UM` prefix is new. `L` would collide with the parser's L0/L1/L7 rules, and `W` with §14.5's fixed setting. Everything below sits behind the compile-time switch `M5L_J7A` (§15.13.4). `m5load-head.S` is not touched, so the trampoline, its tokens and gate item 9 are unchanged.
+
+- **UM1. Constants.** Window 2 is `[0x1_0000_0000, 0x1_8A00_0000)`. c1, c2 and c3 are at `0xBD000000`, `0x1_0000_0000` and `0x1_8900_0000`, 16 MiB each (§3.3). A new **gate item 11** parses them from the loader source and requires equality with `board/t234_startup.h`'s `T234_RAM2_*` and `T234_CANARY*` defines.
+- **UM2. Identity lines.** Step 1 prints, directly after the unchanged `M5L start …` line, a separate line `M5L variant=j7a`, then `M5L self w2=yes|no canary=none|c1|c2|c3` (from the `LoadedImage` range the start line already prints). The start line's grammar is identical in both builds. `self w2=yes` is informational: the loader's own pages in window 2 hold nothing that runs after the branch, and startup's claim reuses them. `self canary≠none` names the case F54 classifies.
+- **UM3. The tree.** Step 2 adds `crc32=` to `M5L fdt addr=… size=…`, computed with `CalculateCrc32` over `totalsize`. This is item 5's tree stamp under UEFI entry. It refuses `M5L REFUSE fdt reason=w2` if `[fdt, fdt+totalsize)` overlaps window 2, and `reason=canary` if it overlaps c1.
+  - **Why window 2 as a whole, not only the canaries.** Startup only calls `avoid_ram` on the tree (VERIFIED (source): `main.c`), and an `avoid_ram` range still reaches sysram (C15). A firmware tree inside window 2 would be handed to procnto, and `s1-j1`'s hold covers most of window 2.
+  - VERIFIED (private record, once): M5's tree lay outside both windows.
+- **UM4. Pre-claim of the canaries.** After step 5 reserves the target:
+  - call `AllocatePages(AllocateAddress, EfiLoaderData, base, 0x1000 pages)` for each of c1, c2 and c3, in order;
+  - on success, print `M5L canary cN preclaim=ok`;
+  - on failure, print the status and every descriptor overlapping that canary, then `M5L REFUSE canary cN status=…`.
+
+  What it gives (VENDOR_CLAIM, AllocateAddress semantics, R81): a claim succeeds only when every page is ConventionalMemory, and no UEFI allocation can land on a canary between the claim and the exit. A successful `preclaim=ok` is therefore itself the type record. It writes no page (HYPOTHESIS, Q19), and startup's fill follows anyway. It changes the firmware's volatile map only; nothing persists (D37). The claims are released under UM10.
+- **UM5. Window-2 rule, at step 7.**
+  - Print every descriptor overlapping window 2 in the existing `M5L map type=… start=… pages=… attr=…` form.
+  - Sweep `[W2_START, W2_END)` with window 1's allowed types (Conventional, LoaderCode, LoaderData, BootServicesCode, BootServicesData). Any RT attribute, gap or other type refuses: `M5L REFUSE w2 reason=gap|type|rt at=…`.
+  - **Canary rule:** each canary's claim returned success, and it is covered only by LoaderData. Otherwise `M5L REFUSE canary cN reason=type at=…`.
+  - Print `M5L W2 PASS` before `M5L CHECK PASS`, so `check` and `go` still print the same prelude (m5-design §13 E).
+- **UM6. Re-check on the exact map passed to `ExitBootServices`.** In step 10, between each `GetMemoryMap` and its `ExitBootServices`, run UM5's sweep and canary rule as a pure function over that buffer, with no boot-services call and no print. This keeps m5-design §3.3's "nothing between them".
+  - **Retry discipline (UEFI's rule after a failed exit).** Under the switch, the final-map buffer is allocated once, before the first try, with the existing slack. After the first `ExitBootServices` call has returned, the loader calls no boot service other than `GetMemoryMap` and `ExitBootServices`, and no `ConOut` output. A `GetMemoryMap` that no longer fits the buffer on a later try ends in the MODE_EBS_FAIL path. (M5's switch-off loop calls `AllocatePool` on a retry; recorded in §15.13.19, not changed, because it would change the switch-off object.)
+  - **Failure on the first try** (before any `ExitBootServices` call): skip the exit, release everything under UM10, print `M5L REFUSE w2-final`, return to the Shell. That is before the exit, so M5 rule 2 holds. Not counted (F53).
+  - **Failure on a later try** (after a failed `ExitBootServices`): no return to the Shell, no free, no print. The loader calls `m5_tramp(…, MODE_EBS_FAIL)`, exactly as M5's loop does after four failed tries: DAIF masked, `M5L-EBS FAIL` on the TCU, PSCI reset (M5 rule 3). COM3 cannot tell this cause from four refused exits. Counted, class S (F55).
+  - A printed `M5L-EBS ok` then certifies the rule on the final map.
+  - There is no post-exit map print: the trampoline sequence is gate item 9, and whether the TCU is reachable with the MMU still on after the exit is UNKNOWN.
+- **UM7. Loader wait bounds.** The Shell loads a file many times M5's size from SD before the loader prints anything, and the loader then CRCs, copies and re-CRCs the blob silently (VERIFIED (source): `m5load.c` steps 3-6). §15.13.6.1's `LOADER_EXPECT_S`, `LOADER_CUT_S` and `PROMPT_AFTER_S` apply identically to `check` and `go` (R78). This is a procedure bound, not a code change.
+- **UM8. With the switch off, nothing changes.** The switch-off object of the edited file equals the switch-off object of HEAD's unedited file, byte for byte (§15.13.4 D0).
+- **UM9. Reserved-memory report (informational, never a refusal).** At `check` and at `go`, after UM3 and before step 5, walk `/reserved-memory` in the `x0` tree read-only, with the tree parser `fdt_pick_console` already uses. For every child whose `reg`, `alloc-ranges` or `iommu-addresses` overlaps window 2, c1, c2 or c3, print one class-only line: `M5L resmem name=<node> status=okay|disabled|absent map=no-map|reusable|plain prop=reg|alloc-ranges|iommu-addresses over=c1|c2|c3|w2 base=yes|no` (`base=yes` when the range starts at window 2's base). No address or size is printed. A property whose length does not divide by its cells prints `form=unparsed`. Then `M5L resmem done`. The walk uses stack memory only, no stored pointer (gate item 6), no MMIO and no write. It bears on the reading (§15.13.10.3), never on `go`.
+- **UM10. Release on every return to the Shell.** Every path that returns to the Shell releases the canary claims, the target and every pool it holds: all `check` exits, every refusal in `go` before the first `ExitBootServices` call (UM3-UM6, `el`), and the first-try `w2-final` refusal. The go path also frees step 7's pool before step 10 allocates the final-map buffer. The claims are held only on the path that reaches `ExitBootServices`. A `check` after any such return in the same Shell visit therefore reaches `preclaim=ok` again (T0f′, T0l).
+
+##### From the UEFI Shell: optional, read-only, record only (D43)
+
+- **`memmap`,** typed once before `M5LOAD.EFI check`.
+  - It shows the firmware's full map at Shell time, including the runtime and reserved layout. That cross-checks R80 and informs revision 4.
+  - It is **not a gate:** it predates the loader's image load, pools and claims.
+  - Its paging behaviour is R90. If it pauses for a key, the operator arms F12 and ends it with `q`, and records the deviation.
+  - It lists descriptors, not memory content, so the no-dump rule does not bear on it. The block is extracted into a private record and judged by nothing.
+- **Never, in J7a:**
+  - `dmem`, `mm`, or any memory-content read or write;
+  - `setvar`, or `dmpstore` with any option;
+  - `bcfg`;
+  - `connect` or `disconnect` beyond m5-design F6's use;
+  - `drivers`, which is not typed (low value, more keystrokes);
+  - **any output redirection (`>`, `>>`),** which writes a file on a mapped filesystem such as the ESP.
+
+##### What neither check can see
+
+- A secure-world, BPMP, EMC or other coprocessor user of memory the firmware reports as free. That is H2 proper, and J7a measures it. UM9 names any node the firmware tree declares over it; a user that no node declares stays invisible.
+- Whether the firmware tree's `/reserved-memory` at Shell time matches Linux's live tree (R94). The tree itself never leaves the board: the firmware may patch board identifiers into it (HYPOTHESIS).
+- A firmware device doing DMA outside its reported buffers after the exit (R82).
+
+##### A contradiction recorded, not resolved here
+
+m5-design §3.3 step 7 allows the tree anywhere in window 1 "because startup reserves it (board/main.c:247-248)". Current `main.c` calls only `avoid_ram` for the tree, and C15 says such a range reaches sysram. UM3 makes J7a independent of this for window 2.
+- **Not read here:** whether anything reads the tree after procnto starts.
+- **A pre-existing condition:** the same holds for kexec's tree in window 1 on every kexec rung.
+- Listed for the orchestrator (§15.13.19).
+
+---
+
+#### 15.13.4 The image and the loader
+
+##### The payload: `s1-j1`, unchanged (D36)
+
+- The embedded kimg is J6c's `s1-j1.kimg`. Its sha256 must equal the `kimg_sha256` registered in J6c's `prereg j6 params` line. That was VERIFIED by the UEFI-path analysis against J6c's params and stage logs and the file on the PC.
+- Nothing in the image, the startup line (`-b w2,canary`, `-Wkeep`), `memcanary-w`, the hold size or the fill-rate factor changes. **From the shim on, every byte is J6c's.** The one pre-registered exception is Q20's branch (b) below, which needs D47 and a new image.
+- **Why `s1-j1` and not `s1-h1`:**
+  - it is one variable against J6c, the only run with content classes, onset, heal and re-read counts, page bitmaps and the hold;
+  - it can answer "bad, but a different profile" (§15.13.10.3), including the page-set item P7;
+  - its hold watches most of sysram with no Linux in the power cycle.
+
+  `s1-h1` is not supported in J7a. It would need its own parse mode and would lose every profile item.
+- **Geometry.** VERIFIED (arithmetic on `s1-j1.shim.txt` and the file size): `text_offset` is `0x80000`; `image_size` is a page multiple, not below the file length, and ends inside window 1, below c1 and below the generator's geometry cap. So `blob-consts.py` and the window-1 rule accept it.
+
+**What an image built for kexec meets under UEFI entry**
+
+| Item | kexec (J6c) | UEFI (M5 R1, `-P1`) | For J7a | Class |
+|---|---|---|---|---|
+| EL at the shim | 2 | 2 | none | VERIFIED |
+| `x0` | Linux's kexec tree | the firmware's DT table (DT mode) | startup took its CPU list from it in M5; RAM is stated, not read from the tree; UM9 reports its reserved-memory nodes over the canaries | VERIFIED (M5 T3) |
+| Secondary CPUs | offlined by Linux; M2 brought all six up | never started (EBBR); M5 started none | **new:** `CPU_ON` of cores 1-3 from never-started state, their redistributors, INTID 28 on each | HYPOTHESIS (R84) |
+| WDT0 | configured by systemd; does not fire after kexec | M5's R1 capture carries a `t234: WDT0 CR=` token that **differs from J6c's** (class only). `wdt.c` prints its "did not fire after the kexec hand-over" text whenever CR is non-zero, so that line is no evidence under UEFI entry (VERIFIED (source): `wdt.c`). `s1-j1` runs `-Wkeep`, which leaves WDT0 as inherited, and its `guard_s` and `return_bound_s` are far longer than M5's run | **Q20 is answered at the desk before D35,** with a pre-registered branch (below) | UNKNOWN until Q20 (R85) |
+| DMA masters | Linux's shutdown, quiesce, SMMU handling | repowered, then UEFI drivers ran | J7a's premise (R87), plus a new confound (R82), reduced by D46 | HYPOTHESIS |
+| TCU drain | after Linux | after the firmware | long `xport` exports under UEFI are new | short text VERIFIED; volume HYPOTHESIS (R86) |
+| Text before the shim on COM3 | L4T's shutdown | firmware, menus, Shell, `M5L` lines | none of it carries a parser record prefix | VERIFIED (M5 R1 capture, count only) |
+
+**Q20's pre-registered branch (desk only, before D35).** The two private CR values are read against the public T234 watchdog register description, and the result is recorded as a number-free class: enable bit equal or different between the two entries, and whether the UEFI value means counting toward a reset.
+- **(a) Not counting toward a reset under UEFI entry:** R85 is answered at the desk; `s1-j1` runs unchanged.
+- **(b) Counting toward a reset with a period (all stages) shorter than `guard_s`:** `s1-j1` cannot run unchanged. The owner chooses (D47) between a `-Wdisable` variant, which is a new image with its own T-J1 and pins and a recorded break of the one-variable premise, and not running J7a.
+- **(c) The documentation does not decide it:** R85 stays UNKNOWN. The owner accepts the risk at D35, and §15.13.10.5's WDT rule applies: a WDT-type reset is F62, counted, and the unchanged image is not retried (D42).
+
+##### Loader source change (D37)
+
+**`orin-native/uefi/m5load.c` changes inside `#ifdef M5L_J7A`, implementing UM1-UM10,** plus **one new header, `orin-native/uefi/m5load-rules.h`,** included only under `M5L_J7A`. The header holds only pure rule functions (the window-2 sweep, the canary rule, the tree-overlap rule, the reserved-memory range test) that take the map or tree bytes and constants as arguments. It defines no static data, stores no pointer (gate item 6: the two link bases must give identical files) and allocates nothing (`m5load.lds` refuses `.bss`), so the same functions compile for the host in T0u.
+
+Nothing else changes: no new MMIO, no GIC, timers, clocks or CPUs; no file or variable write; nothing printed between any `GetMemoryMap` and its `ExitBootServices`. M5's "The loader never" list holds word for word.
+
+**T0-only switches.** `M5L_T0_FORCE=um6-first|um6-later` makes UM6's function fail on the first try, or makes the first `ExitBootServices` fail once (a stale key) and UM6 fail on the retry. It exists only for T0l. **Gate item 12** refuses a board build that defines `M5L_T0_FORCE` or whose object differs from the J7a T0 build in anything but the blob and constants (with item 8).
+
+**Build scripts:**
+- `build-m5-loader.sh`:
+  - `M5L_J7A=1` adds `-DM5L_J7A` and passes `--variant j7a` to the gate.
+  - `T0=1 T0_PAD_LIKE=<kimg>` pads the contract probe to the kimg's file length and copies the kimg's `image_size` into the probe header. It reads only header bytes our shim wrote, so the T0 build embeds no QNX byte and matches the board build in every size field.
+  - `T0_FORCE=…` is accepted only with `T0=1`.
+- `m5-gate.py` adds gate items 11 (UM1) and 12 (no force switch in a board build) and makes item 8 variant-aware: it compares only builds of the same variant, and the J7a board build against the J7a T0 build.
+- `t0/run-t0.ps1` gains the cases below.
+
+**Where it is built.** In a git worktree of the J7a commit, never in the main checkout. `build-m5-loader.sh` writes a fixed `out/` beside itself, and in main that would overwrite M5's gated `M5LOAD.EFI` and `gate.txt`.
+- The kimg is read read-only by absolute path from the main checkout.
+- The worktree and its git-ignored `out/` are kept until J7a's record is written.
+- The ESP file keeps the name `M5LOAD.EFI` and is identified by sha256. `com3-term.ps1`'s go detector matches `M5LOAD.EFI go` or `M5LOAD go`, after stripping a device or path prefix (VERIFIED (source): `Test-GoLine`), so the terminal needs no change.
+
+**Order, on the PC:**
+1. **D0a, the reference commit, before any edit.** M5's staged loader in `orin-native/uefi/out/` was written before commit `600996f` changed `m5load.c` (VERIFIED: file time against commit time). That change alters code (the tree refusal tokens, VERIFIED (source): `git diff 25d40e7 600996f`), none of which M5's pass printed. In two scratch worktrees, build with no switch against `m1b-p1.kimg` at `25d40e7` and at `600996f`. Record which one reproduces the staged loader's sha256 (M5's stage listing and `out/gate.txt` item 10), and pin that commit's `m5load.c` as the reference.
+   - Expected (HYPOTHESIS): `25d40e7` reproduces it, and `600996f` does not, for the known source reason.
+   - **If neither reproduces it:** stop and investigate toolchain or source drift before anything else. Owner acceptance under D37 comes only after that investigation, never in place of it.
+2. **D0b, the switch leak test.** In a scratch worktree at HEAD: build with no switch from HEAD's unedited `m5load.c`, then from the edited, uncommitted file. The two objects must be byte-identical. A mismatch means the switch leaks, and the edit is fixed. HEAD's unedited build differs from the staged loader only by what D0a explained.
+3. **Commit** (PO-A form): the loader source and header, the gate, the build switches, the T0 cases, and the harness, parser and privacy changes of §15.13.7. Number-free message, no driver or identifier. Reviewed before the session (D44).
+4. **T0 builds:** `M5L_J7A=1 T0=1 T0_PAD_LIKE=<main checkout>/orin-native/shim/out/s1/s1-j1.kimg ./orin-native/uefi/build-m5-loader.sh`, and the two `T0_FORCE` variants in separate scratch output directories.
+5. **Board build:** `M5L_J7A=1 KIMG=<main checkout>/orin-native/shim/out/s1/s1-j1.kimg KIMG_SHA256=<J6c's registered kimg_sha256> ./orin-native/uefi/build-m5-loader.sh`. Gate items 1-12 pass; item 7 pins the blob.
+6. **Determinism of the J7a build:** clean `out/`, rebuild, same sha256.
+7. **Pins, recorded privately** in J7a's pre-registration stage (§15.13.8): loader, blob and `gate.txt` sha256, the D0a reference commit, commit, T0 record name. Nothing carrying QNX bytes is committed (`*.efi`, `out/`, `*.kimg` are ignored).
+
+##### T0 (QEMU 11.1.0 with edk2, `acpi=off`, as M5)
+
+| Case | Setup | Expected (pre-registered) |
+|---|---|---|
+| T0a | gate | items 1-12 pass on the J7a board and T0 builds; item 8 shows blob and constants only; item 12 refuses a force build presented as a board build |
+| T0b | `-m 8G`, padded probe, `check` | every M5 token, plus `M5L variant=j7a` directly after the start line, `M5L self w2=… canary=none`, `M5L fdt … crc32=`, `M5L resmem done`, window-2 `M5L map` lines, three `preclaim=ok`, `M5L W2 PASS`, `M5L CHECK PASS`, Shell prompt |
+| T0c | as T0b, `go` | `M5L-EBS ok`, `M5L-JUMP`, `PROBE EL=2 … PC=80080000`. This covers the large load, the claim and copy, and the cache loop over the full `image_size` |
+| T0d | `-m 1536M` | any named refusal, then the Shell prompt, recorded as observed (c1's pre-claim or M5's `window reason=type` are both correct); never `M5L CHECK PASS` |
+| T0e | as M5 | as M5. Its locate-by-bytes must still find exactly one match with the padding |
+| T0f′ | as M5's T0f (`virtualization=off`, `go`), then `check` in the same Shell | `M5L REFUSE el=1`, Shell prompt; then `M5L CHECK PASS` with three `preclaim=ok` (UM10 after a go refusal) |
+| T0h | `-m 3G` (RAM ends at window 2's base) | **any named refusal, then the Shell prompt, recorded as observed** (a large loader may be placed over the target or c1 first); never `M5L CHECK PASS` |
+| T0i | `-m 4G` (RAM ends inside window 2) | as T0h |
+| T0j | `-m 5280M` (RAM ends at window 2's end) | as T0h |
+| T0k | the switch-off loader against M5's T0 build | M5's T0 tokens, unchanged (regression) |
+| T0l | the `T0_FORCE` builds, `go` | `um6-first`: `M5L GO`, `M5L REFUSE w2-final`, Shell prompt, then `check` reaches three `preclaim=ok` and `M5L CHECK PASS`. `um6-later`: `M5L GO`, `M5L-EBS FAIL`, a reset, no Shell prompt |
+| T0u | PC unit test of `m5load-rules.h`, compiled for the host, on synthetic maps and trees | tree in window 2 or over c1, RT attribute in window 2, gap, BootServicesData over a canary, a canary claim that failed, a final map that fails, a reserved-memory node over c2 at window 2's base, a malformed property (`form=unparsed`): each gives its named result; a clean map passes. If the header cannot be host-compiled without changing the switch-off object, T0u becomes a reviewed reading and is recorded |
+
+**T0 cannot show:** cache coherency for this image (R33, board only); the Tegra firmware's map or tree; `CPU_ON` from firmware state; WDT0; long exports; the Shell's load time from SD. **No TCG run is added:** `s1-j1` is unchanged and T-J1 met, and the S1 TCG legs cannot enter through edk2 on the T234 board.
+
+---
+
+#### 15.13.5 Dated exceptions (2026-09-14, D35; J7a board sessions only)
+
+Each lapses when that session's close step (§15.13.6, C) is recorded. None carries over to a kexec rung.
+
+| # | Rule | Exception for J7a | Bounds |
+|---|---|---|---|
+| X1 | §2 rule 5, "kexec only"; D6 | Entry through the UEFI Shell (`Boot0007`) and our loader, on a DC cold boot with no Linux in that power cycle. **D6 is unchanged:** J7a is a diagnostic entry, not S1-F's entry path, and §3.2's "deferred to the freeze" row stands | No `jrun`, quiesce, `kexec -l`, detached sequence or kpageflags snapshot on the L4T boot powered off before a run |
+| X2 | Rule 5, "no write to the ESP" | **One file,** `\M5LOAD.EFI`, in the root of the SD card's ESP (L4T's `/boot/efi`). Staged by `b_esp_stage` (§15.13.7) and removed at every session's close (M5 D10). Never under `EFI/BOOT` or `EFI/UpdateCapsule`, never a `.nsh`, never on the NVMe ESP. The rootfs route was weighed and not chosen (§15.13.18 row 20, D45) | The ESP listing after every return is S0 plus that file at its staged hash; after close, S0. A short ESP refuses before any write (F65) |
+| X3 | Rule 5, "no write to a UEFI variable" | **No exception: we write none.** The firmware's own per-boot writes are judged against the control delta (m5-design §5.2 item 4; only `MTC` changed in M5) | `efibootmgr -v` hash equal apart from `BootCurrent` |
+| X4 | Rule 5, "nothing persistent on L4T apart from staged kimgs" | `~/M5LOAD.EFI` as a staging copy, removed right after the ESP copy is verified. M5's kept `~/m5-backup` is reused only if its hashes equal the live `extlinux.conf` and `BOOTAA64.efi`; otherwise `~/j7a-backup/` is written, hashed and kept like M5's | Every write and removal recorded |
+| X5 | §8 item 10, "no TX" | Adapter TX on J14 pin 3 for the J7a session only. The owner fits it **with DC power removed** during the control cold boot (§15.13.6, J7a-ctl), after confirming the adapter's 3.3 V jumper. **No loopback test:** `com3-term.ps1 -SelfTest` plus the control boot replace m5-design §8 item 4, as in M5 §14.3 (D40). It is removed at close with the terminal still running | **No kexec rung runs while it is fitted.** The next kexec rung's precondition records the owner's statement that pin 3 is unwired |
+| X6 | §2 rule 6a; §15.6's "any power cut" immediate stop | **A planned DC cut** before each cold boot, only after `j7a`'s poweroff watch prints READY. READY needs the kernel's power-down line with no firmware output after it, then 30 s of COM3 silence. Before a counted `go`, power stays off at least `DRAM_OFF_S` (§15.13.6.1). A planned cut is not a §15.6 power cut | A cut before READY is a recorded deviation (as m5-design §14.3), not a planned cut and not a run event. Every other cut is a §15.6 power cut |
+| X7 | Rule 6a's first case ("the L4T boot option had started before kexec") | Under UEFI entry, the Shell launch validates the boot chain (m5-design R11, C11). After it, a cut is judged as rule 6a's first case once §15.13.9's holds have passed. Menus before the launch follow m5-design §2 rule 5 in full | §15.13.9 |
+
+**M5 §7.4 "never leave TX on while the terminal is stopped" needs no exception.** One `com3-term.ps1` session runs for the whole board session: started before the TX wire goes on, stopped after it comes off. The harness cuts per-phase segments by recorded byte offsets (§15.13.7).
+
+---
+
+#### 15.13.6 The board procedure (owner at the plug from J7a-bench to C)
+
+**Conventions** as m5-design §6 and §15.4. `PS>` is PowerShell on the PC and `PC$` is Git Bash. `<rec>` is the session's `results/orin-native-port/20260914T045838Z/s1/`, so `used-boot-ids.log`, `used-captures.log` and `nvbootctrl-first.log` carry over.
+
+**Operator rules** (m5-design §14.4, and M5's observed terminal behaviour):
+- the terminal window keeps focus for the whole hotkey window;
+- F12 before every key or line; every Enter after an arm disarms the terminal (M5's private record), so every Shell line needs its own F12;
+- read each line on screen before its Enter;
+- never press F12 after the Enter on `go` or `reset`; read the terminal's state line and press F12 only if it reads ARMED, to disarm. **The one exception is SHELL-AFTER-GO** (below);
+- press nothing during any autoboot or `startup.nsh` countdown;
+- **never arm the terminal or type while L4T, its shutdown or a login prompt is on COM3;** type only the lines and keys of §15.13.7's key-log allowlist.
+
+| Step | Where | Who does what | Gate |
+|---|---|---|---|
+| **J7a-P0** | PC | Q20's desk read and branch; §15.13.4's D0a, D0b, commit, builds, T0; §15.13.7's parser, harness and privacy self-tests and the count-only replay; `com3-term.ps1 -SelfTest` | all pass; pins in J7a's prereg stage |
+| **J7a-bench** | bench; board untouched | **Owner:** confirm the adapter's voltage jumper at 3.3 V by eye, with no rewiring. Remove the Ethernet cable if fitted, and every USB device on the board's ports (D46); leave the adapter's RX on pin 4 and GND on pin 7 as they are. Record any display and the peripheral set | owner confirms each item |
+| **J7a-pre** | PC, then L4T read-only | `PS>` start `com3-term.ps1 -Out <rec>\com3-j7a-<utc>.log` (key log beside it); forwarding stays disarmed. `PC$ s1-board.sh j7a pre s1-j1` | §15.13.7's preconditions |
+| **J7a-stage** | L4T | `s1-board.sh j7a stage`: backups verified or written (X4), S0, `scp` to `~`, then `b_esp_stage` | ESP = S0 plus exactly that file at its hash; `BOOTAA64.efi` unchanged. F65 on any stage failure: J7a cannot run on this design (D45) |
+| **J7a-ctl** (control cold boot and TX refit) | board | `s1-board.sh j7a ctl` issues `poweroff` and watches for READY. **On READY, the owner:** removes DC power; fits the adapter's TX onto J14 pin 3, counting from pin 1, with nothing on pins 8, 10 or 12; waits at least 10 s (design constant) with power off; restores DC power; presses nothing | firmware banner, countdown and `L4TLauncher:` with no menu text; L4T with a new `boot_id`; S1 and Δ(S0,S1); the file persists at its hash; `nvbootctrl` equal to the first reading. **This tests the refit (m5-design R7, R15) and a byte at COM3 activity before any attended menu.** Any menu text is F58; no board output after the refit is m5-design F36 (remove the wire, power cycle) |
+| **J7a-go** (per counted run) | board | `s1-board.sh j7a go s1-j1`: gate A (offset-aware), J7a prereg stage, S2, `poweroff`, READY. **Owner:** DC off for at least `DRAM_OFF_S`, noting the wall-clock times of the cut and the restore; then on | READY printed; the harness records READY's epoch and the first post-cut firmware byte's epoch |
+| | firmware | On `ESC   to enter Setup.`: F12, one ESC. Arrows to `Boot Manager`, Enter; to `UEFI Shell`, Enter (F12 before each). `Shell>` within 120 s of the first ESC is the operator target; a later prompt is a recorded deviation, as in M5 | a missed ESC (`L4TLauncher:` follows) ends the attempt, not counted (exit 6): let L4T boot, repeat from J7a-go |
+| | Shell | Each line armed, read, then Enter: `map -r`, where FS5 must be SD partition 10 as in M5 (otherwise `reset`, stop, owner); `fs5:`; `ls M5LOAD.EFI`; `memmap` (D43); `M5LOAD.EFI check` | **T1′,** each loader token within `LOADER_EXPECT_S` of the Enter or the previous token, then the prompt within `PROMPT_AFTER_S`: every M5 token plus `M5L variant=j7a`, `M5L self … canary=none`, `fdt … crc32=`, the `resmem` lines ending `M5L resmem done`, window-2 map lines, three `preclaim=ok`, `M5L W2 PASS`, `M5L CHECK PASS`. **Any `M5L REFUSE`: type `reset`, no `go`, record, stop, owner** (F50-F52, F54) |
+| | Shell | `M5LOAD.EFI go`. The terminal disarms itself; confirm its state line. **Nothing is pressed until L4T answers ssh, except in SHELL-AFTER-GO** | §15.13.6.1's bounds; the harness watches COM3 only |
+| | Shell (only in SHELL-AFTER-GO) | **SHELL-AFTER-GO:** a Shell prompt after the Enter on `go` with no `M5L-EBS` token (a refusal in `go`, including `w2-final`). The operator reads the terminal state line, arms once with F12, types `reset`, presses Enter, confirms the state line reads disarmed, and presses nothing more. Recorded | not counted (F61, and F53 for the refusal); J7a-go is not repeated in this session (m5-design D11) |
+| **J7a-return** | L4T | automatic inside `j7a go` (or `j7a return <boardlog>` if the watch was interrupted): `reset_reason`, black box, pstore, `nvbootctrl`, S3, the Δ gates, the key-log allowlist check, segment reads, parser, canwatch, privacy scan | §15.13.10's V5, V6; parser verdict |
+| **J7a-2** | board | only as §15.13.11 allows; from J7a-go on the return boot (no second control boot) | as J7a-go |
+| **C** (close) | bench, then L4T | **Owner:** removes the TX wire from pin 3 **with the terminal still running**; then stops `com3-term.ps1` (Ctrl+]). `s1-board.sh j7a clean` with `S1_J7A_TX_REMOVED=yes`. The owner may refit the Ethernet cable and USB devices after `clean` | ESP = S0 exactly; `~/M5LOAD.EFI` absent; `nvbootctrl` equal; `esp_clean=ok`. A read-back hash that differs is F66 |
+
+A session that ends before a counted `go` still runs C. The next session restages from J7a-pre, with a new capture and a new control boot, because the TX refit is repeated.
+
+##### 15.13.6.1 Wait bounds and design constants (not results)
+
+**Constants.**
+- `LOADER_EXPECT_S = 120 s`: the expected bound on any silent stretch while the loader runs, from the Enter on `check` or `go` to `M5L start`, and from each loader token to the next, up to `M5L CHECK PASS`, `M5L GO` or a refusal. Exceeding it is F63, recorded; it is not a cut and not F55.
+- `LOADER_CUT_S = 300 s`: no byte at all for this long, from the Enter or the last loader token, before a completed loader run. This is the first point at which §15.13.9 allows a cut.
+- `PROMPT_AFTER_S = 60 s`: from the last `M5L` line of a completed loader run (`M5L CHECK PASS` or a refusal) to the Shell prompt (m5-design F9 applies only after this).
+- `DRAM_OFF_S = 300 s`: the minimum unpowered time before every counted `go`'s cold boot (R95). The control boot keeps its 10 s.
+- `ESP_MARGIN = 4 MiB`: above the loader's size rounded up to the ESP's cluster size (§15.13.7).
+
+**From the Enter after `go`:**
+
+| Expect | Bound |
+|---|---|
+| `M5L start`, then `M5L variant=j7a` and every loader token up to `M5L GO` | `LOADER_EXPECT_S` per silent stretch |
+| `M5L GO` counted (budget key) | 10 s after `M5L GO` with neither a refusal nor a Shell prompt, or at `M5L-EBS ok\|FAIL` |
+| `M5L-EBS ok`, `M5L-JUMP` | 60 s after `M5L GO`: both print only after the head's cache loop over the full `image_size` and the MMU-off step (VERIFIED (source): `m5load-head.S` steps 12-14) |
+| `T234-SHIM EL=2 …` with `PC=0000000080080000`, then `JUMP` | 10 s after `M5L-JUMP` |
+| `t234: WDT0 CR=` | 20 s after the shim line |
+| `t234: canary c3 … filled` | 60 s after the shim line |
+| `T234 S1 s1-j1 -P4: procnto up` | 120 s after the shim line |
+| the image's reset line | the params' `guard_s` from `procnto up` |
+| a firmware banner | 60 s after the reset line |
+| L4T answers ssh with a new `boot_id` | 600 s after the reset line, and never later than `go_epoch` + the params' `return_bound_s` + 600 s |
+
+---
+
+#### 15.13.7 Harness, parser and privacy changes (PC, before any board step)
+
+##### Defects that block reuse of today's code
+
+| # | Defect | Class | Change |
+|---|---|---|---|
+| P1 | `com3-term.ps1` writes `seconds=0` in its capture header, and `capture_state` reads `epoch + 0 <= now` as `expired`. Gate A would refuse every com3-term capture, and `advice` would class it `nocapture` | VERIFIED (source: `s1-board.sh` `capture_state`; `com3-term.ps1` header line) | For kind `j7a` only, `seconds=0` means "terminal, no deadline", and `running` rests on the write-open test. Gate A's life check is replaced by: `seconds=0` header, a key log beside it starting `session-start`, capture `running`. Self-tests |
+| P2 | `parse-s1.py run` requires `--kexec-tree-sha256` for board runs, and for J6 `wq_kexec_issuing=yes` and `wq_reset_marker=no`; `J1_STEPS` accepts only `control` and `remove` | VERIFIED (source) | `--entry uefi` (below) |
+| P3 | `build-m5-loader.sh` writes a fixed `out/` | VERIFIED (source) | built in a worktree (§15.13.4) |
+| P4 | ESP space. m5-design §8 item 11's "room several times over" was written for a far smaller loader. By private arithmetic on M5's preflight, a J7a-sized loader fits the ESP once, not twice, and meets `ESP_MARGIN` (class only) | VERIFIED (private preflight, class only) | `b_esp_stage` as specified below; `j7a pre` refuses early on a short ESP (F65) |
+| P5 | The firmware's boot-option descriptions carry a network MAC in unseparated hexadecimal form and a drive identifier. `IDENT_MAC` matches only colon, hyphen and `enx` forms, so the Boot Manager screens and `efibootmgr -v` would be kept with identifiers. The Boot Manager screens are drawn with CSI cursor moves, which can split a string | VERIFIED (source for `IDENT_MAC`; the forms and the CSI sequences seen in M5's private records, class only) | new `efi` class in `redact` and `ident_hits`, both on CSI-normalised text (below); `efibootmgr -v` recorded as a board-computed hash plus structure only |
+| P6 | `com3_last_kind` knows no `M5L`, Shell or menu line and strips no CSI sequence, so a last line of `M5L-JUMP` reads `unrecognised` | reported VERIFIED | kinds `loader`, `shell`, `fw-menu`; strip `\x1b\[[0-9;?]*[A-Za-z]` first |
+| P7 | `canwatch` with no kpf still lets the class-only cpu-side rows fire | reported VERIFIED | under `--entry uefi`: `kpf=not-applicable`; the Linux-page-coincidence arms are suppressed |
+| P8 | M5's watch and judge helpers were never committed | VERIFIED (m5-design §14.6) | their fixed rules are ported into `s1-board.sh` with self-tests: READY only on the power-down line; ANOMALY on any firmware text after `poweroff`; the reset pattern allows a trailing non-alphanumeric; bracket expressions, never escaped parentheses through `awk -v`. They are **committed and reviewed before the session** (D44) |
+| P9 | `j6_precondition` refuses after any row holding F39 | reported VERIFIED | a separate `j7a_precondition` |
+| P10 | Gate A and gate B refuse a capture that already holds record lines (`com3_has_records`), and the parser reads one run per log with first-match rules. One capture per session means J7a-2's gate A would see J7a-1's records | VERIFIED (source: `s1-board.sh` `com3_has_records` and its callers) | Under kind `j7a`, gate A checks for record lines only in bytes after the end of the last segment recorded in `used-captures.log` for this capture (the whole file if none). Gate B is kexec-only and unchanged: no `j7a` phase calls it, and no kexec rung may use a J7a capture (§15.13.15). The parser and canwatch read only the current segment. Self-test: two runs in one capture |
+| P11 | The draft's J7a-go carried the 7,200 s uptime gate, citing R31. R31 is the pl011-needle claim. The limit is `MAX_UPTIME_S`, the §6.12/§7.3 rule for Linux state at a kexec hand-over | VERIFIED (source: `s1-board.sh` `MAX_UPTIME_S` and its message; `s1-design.md` R31) | **Dropped for `j7a`:** the L4T instance is powered off and DRAM left unpowered for `DRAM_OFF_S` before the entered power cycle, so its uptime reaches nothing the run depends on. Kexec rungs keep the rule unchanged |
+| P12 | `com3-term.ps1` stores sent bytes as hex (`Write-Key`), so text redaction masks nothing typed, and one terminal session spans L4T boots with a login prompt on COM3 | VERIFIED (source: `Write-Key`, the armed and sent handling) | key-log allowlist check (below); key-log copies are plain byte copies of an allowlist-checked log, labelled as such |
+| P13 | A segment cut into the record directory before redaction leaves a raw copy there if the step is interrupted | design defect in the draft | raw ranges are read through a pipe (below); no raw segment file is ever written into the record directory |
+
+##### `orin-native/startup/s1-board.sh`: new `j7a` subcommands
+
+All share one attempt id `S1_J7A_ID` and one capture per session. The harness never opens COM3: it reads the file, which com3-term holds shared for reading.
+
+| Subcommand | Does | Board contact |
+|---|---|---|
+| `j7a pre s1-j1` | PC gates: clean tree (harness, `parse-s1.py`, `kpf-decode.py`, `com3-term.ps1`, `build-m5-loader.sh`, `m5-gate.py`, `m5load-rules.h`); the loader's `gate.txt` items 1-12 PASS, and its blob pin equals the params' `kimg_sha256`; the D0a reference commit and the T0 record named; `com3-term.ps1 -SelfTest` hash; T-J1 met with the params' `memcanary_w_sha256`; conf gate without the kexec tree; the Q20 branch recorded; no QEMU or other COM3 user. Board, read-only: `bios_version` as M5's firmware; `efibootmgr` structure shows the UEFI Shell and NVMe entries and `BootOrder` starting with the SD entry; SecureBoot off; the ramoops carveout as `RAMOOPS_REG_HEX`; ESP free space against the loader size and `ESP_MARGIN` (F65 refuses here, before any write); backups (X4); no leftover `/boot/efi/M5LOAD.EFI` (if present, only `clean` may run); `nvbootctrl` equal to the first reading | ssh, read-only |
+| `j7a stage` | backups, S0 (`b_efi_snap`, `b_slots`), `b_esp_stage` | ssh; writes X2 and X4 only |
+| `j7a ctl` | gate A; `mark_boot <old> j7a-ctl`; offset `j7a com3_bytes_before_poweroff=`; `b_poweroff`; `j7a_wait_poweroff`; prints `READY: cut DC, fit TX (owner), restore`; `j7a_watch_fw ctl` (banner, countdown, `L4TLauncher:`, no menu or Shell text); `wait_new_boot_id`; S1; `j7a_state_gate s0 s1` | before and after only |
+| `j7a go s1-j1` | gate A (offset-aware, P10); `j7a_prereg_append`; S2; `pstore_before`; `mark_boot <old> j7a`; poweroff and READY as `ctl`; prints `READY: cut DC for at least DRAM_OFF_S, note the times, restore`; records `j7a ready_epoch=` and `j7a first_fw_byte_epoch=`; `j7a_watch_go` (below); `wait_new_boot_id` bounded from `go`; return records | before the poweroff and after the reset only |
+| `j7a return BOARDLOG` | re-enters go's return reads, idempotently | ssh |
+| `j7a clean` | `b_esp_clean` (below); `~/M5LOAD.EFI` absent; `b_slots` | ssh; one removal |
+| `j7a-status BOARDLOG` | prints the watch state from COM3 | none |
+| `advice BOARDLOG` | gains the `j7a` keys and §15.13.9's classes | ssh `boot_id` read |
+
+**`b_esp_stage`** (ssh, in order; any failure ends the step with F65):
+1. Read the ESP's cluster size and free space just before the copy. Refuse, writing nothing, unless free space covers the loader's size rounded up to a cluster plus `ESP_MARGIN`.
+2. `cp` `~/M5LOAD.EFI` to `/boot/efi/M5LOAD.EFI`, then `sync`.
+3. Read back the sha256 and compare it with the staged hash.
+4. On any `cp` or `sync` error or a hash mismatch: `rm -f /boot/efi/M5LOAD.EFI` (that exact path, never a wildcard), `sync`, and verify the ESP listing equals S0. If the removal fails or the listing still differs from S0, stop all board work: F57, owner.
+5. On success: remove `~/M5LOAD.EFI`, record, and only then may `ctl` print READY. `stage` and `ctl` are ordered phases, so no planned cut can come before a verified write.
+
+**`b_esp_clean`:**
+- Read back the sha256. If it equals the staged hash: `rm /boot/efi/M5LOAD.EFI`, `sync`, listing equals S0, `esp_clean=ok`.
+- If it differs: stop, record `esp_clean=hash-mismatch` (F66), delete nothing. The owner may authorise removing that one path by name, by setting `S1_J7A_ESP_REMOVE=/boot/efi/M5LOAD.EFI` (any other value or a wildcard is refused). Then `rm`, `sync`, listing equals S0.
+- Any ESP file other than S0's and that path is F57.
+
+**`j7a_watch_go` states,** each logged with its COM3 byte offset:
+1. `FIRMWARE`, `HOTKEY`.
+2. `MISSED` (`L4TLauncher:` before Shell text): exit 6 after a new `boot_id`, not counted.
+3. `SHELL`: the 120 s operator target from the key log's first sent ESC is recorded, not enforced.
+4. `MEMMAP`.
+5. `T1` (in order) or `REFUSE`: exit 6, not counted, stop.
+6. `GO` (the Enter on `go` seen in the key log).
+7. `SLOWLOAD` (F63) when a silent stretch passes `LOADER_EXPECT_S`; the watch continues.
+8. `SHELL-AFTER-GO` (F61): a Shell prompt after `GO` with no `M5L-EBS` token. It records any refusal (F53), expects the operator's `reset`, and ends with exit 6, not counted.
+9. `COUNTED`: at `M5L-EBS ok` or `M5L-EBS FAIL`, or 10 s after `M5L GO` with neither a refusal nor a Shell prompt. It writes `j7a go_counted com3_bytes_at_go= go_epoch=`. **This line is the budget key.** A refusal after `M5L GO` and before `COUNTED` leaves the attempt uncounted.
+10. `JUMP`, `SHIM`, `WDT0`, `FILLED`, `PROCNTO`, `RECORDS`, `EXPORT`.
+11. `RESET` (`… resetting so the log can be recovered`), `BANNER`, `L4T`.
+
+Negative tokens after `COUNTED`: `M5L-EXC`, `M5L-EBS FAIL`, `BAD-LANDING`, `EXC `, `EL!=2`, `kexec_core: Starting new kernel`, any `s1wq:`.
+
+**Exit codes.** 0-5 keep their meanings. **6:** the attempt ended before a counted `go`. **7:** a counted `go` never reached `procnto up`, which is F55, counted.
+
+**Environment.**
+- Required as today: `ORIN_HOST`, `ORIN_KEY`, `S1_RECORD_DIR`, `S1_COM3_LOG` (Windows paths accepted), `S1_REDACT_SSID` (the return boot's L4T text passes through the capture).
+- New: `S1_J7A_ID`, `S1_J7A_LOADER` (the worktree's built `M5LOAD.EFI`), `S1_J7A_TX_REMOVED=yes` (`clean` only), `S1_J7A_ESP_REMOVE` (`clean` after F66 only).
+- Refused: any variable that would change a bound or a design constant.
+
+**`j7a_precondition`** requires, in `J-waivers.conf`: `D30=yes`; `D34_J7A=yes` (J2's and J6c's rows hold F39); `D35=yes`; J4's row F36; J6c's row carrying the live-writer label; `D38=yes`; `D45=esp`; `D46=yes`; and, under Q20 branch (b), `D47` recorded. It prints `kexec_runs_before=` and `j7a_counted_before=`, and it refuses a third counted `go`, and any `go` after an F62 on the same image.
+
+**Budget helpers.** `j_kexec_runs` is unchanged: it keys on `run com3_bytes_before_kexec=`, which J7a never writes. The new `j7a_counted_runs` counts `^j7a go_counted `.
+
+**Offsets and segments.** Each phase writes its offsets. A segment is the capture's byte range `[offset before poweroff, end of return reads)`.
+- The parser, canwatch and the privacy scan read that raw range through a pipe (`tail -c` and `head -c` into the tool's standard input), or through a `mktemp` file outside the record directory that an EXIT trap removes. No raw segment file is written into the record directory.
+- The kept segment copy is written by piping the same range through `redact`. The raw range's byte offsets and sha256 are recorded; the raw bytes are not.
+- `used-captures.log` records the capture once, with each segment id and its end offset; a segment is used once.
+
+**Key-log allowlist check (`j7a_keylog_check`).** Run at every return and at close.
+- It decodes every `sent` entry of the key log, applies Backspace (`08`), and reconstructs each line at its Enter.
+- **Allowed key sends:** ESC `1b`; arrows `1b 5b 41` to `1b 5b 44`; Enter `0d`; Backspace `08`.
+- **Allowed reconstructed lines:** `map -r`, `fs5:`, `ls M5LOAD.EFI`, `memmap`, `q`, `M5LOAD.EFI check`, `M5LOAD.EFI go`, `reset`, and the empty line (a menu Enter).
+- Printable bytes that do not end in an allowed line, or any `sent` entry while the segment's last COM3 class is L4T text, are F64. The key log is then not copied into a J7a directory, the result is flagged, and the owner decides. Otherwise the copy is a plain byte copy, labelled "allowlist-checked, unredacted".
+- F59 is any `armed` or `sent` entry after the Enter on `go` other than SHELL-AFTER-GO's single arm and `reset` line.
+
+**Harness self-tests** (synthetic, plus in-place replay of M5's private P2, P3 and R1 captures under an environment variable, never copied or committed):
+- a `seconds=0` capture;
+- READY needs the power-down line; ANOMALY on firmware text;
+- each watch state and negative token, with CSI and menu lines;
+- a slow but valid `check` and `go` (silent stretches between `LOADER_EXPECT_S` and `LOADER_CUT_S`) are F63 only: neither a cut advice nor F55;
+- SHELL-AFTER-GO after a `w2-final` refusal and after a pre-GO refusal: not counted, `reset` accepted, F59 not raised;
+- `COUNTED` once only; `w2-final` stays uncounted; `M5L-EBS FAIL` counts;
+- two runs in one capture: gate A passes for J7a-2 after J7a-1's segment is recorded, and fails when J7a-1's segment is not;
+- the key-log allowlist: a clean log passes; a typed free-text line, a line typed while L4T text is last, and a stray printable byte each give F64;
+- the `efi` redaction class, including a CSI-split MAC;
+- `b_esp_stage` failures (short space, `cp` error, hash mismatch) leave the listing equal to S0; `b_esp_clean` with a mismatched hash deletes nothing without `S1_J7A_ESP_REMOVE`, and refuses a wildcard;
+- an interrupted return leaves no raw segment file in the record directory or its temp location;
+- the ESP listing compare;
+- `j_kexec_runs` does not count J7a;
+- no `B*` or `J6*` directory is created;
+- a refused third `go`, and a refused `go` after F62.
+
+##### `orin-native/s1/parse-s1.py`
+
+- **`run … --entry kexec|uefi`,** default `kexec`. Under the default, a re-parse of B2's, J2's, J4's and J6c's own captures must print byte-identical output (R92).
+- **`--arm uefi` with `--entry uefi` only:** `J1_STEPS[("board","host")]["uefi"] = "J7a"`. `--loader-sha256 HEX` is required under `--entry uefi`.
+- **Under `--entry uefi`,** reading one segment only (P10):
+  - **Item 5:** no `kexec_tree_sha256`; it records `entry=uefi`, `loader_sha256=`, and the presence of the `M5L fdt … crc32=` line (its figure goes to the private `parse-s1.txt` only).
+  - **`wq_kexec_issuing` and `wq_reset_marker`** print `n/a-uefi` and leave `want`. `wq_markers=none` is required (no `s1wq:` anywhere).
+  - **New required checks,** on the segment's last Shell visit:
+    - `M5L start mode=check … el=2` and `M5L start mode=go … el=2`, each followed directly by `M5L variant=j7a`, then `M5L self w2=… canary=none`;
+    - for both: `crc src=ok`, `crc dst=ok`, `M5L resmem done`, three `preclaim=ok`, `M5L W2 PASS`;
+    - `M5L CHECK PASS`, and the go prelude matching the check prelude;
+    - **exactly one counted `M5L GO`:** an `M5L GO` not followed by a refusal before `M5L-EBS`; then `M5L-EBS ok`, `M5L-JUMP`, the shim line with `PC=0000000080080000`, then `t234: WDT0`, in order;
+    - zero negative tokens after the counted `M5L GO`. Text before it is unconstrained.
+  - **`resmem` summary (private `parse-s1.txt`, class only):** `resmem_c2=none|<node names>` and `resmem_c2_base=yes|no`, from the go visit's lines.
+  - **Unchanged:** L0, L1, L7 (the reset line and a firmware banner after it; `MAINSWRST`; the black box consistent with COM3), the canary checks, watches a-d, the hold, the exports, `memcanary_w_sha256`.
+  - **The row** keeps J6's rules and adds `j7a=clean|bad|bad-partial|bad-unstable|revert-only|F39c1|F39c3|F49|F62|incomplete` by §15.13.10.1-2. It never prints `pass` or `b2=`.
+- **`canwatch … --entry uefi --ref-j6c <J6c dir>`:** `kpf=not-applicable`; the coincidence rows suppressed; and `profile_vs_j6c=same|differs:<items>` plus `kw_sub=anchored|differs|partial` for bad runs only (§15.13.10.3). J6c's `parse-s1.txt`, `canwatch.txt` and c2's watch exports must match the sha256 registered in J7a's stage.
+- **Self-tests:**
+  - a synthetic UEFI capture is complete;
+  - it is incomplete for each missing token (`M5L variant=j7a`, `M5L resmem done`, `M5L W2 PASS`, a `preclaim=ok`, `M5L-EBS ok`, the fdt stamp);
+  - it is incomplete when `M5L-JUMP` follows the shim line, when two counted GOs appear, or on any negative token after GO;
+  - an `M5L GO` followed by `M5L REFUSE w2-final`, then a later counted `M5L GO` in a new Shell visit of the same segment, parses the later one only;
+  - a c2 `verify=bad` start check followed by a missing watch gives `bad-partial`;
+  - P7's overlap on synthetic bitmaps at, above and below the threshold;
+  - `--arm uefi` without `--entry uefi` is refused;
+  - the output never contains `pass`, `b2=`, a 16-hex-digit value, a dotted quad or a MAC form.
+
+##### Privacy
+
+- **CSI normalisation first.** `redact` and `ident_hits` strip CSI and OSC sequences, and turn cursor-positioning sequences into line breaks, before matching. When an identifier is found only after normalisation, the redacted copy masks the whole screen region between the surrounding clear-screen or cursor-home sequences.
+- **New `efi` class** in `redact` and `ident_hits`:
+  - `MAC[:(]` followed by 12 hex digits, and EUI-64 hyphen groups;
+  - the NVMe boot option's description text, masked whole wherever a boot-option line names an NVMe device, on COM3 and in any `efibootmgr` output.
+- **`redact-selftest`** gains one synthetic of each, with documentation-reserved values, plus a MAC split by a cursor-positioning sequence.
+- **Count-only replay** of the scan over M5's private P2, P3 and R1 captures, in place, including their menu segments: after redaction, zero `efi` hits remain. Counts only; the captures are not copied (R91).
+- **`efibootmgr -v`** is recorded as a board-computed sha256 of its output minus `BootCurrent`, plus entry numbers, active flags and `BootOrder`. No descriptions.
+- **`S1_REDACT_SSID`** stays mandatory.
+- **The raw capture** stays inside the git-ignored record directory and is never copied, quoted or opened by hand. Only redacted segment copies and allowlist-checked key-log copies are kept in J7a directories.
+- **`resmem` lines** carry node names and classes only; the node names are the firmware's, not identifiers, and still pass through `redact`.
+- **Existing exposure, recorded:** M5's private records already hold `efibootmgr -v` and menu screens raw. They are git-ignored and never pushed; this design does not rewrite them.
+
+---
+
+#### 15.13.8 Records
+
+**Pre-registration.** Before the first `go`, after gate A, `j7a_prereg_append` writes a `prereg stage=j7a` block to `<rec>/J-prereg.log`. It never re-emits J2's or J6's lines, and an amendment uses the D34 form. It holds:
+- commit and a clean tree;
+- `s1-board.sh`, `parse-s1.py`, `kpf-decode.py`, `com3-term.ps1` and `m5load-rules.h` sha256;
+- `j7a image=s1-j1 entry=uefi arm=uefi`;
+- `loader_sha256=`, `blob_sha256=` (equal to J6c's registered `kimg_sha256`), `gate_sha256=`, `d0_reference=`, `t0_record=`;
+- this section's rule text sha256 (§15.13.6.1, §15.13.10 and §15.13.11 as approved), including P7's threshold and the design constants;
+- J6c's `parse-s1.txt`, `canwatch.txt` and c2's watch exports sha256 (the reference profile);
+- `fill_rate_factor=4`, unchanged;
+- `q20_branch=a|b|c`;
+- the peripheral set (D46), as class words;
+- the D-rows taken.
+
+**Directories** (§15.4's conventions; no `B*` or `J6*` directory is created or written):
+- `<rec>/J7a-session-<utc>/`: `pre`, `stage`, `ctl` and `clean` board logs; S0 and S1 snapshots; the loader's `gate.txt` and build log copies; the params copy; the control segment copy (redacted); `-c-espfiles.log`.
+- `<rec>/J7a-1/` and `<rec>/J7a-2/`, one per counted `go`: the go board log; S2 and S3 (and S4 if a warm control is needed); the redacted segment copy and the allowlist-checked key-log copy; `-memmap.txt` (the Shell block, if typed); `-resmem.txt` (the `M5L resmem` lines); `-nvbootctrl-{pre,post}.log`; `-blackbox.log` (and any new `dmesg-ramoops`); `-dram-off.log` (READY's epoch, the first firmware byte's epoch, and the owner's stated cut and restore times); `parse-s1.txt`, `canwatch.txt`, `s1-j1a..d.bin`; `-go-gate.log`; `j7a-note.log`, hand-written like `j6c-note.log`.
+- `<rec>/J7a-nogo-<utc>/`: an attempt that ended before a counted `go` (missed ESC, refusal, SHELL-AFTER-GO, no READY, F65).
+
+**Absent on purpose,** each with a line in the board log saying why:
+- no `-kpf-*` ("kpf not-applicable: no Linux ran in the entered power cycle");
+- no `-iomem-postrmmod`, `-pci-*`, `-wq*` or `-trace.txt`;
+- no kexec tree;
+- no raw segment file.
+
+**Snapshot set** (`b_efi_snap`):
+- `boot_id` and uptime;
+- the `efibootmgr` hash and structure;
+- efivars as `name sha256`;
+- `find /boot/efi -type f -exec sha256sum {} +`;
+- `extlinux.conf` and `BOOTAA64.efi` sha256;
+- `bios_version`;
+- `ls -l /sys/fs/pstore`;
+- SecureBoot's state;
+- ESP free space and cluster size;
+- the ramoops carveout; `b_slots`.
+
+**Return state gate** (`j7a_state_gate`, m5-design §5.2 items 3-5, as validity gates):
+- efivars: no name added or removed; each changed name also changed in Δ(S0,S1);
+- `efibootmgr` hash equal apart from `BootCurrent`;
+- ESP = S0 plus the file at its hash;
+- `extlinux.conf`, `BOOTAA64.efi` and `bios_version` equal;
+- `nvbootctrl` equal to the first reading.
+
+A name changed only in Δ(S2,S3) triggers a warm control (`s1-board.sh reboot`, S4, compare), as in m5-design §6.7.
+
+**Run note** (`j7a-note.log`, private): as m5-design §6.10 and `j6c-note.log`. Every figure stays private until the 4.6(i) consultation.
+
+---
+
+#### 15.13.9 Power-cut and advice rules
+
+`advice` gains the offset keys `j7a com3_bytes_before_poweroff=`, `j7a poweroff_ready com3_bytes_at_ready=`, `j7a go_enter`, `j7a go_counted com3_bytes_at_go= go_epoch=`, `j7a shell_after_go`, `j7a shim_seen`, `j7a reset_seen`, and `j7a NO RETURN within`. Offsets come only from a board log naming the same capture; otherwise NO CUT and the owner decides. It never advises a cut while ssh answers.
+
+| Phase, by the last COM3 class after the offsets | Cut? |
+|---|---|
+| L4T running, before a run | only the planned cut after READY (X6) |
+| `poweroff` issued, no power-down line yet | **NO CUT.** Firmware text after the offset means the board rebooted instead: let L4T boot; not counted (F60) |
+| READY | the planned DC cycle (owner), unpowered for at least `DRAM_OFF_S` before a counted `go` |
+| Power-on to the start of `Boot0007` (firmware, menus) | **Never,** except m5-design §2 rule 5's single cut for a firmware that has stopped (10 minutes with no byte, the last output not a menu or prompt, no ssh). A menu is left with `Continue` or a boot option |
+| Shell launched (`check` or `go`), loader running, before a completed loader run: a silent stretch past `LOADER_EXPECT_S` | **NO CUT** (F63, recorded) |
+| Shell launched, before a completed loader run: no byte for `LOADER_CUT_S` from the Enter or the last loader token, or an edk2 exception dump (m5-design F9b) | **one cut (class P):** the Shell launch validated the boot. Record the last line |
+| A completed loader run (`M5L CHECK PASS` or a refusal) with no Shell prompt within `PROMPT_AFTER_S` (m5-design F9) | **one cut (class P).** Record the last line |
+| SHELL-AFTER-GO | **NO CUT.** The operator arms once and types `reset` (F61) |
+| `M5L GO` seen; no `M5L-EBS`, no refusal, no prompt | counted after 10 s; one cut only after `go_epoch` + 600 s with no new byte and no banner (the exit may have happened; m5-design F17, F20; X7) |
+| Counted `go`, no `T234-SHIM` | one cut, only after `go_epoch` + 600 s with no new byte and no banner (m5-design F17, F20; X7) |
+| Shim seen, no image reset line and no banner | **NO CUT until `go_epoch` + the params' `return_bound_s` has passed,** then one cut only after 10 minutes of COM3 silence with the last line not a menu or prompt. The watches and the hold are silent by design (§15.4.8), and **the hold's own dwell bound reaches 10 minutes**, so the silence rule is safe only because it waits for the return bound first. A later edit must never drop that wait |
+| The image's reset line, a `BWAIT` guard deadline or a firmware banner after `go`; L4T not answering | m5-design §2 rule 5's exception and §2 rule 6a's second case, word for word. **Never a second cut** |
+| No capture, or it ended | as the row above |
+
+**After any cut other than the planned one:**
+- record the last COM3 line;
+- let L4T boot to a validated state before any other step;
+- read `nvbootctrl` against the first reading (F30 or m5-design F33 stops all board work);
+- it is a §15.6 immediate stop for J7a, and never a second cut.
+
+**Self-tests** replay synthetic captures for each row, plus M5's private captures in place (READY, MISSED, SHELL, GO).
+
+---
+
+#### 15.13.10 Pre-registered reading
+
+Fixed before J7a-1 and registered by hash. No J7a result exists, so the §15.6 amendments below cannot be fitted to one.
+
+##### 15.13.10.1 Terms
+
+**Complete run.** A counted `go` is complete (`verdict=diagnostic complete`, step J7a) when all of these hold:
+
+| Gate | Evidence |
+|---|---|
+| V1 loader | T1′ in the same Shell visit; UM2-UM5 and UM9 lines with no refusal; `M5L GO`, `M5L-EBS ok`, `M5L-JUMP` |
+| V2 entry | `T234-SHIM EL=2` with `PC=…80080000` and the big-endian DTB magic; `t234: WDT0`; `t234: ram w2`, `gpu range … not added`, three `canary … filled`, as B2 |
+| V3 host | `procnto up` naming `s1-j1`; `S1 W2 reflected=yes`; `S1 ASINFO` equal to J6c's; `memcanary_w_sha256` equal to the pin |
+| V4 watcher | J6c's complete-parse rules (`--diag j1`): six canary checks, watches a-d well formed and in order, the hold's fill and verify lines, exports a-d decoded; `wq_markers=none`; item 5 as §15.13.7 |
+| V5 return | the image's reset; a firmware banner; autoboot with no key; L4T with a new `boot_id`; `reset_reason` `MAINSWRST`; black box consistent with COM3; the key-log allowlist check passes |
+| V6 state | §15.13.8's return state gate. **A failure is F57, an immediate stop, whatever the canaries show** |
+
+A counted run missing V3 or V4 for an image or tool reason is F56: incomplete, counted, with nothing resized at the board (§15.12 C). An F64 alone does not make a run incomplete; it is flagged for the owner.
+
+**c2's state in one complete run,** over the two canary checks and c2's watches a-c:
+
+| State | Holds when |
+|---|---|
+| **clean** | c2 `verify=ok` at both checks; every c2 watch base `bad` 0 and `writer=none`; no revert on c2's watches (§15.12 B7) |
+| **bad** | c2 `verify=bad` at either check, **or** any c2 watch base `bad` above 0, **or** any c2 change event with stable re-reads. A transient write that later healed is still a write |
+| **revert-only** | not bad, but a c2 revert or oscillation above 0: a misread with no write shown |
+
+**c2 bad in a counted run that is not complete (one rule, pre-registered).** When c2's `canary … filled` line was printed and a parse-valid canary check prints c2 `verify=bad` before the run fails for any later reason (F49, F56, F62, a cut), the run reads **bad-partial**. It classifies as K-w with sub-label `partial` (§15.13.10.4), unless F34 holds on c2's printed watches (then bad-unstable). Profile items that need missing data print `n/a`. A run with no parse-valid c2 check reads nothing about c2.
+
+There is **no map label.** UM4's pre-claim makes every complete run's c2 ConventionalMemory at the claim and ours until the exit. A map that is not free refuses before `go` (F50-F52, F54).
+
+##### 15.13.10.2 One run
+
+| Observation in a counted run | Run reading |
+|---|---|
+| complete; c2 clean; c1 clean; hold `verify=ok` | **clean** |
+| complete; c2 bad | **bad**, with its profile (§15.13.10.3) |
+| not complete; c2 bad at a printed check (§15.13.10.1) | **bad-partial** |
+| complete; c2 revert-only | **neither:** an H3 lead under UEFI entry; the run counts |
+| c2 bad **and** F34 on c2's watches (§15.12 B5) | **bad-unstable** (K-r(u)) |
+| c1 bad at either check or in watch d | **F39c1: immediate stop** (c2's reading from the run still stands) |
+| hold `verify=bad` or `timeout data=bad` | **F49: immediate stop** (c2's reading still stands); BootServices descriptors printed in window 1 or 2 are named in the reading |
+| c3 bad | **F39c3:** recorded; it does not stop J7a-2 (D39) and never changes c2's reading |
+| `reset_reason` not `MAINSWRST` after `procnto up` and before the image's reset line | **F62:** counted; c2's reading from printed checks stands under the partial rule |
+
+##### 15.13.10.3 Profile against J6c (bad and bad-partial runs)
+
+`canwatch` prints `profile_vs_j6c` and `kw_sub`. An item is **same** when:
+- **P1 onset:** c2 is bad at watch a's base scan;
+- **P2 anchor:** c2's first mismatch at the start check is its first word;
+- **P3 reads:** F34 does not hold, and `reads=stable`;
+- **P4 content:** the `content=` leading classes equal J6c's, and the flip and pattern-copy classes are zero;
+- **P5 activity:** no c2 watch reads `ongoing`;
+- **P6 direction:** the end-check count is not above the start-check count;
+- **P7 page set:** from c2's watch-a export, compared with J6c's (count-only, printed privately as pages in common, only in J7a, only in J6c): the per-MiB presence vector (which of c2's sixteen MiBs hold at least one `bad_final` page) is identical, **and** the pages in common are at least half of J7a's `bad_final` set and at least half of J6c's. The same comparison is printed for `changed_ever` as a record, not a gate. The threshold is a design constant, deliberately loose: only J6c has bitmaps, so no kexec-run variability is known. J6c's private note records that its hit pages sit in some MiBs and are absent from others, including slab-dense ones; that pattern is what P7 compares.
+
+**`kw_sub`** (pre-registered):
+- **anchored:** P1, P2 and P7 are all same. P3-P6 may differ and are listed.
+- **differs:** any of P1, P2 or P7 differs.
+- **partial:** the run is bad-partial, or P1, P2 or P7 cannot be computed.
+
+| Differs in | Reading (all HYPOTHESIS) |
+|---|---|
+| none (`same`) | the same lay-down, on the same pages, with no Linux in the power cycle. J6c's leading content includes `kva`, so Linux-specific structures are excluded **unless startup's fill did not land on those pages and pre-cut DRAM content survived `DRAM_OFF_S`** (R95; the fill has no read-back). Remanence plus a failed fill would also predict pages Linux held, so P7 same does not break that tie; only the unpowered wait argues against it. Among the remaining writers, QNX-side (H5) and a secure-world writer with high virtual addresses lead over non-secure firmware, which runs identity-mapped (m5-design C4). A `resmem` node over c2 (UM9) is named as the lead. J7e (base shift) is next in revision 4, not J7d |
+| P4 only | the same kind of lay-down with different data: the data depends on the entry state, two writers, or (with `zero` or `ones` dominant) a fill that did not land after decayed DRAM (R95) |
+| P2 | not tied to the base word; weakens H2's "user of window 2's base"; raises J7c's priority |
+| P5 (`ongoing`) | a writer still active while QNX runs, stronger than J6c; the exposure item is raised |
+| P1 (late onset) | onset after QNX came up: H5 or a timer-driven firmware writer leads; J7e first |
+| P7 | a different page set: a different or entry-dependent writer, or UEFI-driver residue (R82). The anchored reading is not made from this run |
+| positive byte signatures above 0 | recorded as a lead; an absence excludes nothing |
+
+##### 15.13.10.4 Across runs, against §15.6
+
+Preconditions met (VERIFIED, private record): J4 is F36; J6c's parser row carries `live-writer`.
+
+| Class | Holds when | Sub-labels | Then |
+|---|---|---|---|
+| **K-w** | **any one counted J7a run reads bad or bad-partial** (not bad-unstable) | `anchored\|differs\|partial` (§15.13.10.3); `profile=same\|differs:<items>`; `intermittent` if another complete run was clean; `repeated` if two runs read bad | "Writer unidentified; not the removable masters; present with no Linux in the power cycle." Kill condition 1 stands for the 11c candidate. Only `anchored` adds "the corruption is anchored at the address" (HYPOTHESIS). Revision 4 as §15.6: a new range, J7c's canaries in its B2, J7e for H5. **After `anchored`, J7a stops.** After `differs` or `partial`, J7a-2 runs within the cap, if no immediate stop applies, to test for a repeat; then the owner decides |
+| **K-r(u)** (sub-class of K-r) | a counted run reads bad-unstable | — | "c2's reads are unstable under UEFI entry; under kexec they were stable, with corrupted data." The range is unusable under both entries. Revision 4's B2 gets a read-stability check under both. Outranks K-w for the same run. J7a stops |
+| **E** | **two complete counted J7a runs, both clean;** no F39c1, F49, F55, F57 or F62 in the counted runs; no F50 in any J7a attempt. A refused `check` (F51, F52, F54) or F53 or F61 in an earlier, uncounted attempt the owner chose to retry does not block E | `c3=clean\|hit` | "The writer needs the kexec entry path in this power cycle, in the broad sense: Linux's DMA, or a coprocessor, firmware, PSCI, clock or EMC state that Linux's run, its shutdown or the L4T boot option leaves, or the tree. The cause within that path is not identified." **E does not exclude a writer anchored at window 2's base whose activity depends on kexec-path or L4T-boot state; J7c and J7e keep their value under E.** Not a range verdict. B2 stays NOT MET on data. Owner (D31): a wider quiesce search in revision 4, UEFI entry for S1 under freeze item 3 (with its own B1 and B2 under that entry), or stopping S1-F |
+| **K-o** (new) | a `check` refuses with F50 | `where=c1\|c2\|c3\|w2` | "Kill condition 1 stands on the firmware's own map at Shell time; no writer is shown." Recorded as contradicting 11c's `/proc/iomem` reading (plan §8 unknown #6, freeze item 6). Revision 4's range derivation includes a UEFI map read. Needs the owner's acceptance (D41) |
+| **U** | anything else, including: one clean run and no second complete run; a revert-only run with the other clean or missing; F51, F52, F53, F54 or F61 twice for one cause; F55; F56 or F62 with no parse-valid c2 check; F39c1 or F49 with c2 not bad; F65; any immediate stop before a class holds | leads recorded | B2 stays data; S1-F stays stopped; owner (D31) |
+
+**Precedence:**
+1. An immediate stop ends J7a.
+2. A reading made in the stopping run still classifies: c2 bad or bad-partial there still gives K-w, with the exposure item.
+3. K-r(u) outranks K-w for the same run.
+4. K-o needs no counted run.
+5. A clean run then a bad run gives K-w/intermittent.
+6. A first run reading K-w `anchored` or K-r(u) ends J7a. A first run reading K-w `differs` or `partial` allows J7a-2 (§15.13.11). If J7a-2 then reads bad with P1, P2 and P7 same **as J7a-1**, the label is `differs,repeated` (a UEFI-path lay-down of its own); bad with an anchored profile against J6c gives `anchored`; clean gives `intermittent`.
+
+##### 15.13.10.5 Cases the analyses raised, read in advance
+
+- **Firmware memory over c2 or window 2 at `check`.**
+  - A runtime, reserved, MMIO, unusable, NVS or gap type gives F50, and K-o under D41.
+  - A Loader* or BootServices* type over a canary, with `M5L self … canary=none`, gives F51: U with the lead "a Shell-time allocation over the canary, not the loader's own image (it may be the Shell's buffer for our file)". It is not a firmware-memory finding by itself. The owner decides whether a later session retries.
+  - The loader's own image over the target or a canary (`M5L self … canary=cN`, or `REFUSE alloc`) gives F54: a loader-placement problem, revised offline and rerun through T0. Not U and not a firmware finding. Placement is probably deterministic (R79), so no retry happens without a revision.
+  - Either way there is no `go`, and no tolerance is widened at the board (M5 D4).
+- **The firmware tree over window 2 or c1:** F52, U with its lead.
+- **A `resmem` node over c2 (UM9):** never a refusal. Under K-w `anchored` it is named as the lead; under E it is recorded and not excluded.
+- **c3 bad:** F39c3. c3 carried a small static write in two of the four kexec runs, so under D39 it does not stop J7a-2 when E still needs that run. Under E, the class line gains `c3=hit`, and public text uses the `c3=hit` sentence (§15.13.16).
+- **c1 bad:** F39c1 stays an immediate stop with no waiver. c1 was clean in every kexec run, so a hit with no Linux is a new window-1 exposure, and D32's freeze-gate sub-item is updated.
+- **The hold fails (F49):** an immediate stop; the exposure item is raised ("a writer reached held sysram with no Linux in the power cycle", HYPOTHESIS). BootServices descriptors printed in either window are named as a possible UEFI-driver residue (R82). A hold `map=fail` or `watch=fail reason=nomem` is F56, not F49.
+- **Startup or QNX fails before `procnto up` (F55):** counted, no canary reading, J7a ends for the session. It is an entry-path finding for freeze item 3 (`-P4` from firmware state, window 2, a large IFS). It includes `M5L-EBS FAIL`, whose two causes (the exit refused four times, or UM6 refusing a later map) COM3 cannot tell apart. Whether the second `go` is spent on a retry is D42.
+- **A WDT-type reset (F62):** `reset_reason` not `MAINSWRST`, after `procnto up` and before the image's reset line. **Counted** (the exit was attempted). c2's reading from printed checks stands under the partial rule. The unchanged image is not retried (D42): the same inherited WDT0 would recur. Before `procnto up`, the same observation is F55.
+
+##### 15.13.10.6 Dated appends to §15.6's rows (not edits in place)
+
+- **K-w:** "2026-09-14 (D38, §15.13): J7a is bad when one counted J7a run reads c2 bad, or bad at a printed check of an incomplete run, under §15.13.10.1. Sub-labels: anchored, differs, partial, intermittent, repeated. Only `anchored` supports 'anchored at the address'. The J6c live-writer condition rests on an early heal with stable re-reads, so K-w's recorded sentence never says 'live' or 'ongoing' unless J7a's P5 differs."
+- **E:** "2026-09-14 (D38, §15.13): J7a is clean only when two complete counted J7a runs read c2 clean, with no F39c1, F49, F55, F57 or F62 in them and no F50 in any J7a attempt. E means the writer needs the kexec entry path's state in the broad sense, including the L4T boot option, PSCI history and uptime; it does not exclude an anchored writer that this state switches on."
+- **K-o and K-r(u):** added as in §15.13.10.4.
+- **U:** adds "one clean J7a run without a second complete run; a revert-only J7a run; F51, F52, F53, F54 or F61 twice for one cause; F55; F56 or F62 with no c2 check; F65".
+- **Immediate stops:** "any power cut" gains "other than a J7a planned cut after READY (X6)".
+
+---
+
+#### 15.13.11 Budget, order and stops
+
+- **J7a's own cap: at most two counted `go`s in revision 3.** They are outside §15.6's four-kexec count, which stays at three used (D38). `j7a_precondition` refuses a third.
+- **Counted:** a `COUNTED` line (§15.13.7): `M5L-EBS ok`, `M5L-EBS FAIL`, or `M5L GO` followed by 10 s with neither a refusal nor a prompt. F55, F56 and F62 are counted.
+- **Not counted** (m5-design §5.3): a missed ESC; no READY or an ANOMALY; a file not found; a capture not running; any `check` refusal; any refusal in `go` before `COUNTED`, including a first-try `w2-final` (F53); SHELL-AFTER-GO (F61); F65; a session stopped before `go`. After an uncounted refusal in `go`, the session does not repeat J7a-go (m5-design D11): it runs C, and a later session may retry. **Two failures for one cause end J7a** (§15.6).
+- **Order in a session:** bench, pre, stage, ctl (refit), J7a-1, return. Then J7a-2 only if J7a-1 was complete and clean, complete and revert-only, complete with F39c3 and c2 clean, or K-w `differs` or `partial` with no immediate stop. Then C.
+  - J7a-2 may run in the same session on J7a-1's return boot, or in a later session that repeats pre, stage, ctl and C.
+  - No separate check-only power cycle: `check` before `go` is not irreversible.
+  - After F62, no J7a-2 on the unchanged image.
+- **Stops:**
+  - §15.6's immediate stops (with X6's exception);
+  - F30 or m5-design F33;
+  - F50, F51, F52, F54; F55; F62 for the unchanged image;
+  - F57;
+  - a K-w `anchored` or K-r(u) reading;
+  - a second failure for one cause;
+  - F65 (J7a cannot run on this design; D45);
+  - any need for a loader change at the board, a firmware setting change, a value dump or an SMMU read (scope stop).
+- **After J7a ends, at any stop, or after each counted run:** a number-free classification memo to the owner, with the private notes.
+
+---
+
+#### 15.13.12 Failure signatures (the §15.7.2 table continues)
+
+| # | Observable | Meaning | Class | Next |
+|---|---|---|---|---|
+| F50 | `M5L REFUSE w2 reason=gap\|type\|rt`, or a canary pre-claim refusal whose descriptor over that canary is runtime, reserved, MMIO, unusable, NVS, ACPI reclaim or a gap | the firmware map does not show window 2 as free RAM at Shell time | M (`reset`) | no `go`; K-o lead (D41); J7a ends; revision-4 input |
+| F51 | `M5L REFUSE canary cN status=…` with Loader* or BootServices* over it and `M5L self … canary=none` | a Shell-time allocation that is not the loader's image covers a canary | M | no `go`; U lead; J7a ends for the session; owner |
+| F52 | `M5L REFUSE fdt reason=w2\|canary` | the firmware tree lies in window 2 or over c1 | M | no `go`; U lead; owner |
+| F53 | a refusal in `go` after `check` passed in the same Shell visit: any `M5L REFUSE` in the go run, including `w2-final` on the first try | the map changed between `check` and the exit | M | SHELL-AFTER-GO (F61); not counted; no repeat in this session (D11); a second occurrence ends J7a |
+| F54 | `M5L REFUSE alloc status=…`, or a canary pre-claim refusal, with `M5L self` over the target or that canary | the firmware placed the larger loader over the target or a canary | M | revise the loader offline (m5-design Q7); T0 again; not a firmware finding |
+| F55 | a counted `go`, no `procnto up` (any of m5-design F17-F24, F26-F28, including `M5L-EBS FAIL` from four refused exits or a later-try UM6 refusal, or a reset whose `reset_reason` is not `MAINSWRST`) | the entry path fails for `s1-j1` under UEFI | S or P (§15.13.9) | counted; no reading; J7a ends for the session; D42; freeze item 3 finding |
+| F56 | a counted run past `procnto up` with V3 or V4 missing | image, tool or harness reason | SR | incomplete; counted; nothing resized; c2 by the partial rule |
+| F57 | the return state gate fails (ESP, a variable outside the control set, `nvbootctrl`, `extlinux.conf`, `BOOTAA64.efi`, `bios_version`), or an ESP removal fails to restore S0 | m5-design F31-F33 | M or X | immediate stop; F33 stops all board work |
+| F58 | an autoboot stops in a menu, or menu text appears with no key sent (control boot or after the image's reset) | TX level or a stray key (m5-design C15, F3) | M (`Continue`) | no `go` until one validated L4T boot; fix the wire |
+| F59 | the key log shows `armed` or `sent` after the Enter on `go`, other than SHELL-AFTER-GO's arm and `reset` | auto-disarm did not fire, or an operator error | — | the operator presses F12 only if the state line reads ARMED; deviation recorded |
+| F60 | firmware text after the `poweroff` offset with no power-down line (ANOMALY) | L4T rebooted instead of powering off | S | let L4T boot; not counted; retry once |
+| F61 | SHELL-AFTER-GO: a Shell prompt after the Enter on `go` with no `M5L-EBS` token | a refusal in `go` returned to the Shell (F53) | M (arm once, `reset`) | not counted; recorded; session runs C |
+| F62 | `reset_reason` not `MAINSWRST`, after `procnto up` and before the image's reset line | a WDT-type or other unplanned reset during the run (R85) | S | counted; c2 by the partial rule; no retry of the unchanged image (D42); Q20 re-read |
+| F63 | a loader silent stretch past `LOADER_EXPECT_S`, with a byte before `LOADER_CUT_S` | slow SD load or copy | — | recorded; wait; not a cut, not F55 |
+| F64 | the key-log allowlist check fails | free text, or keys sent while L4T text was on COM3 | — | the key log is not copied; flagged; owner decides; the run's reading is unaffected |
+| F65 | `j7a pre` or `b_esp_stage` finds the ESP short, or a `cp`, `sync` or read-back failure | the ESP route cannot carry the loader | M | the file removed and S0 verified; J7a cannot run on this design; D45 |
+| F66 | `b_esp_clean` reads back a hash that differs from the staged hash | a different or damaged file at the staged path | M | nothing deleted; owner authorises removal of that one path by name; listing equals S0 |
+
+---
+
+#### 15.13.13 Claims, desk questions (the §15.7.1 table continues)
+
+| # | Claim | Class | Answered by |
+|---|---|---|---|
+| R77 | The SDP toolchain embeds and links the larger kimg; gate item 6's two link bases stay identical; the build is deterministic; the switch-off object of the edited file equals HEAD's; D0a's reference commit reproduces M5's staged loader | HYPOTHESIS | D0a, D0b; the J7a determinism rebuild |
+| R78 | edk2 loads the larger PE, claims and copies within `LOADER_EXPECT_S` per silent stretch (QEMU, then the board) | HYPOTHESIS | T0b, T0c; T1′; F63 otherwise |
+| R79 | NVIDIA's firmware places the larger PE, the Shell's file buffer and the tree away from the target, window 2 and the canaries | HYPOTHESIS (M5's small loader and tree landed high, once; top-down allocation from memory) | `self=`, UM2, UM3, UM4 lines |
+| R80 | At Shell time, the firmware map shows only free types over window 2, as L4T's iomem suggests | HYPOTHESIS (the type-to-iomem rule and the layout's independence from the boot option are unread) | UM5 lines; `memmap` |
+| R81 | `AllocatePages(AllocateAddress)` succeeds only if every page is ConventionalMemory, blocks later allocations there until the exit, and writes no page | VENDOR_CLAIM (the rule) / HYPOTHESIS (no write, Q19) | T0h-T0j, T0l; UM4 lines |
+| R82 | UEFI drivers stop device DMA at `ExitBootServices` | HYPOTHESIS (m5-design §3.5) | not shown; bounded at the canaries by UM4 only; surface reduced by D46 |
+| R83 | After the exit, no non-secure firmware code runs unless runtime services are called, and neither the shim nor startup calls any | VENDOR_CLAIM (UEFI) + VERIFIED (source: `x0` only; startup takes no system table) | — |
+| R84 | Startup at `-P4 -b w2,canary`, `CPU_ON` of cores 1-3 from never-started state with their redistributors and INTID 28, procnto and the large hold work under UEFI entry | HYPOTHESIS (M5 ran `-P1`; M2 ran after kexec) | J7a-1 (F55 otherwise) |
+| R85 | WDT0 does not reset the board during a guard-length run after the firmware's exit | UNKNOWN (the inherited CR token differs from J6c's, class only; the "configured" text is no evidence under UEFI) | Q20's desk read before D35; `reset_reason` (F62) |
+| R86 | The SPE drains long `xport` exports after the firmware's exit, and com3-term's capture keeps them byte-exact | HYPOTHESIS (M5 used it for short text) | V4's export decode; `TCUDROPS` |
+| R87 | A DC cold boot with at least `DRAM_OFF_S` unpowered leaves no Linux device or DMA state; coprocessor firmware re-initialises on both paths | HYPOTHESIS; the premise of E (refines R67) | not testable by J7a |
+| R88 | Firmware CPU frequency, EMC and clock state, the boot option, PSCI history and uptime neither create nor suppress the c2 writer | UNKNOWN (confounds) | not separable |
+| R89 | The Shell launch validates the boot chain, so rule 6a's first case transfers after it (X7) | VERIFIED handler (m5-design R11); the transfer is design | `nvbootctrl` after each return |
+| R90 | This Shell's `memmap` prints the full map without paging | HYPOTHESIS | the optional line |
+| R91 | The `efi` class, on CSI-normalised text, masks the Boot Manager screens' and `efibootmgr`'s identifiers | HYPOTHESIS | `redact-selftest`; count-only replay over P2, P3, R1 |
+| R92 | `--entry uefi` and the `j7a` harness leave every kexec parse and command byte-identical | HYPOTHESIS | PC re-parse of B2, J2, J4, J6c; `harness-selftest` |
+| R93 | The firmware tree lies outside window 2 on every Shell-path boot | VERIFIED once (M5); HYPOTHESIS per boot | UM3 |
+| R94 | The firmware tree's `/reserved-memory` at Shell time matches Linux's live tree over window 2 and the canaries (E13) | HYPOTHESIS (L4TLauncher's boot may apply a different tree or overlays) | UM9 lines, against E13 at the desk |
+| R95 | DRAM left unpowered for `DRAM_OFF_S` keeps no usable pre-cut content, so a fill that did not land could not reproduce Linux structures | HYPOTHESIS (published DRAM remanence at room temperature; not measured on this LPDDR5) | not testable by J7a; recorded off time |
+| R96 | Removing the Ethernet cable and board USB devices reduces R82's surface; the M.2 wireless card, which carries ssh, stays and may be driven by the firmware | HYPOTHESIS | not testable by J7a; peripheral record |
+
+**Desk questions.**
+- **Q19:** does NVIDIA's r36.4.4 edk2 zero or otherwise touch pages on `AllocatePages(AllocateAddress)` under its memory-protection settings? Documentation only. No reading depends on it, since the fill follows; it bears only on "the loader writes no canary page".
+- **Q20 (now before D35):** the public T234 watchdog register description: which WDT0 control bits mean enabled and counting toward a reset, and how the period and expiry stages read? Applied to the two private CR values, class only, it selects §15.13.4's branch. No register read is added.
+
+---
+
+#### 15.13.14 Owner decisions
+
+| # | Decision | Recommendation | When |
+|---|---|---|---|
+| D35 | Accept §15.13: exceptions X1-X7, the Never items (§15.13.15), the gates, the design constants, the reading, the budget, the power table | accept | before any board step |
+| D36 | Image | `s1-j1`, J6c's kimg unchanged (unless Q20 branch (b), then D47) | before building |
+| D37 | Loader: the `M5L_J7A` build with UM1-UM10 (including the pre-claim, a volatile firmware-map change, and the read-only reserved-memory report), `m5load-rules.h`, the T0-only force switches and gate item 12; the ESP name `M5LOAD.EFI`; built in a worktree; D0a's reference commit and D0b's leak test; T0 rerun. A D0a mismatch is investigated first; acceptance of unexplained drift, with T0 as the only evidence, comes only after that | accept. Not recommended: a blob-only rebuild with the Shell's `memmap` as the only window-2 check | before building |
+| D38 | Run cap and deciding rule: at most two counted `go`s, outside the kexec count; K-w on one bad or bad-partial counted run, with `anchored`, `differs` and `partial` sub-labels and J7a-2 after `differs` or `partial`; E on two complete clean counted runs; P7's threshold; the dated appends to §15.6 | accept, before any J7a result | before building (the parser implements it) |
+| D39 | D34 extended to J7a (`D34_J7A`), so J2's and J6c's F39 do not block it; inside J7a, F39c3 does not stop J7a-2, and F39c1 stays an immediate stop | accept | before the session |
+| D40 | Wiring: no loopback test (self-test plus the control boot, a recorded deviation from m5-design §8 item 4 as in M5 §14.3); the TX refit with DC power removed during the control boot; one terminal session per board session; TX removed at close with the terminal running | accept | before the session |
+| D41 | K-o: does a non-free firmware type in window 2 at Shell time confirm kill condition 1 without a run? | yes, recorded as a map fact contradicting 11c, not as a writer | before the session |
+| D42 | Retries: after F55, is J7a's second `go` spent on a retry of the same image? After F62? | after F55: no automatic retry, decided at the memo. After F62: no retry of the unchanged image (pre-registered) | before the session |
+| D43 | Type the Shell's `memmap` once before `check` (record only) | yes | before the session |
+| D44 | Commit and review the J7a loader, helpers, parser and privacy changes before the session (unlike m5-design §14.6); public wording as §15.13.16; whether the profile sub-labels appear in public text | commit and review; sub-labels stay private until D31 | before building is committed |
+| D45 | Loader location: the SD ESP root (X2), or `~` on the APP rootfs through the Shell's filesystem mapping (§15.13.18 row 20). If `j7a pre` finds the ESP short (F65), J7a cannot run on this design; the rootfs route comes only through a reviewed amendment, never at the board | the ESP | before building the harness |
+| D46 | Peripherals and DRAM wait: remove the Ethernet cable and board USB devices for J7a sessions; `DRAM_OFF_S` unpowered before each counted `go` | accept | before the session |
+| D47 | Only under Q20 branch (b): a `-Wdisable` variant of `s1-j1` (new image, its own T-J1 and pins, the one-variable premise broken and recorded), or not running J7a | decide at the Q20 memo | before building |
+
+---
+
+**Taken 2026-09-14 (owner).**
+- **D35, D36, D39, D41, D42, D43 and D44:** accepted as recommended.
+- **D37:** the full `M5L_J7A` loader. **D45:** the SD card's ESP.
+- **D38:** at most two counted `go` runs, and the deciding rule as written.
+- **D40 and D46:** the wiring, peripheral and power steps as written.
+- **D47:** open until Q20's desk read.
+- **Next:** implementation on the PC, commit and review before any board step.
+
+---
+
+#### 15.13.15 Never (J7a additions; §7.3, §15.1's items and m5-design §7.4 apply in full)
+
+- `go` any payload other than the pinned `s1-j1` blob; run a second `go` in one Shell visit; repeat J7a-go in a session after an uncounted refusal in `go`; `go` without T1′ in the same Shell visit.
+- Type `dmem`, `mm`, `setvar`, `dmpstore`, `bcfg`, any output redirection, or any Shell script.
+- Arm the terminal or type anything while L4T, its shutdown or a login prompt is on COM3; type any line or key outside §15.13.7's allowlist.
+- Change any firmware setting to make a run work (DT/ACPI mode, boot order, timeout, Device Manager). A refusal ends the attempt; any loader change reruns T0 (M5 D4, D11).
+- Widen a loader rule, a design constant, or accept a refusal, at the board.
+- Let the loader write window 2, a canary or the GPU range (checked statically by review, and by T0u's rules).
+- Stage the loader anywhere but the SD ESP root, or remove any ESP file other than the staged path, or use a wildcard in an ESP removal.
+- Run a kexec rung, `jrun`, `capture-com3-raw.ps1` or any J1-J6 command while the TX wire is fitted, or use a J7a capture for any kexec rung.
+- Jumper the adapter's TX to its RX while the RX is on the board.
+- Fit or remove the TX wire while the terminal is stopped. The fit happens with DC power removed.
+- Restore DC power before `DRAM_OFF_S` has passed ahead of a counted `go`.
+- Send a key after `go` until L4T answers ssh, except SHELL-AFTER-GO's single arm and `reset`.
+- Open an ssh session to the board between the planned cut and the image's reset.
+- Copy, quote or open the raw capture by hand; write a raw segment file into the record directory; keep an `efibootmgr -v` output or a menu screen unredacted.
+- Commit any `.efi`, the loader's `out/`, a kimg, a capture, a key log or a snapshot.
+
+---
+
+#### 15.13.16 Public text
+
+- **Before J7a runs.** Number-free status only: "B2 not met on data; writer diagnosis continues; a UEFI-entry arm (J7a) is designed and awaits the owner's approval." §15.4.9's J7a row gains "designed in §15.13".
+- **After D31, one class sentence, verbatim or close:**
+  - **K-w:** "The corruption at the lowest window-2 canary also appears when the same watcher image is entered from UEFI, with no Linux in that power cycle. Kill condition 1 stands for this range. The writer is not identified."
+  - **E, c3 clean:** "The corruption did not appear in two UEFI-entry runs of the same watcher image. It needs the kexec entry path's state; the cause within that path is not identified, and a writer at that address that this state switches on is not excluded. This is not a range verdict, and B2 stays not met."
+  - **E, c3 hit:** "The corruption at the lowest window-2 canary did not appear in two UEFI-entry runs of the same watcher image; a small write at another window-2 canary did, so the entry path does not explain every hit. The cause is not identified. This is not a range verdict, and B2 stays not met."
+  - **K-o:** "The firmware's own memory map does not show the second window as free RAM at the UEFI Shell. Kill condition 1 stands on that map; no writer is shown."
+  - **K-r(u):** "The lowest window-2 canary reads back unstably under UEFI entry. The range is not usable under either entry; no writer is shown."
+  - **U:** "Unresolved."
+- **Never in public text:**
+  - any count, offset, address, descriptor type, reserved-memory node or register value read in a run;
+  - `self=`, `ctr=`, the tree's address, size or CRC;
+  - a hash of a private record or build output; a `boot_id`; a duration; a free-space or file-size figure;
+  - the loader or kimg bytes, a capture, a key log or a snapshot;
+  - a MAC or drive identifier;
+  - the K-w sub-labels, before D31 allows them (D44);
+  - "firmware bug", "NVIDIA firmware writes", "QNX writes", "UEFI entry is clean", "kexec is broken" or "fixed", except a named cause labelled HYPOTHESIS;
+  - anything softening "NOT MET, on data".
+- **May be stated** (§15.4.6 precedent): run counts, and the clean-run probabilities worded as "the chance of one or two clean runs if entry has no effect, under a uniform prior over four exchangeable bad runs", with the caveat that those runs used two images.
+- **Licence:** no figure before the 4.6(i) consultation; no QNX binary or `.efi` committed.
+
+---
+
+#### 15.13.17 What J7a does not show
+
+- **The writer's identity.** K-w covers H2 (a firmware, secure-world or coprocessor user of the address), H5 (QNX-side), a fixed-address hardware writer, and UEFI-driver residue outside its reported buffers (R82). Only `anchored` makes the address reading, and even then J7e and J7c are still needed. A UM9 node over c2 is a lead, not an identification.
+- **Which kexec-path state causes E.** GPU residue (H1), coprocessor or BPMP/EMC activity triggered by Linux's run or shutdown, the L4T boot option, PSCI `CPU_OFF` history, uptime and thermal state, clock or frequency state, and the kexec tree against the firmware tree are not separated. **E does not exclude an address-anchored writer that one of these switches on.** Nor does E show that any allowed quiesce could fix it.
+- **That startup's fill landed on every canary page.** The fill has no read-back; a bad reading with Linux-like content leans on `DRAM_OFF_S` (R95), not on a check.
+- **That only the entry path changed** (§15.13.2's confounds).
+- **DMA quiescence under UEFI** outside the three canaries and the hold's pigeonhole coverage (R70, R75, R82), or with the Ethernet cable and USB devices fitted.
+- **Anything about firmware memory after `ExitBootServices`** beyond the final map's types at the exit (UM6), and any reserved-memory user the tree does not declare.
+- **That UEFI entry is valid for S1-F.** `s1-j1` is a host-mode diagnostic with no qvm. Freeze item 3 is not decided, and B2 stays NOT MET on data under every outcome.
+- **Repeatability** beyond the runs made. Two clean runs bound the risk of a false E and do not remove it. One bad run shows a writer without Linux in that run, not its rate.
+- **The window-1 exposure under kexec.** J7a watches window 1 with no Linux only.
+- **Timing, isolation, containment,** anything about the GPU or a Linux guest.
+- **No evaluation figure is publishable** before the 4.6(i) consultation.
+
+---
+
+#### 15.13.18 Where the four analyses disagreed, and what this design chose
+
+| # | Point | Options in the analyses and reviews | Chosen | Why |
+|---|---|---|---|---|
+| 1 | Window-2 check | blob-only rebuild; blob plus the Shell's `memmap` read by a human; a loader rule behind a switch; that rule plus a canary pre-claim, a final-map re-check and a self refusal | **The switch, with the window-2 rule, the tree rule and CRC, the pre-claim, the final-map re-check, the reserved-memory report and release on every return (UM1-UM10)** | Machine-enforced at the moment of `go`; the pre-claim turns "free when checked" into "free and ours until the exit"; the re-check certifies the final map at no boot-services call; the switch-off object is unchanged |
+| 2 | A canary held by Loader* or BootServices* at Shell time | refuse (firmware); proceed with a map label `l` or `f` (rules) | **Refuse: F51, or F54 when it is our own image** | A bad c2 under a firmware allocation cannot separate UEFI-driver residue from an anchored writer at that canary. The refusal costs no `go`, the case is unlikely (R79), and the descriptor is itself a lead. **This does not stop a live device writing a free canary after the exit (R82);** that residual is handled by the profile gate (`anchored` needs P1, P2 and P7 same) and D46, not by the refusal |
+| 3 | The loader's own image in window 2 | refuse (firmware); informational (UEFI path) | **Informational, `M5L self w2=`; over a canary, F54** | Nothing runs from it after the branch, and startup's claim reuses it; over a canary the pre-claim refuses, and F54 names it as a loader problem, not a firmware finding |
+| 4 | The tree rule | overlap with a canary only (rules); overlap with window 2 (UEFI path, firmware) | **Window 2 as a whole, plus c1** | `avoid_ram` does not keep the tree out of sysram (C15, `main.c` VERIFIED), and the hold covers most of window 2 |
+| 5 | Image | `s1-j1` (all); harness support for `s1-h1` too | **`s1-j1` only** | One variable against J6c; the profile items need the watcher; less harness surface |
+| 6 | The ESP file name | keep it; rename and change the terminal's detector | **Keep `M5LOAD.EFI`, identified by sha256** | No terminal change and no new pin; the self-test already covers the name |
+| 7 | Deciding rule | §15.6's single J7a result each way; K-w on one bad and E on two clean (rules); K-w's anchored reading tied to the profile (power review) | **Asymmetric, amended before any J7a result (D38), with `anchored`, `differs` and `partial`** | A bad run is positive evidence that Linux is not needed; only a matching page set and anchor support "anchored at the address". One clean run has about a one-in-six chance if entry has no effect, two about one in twenty |
+| 8 | What counts a run | reaching `M5L GO` (harness); reaching `procnto up` (rules) | **The exit attempted: `M5L-EBS ok\|FAIL`, or `M5L GO` with neither a refusal nor a prompt for 10 s. F55 and F62 are counted** | The exit is the irreversible step; a first-try `w2-final` returns to the Shell and is not; counting F55 and F62 prevents open-ended retries |
+| 9 | Budget | the owner rules (UEFI path); outside the kexec count (rules) | **Outside the kexec count, with J7a's own cap of two, by D38** | J7a is not a kexec run; the cap keeps the revision bounded |
+| 10 | Control cold boot | keep (UEFI path, harness); optional (rules) | **Keep, and merge it with the TX refit on an unpowered board** | It tests autoboot with the new wire before any attended menu, gives the variable control, and avoids fitting a wire to a live header |
+| 11 | Terminal sessions | one per power cycle, switched while L4T is up (harness) | **One per board session, with per-phase segments by byte offset, offset-aware gate A** | M5 §7.4 then needs no exception; fewer operator actions |
+| 12 | The Shell's `memmap` | required (harness); optional (firmware); forbidden as a memory read (rules) | **Optional, record only (D43); `dmem` and `mm` never** | `memmap` lists descriptors, not content; it predates the loader's allocations, so it cannot be a gate |
+| 13 | Cut hold after the shim | 10 minutes of silence (UEFI path); `return_bound_s` plus 300 s of silence (harness); `return_bound_s` plus 600 s and 10 minutes of silence (rules) | **`go` + `return_bound_s`, then 10 minutes of silence** | The watches and the hold are silent by design, and the hold's dwell bound itself reaches 10 minutes, so the silence rule is safe only after the return bound, which covers the run |
+| 14 | New classes | none (UEFI path, harness); K-o and K-r(u) (rules) | **Both, K-o by D41** | A non-free Shell-time map in window 2 and unstable reads under UEFI are both pre-registerable outcomes the existing classes cannot name |
+| 15 | Harness shape | separate `j7a-*` commands (UEFI path); one `j7a` command with phases (harness) | **One `j7a` command with phases and exit codes 6 and 7** | Resumable phases sharing one attempt id; clean budget and advice keys |
+| 16 | Loader wait bounds | 10 s (M5); 120 s for `check` only (draft); one bound for both launches, measured per silent stretch (reviews) | **`LOADER_EXPECT_S` per silent stretch for `check` and `go`, `LOADER_CUT_S` before any cut, `PROMPT_AFTER_S` only after a completed loader run** | The Shell's load and the loader's copy are silent for both launches; a slow valid load must never draw a cut |
+| 17 | `efibootmgr -v` in records | raw, as M5 (UEFI path); hash plus structure (harness) | **Hash plus structure** | Its descriptions carry identifiers the regex classes cannot all name (P5) |
+| 18 | Build location | an output-directory override (harness); a worktree (UEFI path) | **A worktree, kept until J7a's record is written** | No build-script change beyond the switches; M5's gated output untouched |
+| 19 | Extra prints (GPU range summary, `/reserved-memory` walk, the Shell's `drivers`) | optional (firmware); reserved-memory walk required (power review) | **The reserved-memory walk as UM9, informational; the GPU summary and `drivers` not in J7a** | E13 puts `camdbg_carveout`'s allocation range at window 2's base, exactly c2's base, and a disabled or allocation-range node is invisible to the EFI map. The walk reuses the tree parser, reads nothing but the tree, and never refuses |
+| 20 | Where the loader is loaded from | the SD ESP root (draft); `~` on the APP rootfs, which M5's Shell mapped as a filesystem (safety review) | **The ESP (D45)** | (1) M5 VERIFIED the Shell loading our PE from FS5 on this firmware; FS4 was mapped and never listed or loaded from (VERIFIED (private record)). (2) The typed path under `~` would carry the user name, echoed on COM3 and hex-encoded in the key log, which text redaction cannot mask and the allowlist would have to contain; a neutral directory outside `~` is a rootfs write rule 5 forbids. (3) Whether the Shell's ext4 driver is strictly read-only, including journal handling, is unread (HYPOTHESIS); a driver write would be a worse rule-5 breach than one ESP file with a verified hash and removal. (4) The ESP holds the file once with `ESP_MARGIN` (class only), and `b_esp_stage` now handles partial writes. Residual ESP risks: a near-full FAT ESP during the session, and a write before planned cuts, bounded by `sync`, read-back and ordered phases. If F65 ever holds, the rootfs route is the recorded alternative, by a reviewed amendment |
+| 21 | Loopback test before the refit | on the bench with TX jumpered to RX (draft); detach RX and GND, loopback, refit three pins (safety option a); self-test plus control boot as M5 (safety option b) | **Option (b)** | Jumpering TX to RX while RX is on J14 contends with the board's TCU TX; option (a) adds a three-pin rewiring with its own F36 risk. M5's self-test, control boot and P3 typed input covered the key logic, autoboot with the wire, and framing in use |
+| 22 | A refusal in `go` | one more `check` and `go` in the same Shell visit (draft F53); `reset` and a new session (reviews, m5-design D11) | **SHELL-AFTER-GO: arm once, `reset`; not counted; no repeat in the session** | The terminal disarms after each Enter; the retry contradicted M5 §5.3 and D11; and a later-try refusal must never return to the Shell at all (UM6) |
+
+---
+
+#### 15.13.19 Pointers to add later (list only; the orchestrator edits)
+
+- §15.4.9's J7a row: "designed in §15.13 (D35-D47)".
+- §15.6's K-w, E and U rows, and its immediate stops: §15.13.10.6's dated appends. K-o and K-r(u) added.
+- §2 rule 5 and rule 6a, and §8 item 10: one dated J7a pointer line each (X1-X7).
+- §3.2's UEFI row: "used diagnostically by J7a; D6 unchanged".
+- R67: refined by R80-R82, R87 and R95.
+- m5-design §3.3 step 7's "startup reserves it (board/main.c:247-248)": current `main.c` only calls `avoid_ram` for the tree (§15.13.3's contradiction). m5-design §8 item 11's "room several times over" does not hold for a J7a-sized loader.
+- m5-design §6.6 and its gate record: **the loader staged in M5 was built before commit `600996f`**, which changed `m5load.c`'s tree refusal tokens (VERIFIED: file time against commit time, and the diff). M5's pass printed none of them, so the record stands, but "the committed source is the staged loader" needs a dated note once D0a names the reference.
+- m5-design §3.3 step 10: M5's retry loop calls `AllocatePool` after a failed `ExitBootServices`, which UEFI's rule does not allow. It never ran in M5 (the first exit succeeded). UM6 avoids it under the switch; the switch-off loop is unchanged.
+- m5-design's `wdt.c` text "did not fire after the kexec hand-over" is printed under any entry; its wording is entry-specific.
+- `com3-term.ps1`'s header on straight-typed lines, and m5-design §14.8's other stale items: still open.
+- The plan's freeze gate item 3 and §8 unknown #6: the class line after D31.
+
+---
+
+#### 15.13.20 Review outcomes
+
+Three reviews read the draft: safety (RS), power of the reading (RP), feasibility (RF). Every required change is listed with what happened to it.
+
+##### 15.13.20.1 Conflicts between reviewers, and how they were resolved
+
+| # | Conflict | Resolution |
+|---|---|---|
+| K1 | RS6 asks to weigh loading from the rootfs; RF8 asks that a short ESP means J7a cannot run, with no other location | Both honoured: the rootfs route is weighed (§15.13.18 row 20) and not chosen; at the board there is no other location (F65); the rootfs route stays reachable only through a reviewed amendment (D45) |
+| K2 | RS1 asks for a new TCU token (`M5L-W2FINAL FAIL`) on a later-try re-check failure; the draft and RF keep `m5load-head.S` and gate item 9 unchanged | The later-try failure takes the existing MODE_EBS_FAIL path (`M5L-EBS FAIL`, reset), counted S under F55. The new token is rejected: it needs a new trampoline mode in the head. COM3 cannot tell the two causes apart, and the record says so |
+| K3 | RS4 asks for one bound of at least 120 s and an F9 rule only after a completed run; RF1 asks for bounds per silent stretch and an F9 silence rule at least that bound | `LOADER_EXPECT_S` per silent stretch (expectation, never a cut), `LOADER_CUT_S` of no byte before a completed run (the first cut point), `PROMPT_AFTER_S` only after a completed run. This satisfies both |
+| K4 | RS2 offers "drop the retry, or a dated exception to D11"; RF2 offers "drop the retry, or an explicit re-arm rule" | The retry is dropped. RS3's SHELL-AFTER-GO supplies the only re-arm: one F12 and `reset` |
+| K5 | RS12 pre-registers the count of a WDT-type reset; RF3 requires a desk read before D35 that may change the image | Combined: Q20 before D35 with branches (a)-(c); F62 counted in every branch; no retry of the unchanged image (D42); branch (b) goes to D47 |
+| K6 | RP1 lets J7a-2 run after a bad first run whose profile differs; the draft stopped at any bad first run, and RS left the stop rules alone | J7a-2 runs after `differs` or `partial` within the cap, and never after an immediate stop; `anchored` and K-r(u) still end J7a |
+| K7 | RS11 asks for redaction that handles CSI in key-log-adjacent screens; RF4 shows key-log copies cannot be redacted at all | COM3 segments are redacted on CSI-normalised text; key logs are protected by the allowlist check instead, and their copies are labelled unredacted |
+
+##### 15.13.20.2 Every required change
+
+| ID | Sev. | Change asked | Outcome | Where |
+|---|---|---|---|---|
+| RS1 | blocker | UM6's return to the Shell only before the first `ExitBootServices`; a later-try failure resets; class and count defined; F53 and COUNTED rewritten; T0 case | **Applied, except the new TCU token** (rejected: it needs a new mode in `m5load-head.S`, which gate item 9 pins; K2). Also added the retry discipline: the buffer is allocated once, and only `GetMemoryMap` and `ExitBootServices` are called after a failed exit | UM6; F53, F55; §15.13.7 COUNTED; T0l |
+| RS2 | major | every refusal in `go` frees claims, target and pool; drop the same-visit retry or justify it; T0 case | **Applied** (retry dropped) | UM4, UM10; F53; §15.13.11; T0f′, T0l |
+| RS3 | major | SHELL-AFTER-GO state, rule, power row, self-test | **Applied** | §15.13.6; §15.13.7 states; §15.13.9; F61; §15.13.15 |
+| RS4 | major | one loader-silence bound of at least 120 s; 60 s rule only after a completed run; re-derive `M5L GO`'s bound | **Applied** (K3) | UM7; §15.13.6.1; §15.13.9; F63 |
+| RS5 | major | no TX-to-RX jumper while RX is on the board: option (a) or (b) | **Applied, option (b)** | X5; J7a-bench; D40; §15.13.15; §15.13.18 row 21 |
+| RS6 | major | a row weighing the rootfs route; record why if the ESP stays | **Applied as analysis; the route is not adopted** (K1) | §15.13.18 row 20; D45 |
+| RS7 | major | `b_esp_stage` with margin, removal on failure and S0 check; `clean` with a mismatched hash stops, the owner authorises removal by name; self-tests | **Applied** | §15.13.7 `b_esp_stage`, `b_esp_clean`; F65, F66 |
+| RS8 | minor | E's exclusion applies to counted runs, not to a retried earlier refusal | **Applied** | §15.13.10.4 E; §15.13.10.6 |
+| RS9 | minor | correct the "no watch bound reaches 10 minutes" rationale | **Applied** | §15.13.9 shim row; §15.13.18 row 13 |
+| RS10 | minor | T0h-T0j as "any named refusal, never CHECK PASS" | **Applied** (T0d as well) | T0 table |
+| RS11 | minor | CSI normalisation in `redact` and `ident_hits`; region masking; replay over menu segments; synthetic CSI-split MAC | **Applied;** the replay also covers M5's P2 | §15.13.7 Privacy; R91 |
+| RS12 | minor | pre-register whether a non-MAINSWRST reset after `procnto up` counts | **Applied** (counted, F62; K5) | §15.13.10.2, .5; F62; D42 |
+| RP1 | major | tie the anchored reading to the profile; K-w(differs) allows J7a-2; remove Ethernet and USB devices | **Applied, with one adjustment:** the adapter is on the PC, so the board's USB ports are emptied; the M.2 wireless card stays because it carries ssh (D29) and is not removable, recorded as R96 | §15.13.10.3-4; §15.13.11; D46; R96 |
+| RP2 | major | P7 page-set overlap with a pre-registered threshold; hash J6c's exports | **Applied** | §15.13.10.3 P7; §15.13.8 prereg; parser self-tests |
+| RP3 | major | UM9, a read-only reserved-memory walk, informational; R94; name `camdbg_carveout` | **Applied** | UM9; §15.13.2 H2 row; R94; §15.13.18 row 19 |
+| RP4 | major | add boot option, PSCI history, uptime and thermal confounds; E does not exclude an anchored writer; rephrase §15.13.1 | **Applied** | §15.13.1; §15.13.2; §15.13.10.4 E; §15.13.17 |
+| RP5 | major | DC-off wait of minutes, recorded; "fill not landed" as an alternative reading; P7 same does not break that tie | **Applied** (`DRAM_OFF_S`, R95) | §15.13.6, .6.1; §15.13.10.3; §15.13.17; R95 |
+| RP6 | minor | one rule for c2 bad at a printed check in an incomplete counted run | **Applied** (`bad-partial`, K-w `partial`) | §15.13.10.1-4 |
+| RP7 | minor | an E sentence for `c3=hit` | **Applied** | §15.13.16 |
+| RP8 | minor | reword the "false-E estimate" | **Applied** | §15.13.2; §15.13.16; §15.13.18 row 7 |
+| RF1 | blocker | one load bound for both launches, per silent stretch; F9 silence at least that bound; self-tests | **Applied** (K3) | UM7; §15.13.6.1; §15.13.9; harness self-tests |
+| RF2 | blocker | every return frees claims, target and pool; drop the retry or add a re-arm rule; the parser counts only a GO not followed by `w2-final`; T0 case | **Applied** (retry dropped; K4) | UM10; F53, F61; parser counted-GO rule; T0l |
+| RF3 | major | Q20's desk read of the CR values before D35; a pre-registered branch; R85 depends on it | **Applied** (K5) | §15.13.4 WDT0 row and branch; R85; Q20; D47 |
+| RF4 | major | Never: typing while L4T is on COM3; a key-log allowlist check; plain copies; self-test | **Applied** | operator rules; §15.13.7 P12 and allowlist; F59, F64; §15.13.15 |
+| RF5 | major | offset-aware gate A and gate B; parser on the segment only; drop or re-cite the uptime gate | **Applied for gate A, the parser and the uptime gate (dropped). Gate B is unchanged,** because no `j7a` phase calls it and no kexec rung may use a J7a capture | P10, P11; §15.13.15 |
+| RF6 | major | rebuild at `600996f^` and `600996f` to find D0's reference | **Applied** (`600996f^` is `25d40e7`, VERIFIED) | §15.13.4 D0a, D0b; §15.13.19 |
+| RF7 | major | split F51 from the loader's own image over a canary; say what "exactly our claim" is checked against | **Applied** (`self … canary=` line; F54 extended; claim success replaces "exactly") | UM2, UM4, UM5; F51, F54; §15.13.10.5 |
+| RF8 | major | a fixed margin constant; `j7a pre` refuses early; pre-registered outcome; ordered stage and cut | **Applied** (`ESP_MARGIN`; F65; K1) | §15.13.6.1; P4; `b_esp_stage` |
+| RF9 | minor | one place for `variant=j7a`, consistent everywhere | **Applied with the other form:** a separate line directly after the start line, so the start line's grammar stays identical in both builds and the check and go preludes stay equal | UM2; parser; T0b |
+| RF10 | minor | allow one pure header for the rules, or make T0u a reviewed reading; name the pointer and `.bss` constraints | **Applied** (`m5load-rules.h`) | §15.13.4 loader source change; T0u |
+| RF11 | minor | no raw segment in the record directory, even briefly; record range and hash; self-test | **Applied** (pipe or an outside `mktemp` with an EXIT trap) | §15.13.7 P13, offsets and segments; self-tests |
+
+**Rejected outright:** none. **Rejected in part:** RS1's new token (K2); RS6's route, kept as analysis (K1); RF5's gate-B change (not reached by any J7a phase); RP1's "every USB device except the adapter", adjusted to the board's ports with the wireless card recorded; RF9's suggested placement on the start line.
