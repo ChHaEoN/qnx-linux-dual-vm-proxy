@@ -825,8 +825,22 @@ slots_report() {
 
 # §8 item 6, from 'iomemhi ' lines on stdin: the window's System RAM line, and every
 # entry that starts inside 0x100000000-0x249ffffff other than that line.
+#
+# The running Linux kernel's own image is not a reservation of that range: KASLR
+# places it anywhere in System RAM on each boot, and it is gone once kexec hands
+# over (plan checklist 11c: on one of the three boots compared it sat inside the
+# candidate). B0 on 2026-09-14 met exactly that: 'Kernel code', a 'reserved' child
+# and 'Kernel data' inside the range. Only that shape is excluded: exactly one
+# 'Kernel code' and one 'Kernel data' line, both indented alike (children of the
+# System RAM line), exactly one entry between them, named 'reserved', at the same
+# indent, and the three contiguous (code end + 1 = reserved start, reserved end
+# + 1 = data start). Those three lines are reported as iomem_kernel_image and not
+# counted; any other entry that starts inside the range, including a looser
+# shape, still fails the gate. A no-map firmware carve-out splits the System RAM
+# line itself, so it fails the exact top-level match anyway (review, 2026-09-14).
 iomem_gate() {
 	awk '
+	function h(x,   i, v) { v = 0; for (i = 1; i <= length(x); i++) v = v * 16 + index("0123456789abcdef", substr(x, i, 1)) - 1; return v }
 	{
 		sub(/^iomemhi /, "")
 		l = $0
@@ -834,10 +848,33 @@ iomem_gate() {
 		sub(/^[ \t]+/, "", s)
 		start = substr(s, 1, 9)
 		if (s == "100000000-25e20dfff : System RAM" && l !~ /^[ \t]/) { sys = 1; next }
-		if (start >= "100000000" && start <= "249ffffff") { n++; print "iomem_in_range " s }
+		if (start >= "100000000" && start <= "249ffffff") {
+			m++
+			line[m] = s
+			ind[m] = length(l) - length(s)
+			st[m] = start
+			en[m] = substr(s, 11, 9)
+			name[m] = s
+			sub(/^[^:]*: /, "", name[m])
+			if (name[m] == "Kernel code") { kc = m; nkc++ }
+			if (name[m] == "Kernel data") { kd = m; nkd++ }
+		}
 		if (start == "24a000000") print "iomem_at_cma " s
 	}
-	END { printf "iomem_sysram_line=%s iomem_entries_in_range=%d\n", (sys ? "yes" : "no"), n + 0 }'
+	END {
+		kr = 0; nr = 0; img = 0
+		if (nkc == 1 && nkd == 1 && st[kc] < st[kd] && ind[kc] > 0 && ind[kc] == ind[kd]) {
+			for (i = 1; i <= m; i++)
+				if (st[i] > st[kc] && st[i] < st[kd]) { kr = i; nr++ }
+			img = (nr == 1 && name[kr] == "reserved" && ind[kr] == ind[kc] \
+				&& h(en[kc]) + 1 == h(st[kr]) && h(en[kr]) + 1 == h(st[kd]))
+		}
+		for (i = 1; i <= m; i++) {
+			if (img && (i == kc || i == kr || i == kd)) print "iomem_kernel_image " line[i]
+			else { n++; print "iomem_in_range " line[i] }
+		}
+		printf "iomem_sysram_line=%s iomem_entries_in_range=%d\n", (sys ? "yes" : "no"), n + 0
+	}'
 }
 
 # ---------------------------------------------------------------- stage
@@ -1003,8 +1040,14 @@ cmd_p0() {
 		else
 			p0_gate landing FAIL "NOT 0x80080000, which predicts BAD-LANDING: take K1 (S1_KEXEC=c) first"
 		fi
+	elif [ "$dy" = no ]; then
+		# M3's rule (m3-design §6.3 step 5): the placement read runs only if dynamic
+		# debug exists. Without it the landing is checked at run time instead: the
+		# shim's line must carry PC=0000000080080000 and BAD-LANDING must not appear
+		# (§5.1 L0, §6.6's B1 tokens). B0 on 2026-09-14 found dyndbg=no on this L4T.
+		rec "p0 GATE landing SKIPPED: dyndbg=no, so the landing line cannot be read here. Guard: the shim compares its run address with 0x80080000 and on a mismatch prints BAD-LANDING and PSCI-resets before any QNX code (t234-shim.S landing check). B1's tokens and parse-s1.py L0 (B2, B3) also require PC=0000000080080000 and no BAD-LANDING; B4 and B5 report tier_L0 but their verdicts do not gate on it"
 	else
-		p0_gate landing FAIL "dyndbg=${dy:-unknown}: the landing line cannot be read"
+		p0_gate landing FAIL "dyndbg=${dy:-unknown}: the dynamic-debug check did not answer"
 	fi
 	out="$(board 60 'echo "kexec_loaded_at_end=$(cat /sys/kernel/kexec_loaded)"')"
 	printf '%s\n' "$out" | rec_pipe
@@ -2037,6 +2080,22 @@ cmd_harness_selftest() {
 	check "iomem: the window line, nothing in range" "$(has "$out" 'iomem_sysram_line=yes iomem_entries_in_range=0')" yes
 	out="$(printf 'iomemhi 100000000-25e20dfff : System RAM\niomemhi   180000000-180ffffff : reserved\n' | iomem_gate)"
 	check "iomem: a reservation in range is counted" "$(has "$out" 'iomem_entries_in_range=1')" yes
+	# B0, 2026-09-14: the running kernel's KASLR image inside the range is not a reservation
+	out="$(printf 'iomemhi 100000000-25e20dfff : System RAM\niomemhi   221da0000-223b2ffff : Kernel code\niomemhi   223b30000-2242affff : reserved\niomemhi   2242b0000-22473ffff : Kernel data\niomemhi   24a000000-259ffffff : reserved\n' | iomem_gate)"
+	check "iomem: the kernel image (code, reserved between, data) is not counted" "$(has "$out" 'iomem_sysram_line=yes iomem_entries_in_range=0')" yes
+	check "iomem: the kernel image lines are reported" "$(printf '%s\n' "$out" | grep -c '^iomem_kernel_image ')" 3
+	out="$(printf 'iomemhi 100000000-25e20dfff : System RAM\niomemhi   180000000-180ffffff : reserved\niomemhi   221da0000-223b2ffff : Kernel code\niomemhi   223b30000-2242affff : reserved\niomemhi   2242b0000-22473ffff : Kernel data\n' | iomem_gate)"
+	check "iomem: a reservation outside the kernel image still counts" "$(has "$out" 'iomem_entries_in_range=1')" yes
+	out="$(printf 'iomemhi 100000000-25e20dfff : System RAM\niomemhi   221da0000-223b2ffff : Kernel code\niomemhi   230000000-230ffffff : reserved\niomemhi   2242b0000-22473ffff : Kernel data\n' | iomem_gate)"
+	check "iomem: a reserved line past the kernel data's end breaks the shape, all three count" "$(has "$out" 'iomem_entries_in_range=3')" yes
+	out="$(printf 'iomemhi 100000000-25e20dfff : System RAM\niomemhi   221da0000-223b2ffff : Kernel code\niomemhi   223b30000-223cfffff : reserved\niomemhi   223d00000-2242affff : reserved\niomemhi   2242b0000-22473ffff : Kernel data\n' | iomem_gate)"
+	check "iomem: two reserved lines in the gap all count" "$(has "$out" 'iomem_entries_in_range=4')" yes
+	out="$(printf 'iomemhi 100000000-25e20dfff : System RAM\niomemhi   221da0000-223b2ffff : Kernel code\niomemhi   223c00000-2241fffff : reserved\niomemhi   2242b0000-22473ffff : Kernel data\n' | iomem_gate)"
+	check "iomem: a gap line that is not contiguous counts" "$(has "$out" 'iomem_entries_in_range=3')" yes
+	out="$(printf 'iomemhi 100000000-25e20dfff : System RAM\niomemhi   221da0000-223b2ffff : Kernel code\niomemhi     223b30000-2242affff : reserved\niomemhi   2242b0000-22473ffff : Kernel data\n' | iomem_gate)"
+	check "iomem: a gap line at another indent counts" "$(has "$out" 'iomem_entries_in_range=3')" yes
+	out="$(printf 'iomemhi 100000000-25e20dfff : System RAM\niomemhi   223b30000-2242affff : reserved\niomemhi   2242b0000-22473ffff : Kernel data\n' | iomem_gate)"
+	check "iomem: without Kernel code, the reserved and data lines both count" "$(has "$out" 'iomem_entries_in_range=2')" yes
 
 	# §6.12, §7.3: the limits are constants and cannot be overridden
 	check "uptime limit 7200" "$MAX_UPTIME_S" 7200
