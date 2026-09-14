@@ -233,10 +233,13 @@ ident_hits() {
 	[ -n "$R_KEY" ] && pats+=(-e "$R_KEY")
 	[ -n "$R_KEYBASE" ] && pats+=(-e "$R_KEYBASE")
 	[ -n "$R_HOSTNAME" ] && pats+=(-e "$R_HOSTNAME")
-	addr="$(grep -acE "$IDENT_IP" "$f" 2>/dev/null || echo 0)"
-	mac="$(grep -acE "$IDENT_MAC" "$f" 2>/dev/null || echo 0)"
+	# grep -c prints 0 and exits 1 when nothing matches: '|| echo 0' made that
+	# "0<newline>0", the sum failed, and a file with hits in another class was kept raw.
+	addr="$(grep -acE "$IDENT_IP" "$f" 2>/dev/null)"
+	mac="$(grep -acE "$IDENT_MAC" "$f" 2>/dev/null)"
 	name=0
-	[ "${#pats[@]}" -gt 0 ] && name="$(grep -acF "${pats[@]}" "$f" 2>/dev/null || echo 0)"
+	[ "${#pats[@]}" -gt 0 ] && name="$(grep -acF "${pats[@]}" "$f" 2>/dev/null)"
+	addr="${addr:-0}" mac="${mac:-0}" name="${name:-0}"
 	total=$(( addr + mac + name ))
 	echo "$total addr=$addr mac=$mac name=$name"
 }
@@ -1883,6 +1886,12 @@ cmd_redact_selftest() {
 
 	out="$(ident_hits "$d/in")"
 	check "ident_hits classes" "$(echo "$out" | grep -c 'addr=2 mac=1 name=')" 1
+	printf 'login fakeuser@fakehost-desktop only\n' > "$d/nameonly"
+	out="$(ident_hits "$d/nameonly" 2>&1)"
+	check "ident_hits zero classes sum" "$(echo "$out" | grep -cE '^[1-9][0-9]* addr=0 mac=0 name=[1-9]')" 1
+	check "ident_hits one line" "$(echo "$out" | wc -l)" 1
+	printf 'nothing to see\n' > "$d/clean"
+	check "ident_hits clean" "$(ident_hits "$d/clean" 2>&1)" "0 addr=0 mac=0 name=0"
 
 	rm -rf "$d"
 	echo
