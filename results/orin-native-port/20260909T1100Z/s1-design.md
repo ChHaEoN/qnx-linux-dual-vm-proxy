@@ -2242,6 +2242,12 @@ The export block is placed after `FAIL_STATE`, **outside** the `MODE != host` gu
     - After that comes the owner's D30 on J7a, the UEFI entry arm, which separates Linux residue from a writer anchored at window 2's base.
     - The class stays U. Under D34, class Q cannot hold.
   - **Budget.** Today's two kexec runs and two L4T-only runs are used.
+- **Owner decisions after J4 (2026-09-14, "follow the recommendations"):**
+  - **D27:** build `s1-j1` (§15.4.8, §15.5 B), with the hold margin set by the implementation and recorded before J6.
+  - **D29:** allow the [D29] wording: the direction of the count change, the wireless link and the device classes. SSIDs, MACs, IPs and mask widths stay out. §15 is pushed as written.
+  - **D31:** today's class is U.
+  - **D30 (the UEFI arm):** decided at J6's memo.
+  - **Next:** J6 in the control arm (J6c), with the owner at the board.
 
 ### 15.7 Claims, failure signatures, risks
 
