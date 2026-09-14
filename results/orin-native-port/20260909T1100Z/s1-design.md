@@ -2801,7 +2801,7 @@ m5-design §3.3 step 7 allows the tree anywhere in window 1 "because startup res
 | EL at the shim | 2 | 2 | none | VERIFIED |
 | `x0` | Linux's kexec tree | the firmware's DT table (DT mode) | startup took its CPU list from it in M5; RAM is stated, not read from the tree; UM9 reports its reserved-memory nodes over the canaries | VERIFIED (M5 T3) |
 | Secondary CPUs | offlined by Linux; M2 brought all six up | never started (EBBR); M5 started none | **new:** `CPU_ON` of cores 1-3 from never-started state, their redistributors, INTID 28 on each | HYPOTHESIS (R84) |
-| WDT0 | configured by systemd; does not fire after kexec | M5's R1 capture carries a `t234: WDT0 CR=` token that **differs from J6c's** (class only). `wdt.c` prints its "did not fire after the kexec hand-over" text whenever CR is non-zero, so that line is no evidence under UEFI entry (VERIFIED (source): `wdt.c`). `s1-j1` runs `-Wkeep`, which leaves WDT0 as inherited, and its `guard_s` and `return_bound_s` are far longer than M5's run | **Q20 is answered at the desk before D35,** with a pre-registered branch (below) | UNKNOWN until Q20 (R85) |
+| WDT0 | configured by systemd; does not fire after kexec | M5's R1 capture carries a `t234: WDT0 CR=` token that **differs from J6c's** (class only). `wdt.c` prints its "did not fire after the kexec hand-over" text whenever CR is non-zero, so that line is no evidence under UEFI entry (VERIFIED (source): `wdt.c`). `s1-j1` runs `-Wkeep`, which leaves WDT0 as inherited, and its `guard_s` and `return_bound_s` are far longer than M5's run | **Q20 answered 2026-09-14: branch (a)** (below) | VENDOR_CLAIM (upstream field positions) / HYPOTHESIS (the same positions on T234) (R85) |
 | DMA masters | Linux's shutdown, quiesce, SMMU handling | repowered, then UEFI drivers ran | J7a's premise (R87), plus a new confound (R82), reduced by D46 | HYPOTHESIS |
 | TCU drain | after Linux | after the firmware | long `xport` exports under UEFI are new | short text VERIFIED; volume HYPOTHESIS (R86) |
 | Text before the shim on COM3 | L4T's shutdown | firmware, menus, Shell, `M5L` lines | none of it carries a parser record prefix | VERIFIED (M5 R1 capture, count only) |
@@ -2810,6 +2810,20 @@ m5-design §3.3 step 7 allows the tree anywhere in window 1 "because startup res
 - **(a) Not counting toward a reset under UEFI entry:** R85 is answered at the desk; `s1-j1` runs unchanged.
 - **(b) Counting toward a reset with a period (all stages) shorter than `guard_s`:** `s1-j1` cannot run unchanged. The owner chooses (D47) between a `-Wdisable` variant, which is a new image with its own T-J1 and pins and a recorded break of the one-variable premise, and not running J7a.
 - **(c) The documentation does not decide it:** R85 stays UNKNOWN. The owner accepts the risk at D35, and §15.13.10.5's WDT rule applies: a WDT-type reset is F62, counted, and the unchanged image is not retried (D42).
+
+**Q20's outcome (2026-09-14): branch (a).**
+- **Where the answer came from.** The repo's own documents hold only field names, and a first desk pass therefore returned (c). The owner then allowed one per-file read of the upstream Linux driver for this timer IP (D33, this question only; no clone, archive or tree). It gives the control register's field positions: a system POR reset enable, a system debug reset enable, the interrupt enables, a period field and a timer source. The status register gives an expiration count, with a reset on the fifth expiry.
+- **The two recorded classes, read against those positions (values private):**
+  - **Under kexec entry,** WDT0's POR reset enable is set, with a non-zero period.
+  - **Under UEFI entry (M5 R1),** WDT0's reset enables and interrupt enables are all clear, and its control word equals the idle WDT1's.
+
+  By the upstream definitions, WDT0 under UEFI entry cannot cause a system reset even if a counter ran. So `s1-j1` runs unchanged and D47 is not reached.
+- **Limits.**
+  - The positions are the upstream driver's, not a T234 reference manual. That T234's WDT0 uses them is HYPOTHESIS (research-tegra234.md 9.4 names the same IP).
+  - Counting is started by a write-only command, so the control word does not show whether a counter runs.
+  - A few high control bits and one status bit are undefined upstream.
+  - F62 stays the rule if an unplanned reset happens anyway.
+- **Consistency.** Under kexec entry the POR reset enable is set, yet M0's hang test showed no fire, so there the counter or its source was not running.
 
 ##### Loader source change (D37)
 
@@ -2833,10 +2847,10 @@ Nothing else changes: no new MMIO, no GIC, timers, clocks or CPUs; no file or va
 - The ESP file keeps the name `M5LOAD.EFI` and is identified by sha256. `com3-term.ps1`'s go detector matches `M5LOAD.EFI go` or `M5LOAD go`, after stripping a device or path prefix (VERIFIED (source): `Test-GoLine`), so the terminal needs no change.
 
 **Order, on the PC:**
-1. **D0a, the reference commit, before any edit.** M5's staged loader in `orin-native/uefi/out/` was written before commit `600996f` changed `m5load.c` (VERIFIED: file time against commit time). That change alters code (the tree refusal tokens, VERIFIED (source): `git diff 25d40e7 600996f`), none of which M5's pass printed. In two scratch worktrees, build with no switch against `m1b-p1.kimg` at `25d40e7` and at `600996f`. Record which one reproduces the staged loader's sha256 (M5's stage listing and `out/gate.txt` item 10), and pin that commit's `m5load.c` as the reference.
-   - Expected (HYPOTHESIS): `25d40e7` reproduces it, and `600996f` does not, for the known source reason.
+1. **D0a, the reference commit, before any edit.** Commit `600996f` changed `m5load.c` (the tree refusal tokens, VERIFIED (source): `git diff 25d40e7 600996f`), none of which M5's pass printed. In two scratch worktrees, build with no switch against `m1b-p1.kimg` at `25d40e7` and at `600996f`. Record which one reproduces the staged loader's sha256 (M5's stage listing and `out/gate.txt` item 10), and pin that commit's `m5load.c` as the reference.
+   - ~~Expected (HYPOTHESIS): `25d40e7` reproduces it, and `600996f` does not, for the known source reason.~~ **2026-09-14, done:** `600996f` reproduces the staged loader's sha256, and `25d40e7` does not (VERIFIED: scratch builds against `m1b-p1.kimg` at the M5 pin; only `m5load.o` differs, and each build is deterministic). **The reference commit is `600996f`.** The staged files predate that commit's time, but the build used the uncommitted edit that `600996f` then committed, so the file-time inference was misleading.
    - **If neither reproduces it:** stop and investigate toolchain or source drift before anything else. Owner acceptance under D37 comes only after that investigation, never in place of it.
-2. **D0b, the switch leak test.** In a scratch worktree at HEAD: build with no switch from HEAD's unedited `m5load.c`, then from the edited, uncommitted file. The two objects must be byte-identical. A mismatch means the switch leaks, and the edit is fixed. HEAD's unedited build differs from the staged loader only by what D0a explained.
+2. **D0b, the switch leak test.** In a scratch worktree at HEAD: build with no switch from HEAD's unedited `m5load.c`, then from the edited, uncommitted file. The two objects must be byte-identical. A mismatch means the switch leaks, and the edit is fixed. ~~HEAD's unedited build differs from the staged loader only by what D0a explained.~~ **2026-09-14:** HEAD's unedited build is byte-identical to the staged loader (VERIFIED at the §15.13 commit; no loader input changed after `600996f` apart from the build script's mode bit).
 3. **Commit** (PO-A form): the loader source and header, the gate, the build switches, the T0 cases, and the harness, parser and privacy changes of §15.13.7. Number-free message, no driver or identifier. Reviewed before the session (D44).
 4. **T0 builds:** `M5L_J7A=1 T0=1 T0_PAD_LIKE=<main checkout>/orin-native/shim/out/s1/s1-j1.kimg ./orin-native/uefi/build-m5-loader.sh`, and the two `T0_FORCE` variants in separate scratch output directories.
 5. **Board build:** `M5L_J7A=1 KIMG=<main checkout>/orin-native/shim/out/s1/s1-j1.kimg KIMG_SHA256=<J6c's registered kimg_sha256> ./orin-native/uefi/build-m5-loader.sh`. Gate items 1-12 pass; item 7 pins the blob.
@@ -3337,7 +3351,7 @@ Preconditions met (VERIFIED, private record): J4 is F36; J6c's parser row carrie
 | R82 | UEFI drivers stop device DMA at `ExitBootServices` | HYPOTHESIS (m5-design §3.5) | not shown; bounded at the canaries by UM4 only; surface reduced by D46 |
 | R83 | After the exit, no non-secure firmware code runs unless runtime services are called, and neither the shim nor startup calls any | VENDOR_CLAIM (UEFI) + VERIFIED (source: `x0` only; startup takes no system table) | — |
 | R84 | Startup at `-P4 -b w2,canary`, `CPU_ON` of cores 1-3 from never-started state with their redistributors and INTID 28, procnto and the large hold work under UEFI entry | HYPOTHESIS (M5 ran `-P1`; M2 ran after kexec) | J7a-1 (F55 otherwise) |
-| R85 | WDT0 does not reset the board during a guard-length run after the firmware's exit | UNKNOWN (the inherited CR token differs from J6c's, class only; the "configured" text is no evidence under UEFI) | Q20's desk read before D35; `reset_reason` (F62) |
+| R85 | WDT0 does not reset the board during a guard-length run after the firmware's exit | **2026-09-14:** VENDOR_CLAIM via Q20's branch (a): the reset and interrupt enables are clear under UEFI entry by the upstream field positions; HYPOTHESIS that T234 uses them, and whether a counter runs is not visible | Q20 (answered); `reset_reason` (F62) |
 | R86 | The SPE drains long `xport` exports after the firmware's exit, and com3-term's capture keeps them byte-exact | HYPOTHESIS (M5 used it for short text) | V4's export decode; `TCUDROPS` |
 | R87 | A DC cold boot with at least `DRAM_OFF_S` unpowered leaves no Linux device or DMA state; coprocessor firmware re-initialises on both paths | HYPOTHESIS; the premise of E (refines R67) | not testable by J7a |
 | R88 | Firmware CPU frequency, EMC and clock state, the boot option, PSCI history and uptime neither create nor suppress the c2 writer | UNKNOWN (confounds) | not separable |
@@ -3351,8 +3365,8 @@ Preconditions met (VERIFIED, private record): J4 is F36; J6c's parser row carrie
 | R96 | Removing the Ethernet cable and board USB devices reduces R82's surface; the M.2 wireless card, which carries ssh, stays and may be driven by the firmware | HYPOTHESIS | not testable by J7a; peripheral record |
 
 **Desk questions.**
-- **Q19:** does NVIDIA's r36.4.4 edk2 zero or otherwise touch pages on `AllocatePages(AllocateAddress)` under its memory-protection settings? Documentation only. No reading depends on it, since the fill follows; it bears only on "the loader writes no canary page".
-- **Q20 (now before D35):** the public T234 watchdog register description: which WDT0 control bits mean enabled and counting toward a reset, and how the period and expiry stages read? Applied to the two private CR values, class only, it selects §15.13.4's branch. No register read is added.
+- **Q19:** does NVIDIA's r36.4.4 edk2 zero or otherwise touch pages on `AllocatePages(AllocateAddress)` under its memory-protection settings? Documentation only. No reading depends on it, since the fill follows; it bears only on "the loader writes no canary page". **2026-09-14:** the repo holds no documentation of these firmware memory-protection settings or of page writes on this call. Q19 stays open, and R81's "writes no page" part stays HYPOTHESIS.
+- **Q20 (now before D35):** the public T234 watchdog register description: which WDT0 control bits mean enabled and counting toward a reset, and how the period and expiry stages read? Applied to the two private CR values, class only, it selects §15.13.4's branch. No register read is added. **2026-09-14, answered: branch (a),** from one per-file read of the upstream driver under D33 (§15.13.4).
 
 ---
 
@@ -3381,7 +3395,9 @@ Preconditions met (VERIFIED, private record): J4 is F36; J6c's parser row carrie
 - **D37:** the full `M5L_J7A` loader. **D45:** the SD card's ESP.
 - **D38:** at most two counted `go` runs, and the deciding rule as written.
 - **D40 and D46:** the wiring, peripheral and power steps as written.
-- **D47:** open until Q20's desk read.
+- **D47:** ~~open until Q20's desk read~~ **not reached:** Q20 came back branch (a) on 2026-09-14 (§15.13.4).
+- **D35's residual risk:** it includes R85's limits (the upstream positions, and counting not visible).
+- **D33 (this Q20 only):** one per-file read of the upstream driver, taken 2026-09-14.
 - **Next:** implementation on the PC, commit and review before any board step.
 
 ---
@@ -3483,7 +3499,7 @@ Preconditions met (VERIFIED, private record): J4 is F36; J6c's parser row carrie
 - §3.2's UEFI row: "used diagnostically by J7a; D6 unchanged".
 - R67: refined by R80-R82, R87 and R95.
 - m5-design §3.3 step 7's "startup reserves it (board/main.c:247-248)": current `main.c` only calls `avoid_ram` for the tree (§15.13.3's contradiction). m5-design §8 item 11's "room several times over" does not hold for a J7a-sized loader.
-- m5-design §6.6 and its gate record: **the loader staged in M5 was built before commit `600996f`**, which changed `m5load.c`'s tree refusal tokens (VERIFIED: file time against commit time, and the diff). M5's pass printed none of them, so the record stands, but "the committed source is the staged loader" needs a dated note once D0a names the reference.
+- m5-design §6.6 and its gate record: ~~the loader staged in M5 was built before commit `600996f`~~ **2026-09-14:** D0a names `600996f`. The staged loader equals that commit's source build, so "the committed source is the staged loader" holds with no qualification. The file-time inference was misleading, because the build came from the uncommitted edit that `600996f` committed.
 - m5-design §3.3 step 10: M5's retry loop calls `AllocatePool` after a failed `ExitBootServices`, which UEFI's rule does not allow. It never ran in M5 (the first exit succeeded). UM6 avoids it under the switch; the switch-off loop is unchanged.
 - m5-design's `wdt.c` text "did not fire after the kexec hand-over" is printed under any entry; its wording is entry-specific.
 - `com3-term.ps1`'s header on straight-typed lines, and m5-design §14.8's other stale items: still open.
