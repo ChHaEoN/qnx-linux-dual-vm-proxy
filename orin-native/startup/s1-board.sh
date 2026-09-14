@@ -4228,7 +4228,9 @@ j3_return() {
 # §15.4.3-§15.4.6: J2 (control), J4 (remove) and J3 (j3). Phase A over ssh, the detached
 # sequence, COM3 progress, and the return paths. $1 the arm, $2 the image (s1-h1).
 j_detached() {
-	local arm="$1" img="$2" kw=jrun out old up rc wrc left gate worst name base q17="" pre_ok home homedev kddev trace=no j1b st jpre="" cmin
+	# J6c (2026-09-14): an s1-j1 run defers pre_ok to after gate A, and 'set -u' stopped it at
+	# the first read; every local starts empty
+	local arm="$1" img="$2" kw=jrun out="" old="" up="" rc="" wrc="" left="" gate="" worst="" name="" base="" q17="" pre_ok="" home="" homedev="" kddev="" trace=no j1b="" st="" jpre="" cmin=""
 	local wq wqfb line_main line_fb fb_s armed com3_off gok gov0 gov4 rcs oops L v p SD pstore_before
 	local conf="$S1DIR/s1-linux.conf" tree="" pc_conf_sha="" pc_image_sha="" pc_l4t_initrd_sha="" pc_initrd_sha="" conf_gate
 	local pc_image="$S1DIR/out/l4t/Image" pc_l4t_initrd="$S1DIR/out/l4t/initrd" pc_initrd="$S1DIR/out/initrd.cpio.gz"
@@ -6771,6 +6773,7 @@ cmd_harness_selftest() {
 	com3_marker_seen "$jr2/stray-marker.log" 0 "s1wq: begin arm=control final=kexec result=0"
 	check "com3_marker_seen: a marker after stray bytes is seen" "$?" 0
 	check "j_wq_lines: a marker quoted mid-line is still not a marker" "$(printf 'systemd[1]: echo s1wq: begin arm=x\n' | j_wq_lines | wc -l)" 0
+	check "jrun's locals start empty, so an s1-j1 run survives set -u before its deferred prereg (J6c)" "$(grep -c '^[[:space:]]*local arm="\$1" img="\$2" kw=jrun .* pre_ok="" ' "$HERE/$PROG")" 1
 	check "j3's return read passes XHCI_PATH to b_pci_state (the F41-xhci gate defect)" "$(grep -c '^[[:space:]]*out="$(board 120 b_identity b_pstore b_slots "XHCI_PATH=' "$HERE/$PROG")" 1
 	check "precondition: J2b after F32 is refused" "$(wqpre b2repeat)" 1
 	check "precondition: J4 without J3 met is refused" "$(wqpre remove)" 1
