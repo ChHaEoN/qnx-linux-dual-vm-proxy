@@ -9,6 +9,51 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-14 — S1-F under TCG: a stock Linux kernel boots as a qvm guest to a working shell (T1-T3)
+
+S1-F's PC half ran, all under QEMU TCG (emulated) on the Windows PC; none of it ran on the board. T0 had built and
+gated the pieces on the PC first ([s1-design.md](../results/orin-native-port/20260909T1100Z/s1-design.md) §14.6). The
+guest is the board's stock L4T 5.15 kernel `Image`, with an initrd built from the board's own busybox. The host is a
+TCG QHV host image, so qvm runs inside the emulation, as on the cloud leg.
+
+- **T1, qvm's `dryrun`.** The first attempt wrote qvm's device tree, but qvm then exited with an error. It could not
+  open the virtio-console `hostdev`, which named the pty slave (`Unable to open '/dev/ttyp3': Interrupted function
+  call`). The gate passed it anyway, for two reasons: it recorded the exit code without judging it, and its error
+  heuristic looked only for certain words. Two changes followed. The `hostdev` moved to the pty master, as M3 wired its
+  console (the design's own fallback). Every dryrun gate now needs a zero exit and no qvm `[file:line]` diagnostic. The
+  second attempt was clean. qvm reported `Exiting: dryrun complete`, and every gating device-tree row was present:
+  memory, GICv3, timer, virtio-mmio, bootargs, initrd and PSCI. The host's memory-canary self-test also passed. The
+  console reader would otherwise have opened the slave before qvm held the master, so the host script now starts it
+  only after qvm is launched (s1-design §14.10).
+- **T2, boot to a shell.** The kernel booted as a qvm guest on qvm's generated device tree, with its three vCPUs
+  online. It ran our `/init` and reached busybox's shell on `hvc0`. The shell answered the host-injected probe. The
+  console shows the echoed command with its arithmetic unevaluated, and on the next line the result that only the
+  shell's arithmetic produces. That meets S1-F's pass item 1 under TCG only. The reader-order race the design had
+  named did not occur in this TCG run.
+- **T3, the hold path rehearsed.** The run showed ten host heartbeats with qvm alive, a host allocation verified after
+  the hold, the end probe answered and a clean teardown. T3 rehearses the ten-minute script. It is not pass item 4.
+
+What it shows, under TCG: qvm loads a stock arm64 Linux `Image` with a bare `load` line, and its gzip cpio initrd
+with `initrd load`. Its generated
+device tree carries no Tegra nodes, and 5.15-tegra boots on it. The secondary vCPUs start through PSCI, and console
+input and output work over virtio-console. The design's risks R1-R10, R12-R14, R29 and R31 are answered for the
+emulated leg only (s1-design §14.11).
+
+What it does not show: nothing ran on the board, and a TCG pass does not predict a native pass. The board's PSCI, the
+A78AE system registers a guest may touch, the second RAM window, the canaries and physical CPU pinning are all
+untested. Whether the console reader's open waits for qvm's master is not observable, so the reader-order race stays
+open on the board. It gives no timing of any kind, no isolation or containment claim, and nothing about a GPU. Next are the
+board rungs, with the owner present:
+- B0: pre-flight and staging;
+- B1: the startup regression;
+- B2: window 2 and the canaries;
+- B3: the native boot, item 2;
+- B4: the ten-minute run, item 4;
+- B5: only if v1 keeps the QNX guest, item 3.
+
+Item 5's stamps come with every run. The run records are private and git-ignored, and no figure is published here.
+The plan's [S1-F block](orin-native-port-plan.md#the-revised-ladder) carries the status.
+
 ## 2026-09-13 — S1-F design written, and the owner takes every decision as recommended
 
 The S1-F design, [s1-design.md](../results/orin-native-port/20260909T1100Z/s1-design.md) (revision 2), specifies how a

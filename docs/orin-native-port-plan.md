@@ -399,7 +399,7 @@ Publication is unchanged by this section. §9's open item on already-published n
 
 #### The revised ladder
 
-M0, M1, M2, M1b and M3 (met) → **M4-F** (met 2026-09-11, with the r0 instrument caveat below) → **M5-F** (met 2026-09-13, under m5-design's option A, with the deviations below) → **S1-F** → **freeze v1** → **campaign**.
+M0, M1, M2, M1b and M3 (met) → **M4-F** (met 2026-09-11, with the r0 instrument caveat below) → **M5-F** (met 2026-09-13, under m5-design's option A, with the deviations below) → **S1-F** (**2026-09-14:** its TCG half, pass item 1, met under emulation on the PC; the board rungs are ahead) → **freeze v1** → **campaign**.
 
 Every rung up to the freeze is functional: it passes or fails on what appears, never on a figure. A rung still keeps what its instruments print, but those figures are not judged, not reported and not carried into the campaign.
 
@@ -481,7 +481,13 @@ Every rung up to the freeze is functional: it passes or fails on what appears, n
   - Three vCPUs pinned to cores 1-3.
   - An initrd built from the board's own busybox.
   
-  Next: copy the board's `Image` and `initrd` (D3), then T0 on the PC. Nothing has been built or run.
+  ~~Next: copy the board's `Image` and `initrd` (D3), then T0 on the PC. Nothing has been built or run.~~ **2026-09-14:** D3's copy and T0 are done, and T1-T3 have run under TCG (next bullet). Nothing of S1 has run on the board.
+- **2026-09-14: pass item 1 met under TCG (emulated) on the PC, not on the board** ([s1-design.md](../results/orin-native-port/20260909T1100Z/s1-design.md) §14.9-14.11). The records are private and git-ignored.
+  - **T1**, qvm's `dryrun` with its device tree dumped, passed clean on its second attempt. The first attempt wrote the device tree, but qvm exited with an error: it could not open the virtio-console `hostdev` on the pty slave. The gate of that day passed it anyway. The `hostdev` moved to the pty master, as M3 wired its console (s1-design C11's fallback), and every dryrun gate now needs a clean exit with no qvm diagnostic. The host script also starts the console reader only after qvm is launched, so the slave open is no longer attempted before qvm starts; whether qvm already holds the master at that moment is not observable, and the race stays open on the board (s1-design §14.10, §14.11).
+  - **T2:** the board's stock L4T 5.15 kernel `Image` booted as a qvm guest, on qvm's generated device tree, under the TCG QHV host. Its three vCPUs came online, it ran our `/init` from the busybox initrd, and its shell answered the host-injected probe with the answer, not the echo. With T1, that meets pass item 1, under TCG only.
+  - **T3**, the ten-minute hold path, passed as a rehearsal. It showed ten host heartbeats with qvm alive, a held host allocation verified after the hold, the end probe answered and a clean teardown. It is not pass item 4.
+  - **Still ahead, on the board with the owner present:** B0-B5. B1 is the startup regression; B2 covers window 2 and the canaries; B3, the native boot, is item 2; B4, the ten-minute run, is item 4. Item 3 applies only if v1 keeps the QNX guest (D1). Item 5's stamps are owed by every run.
+  - **Not shown:** anything the board may do differently (its PSCI, A78AE system registers, window 2, physical pinning); any timing; any isolation; any GPU.
 - **Deferred to the campaign:** the research track's own S1 exit criterion, a CPU-only baseline of the small model in the guest; any boot time; IPC statistics; any Linux-guest latency.
 - **Scope:** S1 crosses §1's non-goal "no Linux guest on the native leg", now struck through there. The GPU non-goals stay.
 
@@ -811,7 +817,7 @@ still run against the black box, at roughly one question per reboot cycle — cl
 | M3 — QHV host + guest, ~~first number~~ | 2-6 | MED-HIGH | ~~INTID 28~~ (wired, M1b); stage-2/ICH on real silicon; ~~plus the watchdog policy, now on the critical path~~ (WDT0 does not fire after kexec). **Met 2026-09-10.** **2026-09-11: a functional pass; its measurement moves to the v1 campaign ([§6](#architecture-versions-and-the-measurement-freeze-decided-2026-09-11))** |
 | M4 — ~~qvm-trace~~ **M4-F: r0, r1 (met 2026-09-11; r0 under earlier instruments)** | 1-3 | LOW-MED | The dry run (done 2026-09-11); then ~~11 KB/s transport and the parser~~ **the transport and parser that m4-design.md specifies, exercised by r0 and r1. r2's timed runs move to the campaign (2026-09-11, [§6](#architecture-versions-and-the-measurement-freeze-decided-2026-09-11))** |
 | M5 — ~~optional UEFI cross-check~~ **M5-F: UEFI cold boot to startup (2026-09-11)** | 2-5 | HIGH | ~~PE ImageBase/relocation, `mkifsf_uefi` behaviour.~~ **2026-09-13:** under option A, the drivers were the loader, T0 and the board's map at Shell time; ImageBase and `mkifsf_uefi` belong to option B (m5-design Appendix A). **The median comparison moves to the campaign (2026-09-11, [§6](#architecture-versions-and-the-measurement-freeze-decided-2026-09-11))**. **Met 2026-09-13 (M5-F, option A)** |
-| S1-F — Linux guest, no GPU, native qvm **(added 2026-09-11)** | 1-3 weeks after M3 (the research track's estimate, HYPOTHESIS) | not rated | qvm's handling of an arm64 kernel, its device tree and PSCI; ownership of the second RAM window ([§6](#architecture-versions-and-the-measurement-freeze-decided-2026-09-11)) |
+| S1-F — Linux guest, no GPU, native qvm **(added 2026-09-11)** | 1-3 weeks after M3 (the research track's estimate, HYPOTHESIS) | not rated | qvm's handling of an arm64 kernel, its device tree and PSCI; ownership of the second RAM window ([§6](#architecture-versions-and-the-measurement-freeze-decided-2026-09-11)). **2026-09-14:** the first three were answered under TCG only ([s1-design.md](../results/orin-native-port/20260909T1100Z/s1-design.md) §14.11); on the board, all four remain |
 | Freeze v1 **(added 2026-09-11)** | not estimated | UNKNOWN | The owner's settings for the freeze gate; writing the manifest |
 | Campaign on v1 **(added 2026-09-11)** | not estimated | UNKNOWN | Board time for the native leg; TCG time for both twin legs |
 

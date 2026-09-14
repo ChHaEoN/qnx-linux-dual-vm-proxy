@@ -14,8 +14,9 @@
 > leg's hypervisor images, unchanged. Those three QEMU legs are closed as
 > history. The current work, **Phase 3b**, runs the
 > QNX Hypervisor natively on the Orin with no QEMU. Its M path is complete,
-> ending at M5-F's functional pass. A Linux guest is added next (S1-F, also a
-> functional rung). Then reference architecture v1 is frozen, and the
+> ending at M5-F's functional pass. A Linux guest is being added (S1-F, also a
+> functional rung): under TCG emulation on the PC it has booted to a shell,
+> but not yet on the board. Then reference architecture v1 is frozen, and the
 > measurements run once on it. One of them is the
 > **twin diff**: what changes when the host bundle (CPU, OS, TCG backend,
 > QEMU build) changes.
@@ -33,10 +34,12 @@ section)
 - **What it is:** a study of the software layer under DRIVE OS-style
   partitioning, a QNX safety side beside a Linux general-purpose side, using
   QEMU emulation and a Jetson Orin Nano dev kit instead of DRIVE hardware.
-  Nothing in it is certified. The Linux side is the target shape: no emulated
-  leg had a Linux partition, and the only Linux so far was the Orin's native
-  L4T host beside a QNX guest under TCG (A2). A Linux guest under the
-  hypervisor is planned (reference architecture v1) and has not run on any leg.
+  Nothing in it is certified. The Linux side is the target shape. None of the
+  earlier QEMU legs (A1 to A3) had a Linux partition; their only Linux was the
+  Orin's native L4T host beside a QNX guest under TCG (A2). A Linux guest under
+  the hypervisor is planned for reference architecture v1. So far, a stock
+  Linux kernel has booted as a guest of the QNX Hypervisor to a shell only
+  under TCG emulation on the PC, not yet on the board.
 - **What works now:**
   - The QNX Hypervisor runs natively at EL2 on the Orin, with no QEMU (A4), and
     boots the cloud-leg QNX guest image and disk unchanged
@@ -57,7 +60,8 @@ section)
   interference, real-time guarantees, any safety certification, and GPU,
   camera or accelerator paths
   ([known limitations](#known-limitations-honest-framing)).
-- **Next:** S1-F, a Linux guest without a GPU under native `qvm`; then the v1
+- **Next:** S1-F's board runs, a Linux guest without a GPU under native `qvm`
+  (its emulated half has passed under TCG on the PC); then the v1
   freeze and one measurement campaign ([roadmap](#roadmap)). If the Linux
   guest is in v1, the campaign includes a CPU-only baseline of a small model in
   it. GPU pass-through is the owner's target, on a research track outside the
@@ -97,8 +101,10 @@ from the firmware's UEFI Shell, which has carried only the one-core M1b host
 image, without `qvm` or a guest.
 
 The diagram reads top to bottom: history, the current native leg, and the
-next steps, none of which has run. S1-F adds a Linux guest without a GPU
-under native `qvm`. Reference architecture v1 is then frozen: the native host
+next steps, none of which has run except S1-F's emulated half on the PC.
+S1-F adds a Linux guest without a GPU under native `qvm`; so far it has run
+only under TCG emulation on the PC, where a stock Linux kernel booted as a
+`qvm` guest to a shell. Reference architecture v1 is then frozen: the native host
 with that guest, plus two TCG twin legs that boot v1's guests in a QHV host
 image under QEMU, on the Windows PC and on the Orin. One measurement
 campaign runs on v1. Its twin diff sets the two TCG legs against each other
@@ -134,9 +140,10 @@ variable. The architecture versions are defined in the
   └─────────────────────────────────────────┬──────────────────────────────────────────┘
                                             │ next: add a Linux guest
   ┌─────────────────────────────────────────v──────────────────────────────────────────┐
-  │ NEXT  planned, not run                                                             │
+  │ NEXT  not run, except S1-F's TCG half on the PC                                    │
   │                                                                                    │
   │ S1-F, the first stage of A5: A4's host, qvm, and a Linux guest without a GPU       │
+  │ so far only under TCG emulation on the PC, where it boots to a shell               │
   │                                         │                                          │
   │                                         v freeze                                   │
   │ reference architecture v1, fixed by a manifest; entry path, or both, chosen at     │
@@ -179,7 +186,7 @@ truth; this table is a summary that can lag it.
 | **1** — Cloud twin bring-up: QHV `qvm` hosting a QNX guest under TCG | ✅ done | [qhv-tcg-host-and-guest-boot.log](logs/sample-boot/qhv-tcg-host-and-guest-boot.log) |
 | **2** — Cloud twin IPC + latency | ✅ **closed: architecture A1 history** — real P50/P99/Max exist, but the 100k-iteration target was never reached. The `qvm`/TCG virtio-queue stall that capped it is recoverable, not root-caused, and stays open. The v1 campaign's IPC sample size is set once, at the freeze | [cloud-ipc-latest.csv](results/cloud/cloud-ipc-latest.csv), [qnx-host-client/README.md](ipc-test/qnx-host-client/README.md) |
 | **3** — Hardware twin port (Jetson Orin Nano) | ✅ **closed: architecture A2 history** — heterogeneous QNX↔Linux IPC over a real `br0`/tap bridge ran under **TCG** (2 × 100 000 iterations, 0 errors). KVM boot never worked: the root-caused GICv3 / `KVM_EXIT_ARM_NISV` defect, reproduced on a second ARM vendor and at compile level from QNX's own BSP source (compile-verified, boot-unverified: the `qemu-virt` board source is not shipped), stays open as a separate filing track, outside reference architecture v1 | [orin-ipc-latest.csv](results/hw/orin-ipc-latest.csv), [orin-port.md](docs/orin-port.md), [aws-a1-metal-kvm-nisv-repro.log](logs/sample-boot/aws-a1-metal-kvm-nisv-repro.log) |
-| **3b** — Native QNX on the Orin Nano (no QEMU) | 🟡 **M path complete (2026-09-13); next S1-F** — the QNX Hypervisor runs natively at EL2 on the Orin (architecture A4): M0 showed `kexec` hands over at EL2, and M1 to M3 brought up QNX, all six cores, the EL2 host and native `qvm` booting the unmodified cloud-leg QNX guest. M4-F showed the trace instrument working on the board, with a partial cross-check and its two rungs under different instrument versions (both freeze-gate items). M5-F entered the one-core M1b host image (no `qvm`, no guest) through a UEFI cold boot in one attended session. Every rung is a functional pass; figures from M3 on stay unpublished, and the numbers are taken once, in the v1 campaign, after S1-F (a Linux guest without a GPU) and the v1 freeze | [ADR-003](docs/adr-003-hardware-timed-qhv.md), [orin-native-port-plan.md](docs/orin-native-port-plan.md), [orin-native/startup/README.md](orin-native/startup/README.md), [results/orin-native-port/](results/orin-native-port/) |
+| **3b** — Native QNX on the Orin Nano (no QEMU) | 🟡 **M path complete (2026-09-13); next S1-F** — the QNX Hypervisor runs natively at EL2 on the Orin (architecture A4): M0 showed `kexec` hands over at EL2, and M1 to M3 brought up QNX, all six cores, the EL2 host and native `qvm` booting the unmodified cloud-leg QNX guest. M4-F showed the trace instrument working on the board, with a partial cross-check and its two rungs under different instrument versions (both freeze-gate items). M5-F entered the one-core M1b host image (no `qvm`, no guest) through a UEFI cold boot in one attended session. Every rung is a functional pass. S1-F (a Linux guest without a GPU) has passed only its emulated half: on 2026-09-14, under TCG on the PC, a stock Linux kernel booted as a `qvm` guest to a shell; its board runs are next. Figures from M3 on stay unpublished, and the numbers are taken once, in the v1 campaign, after S1-F and the v1 freeze | [ADR-003](docs/adr-003-hardware-timed-qhv.md), [orin-native-port-plan.md](docs/orin-native-port-plan.md), [orin-native/startup/README.md](orin-native/startup/README.md), [results/orin-native-port/](results/orin-native-port/) |
 | **4** — Twin diff + DRIVE OS comparison | 🟡 **history recorded; re-run inside the v1 campaign** — the plain-leg boot diff (A2), the A1-against-A2 IPC diff and the release-aligned QHV pair (A3) are kept as architecture-version history, all under TCG and none hardware-timed. The twin diff runs again in the v1 campaign, and the verdicts in [drive-os-comparison.md](docs/drive-os-comparison.md) wait for it | [digital-twin-design.md](docs/digital-twin-design.md) §1a, §4, §5 |
 | **5** — FuSa & Cybersecurity overlay | ⬜ not started as a dedicated phase (a Phase-1-gate FuSa + Cyber pass *did* run) | [docs/fusa/](docs/fusa/), [docs/cyber/](docs/cyber/), [docs/tara/](docs/tara/) |
 | **6** — Polish, public README, demo recording | ⬜ not started | — |
@@ -485,10 +492,11 @@ them is a figure:
   touching the firmware's DT/ACPI selection
   ([m5-design.md](results/orin-native-port/20260909T1100Z/m5-design.md) §6.1, §7.4, §14.5).
 
-What this is not, stated plainly: the hypervisor has hosted one QNX guest, not Linux,
+What this is not, stated plainly: on the board the hypervisor has hosted one QNX guest,
+not yet Linux (a Linux guest has booted to a shell only under TCG emulation on the PC),
 with no device pass-through, and only on a host entered from Linux; the cold boot ran
 the one-core M1b host image without `qvm` or a guest. No per-exit hypervisor number is judged or
-published. With M5-F the M path is complete. Next is S1-F, a Linux guest without a GPU
+published. With M5-F the M path is complete. Next are S1-F's board runs, a Linux guest without a GPU
 under native `qvm`, then the v1 freeze and one measurement campaign. The two
 second-cluster cores run a busy loop at a fixed, much lower rate whose cause is still
 open, and the freeze needs it explained or those cores left out of v1. The M0 to M1b
@@ -576,7 +584,7 @@ Other prereqs:
   - [x] M3 — the QNX Hypervisor boots a QNX guest natively (2026-09-10)
   - [x] M4-F — the trace instrument works on the board (2026-09-11)
   - [x] M5-F — a UEFI cold boot reaches startup; the M path ends (2026-09-13)
-  - [ ] S1-F — a Linux guest without a GPU under native qvm (RAM-window check run 2026-09-13; design in progress)
+  - [ ] S1-F — a Linux guest without a GPU under native qvm (its TCG half, pass item 1, passed 2026-09-14; board runs next)
   - [ ] Freeze reference architecture v1
   - [ ] One measurement campaign on v1
 - [ ] **Phase 4** — Twin diff + DRIVE OS comparison: earlier diffs kept as A1-A3 history; the twin diff and the verdicts come from the v1 campaign ([digital-twin-design.md](docs/digital-twin-design.md))

@@ -422,7 +422,11 @@ Quick summary for context:
   unchanged M1b image, was launched from the firmware's UEFI Shell on a cold boot, reached the shim and startup at EL2
   and then procnto, and L4T came back with only the per-boot MTC variable changed; one attended `go`, deviations
   recorded in m5-design.md §14; the M path has ended, so README PR #1 is the owner's to merge; figures unpublished).
-  Still ahead: S1 functional (a Linux guest without a GPU under native qvm); freeze
+  Still ahead: S1 functional (a Linux guest without a GPU under native qvm) **(2026-09-14: its TCG half passed on the PC,
+  under emulation only. After the virtio-console `hostdev` moved to the pty master, qvm's dryrun was clean. The board's
+  stock L4T kernel then booted as a qvm guest with three vCPUs, to a busybox shell that answered the host's probe (pass
+  item 1), and the ten-minute hold path was rehearsed. Nothing of S1 has run on the board; B0-B5 are next, with the
+  owner present; s1-design.md §14.9-14.11)**; freeze
   reference architecture v1; then one measurement campaign on it (the M3 and M4 numbers, the M5 comparison, the twin
   diff), every record stamped with the version. ~~Awaiting the owner's confirmation: the M path ends at M5's functional
   pass, which sets when README PR #1 can merge.~~ **2026-09-11 (owner):** confirmed. The M path ends at M5-F's

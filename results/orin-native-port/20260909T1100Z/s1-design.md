@@ -1230,14 +1230,15 @@ No board was contacted, no QEMU was started, nothing was downloaded, and no QNX-
   - Accept the TCG wall rule of V, which gives 4,840 s for `lin-dryrun`, ~~7,825 s~~ 8,395 s for `lin-boot` and ~~9,445 s~~ 10,015 s for `hold`. **2026-09-14:** the two guest modes moved by 570 s each, the TCG dryrun bound less the reader bound, when the hvc0 open wait moved after the launch (§14.10).
   - Accept `s1-n2`'s guard of 3,300 s (return 3,600 s), which is one 300 s step above O's first figure (§14.10).
   - D14's `--q2-limit`, if D1 keeps the QNX guest.
-- **T1 or T2:**
-  - Whether `/dev/shmem` accepts `mkdir` for `s1con`'s hit directory. A refusal would show as `S1 FAIL reader hvc0`.
-  - qvm's logger line format, and the wording and stream of its FDT-saved message; `logger_errors` may need tuning. **2026-09-14:** partly answered by T1 attempt 1. The FDT message reads `FDT saved to '<path>'`, and a configuration error prints `[file:line] message`; the export shows CRLF line ends. Both came from the dryrun's stdout and stderr taken together, so the stream is still unknown, and the logger's own format for `error`, `fatal` and `internal` is still unseen (§14.9).
-  - R13's 596 MiB gate under the TCG host's 1 GiB `OPT_RAM` with QEMU's `-m 2G`.
-  - Whether qvm accepts `unsupported <class> abort`, which `s1-d1` uses.
+- **T1 or T2:** (**2026-09-14:** both have run under TCG, §14.10 and §14.11)
+  - ~~Whether `/dev/shmem` accepts `mkdir` for `s1con`'s hit directory. A refusal would show as `S1 FAIL reader hvc0`.~~ **2026-09-14:** it does on the TCG host: T2 wrote `open.hit` (§14.11).
+  - qvm's logger line format, and the wording and stream of its FDT-saved message; `logger_errors` may need tuning. **2026-09-14:** partly answered by T1 attempt 1. The FDT message reads `FDT saved to '<path>'`, and a configuration error prints `[file:line] message`; the export shows CRLF line ends. Both came from the dryrun's stdout and stderr taken together, so the stream is still unknown, and the logger's own format for `error`, `fatal` and `internal` is still unseen (§14.9). **2026-09-14:** the clean dryruns of T1 attempt 2, T2 and T3 printed `Exiting: dryrun complete` after the FDT message (§14.10, §14.11). The stream and the logger's own error format are still unknown.
+  - ~~R13's 596 MiB gate under the TCG host's 1 GiB `OPT_RAM` with QEMU's `-m 2G`.~~ **2026-09-14:** answered under TCG for the `dryrun`, `boot` and `hold` modes (§14.11). The board's gates stay with B3 and B4.
+  - Whether qvm accepts `unsupported <class> abort`, which `s1-d1` uses. **2026-09-14:** still open; no TCG run used `s1-d1`.
   - ~~**2026-09-14:** whether `s1con`'s open of the slave `/dev/ttyp3` returns before qvm holds the master. The readers still start before the launch; if a slave open waits for its master, T2 stops at `S1 FAIL reader hvc0` (§14.9).~~ **Addressed 2026-09-14 (§14.10):** `s1con` now starts right after qvm is launched, and its open wait is the first wait after the launch. Two things stay for T2:
     - whether a slave open waits for its master, is refused (`s1con: open /dev/ttyp3: …` and `S1 FAIL reader hvc0`), or returns early and ends `s1con` on its first read (`STAMP eof` or `STAMP read-error` in `s1con.stamps` before teardown, then `l_kernel` with no `i_start`, which reads as §5.3 stage 2 unless `s1con.stamps` is checked);
     - whether qvm reaches its hostdev inside the dryrun's bound after a launch.
+    - **2026-09-14 (T2, TCG):** the order worked in this run. The open wait named `open.hit`, the needle waits returned, and `s1con.stamps` held no end of file before teardown. So neither a refusal nor the early-end race occurred in this TCG run. Neither point is answered: whether the open waited for the master is still unobservable, and the open wait's `bwait` line does not show when qvm reached its `hostdev` (§14.10). Both points stay open, and on the board the timing differs (§14.11).
 
     A missing `/dev/shmem/con` still shows as `S1 FAIL reader hvc0`, now after the launch and followed by teardown. A qvm that exits before `s1con` opens prints no reader failure; it shows through `qvm.rc` and a missing L4, as before.
 - **Board harness:**
@@ -1262,6 +1263,11 @@ No board was contacted, no QEMU was started, nothing was downloaded, and no QNX-
   - `launch-s1tcg.ps1`: the end rule and the wall bound (V).
   - `s1-board.sh`: it also has `reboot`, `advice`, `consistency`, `b1-compare`, `redact-selftest` and `harness-selftest` (W-Z).
 - **§13, "What did not change":** it names §3.7's configuration text and the console wiring, both changed on 2026-09-14 (§14.9). §13 records revision 2's review and is left as it was.
+- **2026-09-14, after T2 and T3 (§14.11):**
+  - **The header's 2026-09-14 note:** "Nothing has run under QEMU or on the board". T1-T3 have since run under TCG; nothing has run on the board.
+  - **§9's "Answered by" column:** it does not say that the TCG leg answered R1-R10, R12-R14, R29 and R31, or R22's text-size half. The board halves of R3, R6, R14 and R22 stay with B3.
+  - **§6.3:** it does not say that `stamp` starts before the launch and `s1con` after it (§14.10).
+  - **§14.10, "What this does not show":** T2 has since run with the new order under TCG, and the raw slave path and probe 1 are answered there. Whether the slave open waits for its master, and when qvm reaches its `hostdev` after a launch, stay unobservable; every item stays open on the board.
 
 ### 14.9 T1 attempt 1 and the change it caused (2026-09-14)
 
@@ -1373,3 +1379,68 @@ There is a third outcome. The open could return before qvm holds `/dev/ptyp3`, a
 - whether qvm reaches its `hostdev` inside `DRY_K` after a launch;
 - the raw slave path;
 - probe 1.
+
+### 14.11 T2 and T3 under TCG (2026-09-14)
+
+Both runs below are under QEMU TCG on the PC, from images built from commit `00c61db`. Nothing ran on the board. The records are private and git-ignored, and no figure, hash, size, address or duration from them is copied here.
+
+**T2 passed clean (`-Mode boot`).**
+- **Before the launch,** as in T1:
+  - the memory gate passed, and so did md5 pre;
+  - the dryrun exited 0 with no qvm diagnostic, and its FDT was byte-identical to T1's;
+  - `memcanary --selftest` passed.
+- **The launch.** `s1con` started after qvm, and `open.hit`, `i_ready.hit` and `shell_ok.hit` were all written. No `S1 FAIL reader hvc0` appeared. When qvm opened its `hostdev` is not observable, since the open wait's `bwait` line names `open.hit` only (§14.10). `s1con.stamps` held `STAMP eof` only at teardown. Neither a refusal nor §14.10's third outcome, an early end of file, occurred.
+- **pl011 (the capped head).** The stock 5.15-tegra kernel reported qvm's machine model, earlycon on the pl011 vdev, PSCI found through the device tree, three CPUs brought up, the initramfs unpacked, `hvc0` enabled, and `Run /init`.
+  - Lines taken as harmless: UEFI not found, a faked NUMA node, ACPI disabled, PSCI's `MIGRATE_INFO_TYPE` unknown, no cache hierarchy detected, and a jitterentropy initialisation failure. That last one is taken as an effect of the emulated host (HYPOTHESIS).
+- **hvc0.** Our `/init` did the following, in order:
+  - printed `S1-INIT start`;
+  - mounted `/dev`, `/proc` and `/sys`;
+  - reported the kernel release and the configured cmdline;
+  - found CPUs 0-2 online;
+  - printed `S1-INIT ready`.
+
+  busybox `ash` then started, warning that job control is off, since it has no controlling tty. Probe 1's echo shows the literal `$((40+2))`, and the next line is `S1-SHELL-42-OK`: the shell's answer, not the echo.
+- **Teardown** took the script's `term` path. md5 post was ok, and the log shows `S1 FAIL_STATE none`. `parse-s1.py run` gave L1-L5, `item1_t2=pass`, item 5 ok and `verdict=pass`.
+
+**Plan pass item 1 is met under TCG** by T1 attempt 2 (§14.10) and T2, with one configuration: T2's `conf_sha256` equals attempt 2's.
+
+**T3 passed clean (`-Mode hold`).** It is a rehearsal, not pass item 4.
+- The same checks ran before the launch, with the `hold` mode's memory gate, and probe 1 was answered.
+- The hold printed these lines, in order:
+  - `S1 ALLOC hold … fill=ok`;
+  - `S1 HOLD start`;
+  - ten `S1 HB` lines, each with `qvm=alive rc=absent`;
+  - `S1 HOLD end qvm=alive`.
+- Probe 2 was written and answered, as `S1-END-43-OK` under the echoed `$((42+1))`. The allocation then gave `verify=ok`.
+- The guest's `hvc0` shows the ten heartbeat lines, then probe 2's answer.
+- Teardown matched T2's: md5 post ok and `S1 FAIL_STATE none`. `s1con` ended only at teardown, with both probe writes done.
+- `parse-s1.py run` gave L1-L6, `t3=pass` and item 5 ok, and its `bb_text_bytes` estimate was under R22's limit.
+
+**Risks answered, under TCG only (§9).** The board may still differ on every one.
+- **R1:** qvm loads the EFI-stub arm64 `Image` with a bare `load`. It placed the initrd right after the header's image size (T1).
+- **R2, R4:** `set fdt-dump-file … dryrun` works after `@conf`, and the cmdline reaches `/chosen/bootargs`. The guest's own cmdline matched (T1, T2).
+- **R3:** the generated FDT carries every gating node, and 5.15 boots on it. B3 keeps the board half.
+- **R5:** the gzip cpio passed unchanged and was unpacked.
+- **R6:** 5.15-tegra boots on a generic tree with no Tegra nodes. B3 keeps the board half.
+- **R7, R8:** earlycon works on qvm's pl011 vdev, and the virtio port became `hvc0`.
+- **R9:** qvm accepts the master as `hostdev` (T1 attempt 2), and input reaches the guest through the raw slave (T2).
+- **R10:** `$(( ))` works, which completes R10 after T0.
+- **R12:** the `cpu cluster _cpu-N` lines are accepted under `-smp 4`, and three CPUs came online.
+- **R13:** the memory gate passed in the `dryrun`, `boot` and `hold` modes on the TCG host.
+- **R14:** `psci-supported auto` found PSCI on the TCG host's tree, and the secondaries started. B3 keeps the board's tree.
+- **R29:** with no virtio-rng, the shell was not blocked.
+- **R31:** both pl011 needle texts matched (L3, diagnosis only).
+- **R22:** only T3's text-size half is answered. B3 keeps the black box itself.
+
+**Still open for the board.**
+- **B0:** pre-flight, staging, `p0` and the kexec tree's sha256 (W).
+- **B1:** the option-off startup regression.
+- **B2:** window 2, the canaries, `S1 ASINFO` and the `alloc` path (R16-R19, R37-R40).
+- **B3:** the native boot, pass item 2. It covers R3, R6 and R14 on the board's own tree, R15 (A78AE registers), R20, R21, R22's black box, R23, and R28 (the TCG FDT against the board's).
+- **B4:** the ten-minute run, pass item 4: canaries, the end probe, and R24.
+- **B5:** only if D1 keeps the QNX guest, pass item 3 (R25, R26, R35).
+- **Item 5:** its stamps are owed by every board run.
+- **The slave open.** T2 shows that the §14.10 order works under TCG. It still cannot show whether `s1con`'s open waited for the master, and the race §14.10 names could appear under the board's different timing.
+- **`s1-d1`:** whether qvm accepts `unsupported <class> abort` is still untested, since no run used `s1-d1`.
+
+**What this does not show (§10).** No timing of any kind. No isolation or containment. Nothing about A78AE, the board's PSCI, window 2 or physical pinning, and a TCG pass does not predict a native pass. No GPU result, and not publishable before the 4.6(i) consultation.
