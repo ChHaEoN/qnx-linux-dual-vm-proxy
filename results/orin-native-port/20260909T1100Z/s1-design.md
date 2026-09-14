@@ -2272,6 +2272,7 @@ The export block is placed after `FAIL_STATE`, **outside** the `MODE != host` gu
   - **Window 1 was not written during the watches:** c1 was clean at every scan, and the large hold over sysram verified.
   - **c3 again carried a small static write,** at a different place from J2's.
 - **What follows.** Three of the revision's four kexec runs are used. §15.6 stops here: the class stays U, and the owner decides. D30's UEFI-entry arm (J7a) is the test that separates a Linux-left writer from one anchored at the window-2 base.
+- **Owner decision, 2026-09-14 (D30): J7a, UEFI entry.** A short J7a design is written and reviewed before anything is built. It has to settle the exceptions to §2 rule 5 (the ESP write), the TX refit, firmware use of window 2 (§3.2, never checked) and how its result is read under §15.6. No board step runs before the owner approves that design.
 
 ### 15.7 Claims, failure signatures, risks
 
