@@ -6,6 +6,7 @@ Implements results/orin-native-port/20260909T1100Z/s1-design.md (revision 2;
 the owner took D1-D19 as recommended): the configuration gate of §3.7 (D13,
 D19), the FDT checklist of §6.2 read with our own reader (D12), the tier and
 pass rules of §5.1-§5.2 with D10's end_ok, and the pipe-free rule of §2 rule 7.
+Also revision 3's §15.5 A3: the J diagnostic parse of B2's image (run --diag).
 Standard library only.
 
   parse-s1.py conf FILE [--allow FILE] [--overlay FILE]
@@ -14,6 +15,7 @@ Standard library only.
                   [--blackbox FILE] [--out-dir DIR|none] [--conf FILE]
                   [--ref-conf-sha256 HEX] [--reset-reason TEXT]
                   [--kexec-tree-sha256 HEX] [--image FILE] [--initrd FILE]
+                  [--diag j2|j2b|j4]
   parse-s1.py kshcheck FILE | --selftest
   parse-s1.py --selftest
 
@@ -54,6 +56,40 @@ run    Reads a TCG serial log or a board COM3 capture (and, on the board, the
        check_out_path); --out-dir none writes nothing. No FreeMem value and no
        duration is ever printed (§2 rule 8).
 
+run --diag j2|j2b|j4   (s1-design.md §15.5 A3; --profile board --mode host only)
+       The same log and B2's line rules for the tiers and canaries, but a
+       diagnostic parse, never a pass run (§2 rule 3): step=J2|J2b|J4, no b2=
+       field, and verdict=diagnostic complete, or diagnostic incomplete failed=...
+       Complete means every record B2's verdict reads was present and parsed,
+       whatever the canary values:
+         conf_gate passes; L0 and L7 are met; L1 is met apart from its
+         canary_start_* values (L1_records=); item 5 is neither refused nor bad;
+         for each of c1, c2 and c3, exactly one S1 CANARY line before the first
+         S1 ALLOC line (c<n>_start=) and exactly one after it (c<n>_end=), each
+         verify=ok or verify=bad; exactly one S1 ALLOC mib=1536 line, fill=ok with
+         verify=ok or verify=bad (alloc=);
+         J2 and J4, which §15.4.3's detached sequence issues: its s1wq: marker
+         ending 'kexec issuing' before the shim line (wq_kexec_issuing=yes), and
+         none of its abort, 'kexec did not happen' or fallback firing|forcing
+         markers anywhere (wq_reset_marker=no);
+         J2b, cmd_run's B2 flow with no additions: no s1wq: marker at all
+         (wq_markers=none).
+       A check or allocation that is not ok|bad prints absent, multiple, unread (a
+       line with no verify=ok|bad: refuse=, map=fail, tool=no-output), unsplit (no
+       S1 ALLOC line to split the checks) or map-fail. j_row= is the row of
+       §15.4.4's or §15.4.6's table:
+         F39 when any c1 or c3 check reads bad, even in an incomplete parse (a
+         stop outranks a retry); otherwise F40 when incomplete; otherwise from
+         c2_start and c2_end:
+         J2  F32 bad at both, F32a bad then ok, F32b ok then bad, F33 ok at both;
+         J2b F45 bad at either, F46 ok at both (§15.4.4's J2b table);
+         J4  F35 ok at both, F36 bad at either.
+       alloc=bad is recorded and changes no row: the J tables have none for it.
+       F35's "Bus Master 0 at the issue" is the sequence's own refusal before its
+       kexec issuing marker (§15.4.3 Phase B step 7); the parser reads no wq.log.
+       Exit as run: 3 when item-5 stamps are missing, and the verdict line then
+       reads incomplete with item5 among failed=.
+
 kshcheck  parse-m4.py's implementation, imported, so the rule cannot drift (§4.2).
 
 Record formats this parser expects from the S1 host script (§5.1):
@@ -76,6 +112,9 @@ Record formats this parser expects from the S1 host script (§5.1):
   S1 BOTH alive
   S1 FAIL_STATE none
   rc=<n>                                (cat of qvm.rc; before S1 STATE teardown it fails L4)
+Read by --diag only, from L4T's console before the kexec (§15.4.3; /dev/kmsg lines, so
+a printk time may precede them): s1wq: ... kexec issuing; s1wq: ... abort reason=...;
+s1wq: ... kexec did not happen; s1wq: ... fallback firing|forcing.
 Exports, the framing of orin-native/m4dry/m4dry-host.ksh.in's kevblock with the
 S1 prefix:
   S1 BEGIN name=<name> bytes=<n> md5=<hex> enc=base64
@@ -276,6 +315,29 @@ ITEM1_T2_NEEDS = ("conf_gate", "profile", "L2", "fdt_gating", "L4", "L5", "conf_
 ITEM2_NEEDS = ("conf_gate", "L0", "L1", "L2", "fdt_gating", "L4", "L5", "L7", "canaries_all_ok", "conf_identity",
                "conf_ref")
 ITEM4_NEEDS = ("conf_gate", "L6", "L7", "canaries_all_ok", "conf_identity", "conf_ref")
+
+# Revision 3's J diagnostic parse of B2's image (s1-design.md §15.5 A3): board host mode only.
+DIAG_STEPS = {"j2": "J2", "j2b": "J2b", "j4": "J4"}
+CANARY_CHECKS = tuple(f"{c}_{k}" for c in CANARIES for k in ("start", "end"))
+# §15.4.3's markers go to /dev/kmsg, so on COM3 a printk time may stand before them.
+WQ_MARK_RE = re.compile(r"(?:^|[\s\]])s1wq:(?:\s|$)")
+WQ_ISSUING_RE = re.compile(r"(?:^|[\s\]])s1wq:\s(?:.*\s)?kexec issuing\s*$")
+WQ_RESET_RE = re.compile(r"(?:^|[\s\]])s1wq:\s.*"
+                         r"(?:abort reason=|kexec did not happen|fallback firing|fallback forcing)")
+
+
+def diag_row(diag, checks, complete):
+    """The §15.4.4 or §15.4.6 table row of a J parse, from the six canary checks (ok|bad|...)."""
+    if any(checks[f"{c}_{k}"] == "bad" for c in ("c1", "c3") for k in ("start", "end")):
+        return "F39"
+    if not complete:
+        return "F40"
+    both = (checks["c2_start"], checks["c2_end"])
+    if diag == "j2":
+        return {("bad", "bad"): "F32", ("bad", "ok"): "F32a", ("ok", "bad"): "F32b", ("ok", "ok"): "F33"}[both]
+    if diag == "j2b":
+        return "F46" if both == ("ok", "ok") else "F45"
+    return "F35" if both == ("ok", "ok") else "F36"
 
 
 # ------------------------------------------------------------------ conf: the gate (§3.7)
@@ -1111,12 +1173,15 @@ def is_subsequence(sub, seq):
 
 
 def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_data=None, ref_conf_sha256=None,
-                reset_reason=None, kexec_tree_sha256=None, pc_image=None, pc_initrd=None):
+                reset_reason=None, kexec_tree_sha256=None, pc_image=None, pc_initrd=None, diag=None):
     """The §5.1 tiers and §5.2 items of one run. Returns a dict: lines, blocks, verdict, refused.
 
     conf_gate_ok is conf_check's result for conf_bytes; pc_image and pc_initrd are
-    the PC's payload bytes, or None when not given.
+    the PC's payload bytes, or None when not given. diag is None, or j2, j2b or j4
+    for §15.5 A3's diagnostic parse of a board host-mode log (the dict adds j_row).
     """
+    if diag is not None and (diag not in DIAG_STEPS or (profile, mode) != ("board", "host")):
+        raise InputError(f"--diag {diag} reads only a board host-mode log (s1-design.md 15.5 A3)")
     out = []
     put = lambda k, v: out.append(f"{k}={v}")  # noqa: E731
     board = profile == "board"
@@ -1496,12 +1561,54 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
         t3_needs = ("conf_gate", "profile", "t3", "bb_text", "conf_identity")
         put("t3", "pass" if comp_ok(t3_needs) else
             "fail failed=" + ",".join(failed(t3_needs)) + " missing=" + ",".join(miss["t3"] + miss["bb_text"]))
-    if mode == "host":
+    if mode == "host" and diag is None:
         put("b2", "pass" if comp_ok(("L0", "L1", "b2", "L7", "canaries_all_ok")) else "fail")
     if refused:
         put("item5", "refused missing=" + ",".join(missing))
     else:
         put("item5", "ok" if not miss["item5"] else "bad " + ",".join(miss["item5"]))
+    if diag is not None:
+        # §15.5 A3: B2's records, read without their canary values; never pass, never b2=.
+        checks = {}
+        for c in CANARIES:
+            mine = [(i, m) for i, m in cans if m.group(1) == c]
+            for k in ("start", "end"):
+                part = [m for i, m in mine if act_i is not None and (i < act_i if k == "start" else i > act_i)]
+                v = verify_of(part[0]) if len(part) == 1 else None
+                checks[f"{c}_{k}"] = ("unsplit" if act_i is None else "absent" if not part else
+                                      "multiple" if len(part) > 1 else v if v in ("ok", "bad") else "unread")
+        allocs = [kvs(m, 2) for _, m in R.all(RX["alloc"]) if int(m.group(1)) == B2_ALLOC_MIB]
+        ad = allocs[0] if len(allocs) == 1 else {}
+        alloc = ("absent" if not allocs else "multiple" if len(allocs) > 1 else "map-fail" if ad.get("map") == "fail"
+                 else ad["verify"] if ad.get("fill") == "ok" and ad.get("verify") in ("ok", "bad") else "unread")
+        l1_records = [x for x in miss["L1"] if not x.startswith("canary_start_")]
+        want = [("conf_gate", not miss["conf_gate"]), ("L0", not miss["L0"]), ("L1_records", not l1_records),
+                ("L7", not miss["L7"]), ("item5", not refused and not miss["item5"])]
+        want += [(k, checks[k] in ("ok", "bad")) for k in CANARY_CHECKS]
+        want.append(("alloc", alloc in ("ok", "bad")))
+        put("L1_records", "ok" if not l1_records else "missing " + ",".join(l1_records))
+        for k in CANARY_CHECKS:
+            put(k, checks[k])
+        put("alloc", alloc)
+        if diag in ("j2", "j4"):
+            shim_i = R.first(RX["shim"])[0]
+            issuing = "yes" if R.first(WQ_ISSUING_RE, before=shim_i)[0] is not None else "no"
+            reset_marker = "yes" if R.first(WQ_RESET_RE)[0] is not None else "no"
+            put("wq_kexec_issuing", issuing)
+            put("wq_reset_marker", reset_marker)
+            want += [("wq_kexec_issuing", issuing == "yes"), ("wq_reset_marker", reset_marker == "no")]
+        else:
+            markers = "present" if R.first(WQ_MARK_RE)[0] is not None else "none"
+            put("wq_markers", markers)
+            want.append(("wq_markers", markers == "none"))
+        dfailed = [k for k, ok_ in want if not ok_]
+        row = diag_row(diag, checks, not dfailed)
+        step = DIAG_STEPS[diag]
+        verdict = "diagnostic " + ("incomplete" if dfailed else "complete")
+        put("j_row", row)
+        put("step", step)
+        put("verdict", verdict + ("" if not dfailed else " failed=" + ",".join(dfailed)))
+        return {"lines": out, "blocks": blocks, "verdict": verdict, "refused": refused, "step": step, "j_row": row}
     for n in needs:
         if n in miss and miss[n] and n not in ("L0", "L1", "L2", "L3", "L4", "L5", "L6", "L7"):
             put(f"missing_{n}", ",".join(miss[n]))
@@ -1515,7 +1622,7 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
 
 
 def run_report(a_log, data, bb_data, a_blackbox, conf_path, conf_bytes, allow_bytes, res, profile, mode,
-               pins=()):
+               pins=(), diag=None):
     head = [f"parser={rel_repo(__file__)} sha256={sha256(open(__file__, 'rb').read())}",
             f"kshcheck_impl={rel_repo(PARSE_M4_PATH)} sha256={sha256(open(PARSE_M4_PATH, 'rb').read())}",
             f"input_log={rel_repo(a_log)} sha256={sha256(data)} bytes={len(data)}",
@@ -1525,7 +1632,7 @@ def run_report(a_log, data, bb_data, a_blackbox, conf_path, conf_bytes, allow_by
             f"input_allow sha256={sha256(allow_bytes)}"]
     head += [f"input_{key}={rel_repo(p)} sha256={sha256(b)}" if b is not None else f"input_{key}=none"
              for key, p, b in pins]
-    head.append(f"profile={profile} mode={mode}")
+    head.append(f"profile={profile} mode={mode}" + (f" diag={diag}" if diag is not None else ""))
     return "".join(out_line("S1PC " + ln) + "\n" for ln in head + res["lines"])
 
 
@@ -1554,6 +1661,11 @@ def cmd_run(a):
         print("parse-s1: usage: --mode host is the board's B2; a TCG script never calls memcanary asinfo",
               file=sys.stderr)
         return 2
+    diag = getattr(a, "diag", None)
+    if diag is not None and (a.profile, a.mode) != ("board", "host"):
+        print("parse-s1: usage: --diag j2|j2b|j4 reads B2's image: --profile board --mode host "
+              "(s1-design.md 15.5 A3)", file=sys.stderr)
+        return 2
     data = PM.read_bytes(a.log)
     bb_data = PM.read_bytes(a.blackbox) if a.blackbox else None
     conf_path = a.conf or DEFAULT_CONF
@@ -1564,9 +1676,9 @@ def cmd_run(a):
     res = analyze_run(data, profile=a.profile, mode=a.mode, conf_bytes=conf_bytes, conf_info=info,
                       conf_gate_ok=gate_ok, bb_data=bb_data, ref_conf_sha256=a.ref_conf_sha256,
                       reset_reason=a.reset_reason, kexec_tree_sha256=a.kexec_tree_sha256, pc_image=pc_image,
-                      pc_initrd=pc_initrd)
+                      pc_initrd=pc_initrd, diag=diag)
     text = run_report(a.log, data, bb_data, a.blackbox, conf_path, conf_bytes, allow_bytes, res, a.profile, a.mode,
-                      pins=(("image", a.image, pc_image), ("initrd", a.initrd, pc_initrd)))
+                      pins=(("image", a.image, pc_image), ("initrd", a.initrd, pc_initrd)), diag=diag)
     out_dir = None if a.out_dir == "none" else (a.out_dir or os.path.dirname(os.path.abspath(a.log)))
     if out_dir is not None:
         for p in write_run_outputs(out_dir, res, text):
@@ -1974,7 +2086,7 @@ def selftest():
 
     # ---- run
     def run(profile, mode, lines=None, *, bb="auto", ref=True, reset="MAINSWRST", kexec=SYN_KEXEC, tree=None,
-            enc="base64", gate_ok=True, image=None, initrd=None, qvmlog=SYN_QVMLOG):
+            enc="base64", gate_ok=True, image=None, initrd=None, qvmlog=SYN_QVMLOG, diag=None):
         blob = fdt_build(tree) if tree is not None else dtb
         if lines is None:
             lines = syn_log(profile, mode, blob, conf_bytes, cmdline, enc=enc, qvmlog=qvmlog)
@@ -1984,7 +2096,7 @@ def selftest():
                            conf_gate_ok=gate_ok, bb_data=bbd, ref_conf_sha256=sha256(conf_bytes) if ref else None,
                            reset_reason=reset if profile == "board" else None,
                            kexec_tree_sha256=kexec if profile == "board" else None, pc_image=image,
-                           pc_initrd=initrd)
+                           pc_initrd=initrd, diag=diag)
 
     def has(res, text):
         return any(ln.startswith(text) for ln in res["lines"])
@@ -2117,6 +2229,167 @@ def selftest():
     check("run B2 canary verify=bad fails", r["verdict"] == "fail" and has(r, "missing_canaries_all_ok"))
     r = run("board", "host", edit_lines(bl, sub=((r" fdt=none", ""),)))
     check("run B2 without fdt=none refuses the verdict", r["verdict"] == "refused")
+
+    # ---- run --diag (s1-design.md §15.5 A3): J2, J2b and J4 read B2's synthetic log (SYNTHETIC; not a record).
+    # J2 and J4 add the detached sequence's /dev/kmsg markers on L4T's console before the kexec.
+    wq_marks = tuple((r"^--- raw capture started", ln) for ln in
+                     ("[  100.000001] s1wq: begin arm=control result=0", "[  400.000001] s1wq: kexec issuing",
+                      "[  401.000001] kexec_core: Starting new kernel"))
+    jl = edit_lines(bl, add_after=wq_marks)
+    c1_ok, c2_ok, c3_ok = (rf"^S1 CANARY {c} verify=ok$" for c in CANARIES)
+    alloc_ok = r"^S1 ALLOC mib=1536 fill=ok verify=ok$"
+
+    def bad(c):
+        return f"S1 CANARY {c} verify=bad first_off=0x0 words=1"
+
+    def sub_nth(lines_, pattern, new, n):
+        """lines_ with only the n-th (from 0) line matching pattern replaced by new: 0 the start check, 1 the end."""
+        out_, k = [], 0
+        for ln in lines_:
+            if re.search(pattern, ln):
+                ln, k = (new if k == n else ln), k + 1
+            out_.append(ln)
+        return out_
+
+    def field(res, key):
+        return next((ln.split("=", 1)[1] for ln in res["lines"] if ln.startswith(key + "=")), None)
+
+    jres = []
+
+    def jrun(diag, lines_):
+        res = run("board", "host", lines_, diag=diag)
+        jres.append(res)
+        return res
+
+    def diag_is(res, verdict, row, failed_=()):
+        return (res["verdict"] == "diagnostic " + verdict and res["j_row"] == row and field(res, "j_row") == row and
+                all(f in res["lines"][-1].split("failed=", 1)[-1].split(",") for f in failed_) and
+                (verdict == "incomplete") == ("failed=" in res["lines"][-1]))
+
+    r = jrun("j2", jl)
+    check("run --diag j2 synthetic is complete, row F33, step J2, and prints no b2= field",
+          diag_is(r, "complete", "F33") and r["step"] == "J2" and has(r, "step=J2") and
+          r["lines"][-1] == "verdict=diagnostic complete" and not has(r, "b2=") and
+          [field(r, k) for k in CANARY_CHECKS] == ["ok"] * 6 and field(r, "alloc") == "ok" and
+          field(r, "wq_kexec_issuing") == "yes" and field(r, "wq_reset_marker") == "no")
+    r = jrun("j2", edit_lines(jl, sub=((c2_ok, bad("c2")),)))
+    check("run --diag j2 c2 bad at both checks is complete, row F32, while B2's own L1 still misses it",
+          diag_is(r, "complete", "F32") and "canary_start_c2" in tier(r, "L1") and field(r, "L1_records") == "ok"
+          and field(r, "c2_start") == "bad" and field(r, "c2_end") == "bad")
+    r = jrun("j2", sub_nth(jl, c2_ok, bad("c2"), 0))
+    check("run --diag j2 c2 bad at the start check only is row F32a", diag_is(r, "complete", "F32a") and
+          field(r, "c2_start") == "bad" and field(r, "c2_end") == "ok")
+    r = jrun("j2", sub_nth(jl, c2_ok, bad("c2"), 1))
+    check("run --diag j2 c2 bad at the end check only is row F32b", diag_is(r, "complete", "F32b") and
+          field(r, "c2_start") == "ok" and field(r, "c2_end") == "bad")
+    r = jrun("j2", sub_nth(jl, c1_ok, bad("c1"), 1))
+    check("run --diag j2 c1 bad at the end check is row F39", diag_is(r, "complete", "F39"))
+    r = jrun("j2", sub_nth(edit_lines(jl, sub=((c2_ok, bad("c2")),)), c3_ok, bad("c3"), 0))
+    check("run --diag j2 c3 bad outranks c2 bad: row F39", diag_is(r, "complete", "F39"))
+    r = jrun("j2", sub_nth(sub_nth(jl, c1_ok, bad("c1"), 0), c2_ok, "S1 CANARY c2 tool=no-output", 1))
+    check("run --diag j2 c1 bad in an incomplete parse is still row F39", diag_is(r, "incomplete", "F39", ("c2_end",))
+          and field(r, "c2_end") == "unread")
+    r = jrun("j2", sub_nth(jl, c2_ok, "S1 CANARY c2 refuse=in-sysram", 0))
+    check("run --diag j2 a canary refusal is incomplete, row F40", diag_is(r, "incomplete", "F40", ("c2_start",)) and
+          field(r, "c2_start") == "unread")
+    r = jrun("j2", edit_lines(sub_nth(jl, c3_ok, "DROP", 1), drop=(r"^DROP$",)))
+    check("run --diag j2 a missing end check is incomplete, row F40", diag_is(r, "incomplete", "F40", ("c3_end",)) and
+          field(r, "c3_end") == "absent" and field(r, "c3_start") == "ok")
+    r = jrun("j2", edit_lines(jl, add_after=((r"^S1 ALLOC mib=1536", "S1 CANARY c1 verify=ok"),)))
+    check("run --diag j2 two lines in one check are incomplete, row F40", diag_is(r, "incomplete", "F40", ("c1_end",))
+          and field(r, "c1_end") == "multiple")
+    r = jrun("j2", edit_lines(jl, sub=((alloc_ok, "S1 ALLOC mib=1536 map=fail errno=12"),)))
+    check("run --diag j2 allocation map=fail is incomplete, row F40", diag_is(r, "incomplete", "F40", ("alloc",)) and
+          field(r, "alloc") == "map-fail")
+    r = jrun("j2", edit_lines(jl, drop=(r"^S1 ALLOC mib=1536",)))
+    check("run --diag j2 with no allocation line leaves every check unsplit, row F40",
+          diag_is(r, "incomplete", "F40", ("alloc",) + CANARY_CHECKS) and
+          [field(r, k) for k in CANARY_CHECKS] == ["unsplit"] * 6)
+    r = jrun("j2", edit_lines(jl, sub=((alloc_ok, "S1 ALLOC mib=1536 fill=ok verify=bad first_off=0x0 words=1"),)))
+    check("run --diag j2 allocation verify=bad is recorded and changes no row", diag_is(r, "complete", "F33") and
+          field(r, "alloc") == "bad")
+    r = jrun("j2", edit_lines(jl, sub=((r"canary_in_sysram=no", "canary_in_sysram=yes"),)))
+    check("run --diag j2 an S1 ASINFO difference is incomplete, row F40",
+          diag_is(r, "incomplete", "F40", ("L1_records",)) and "asinfo" in field(r, "L1_records"))
+    r = jrun("j2", edit_lines(jl, drop=(r"procnto up",)))
+    check("run --diag j2 with no procnto up is incomplete, row F40", diag_is(r, "incomplete", "F40", ("L0",)))
+    r = jrun("j2", edit_lines(jl, sub=((r" fdt=none", ""),)))
+    check("run --diag j2 missing item-5 stamps: refused, incomplete with item5 failed, row F40",
+          r["refused"] and diag_is(r, "incomplete", "F40", ("item5",)) and has(r, "item5=refused missing=fdt=none"))
+    r = jrun("j2", edit_lines(jl, drop=(r"s1wq: kexec issuing",)))
+    check("run --diag j2 without the kexec issuing marker is incomplete, row F40",
+          diag_is(r, "incomplete", "F40", ("wq_kexec_issuing",)) and field(r, "wq_kexec_issuing") == "no")
+    r = jrun("j2", edit_lines(bl, add_after=((r"procnto up", "[  400.000001] s1wq: kexec issuing"),)))
+    check("run --diag j2 a kexec issuing marker after the shim line does not count",
+          diag_is(r, "incomplete", "F40", ("wq_kexec_issuing",)))
+    r = jrun("j2", edit_lines(jl, add_after=((r"s1wq: kexec issuing", "[  580.000001] s1wq: abort reason=governor"),)))
+    check("run --diag j2 with an abort marker is incomplete, row F40",
+          diag_is(r, "incomplete", "F40", ("wq_reset_marker",)) and field(r, "wq_reset_marker") == "yes")
+    r = jrun("j2b", bl)
+    check("run --diag j2b synthetic with no s1wq: marker is complete, row F46, step J2b",
+          diag_is(r, "complete", "F46") and r["step"] == "J2b" and field(r, "wq_markers") == "none" and
+          field(r, "wq_kexec_issuing") is None)
+    r = jrun("j2b", sub_nth(bl, c2_ok, bad("c2"), 1))
+    check("run --diag j2b c2 bad at one check is row F45", diag_is(r, "complete", "F45"))
+    r = jrun("j2b", jl)
+    check("run --diag j2b with s1wq: markers is incomplete, row F40",
+          diag_is(r, "incomplete", "F40", ("wq_markers",)) and field(r, "wq_markers") == "present")
+    r = jrun("j4", jl)
+    check("run --diag j4 synthetic is complete, row F35, step J4", diag_is(r, "complete", "F35") and r["step"] == "J4")
+    r = jrun("j4", sub_nth(jl, c2_ok, bad("c2"), 1))
+    check("run --diag j4 c2 bad at the end check is row F36", diag_is(r, "complete", "F36"))
+    r = jrun("j4", edit_lines(jl, sub=((c2_ok, bad("c2")),)))
+    check("run --diag j4 c2 bad at both checks is row F36", diag_is(r, "complete", "F36"))
+    r = jrun("j4", sub_nth(jl, c3_ok, bad("c3"), 1))
+    check("run --diag j4 c3 bad is row F39", diag_is(r, "complete", "F39"))
+    r = jrun("j4", edit_lines(jl, drop=(r"s1wq: kexec issuing",)))
+    check("run --diag j4 clean canaries without the kexec issuing marker are not F35: incomplete, row F40",
+          diag_is(r, "incomplete", "F40", ("wq_kexec_issuing",)))
+    check("run --diag no J parse prints a b2= field, verdict=pass, or pass on any line but conf_gate's",
+          len(jres) == 27 and all(not has(x, "b2=") and not any("verdict=pass" in ln for ln in x["lines"]) and
+                                  all(ln.startswith("conf_gate=") for ln in x["lines"] if re.search(r"=pass\b", ln))
+                                  for x in jres))
+    try:
+        run("board", "boot", diag="j2")
+        check("run --diag on a non-host log is refused", False)
+    except InputError:
+        check("run --diag on a non-host log is refused", True)
+    r = run("board", "host", jl)
+    check("run B2 on a log with s1wq: markers still passes and prints no diagnostic field",
+          r["verdict"] == "pass" and has(r, "b2=pass") and not any(
+              has(r, k + "=") for k in ("j_row", "L1_records", "alloc", "wq_kexec_issuing") + CANARY_CHECKS))
+    jlog, jbb = os.path.join(tdir, "j2-com3.log"), os.path.join(tdir, "j2-blackbox.log")
+    with open(jlog, "wb") as f:
+        f.write(("\n".join(jl) + "\n").encode("latin-1"))
+    with open(jbb, "wb") as f:
+        f.write(syn_blackbox(jl))
+
+    def jcmd(**kw):
+        ns = dict(log=jlog, profile="board", mode="host", blackbox=jbb, out_dir="none", conf=None,
+                  ref_conf_sha256=None, reset_reason="MAINSWRST", kexec_tree_sha256=SYN_KEXEC, image=None,
+                  initrd=None, diag="j2")
+        ns.update(kw)
+        b = io.StringIO()
+        with contextlib.redirect_stdout(b), contextlib.redirect_stderr(io.StringIO()):
+            rc_ = cmd_run(argparse.Namespace(**ns))
+        return rc_, b.getvalue()
+
+    rc, jtext = jcmd()
+    check("run cmd --diag j2 prints diag=j2, S1PC step=J2 and the diagnostic verdict last, exit 0",
+          rc == 0 and "S1PC profile=board mode=host diag=j2\n" in jtext and "S1PC step=J2\n" in jtext and
+          "S1PC j_row=F33\n" in jtext and jtext.endswith("S1PC verdict=diagnostic complete\n"))
+    jwritten = write_run_outputs(os.path.join(tdir, "outj"), {"blocks": []}, jtext, check=False)
+    with open(jwritten[-1], "rb") as f:
+        jfile = f.read().decode("ascii")
+    check("run a J parse-s1.txt never contains b2=pass or verdict=pass",
+          jwritten[-1].endswith("parse-s1.txt") and "verdict=diagnostic" in jfile and "b2=pass" not in jfile and
+          "verdict=pass" not in jfile and "S1PC b2=" not in jfile)
+    os.remove(jwritten[-1])
+    os.rmdir(os.path.join(tdir, "outj"))
+    check("run cmd --diag with --mode boot is a usage error", jcmd(mode="boot")[0] == 2)
+    rc, b2text = jcmd(diag=None)
+    check("run cmd B2 without --diag keeps b2=pass and verdict=pass", rc == 0 and "S1PC b2=pass\n" in b2text and
+          b2text.endswith("S1PC verdict=pass\n") and "diag=" not in b2text and "j_row=" not in b2text)
     r = run("board", "boot")
     check("run B3 synthetic passes", r["verdict"] == "pass" and r["step"] == "B3" and has(r, "item2=pass") and
           has(r, "tier_L7=ok") and has(r, "bb_consistent=yes"))
@@ -2264,6 +2537,7 @@ def main(argv=None):
     r.add_argument("--kexec-tree-sha256")
     r.add_argument("--image")
     r.add_argument("--initrd")
+    r.add_argument("--diag", choices=tuple(DIAG_STEPS), help="J diagnostic parse of B2's image (s1-design.md 15.5 A3)")
 
     k = sub.add_parser("kshcheck")
     k.add_argument("file", nargs="?")
