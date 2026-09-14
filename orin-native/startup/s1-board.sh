@@ -6058,7 +6058,39 @@ j7a_go_states() {
 		a = strtonum("0x" a); b = strtonum("0x" b)
 		return (a < W2E && a + b * 4096 > W2S)
 	}
-	BEGIN { pos = base; no = 0; counted = 0; go = 0; t1 = 0; reset = 0; neg = 0; negall = 0; ebsfail = 0; refgo = 0
+	# D49: the negative scan reads what parse-s1.py j7a_loader reads. Text is normalised as s below. The scan
+	# runs from the line after the counted M5L GO (a token between M5L GO and COUNTED waits, is printed at
+	# COUNTED and is dropped at a refusal; with M5L GO unseen it runs from COUNTED on) up to, not including,
+	# the image reset line. The body of an ended S1 BEGIN/END block is not read; the body of an unended block
+	# is read when the next S1 BEGIN or the end of the text closes it (the split_log rules, on the line with
+	# only CR and edge blanks removed). EXC counts at a line start after an optional printk time, and s1wq:
+	# only with a boundary before and after, as WQ_MARK_RE.
+	function negtok(t,    e) {
+		if (t ~ /M5L-EBS FAIL/) return "M5L-EBS-FAIL"
+		e = t; sub(/^\[[ \t]*[0-9]+\.[0-9]+\][ \t]*/, "", e)
+		if (t ~ /M5L-EXC|BAD-LANDING|EL!=2|kexec_core: Starting new kernel/ || t ~ /(^|[] \t])s1wq:([ \t]|$)/ || e ~ /^EXC /) return "negative"
+		return ""
+	}
+	function negemit(p, tok) { neg++; print "j7a_neg off=" p " token=" tok }
+	# kind R is the image reset line, T a token; mode c when read after COUNTED, p between M5L GO and COUNTED
+	function negev(kind, p, tok, mode) {
+		if (kind == "R") { imgreset = 1; return }
+		if (imgreset) return
+		if (mode == "c" || counted) negemit(p, tok)
+		else if (!refgo) pend[++npend] = p SUBSEP tok
+	}
+	function cnt(    k, a) {
+		counted = 1; st("COUNTED")
+		for (k = 1; k <= npend; k++) { split(pend[k], a, SUBSEP); negemit(a[1], a[2]) }
+		npend = 0; delete pend
+	}
+	function replay(    k, a) {
+		for (k = 1; k <= nbev; k++) { split(bev[k], a, SUBSEP); negev(a[1], a[2], a[3], a[4]) }
+		nbev = 0; delete bev
+	}
+	function blkname(t,    n) { n = t; sub(/^S1 (BEGIN|END) name=/, "", n); sub(/[\t\v\f\034-\037 \205\240].*$/, "", n); return n }
+	BEGIN { pos = base; no = 0; counted = 0; go = 0; t1 = 0; reset = 0; imgreset = 0; neg = 0; negall = 0; ebsfail = 0; refgo = 0
+		ng = 0; gopos = -1; npend = 0; nbev = 0; inblk = 0; bname = ""
 		W2S = strtonum("0x100000000"); W2E = strtonum("0x18a000000") }
 	{
 		raw = $0
@@ -6108,12 +6140,12 @@ j7a_go_states() {
 				}
 			}
 			if (go && !counted) {
-				if (s ~ /^M5L REFUSE/) { refgo = 1; st("REFUSE-GO") }
-				if (s == "M5L GO" || s ~ /^M5L GO /) { if (!refgo) st("M5L-GO") }
-				if (s ~ /M5L-EBS ok/) { counted = 1; st("COUNTED") }
-				else if (s ~ /M5L-EBS FAIL/) { counted = 1; ebsfail = 1; st("COUNTED"); neg++; print "j7a_neg off=" pos " token=M5L-EBS-FAIL" }
-				else if (!refgo && (s ~ /M5L-JUMP/ || index(s, "T234-SHIM EL=2") > 0 || s ~ /^t234: WDT0/)) { counted = 1; st("COUNTED") }
-				else if (!refgo && goff != "" && ("M5L-GO" in seen) && seen["M5L-GO"] >= goff + 0) { counted = 1; st("COUNTED") }
+				if (s ~ /^M5L REFUSE/) { refgo = 1; st("REFUSE-GO"); npend = 0; delete pend }
+				if (s == "M5L GO" || s ~ /^M5L GO /) { if (!refgo) { st("M5L-GO"); if (!ng) { ng = 1; gopos = pos } } }
+				if (s ~ /M5L-EBS ok/) cnt()
+				else if (s ~ /M5L-EBS FAIL/) { ebsfail = 1; cnt() }
+				else if (!refgo && (s ~ /M5L-JUMP/ || index(s, "T234-SHIM EL=2") > 0 || s ~ /^t234: WDT0/)) cnt()
+				else if (!refgo && goff != "" && ("M5L-GO" in seen) && seen["M5L-GO"] >= goff + 0) cnt()
 			}
 			if (counted) {
 				if (s ~ /M5L-JUMP/) st("JUMP")
@@ -6124,12 +6156,28 @@ j7a_go_states() {
 				if (s ~ /^S1 /) { if (!("RECORDS" in seen)) st("RECORDS") }
 				if (s ~ /^S1 BEGIN /) { if (!("EXPORT" in seen)) st("EXPORT") }
 				if (s ~ /resetting so the log can be recovered|BWAIT guard deadline/) { reset = 1; st("RESET") }
-				if (!("BANNER" in seen) && s ~ /M5L-EXC|BAD-LANDING|EXC |EL!=2|kexec_core: Starting new kernel|s1wq:/) { neg++; print "j7a_neg off=" pos " token=negative" }
+			}
+			# D49: S1 BEGIN/END blocks as split_log reads them, then this line of the negative scan (see negtok)
+			sb = raw; gsub(/\r/, "", sb); sub(/^[ \t]+/, "", sb); sub(/[ \t]+$/, "", sb)
+			body = 0
+			if (inblk) {
+				if (sb ~ /^S1 END name=[^\t\v\f\034-\037 \205\240]+[\t\v\f\034-\037 \205\240]*$/ && blkname(sb) == bname) { inblk = 0; nbev = 0; delete bev }
+				else if (sb ~ /^S1 BEGIN name=[^\t\v\f\034-\037 \205\240]+( |$)/) { replay(); inblk = 0 }
+				else body = 1
+			}
+			if (!body && !inblk && sb ~ /^S1 BEGIN name=[^\t\v\f\034-\037 \205\240]+( |$)/) { inblk = 1; bname = blkname(sb) }
+			if (ng ? (pos > gopos && (counted || !refgo)) : counted) {
+				kind = (s ~ /T234 S1 [^ \t]+ -P4: resetting so the log can be recovered/) ? "R" : "T"
+				tok = (kind == "R") ? "" : negtok(s)
+				if (kind == "R" || tok != "") {
+					if (body) bev[++nbev] = kind SUBSEP pos SUBSEP tok SUBSEP (counted ? "c" : "p")
+					else negev(kind, pos, tok, counted ? "c" : "p")
+				}
 			}
 		}
 		pos += length(raw) + 1
 	}
-	END { printf "j7a_summary last=%s counted=%s go=%s t1=%s negatives=%d end=%d\n", (last == "" ? "none" : last), (counted ? "yes" : "no"), (go ? "yes" : "no"), (t1 ? "yes" : "no"), neg, pos }'
+	END { if (inblk) replay(); printf "j7a_summary last=%s counted=%s go=%s t1=%s negatives=%d end=%d\n", (last == "" ? "none" : last), (counted ? "yes" : "no"), (go ? "yes" : "no"), (t1 ? "yes" : "no"), neg, pos }'
 }
 
 # The offset of state $2 in j7a_go_states output $1, or empty.
@@ -6377,6 +6425,36 @@ j7a_go_budget_gate() {
 	c="$(j7a_counted_runs)"
 	(( c < J7A_CAP )) || die "J7a's cap is $J7A_CAP counted go runs (D38) and $c are recorded: no further go"
 	! j7a_f62_seen || die "an F62 is recorded for J7a: the unchanged image is not retried (D42)"
+	return 0
+}
+
+# D52: the DRAM_OFF_S reading of a counted go, from its go_counted line's dram_off= (possible|violated), or
+# unread. $1 board log.
+j7a_dram_reading() {
+	local v=""
+	v="$(sed -n 's/^j7a go_counted .* dram_off=\([a-z]*\) .*/\1/p' "$1" 2>/dev/null | tail -n 1)"
+	case "$v" in possible|violated) echo "$v" ;; *) echo unread ;; esac
+}
+
+# D52: the class line for one counted go's DRAM_OFF_S reading $1. Only possible lets a clean run count toward E.
+j7a_e_eligible_line() {
+	case "$1" in
+	possible) echo "j7a e_eligible=yes dram_off=possible (D52)" ;;
+	violated) echo "j7a e_eligible=no dram_off=violated: this counted go never contributes to class E, even if clean; a bad c2 from it still counts toward K-w (D52)" ;;
+	*) echo "j7a e_eligible=no dram_off=$1: the DRAM_OFF_S check was not read, so this go is held out of class E pending the owner's confirmation (D52 names a failed check); a bad c2 from it still counts toward K-w" ;;
+	esac
+}
+
+# D52, D53: parse-s1.py j7a-across over every J7a run directory holding a parse-s1.txt, recorded in the board
+# log. It reads records only; precedence 6 (differs,repeated) stays a desk reading, and the tool says so.
+j7a_across_record() {
+	local x out="" dd=()
+	for x in "$RECDIR"/J7a-[0-9]*/; do [ -f "${x}parse-s1.txt" ] && dd+=("${x%/}"); done
+	(( ${#dd[@]} > 0 )) || return 0
+	if (( ${#dd[@]} > J7A_CAP )); then rec "j7a across: more run directories than the cap: not read by the tool; the owner reads them"; return 0; fi
+	out="$(timeout 300 "$PY_BIN" "$PARSER" j7a-across "${dd[@]}" 2>&1)" || rec "j7a across: parse-s1.py j7a-across ended rc=$?"
+	# python on Windows writes CRLF; the board log keeps LF lines
+	printf '%s\n' "$out" | tr -d '\r' | grep -E '^(S1JX |parse-s1: )' | grep -Ev '^S1JX (parser|input_)' | sed 's/^S1JX /j7a across /' | rec_pipe
 	return 0
 }
 
@@ -7044,7 +7122,7 @@ j7a_watch_go() {
 			if grep -q 'bound=VIOLATED' <<< "$dram"; then
 				J7A_DRAM=violated
 				echo "DRAM_OFF_S NOT MET: do not enter the Shell; press nothing and let L4T autoboot (a missed ESC ends the attempt, not counted) (§15.13.15)" >&2
-				rec "j7a dram_off=violated: the operator does not enter the Shell; a counted go after it is marked on its go_counted line for the owner (§15.13.15)"
+				rec "j7a dram_off=violated: the operator does not enter the Shell; a counted go after it still counts by the token rule, is marked on its go_counted line, never contributes to class E, and a bad c2 from it still counts toward K-w (D52, §15.13.15)"
 			else
 				J7A_DRAM=possible
 			fi
@@ -7088,7 +7166,7 @@ j7a_watch_go() {
 				j7a_counted_move
 				rec "j7a go_counted com3_bytes_at_go=$J7A_GO_OFF by=$how go_enter_epoch=${goe:-unread} m5l_go_epoch=${mgo_e:-unread} dram_off=$J7A_DRAM go_epoch=$J7A_GO_EPOCH"
 				rec "j7a return_bound_s=$rb"
-				[ "$J7A_DRAM" = violated ] && rec "j7a DEVIATION: this counted go followed a DRAM_OFF_S violation (§15.13.15 Never); §15.13 does not say whether such a go counts, so it counts by the token rule and is marked for the owner"
+				[ "$J7A_DRAM" = violated ] && rec "j7a DEVIATION: this counted go followed a DRAM_OFF_S violation (§15.13.15 Never): it counts by the token rule; under D52 it never contributes to class E, even if clean, and a bad c2 from it still counts toward K-w"
 			fi
 		fi
 		if [ "$counted" = yes ]; then
@@ -7242,7 +7320,7 @@ j7a_f66_recorded() { local f; f="$(j7a_phase_log clean)"; [ -n "$f" ] && grep -a
 # canwatch; the redacted segment copy; the resmem and memmap blocks; the segment ledger. Exit 7 for F55.
 j7a_return() {
 	local old="$1" off="$2" kl0="$3" kind="$4" out reason bb lsha s0 s1 s3 s4 g kc wfrom wto sag end t seg rsha pargs cwargs p verdict rc cw row j6c
-	local states="${J7A_STATES:-}" kl f55=no warm reasons n pb newrec names rf want
+	local states="${J7A_STATES:-}" kl f55=no warm reasons n pb newrec names rf want dram=""
 	grep -aq '^j7a return done' "$REC" 2>/dev/null && { rec "j7a return: already done for this attempt"; return 0; }
 	kl="$(j7a_keylog_path "$S1_COM3_LOG")"
 	end=$(stat -c %s "$S1_COM3_LOG")
@@ -7292,7 +7370,7 @@ j7a_return() {
 		rec "j7a new_dmesg_ramoops=none (since S2)"
 	fi
 	if [ "$kind" = counted ] && grep -aq '^j7a dram_off=violated' "$REC"; then
-		rec "j7a DEVIATION (§15.13.15): DRAM_OFF_S was not met ahead of this counted go; the owner decides how the run is read"
+		rec "j7a DEVIATION (§15.13.15): DRAM_OFF_S was not met ahead of this counted go; under D52 the run never contributes to class E, even if clean, and a bad c2 from it still counts toward K-w"
 	fi
 	if [ "$kind" = counted ]; then
 		if j7a_has_state "$states" PROCNTO; then
@@ -7360,7 +7438,10 @@ j7a_return() {
 	check_private "$base-resmem.txt" "$base-memmap.txt"
 	if [ "$kind" = counted ] && find_python; then
 		cp "$PARAMS" "$base-params.log" && check_private "$base-params.log"
-		pargs=(run "$seg" --profile board --mode host --out-dir "$SD" --conf "$S1DIR/s1-linux.conf" --entry uefi --arm uefi --loader-sha256 "$J7A_LSHA" --diag j1 --fill-factor "$(j6_prereg_factor)" --hold-mib "$(param j1_hold_mib)")
+		# D52: the go_counted line's DRAM_OFF_S reading goes to the parser and to this run's class line
+		dram="$(j7a_dram_reading "$REC")"
+		rec "$(j7a_e_eligible_line "$dram")"
+		pargs=(run "$seg" --profile board --mode host --out-dir "$SD" --conf "$S1DIR/s1-linux.conf" --entry uefi --arm uefi --loader-sha256 "$J7A_LSHA" --diag j1 --fill-factor "$(j6_prereg_factor)" --hold-mib "$(param j1_hold_mib)" --dram-off "$dram")
 		[ -n "$bb" ] && pargs+=(--blackbox "$bb")
 		[ -n "$reason" ] && pargs+=(--reset-reason "$reason")
 		verdict="$(timeout 900 "$PY_BIN" "$PARSER" "${pargs[@]}" 2>&1)"; rc=$?
@@ -7376,6 +7457,7 @@ j7a_return() {
 		[ -f "$SD/canwatch.txt" ] && { check_private "$SD/canwatch.txt"; privacy_scan "$SD/canwatch.txt"; }
 		row="$(sed -n 's/^S1PC j_row=//p' "$SD/parse-s1.txt" 2>/dev/null | tail -n 1)"
 		rec "j7a j_row=${row:-none}"
+		j7a_across_record
 	elif [ "$kind" = counted ]; then
 		rec "j7a parser NOT run: no python"
 	else
@@ -9279,6 +9361,54 @@ cmd_harness_selftest() {
 	check "j7a watch: M5L-EBS FAIL counts once and is a negative token" "$(printf '%s\n' "$jst" | grep -c '^j7a_state COUNTED ')/$(printf '%s\n' "$jst" | grep -c '^j7a_neg ')" "1/1"
 	sed 's/^t234: WDT0 CR=0 SR=0/EXC  synthetic\r/' "$jg" > "$j7/neg.log"
 	check "j7a watch: EXC after COUNTED is a negative token" "$(j7a_go_states "$j7/neg.log" 0 | grep -c '^j7a_neg ')" 1
+	# D49: EXC only at a line start (blanks and a printk time stripped), and the scan ends at the image reset line
+	sed 's/^t234: WDT0 CR=0 SR=0/t234: synthetic note EXC not at the start/' "$jg" > "$j7/negmid.log"
+	check "j7a watch D49: an EXC token mid-line before the reset line is not a negative token" "$(j7a_go_states "$j7/negmid.log" 0 | grep -c '^j7a_neg ')" 0
+	sed 's/^t234: WDT0 CR=0 SR=0/   [   12.345678] EXC ESR=1/' "$jg" > "$j7/negpk.log"
+	check "j7a watch D49: EXC at a line start after blanks and a printk time, before the reset line, is a negative token" "$(j7a_go_states "$j7/negpk.log" 0 | grep -c '^j7a_neg ')" 1
+	sed 's/^MB1 (version synthetic)/EXC ESR=1\r\nM5L-EXC ESR=2\r\nMB1 (version synthetic)/' "$jg" > "$j7/negafter.log"
+	check "j7a watch D49: EXC and M5L-EXC after the image reset line are not negative tokens (before D49 the banner ended the scan)" "$(j7a_go_states "$j7/negafter.log" 0 | grep -c '^j7a_neg ')" 0
+	# D49: the scan starts on the line after M5L GO, reads block bodies as split_log does, and anchors s1wq: as WQ_MARK_RE (parse-s1.py --selftest runs the same token lines)
+	sed 's/^M5L-EBS ok/M5L-EXC ESR=1\r\nM5L-EBS ok/' "$jg" > "$j7/neggo.log"
+	check "j7a watch D49: an M5L-EXC between M5L GO and M5L-EBS ok waits and counts at COUNTED" "$(j7a_go_states "$j7/neggo.log" 0 | grep -c '^j7a_neg ')" 1
+	sed 's/^M5L-EBS ok.*/M5L-EXC ESR=1\r\nM5L REFUSE w2-final\r/' "$jg" > "$j7/neggoref.log"
+	check "j7a watch D49: an M5L-EXC after M5L GO and before a refusal is dropped with the uncounted go" "$(j7a_go_states "$j7/neggoref.log" 0 | grep -c '^j7a_neg \|^j7a_state COUNTED ')" 0
+	sed 's/^t234: WDT0 CR=0 SR=0/S1 BEGIN name=j7xt bytes=4 md5=0 enc=text\r\nEXC ESR=1\r\nS1 END name=j7xt\r\nt234: WDT0 CR=0 SR=0/' "$jg" > "$j7/negblk.log"
+	check "j7a watch D49: a line-start EXC in the body of an ended S1 BEGIN/END block is not read" "$(j7a_go_states "$j7/negblk.log" 0 | grep -c '^j7a_neg ')" 0
+	sed 's/^t234: WDT0 CR=0 SR=0/S1 BEGIN name=j7xt bytes=4 md5=0 enc=text\r\nEXC ESR=1\r\nt234: WDT0 CR=0 SR=0/' "$jg" > "$j7/negopen.log"
+	sed 's/^S1 BEGIN name=j1a bytes=1 md5=0 enc=base64/&\r\nEXC ESR=1/' "$jg" > "$j7/negeof.log"
+	check "j7a watch D49: the body of an unended block is read, closed by the next S1 BEGIN or by the end of the text" "$(j7a_go_states "$j7/negopen.log" 0 | grep -c '^j7a_neg ')/$(j7a_go_states "$j7/negeof.log" 0 | grep -c '^j7a_neg ')" "1/1"
+	sed 's/^t234: WDT0 CR=0 SR=0/xs1wq: note\r\ns1wq:x\r\n[   1.500000]s1wq: note\r\nt234: WDT0 CR=0 SR=0/' "$jg" > "$j7/negwq.log"
+	check "j7a watch D49: s1wq: needs a boundary before and after, as WQ_MARK_RE (a closing bracket is one)" "$(j7a_go_states "$j7/negwq.log" 0 | grep -c '^j7a_neg ')" 1
+	sed 's/^M5L-EBS ok/M5L-JUNK/; s/^M5L-JUMP/M5L-EBS FAIL/' "$jg" > "$j7/negclk.log"
+	check "j7a watch D49: after a count by clock at M5L GO, a later M5L-EBS FAIL is a negative token" "$(j7a_go_states "$j7/negclk.log" 0 s1-j1 "$(grep -abo 'M5L GO' "$jg" | tail -n 1 | cut -d: -f1)" | grep -c 'token=M5L-EBS-FAIL')" 1
+	check "j7a watch D49: harness and parser carry the same s1wq: boundaries" \
+		"$(grep -cF '(^|[] \t])s1wq:([ \t]|$)' "$HERE/$PROG")/$(grep -cF 'WQ_MARK_RE = re.compile(r"(?:^|[\s\]])s1wq:(?:\s|$)")' "$PARSER")" "2/1"
+	check "j7a watch D49: harness and parser carry the same printk-time and EXC anchoring and the same reset-line bound" \
+		"$(grep -cF '\[[ \t]*[0-9]+\.[0-9]+\][ \t]*' "$HERE/$PROG")/$(grep -cF '\[[ \t]*[0-9]+\.[0-9]+\][ \t]*)?EXC ' "$PARSER")/$(grep -cF 'rs = next((i for i, t in nl if i > g and RX["reset"].search(t)), None)' "$PARSER")" "2/1/1"
+	# D52: the DRAM_OFF_S reading and the class line
+	printf 'j7a go_counted com3_bytes_at_go=1 by=token go_enter_epoch=1 m5l_go_epoch=2 dram_off=violated go_epoch=2\n' > "$j7/d52v-board.log"
+	printf 'j7a go_counted com3_bytes_at_go=1 by=token go_enter_epoch=1 m5l_go_epoch=2 dram_off=possible go_epoch=2\n' > "$j7/d52p-board.log"
+	check "j7a D52: the go_counted line gives violated, possible, or unread when absent" \
+		"$(j7a_dram_reading "$j7/d52v-board.log")/$(j7a_dram_reading "$j7/d52p-board.log")/$(j7a_dram_reading "$j7/d52-absent-board.log")" "violated/possible/unread"
+	check "j7a D52: a violated or unread go is never E-eligible; possible is" \
+		"$(has "$(j7a_e_eligible_line violated)" 'e_eligible=no')/$(has "$(j7a_e_eligible_line unread)" 'e_eligible=no')/$(has "$(j7a_e_eligible_line possible)" 'e_eligible=yes')" "yes/yes/yes"
+	check "j7a D52: the return passes the reading to the parser and records the across reading" \
+		"$(awk '/^j7a_return\(\) \{/,/^}/' "$HERE/$PROG" | grep -c -- '--dram-off "\$dram"')/$(awk '/^j7a_return\(\) \{/,/^}/' "$HERE/$PROG" | grep -c '^[[:space:]]*j7a_across_record$')" "1/1"
+	if find_python; then
+		jx="$d/j7x"; mkdir -p "$jx/J7a-1" "$jx/J7a-2"
+		printf 'S1PC j7a=clean\nS1PC j7a_class=U\nS1PC j7a_dram_off=violated\nS1PC j7a_e_eligible=no-dram-off-violated\nS1PC step=J7a\nS1PC verdict=diagnostic complete\n' > "$jx/J7a-1/parse-s1.txt"
+		printf 'S1PC j7a=clean\nS1PC j7a_class=E-candidate\nS1PC j7a_dram_off=possible\nS1PC j7a_e_eligible=yes\nS1PC step=J7a\nS1PC verdict=diagnostic complete\n' > "$jx/J7a-2/parse-s1.txt"
+		out="$( REC="$jx/x-board.log"; : > "$REC"; RECDIR="$jx"; j7a_across_record; cat "$REC" )"
+		check "j7a across D52: a clean run that violated DRAM_OFF_S and a clean run read U, never E" "$(has "$out" 'j7a across class=U ')/$(has "$out" 'j7a across class=E ')/$(has "$out" 'e_excluded=J7a-1')" "yes/no/yes"
+		check "j7a across D53: precedence 6 is marked as read at the desk, with no tool" "$(has "$out" 'precedence6=read-at-desk tool=none')" yes
+		printf 'S1PC j7a=bad\nS1PC j7a_class=K-w\nS1PC j7a_dram_off=violated\nS1PC j7a_e_eligible=no-dram-off-violated\nS1PC step=J7a\nS1PC verdict=diagnostic complete\n' > "$jx/J7a-1/parse-s1.txt"
+		out="$( REC="$jx/x-board.log"; : > "$REC"; RECDIR="$jx"; j7a_across_record; cat "$REC" )"
+		check "j7a across D52: a bad c2 from a DRAM_OFF_S-violating run still counts toward K-w" "$(has "$out" 'class=K-w')/$(has "$out" 'kw_includes_dram_off_not_possible=yes')" "yes/yes"
+		printf 'S1PC j7a=bad-unstable\nS1PC j7a_class=K-r(u)\nS1PC j7a_dram_off=possible\nS1PC j7a_e_eligible=yes\nS1PC step=J7a\nS1PC verdict=diagnostic complete\n' > "$jx/J7a-2/parse-s1.txt"
+		out="$( REC="$jx/x-board.log"; : > "$REC"; RECDIR="$jx"; j7a_across_record; cat "$REC" )"
+		check "j7a across: K-w in one run and K-r(u) in another both record, the combination left to the desk" "$(has "$out" 'j7a across class=K-w')/$(has "$out" 'j7a across class=K-r(u) runs=J7a-2')/$(has "$out" 'classes=K-r(u),K-w runs=different')" "yes/yes/yes"
+	fi
 	check "j7a loader phase: an echoed launch with no completion is running" "$(j7a_loader_phase "$(printf 'FS5:\\> M5LOAD.EFI check\nM5L start mode=check el=2\n')")" running
 	check "j7a loader phase: CHECK PASS completes" "$(j7a_loader_phase "$(printf 'M5L start mode=check el=2\nM5L CHECK PASS\n')")" done
 

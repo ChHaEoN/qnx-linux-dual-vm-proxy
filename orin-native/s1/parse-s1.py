@@ -597,13 +597,31 @@ M5L_RX = {
 M5L_EBS_RE = re.compile(r"M5L-EBS(?!\S)")
 M5L_EBS_OK_RE = re.compile(r"M5L-EBS ok(?!\S)")
 M5L_JUMP_RE = re.compile(r"M5L-JUMP(?!\S)")
+# D49 (owner, 2026-09-14): under UEFI entry 'EXC ' counts only at a line's start, after CR removal, leading
+# blanks and an optional printk time; s1-board.sh's j7a_go_states applies the same anchoring.
+J7A_EXC_RE = re.compile(r"^(?:\[[ \t]*[0-9]+\.[0-9]+\][ \t]*)?EXC ")
+J7A_OSC_RE = re.compile(r"\x1b\][^\x07]*\x07")
+J7A_NONPRINT_RE = re.compile(r"[^\t -~]")
+J7A_NORM_EDGE_RE = re.compile(r"^[ \t]+|[ \t]+$")
+
+
+def j7a_norm(t):
+    """A record line as s1-board.sh's j7a_go_states reads it (D49): OSC and CSI sequences, a lone ESC and
+    non-printing bytes removed, then leading and trailing blanks."""
+    return J7A_NORM_EDGE_RE.sub("", J7A_NONPRINT_RE.sub("", CSI_RE.sub("", J7A_OSC_RE.sub("", t)).replace("\x1b", "")))
+
+
 # §15.13.7: zero of these after the counted M5L GO (text before it is unconstrained); any s1wq: marker too.
+# D49: the scan stops at the image's own reset line, as L0's does.
 J7A_NEG_AFTER_GO = (("m5l_exc", re.compile(r"M5L-EXC")), ("ebs_fail", re.compile(r"M5L-EBS FAIL")),
-                    ("bad_landing", re.compile(r"BAD-LANDING")), ("exc", re.compile(r"EXC ")),
+                    ("bad_landing", re.compile(r"BAD-LANDING")), ("exc", J7A_EXC_RE),
                     ("el_not_2", re.compile(r"EL!=2")), ("kexec", re.compile(r"kexec_core: Starting new kernel")),
                     ("s1wq", WQ_MARK_RE))
-J7A_ROWS = ("clean", "bad", "bad-partial", "bad-unstable", "revert-only", "unsettled", "F39c1", "F39c3", "F49", "F62",
+J7A_ROWS = ("clean", "bad", "bad-partial", "bad-unstable", "revert-only", "F39c1", "F39c3", "F49", "F62",
             "incomplete")
+# D52: the harness's DRAM_OFF_S reading of a counted go (its go_counted line's dram_off=); only possible lets
+# a clean run count toward class E.
+J7A_DRAM = ("possible", "violated", "unread")
 J7A_FLIP_PAT = ("flip2_same", "flip2_var", "flip8", "pat_same", "pat_other")
 # §15.13.10.3 P7: pages in common at least this fraction of each side's bad_final set (a design constant).
 P7_SHARE = Fraction(1, 2)
@@ -1509,6 +1527,16 @@ def j7a_loader(recs):
     if out["go_i"] is None:
         return out
     g = out["go_i"]
+    # D49: from the line after the counted GO up to (not including) the image's own reset line, or the
+    # segment's end, on text normalised as s1-board.sh's j7a_go_states does (j7a_norm). It depends on the
+    # counted GO only, so it is read before the go run's own checks. The lines are the record lines: an
+    # ended S1 BEGIN/END block's body is not among them, an unended block's body is (split_log), and the
+    # harness skips and replays block bodies the same way.
+    nl = [(i, j7a_norm(t)) for i, t in recs]
+    rs = next((i for i, t in nl if i > g and RX["reset"].search(t)), None)
+    out["neg"] = [n for n, rx in J7A_NEG_AFTER_GO
+                  if any(i > g and (rs is None or i < rs) and rx.search(t) for i, t in nl)]
+    ck["neg_after_go"] = not out["neg"]
     go_start = next((i for i, mode, _e in reversed(starts) if i < g), None)
     if go_start is None or dict((i, (m, e)) for i, m, e in starts)[go_start] != ("go", "2"):
         return out
@@ -1566,8 +1594,6 @@ def j7a_loader(recs):
             break
         pos = j
     ck["after_go"] = seq_ok
-    out["neg"] = [n for n, rx in J7A_NEG_AFTER_GO if any(i > g and rx.search(t) for i, t in lines)]
-    ck["neg_after_go"] = not out["neg"]
     return out
 
 
@@ -1589,7 +1615,7 @@ def j7a_resmem_summary(resmem, tree_unparsed=False):
 
 def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_data=None, ref_conf_sha256=None,
                 reset_reason=None, kexec_tree_sha256=None, pc_image=None, pc_initrd=None, diag=None, arm=None,
-                fill_factor=None, hold_mib=None, kpf_paths=(), entry="kexec", loader_sha256=None):
+                fill_factor=None, hold_mib=None, kpf_paths=(), entry="kexec", loader_sha256=None, dram_off=None):
     """The §5.1 tiers and §5.2 items of one run. Returns a dict: lines, blocks, verdict, refused.
 
     entry uefi is J7a (s1-design.md §15.13.7): diag j1, arm uefi, board host mode, one COM3 segment,
@@ -1610,6 +1636,10 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
                          "(s1-design.md 15.13.7)")
     if arm == J7A_ARM and not uefi:
         raise InputError("--arm uefi needs --entry uefi (s1-design.md 15.13.7)")
+    if uefi and dram_off not in J7A_DRAM:
+        raise InputError("--entry uefi needs --dram-off possible|violated|unread, the go_counted line's reading (D52)")
+    if not uefi and dram_off is not None:
+        raise InputError("--dram-off belongs to --entry uefi (D52)")
     if diag == "j1":
         steps = J1_STEPS.get((profile, mode))
         if steps is None or arm not in steps:
@@ -1684,6 +1714,13 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
         j, _ = R.first(RX["config"], after=pos)
         need("L0", j is not None, "config_after_guard")
         for name, rx in NEG_L0:
+            if uefi and name == "exc":
+                # D49, as read for L0 (the owner confirms: D49 names the post-GO scan): under UEFI entry L0's
+                # EXC token is anchored and its lines cleaned as the loader scan's are (j7a_norm), over L0's own
+                # window; kexec keeps NEG_L0 byte for byte
+                need("L0", not any((l0_after is None or i > l0_after) and (reset_i is None or i < reset_i) and
+                                   J7A_EXC_RE.search(j7a_norm(t)) for i, t in recs), "neg_" + name)
+                continue
             need("L0", R.first(rx, after=l0_after, before=reset_i)[0] is None, "neg_" + name)
 
     # --- L1
@@ -2164,13 +2201,21 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
                    "MAINSWRST" not in reset_reason)
             filled_c2 = R.first(CANARY_FILL_RE["c2"], after=l0_after)[0] is not None
             jr = j7a_rows(checks, labs, hold, hold_bad, not dfailed, filled_c2, f62)
+            # D52: a go whose DRAM_OFF_S check read violated never contributes to class E, even if clean; its
+            # row stays the observation, and a bad c2 from it still classes K-w. unread (the check was not
+            # read) is held out of E as well, pending the owner's confirmation: D52 names a failed check only
+            # and E's premise (R87) needs the wait met
+            eligible = "yes" if dram_off == "possible" else f"no-dram-off-{dram_off}"
+            cls = "U" if jr["class"] == "E-candidate" and eligible != "yes" else jr["class"]
             put("j7a_c2", jr["c2"])
             put("j7a_c3", jr["c3"])
             put("j7a", ",".join(jr["rows"]))
-            put("j7a_class", jr["class"])
+            put("j7a_class", cls)
             put("j7a_stop", ",".join(jr["stop"]) or "none")
+            put("j7a_dram_off", dram_off)
+            put("j7a_e_eligible", eligible)
             res["j7a"] = ",".join(jr["rows"])
-            res["j7a_class"] = jr["class"]
+            res["j7a_class"] = cls
         put("step", step)
         put("verdict", verdict + ("" if not dfailed else " failed=" + ",".join(dfailed)))
         return res
@@ -2296,8 +2341,12 @@ def cmd_run(a):
             print("parse-s1: usage: --entry uefi takes no --kpf and no --kexec-tree-sha256: no Linux ran in the "
                   "entered power cycle (s1-design.md 15.13.7)", file=sys.stderr)
             return 2
-    elif arm == J7A_ARM or loader_sha256 is not None:
-        print("parse-s1: usage: --arm uefi and --loader-sha256 need --entry uefi (s1-design.md 15.13.7)",
+        if getattr(a, "dram_off", None) not in J7A_DRAM:
+            print("parse-s1: usage: --entry uefi needs --dram-off possible|violated|unread, the harness's "
+                  "go_counted reading (D52)", file=sys.stderr)
+            return 2
+    elif arm == J7A_ARM or loader_sha256 is not None or getattr(a, "dram_off", None) is not None:
+        print("parse-s1: usage: --arm uefi, --loader-sha256 and --dram-off need --entry uefi (s1-design.md 15.13.7)",
               file=sys.stderr)
         return 2
     if diag in DIAG_STEPS and (a.profile, a.mode) != ("board", "host"):
@@ -2337,7 +2386,8 @@ def cmd_run(a):
                       conf_gate_ok=gate_ok, bb_data=bb_data, ref_conf_sha256=a.ref_conf_sha256,
                       reset_reason=a.reset_reason, kexec_tree_sha256=a.kexec_tree_sha256, pc_image=pc_image,
                       pc_initrd=pc_initrd, diag=diag, arm=arm, fill_factor=fill_factor, hold_mib=hold_mib,
-                      kpf_paths=kpf, entry=entry, loader_sha256=loader_sha256)
+                      kpf_paths=kpf, entry=entry, loader_sha256=loader_sha256,
+                      dram_off=getattr(a, "dram_off", None) if entry == "uefi" else None)
     j1 = ({"arm": arm, "fill_factor": fill_factor, "hold_mib": hold_mib, "kpf": kpf, "entry": entry}
           if diag == "j1" and a.profile == "board" else None)
     text = run_report(a.log, data, bb_data, a.blackbox, conf_path, conf_bytes, allow_bytes, res, a.profile, a.mode,
@@ -2855,13 +2905,14 @@ def c1_watch_bad_of(labs):
 
 def j7a_rows(checks, labs, hold, hold_bad, complete, filled_c2, f62):
     """§15.13.10.1-2's reading of one counted J7a run. Returns rows (J7A_ROWS, reading first, then F39c1,
-    F39c3, F49, F62), c2 (clean|bad|revert-only|unsettled|bad-partial|unread), c3 (clean|hit|unread),
-    class (per run: K-w, K-r(u), E-candidate, none, unsettled, U) and stop (the immediate stops).
+    F39c3, F49, F62), c2 (clean|bad|revert-only|bad-partial|unread), c3 (clean|hit|unread),
+    class (per run: K-w, K-r(u), E-candidate, none, U) and stop (the immediate stops).
 
     complete: bad when c2 is bad at either check, a c2 watch's base bad is above 0, or a c2 change event
     had stable re-reads; else revert-only on a revert or an oscillation; else clean with both checks ok
-    and writer=none on every c2 watch. Anything else (prog or a FINL-only change with no stable re-read,
-    revert or oscillation) is 'unsettled': §15.13.10.1 names no state for it, so it is left to the owner.
+    and writer=none on every c2 watch. Anything else is a change with no stable re-read, revert or
+    oscillation (prog only, or a change seen only at FINL with writer=ongoing): bad under D48, since it
+    can lead to K-w.
     Not complete: bad-partial when c2's filled line was printed and a parse-valid check reads c2 bad.
     bad or bad-partial with F34 on c2's parsed watches is bad-unstable.
     """
@@ -2886,8 +2937,10 @@ def j7a_rows(checks, labs, hold, hold_bad, complete, filled_c2, f62):
             if not c1_bad and hold == "ok" and not f62:
                 rows.append("clean")
         else:
-            c2 = "unsettled"
-            rows.append("unsettled")
+            # D48 (owner, 2026-09-14): a progressive-only change is bad. F34 needs an osc or a revert, and
+            # neither is above 0 here, so this is never bad-unstable.
+            c2 = "bad"
+            rows.append("bad")
     else:
         c2 = "bad-partial" if filled_c2 and "bad" in c2_checks else "unread"
         if c2 == "bad-partial":
@@ -2907,8 +2960,6 @@ def j7a_rows(checks, labs, hold, hold_bad, complete, filled_c2, f62):
         cls = "K-w"
     elif "clean" in rows:
         cls = "E-candidate"
-    elif "unsettled" in rows:
-        cls = "unsettled"
     elif "revert-only" in rows:
         cls = "none"
     else:
@@ -3081,6 +3132,106 @@ def cmd_j6c_refs(a):
             print(out_line(f"parse-s1: input error: the J6c reference file {name} is absent"), file=sys.stderr)
             return 1
         sys.stdout.write(out_line(f"S1REF file={name} sha256={sha256(PM.read_bytes(path))}") + "\n")
+    return 0
+
+
+# D53: §15.13.10.4 precedence 6's 'differs,repeated' compares J7a-2's P1, P2 and P7 with J7a-1's. canwatch
+# compares each run with J6c only, so no tool computes it: it is read at the desk.
+J7A_PRECEDENCE6 = ("precedence6=read-at-desk tool=none (differs,repeated compares J7a-2's P1, P2 and P7 with "
+                   "J7a-1's; this tool compares each run with J6c only and does not compute it)")
+
+
+def j7a_across(runs):
+    """§15.13.10.4's reading across the counted J7a runs, from their records only. runs is a list of
+    (name, parse-s1.txt fields, canwatch.txt fields or None), in run order. Returns the output lines.
+
+    K-r(u) for the runs that read bad-unstable; K-w for the runs that read bad or bad-partial, whatever their
+    DRAM_OFF_S reading (D52), with each bad run's kw_sub and 'intermittent' when another complete run read
+    clean. §15.13.10.4 precedence 3 ranks K-r(u) over K-w for the same run only, and a run reads one of the two,
+    so when different runs give both, both lines print and the combination is left to the desk. With neither:
+    E only when two complete runs read clean with j7a_class E-candidate and j7a_e_eligible=yes (D52), with the
+    checks this tool cannot read (F50 in any attempt, F55, F57) named for the desk; else U. Precedence 6's
+    'differs,repeated' is never computed (D53).
+    """
+    lines, kru, bad, clean_obs, clean_e = [], [], [], [], []
+    elig_of = {}
+    c3_hit = False
+    for name, pf, cw in runs:
+        reading = [x for x in (pf.get("j7a") or "").split(",") if x]
+        complete = pf.get("verdict") == "diagnostic complete"
+        elig = pf.get("j7a_e_eligible") or "absent"
+        kw = (cw or {}).get("kw_sub") or "n/a"
+        lines.append(f"run name={name} reading={pf.get('j7a') or 'absent'} class={pf.get('j7a_class') or 'absent'} "
+                     f"complete={'yes' if complete else 'no'} dram_off={pf.get('j7a_dram_off') or 'absent'} "
+                     f"e_eligible={elig} kw_sub={kw}")
+        if "bad-unstable" in reading:
+            kru.append(name)
+        elif "bad" in reading or "bad-partial" in reading:
+            bad.append((name, kw, elig != "yes"))
+        if complete and "clean" in reading:
+            clean_obs.append(name)
+            elig_of[name] = elig
+            if pf.get("j7a_class") == "E-candidate" and elig == "yes":
+                clean_e.append(name)
+                c3_hit = c3_hit or "F39c3" in reading
+    if kru:
+        lines.append("class=K-r(u) runs=" + ",".join(kru))
+    if bad:
+        labels = [f"{n}:{kw}" for n, kw, _ in bad]
+        # D52 limits E only: a clean run whose DRAM_OFF_S check failed is still a clean observation here
+        if any(n not in [b[0] for b in bad] for n in clean_obs):
+            labels.append("intermittent")
+        lines.append("class=K-w kw_sub=" + ",".join(labels))
+        if any(v for _, _, v in bad):
+            lines.append("kw_includes_dram_off_not_possible=yes (D52: a bad c2 from such a run still counts toward K-w)")
+    if kru and bad:
+        # no section number in the text: a dotted section number reads as a dotted quad to the privacy screens
+        lines.append("classes=K-r(u),K-w runs=different (the across-runs precedence 3 ranks K-r(u) over K-w for the "
+                     "same run only: the combination across runs is read at the desk)")
+    if not (kru or bad) and len(clean_e) >= 2:
+        lines.append(f"class=E c3={'hit' if c3_hit else 'clean'} runs=" + ",".join(clean_e))
+        lines.append("e_desk_checks=no-F50-in-any-attempt,no-F55,no-F57 (board logs; not read by this tool)")
+    elif not (kru or bad):
+        lines.append(f"class=U e_runs={len(clean_e)} (E needs two complete clean runs whose DRAM_OFF_S reads possible)")
+        if len(clean_obs) > len(clean_e):
+            lines.append("e_excluded=" + ",".join(f"{n}:{elig_of[n]}" for n in clean_obs if n not in clean_e) +
+                         " (clean, not eligible for E: no-dram-off-violated by D52; no-dram-off-unread or absent "
+                         "pending the owner's confirmation)")
+    lines.append(J7A_PRECEDENCE6)
+    return lines
+
+
+def cmd_j7a_across(a):
+    """j7a-across DIR [DIR]: §15.13.10.4 across the counted J7a runs, from each directory's parse-s1.txt
+    and canwatch.txt (when present). Prints S1JX lines; writes nothing."""
+    if len(a.dirs) > 2:
+        print("parse-s1: usage: j7a-across takes at most two run directories (J7a's cap, D38)", file=sys.stderr)
+        return 2
+    head = [f"parser={rel_repo(__file__)} sha256={sha256(open(__file__, 'rb').read())}"]
+    runs = []
+    for d in a.dirs:
+        p = os.path.join(d, "parse-s1.txt")
+        if not os.path.isfile(p):
+            raise Refused(f"{os.path.basename(os.path.normpath(d))} holds no parse-s1.txt")
+        pb = PM.read_bytes(p)
+        pf = parse_fields(pb)
+        if pf.get("step") != "J7a":
+            raise Refused(f"{os.path.basename(os.path.normpath(d))}/parse-s1.txt is not a J7a parse")
+        head.append(f"input_parse={rel_repo(p)} sha256={sha256(pb)}")
+        c = os.path.join(d, "canwatch.txt")
+        cw = None
+        if os.path.isfile(c):
+            cb = PM.read_bytes(c)
+            head.append(f"input_canwatch={rel_repo(c)} sha256={sha256(cb)}")
+            cw = {}
+            for ln in cb.decode("utf-8", "replace").replace("\r", "").split("\n"):
+                if ln.startswith("S1CW ") and "=" in ln:
+                    k, v = ln[5:].split("=", 1)
+                    cw[k] = v
+        else:
+            head.append(f"input_canwatch={rel_repo(c)} absent")
+        runs.append((os.path.basename(os.path.normpath(d)), pf, cw))
+    sys.stdout.write("".join(out_line("S1JX " + ln) + "\n" for ln in head + j7a_across(runs)))
     return 0
 
 
@@ -4458,13 +4609,13 @@ def selftest():
 
     j7res = []
 
-    def j7(lines_=None, *, reset="MAINSWRST", loader=J7_LOADER, **kw):
+    def j7(lines_=None, *, reset="MAINSWRST", loader=J7_LOADER, dram="possible", **kw):
         if lines_ is None:
             lines_ = syn_j7a(**kw)[0]
         data_ = ("\n".join(lines_) + "\n").encode("latin-1")
         res = analyze_run(data_, profile="board", mode="host", conf_bytes=conf_bytes, conf_info=info,
                           conf_gate_ok=True, bb_data=syn_blackbox(lines_), reset_reason=reset, diag="j1", arm="uefi",
-                          fill_factor="4", entry="uefi", loader_sha256=loader)
+                          fill_factor="4", entry="uefi", loader_sha256=loader, dram_off=dram)
         j7res.append(res)
         return res
 
@@ -4532,6 +4683,55 @@ def selftest():
     r = j7(lj)
     check("run --entry uefi text before the counted GO is unconstrained (an EXC token there): complete",
           r["verdict"] == "diagnostic complete")
+    # D49: 'EXC ' only at a line's start (leading blanks and a printk time stripped), and only before the image's
+    # own reset line
+    for label, neg, where, want in (
+            ("mid-line, before the reset line", "t234: synthetic note EXC not at the start", r"^t234: WDT0 ", "complete"),
+            ("at a line's start after blanks and a printk time", "   [   12.345678] EXC ESR=1", r"^t234: WDT0 ",
+             "incomplete"),
+            ("at a line's start after the image's reset line", "EXC ESR=1",
+             r"resetting so the log can be recovered", "complete"),
+            ("an M5L-EXC after the image's reset line", "M5L-EXC ESR=1", r"resetting so the log can be recovered",
+             "complete"),
+            ("at a line's start behind an OSC sequence and a stray byte", "\x1b]0;t\x07\x00EXC ESR=1",
+             r"^t234: WDT0 ", "incomplete")):
+        lj, _ = syn_j7a()
+        r = j7(edit_lines(lj, add_after=((where, neg),)))
+        check(f"run --entry uefi D49: an EXC token {label}: {want}",
+              r["verdict"] == "diagnostic " + want and
+              (("m5l_neg_after_go" in j7_failed(r)) == (want == "incomplete")))
+    check("D49: the J7a EXC pattern is anchored and allows only blanks and a printk time before it",
+          bool(J7A_EXC_RE.match("EXC x")) and bool(J7A_EXC_RE.match("[ 1.5] EXC x")) and
+          not J7A_EXC_RE.match("a EXC x") and not J7A_EXC_RE.match("M5L-EXC x") and not J7A_EXC_RE.match("[x] EXC y"))
+    # D49: the scan starts on the line after the counted GO (before M5L-EBS ok too); it reads the record lines
+    # (an ended S1 BEGIN/END block's body is not read; an unended block's body is, closed by the next BEGIN or
+    # by the segment's end); s1wq: is anchored as WQ_MARK_RE. s1-board.sh harness-selftest runs the same token
+    # lines through j7a_go_states.
+    def ins(L_, at, new):
+        k_ = next(i_ for i_, x in enumerate(L_) if re.search(at, x))
+        return L_[:k_] + list(new) + L_[k_:]
+
+    xt_begin = "S1 BEGIN name=j7xt bytes=4 md5=0 enc=text"
+    lj, _ = syn_j7a()
+    last_begin = max(i_ for i_, x in enumerate(lj) if x.startswith("S1 BEGIN "))
+    last_export = max(i_ for i_, x in enumerate(lj) if x.startswith("S1 EXPORT "))
+    for label, lines_, want_neg in (
+            ("an M5L-EXC between the counted M5L GO and M5L-EBS ok counts",
+             ins(lj, r"^M5L-EBS ok$", ["M5L-EXC ESR=1"]), True),
+            ("a line-start EXC inside an ended enc=text block is not read",
+             ins(lj, r"^t234: WDT0 ", [xt_begin, "EXC ESR=1", "S1 END name=j7xt"]), False),
+            ("a line-start EXC inside an unended block closed by the next S1 BEGIN counts",
+             ins(lj, r"^t234: WDT0 ", [xt_begin, "EXC ESR=1"]), True),
+            ("a line-start EXC inside an unended block that runs to the segment's end, before the reset line, counts",
+             lj[:last_export + 1] + [xt_begin, "EXC ESR=1"] + lj[last_export + 1:], last_export > last_begin),
+            ("xs1wq: (no boundary before the marker) is not a token", ins(lj, r"^t234: WDT0 ", ["xs1wq: note"]), False),
+            ("s1wq: after a printk time's closing bracket is a token",
+             ins(lj, r"^t234: WDT0 ", ["[   1.500000]s1wq: note"]), True)):
+        r = j7(lines_)
+        check(f"run --entry uefi D49: {label}", ("m5l_neg_after_go" in j7_failed(r)) == want_neg)
+    r = j7(ins(lj, r"^t234: WDT0 ", ["\x1b[0mEXC ESR=1"]))
+    check("run --entry uefi D49 (L0 as read under UEFI entry): an EXC behind a CSI sequence fails L0 and the loader scan",
+          "L0" in j7_failed(r) and "m5l_neg_after_go" in j7_failed(r))
     first_visit = syn_visit(go_=syn_m5l("go") + ["M5L GO", "M5L REFUSE w2-final", "Shell> reset"], after=())
     r = j7(before=first_visit)
     check("run --entry uefi a GO refused by w2-final, then a counted GO in a new Shell visit: the later one only",
@@ -4562,8 +4762,75 @@ def selftest():
     check("run --entry uefi reverts only: revert-only, class none", r["j7a"] == "revert-only" and
           field(r, "j7a_class") == "none")
     r = j7(watches=c2w(classes={"other": 16}, bad_base=0, changed_words=2, prog=2, stable=0))
-    check("run --entry uefi a prog-only c2 change with no stable re-read: unsettled (left to the owner)",
-          r["verdict"] == "diagnostic complete" and r["j7a"] == "unsettled" and field(r, "j7a_class") == "unsettled")
+    check("run --entry uefi D48: a prog-only c2 change with no stable re-read, revert or osc: bad, K-w, never unsettled",
+          r["verdict"] == "diagnostic complete" and r["j7a"] == "bad" and field(r, "j7a_class") == "K-w" and
+          field(r, "j7a_c2") == "bad" and not any("unsettled" in ln for ln in r["lines"]))
+    r = j7(watches=c2w(classes={"other": 16}, bad_base=0, writer="ongoing"))
+    check("run --entry uefi D48: a change seen only at FINL with writer=ongoing (no stable, revert, osc): bad, K-w"
+          f" [got {r['verdict']} j7a={r.get('j7a')}]",
+          r["verdict"] == "diagnostic complete" and r["j7a"] == "bad" and field(r, "j7a_class") == "K-w")
+    # D52: DRAM_OFF_S not met
+    r = j7(dram="violated")
+    check("run --entry uefi D52: a clean run whose DRAM_OFF_S check failed: row clean, class U, not E-eligible",
+          r["verdict"] == "diagnostic complete" and r["j7a"] == "clean" and field(r, "j7a_class") == "U" and
+          field(r, "j7a_dram_off") == "violated" and field(r, "j7a_e_eligible") == "no-dram-off-violated")
+    r = j7(bad_both, dram="violated")
+    check("run --entry uefi D52: a bad c2 from a DRAM_OFF_S-violating run still classes K-w",
+          r["j7a"] == "bad" and field(r, "j7a_class") == "K-w" and field(r, "j7a_e_eligible") == "no-dram-off-violated")
+    r = j7(dram="unread")
+    check("run --entry uefi D52: a clean run with no DRAM_OFF_S reading is not E-eligible either",
+          field(r, "j7a_class") == "U" and field(r, "j7a_e_eligible") == "no-dram-off-unread")
+    check("run --entry uefi D52: a clean run with DRAM_OFF_S possible stays E-candidate and eligible",
+          field(j7(), "j7a_class") == "E-candidate" and field(j7res[-1], "j7a_e_eligible") == "yes")
+    for why, kw in (("--entry uefi without --dram-off", {"dram_off": None}),
+                    ("--dram-off under kexec", {"entry": "kexec", "arm": "control", "dram_off": "possible"})):
+        try:
+            args_ = dict(profile="board", mode="host", conf_bytes=conf_bytes, conf_info=info, conf_gate_ok=True,
+                         diag="j1", arm="uefi", fill_factor="4", entry="uefi", loader_sha256=J7_LOADER)
+            args_.update(kw)
+            analyze_run(b"", **args_)
+            check(f"run {why} is an input error (D52)", False)
+        except InputError:
+            check(f"run {why} is an input error (D52)", True)
+
+    # D52, D53: the across-runs reading, on parse fields
+    def pfs(r_):
+        return {ln.split("=", 1)[0]: ln.split("=", 1)[1] for ln in r_["lines"] if "=" in ln}
+
+    clean_ok, clean_bad_dram = pfs(j7()), pfs(j7(dram="violated"))
+    bad_ok, bad_dram = pfs(j7(bad_both)), pfs(j7(bad_both, dram="violated"))
+    across_texts = []
+
+    def xa(*runs_):
+        t_ = j7a_across(list(runs_))
+        across_texts.append("\n".join(t_))
+        return t_
+
+    t = xa(("J7a-1", clean_ok, None), ("J7a-2", clean_ok, None))
+    check("j7a-across: two complete clean eligible runs read E, with the desk checks named and the D53 marker",
+          "class=E c3=clean runs=J7a-1,J7a-2" in t and any(x.startswith("e_desk_checks=") for x in t) and
+          t[-1] == J7A_PRECEDENCE6)
+    t = xa(("J7a-1", clean_bad_dram, None), ("J7a-2", clean_ok, None))
+    check("j7a-across D52: a DRAM_OFF_S-violating clean run cannot make E (class U, excluded named)",
+          any(x.startswith("class=U e_runs=1 ") for x in t) and
+          any(x.startswith("e_excluded=J7a-1:no-dram-off-violated ") for x in t) and
+          not any(x.startswith("class=E") for x in t))
+    t = xa(("J7a-1", clean_ok, None), ("J7a-2", bad_dram, {"kw_sub": "differs"}))
+    check("j7a-across D52: a bad c2 from a DRAM_OFF_S-violating run still counts toward K-w (intermittent)",
+          "class=K-w kw_sub=J7a-2:differs,intermittent" in t and
+          any(x.startswith("kw_includes_dram_off_not_possible=yes") for x in t))
+    t = xa(("J7a-1", bad_ok, {"kw_sub": "differs"}), ("J7a-2", bad_ok, {"kw_sub": "differs"}))
+    check("j7a-across D53: two bad runs are K-w with each kw_sub; differs,repeated is not computed, only marked",
+          "class=K-w kw_sub=J7a-1:differs,J7a-2:differs" in t and t[-1] == J7A_PRECEDENCE6 and
+          not any("repeated" in x for x in t[:-1]))
+    t = xa(("J7a-1", clean_ok, None))
+    check("j7a-across: one clean run alone is U", any(x.startswith("class=U e_runs=1 ") for x in t))
+    t = xa(("J7a-1", bad_ok, {"kw_sub": "differs"}), ("J7a-2", dict(bad_ok, j7a="bad-unstable", j7a_class="K-r(u)"), None))
+    check("j7a-across: K-w differs in J7a-1, then bad-unstable in J7a-2: both classes print (precedence 3 is per run), "
+          "the combination is left to the desk",
+          "class=K-r(u) runs=J7a-2" in t and "class=K-w kw_sub=J7a-1:differs" in t and
+          any(x.startswith("classes=K-r(u),K-w runs=different ") for x in t) and
+          not any(x.startswith(("class=E", "class=U")) for x in t))
     r = j7(watches={"d": {"classes": {"zero": 16}}})
     check("run --entry uefi a c1 watch bad: F39c1 (an immediate stop), no clean token, class U",
           r["j7a"] == "F39c1" and field(r, "j7a_class") == "U" and field(r, "j7a_stop") == "F39c1" and
@@ -4630,7 +4897,7 @@ def selftest():
             ns = dict(log=j7log, profile="board", mode="host", blackbox=j7bb, out_dir="none", conf=None,
                       ref_conf_sha256=None, reset_reason="MAINSWRST", kexec_tree_sha256=None, image=None, initrd=None,
                       diag="j1", arm="uefi", fill_factor="4", hold_mib=None, kpf=None, entry="uefi",
-                      loader_sha256=J7_LOADER)
+                      loader_sha256=J7_LOADER, dram_off="possible")
             ns.update(kw)
             b = io.StringIO()
             with contextlib.redirect_stdout(b), contextlib.redirect_stderr(io.StringIO()):
@@ -4649,7 +4916,9 @@ def selftest():
                           ("--entry uefi with --kexec-tree-sha256", {"kexec_tree_sha256": SYN_KEXEC}),
                           ("--entry uefi with --arm control", {"arm": "control"}),
                           ("--entry uefi with --diag j2", {"diag": "j2", "arm": None}),
-                          ("--loader-sha256 under kexec", {"entry": None, "arm": "control"})):
+                          ("--loader-sha256 under kexec", {"entry": None, "arm": "control"}),
+                          ("--entry uefi without --dram-off (D52)", {"dram_off": None}),
+                          ("--dram-off under kexec (D52)", {"entry": None, "arm": "control", "loader_sha256": None})):
             check(f"run cmd {label} is a usage error", j7cmd(**kw)[0] == 2)
         j7parse = put_file("j7a/parse-s1.txt", j7text.encode("utf-8"))
         _, j7bins = syn_j7a(watches=c2w(classes={"zero": 10, "kva": 6}))
@@ -4734,8 +5003,9 @@ def selftest():
         value_hex = re.compile(r"(?<![0-9A-Fa-f])(?:0[xX])?[0-9A-Fa-f]{16}(?![0-9A-Fa-f])")
         quad = re.compile(r"(?<![0-9.])[0-9]{1,3}(?:\.[0-9]{1,3}){3}(?![0-9.])")
         mac = re.compile(r"(?<![0-9A-Fa-f])[0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5}(?![0-9A-Fa-f])")
-        outs = ["\n".join(x["lines"]) for x in j7res] + cwtexts_u
-        check("run --entry uefi screens cover every synthetic J7a parse", len(j7res) == 30 and len(cwtexts_u) == 3)
+        outs = ["\n".join(x["lines"]) for x in j7res] + cwtexts_u + across_texts
+        check("run --entry uefi screens cover every synthetic J7a parse and across reading",
+              len(j7res) == 51 and len(cwtexts_u) == 3 and len(across_texts) == 6)
         for label, bad_ in (("the word pass", lambda t: re.search(r"pass", t, re.IGNORECASE)),
                             # the b2= verdict field is a line of its own (c2_sums' stride bins b0=..b7= are not it)
                             ("a b2= field", lambda t: re.search(r"(?m)^(?:S1PC |S1CW )?b2=", t)),
@@ -4902,6 +5172,8 @@ def main(argv=None):
     r.add_argument("--entry", choices=ENTRIES, default=None,
                    help="kexec (the default) or uefi: J7a's segment, with --diag j1 --arm uefi (15.13.7)")
     r.add_argument("--loader-sha256", help="--entry uefi: the staged loader's sha256 (item 5 under UEFI entry)")
+    r.add_argument("--dram-off", choices=J7A_DRAM,
+                   help="--entry uefi: the go_counted line's DRAM_OFF_S reading; only possible can count toward E (D52)")
 
     w = sub.add_parser("canwatch")
     w.add_argument("log")
@@ -4918,6 +5190,9 @@ def main(argv=None):
     j = sub.add_parser("j6c-refs")
     j.add_argument("dir")
 
+    x = sub.add_parser("j7a-across")
+    x.add_argument("dirs", nargs="+", help="the counted J7a run directories in order (J7a-1, then J7a-2)")
+
     k = sub.add_parser("kshcheck")
     k.add_argument("file", nargs="?")
     k.add_argument("--selftest", action="store_true")
@@ -4929,7 +5204,7 @@ def main(argv=None):
         ap.print_usage(sys.stderr)
         return 2
     handlers = {"conf": cmd_conf, "fdt": cmd_fdt, "run": cmd_run, "canwatch": cmd_canwatch, "kshcheck": cmd_kshcheck,
-                "j6c-refs": cmd_j6c_refs}
+                "j6c-refs": cmd_j6c_refs, "j7a-across": cmd_j7a_across}
     try:
         return handlers[a.cmd](a)
     except Refused as e:
