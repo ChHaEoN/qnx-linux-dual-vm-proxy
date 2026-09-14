@@ -2230,6 +2230,18 @@ The export block is placed after `FAIL_STATE`, **outside** the `MODE != host` gu
   - **The defect.** The harness printed `NOT MET F41-xhci` because its return read did not pass the xHCI path, so the xHCI rebind check had no line to match. The same read shows the xHCI's buses bound to their driver, and a direct read confirmed it.
   - **The fix.** The return read passes the path, with a self-test.
   - **Owner decision (2026-09-14).** J3 is re-judged from its own records: the original line is kept, a dated re-judged line is appended, and J4 runs.
+- **J4: F36.** The removal arm ran to its jump and back cleanly, with the "max" set.
+  - **What ran.** Every slot succeeded. Bus Master read zero on every endpoint and single-child root port before the issue. Both the uptime and governor guards passed, and the image reset back to L4T.
+  - **The canaries.** c2 was bad at both checks, and c1 and c3 verified at both. So **the removable DMA masters are excluded as c2's writer, as this sequence quiesced them.** Per §15.3, J4 gives no evidence on H1, H2, H3 or H5.
+  - **Record-only observations (HYPOTHESIS):**
+    - c2 now repeats across B2, J2 and J4. The first mismatch was the first word each time, and the second count was lower each time, although Linux's use of those pages differed by boot and by arm;
+    - c3 was held by Linux at J4's jump and stayed clean, which contradicts reading J2's c3 hit as "held pages are hit".
+  - **What follows (§15.6 after F36).**
+    - The memo goes to the owner.
+    - Next is J6 in the control arm (J6c: content classes, re-read and heal counts, page bitmaps, and a large hold over sysram).
+    - After that comes the owner's D30 on J7a, the UEFI entry arm, which separates Linux residue from a writer anchored at window 2's base.
+    - The class stays U. Under D34, class Q cannot hold.
+  - **Budget.** Today's two kexec runs and two L4T-only runs are used.
 
 ### 15.7 Claims, failure signatures, risks
 
