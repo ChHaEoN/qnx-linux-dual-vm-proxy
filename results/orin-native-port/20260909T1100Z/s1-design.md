@@ -235,6 +235,7 @@ No disk copy and no io-blk cache: the Linux guest has no block device. Because 5
 - virtio-console: `hostdev /dev/ptyp3`, the master, held by qvm; `s1con -O -R` opens the slave `/dev/ttyp3` read-write and sets it raw (**2026-09-14**, C11's fallback, §14.9). ~~`hostdev /dev/ttyp3`, the slave; `s1con` opens master `/dev/ptyp3` read-write.~~
   - ~~Why the slave: bytes the host writes to the master reach qvm as input. The slave's echo, if on, returns them to the master, where `s1con` sees its own probe text, which cannot match a needle. Guest output passes the slave's output processing to the master. So no termios change is needed. HYPOTHESIS until T2.~~ **Correction 2026-09-14:** T1 attempt 1 refuted this on qvm's side. With the slave as `hostdev` and nothing holding the master during the dryrun, qvm printed `Unable to open '/dev/ttyp3': Interrupted function call` and exited 64 (§14.9). The fallback below is adopted. It is also M3's precedent: qvm holds the master `/dev/ptyp0`, and the host client opens the slave `/dev/ttyp0` (`qhvc/g2-m3.conf:38`; `startup/m3-host.ksh.in:53`, `:121`).
   - Fallback (~~if qvm rejects a slave or input stalls in canonical mode~~ **adopted 2026-09-14, before T2; T1 runs again as attempt 2**): `hostdev /dev/ptyp3` with `s1con -R` on `/dev/ttyp3`, which sets raw mode, as `qnx-host-client` does for IPC (m3-design.md:845). ~~That changes the configuration, so it is decided at T2, before any pass run.~~ It changes the configuration's sha256, and no pass run had used the old one (§14.9).
+  - **Reader order (2026-09-14, after T1 attempt 2, §14.10):** `stamp` still opens the master `/dev/ptyp2` before the launch. `s1con` now starts right after qvm is launched in the background, and its `open.hit` is the first wait after the launch. The reason is that a slave open is expected to wait for its master (HYPOTHESIS, §14.9), and qvm opens `/dev/ptyp3` only once it is running. The dryrun before the launch needs no reader.
 - `devc-pty` provides eight pairs by default (`m3.build.in:78`; m3-design.md:91).
 
 **Needles** (all our text except the kernel's):
@@ -1079,8 +1080,10 @@ Whether `/dev/shmem` accepts a subdirectory is still open (§14.7).
 | `s1-m1b-p6` | none / 1,200 s | M1b's / 1,200 s | 4,200 s |
 | `s1-h1` | 900 / 1,200 s | 900 / 1,200 s | 4,200 s |
 | `s1-n1` | 2,100 / 2,400 s | 1,800 / 2,100 s | 5,400 s |
-| `s1-n2` | 3,000 / 3,300 s | 2,400 / 2,700 s | 6,300 s |
+| `s1-n2` | ~~3,000 / 3,300 s~~ 3,300 / 3,600 s | 2,400 / 2,700 s | ~~6,300 s~~ 6,600 s |
 | `s1-d1` | 2,100 / 2,400 s | — | 5,400 s |
+
+**2026-09-14 (§14.10):** the hvc0 open wait now follows the launch under the dryrun's bound, in place of the reader bound it had before the launch. That adds 55 s to every board guest mode's `ksh_worst_s`, since the pl011 reader keeps its bound: `s1-n1` and `s1-d1` go from 1,670 to 1,725 s, and `s1-n2` from 2,615 to 2,670 s. `s1-n1` and `s1-d1` keep their guards. `s1-n2` crosses a 300 s step and moves to 3,300 / 3,600 s, with capture 6,600 s. The unbuilt `s1-q2` computes to the same 3,300 / 3,600 s. These come from the edited bound-table functions; the rebuild's `.params` are authoritative.
 
 Accepting these bounds, or tightening the table toward §6.12, is an owner decision (§14.7).
 
@@ -1090,7 +1093,13 @@ Accepting these bounds, or tightening the table toward §6.12, is an owner decis
   - On the board the BEGIN, body and END lines go by `tcu-cat -m`, `-f`, `-m`, so they never enter the black box. The console carries one `S1 EXPORT name=<n> bytes=… md5=… enc=base64 rc=…` record per stream.
 - **TCG exports `fdt` and `qvmlog` before the launch** (C16, V17, §6.3), right after `S1 DRYRUN` and with its own `S1 STATE export`; `pl011` and `hvc0` follow teardown. The board exports all four after teardown (§5.1 L2, §6.8). Review caught the first version exporting after teardown on TCG as well.
 - **`logger_errors` is a heuristic,** because qvm's logger format has not been read. It counts dryrun output lines that contain `error`, `fatal` or `internal` as a whole word (case-insensitive), leaving out lines that contain `logger`. A `saved=` other than `yes` stops the run before launch. A nonzero count lets the boot go on and sets `FAIL_STATE dryrun_logger_errors`. **2026-09-14:** it also counts every line that begins with qvm's configuration-diagnostic form `[file:line] `, whatever its words, each line once, because T1 attempt 1's diagnostic named none of the three words. The PC counts the same lines again from the `qvmlog` export, and requires `rc=0` (§14.9).
-- **`l_kernel` is a checkpoint, not a stop** (240 s on the board, 900 s on TCG). At its bound the wait goes on to `i_ready` if `l_kernel` or `i_start` was seen. The chained waits' `-t` bounds sum to the `i_ready` bound plus 10 s from the launch, and background timer files are a second limit.
+- **`l_kernel` is a checkpoint, not a stop** (240 s on the board, 900 s on TCG). At its bound the wait goes on to `i_ready` if `l_kernel` or `i_start` was seen. ~~The chained waits' `-t` bounds sum to the `i_ready` bound plus 10 s from the launch, and background timer files are a second limit.~~ **2026-09-14 (§14.10):**
+  - The chain now starts with the hvc0 open wait, under the dryrun's bound.
+  - The timer files, started at the launch, hold `l_kernel` and `i_ready` to their bounds from the launch; a slow open does not move them.
+  - The `-t` bounds are backstops and never end a wait before its timer. The generator refuses a table where one would, or where the open wait could outlast `l_kernel`'s timer.
+  - If the timers failed, the backstops' sum from the launch would be the open wait's bound plus the `i_ready` bound plus 10 s.
+
+  Shortening `l_kernel`'s `-t` by the open wait instead would end that checkpoint early whenever `s1con` opens quickly.
 - **F29 tears down at once.**
   - The hold and q2 blocks start only when `l_rbfail.hit`, `l_panic.hit` and `qvm_exit.hit` are all absent, and their waits also end on `l_rbfail.hit`.
   - After the heartbeat loop, `l_rbfail` skips the hold verify (printing `S1 NOTE hold_verify skipped reason=l_rbfail`) and the board's hold canary set.
@@ -1218,14 +1227,19 @@ No board was contacted, no QEMU was started, nothing was downloaded, and no QNX-
 
 - **Owner:**
   - Accept O's bounds, or tighten the table.
-  - Accept the TCG wall rule of V, which gives 4,840 s for `lin-dryrun`, 7,825 s for `lin-boot` and 9,445 s for `hold`.
+  - Accept the TCG wall rule of V, which gives 4,840 s for `lin-dryrun`, ~~7,825 s~~ 8,395 s for `lin-boot` and ~~9,445 s~~ 10,015 s for `hold`. **2026-09-14:** the two guest modes moved by 570 s each, the TCG dryrun bound less the reader bound, when the hvc0 open wait moved after the launch (§14.10).
+  - Accept `s1-n2`'s guard of 3,300 s (return 3,600 s), which is one 300 s step above O's first figure (§14.10).
   - D14's `--q2-limit`, if D1 keeps the QNX guest.
 - **T1 or T2:**
   - Whether `/dev/shmem` accepts `mkdir` for `s1con`'s hit directory. A refusal would show as `S1 FAIL reader hvc0`.
   - qvm's logger line format, and the wording and stream of its FDT-saved message; `logger_errors` may need tuning. **2026-09-14:** partly answered by T1 attempt 1. The FDT message reads `FDT saved to '<path>'`, and a configuration error prints `[file:line] message`; the export shows CRLF line ends. Both came from the dryrun's stdout and stderr taken together, so the stream is still unknown, and the logger's own format for `error`, `fatal` and `internal` is still unseen (§14.9).
   - R13's 596 MiB gate under the TCG host's 1 GiB `OPT_RAM` with QEMU's `-m 2G`.
   - Whether qvm accepts `unsupported <class> abort`, which `s1-d1` uses.
-  - **2026-09-14:** whether `s1con`'s open of the slave `/dev/ttyp3` returns before qvm holds the master. The readers still start before the launch; if a slave open waits for its master, T2 stops at `S1 FAIL reader hvc0` (§14.9).
+  - ~~**2026-09-14:** whether `s1con`'s open of the slave `/dev/ttyp3` returns before qvm holds the master. The readers still start before the launch; if a slave open waits for its master, T2 stops at `S1 FAIL reader hvc0` (§14.9).~~ **Addressed 2026-09-14 (§14.10):** `s1con` now starts right after qvm is launched, and its open wait is the first wait after the launch. Two things stay for T2:
+    - whether a slave open waits for its master, is refused (`s1con: open /dev/ttyp3: …` and `S1 FAIL reader hvc0`), or returns early and ends `s1con` on its first read (`STAMP eof` or `STAMP read-error` in `s1con.stamps` before teardown, then `l_kernel` with no `i_start`, which reads as §5.3 stage 2 unless `s1con.stamps` is checked);
+    - whether qvm reaches its hostdev inside the dryrun's bound after a launch.
+
+    A missing `/dev/shmem/con` still shows as `S1 FAIL reader hvc0`, now after the launch and followed by teardown. A qvm that exits before `s1con` opens prints no reader failure; it shows through `qvm.rc` and a missing L4, as before.
 - **Board harness:**
   - Whether `/sys/firmware/fdt`'s sha256 is an acceptable kexec-tree stamp (W).
   - The `/etc/nv_tegra_release` format `p0` assumes: `R36` and `REVISION: 4.7` on its first line.
@@ -1280,6 +1294,82 @@ No board was contacted, no QEMU was started, nothing was downloaded, and no QNX-
 
 A diagnostic that names `/dev/ptyp3` instead leaves this design no console fallback (F4).
 
-**Open before T2: the reader order.** The host script still starts `s1con` and waits for its `open.hit` (bound `READER_T`) before the launch. So `s1con` opens the slave `/dev/ttyp3` before qvm holds the master. If a slave open waits for its master, as this section's reading supposes, `s1con` cannot open in time, and T2 stops at `S1 FAIL reader hvc0` before any launch. The adoption kept the order as decided. T1 attempt 2 runs in dryrun mode, starts no reader, and cannot show this either way. The order is owed a decision before T2, and before any board rung that launches. The review of this change named two options. (a) Start `s1con` after the launch and fold its `open.hit` into the needle waits, which changes the bound table and the host script's silence rule. (b) Open with `O_NONBLOCK` and clear it once the open returns, which moves `s1con`'s pin. On (b), a slave whose master is not yet open may refuse the open or give end of file on its first read, which ends `s1con`, so (b) is not safe to adopt untested. It is UNVERIFIED for `devc-pty` either way. M3's order, where the slave is opened only after qvm holds the master, is the only one run so far.
+**Open before T2: the reader order.** The host script still starts `s1con` and waits for its `open.hit` (bound `READER_T`) before the launch. So `s1con` opens the slave `/dev/ttyp3` before qvm holds the master. If a slave open waits for its master, as this section's reading supposes, `s1con` cannot open in time, and T2 stops at `S1 FAIL reader hvc0` before any launch. The adoption kept the order as decided. T1 attempt 2 runs in dryrun mode, starts no reader, and cannot show this either way. The order is owed a decision before T2, and before any board rung that launches. The review of this change named two options. (a) Start `s1con` after the launch and fold its `open.hit` into the needle waits, which changes the bound table and the host script's silence rule. (b) Open with `O_NONBLOCK` and clear it once the open returns, which moves `s1con`'s pin. On (b), a slave whose master is not yet open may refuse the open or give end of file on its first read, which ends `s1con`, so (b) is not safe to adopt untested. It is UNVERIFIED for `devc-pty` either way. M3's order, where the slave is opened only after qvm holds the master, is the only one run so far. **Decided 2026-09-14: option (a), before T2 (§14.10).**
 
-**What this does not show.** Nothing has run with the new wiring. qvm's acceptance of the master, the raw slave path and probe 1 stay untested until attempt 2 and T2.
+**What this does not show.** Nothing has run with the new wiring. qvm's acceptance of the master, the raw slave path and probe 1 stay untested until attempt 2 and T2. **2026-09-14:** attempt 2 answered qvm's acceptance of the master (§14.10).
+
+### 14.10 T1 attempt 2 and the reader order (2026-09-14)
+
+**T1 attempt 2 passed clean.** It ran under TCG from an image built from commit `8d28100`, where the virtio-console `hostdev` is the master `/dev/ptyp3`. Its record is private and git-ignored. Against attempt 1:
+- qvm's dryrun exited 0 and printed `Exiting: dryrun complete`, with no `[file:line]` diagnostic;
+- the dumped FDT was byte-identical to attempt 1's, and every gating row was present;
+- `memcanary --selftest` passed again.
+
+So qvm opens the master of a pty pair with nothing on the slave. The dryrun needs no reader, and the host script's order before the launch stays as it was.
+
+**The slave side is still a HYPOTHESIS.** §14.9's reading was that a pty slave open waits until its master is open. Attempt 1 is consistent with that: qvm's open of the slave was interrupted, not refused. No run has opened the slave with the master held since.
+
+**The problem it left.** Until this change, the host script started `s1con` on the slave `/dev/ttyp3` and waited for its `open.hit` in `S1 STATE readers`, before `S1 STATE launch`. qvm opens the master only after the launch. Under the reading, `s1con`'s open could not return in time, so T2, B3 and B4 would all have stopped at `S1 FAIL reader hvc0` without launching.
+
+**What changed: §14.9's option (a).** Option (b), `O_NONBLOCK`, was not taken: it moves `s1con`'s pin and is unsafe untested (§14.9).
+1. **Host script (`s1-host.ksh.in`, both profiles).** `S1 STATE readers` now starts only `stamp` on the pl011 master `/dev/ptyp2` and waits for its `open.hit` under the reader bound, as M3 did. Under `S1 STATE launch` the order is:
+   - the two timer files;
+   - qvm, in the background;
+   - `s1con`, at once in the background, with the same arguments as before;
+   - `bwait -p /dev/shmem/con/open.hit -p /dev/shmem/qvm_exit.hit`, bounded by the dryrun's bound `DRY_K` (60 s on the board, 600 s on TCG). This is the first wait after the launch.
+2. **With `open.hit`,** the `l_kernel`, `i_ready` and `shell_ok` waits run exactly as before.
+3. **Without it,** the script skips the needle waits. If qvm is still running, it also prints `S1 FAIL reader hvc0` and sets `FAIL_STATE reader`. If qvm exited first, the script prints no reader failure, since a qvm that has exited never opens `/dev/ptyp3`. That exit shows as it did before this change, through `qvm.rc` and a missing L4, and the open wait's `bwait` line names `/dev/shmem/qvm_exit.hit`.
+   - `S1 STATE report` still prints.
+   - The hold and q2 blocks need `shell_ok`, so they are skipped.
+   - Teardown ends qvm, because `LAUNCHED` was set before the launch.
+4. **The report now also shows the open wait's own `bwait` line.** A log therefore says whether `s1con` opened, the wait timed out, or qvm exited first. The parser reads no `BWAIT path` line, so no token changed.
+5. **Unchanged:**
+   - the token texts;
+   - the dryrun and its TCG export, which still come before any reader;
+   - the q2 block, whose `stamp` opens the master `/dev/ptyp1` before its launch and whose IPC client opens `/dev/ttyp0` after the banner. Neither is a slave opened before its master.
+
+**Why no guest output is lost.** The guest's first `hvc0` line, `S1-INIT start`, can appear only after its kernel has booted and probed virtio-console. That is long after qvm opened its `hostdev`.
+
+**Why the dryrun's bound and not the reader bound.** qvm opens its `hostdev` during its configuration pass. In `s1-linux.conf` the `ram`, `load` and `initrd load` lines come before `vdev virtio-console`, so the open may follow the loading of the `Image` and the initrd; that line order is a HYPOTHESIS for qvm's processing order. The dryrun does that same pass, and in attempt 2 it completed inside `DRY_K`. The reader bound (5 s on the board, 30 s on TCG) was sized for an open that returns at once, and nothing measured shows qvm reaching its `hostdev` that fast after a launch. A healthy run could fail on it. The wait ends at `open.hit`, so a good run pays nothing extra; only the worst case grows. Returning to the reader bound would change one marker in the template and one term of `ksh_worst`.
+
+**Silence and bounds.**
+- Between the launch and the needle waits' return, the console carries nothing except the failure line, and `s1con`'s own stderr if its open fails; both are failure paths.
+- The timer files started at the launch hold `l_kernel` and `i_ready` to their bounds from the launch, whatever the open wait takes (§14.3 P).
+- `bounds()` now refuses a table where `DRY_K` is not below `LK`, or where a chained `-t` would end its wait before its timer.
+- `ksh_worst` counts the pl011 reader before the launch and, chained from it, `DRY_K` + `LK_WAIT` + `IR_REST` + `SHELL_T`.
+
+**The new bounds (C14), computed from the edited functions.** The rebuild's `.params` and `s1tcg.params` are authoritative.
+
+| Image or variant | `ksh_worst_s` | Guard / return | `capture_s` or TCG wall |
+|---|---|---|---|
+| `s1-h1` | 470 s (unchanged) | 900 / 1,200 s | 4,200 s |
+| `s1-n1`, `s1-d1` | ~~1,670~~ 1,725 s | 2,100 / 2,400 s (unchanged) | 5,400 s |
+| `s1-n2` | ~~2,615~~ 2,670 s | ~~3,000 / 3,300~~ 3,300 / 3,600 s | ~~6,300~~ 6,600 s |
+| `s1-q2` (not built) | ~~2,615~~ 2,670 s | ~~3,000 / 3,300~~ 3,300 / 3,600 s | ~~6,300~~ 6,600 s |
+| TCG `lin-dryrun` | 3,040 s (unchanged) | none | 4,840 s |
+| TCG `lin-boot`, `d1-boot`, `d2` | ~~6,025~~ 6,595 s | none | ~~7,825~~ 8,395 s |
+| TCG `hold` | ~~7,645~~ 8,215 s | none | ~~9,445~~ 10,015 s |
+| TCG `q2` | ~~10,415~~ 10,985 s | none | ~~12,215~~ 12,785 s |
+
+**VERIFIED on the PC (no rebuild; PO-A refuses sources that differ from HEAD):**
+- `bash -n` passes on `make-s1-images.sh`.
+- Every `@MARKER@` the template uses is one `gen_ksh` substitutes.
+- A scratch rendering of the template drops the `##` lines and applies the profile prefixes with this table's values. It was made for the board and TCG profiles in `boot`, `hold`, `q2` and `dryrun` modes. Each rendering has no surviving marker and passes `kshcheck` and `bash -n`.
+- `parse-s1.py --selftest` passes with no parser edit.
+
+**What T2 must show.**
+- **A clean dryrun before the launch.** Before `S1 STATE launch`: `S1 DRYRUN rc=0 saved=yes … logger_errors=0`, and the `fdt` and `qvmlog` exports. From `parse-s1.py run`: `dryrun_rc=0` and `qvmlog_diagnostics=0`.
+- **`s1con`'s open after the launch.** After `S1 STATE launch`, no `S1 FAIL reader hvc0`. In `S1 STATE report`, the open wait's `bwait` line names `/dev/shmem/con/open.hit`, not `qvm_exit.hit` or a timeout. In that report's copy of `s1con.stamps`, before `S1 STATE teardown`, there is no `STAMP eof`, `STAMP read-error` or `STAMP poll-error` line. `open.hit` together with `STAMP i_start` shows that this order works. It does not show whether the open waited for the master: `s1con` starts at the same moment as qvm, so the `bwait` line looks the same either way.
+- **The needles.** `STAMP i_start`, `STAMP i_ready` and `STAMP shell_ok` from `s1con`'s record; no `STAMP l_panic` or `STAMP l_rbfail`; no `rc=` line before `S1 STATE teardown`.
+- **The streams.** After teardown, the `pl011` and `hvc0` exports, each decoding.
+- **The verdict.** `S1 FAIL_STATE none`, and L2, L4 and L5 from the parser, the pass rule of §6.3.
+
+A refusal instead of a wait would print `s1con: open /dev/ttyp3: …` with `S1 FAIL reader hvc0`. This script cannot observe when qvm holds the master, so that outcome would need a new design decision.
+
+There is a third outcome. The open could return before qvm holds `/dev/ptyp3`, and the first read could then give end of file or an error (§14.9 named this for option (b); under option (a) the same race exists whenever `s1con`'s open runs before qvm reaches its `hostdev`). `s1con` would then write `open.hit` and end at once with `STAMP eof` or `STAMP read-error`. The host's open wait passes, and the needle waits run out with `l_kernel` but no `i_start`. §5.3's T2 staging would read that as stage 2 (an FDT, interrupt, virtio-mmio or initrd problem) unless `s1con.stamps` in `S1 STATE report` is read first. It is a reader-order fault, and it too would need a new design decision.
+
+**What this does not show.** Nothing has run with the new order: no TCG boot and no board rung. Several things stay untested until T2, and then B3:
+- the slave-open behaviour;
+- whether qvm reaches its `hostdev` inside `DRY_K` after a launch;
+- the raw slave path;
+- probe 1.

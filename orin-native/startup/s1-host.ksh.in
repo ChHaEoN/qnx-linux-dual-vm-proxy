@@ -42,9 +42,10 @@
 ## Rules (§2 rule 7, as m4-host.ksh.in): no pipe, no command substitution, no
 ## backquote, no case-pattern alternation, no nested shell string, no
 ## here-document, no arithmetic; every wait is a bwait with a bound; nothing is
-## printed from a qvm launch to the return of its last needle wait, because the
-## TCU callout busy-polls in the writer's context (the waits write their own
-## lines to files); records first, exports next, capped diagnostics last (on TCG
+## printed from a qvm launch to the return of its last needle wait, apart from a
+## failure line, because the TCU callout busy-polls in the writer's context (the
+## waits write their own lines to files); records first, exports next, capped
+## diagnostics last (on TCG
 ## the dryrun's fdt and qvmlog exports come before the launch, C16 and §6.3; the
 ## board sends them after teardown, §5.1 L2).
 ## make-s1-images.sh runs parse-s1.py kshcheck (parse-m4.py's implementation) on
@@ -58,6 +59,10 @@
 ## apart): design C11's fallback, adopted after T1 attempt 1, where qvm could not
 ## open the slave (§14.9). It is M3's IPC wiring (qvm on /dev/ptyp0, the client
 ## on /dev/ttyp0). Pairs 0 and 1 stay the QNX guest's, as in M3 (§3.4).
+## Order (§14.10, after T1 attempt 2): stamp opens /dev/ptyp2 before the launch;
+## s1con starts right after qvm is launched, because a slave open waits for its
+## master (HYPOTHESIS, §14.9), and its open wait, under the dryrun bound DRY_K, is
+## the first wait after the launch. The dryrun before the launch needs no reader.
 # s1-host.ksh: S1 host state machine, generated from s1-host.ksh.in; edit the template.
 S=/dev/shmem
 C=/dev/shmem/con
@@ -267,37 +272,52 @@ if [ "$MODE" != host ] && [ "$MODE" != dryrun ] && [ -z "$FAIL" ]; then
 	mkdir -p "$C"
 	stamp -i /dev/ptyp2 -o "$S/s1.pl011" -m @CAP@ -r "$S/s1.stamps" -h "$S" -s 'Booting Linux on physical CPU' -l l_kernel -s 'Run /init as init process' -l l_run_init -s 'Kernel panic' -l l_panic -s 'Reboot failed -- System halted' -l l_rbfail &
 	bwait -p "$S/open.hit" -t @READER_T@ > "$S/rd.1" 2>&1 || { say "FAIL reader pl011"; FAIL=${FAIL:-reader}; }
-	s1con -i /dev/ttyp3 -O -R -o "$S/s1.hvc" -m @CAP@ -r "$S/s1con.stamps" -h "$C" -d 2 -s 'S1-INIT start' -l i_start -s 'S1-INIT ready' -l i_ready -s 'S1-SHELL-42-OK' -l shell_ok -s 'S1-HB' -l hb -s 'S1-END-43-OK' -l end_ok -w 'i_ready=echo S1-SHELL-$((40+2))-OK' -t '/dev/shmem/probe2.go=echo S1-END-$((42+1))-OK' &
-	bwait -p "$C/open.hit" -t @READER_T@ > "$S/rd.2" 2>&1 || { say "FAIL reader hvc0"; FAIL=${FAIL:-reader}; }
 fi
 
 # §6.3, §6.8: every bound runs from the launch. The l_kernel bound is diagnosis
 # only: at its expiry the wait goes on while l_kernel or i_start has been seen.
 # l_panic, l_rbfail and qvm's exit end every wait at once (F29). Silent from the
-# launch to the last wait's return.
+# launch to the last wait's return, apart from a failure line.
+# The reader order (§14.10): s1con opens the slave /dev/ttyp3 only after qvm has been
+# started, because a slave open waits for its master and qvm opens the master
+# /dev/ptyp3 itself. qvm does that in its configuration pass, the work its dryrun
+# finished inside the dryrun bound, so the hvc0 open wait has that bound, ends at once
+# if qvm exits, and is the first wait after the launch. The guest writes hvc0 only
+# after its kernel has probed virtio-console, so no guest output comes before the
+# open. The timer files started at the launch, not the chained -t bounds, hold
+# l_kernel and i_ready to their bounds from the launch. Without open.hit the needle
+# waits are skipped, and teardown ends qvm. A qvm that exited before s1con opened is
+# not a reader failure: no FAIL line is printed, and its exit shows through qvm.rc as
+# it did before this order.
 if [ "$MODE" != host ] && [ "$MODE" != dryrun ] && [ -z "$FAIL" ]; then
 	state launch
 	LAUNCHED=1
 	bwait -s @LK@ -c "$S/lk.expired" &
 	bwait -s @IR@ -c "$S/ir.expired" &
 	( stamp -n -q -l qvm_launch -r "$S/s1.stamps" -x "$X/qvm" "@$CONF" < /dev/null > /dev/ttyp2 2>&1; echo "rc=$?" > "$S/qvm.rc"; : > "$S/qvm_exit.hit" ) &
-	bwait -p "$C/i_ready.hit" -p "$S/l_panic.hit" -p "$S/l_rbfail.hit" -p "$S/qvm_exit.hit" -p "$S/lk.expired" -t @LK_WAIT@ > "$S/w.1" 2>&1
-	GO=
-	[ -e "$S/l_kernel.hit" ] && GO=1
-	[ -e "$C/i_start.hit" ] && GO=1
-	[ -e "$C/i_ready.hit" ] && GO=
-	[ -e "$S/l_panic.hit" ] && GO=
-	[ -e "$S/l_rbfail.hit" ] && GO=
-	[ -e "$S/qvm_exit.hit" ] && GO=
-	[ -n "$GO" ] && bwait -p "$C/i_ready.hit" -p "$S/l_panic.hit" -p "$S/l_rbfail.hit" -p "$S/qvm_exit.hit" -p "$S/ir.expired" -t @IR_REST@ > "$S/w.2" 2>&1
-	GO=
-	[ -e "$C/i_ready.hit" ] && GO=1
-	[ -e "$S/l_panic.hit" ] && GO=
-	[ -e "$S/l_rbfail.hit" ] && GO=
-	[ -e "$S/qvm_exit.hit" ] && GO=
-	[ -n "$GO" ] && bwait -p "$C/shell_ok.hit" -p "$S/l_panic.hit" -p "$S/l_rbfail.hit" -p "$S/qvm_exit.hit" -t @SHELL_T@ > "$S/w.3" 2>&1
+	s1con -i /dev/ttyp3 -O -R -o "$S/s1.hvc" -m @CAP@ -r "$S/s1con.stamps" -h "$C" -d 2 -s 'S1-INIT start' -l i_start -s 'S1-INIT ready' -l i_ready -s 'S1-SHELL-42-OK' -l shell_ok -s 'S1-HB' -l hb -s 'S1-END-43-OK' -l end_ok -w 'i_ready=echo S1-SHELL-$((40+2))-OK' -t '/dev/shmem/probe2.go=echo S1-END-$((42+1))-OK' &
+	bwait -p "$C/open.hit" -p "$S/qvm_exit.hit" -t @DRY_K@ > "$S/rd.2" 2>&1
+	if [ -e "$C/open.hit" ]; then
+		bwait -p "$C/i_ready.hit" -p "$S/l_panic.hit" -p "$S/l_rbfail.hit" -p "$S/qvm_exit.hit" -p "$S/lk.expired" -t @LK_WAIT@ > "$S/w.1" 2>&1
+		GO=
+		[ -e "$S/l_kernel.hit" ] && GO=1
+		[ -e "$C/i_start.hit" ] && GO=1
+		[ -e "$C/i_ready.hit" ] && GO=
+		[ -e "$S/l_panic.hit" ] && GO=
+		[ -e "$S/l_rbfail.hit" ] && GO=
+		[ -e "$S/qvm_exit.hit" ] && GO=
+		[ -n "$GO" ] && bwait -p "$C/i_ready.hit" -p "$S/l_panic.hit" -p "$S/l_rbfail.hit" -p "$S/qvm_exit.hit" -p "$S/ir.expired" -t @IR_REST@ > "$S/w.2" 2>&1
+		GO=
+		[ -e "$C/i_ready.hit" ] && GO=1
+		[ -e "$S/l_panic.hit" ] && GO=
+		[ -e "$S/l_rbfail.hit" ] && GO=
+		[ -e "$S/qvm_exit.hit" ] && GO=
+		[ -n "$GO" ] && bwait -p "$C/shell_ok.hit" -p "$S/l_panic.hit" -p "$S/l_rbfail.hit" -p "$S/qvm_exit.hit" -t @SHELL_T@ > "$S/w.3" 2>&1
+	else
+		[ -e "$S/qvm_exit.hit" ] || { say "FAIL reader hvc0"; FAIL=${FAIL:-reader}; }
+	fi
 	state report
-	show "$S/w.1" "$S/w.2" "$S/w.3" "$S/s1.stamps" "$S/s1con.stamps"
+	show "$S/rd.2" "$S/w.1" "$S/w.2" "$S/w.3" "$S/s1.stamps" "$S/s1con.stamps"
 	mem launched
 	pidin -p qvm -f abNli > "$S/pq.1" 2>&1; head -n 30 "$S/pq.1"
 @BOARD@	say "GUESTRAM unknown"

@@ -751,6 +751,14 @@ bounds() {
 	(( ${BT[IR]} > ${BT[LK]} )) || die "bound table: i_ready's bound must exceed l_kernel's"
 	(( HB_COUNT * ${BT[HB_S]} == HOLD_S )) || die "bound table: $HB_COUNT heartbeats of ${BT[HB_S]} s are not the $HOLD_S s hold"
 	(( ${BT[HOLD_T]} > HOLD_S + ${BT[END_T]} + 30 )) || die "bound table: memcanary hold -T ${BT[HOLD_T]} does not outlast the hold and probe 2"
+	# §14.10: s1con opens hvc0's slave only after the launch, so its open wait, bounded by
+	# DRY_K (qvm opens the master in the configuration pass its dryrun finished inside
+	# DRY_K), is the first launch-relative wait. The timer files started at the launch hold
+	# l_kernel and i_ready to LK and IR from it: the open wait must end before l_kernel's
+	# timer, and no chained -t may end its wait before its timer does.
+	(( ${BT[DRY_K]} < ${BT[LK]} )) || die "bound table: the hvc0 open wait (DRY_K) must end before l_kernel's timer"
+	(( ${BT[LK_WAIT]} > ${BT[LK]} && ${BT[LK]} + ${BT[IR_REST]} > ${BT[IR]} )) \
+		|| die "bound table: a chained -t would end its wait before the launch timer"
 }
 
 # ksh_worst PROFILE MODE: the host script's worst case from the bound table, each
@@ -778,7 +786,9 @@ ksh_worst() {
 		w=$(( w + 2 * ex + ${BT[SEND_FDT]} + ${BT[SEND_LOG]} ))
 		[ "$p" = board ] && w=$(( w + 10 ))
 		if [ "$m" != dryrun ]; then
-			w=$(( w + 2 * ${BT[READER_T]} + ${BT[LK_WAIT]} + ${BT[IR_REST]} + ${BT[SHELL_T]} + 5 ))
+			# pl011's reader before the launch; then, chained from the launch, the hvc0
+			# open wait (DRY_K, §14.10), l_kernel, the rest to i_ready, and shell_ok.
+			w=$(( w + ${BT[READER_T]} + ${BT[DRY_K]} + ${BT[LK_WAIT]} + ${BT[IR_REST]} + ${BT[SHELL_T]} + 5 ))
 			w=$(( w + 2 * ${BT[TD_TERM]} + 2 * ${BT[TD_KILL]} + 2 * ${BT[EOF_T]} + set ))
 			w=$(( w + 2 * ex + 2 * ${BT[SEND_STREAM]} ))
 			[ "$p" = board ] && w=$(( w + 10 ))
