@@ -1485,3 +1485,992 @@ The owner was at the board, with the TX wire off. The images are the ones rebuil
 - **What follows, per the design.** S1-F stops, and B3 to B5 do not run. No window-1-only continuation is offered (V14). Under D8, the next step is a new design revision, owned by the owner's decision, which reruns B1 and B2: another range derived from the three-boot `/proc/iomem` comparison, a diagnosis of the writer first, or both. D8 names this record `r/s1-runs.md`. Because S1's figures stay private, the number-free record is this section, and the private run notes sit beside the B2 records.
 
 **What this does not show.** B0 and B1 show that the harness, the staging and the option-off startup work on the board. B2 shows that 11c's window-2 candidate is not free after the quiesce, at its lowest canary. It does not show that the rest of window 2 is free, since two canaries of 16 MiB sample a range of more than 2 GiB, and the allocation checks its pages only for the moment it holds them. It shows nothing about a Linux guest on the board, and no timing.
+
+## 15. Revision 3: writer diagnosis for B2's c2 canary (D8 option 1, 2026-09-14)
+
+Phase 3b. **Revised 2026-09-14, after three adversarial reviews (safety, power, feasibility; outcomes in §15.11).** Proposed as a new **§15 of `results/orin-native-port/20260909T1100Z/s1-design.md`**. Older sections get dated one-line pointers, not rewrites (§15.8). Nothing in this revision has been built or run. It creates no code, configuration or image. It is a synthesis of four desk analyses (Linux-side mechanisms, a QNX-side read-only instrument, harness quiesce variants, design rules with classification) and three reviews. §15.10 records where the analyses disagreed; §15.11 records every review change and how conflicts between reviewers were resolved.
+
+**Hard rules kept while writing.** No board contact, no download, no repository edit, no QNX-shipped binary read. Web use was limited to documentation pages, and those reads were the analyses'.
+
+**Evidence classes** as in the header of s1-design.md: VERIFIED, VENDOR_CLAIM, HYPOTHESIS, UNKNOWN. Two additions:
+- **"VERIFIED (private record)"** means read in a git-ignored run record. The text quotes no figure from it.
+- **"reported VERIFIED"** means another analysis read it, and this draft did not re-read it.
+
+**Number-free, and D29-gated.** This text contains:
+- no count, offset or page-class figure from any run;
+- no uptime, boot id or duration from a run;
+- no IOMMU group, PCI address, DMA mask width or kernel-placed address read in a run;
+- no MAC, IP, SSID, user name or hostname.
+
+Addresses that appear are design constants already public in §3.3, or page-frame numbers derived from them. Durations that appear are design constants (wait bounds), never results. The run facts behind §15.2 are in `results/orin-native-port/20260914T045838Z/s1/B2/` and `.../s1/diag/` (git-ignored).
+
+**Pushable only after D29.** Three kinds of wording in this text are reserved for the owner under D29 and are marked **[D29]** where they state a run fact: the direction of E2's count change, that the harness's ssh link is wireless, and which device classes the removal set holds. If D29 declines any of them, §15 is not pushed as written; the push carries the neutral substitutions in §15.8's table instead.
+
+---
+
+### 15.1 Purpose, the owner's decision, scope
+
+**Decision (owner, 2026-09-14, D8 option 1).** B2 was not met on data: c2 gave `verify=bad` at both checks while c1 verified. By §5.3 that is kill condition 1 for the 11c candidate, and S1-F stopped. The owner chose to **find the writer first**:
+- **A quiesce shortfall** is a harness defect. An example is a Linux device left doing DMA after kexec. It is fixed in the harness, and B1 and B2 are rerun.
+- **A firmware or range-owned writer** confirms kill condition 1. A new range is then derived, in revision 4.
+
+**Purpose of this revision**
+1. Put the next board runs in order, cheapest and most discriminating first. Harness-only rungs on the staged `s1-h1` come first, so they can run in the owner's current session.
+2. Pre-register the rule that classifies B2 before any diagnostic result exists (§15.6).
+3. Specify one image-changing instrument that shows *what kind of* data sits in c2, without printing it, and that also watches the rest of sysram through a large timed hold (§15.4.8 J6).
+4. Bound the diagnosis and name the decisions reserved for the owner.
+
+**Scope**
+- **In:** the c2 writer's class, B2's classification, and the harness fix if there is one. Also the exposure of window 1 and of earlier rungs, as a risk statement.
+- **Out:**
+  - S1-F progress: B3-B5 stay stopped;
+  - any change to the startup binary, window 2's size or the canary constants (each reruns B1, so revision 4);
+  - any change to the `s1-h1` image or its sources (the B2 rerun must be judged by §6.7 unchanged);
+  - GPU pass-through;
+  - any timing.
+
+**Contradictions this revision resolves** (the §1 table continues)
+
+| # | Conflict | Resolution |
+|---|---|---|
+| C17 | F16 and F23 say "stop board work until explained"; D8 option 1 needs board runs | The stop is lifted **only** for §15's J rungs, under D20. B3-B5 stay stopped |
+| C18 | §5.3's defect list has no quiesce class, so c2 `verify=bad` is data whatever its cause | A pre-registered class Q (quiesce shortfall) with fixed evidence criteria (§15.6). It is adopted before J2 runs, so the rule cannot be fitted to a result |
+| C19 | D8's text says a revision "reruns B1 and B2"; §5.3 says "rerun B1 if startup changed" | Owner ruling D26. Recommendation: rerun B1 after any harness fix, since the quiesce is part of B1's entry |
+| C20 | §0 and §3.8 (RT:81) say the other masters are "untranslated because Linux disables the SMMUs". Under SMMUv2 bypass, a master restricted to 32-bit DMA addresses cannot address c2 | Kept as R46 (HYPOTHESIS). The consequence is drawn in §15.3: a c2 writer points first to a master with no SMMU, to firmware, or to QNX, and the exposure moves toward window 1 (§15.8). This is design reasoning about any 32-bit master, not a statement about which device on the board has which mask |
+| C21 | §14.12 wrote that something "kept writing"; **[D29]** the second mismatch count was **lower** than the first, which a plain overwriter cannot produce | §15.2 E2 restates the observation. "Writer" becomes one hypothesis beside read instability (H3). Public wording of the direction is D29's |
+| C22 | §3.8: memcanary prints only a count, so data cannot separate the hypotheses | A second read-only binary, built from the same source, with classes, counters and page bitmaps only (J6). `memcanary`, its pin and every existing kimg stay byte-identical |
+| C23 | The private page-ownership snapshot comes from B2's return boot, not quiesced, not at kexec | J2 and J4 take the same reads on the boot that jumps, before and after the quiesce, over ssh. **No snapshot is taken at the jump:** pre-kexec page flags cannot predict where a device writes after kexec under bypass or a stale translation (R45), and a final snapshot would add block I/O on the jump boot (§15.11, power review) |
+| C24 | B2's note called the nvgpu PMU timeouts "known quiesce noise", implying the `rmmod` causes them | **VERIFIED (text):** the public M1 capture, from a kexec without the module quiesce, shows the same two timeout lines and the pending-interrupt line just before the SMMU lines. So the error **lines** come with nvgpu's teardown on either path, not only with the `rmmod`. **Not shown:** that the GPU's state or the pages it held are the same after `rmmod` and after the shutdown path. The same lines do not imply the same state, so C24 does not show that a no-`rmmod nvgpu` arm is uninformative. J5 stays unrun for budget and fixed-setting reasons (§15.10 item 5) |
+
+**Still forbidden.** §7.3 applies in full, and §2 rules 5, 6, 6a and 10 are unchanged except for the one dated rule-5 exception in §15.4.3 (the detached sequence's own three files). New Never items:
+- No `rfkill` command at all (state is read from sysfs), no `nmcli`, `iw`, `ip addr` or other NetworkManager or wpa_supplicant state change, and no `systemctl enable|disable|mask`. Also no write under `/etc`, `/boot` or `/var/lib`, no kernel command-line change, and no `reboot -ff`. Reason: rfkill and NetworkManager radio state persist across boots (VENDOR_CLAIM, systemd-rfkill(8) and the NetworkManager rfkill page), so the next boot could come back without ssh while COM3 is receive-only.
+- No write to a PCI sysfs `remove`, `rescan`, `reset`, `driver_override`, `new_id` or `power/control` file; no `dd` with `of=` on any `/sys` path; no PCI configuration write other than the one `setpci ... COMMAND=0000:0004` form of §15.4.3.
+- No read of a netdev or Bluetooth `address` file, a USB `serial` attribute, `lsusb -v` or `hciconfig`.
+- No dump of canary word values or bytes anywhere, unless D28 later approves a restricted form. No packet capture on L4T.
+- No `/dev/mem` or `devmem` read on L4T.
+- No MMIO read of SMMU, PCIe configuration or GPU registers from QNX: an unclocked block can raise an SError at EL2, which is a power-cut class.
+- No change to the startup source, window or canary constants, `memcanary.c` without its macro, or the `s1-h1`, `s1-n1`, `s1-n2` or `s1-d1` sources inside revision 3.
+- No diagnostic rung without the owner at the plug, no quiesce on a boot not freshly booted, and no override of the uptime limits, which the detached sequence also enforces at the moment it would issue (§15.4.3).
+
+---
+
+### 15.2 Evidence so far
+
+| # | Fact | Class | Source |
+|---|---|---|---|
+| E1 | **B2:** startup added window 2 and kept the GPU range out. It filled c1, c2 and c3 before procnto. `S1 W2 reflected=yes`; `S1 ASINFO` showed both windows in sysram, three `s1canary` entries, and neither a canary nor the GPU range in sysram. c1 and c3 verified at both checks, and the window-2 allocation filled and verified. c2 gave `verify=bad` at both checks, with its **first word** the first mismatch both times | VERIFIED (private record, one run) | B2 `b2-note.log`, `parse-s1.txt`, COM3 |
+| E2 | **The mismatch count changed between the checks. [D29] The second was lower.** `check_words` recounts from scratch on each call (`tools/memcanary.c`, `check_words`). So some words read back as exactly `splitmix64(base + offset)` again. A writer that only overwrites cannot do that. It needs a writer that restores earlier content (save, use, restore; a status bit set and later cleared; a copy written back) or a read path that does not return what is stored | VERIFIED (arithmetic on the tool's semantics, if both reads were faithful) | same |
+| E3 | **Bad before any S1 memory user ran.** The host script order is `asinfo`, then the start verify, then `alloc`, then an unheld wait, then the end verify (`startup/s1-host.ksh.in`, host block). The procnto allocator is excluded by `canary_in_sysram=no`. The `alloc` checks its own pages only straight after its fill; it holds nothing during the wait, so B2 shows almost nothing about a live writer elsewhere in sysram | VERIFIED (source) | source; B2 |
+| E4 | **Linux turned SMMU translation off before every kexec checked.** All three SMMU instances printed `disabling translation`, then `kexec_core: Starting new kernel`. Seen in B2, B1, every M3 and M4 COM3 capture checked, and the public M1 capture | VERIFIED (text only; register state after kexec never read) | COM3 captures; `logs/sample-boot/orin-native-m1-first-procnto.log` |
+| E5 | **The same nvgpu teardown error lines appear with and without the module quiesce:** two `PMU wait timeout expired` lines and one pending-interrupt line. In B2 they fall during the quiesce; which step triggers them is UNKNOWN. In M1, which had no module quiesce, they fall just before the SMMU lines | VERIFIED (text) | same (C24) |
+| E6 | rtcpu's ivc-bus children print `ivc channel driver missing` during shutdown. RCE's run state after kexec is UNKNOWN | VERIFIED (text) | same |
+| E7 | **Zones on L4T:** ZONE_DMA covers window 1; ZONE_DMA32 is empty; **ZONE_Normal starts exactly at window 2's base, which is c2's base** | VERIFIED (one boot, private record) | `diag/d0-note.log` |
+| E8 | **Page ownership on B2's return boot, not quiesced:** c1's pages all free; c2's pages mostly slab, with page tables, file cache and free pages; c3 page cache; the lowest part of ZONE_Normal dense with slab. It is not the state at B2's kexec, and it describes Linux's CPU-side ownership only | VERIFIED (one other boot; limits in C23 and R45) | `diag/d0-kpageflags.log` |
+| E9 | **DMA-capable devices on that boot [D29]:** a wireless network function on an out-of-tree PCIe driver, behind an SMMU, Bus Master set, carrying the PC's ssh; a wired Ethernet function on an out-of-tree driver, no link; an NVMe drive; the Tegra xHCI with hubs and a Bluetooth radio. Coprocessor groups: BPMP, RCE, DCE, SPE, host1x contexts and display. Default IOMMU domain translated; `arm_smmu disable_bypass=Y`. Each device's DMA mask width is recorded privately and is not public text | VERIFIED (one boot) | `diag/d0-layout.log`, `d0-shutdown.log` |
+| E10 | A kallsyms search for driver shutdown handlers is **inconclusive**: it also misses handlers that certainly exist | VERIFIED (limit) | same |
+| E11 | **The GPU has no `iommus` property and is `dma-coherent`,** so its DMA is CPU-physical even under L4T | reported VERIFIED (live DT on the local research branch; RT C2, C3) | RT |
+| E12 | **The instances are Arm SMMUv2 (MMU-500), and the live DT has no ITS or `msi-controller` node** | reported VERIFIED (research-tegra234.md; RT C4, C13) | same |
+| E13 | **RCE's allocatable IOVA window,** from the `rce-reservation` node's `iommu-addresses`, overlaps the upper part of window 1, and c1 lies inside it. `camdbg_carveout`, the only node whose allocation range starts at window 2's base, is `disabled` | VERIFIED (live DT on the local research branch; addresses kept out of public text) | `raw/orin-live.dts` on `research/gpu-passthrough` |
+| E14 | **`kexec -s` jumps with no purgatory,** and the shim line shows the kexec tree far from c2 | VERIFIED | `r/research-kexec-tcu.md`; B2 COM3 |
+| E15 | **Under SMMUv2, `sCR0.CLIENTPD=1` makes every transaction bypass translation;** `USFCFG` applies only while CLIENTPD is 0 | VENDOR_CLAIM (Arm IHI 0062; OSDev summary) | analyses' reads |
+| E16 | **Upstream's SMMUv2 shutdown path puts the SMMU into bypass on kexec,** and devices still doing DMA then write untranslated addresses | VENDOR_CLAIM (linux-arm-kernel thread, 2024-03); NVIDIA's 5.15 fork not read | same |
+| E17 | **Linux clears PCI Bus Master in `pci_device_shutdown` during kexec** for devices in D0-D3hot | VENDOR_CLAIM (2012 patch text); fork not read | same |
+| E18 | **systemd arms the Tegra hardware watchdog under L4T;** the known long-uptime shutdown Oops came back through a watchdog reset | reported VERIFIED (B2-session COM3); the return VERIFIED in §14.12 | B2 COM3; §14.12 |
+
+**What this evidence does not show**
+- **Which device, firmware or code wrote c2.**
+- **Whether `CLIENTPD` was actually set after kexec,** or whether PCI Bus Master was actually cleared on this kernel.
+- **Whether the result repeats:** there is one run.
+- **What c2 held at B2's kexec,** or what the mismatching words contain.
+- **Anything about the rest of window 2 or of window 1** beyond c1 and c3, including whether a writer landed in sysram during B2 (E3).
+
+---
+
+### 15.3 Hypotheses, ranked, and what separates them
+
+**Constraints any explanation must meet**
+- **K-a:** only c2 is bad; c1 and c3 are clean. (Only three 16 MiB windows were watched; K-a says nothing about the rest of sysram.)
+- **K-b:** the first bad word is at c2's first word, twice.
+- **K-c:** the count changed, so something was live after startup's fill.
+- **K-d:** words returned to the pattern (E2).
+- **K-e:** c2 was bad before any S1 memory user ran.
+- **K-f:** c2 is outside sysram.
+- **K-g:** under Linux the same pages hold live slab (weak, one other boot). A writer that is *always* active under Linux would regularly corrupt L4T.
+
+**Pivot (HYPOTHESIS, strong, from E4 and E15-E17).** A translated master still active after kexec writes at its old IOVA used as a physical address.
+- iommu-dma allocates PCI IOVAs below 32 bits first, top-down (HYPOTHESIS, from memory; Q16).
+- If so, the removable PCIe masters land below 4 GiB, not at c2.
+- Reaching c2 would need a Bus Master violation **and** translation still in force (or a stale translation, H4s).
+- A GPU with no SMMU (E11), firmware, a coprocessor with physical access, or QNX need neither.
+
+| Rank | Hypothesis | Fit | Prior | Discriminating observation |
+|---|---|---|---|---|
+| **H1** | **GPU residue.** The ga10b or one of its falcons keeps writing CPU-physical pages nvgpu used, after its teardown errors (E5) | K-a and K-b if an nvgpu page was at the low end of ZONE_Normal; K-c yes; K-d plausible (firmware working memory rewrites fields; HYPOTHESIS); K-g consistent, since writes after teardown never meet a live Linux owner for long | medium | **J4 bad** (removable masters excluded) **and** a UEFI-entry arm clean (J7a). Supporting only: J6 bitmaps show pointer-like or structured classes, and the J6 fill-rate row changes. The J2 and J4 page snapshots carry **no evidential weight** for H1 (R45) |
+| **H2** | **A firmware or coprocessor user of window 2's base that `/proc/iomem` does not show** (refines K5, R17): BPMP or EMC work, secure side | K-b strong: the range starts at a region, zone and possibly die boundary. K-d fits save and restore well. **K-g against**, unless shutdown or the quiesce triggers it | medium-low | **J4 bad and J7a (UEFI) still bad.** Supporting: J6 shows `healed` words, pattern copies or periodic whole-page restores, `small32` ring-counter-like words, and no Linux-pointer classes |
+| **H3** | **Read instability at the base of window 2:** retention or a marginal read after an EMC change. No writer | The only candidate that explains K-d without a writer. Against: the allocation verified over window 2, and Linux uses these pages | low | J6's F34 rule: oscillating re-reads (`osc`, A-B-A) above 0, `flip2` dominant, and no in-progress changes (`prog` 0) |
+| **H4** | **A removable Linux DMA master** (wireless, Ethernet, NVMe with a host memory buffer, xHCI with its falcon) with translation still in force | Needs two failures (Bus Master, then bypass). K-d: network RX appends contradict it (HYPOTHESIS), but a descriptor ring whose device sets and later clears status or ownership bits in existing words, or an NVMe host memory buffer write-back, fits K-d (HYPOTHESIS) | low | **J4 clean** where J2 is bad. Supporting only: J6 positive signatures (§15.4.8; absence excludes nothing) |
+| **H4s** | **Sub-hypothesis of H4: a stale translation.** A master keeps DMA through SMMU page tables that were Linux pages and became QNX sysram after kexec; QNX's use of those pages moves the write targets | Fits K-c; the change in c2's count straddling B2's allocation fill would fit a target move caused by the fill | low (needs R46 false) | J6's fill-rate row (label c against label b, §15.4.8), then J4 |
+| **H5** | **QNX-side**, anchored at the window-2 `ram` entry base (R38's residual) | K-b strong, K-c yes, K-d weak; K-f excludes only the allocator | low | J6: page-table or kernel-address classes. Separated only by revision 4's base shift |
+| — | **RCE under bypass** | Lands in its IOVA window (E13), not c2 | not a c2 candidate | Window-1 exposure (§15.8). c1 sits there and was clean once |
+| X | procnto allocator; S1 `alloc`; startup's fill; kexec purgatory and segments; GIC LPI tables; SMMUv3 queues | K-f; K-e; not live (K-c); E14; E12 | **excluded** | — |
+
+**What J4 can and cannot separate.** J4 (removal of the removable masters) tests H4 and H4s only. It gives **no evidence on H1, H2, H3 or H5**. It is kept as the first test arm because it needs no image, it is the only arm whose clean result is itself a harness fix, and its bad result is the precondition of every class except Q (§15.6). The decisive H1-versus-H2 test is J7a.
+
+---
+
+### 15.4 The diagnostic rung ladder
+
+**Prefix `J`.** A repository search found no `J<n>` ids. The harness analysis's R0/W0/D1-D3 names would collide with the R and D tables.
+
+**Default record directory:** the session's existing `<rec>` (`results/orin-native-port/20260914T045838Z/s1/`), so `used-boot-ids.log` keeps guarding the fresh-boot rule. Each rung goes to `<rec>/J<n>/`, an attempt to `J<n>-aN`, and a refusal to `J<n>-refused-<utc>`. **No J rung ever creates or writes a `B*` directory** (a harness self-test proves it), and B1's and B2's records are never touched.
+
+| Rung | Where | Image | Needs a rebuild | Question | Today? |
+|---|---|---|---|---|---|
+| J0 | PC | — | no | desk reads; harness implementation and self-tests; pre-registration | before J1 |
+| J1 | L4T only; no quiesce, no kexec; ends in a reboot | — | no | census: tools, topology, mounts; marker and transient-timer path to COM3; the trace | yes |
+| J2 | kexec, issued by the detached sequence with an **empty** removal set, ssh kept up | `s1-h1` (staged) | no | **matched control:** does c2 go bad again under exactly J4's timing and issuing context? | yes |
+| J2b | kexec, `cmd_run`'s B2 flow with no additions | `s1-h1` | no | **only if J2 is clean:** a pure B2 repeat, to separate intermittency from the J additions | in J4's slot, only after F33 |
+| J3 | L4T only; quiesce, no kexec; ends through the fallback timer | — | no | **rehearsal** of the detached removal that drops ssh | yes, after F32 |
+| J4 | kexec, issued by the detached sequence with the removal set | `s1-h1` | no | **test arm:** removable DMA masters removed before kexec | yes, after J3 met |
+| J5 | kexec | `s1-h1` | no | *reserved:* no-`rmmod nvgpu` arm | only by D24 |
+| J6 | kexec, in the arm §15.6 names | new `s1-j1` (startup unchanged) | yes | **watcher:** content classes, heal, oscillation and progress counts, page bitmaps, and a large timed hold over sysram | next session |
+| J7 | — | — | — | reserved arms: UEFI entry, and the rest (§15.4.9) | revision 4 or a D-row |
+
+**Boot chain for today.** Each quiesce is on a fresh, unused boot, and each start meets the start-margin rule of §15.4.3 (start uptime plus the rung's worst case under 1,800 s). **Before each rung's capture starts, the previous capture is stopped**, and each capture file name is used once (`<rec>/used-captures.log`).
+1. J1 on the current boot, ending in the reboot that J2 needs anyway.
+2. J2 on that fresh boot.
+3. After J2:
+   - **F32** (c2 bad at both checks): J3 on J2's return boot, then J4 on J3's return boot.
+   - **F33** (c2 ok at both checks): J2b on J2's return boot, then stop and memo.
+   - **F32a or F32b** (bad at one check only), **F39**, or a second F40: stop and memo; J6 first, next session.
+4. If a start misses its margin, `s1-board.sh reboot` first. A reboot is not a diagnostic run.
+
+#### 15.4.1 J0: desk and implementation (PC)
+
+- **Q16 (documentation, mailing-list and patch-discussion pages only; no clone, archive, tree or per-file source download):**
+  - what upstream v5.15's SMMUv2 shutdown and remove paths write to `sCR0`;
+  - `pci_device_shutdown`'s Bus Master clear and its `kexec_in_progress` condition;
+  - `device_shutdown()`'s `initcall_debug` print and its console level;
+  - whether `initcall_debug` is writable at run time;
+  - iommu-dma's 32-bit-first IOVA policy;
+  - `setpci`'s `value:mask` semantics (setpci(8));
+  - what `systemctl is-system-running` reports during a kexec shutdown (systemctl(1)).
+
+  Each answer re-labels R46-R48, R56, R72-R74 (VERIFIED against upstream documentation only; the fork stays unread). Reading upstream function bodies through per-file web source views is **not** assumed to be allowed; it is D33's.
+- **Q17:** is the staged `s1-h1.kimg` still what HEAD produces? Before J2, J2b, J4 and any B2 rerun, the harness checks that `s1-h1.params`' `kimg_sha256` is a real hash (not `-`) and equals the staged kimg's sha256. No rebuild is needed for J2-J4.
+- **Implementation of §15.5 A** (harness-only), its self-tests, and a local commit before J1 with a number-free message. **The commit names no driver:** devices are resolved at run time from PCI class codes, driver links and J1's private set file (§15.4.2). **Pushing that commit, or any text naming the removal set or the wireless link, waits for D29.**
+- **Pre-registration.** Before J2 runs, `<rec>/J-prereg.log` records:
+  - the commit, `git diff --quiet HEAD` of the harness, `kpf-decode.py` and `parse-s1.py`, and their sha256;
+  - §15.6's rule text hash;
+  - J4's removal set and the fixed slot list, as §15.4.3 derives them from J1 (private set file hash);
+  - the fill-rate factor for J6's row (§15.4.8);
+  - the D-rows taken.
+
+  Every J run note cites it, and every J board log records the same stamps (§15.5 A1).
+
+#### 15.4.2 J1: census, marker path and trace rehearsal (L4T only)
+
+- **Runs:** `s1-board.sh j1`, on any boot (it quiesces nothing), which it marks `by=j1`. It needs one COM3 capture started from PowerShell, whose file lies inside the git-ignored record directory, with life at least 1,800 s. A J1 boot is never used for a quiesce.
+- **Reads (read-only unless marked):**
+  1. **Tools:** `command -v systemd-run setpci dd sha256sum modprobe findmnt`; `systemd-run --version` (first line). Then one `dd iflag=skip_bytes,count_bytes` read of 64 entries of `/proc/kpageflags` at c1's page-frame offset, into tmpfs. This tests the snapshot primitive (R60). If `setpci` is absent, the Bus Master clear step is never run (§15.4.3).
+  2. **Kernel config items:** `CONFIG_(DMA_API_DEBUG|PAGE_OWNER|IOMMU_DEBUGFS|KEXEC_FILE|PCI_IOV)`; `/proc/sys/kernel/printk`, `printk_devkmsg`, `panic`, `panic_on_oops`.
+  3. **PCI topology:** `b_pci_state census` (§15.5 A1); each root port's child count; every `/sys/kernel/iommu_groups/*/type` whose value is not `DMA` or `DMA-FQ`, which adds to the untranslated set (record only).
+  4. **Storage and mounts:** `findmnt -rn -o TARGET,SOURCE` for every mount; `/proc/swaps`; the block device's sysfs parent chain for `/`, `$HOME`, `/dev/shm`'s backing and the kimg directory `KD`. **Pre-registered rule:** any controller (xHCI, NVMe or PCIe function) with a mounted or swap-backed descendant leaves J4's set.
+  5. **USB:** for every `/sys/bus/usb/devices/*`, only its `driver` link, `idVendor`, `idProduct` and `bInterfaceClass`; whether a HID keyboard interface is present (recovery, §15.7.3). No `serial`, no `address`.
+  6. **Marker and timer path (under D20):** one `s1wq: j1 probe result=0` line written to `/dev/kmsg` at level 3, then a check that it reached COM3 (R57). Then one transient timer, `systemd-run --on-active=30s --collect`, whose only action writes `s1wq: j1 timer result=0` to `/dev/kmsg`; its line on COM3 shows that a transient timer fires and its marker arrives (part of R59; the quiesced case stays J3's).
+  7. **Only under D23:** the GPU power-domain line from `/sys/kernel/debug/pm_genpd/pm_genpd_summary` and the EMC clock rate from debugfs (paths HYPOTHESIS, Q18; record only, never a gate, never GPU MMIO).
+  8. **Only under D21, and the only other writes:** `echo 1 > /sys/module/kernel/parameters/initcall_debug` and `dmesg -n 7`, both runtime-only, set just before the harness's usual reboot. Then `wait_new_boot_id`.
+- **Set file.** From reads 3-5, J1 writes the private `<rec>/J-set.conf`: for each member of J4's "max" set, its sysfs device path, driver name, root port and whether it stays in the set by the rules of §15.4.3 and item 4. Its hash goes into `J-prereg.log`. The committed harness reads it; it carries no driver name itself.
+- **Records:** `<rec>/J1/j1-<utc>-{board,census,com3}.log`, `-kpf-probe.bin`. The privacy scan, with the SSID class (§15.5 A4), runs on every copied text.
+- **Bounds:** reads 300 s; timer probe 120 s; reboot return bound 1,200 s, as `reboot`.
+- **Precondition:** no other workflow on the board or COM3; `S1_REDACT_SSID` supplied privately by the owner.
+
+| Observation | Conclusion | Next |
+|---|---|---|
+| `systemd-run` present; the `dd` probe returns 64 entries; both `s1wq: j1` markers on COM3 | detached sequence, snapshots and markers can run as designed | J2 |
+| `systemd-run` absent, or either marker missing from COM3 (F42) | no detached sequence can be proven | J2b runs in J2's place (a pure B2 repeat); J3 and J4 wait (revision 4, or D25's Ethernet variant) |
+| per-device `shutdown` lines from the trace on COM3 during the reboot, and the reboot's shutdown section of COM3 shorter than half of `S1_STUCK_S` | the trace works and its console cost is bounded | J2 and J4 both carry it (matched) |
+| no trace lines (F38), or the trace's shutdown section at least half of `S1_STUCK_S` | observation defect, or too costly on the console | J2 and J4 both run without the trace; no rerun for the trace alone |
+| a root port with more than one child, or a controller with a mounted or swap descendant | that device leaves J4's set, per the rules | recorded in `J-set.conf` and `J-prereg.log` |
+| `$HOME` or `KD` resolves under a controller in the set | the sequence could remove its own storage | that controller leaves the set; if it is the wireless function, no J3 or J4 (memo) |
+| a translated group that is not `DMA` or `DMA-FQ` (identity) | a new untranslated master exists | memo line; H4 widens; ladder unchanged |
+| the reboot oopses and returns through the watchdog | the known long-uptime pattern (F27) | J2 on the fresh boot |
+
+#### 15.4.3 The detached sequence (shared by J2, J3 and J4)
+
+**Why detached, and why in both arms.** Removing the wireless function **[D29]** drops the PC's ssh, so in J4 `systemctl kexec` must be issued by a unit on the board, not over ssh. If only J4 were detached, a clean J4 could come from its longer dwell after the quiesce or from the issuing context rather than from the removal; H1 residue that fades with time (HYPOTHESIS) would then be wrongly credited to the removable masters. So **J2 runs the same generated sequence with an empty removal set**, and the removal is the only difference between the arms. J3 runs it with J4's set and no kexec.
+
+**J4's removal set ("max").** Pre-registered from J1's set file before J2:
+- the wireless function: interface down, driver unbind, module removal, Bus Master read back on the endpoint and its root port, cleared if still set;
+- the xHCI platform device, unbound from its driver, which removes the hubs and the Bluetooth radio;
+- the Ethernet function: unbind, then the Bus Master check on the endpoint and its root port;
+- the NVMe function, **only if** J1 shows no mounted or swap-backed descendant and neither `$HOME` nor `KD` under it.
+
+**Refusals.**
+- A device whose root port has more than one child is not cleared at the root port.
+- If J3 shows an xHCI, Ethernet or NVMe step failing, J4's set falls back to **wireless only**. That fallback is pre-registered, so it is not a new decision.
+- The SD host, display, host1x, coprocessors and the GPU (already `rmmod`) are untouched. They are reported as **not excluded** by J4.
+
+**Fixed slots.** The generator derives one slot list from the "max" set, and every arm uses the **same list and the same number of slots**:
+
+| Slot | Action in J3 and J4 | In J2, and for members not in the set |
+|---|---|---|
+| 1 | wireless interface down (`ip link set dev <resolved> down`) | `result=skip` |
+| 2 | wireless driver unbind | `result=skip` |
+| 3 | wireless module removal (`modprobe -r <resolved>`) | `result=skip` |
+| 4 | wireless Bus Master read, clear if set, read back (endpoint, then a single-child root port) | read only |
+| 5 | xHCI unbind | `result=skip` |
+| 6 | Ethernet unbind | `result=skip` |
+| 7 | Ethernet Bus Master read, clear if set, read back | read only |
+| 8 | NVMe unbind | `result=skip` |
+| 9 | NVMe Bus Master read, clear if set, read back | read only |
+
+Each slot runs its action under `timeout WQ_STEP_TIMEOUT_S`, prints `s1wq: slot<n> <step> result=<rc>`, runs the Oops and D-state check below, and then sleeps until the slot's fixed length `WQ_SLOT_S` has passed. So the dwell from the quiesce to the issue is the same in every arm.
+
+**Bus Master clear, the only configuration write.** Only `setpci -s <BDF resolved from the driver link> COMMAND=0000:0004`, with a read-back of the Command register before and after. No `dd` fallback: if J1 found no `setpci`, the clear is not run, and a still-set required bit aborts with `abort reason=bme-not-cleared` (F44).
+
+**Phase A: PC, synchronous over ssh.** Every ssh session has an explicit timeout equal to its own bound.
+1. Stamps (§15.4.1), identity, uptime, fresh-boot and **start-margin** gates; `nvbootctrl`; governor pin; quiesce (bound 500 s, as `run`); gate B, including `oops_lines=0` from the quiesce, as `run` requires.
+2. `b_kpf_snap prequiesce` (J2 and J4 only, taken before step 1's quiesce) and `b_kpf_snap postquiesce` and `b_pci_state postquiesce` after it: raw `/proc/kpageflags` and `/proc/kpagecount` slices for window 2's and c1's page frames plus a text header, written to a `mktemp -d /dev/shm/s1kpf.XXXXXX` directory, fetched by scp at once, sha256-verified on the PC, then removed from tmpfs. **No tar, no gzip, nothing on the rootfs.** A snapshot failure is recorded and never stops the rung.
+3. `kexec -s -l`, `kexec_loaded=1` (J3 too, so memory state matches J4), `b_governor`.
+4. **Generate** `<img>-<utc>-wq.sh` and `-wqfb.sh` with `printf %q` and `declare -f WQ_FUNCS` only (§15.5 A5), never a heredoc (heredocs eat backslashes). Gate both with `bash -n` and the allow-list gate (§15.5 A5). scp them to `$HOME` and compare sha256.
+5. **Arm the fallback first:** `systemd-run --unit=s1wqfb-<utc> --on-active=<WQ_FALLBACK_S>s --timer-property=AccuracySec=1s --collect /bin/bash $HOME/…-wqfb.sh`.
+6. **Start the sequence:** `systemd-run --unit=s1wq-<utc> --collect --no-block -p TimeoutStopSec=30 /bin/bash $HOME/…-wq.sh`, with `FINAL=kexec` (J2, J4) or `FINAL=none` (J3). Both `systemd-run` command lines pass the same allow-list gate before they are sent.
+7. Record `run com3_log=<name> …`, `run com3_bytes_before_kexec=<bytes>` (J2, J4) or `j3 com3_bytes_before_arm=<bytes>` (J3), and `wq_armed armed_epoch=<s> wq_fallback_s=<s>` in the board log.
+
+**Phase A failures.** A failure or timeout at any step after 3 reads `/sys/kernel/kexec_loaded` over ssh, runs `b_unload`, stops any armed unit, and exits 3 ("reboot before another attempt"). Units are never armed after a timeout.
+
+**Phase B: board, detached.** Order, with nothing slow between the governor read and `systemctl kexec`:
+1. A start delay `WQ_START_DELAY_S`, so the PC's ssh session closes cleanly. The PC polls **COM3 only** in every arm; in J2 it uses ssh only for the ARMED-failure stop.
+2. `kexec_loaded` check (J2, J4); refuse if `$HOME` resolves under a set member.
+3. `b_pci_state pre`.
+4. Resolve each set member from its driver link and the set file, never from a fixed address; refuse on a mismatch (`abort reason=resolve`).
+5. The fixed slots. **After each slot:** scan `dmesg` since the sequence began for `Oops|BUG:|Kernel panic|Unable to handle kernel|Internal error` (b_quiesce's pattern) and check that the slot's process is gone and no task of the sequence is in D-state. On any hit: `abort reason=oops` (F47).
+6. `b_pci_state final` (per-read `timeout 10`, total under `WQ_FINAL_READS_S`).
+7. Refuse, with `abort reason=bme-not-cleared`, if any required Bus Master bit is still set (J3, J4).
+8. The Oops scan again.
+9. The trace settings, under D21 and J1's go (both arms or neither).
+10. `FINAL=none` (J3): mark `no final action`, then wait for the fallback.
+11. `FINAL=kexec` (J2, J4):
+    - read `/proc/uptime`; at or above 1,800 s: `abort reason=uptime` (F48). The constant is fixed in the script, not read from the environment, and 7,200 s is refused without exception;
+    - read both cpufreq policies' governor; not `performance`: `abort reason=governor` (F48);
+    - `b_freq final`;
+    - mark `kexec issuing`, then `systemctl kexec`.
+12. **After `systemctl kexec`:** a non-zero rc is the only "rejected" case: `abort reason=kexec-rejected`. On rc 0 the sequence waits `WQ_ISSUE_WAIT_S`; then, if `systemctl is-system-running` reads `stopping`, it marks `shutdown in progress` and exits without any action (R72); otherwise it marks `kexec did not happen`, runs `kexec -u` and reboots (exit 5).
+
+**Abort path** (`abort reason=…`): `kexec -u`, `sync`, `systemctl reboot`. Exit 5.
+
+**The fallback script:**
+- if `systemctl is-system-running` reads `stopping`: marks `fallback idle shutdown in progress` and exits;
+- otherwise marks `fallback firing`; appends a bounded `dmesg` tail to `wq.log`; runs `kexec -u`, `sync` and `systemctl reboot`;
+- after a 120 s wait, if still running and not `stopping`, marks `fallback forcing` and runs `systemctl reboot --force` (exactly one `--force`, never two).
+
+**Marker texts** are chosen so the existing parsers and `com3_class` never mistake them:
+- the prefix `s1wq:`;
+- `result=`, never `rc=`;
+- none of `verify=bad refuse= FAIL MB1 Setup Press Select Continue Shell login`;
+- no line ending in `$`, `#` or `>`.
+
+**Design constants,** refused if set in the environment and printed in the board log:
+- `WQ_START_DELAY_S` 15, `WQ_SLOT_S` 30, `WQ_STEP_TIMEOUT_S` 25, `WQ_SLOTS` fixed by the slot list, `WQ_FINAL_READS_S` 60, `WQ_ISSUE_WAIT_S` 180;
+- `WQ_FALLBACK_S` = start delay + `WQ_SLOTS` × `WQ_SLOT_S` + `WQ_FINAL_READS_S` + `WQ_ISSUE_WAIT_S` + 120.
+
+**Start margin.** The harness computes the rung's worst case from its own bounds (Phase A's gates, quiesce, snapshots, load and arming bounds, plus Phase B up to the issue, or to the fallback firing for J3), prints it in the board log, and refuses to start unless the start uptime plus that worst case is under 1,800 s. The issue-time uptime check in Phase B stays as the hard guard.
+
+**Rule-5 exception (dated 2026-09-14, under D25).** `-wq.sh`, `-wqfb.sh` and `-wq.log` may persist in `$HOME` across one reboot. On every return path, including exit 3, exit 5 and after a cut, they are fetched with sha256 verification and removed with a `b_rmfiles`-style step (names matching `[A-Za-z0-9._-]`, never `*.kimg`); the next harness command after any failed or cut path removes any leftover first. Every removal, and any file left behind, is recorded in the board log. Nothing else of the sequence touches the rootfs.
+
+#### 15.4.4 J2: the matched control arm (kexec, `s1-h1`), and J2b
+
+**J2 runs:** `s1-board.sh jrun s1-h1 control`: §15.4.3 with an empty removal set and `FINAL=kexec`, ssh kept up.
+- **Image:** `s1-h1` as staged, with Q17's check. Guard and return bound from `s1-h1.params`. `STEP=J2` is set after `resolve_kimg`, so `image_step`'s B2 mapping never reaches the record path.
+- **Preconditions:**
+  - J1 met (or its F42 row sends J2b instead);
+  - a fresh unused boot meeting the start margin;
+  - owner at the plug;
+  - one new COM3 capture, started from PowerShell inside the record directory, never used before, with life at least the return bound + 2,180 s + `WQ_FALLBACK_S`;
+  - `nvbootctrl` equal to the session's first reading;
+  - D20, D21 (for the trace), D22 and D25 taken; `S1_REDACT_SSID` supplied.
+- **PC progress:** `wait_wq`, as J4 (§15.4.6), with ssh used only for the ARMED stop.
+- **Records:** B2's set under `J2/` (board, params, `iomem-postrmmod`, COM3 copy, black box, `nvbootctrl` pre and post), `parse-s1.txt` from `run --diag j2`, `-kpf-{prequiesce,postquiesce}.{flags,count}.bin` with header, sha256 and `-decode.txt`, `-pci-{postquiesce,pre,final}.log`, `-wq.sh`, `-wqfb.sh`, `-wq.log`, `-wq-com3-markers.txt`, `-trace.txt` (the COM3 shutdown lines extracted and redacted), `j-note.log`.
+- **Verdict:** the parser's `run --diag j2` prints `step=J2` and `verdict=diagnostic complete|incomplete`, never `pass` and never a `b2=` field (§2 rule 3).
+
+| Observation | Conclusion | Next |
+|---|---|---|
+| **F32:** c2 bad at both checks; c1 and c3 ok; L0, L7, `S1 ASINFO` as B2 | the observation repeats (two bad controls) | J3 |
+| **F32a:** c2 bad at the start check, ok at the end check | corruption present before QNX's checks, and all bad words returned to the pattern before the end check (K-d at its extreme): a restoring writer or read instability | **stop kexec work today; memo;** J6 first, in the control arm |
+| **F32b:** c2 ok at the start check, bad at the end check | onset after the start check, so the writer started after QNX came up | **stop kexec work today; memo;** J6 first, in the control arm (a J4 clean result could be an onset-timing artefact) |
+| **F33:** c2 ok at both checks | B2 not reproduced under the J additions | J2b on the return boot, then stop (§15.6 class U) |
+| **F39:** c1 or c3 bad | the corruption reaches beyond c2 | **stop; owner;** the exposure item is raised |
+| **F40:** `refuse=`, `map=fail`, an `S1 ASINFO` difference, or no `procnto up` for a harness reason | a defect or harness fault | defect path; one harness retry on a fresh boot |
+| **F43, F47, F48:** the sequence aborted (exit 5) | no kexec happened | one harness retry on a fresh boot; a second stops the day |
+| the trace shows no `shutdown` line for a PCI function | its shutdown hook did not run, or the trace missed it | recorded; the J4 set is unchanged |
+| `b_pci_state final` shows Bus Master set on a PCI member at the issue | recorded as `bme_at_issue_control`; a named input to F35's split (§15.4.6). It shows only the state **before** the shutdown, not whether the shutdown cleared it | recorded |
+
+The page snapshots are a record only: they describe Linux's CPU-side page ownership near the jump and carry no evidential weight on H1 or on where a device writes (R45).
+
+**J2b runs** (only after F33, or after J1's F42 row): `s1-board.sh jrun s1-h1 b2repeat`: `cmd_run`'s B2 flow over ssh with **no additions** (no snapshots, no trace, no detached sequence), on J2's fresh return boot. Records under `<rec>/J2b/`; `run --diag j2b`; never a `B2-aN` directory.
+
+| Observation | Conclusion | Next |
+|---|---|---|
+| **F45:** J2b c2 bad | the J additions (dwell after the quiesce, the unit as issuer, the trace) change the writer's behaviour. A dwell effect would fit fading residue (HYPOTHESIS) | stop; memo; class U with this as a lead; D31 |
+| **F46:** J2b c2 ok at both checks | intermittent: one bad in three runs of B2's image | stop; memo; class U; D31 decides J6 in the control arm, which watches for onset |
+| F39, F40 | as J2 | as J2 |
+
+#### 15.4.5 J3: rehearsal of the detached removal (L4T only)
+
+**Runs:** `s1-board.sh j3`, only after F32. It needs D20, D22, D25 and a J1 that met. §15.4.3 with J4's set and `FINAL=none`; no prequiesce snapshot. It ends through the fallback timer, which proves that the fallback recovers a board with no network, without a power cut.
+
+**Preconditions:**
+- a fresh unused boot meeting the start margin (J2's return boot); owner present;
+- one new COM3 capture inside the record directory, never used before, with life at least `WQ_FALLBACK_S` + 1,200 + 1,800 s;
+- `S1_REDACT_SSID` supplied privately by the owner.
+
+**Gates** (read over ssh on the return boot, which is fresh and not marked):
+- COM3 holds every slot marker in order, and the fetched `wq.log` is consistent with it (R57);
+- `wq.log` shows each set member's steps at `result=0`, no `abort reason=`, and Bus Master 0 on every required endpoint and root port. Whether the driver cleared Bus Master itself is recorded as `bme_after_unbind`, before any clear;
+- `fallback firing`, then a reboot, then a new `boot_id` inside the reboot bound (R59);
+- **after the return:**
+  - `systemctl list-units --all 's1wq*'` is empty;
+  - the wireless driver is bound and its interface up;
+  - rfkill soft and hard read 0 from sysfs;
+  - NetworkManager and wpa_supplicant are active;
+  - the xHCI, Ethernet and NVMe drivers are bound. This shows the change was runtime-only (R58);
+- `nvbootctrl` equals the first reading; no new `dmesg-ramoops`, or it is recorded (F27);
+- the board-side sequence files are removed and the removal recorded.
+
+**No black box, no parser.** J3 has no QNX run: `b_after`'s black-box copy and the parser are skipped. If the previous console is wanted, it is copied as `-l4t-console-ramoops.log`, scanned with the SSID class, and never passed as `--blackbox`.
+
+**Records:** `<rec>/J3/`:
+- board log, COM3 copy;
+- `-wq.sh` and `-wqfb.sh` as sent, `-wq.log`, `-wq-com3-markers.txt`;
+- `-pci-{postquiesce,pre,final}.log`;
+- `-kpf-postquiesce.{flags,count}.bin` with header and decode;
+- `nvbootctrl` pre and post.
+
+| Observation | Conclusion | Next |
+|---|---|---|
+| every gate met | detached removal and fallback recovery work on this L4T | J4 on this return boot (after `reboot` if the start margin is missed) |
+| no slot marker on COM3, but the unit is active over ssh (F42) | markers do not reach the console under the quiesce | PC stops both units, `kexec -u`, exit 3; reboot; **no J4 today**; class U for today |
+| an xHCI, Ethernet or NVMe step fails or aborts, and the wireless steps pass | that device is unsafe to remove this way | J4 uses the pre-registered wireless-only set; recorded |
+| a wireless step fails, `abort reason=oops`, or `bme-not-cleared` (F44, F47) | the removal cannot be shown | no J4; memo; class U for today |
+| `fallback firing` absent after `WQ_FALLBACK_S` + 600 s, with no network (F42) | the fallback does not recover the board | §15.7.3 recovery; **no detached kexec variant** until revision 4 |
+| wireless, Ethernet or xHCI not back after the return (F41) | persistent state was touched, or a driver did not reload | stop board work; §15.7.3 |
+
+#### 15.4.6 J4: the test arm (kexec, `s1-h1`)
+
+- **Runs:** `s1-board.sh jrun s1-h1 remove`: §15.4.3 with J4's set (or the wireless-only fallback) and `FINAL=kexec`. `STEP=J4` is set after `resolve_kimg`.
+- **Only variable against J2:** the removal set. Timing (fixed slots), issuing context (the unit), snapshots and trace are matched.
+- **Image, bounds, records and verdict:** as J2 (`run --diag j4`).
+- **Preconditions:** J3 met; a fresh unused boot meeting the start margin; owner at the plug; one new COM3 capture inside the record directory; D24 (set) taken; `S1_REDACT_SSID` supplied.
+- **PC progress (`wait_wq`, 10 s polls of COM3 after the offset):**
+
+  | State | Evidence | Next |
+  |---|---|---|
+  | ARMED | no marker yet | if no `begin` by its bound while ssh still answers: stop both units, `kexec -u`, exit 3 |
+  | PROGRESS | slot markers; ssh silence expected in J4 | keep polling COM3; ssh is no longer evidence |
+  | ISSUED | `kexec issuing` | wait; a slow shutdown with growing COM3 is not a hang |
+  | JUMPED | `kexec_core: Starting new kernel` or `T234-SHIM` | `wait_new_boot_id` from here, with the params' return bound |
+  | ABORTED | `abort reason=`, `kexec did not happen` or `fallback firing` | wait for a new `boot_id`; exit 5, a harness-reason retry |
+  | STALLED | no new marker by the slot bound, no jump | `advice` (§15.7.3); NO CUT until the fallback deadline has passed |
+
+- **After a JUMPED return:**
+  - fetch `wq.log`, checking sha256, then remove the board-side sequence files;
+  - check that the `s1wq:` lines in `wq.log` are a subsequence of COM3's;
+  - parser, privacy scan, `extract`, `consistency`.
+- **After an ABORTED return (exit 5, F43, F47, F48):** as J3's "no black box, no parser" rule.
+
+| Observation | Conclusion | Next |
+|---|---|---|
+| **F35:** c2 ok at both checks; c1 and c3 ok; L0 and L7 met; the sequence reached `kexec issuing` with Bus Master 0 on every required function | the removed set is implicated, **provisionally** (H4 or H4s, or its live driver state) | §15.6 class Q (provisional); memo; D27; J6 in the remove arm; then the B1 and B2 reruns |
+| F35 **and** `bme_at_issue_control` shows Bus Master set on the PCI members in J2 | read as **Q-p:** the kexec shutdown's own Bus Master handling did not protect c2 in the control (E17 false on this fork, or too late; HYPOTHESIS, since no read follows the shutdown) | recorded in the memo |
+| F35 **and** Bus Master already clear on the PCI members at the issue in J2 | read as **Q-x:** the non-PCI member (the xHCI and its falcon, R63) or driver state implicated | recorded; D27 considers bisecting toward the xHCI |
+| **F36:** c2 bad at either check | the removable masters are excluded **as quiesced by this sequence**; nothing is shown about H1, H2, H3 or H5 | memo; J6 in the control arm; J7a decision |
+| **F39** | as J2 | stop; owner |
+| **F43, F47, F48:** ABORTED, exit 5 | no kexec happened; a harness-reason attempt | one retry on a fresh boot; a second stops the day |
+| **F37:** COM3 ends in L4T text after `kexec issuing`, with no shim and no ssh | Linux hang in the detached shutdown | §15.7.3; the diagnosis ends for the day |
+
+**False-Q risk, stated.** With one run per arm after two bad controls, a clean J4 under no real effect is not unlikely (a rule-of-succession estimate after two bad controls is about one in four). Q therefore stays provisional until the conditions of §15.6's "final" column hold.
+
+#### 15.4.7 J5: no-`rmmod nvgpu` arm (reserved)
+
+This is J2 with the fixed quiesce relaxed: nvgpu is left to its own shutdown path, as M1 and M1b entered.
+- **Not in today's ladder,** for two reasons: it relaxes a fixed harness setting (§14.5 W), and the budget is spent on the arms that can classify. C24 does **not** show it would be uninformative: the same error lines do not imply the same GPU or page state (C24, §15.10 item 5).
+- It runs only if D24 selects it, under a new one-line pre-registration, and counts against the revision's kexec budget.
+
+#### 15.4.8 J6: the watcher (image change, startup unchanged)
+
+**What it is.** A second read-only binary, `memcanary-w`. It is built from the same `memcanary.c` with `-DMEMCANARY_WATCH`, and the plain build hashes to `PIN_MEMCANARY` (the determinism gate, §15.5 B8.1, run in a scratch worktree before any commit). If the gate fails, the fallback is a separate `memcanary-w.c` sharing no edited token. **`PIN_MEMCANARY` never moves.**
+
+The binary ships in the new image `s1-j1`:
+- host mode, never a pass run;
+- the startup line unchanged (`-b w2,canary`), so `PIN_STARTUP_S1` is unchanged and **B1 is not triggered**;
+- B2's `alloc -s 1536` is **replaced** by the existing `memcanary hold` subcommand (the one B4 uses), sized as below.
+
+**Tool: `memcanary-w watch -n c1|c2|c3 -l LABEL -i MS -c COUNT -T SECS -d /dev/shmem/j1<label>.bin`**
+
+*Guards.* A compiled name only; `verify`'s refusals (`refuse=no-entry`, `refuse=in-sysram`, `map=fail errno=`); `mmap_device_memory(PROT_READ)`. Its only writes are two heap buffers (the `base` copy and `prev`) and one small file under `/dev/shmem/`.
+
+*Refused arguments.*
+- any hex or other address;
+- a label outside `[a-z0-9]{1,8}`;
+- `-i` outside 0-60,000;
+- `-c` outside 1-100,000;
+- `-T` outside 1-3,600;
+- `-d` without the `/dev/shmem/j1` prefix, or containing `..`.
+
+*Algorithm.*
+1. **BASE:** one read of every word, kept as `base` and `prev`; a bad-word bitmap against the pattern.
+2. **Snapshots** k = 1..COUNT until the deadline, sleeping `MS` between them. Where a word's read `A` differs from `prev`:
+   - read it twice more at once, `B` and `C`;
+   - count `osc` if `B != A` and `C == A` (the value returns to the first read: a marginal read);
+   - count `prog` if `B != A` and `C != A` (A-B-B or A-B-C: a writer in progress);
+   - count `stable` if `A == B == C`;
+   - count `healed` if the last read equals the pattern;
+   - update `prev` with the last read;
+   - set the page's `changed` bit, and its `healed` bit when it healed.
+
+   Nothing is printed inside the loop: the TCU callout busy-polls in the writer's context (§2 rule 7).
+3. **FINL:** the final bad set against the pattern.
+4. **Classification** of FINL's bad words (below), `munmap`, one file write, then the console lines.
+
+*Exit codes.* 0 when complete; 1 on a refusal, map failure, no memory or I/O failure; 2 on usage or an unknown name.
+
+*Word classes.* First match wins, so they sum to `bad`. Each rule is our reading of a public specification, from memory: HYPOTHESIS, and the self-test encodes that reading.
+- `zero`; `ones`;
+- `flip2`: popcount(word XOR pattern) ≤ 2, split into `flip2_same` (FINL's differing bit positions equal BASE's for that word) and `flip2_var`;
+- `flip8`: 3-8;
+- `pat_same`: the splitmix64 inverse lands on another 8-byte-aligned offset of the same canary;
+- `pat_other`: the inverse lands in another canary;
+- `hi_pat`: the upper 32 bits equal the pattern's, the lower differ (a 32-bit field written into the low half);
+- `lo_pat`: the lower 32 bits equal the pattern's, the upper differ;
+- `pte`: an ARMv8 VMSA table or page descriptor whose output address is in DRAM;
+- `kva`: top 16 bits all ones;
+- `ptr_self`: inside this canary;
+- `ptr_ram`: inside DRAM;
+- `u32page`: below 4 GiB, page-aligned, non-zero;
+- `small32`: non-zero, below 2^32, not page-aligned (ring indices, counters, queue headers; HYPOTHESIS on such layouts);
+- `other`.
+
+*Stride histogram.* For FINL's bad words, a count per in-page offset modulo 64 in eight bins (a periodic record stride shows as one or two dominant bins). Counts only.
+
+*Byte signatures,* counted independently over bad extents, **scanned at every byte offset**, counts only: `ascii_runs` of at least 16 printable bytes; `ipv4` (a valid header checksum); `beacon` (802.11 beacon frame control and broadcast address); `trb_evt` (xHCI event TRB shape). **They are positive-only:** after kexec the host driver is gone, whether a network function still decrypts is UNKNOWN, receive buffers start with vendor descriptors (HYPOTHESIS), and beacons may be filtered while associated. Their absence excludes nothing.
+
+*Console lines* (each ≤ 255 B at maximum field widths, matched by the harness's existing `S1 ` prefix):
+```
+S1 CANARY <n> watch=base label=<l> bad=<n> pages=<n> first_off=0x<hex> last_off=0x<hex>
+S1 CANARY <n> watch=time label=<l> snaps=<n> changed_snaps=<n> changed_words=<n> healed=<n> osc=<n> prog=<n> stable=<n> stop=count|deadline
+S1 CANARY <n> watch=words label=<l> bad=<n> zero=<n> ones=<n> flip2_same=<n> flip2_var=<n> flip8=<n> pat_same=<n> pat_other=<n>
+S1 CANARY <n> watch=words2 label=<l> hi_pat=<n> lo_pat=<n> pte=<n> kva=<n> ptr_self=<n> ptr_ram=<n> u32page=<n> small32=<n> other=<n>
+S1 CANARY <n> watch=stride label=<l> b0=<n> b1=<n> b2=<n> b3=<n> b4=<n> b5=<n> b6=<n> b7=<n>
+S1 CANARY <n> watch=bytes label=<l> ascii_runs=<n> ascii_bytes=<n> ipv4=<n> beacon=<n> trb_evt=<n>
+S1 CANARY <n> watch=verdict label=<l> writer=none|static|stopped|ongoing heal=no|yes reads=stable|osc|prog content=<list>|unclassified
+S1 CANARY <n> watch=fail label=<l> reason=nomem|dump-open|dump-write errno=<n>
+```
+
+*Export file* (content-free; offsets only, little-endian):
+- a 64 B header: magic `S1J1PBMP`, version, name, label, base, page count, snapshots taken, interval;
+- three bitmaps of one bit per 4 KiB page: `bad_final`, `changed_ever`, `healed_ever`;
+- a 32 B tail of the counts.
+
+It is sent **only through `xport`** (base64 between `S1 BEGIN` and `S1 END`), never as raw bytes and never into the black box. Raw bytes on COM3 would break `com3_last_kind`, parse-s1's body decode and the byte-exact redaction. **No word value, byte or pointer value leaves the target.** A value export is D28, reserved.
+
+*The hold.* `memcanary hold -s @J1_HOLD_MIB@ -f /dev/shmem/j1hold.go -T @J1_HOLD_T@ -o /dev/shmem/j1hold.out`, started in the background after watch `b`, as B4 starts it:
+- `@J1_HOLD_MIB@` is a generator design constant: windows 1 and 2's sysram sizes minus the canaries, minus a margin for procnto, the script, the watch buffers and the export files (margin in D27). No FreeMem value sizes it (§2 rule 8);
+- it fills once, then waits through watches `c` and `d`; the script then touches the trigger and waits for the verify line;
+- **what it shows:** by pigeonhole on the design sizes, an allocation that large must cover most of window 2 and much of window 1, so a writer landing anywhere in the held pages during the dwell makes the verify bad. **What it does not show:** where the bad words are (it prints one first offset in its own virtual allocation and a count), or which physical pages it covered (procnto's placement is HYPOTHESIS apart from the arithmetic, R75);
+- a `map=fail` is F28: diagnostic incomplete, not a verdict.
+
+*Host script (`s1-host.ksh.in`).* New `@J1@`-prefixed lines only, so every other image's generated script stays byte-identical:
+
+| Step | Label | Target | Interval | Count | Deadline | Bound |
+|---|---|---|---|---|---|---|
+| after `canaries start` | `a` | c2 | 0 ms | 100,000 | 20 s | 60 s |
+| next | `b` | c2 | 1,000 ms | 180 | 190 s | 230 s |
+| then the hold starts; wait for its fill line | | | | | | fill bound |
+| during the hold | `c` | c2 | 1,000 ms | 180 | 190 s | 230 s |
+| during the hold | `d` | c1 | 1,000 ms | 60 | 70 s | 110 s |
+| then touch the trigger; wait for the hold's verify line; `canaries end` as B2; then the `@BOARD@@J1@` export block; reset | | | | | | verify bound |
+
+The export block is placed after `FAIL_STATE`, **outside** the `MODE != host` guard, and exports `j1a` to `j1d` by `xport` (so `export_filename` gives `s1-j1a.bin` and so on), following the existing record-first rule. These are wait bounds, not results. The generator computes the guard and return bound, which must stay under the 3,600 s guard cap, and a black-box text estimate for `s1-j1` (§15.5 B8.6).
+
+**Run.**
+- `s1-board.sh stage s1-j1`, `p0 s1-j1`, then `reboot`.
+- On a fresh boot, `jrun s1-j1 control` or `jrun s1-j1 remove`: J2's or J4's harness arm (§15.4.3), with the same snapshots. Which arm runs is set by §15.6: after F35 the **remove** arm (J6r), which is a condition of Q becoming final; after F36, F32a, F32b or F46 the **control** arm (J6c). The other arm runs only by D27.
+
+**Preconditions:** the §15.5 B8 gates and the TCG self-test passed; D27 taken; the usual board rules and §15.4.4's preconditions.
+
+**Records:** `<rec>/J6r/` or `<rec>/J6c/`: J2's set plus `s1-j1a..d.bin`, the hold's lines, and `canwatch.txt`, the analyzer output with counts and classes only. The parser's `run --diag j1` verdict line reads `diagnostic complete` or `diagnostic incomplete failed=…`, never `pass`.
+
+| Observation | Conclusion | Next |
+|---|---|---|
+| **F34:** `osc` above 0 **and** `flip2` (same and var together) the majority class **and** `prog` 0 | H3, read instability | stop; memo; class K-r unless J4 was F35 (then U) |
+| `prog` above 0, or `changed_words` above 0 with `stable` re-reads | a live writer (not read instability) | carried into K-w or E by J7a |
+| `healed` above 0 with `pat_same` or `pat_other` dominant, or whole pages healed together | a restoring writer (H2 lean; a firmware save and restore, or a copy) | memo; D30 (J7a UEFI arm) |
+| `small32`, `hi_pat` or `lo_pat` dominant, or one or two dominant stride bins | ring, counter or register-style records (H2 or H4 lean; which device is not shown) | memo; D30 |
+| `ptr_ram` or `u32page` dominant, and bitmap pages coincide with page frames Linux held before the quiesce | CPU-side structures (H1 lean; weak, R45) | memo; D30 (J7a) |
+| `pte` or `kva` dominant | QNX-shaped structures (H5 lean) | memo; revision 4 base shift |
+| a positive signature above 0 after F36 | contradicts J4's exclusion **positively** | review J4's Bus Master evidence; memo |
+| label `c`'s `changed_words` per snapshot differs from label `b`'s by more than the pre-registered factor | writer behaviour changed with the host allocation (H4s lean) | memo; H4s row |
+| **F49:** the hold's verify bad | a writer reached sysram outside the canaries (or QNX-side) | stop; owner; exposure item raised; Q cannot become final |
+| `writer=none` (c2 clean at every scan) | not reproduced in this run | memo; B2 stays data; in J6r, a condition for Q-final |
+| `writer=static` | c2 was bad but did not change during the watches | memo; E2's live-writer inference is weakened, not withdrawn |
+| a `c1` watch (label d) with `bad` above 0 | F39 | stop; exposure item |
+
+#### 15.4.9 J7: reserved arms (not designed here)
+
+| Arm | Separates | Why reserved |
+|---|---|---|
+| **J7a:** UEFI entry carrying the `s1-h1` or `s1-j1` payload (M5's path) | H1 from H2: no Linux residue at all | needs a TX refit, a loader rebuild and attended firmware menus, and firmware allocations in window 2 were never checked (§3.2). Owner decision D30, then its own short design |
+| **J7b:** a read of each SMMU's `sCR0` (CLIENTPD) after kexec | settles R46 directly | a new MMIO read surface with SError-at-EL2 risk; on the new Never list. Revision 4 with its own design |
+| **J7c:** more canaries inside window 2 (for example 16 MiB above c2, and at a candidate die boundary), and one inside window 1 below c1 | how far the writer reaches; die anchoring; window-1 exposure | startup constants change, so B1 reruns. Revision 4 |
+| **J7d:** a restricted value export (pattern classes only; never `other`, `ascii`, `pte`, `kva` or any class that would carry QNX kernel structure or pointer content) | device or structure identity | privacy (§15.7.4) and the 4.6(c) stance (source and docs only, no analysis of QNX internals). D28 |
+| **J7e:** window 2's base shifted with c2 at the new base | H5 | startup change. Revision 4 |
+
+---
+
+### 15.5 Implementation changes
+
+### A. Harness-only (J1-J4 and J2b; no image, no pin moves)
+
+1. **`orin-native/startup/s1-board.sh`**
+   - **New subcommands:**
+     - `j1`;
+     - `j3`;
+     - `jrun IMG control|remove|b2repeat`, which accepts `s1-h1` (and `s1-j1` with `control|remove` after B) and refuses any other image or arm;
+     - `wq-status BOARDLOG`, which prints §15.4.6's state from COM3;
+     - `kpf-decode FILE`.
+   - **Existing subcommands:** `run`, `p0`, `p1`, `reboot` and `stage` are unchanged.
+   - **Step and record path:** `jrun` sets `STEP=J2|J2b|J4|J6r|J6c` and `MODE=host` **after** `resolve_kimg`, so `image_step`'s B2 mapping for `s1-h1` never reaches `SD`; a self-test proves no `jrun` creates a `B*` directory.
+   - **Stamps:** `j1`, `j3` and `jrun` record `s1-board.sh`'s sha256, `git rev-parse HEAD`, and `git diff --quiet HEAD` of the harness, `kpf-decode.py` and `parse-s1.py`, and refuse a dirty tree. Before `jrun s1-h1`, Q17's params-hash check.
+   - **New board functions,** in `BOARD_FUNCS` (Phase A only):
+     - `b_kpf_snap TAG`: `dd iflag=skip_bytes,count_bytes` of `/proc/kpageflags` and `/proc/kpagecount` for window 2's page frames and c1's, into a `mktemp -d /dev/shm/s1kpf.XXXXXX`; `zoneinfo` and `buddyinfo`; a text header with the page-frame ranges, uptime and `boot_id`; sha256 of each file. The PC fetches, verifies and runs `privacy_scan` on the header, then the board function removes the directory. No tar;
+     - `b_pci_state TAG`: for each PCI function, one line with its driver, parent, `power_state`, `enable`, the Command register from `config` offset 4 and the Bus Master bit. Plus the xHCI binding, rfkill `soft` and `hard` from `/sys/class/rfkill/*/`, each netdev's `operstate`, and NetworkManager and wpa_supplicant `is-active`. **No MAC, IP or SSID is ever read**: no `address` file, `ip addr`, `nmcli`, `iw`;
+     - `b_census` (J1's reads, including the mount chain and the set file);
+     - `b_trace_on` (under D21);
+     - `b_wq_gen` (PC-side generation helper).
+   - **`WQ_FUNCS`** (the only functions `declare -f` emits into `wq.sh` and `wqfb.sh`; none quiesces, pins, or writes `dynamic_debug`): `b_wq_mark`, `b_wq_slot`, `b_wq_bme`, `b_wq_oops`, `b_wq_uptime`, `b_wq_governor_read`, `b_freq`, `b_pci_state`, `b_trace_on`, `b_wq_issue`, `b_wq_abort`, `b_wq_fallback`.
+   - **Exit codes:** 0-4 as today; **5** = rebooted by the sequence's abort or fallback, no kexec, a harness-reason retry.
+   - **Exit-5, F43, F47, F48 and F25w returns:** `b_after`'s black-box copy and the parser are skipped; an optional `-l4t-console-ramoops.log` copy is scanned with the SSID class and never passed as `--blackbox`.
+   - **`advice` / `cmd_advice`:**
+     - parse `(run|p1|reboot|jrun|j3) NO RETURN within`, `run com3_bytes_before_kexec=` and `j3 com3_bytes_before_arm=`, and `wq_armed armed_epoch= wq_fallback_s=`;
+     - **for any board log with `wq_armed`, print NO CUT in every class (F25a, F25b, F25w) until `armed_epoch + WQ_FALLBACK_S + 1,200 s` has passed;**
+     - after that: any of `fallback firing`, `fallback forcing`, `abort reason=`, `kexec did not happen`, `Restarting system` or `reboot:` after the offset classes **F25b**, with M5's exception word for word; `Starting new kernel`, a shim line or a record line after the offset leaves today's F25a and F25b logic unchanged; otherwise, `s1wq:` markers alone class **F25w** (§15.7.3).
+   - **Gate A and gate B for `j1`, `j3` and `jrun`:**
+     - capture life ≥ return bound + 2,180 + `WQ_FALLBACK_S` for `j3` and `jrun control|remove` (as B2 for `b2repeat`, 1,800 s for `j1`);
+     - `S1_COM3_LOG` must resolve inside the git-ignored `S1_RECORD_DIR`;
+     - refuse a capture name already in `<rec>/used-captures.log`, and refuse a capture that holds an `s1wq:` marker or any earlier rung's output (today's `com3_has_records` misses L4T-only rungs);
+     - `S1_REDACT_SSID` must be set.
+   - **Refused environment variables:** `S1_WQ_*` and every existing fixed setting.
+2. **`orin-native/s1/kpf-decode.py`** (new, stdlib, `SPDX-License-Identifier: Apache-2.0` like its siblings, `--selftest`).
+   - **Classes** from `/proc/kpageflags` bits: buddy, slab, pgtable, LRU anon or file, compound head or tail, nopage, reserved, other held (count ≥ 1 and none of the above), free or tail (VENDOR_CLAIM for bits 0-26, docs.kernel.org `pagemap`; bit 32 HYPOTHESIS).
+   - **Outputs:** per-canary class counts, per-MiB classes for c1-c3, a map of window 2 in 16 MiB buckets, and `prequiesce` → `postquiesce` counts for c2's pages (held-to-free, free-to-held, held-to-held), labelled "record only".
+   - **Refusals:** a size not a multiple of 8; an entry count different from the header; a missing header.
+   - **Every decode prints:** "kpageflags describe Linux's CPU-side ownership only; they cannot name the device that holds a page or predict where a device writes after kexec".
+3. **`orin-native/s1/parse-s1.py`:** `run --diag j2|j2b|j4` sets `step=J2|J2b|J4`, keeps B2's line rules, and prints `verdict=diagnostic complete|incomplete`, never `pass` and never `b2=`. Self-test: a J `parse-s1.txt` never contains `b2=pass` or `verdict=pass`.
+4. **Redaction:**
+   - `S1_REDACT_SSID`, supplied by the owner in the environment and never written to a record, is passed to awk through `ENVIRON` (not `-v`, which expands backslashes), refused if shorter than 3 bytes, and added **both** to `ident_hits` as its own class (`ssid=N`) **and** to `redact`, so a copy whose only identifier is the SSID is never kept raw;
+   - it is mandatory for every J rung;
+   - `redact-selftest` gains: a file holding only the SSID (must not be kept raw), a 1-2 byte SSID (refused), an SSID containing a backslash, a colon-form MAC in a `wq.log`, a hyphen-form MAC, and a second host address for the Ethernet recovery path.
+5. **Allow-list gate** on the generated `wq.sh` and `wqfb.sh` and on both `systemd-run` command lines, on the PC, before scp. It replaces the draft's prose with an exact list; everything not listed is refused.
+   - **Command words and argument forms allowed:** `cat` of sysfs and `/proc` read paths; `ip link set dev <resolved> down`; `modprobe -r <resolved>`; `setpci -s <BDF> COMMAND` (read) and `setpci -s <BDF> COMMAND=0000:0004`; `kexec -u`; `systemctl kexec`; `systemctl reboot`; exactly one `systemctl reboot --force`; `systemctl is-system-running`; `sync`; `sleep`; `timeout`; `dmesg` (read; `dmesg -n 7` only inside `b_trace_on`); `sha256sum`; `date`; `readlink`; `printf`; `grep`; `ps` (D-state check).
+   - **Redirect targets allowed:** the fixed `$HOME/<img>-<utc>-wq.log`; `/dev/kmsg`; `/sys/bus/{pci,platform}/drivers/<resolved>/unbind`; `/sys/module/kernel/parameters/initcall_debug`.
+   - **Refused explicitly (one self-test injection each):** `rfkill`, `nmcli`, `iw`, `ip addr`, `systemctl (enable|disable|mask|stop|isolate)`, any path under `/etc`, `/boot` or `/var/lib`, `apt`, `dpkg`, `extlinux`, `--force --force`, `-ff`, `/dev/mem`, `devmem`, `dd`, `of=` on `/sys`, `tar`, and writes to `remove`, `rescan`, `reset`, `driver_override`, `new_id` or `power/control`; `address`, `serial`, `lsusb`, `hciconfig`.
+   - **Self-test:** the real generated scripts for all three arms pass; each injected form fails.
+6. **`harness-selftest` additions** (synthetic only):
+   - `wq_state` for ARMED, PROGRESS, ISSUED, JUMPED (both evidence forms), ABORTED (three forms) and STALLED;
+   - `advice` on a J4 log: markers and 400 s of silence with no jump print NO CUT; F25a-looking Linux shutdown text before the fallback deadline prints NO CUT; after the deadline, a reset marker classes F25b and markers alone class F25w; F25a and F25b unchanged after a jump;
+   - gate A and gate B: a reused capture name, a capture holding `s1wq:` markers or J1 text, a capture outside the record directory, a missing SSID, all refused;
+   - generation, via `bash -n`, a `%q` round trip, and a fixed slot count equal across the three arms;
+   - `jrun` refusals, the no-`B*`-directory case, and the start-margin refusal;
+   - the exit-5 branch skips the black box and the parser;
+   - `kpf-decode --selftest`.
+7. **TCG:** none. These rungs are L4T only; everything is synthetic on the PC.
+
+### B. Image-changing (J6 only; next session)
+
+1. **`orin-native/tools/memcanary.c`:**
+   - `#ifdef MEMCANARY_WATCH` blocks: the constants; `unmix64` and `inv64`; the classifiers; the engine over a `const uint64_t *` for self-tests (three reads, `osc`, `prog`, `stable`); the stride histogram; the bitmap export; the lines; `cmd_watch`; `cw_selftest`;
+   - one `#ifdef` usage line and dispatch branches;
+   - a header comment paragraph;
+   - no existing token changes when the macro is off.
+2. **`orin-native/tools/Makefile` and `.gitignore`:** target `memcanary-w: memcanary.c` with `-DMEMCANARY_WATCH`, and `orin-native/tools/memcanary-w` ignored in the same change. A copy of the pinned `memcanary` binary is kept outside the tree before any build, as for the startup pin.
+3. **`orin-native/startup/s1.build.in`:** `@J1@/proc/boot/memcanary-w=memcanary-w`.
+4. **`orin-native/startup/s1-host.ksh.in`:** the `@BOARD@@J1@` watch and hold steps and the host-mode export block of §15.4.8, and `@TCG@@J1@memcanary-w --selftest`.
+5. **`orin-native/startup/make-s1-images.sh`:**
+   - **`PO_A_PATHS`** gains `s1-host.ksh.in`, `s1.build.in`, `make-s1-images.sh`, `orin-native/tools/Makefile` and `parse-s1.py`, in the same commit as the other B changes;
+   - **New targets:** image `s1-j1` (not in the default list, host mode, diag `j1`); TCG variant `j1` (dryrun mode).
+   - **Generator plumbing:** the prefix regex gains `J1`; the new markers (`@J1_HOLD_MIB@`, `@J1_HOLD_T@`) are added to the substitution list; `bounds()`; `ksh_worst` terms.
+   - **`PIN_MEMCANARY_W`,** checked only when `s1-j1` or `j1` is built.
+   - **`check_dumpifs_s1`:** `memcanary-w` present only in `s1-j1`.
+   - **`profile_check`** recognises `memcanary-w` explicitly (today's scanner would skip it as a longer word after `memcanary`). The board `j1` script may call only `watch` with a compiled name and the bounded flags, and `memcanary hold` only with `@J1_HOLD_MIB@`. The TCG `j1` script may call only `--selftest`, once. Every other script must not contain it.
+   - **`constant_check`:** the DRAM bound constant equals `T234_RAM_BASE` + 8 GiB; `@J1_HOLD_MIB@` is below windows 1 and 2's sysram size minus the canaries.
+   - **`profile_selftest`,** by injection:
+     - `watch -n c4`;
+     - an address argument;
+     - a `-d` outside `/dev/shmem/j1`;
+     - an interval out of range;
+     - a `watch` in a TCG script;
+     - `--selftest` in the board script;
+     - `memcanary-w` in `s1-h1.ksh`;
+     - a hold size other than `@J1_HOLD_MIB@` in `s1-j1.ksh`.
+6. **`orin-native/s1/build-s1tcg-image.ps1`:** `-Variant j1` (dryrun), with `memcanary-w` added to the tool list **only for that variant**, so no T1-T3 variant's tool list, `files.list` or params changes.
+7. **`orin-native/s1/parse-s1.py`:**
+   - `watch` and `words2`/`stride` regexes, and the `cans` filter excluding `watch=` lines, so B2's `six_verify_*` semantics are unchanged;
+   - diag steps `("board","host","j1")` → `J6r|J6c` and `("tcg","dryrun","j1")` → `T-J1`;
+   - a `canwatch` subcommand that decodes the bitmaps, checks structure and cross-checks counts against the console lines. It also sets bitmap pages against `kpf-decode` output from the same boot, and computes the fill-rate row. It never prints a value;
+   - `run --diag j1`.
+8. **Gates before J6** (PC, then TCG):
+   1. **Determinism, in a scratch worktree on an uncommitted copy of the edit:** HEAD's `memcanary.c` and the edited file without the macro, each rebuilt to a scratch name, hash to `PIN_MEMCANARY`. B versus B' (separate source) is decided **before** any commit to main.
+   2. **No drift, with `--out` set to a scratch git-ignored directory (or in a worktree), never the default output root:** a regeneration of `s1-m1b-p6`, `s1-h1`, `s1-n1`, `s1-n2` and `s1-d1`, and of every TCG variant through `make-s1-images.sh` **and** `build-s1tcg-image.ps1` (T1-T3 `files.list` and params), is byte-identical to the as-built files. Afterwards, `s1-h1.params`' `kimg_sha256` still equals the staged kimg's sha256.
+   3. **The build of `s1-j1` passes every existing gate:** PO-A (with the new paths), pins, constants, profile check and its self-test, `kshcheck`, geometry, startup arguments read back as `-b w2,canary`, dumpifs names, tracked-path guard.
+   4. **`parse-s1.py --selftest`:** synthetic bitmaps accepted; each malformation refused by name; `run --diag j1` never gives `pass`; B2's synthetic log with an added `watch=` line still gives `b2=pass`; a J6 log with `S1 BEGIN`/`S1 END` frames still classifies as `record` or `export-body` in `com3_last_kind`; `canwatch` output contains no 16-hex-digit value token, dotted quad or MAC pattern.
+   5. **TCG `T-J1`:** `memcanary-w --selftest` passes, covering:
+      - the pattern and inverse round trips;
+      - one crafted value per class, with precedence (including `hi_pat`, `lo_pat`, `small32`, `flip2_same` against `flip2_var`);
+      - signature positives at non-aligned byte offsets, and negatives, with documentation-reserved addresses only;
+      - engine changes, heals, `osc` (A-B-A), `prog` (A-B-B and A-B-C) and `stable` on a heap buffer;
+      - stride histogram;
+      - bitmap round trip;
+      - line lengths at maximum field widths;
+      - refusals, including an address string and the black box.
+
+      It maps no physical memory, and no `asinfo`, `verify` or `watch` runs under TCG.
+   6. **Black-box budget (R22):** a generator check that the worst-case black-box text of `s1-j1` (the watch lines at maximum widths for four watches, the hold lines, the `S1 EXPORT` records, the `pidin syspage=asinfo` cap, and the `show` heads of each `.b` and `.err`) stays under the 60,000 B rebuild threshold.
+9. **Pins and images:**
+   - **Unchanged:** `PIN_STARTUP_S1`, `PIN_MEMCANARY`, and every existing kimg, params file and TCG script.
+   - **New, all git-ignored:** `PIN_MEMCANARY_W` and `s1-j1.{build,ksh,ifs,kimg,params}`.
+   - **Order:** determinism decided (8.1), then commit (PO-A), then build; stage and `p0` `s1-j1` before J6.
+
+---
+
+### 15.6 Classification rules (pre-registered), budget, owner decisions
+
+**Classes for B2**
+
+| Class | Holds when | Then |
+|---|---|---|
+| **Q: quiesce shortfall** (provisional) | all of: (1) J2 is F32, so the control is bad twice (B2 and J2); (2) J4 is F35, clean at both checks with the same image, timing, issuing context and harness except the removal set; (3) no F39 or F49 in any J rung; (4) no J6 run is F34; (5) the fix is exactly J4's removal, runtime-only, within the new Never items. Sub-label Q-p or Q-x by §15.4.6's split | The removal becomes a fixed harness setting for B-runs, with its override refused. Self-tests and the privacy scan pass. **Q becomes final only when all of these hold:** (a) J6r (`s1-j1`, remove arm) shows `writer=none` on c2, c1 clean, and the hold verifies; (b) **B1 reruns** and passes (D26); (c) **B2 reruns** with the unchanged `s1-h1` on a fresh boot under the fix and passes, **judged by §6.7 unchanged**. If any fails, the attribution is withdrawn and B2 stays data |
+| **K-r: kill condition 1 stands, read instability** | c2 bad in J2 (F32, F32a or F32b), J4 not F35, and a J6 run is F34 | Recorded as "no writer shown; c2's reads are unstable". Revision 4: a range that avoids the unstable region, with a read-stability check in its B2. Not a device or firmware verdict |
+| **K-w: kill condition 1 stands, a writer without Linux** | J4 is F36, a J6c run shows a live writer (`prog` above 0, or changed words with stable re-reads), **and** J7a (UEFI) is bad | Recorded as "writer unidentified; not the removable masters; not stopped by a firmware entry". Revision 4 derives a new range, with J7c's canaries in its B2 and J7e to separate H5 |
+| **E: entry-path** | J4 is F36, and J7a (UEFI) is clean | Linux-caused, not stopped by any quiesce the rules allow. **Not a range verdict:** moving the window does not contain Linux's DMA. Owner (D31): a wider quiesce search in revision 4, UEFI entry for S1 under freeze item 3, or stopping S1-F |
+| **U: unresolved** | any of: F33 (with J2b's F45 or F46 recorded as its lead); F32a or F32b with no J6 result yet; J3 not met (F41, F42, F44, F47), so no J4; F35 with a J6 run F34; F36 with no J6c writer shown (`writer=none` or `static`) and J7a not run or declined; F36 with J6 not F34 and J7a declined; F49 unexplained; any immediate stop below | B2 stays data, and S1-F stays stopped. Owner decides (D31) |
+
+**Records.** B2's `parse-s1.txt` and verdict line are never regenerated or replaced. Every class line is appended, dated, and cites the J records and `J-prereg.log`. Public text changes class only when Q is final, or when the owner accepts K-r, K-w or E (§15.8).
+
+**Budget**
+- **Today's session:** J1 and J3 (L4T only), J2, and one of J4 or J2b (kexec): **at most two kexec and two L4T-only diagnostic runs.**
+  - One harness-reason retry per rung does not count: a run that never reached `procnto up`, an exit-5 abort, or a J1 or J3 that stopped before its quiesce or reads.
+  - A second harness failure on any rung stops the day.
+- **After J4, J2b, or at any stop, return to the owner** with a number-free classification memo and the private J notes.
+- **Revision total:** at most **four kexec diagnostic runs** (J2; J4 or J2b; J6 in the arm §15.4.8 names; and J6 in the other arm, or J5, only by D24 or D27) and two L4T-only runs. Anything more is revision 4.
+- **The B1 and B2 reruns under class Q** are S1 ladder work, not diagnostic budget.
+
+**Immediate stops**
+- F30;
+- any power cut (never a second);
+- `EXC`, an SError or a silent hang after kexec;
+- F37, F39, F41, F49;
+- two refusals for one cause;
+- any need for a startup change, a `memcanary` change, an SMMU read or a value dump (scope stop, revision 4).
+
+**Owner decisions**
+
+| # | Decision | Recommendation | When |
+|---|---|---|---|
+| D20 | Accept revision 3: the J ledger, §15.6's rule, the budget, F16 and F23 lifted for J rungs only, and J1's marker and transient-timer probe | accept | before J1 |
+| D21 | Runtime trace settings on L4T (`initcall_debug`, console level 7) in J1, and in J2 and J4 as a matched pair after J1's go; never in J2b | accept: runtime-only, they name which shutdown hooks ran, and the arms stay matched | before J1 |
+| D22 | Read-only page-frame snapshots to tmpfs, PCI config reads, and one Bus Master clear per function through `setpci ... COMMAND=0000:0004` only (no `dd` fallback) | accept: config space, not GPU MMIO; firmware resets PCIe at every boot | before J2 |
+| D23 | GPU power-domain and EMC rate reads from debugfs (record only, never a gate) | accept as a diagnostic record; they are not the GPU checks deferred to the first GPU stage (plan:465), but the owner rules | before J1 |
+| D24 | J4's removal set: "max" or wireless only; J5 at all; and whether today's second kexec goes to J4 at all, given that J4 tests only H4 and H4s (§15.3) | "max", with wireless only as the pre-registered fallback; J4 today, because it needs no image and its clean result is itself a fix; J5 not run | before J2 |
+| D25 | The detached sequence in both arms, exit 5, the rule-5 exception for its three files, the narrowed F25w and its one cut, the advice hold until the fallback deadline; the Ethernet-cable variant as a recovery path only | accept, with F25w's one cut only as in §15.7.3 | before J2 |
+| D26 | Rerun B1 after a harness-only fix | yes | before any rerun |
+| D27 | Build `s1-j1` (classes, counters, page bitmaps, the large hold; no values), including the hold's margin constant. Also: under class Q, keep "max" as the fix or bisect (Q-x points at the xHCI first); whether J6 also runs in the other arm | build it; keep "max" unless the freeze manifest needs the device named; the other arm only if the first J6 leaves the class U | at J4's or J2b's memo |
+| D28 | A restricted value export (J7d), never `other`, `ascii`, `pte`, `kva` or any QNX-structure class | no, unless J6 leaves `content=unclassified` and the owner accepts §15.7.4's terms | after J6 |
+| D29 | Public wording: the direction of E2's count change; whether public text may name the removable device set and that the harness's ssh link is wireless. **A precondition of pushing the J0 commit and of pushing §15 as written** | allow both; never an SSID, MAC, IP or mask width | before any push |
+| D30 | J7a, the UEFI arm | decide at J6's memo | after J6 |
+| D31 | Accept the class (Q, K-r, K-w, E, U) and what follows | at each memo | memo |
+| D32 | Where the exposure item goes (§15.8) | record it now in the plan | before B3 |
+| D33 | Whether Q16 may read upstream function bodies through per-file web source views (no clone, archive or tree) | allow per-file views of the named functions only, or answer Q16 from documentation and patch discussion alone | before J0's desk reads close |
+
+**Taken 2026-09-14 (owner).**
+- **D20-D23:** accepted as recommended.
+- **D24:** the "max" set, with wireless only as the pre-registered fallback. J4 runs today; J5 is not run.
+- **D25:** accepted, including F25w's single cut.
+- **Today's plan:** J1-J4 run in the owner's session once §15.5 A is implemented, reviewed and self-tested.
+- **Still open:** D26-D33, with D29 due before any push.
+
+---
+
+### 15.7 Claims, failure signatures, risks
+
+#### 15.7.1 Claims (the §9 table continues)
+
+| # | Claim | Class | Answered by |
+|---|---|---|---|
+| R43 | E1 as stated | VERIFIED (one run) | B2 |
+| R44 | ZONE_Normal starts at c2's base; ZONE_DMA covers window 1 | VERIFIED (one boot) | D0 read |
+| R45 | kpageflags snapshots describe Linux's CPU-side page ownership at the snapshot moments only; they cannot predict DMA targets after kexec under R46 or a stale translation, and a quiesce frees pages everywhere whether or not H1 holds | VERIFIED (limit, from the interface's definition) | — |
+| R46 | `disabling translation` leaves the T234 SMMUs in bypass for attached masters | HYPOTHESIS (VENDOR_CLAIM upstream, E15-E16; fork unread) | Q16; only J7b proves it |
+| R47 | The kexec shutdown clears PCI Bus Master on endpoints and root ports in D0-D3hot | HYPOTHESIS (VENDOR_CLAIM, E17) | Q16; J3 and J4 read it only before the issue |
+| R48 | Under R46, 32-bit PCI IOVAs land below 4 GiB, which includes window 1 | HYPOTHESIS | Q16; exposure item |
+| R49 | The GPU's DMA is CPU-physical with no SMMU | reported VERIFIED (E11) | — |
+| R50 | H1: GPU residue writes after kexec | HYPOTHESIS | J4 plus J7a; J6 supporting |
+| R51 | H2: a firmware user of window 2's base invisible to `/proc/iomem` (refines R17) | HYPOTHESIS | J7a; J6 |
+| R52 | H3: c2's reads are not stable | HYPOTHESIS (motivated by E2) | J6's F34 rule |
+| R53 | H4: a removable Linux master writes c2 | HYPOTHESIS | J4 |
+| R54 | H5: a QNX-side writer at the window-2 base | HYPOTHESIS, low | J6 classes; revision 4 |
+| R55 | c2's result repeats under B2's conditions | UNKNOWN | J2; J2b |
+| R56 | `initcall_debug` is writable at run time, and `device_shutdown()` prints one line per device when it is set | HYPOTHESIS | Q16; J1 |
+| R57 | A `/dev/kmsg` write at level 3 reaches COM3, from a login shell and from a transient unit | HYPOTHESIS | J1 (unquiesced); J3 (quiesced) |
+| R58 | The unbinds and the module removal are runtime-only; every device returns on the next boot | HYPOTHESIS (out-of-tree drivers) | J3 |
+| R59 | A `systemd-run` timer armed after `isolate multi-user` fires on the quiesced L4T; transient units vanish at reboot | HYPOTHESIS (systemd-run(1)) | J1 (timer fires, unquiesced); J3 |
+| R60 | `dd` with `skip_bytes` reads `/proc/kpageflags` at an offset, and the needed tools are present | HYPOTHESIS | J1 |
+| R61 | kpageflags bits 0-26 mean what the kernel documentation says; bit 32 is reserved | VENDOR_CLAIM (0-26); HYPOTHESIS (32) | `kpf-decode --selftest` |
+| R62 | The L4T hardware watchdog resets a panicked or oopsed L4T inside the detached sequence | HYPOTHESIS (configured: reported VERIFIED, E18) | not provoked |
+| R63 | Unbinding the xHCI stops the XUSB falcon | HYPOTHESIS | not shown by any J rung |
+| R64 | `memcanary.c` without the macro recompiles byte-identically to `PIN_MEMCANARY` | HYPOTHESIS | B8.1 determinism gate |
+| R65 | A long read-only `mmap_device_memory` watch of 16 MiB above 4 GiB works at EL2 within its bounds | HYPOTHESIS | J6 |
+| R66 | The word classes and byte signatures match their public specifications | HYPOTHESIS | self-test encodes the reading |
+| R67 | A UEFI entry leaves no Linux residue, and UEFI's allocations avoid c2 | HYPOTHESIS | J7a |
+| R68 | RCE keeps writing inside its IOVA window after kexec, which overlaps window 1 | HYPOTHESIS (window VERIFIED from the DT, E13) | J7c's window-1 canary; exposure item |
+| R69 | E2's inference: words returned to the pattern, so a restoring writer or unstable reads | VERIFIED arithmetic, given faithful reads (`memcanary --selftest`; c1 and c3 verified) | J6 separates the two |
+| R70 | A hold sized near sysram covers most of window 2 and much of window 1 | VERIFIED arithmetic on the design sizes (pigeonhole); physical placement HYPOTHESIS | J6's hold |
+| R71 | A third immediate read separates a marginal read (A-B-A) from a writer in progress (A-B-B, A-B-C) | HYPOTHESIS (a writer could also produce A-B-A by restoring within microseconds) | J6 |
+| R72 | `systemctl is-system-running` reads `stopping` while a kexec shutdown is under way, and transient units are stopped by that shutdown | HYPOTHESIS (systemctl(1)) | Q16; J2 and J4 markers |
+| R73 | The per-device shutdown print is at an informational level, so it reaches COM3 only with the console level raised | HYPOTHESIS | Q16; J1 |
+| R74 | `setpci ... COMMAND=0000:0004` changes only bit 2 of the Command register | HYPOTHESIS (setpci(8), from memory) | Q16; J3's read-back |
+| R75 | procnto places a large anonymous allocation across both windows | HYPOTHESIS (only the pigeonhole bound is arithmetic) | not shown |
+| R76 | H4s: SMMU page tables that were Linux pages become QNX sysram after kexec, and QNX's use of them moves write targets | HYPOTHESIS | J6 fill-rate row; J4 |
+
+**Desk questions:** Q16 and Q17 (§15.4.1); **Q18:** the debugfs paths for the GPU power domain and EMC rate on 5.15-tegra (documentation only), needed by D23.
+
+#### 15.7.2 Failure signatures (the §7.2 table continues)
+
+| # | Observable | Meaning | Class | Next |
+|---|---|---|---|---|
+| F32 | J2 or a J6 control: c2 bad at both checks, c1 and c3 ok | repeats | SR | §15.4 tables |
+| F32a | J2: c2 bad at the start check, ok at the end check | a restoring writer or read instability, before QNX's checks | SR | stop kexec work; memo; J6c first |
+| F32b | J2: c2 ok at the start check, bad at the end check | onset after the start check | SR | stop kexec work; memo; J6c first |
+| F33 | J2: c2 ok at both checks | not reproduced under the J additions | SR | J2b; class U |
+| F34 | J6: `osc` above 0, `flip2` dominant, `prog` 0 | read instability or a hardware class | SR | stop; memo; K-r (U after F35) |
+| F35 | J4: c2 ok at both checks | removed set implicated | SR | class Q (provisional); Q-p or Q-x |
+| F36 | J4: c2 bad | removable masters excluded as quiesced | SR | memo; J6c |
+| F37 | detached run: COM3 ends in L4T text after `kexec issuing`, no shim, no ssh | Linux hang in the detached shutdown | PP only by §15.7.3 | the diagnosis ends for the day |
+| F38 | no per-device trace on COM3, or the trace too slow | observation defect | — | continue without the trace in both arms |
+| F39 | c1 or c3 bad in any J rung, or `watch=base bad` above 0 on c1 | the writer reaches beyond c2 | SR | stop; owner; exposure item raised |
+| F40 | `refuse=`, `map=fail`, `S1 ASINFO` differs from B2, `watch=fail` | image, tool or harness defect | SR | §5.3 defect path; one retry |
+| F41 | after any return, no ssh, or a removed driver not bound | persistent state touched, or a driver did not reload | — | stop board work; §15.7.3 item 8 |
+| F42 | J1 or J3: markers not on COM3, or the fallback did not fire | the detached mechanism is unproven | — | no J3 or J4 until fixed |
+| F43 | J2 or J4 ABORTED (exit 5) for `kexec-rejected`, `kexec did not happen` or `resolve` | no kexec happened | SR (L4T reboot) | one retry on a fresh boot |
+| F44 | Bus Master still set after unbind and clear, or `setpci` absent when a clear is needed | the removal cannot be shown | — | the sequence aborts and reboots; memo |
+| F45 | J2b: c2 bad | the J additions change the writer's behaviour | SR | stop; memo; class U with a lead |
+| F46 | J2b: c2 ok at both checks | intermittent | SR | stop; memo; class U |
+| F47 | `abort reason=oops`, or a D-state task in the sequence | an unbind or removal oopsed or hung | — (F27 recorded) | exit 5; no J4 if in J3; memo |
+| F48 | `abort reason=uptime` or `abort reason=governor` | an issue-time guard refused the kexec | SR (L4T reboot) | one retry on a fresh boot with a larger start margin |
+| F49 | J6: the hold's verify bad | a writer in sysram outside the canaries, or QNX-side | SR | stop; owner; exposure item; Q cannot become final |
+| F25w | after the offset: `s1wq:` markers, and **none** of `fallback firing`, `fallback forcing`, `abort reason=`, `kexec did not happen`, `Restarting system`, `reboot:`, `Starting new kernel`, a shim line or a record line; the fallback deadline plus 1,200 s has passed | L4T is alive with no network, and its fallback did not act | — | §15.7.3 item 6. A reset marker after the offset means a firmware boot may have started: the capture is F25b, not F25w |
+
+#### 15.7.3 Recovery when a detached sequence does not reach kexec
+
+In order. The owner stays at the plug throughout. **For any board log with `wq_armed`, `advice` prints NO CUT in every class until `armed_epoch + WQ_FALLBACK_S + 1,200 s` has passed** (§15.5 A1).
+
+1. **A precondition fails inside the sequence** (wrong driver, root port with more than one child, `kexec_loaded` 0, Bus Master still set, an Oops or D-state task, the issue-time uptime or governor guard): `abort reason=…`, then `kexec -u`, `sync`, `systemctl reboot`. Exit 5.
+2. **`systemctl kexec` returns non-zero:** `abort reason=kexec-rejected`, then as item 1. Exit 5.
+3. **`systemctl kexec` returns 0 but no jump follows:** after `WQ_ISSUE_WAIT_S` the sequence reads `systemctl is-system-running`. `stopping`: it only marks and exits, and the shutdown continues (item 5). Otherwise it marks `kexec did not happen`, then `kexec -u` and reboot. Exit 5.
+4. **The sequence hangs** (for example an unbind in D-state that the per-slot check could not see in time): the fallback timer fires at `armed_epoch + WQ_FALLBACK_S`; unless the system is `stopping`, it runs `kexec -u`, reboot, then after 120 s one `reboot --force`. A reboot blocked by a D-state task may end through systemd's own shutdown timeouts (HYPOTHESIS).
+5. **Oops or panic during an unbind, or the shutdown stuck after `kexec issuing`:** the watchdog systemd arms under L4T resets the board (R62), or the shutdown finishes slowly. A slow shutdown with growing COM3 is not a hang. pstore keeps any Oops record. This is F10 and F25a as today, held by the advice rule above until the fallback deadline.
+6. **F25w** (markers only, no reset marker, no jump, no record line; the deadline has passed): `advice` prints **NO CUT** until all of these hold:
+   - COM3 has been silent for 10 minutes, with no firmware banner and the last output not a menu or prompt;
+   - no ssh answer in that time (in J4 this adds no evidence once the wireless function is removed; in J2 it does).
+
+   Then, under D25, **one** cut is allowed: no reset marker followed the offset, so the running L4T is the boot that was validated at the rung's start (F25a's reasoning). Before that, the non-cut paths are:
+   - wait for the fallback;
+   - if J4's set left the Ethernet driver bound (the wireless-only set), the owner fits an Ethernet cable, finds the new address by scanning the /24, and runs `sudo systemctl reboot`;
+   - if J1 found a USB keyboard and the xHCI was not unbound, a local login and reboot.
+7. **Any reset marker after the offset** (`fallback firing`, `fallback forcing`, `abort reason=`, `kexec did not happen`, `Restarting system`, `reboot:`) followed by silence: a firmware boot may have started, so that boot is unvalidated. The capture is **F25b**, and M5's exception applies word for word (§2 rule 6a). **Never a second cut.**
+8. **A return without the wireless function** (F41): the changes are runtime-only by design, so a second reboot is the first remedy, over the Ethernet cable if needed. No cut on this ground alone.
+
+**After any failed or cut path:** the next harness command removes the board-side sequence files first and records the removal (§15.4.3's rule-5 exception).
+
+#### 15.7.4 Risks
+
+- **Privacy of captured data.**
+  - This revision captures **no network frames** and exports **no canary values**.
+  - The raw COM3 capture may still hold driver messages printed during the wireless removal and, with the console level raised, during the shutdown. mac80211-style deauthentication lines carry MACs, and a vendor driver may print the SSID or BSSID (HYPOTHESIS).
+  - Mitigations: the raw capture must lie inside the git-ignored record directory and is never copied, quoted or scanned by hand; redacted copies only, with MAC (colon and hyphen forms), IP, user, hostname, key name and (new) SSID classes, the SSID counted in `ident_hits` so an SSID-only file is never kept raw; the privacy scan on every text copy, including `wq.log` and its `dmesg` tail; no tar archive, so no user or group name inside a binary record.
+  - The `.bin` snapshots and bitmaps carry page flags and offsets, not content, but still count as run records.
+  - If D28 is ever taken, a value export would carry base64 through the raw capture, where regex redaction cannot reach. It would therefore be limited to non-network, non-QNX-structure classes, decoded into a private directory, and never printed.
+- **Perturbation.** The snapshots, the dwell, the unit as issuer and the trace change timing and page state on the kexec boot. J2 and J4 carry the same additions, so the removal set is the only difference between the arms; J2b is the only repeat without them. Synchronous console output from the trace lengthens the kexec shutdown (HYPOTHESIS); the J1 go rule bounds it, the advice idle clock counts only silence, and an F33 read with the trace on sends J2b, which runs without it.
+- **What J4 tests.** Only H4 and H4s (§15.3). A clean J4 is read through the Q-p and Q-x split, never as "the quiesce defect of the whole class".
+- **Moved writer.** Removing devices changes the slab and page-cache layout at the jump, so a live writer could land somewhere else and leave c2 clean while corrupting other memory (HYPOTHESIS). The canaries see only three 16 MiB windows; the large hold in J6r is the detector, which is why Q-final requires it.
+- **Intermittency.** With n=1 per arm, an intermittent writer can fake class Q (§15.4.6's false-Q estimate). J2b, J6r and the B2 rerun are the further tests.
+- **Linux shutdown Oops** on the reboot, abort and fallback paths is known after long uptimes (§14.12). Every J rung meets the start margin, and the sequence refuses to issue at or above the quiesce limit.
+- **Board bookkeeping.** `used-boot-ids.log` must record `by=j1|j2|j2b|j3|j4|j6r|j6c`; `used-captures.log` records each capture once. A J2 or J3 return boot is fresh; a J1 boot is never used for a quiesce.
+- **Params overwrite.** A generator regeneration with the default output root would rewrite `s1-h1.params` with `kimg_sha256=-` and break the staged kimg's identity; gate B8.2 runs only in a scratch output, and Q17's check refuses a J run or a B2 rerun if it happened.
+- **Scope creep.** The tempting next reads (SMMU registers, GPU state, content dumps) are on the Never list or reserved, so they each come back to the owner.
+
+---
+
+### 15.8 Public text while this is open, and the exposure of earlier rungs
+
+**Public text (number-free).** Number-free status lines are pushed, following the f33611d precedent (M5-F recorded as met, number-free). **Not pushed:** evaluation figures, J records, class memos and run notes, which stay git-ignored or on `m3-results-unpublished` until the 4.6(i) consultation.
+
+- **`s1-design.md`:**
+  - §15 as above, after D29 (or with the substitutions below);
+  - the header gains a revision-3 line;
+  - one dated pointer line each at §0's "What it is not", §5.3's B2 data bullet, §6.12's B2 row, F16, F23, R17, D8, §2 rule 5 (the dated exception) and §14.12's "What follows": "2026-09-14 (owner, D8 option 1): writer diagnosis first, §15; B2 stays NOT MET on data until §15.6's rule says otherwise".
+- **Plan S1-F block:**
+  - replace "Nothing of S1 has run on the board" (plan:484) and the ladder line (plan:402) with: "B0 and B1 met; B2 not met on data at the lowest window-2 canary; S1-F stopped; B3-B5 not run; the writer is under diagnosis (s1-design §15)";
+  - the risk row for S1-F notes that the second window's ownership is now in question;
+  - plan §8 unknown #6 gets a dated annotation (below).
+- **`findings.md`:** a dated entry for B0-B2 and the decision, in the T1-T3 entry's format, with "What it does not show": no writer identified; nothing about the rest of window 2; no Linux guest on the board; no timing; no containment.
+- **`CLAUDE.md` Phase 3b:** replace "Nothing of S1 has run on the board; B0-B5 are next" with the same status. Next-actions item 3 says S1-F is paused in writer diagnosis.
+- **README:** no change on `main`. Any status phrase goes only to the PR #1 branch, and its merge stays the owner's.
+- **Never in public text:**
+  - a count, offset, page class figure, page-frame number observed in a run, uptime, boot id, IOMMU group, PCI address, DMA mask width or kernel-placed address;
+  - a MAC, IP or SSID;
+  - "quiesce defect", "fixed" or "reclassified" before class Q is final;
+  - that the writer *is* a named device or firmware, except as labelled HYPOTHESIS;
+  - anything softening "NOT MET, on data".
+
+**Neutral substitutions if D29 declines**
+
+| [D29] wording | Neutral public form |
+|---|---|
+| the second mismatch count was lower; words returned to the pattern (E2, C21, K-d, R69) | "the mismatch count differed between the checks"; the inference is withheld from public text |
+| the harness's ssh link is wireless; removing the wireless function drops ssh | "the harness's network link"; "removing a device drops the harness's link" |
+| the removal set's device classes (wireless, Ethernet, NVMe, xHCI) | "the removable DMA-capable devices" |
+| E9's device list | "DMA-capable devices were listed privately" |
+
+If D29 declines, §15 itself is pushed only as a pointer plus these neutral forms; the full text stays in the private record.
+
+**Exposure of earlier rungs (a risk statement, not a reopening)**
+- **Window 2** was never claimed before B2: M0-M5 and B1 had no `-b` (`board/init_raminfo.c`). A writer confined to c2's range could not have touched QNX memory in those rungs.
+- **Window 1 is exposed in a way c2 does not cap:**
+  - **GPU residue (H1)** can land on any page nvgpu held, including ZONE_DMA, which contains window 1.
+  - **Under R46 and R48,** a still-active 32-bit PCI master's writes land below 4 GiB.
+  - **RCE's IOVA window** overlaps the upper part of window 1 (R68).
+  - **Every kexec rung** showed the SMMU disable (E4) and the GPU teardown error lines (E5): M1 and M1b without the module quiesce; M3, M4, 11c, B1 and B2 with it.
+  - **M5-F** entered from UEFI with no Linux, so it is exposed only to firmware-class writers (UNKNOWN).
+- **What limits the risk:**
+  - c1 (top of window 1, inside RCE's window) was clean at both B2 checks, in one run;
+  - M3's md5 and `cmp` checks passed for the files they covered;
+  - no rung crashed in a way that points at memory corruption.
+
+  None of this rules out writes into unused or rarely read pages. B1's unexplained thread-count difference is not evidence of this and is not linked to it.
+- **Verdicts stand.** M0-M5's functional verdicts (booted, banner, IPC completed, startup reached) rest on no memory-integrity claim, and m5-design and plan:456 already disclaim DMA quiescence.
+- **Where it goes (D32):**
+  - freeze gate item 3 gains a sub-item: "DMA quiescence after kexec is shown for the claimed windows (s1-design §15's class), or v1 declares the exposure and the campaign carries a window-1 watch";
+  - the v1 manifest's entry-path field gains "DMA quiescence: shown / not shown";
+  - plan §8 unknown #6 is annotated with B2's observation and R48 and R68, and stays HYPOTHESIS;
+  - a window-1 canary is a J7c and revision-4 item, because it is a startup change;
+  - until then, no campaign record claims memory integrity or rests on a clean kexec entry.
+
+---
+
+### 15.9 What this revision does not show
+
+- **Nothing here identifies the writer.** H1-H5 are HYPOTHESIS until J2, J4 and J6 run, and J7a where it is needed.
+- **J4 excludes or implicates only the removable masters, as removed by this sequence.**
+  - It says nothing about the GPU, the coprocessors, the SD host or display, and gives no evidence on H1, H2, H3 or H5.
+  - A clean J4 is provisional until J6r's hold, a B1 rerun and a B2 rerun under the fix pass.
+- **The page-frame snapshots show Linux's CPU-side page state at the snapshot moments, not at the jump, never which device owns a page, and nothing about where a device writes after kexec.**
+- **J6 shows classes and page positions, not identity.**
+  - It cannot see writes before startup's fill, or a write and restore faster than one scan; the hold sees writes in its pages but cannot locate them physically.
+  - Its signatures are readings of public specifications, positive-only, with false positives above zero.
+- **Whether the SMMUs were in bypass after kexec, and whether PCI Bus Master stayed clear through the shutdown, rest on log lines and upstream behaviour.** No register is read after the shutdown starts.
+- **Nothing about the rest of window 2 or of window 1** beyond the canaries and, in J6, the hold's coverage arithmetic.
+- **Nothing about a Linux guest on the board.**
+- **No timing.**
+- **No isolation or containment.**
+- **Not repeatability beyond the runs made.**
+- **No evaluation figure is publishable** before the 4.6(i) consultation; only number-free status lines are pushed (§15.8).
+
+---
+
+### 15.10 Where the four analyses disagreed, and what this draft chose
+
+| # | Point | Options in the analyses | Chosen | Why |
+|---|---|---|---|---|
+| 1 | Rung names | harness: R0/W0/D1-D3/E0; design rules: J | **J** | R and D are existing table ids in this design; J is unused |
+| 2 | Where the revision lives | a separate file; §15 of s1-design | **§15**, with implementation detail in its subsections | §5.3, F16, F23 and D8 are the rules being amended; two documents could disagree about B2's class |
+| 3 | Ranking | QNX instrument: wireless under stale translation first; harness and design rules: wireless as the first A/B variable; Linux mechanisms: GPU first | **GPU (H1) above the removable masters (H4)**; firmware second; read instability and QNX low; H4s kept as a sub-hypothesis | E4 with E15-E17 (bypass sends 32-bit IOVAs below 4 GiB), E2 (a restoring writer does not fit RX appends, HYPOTHESIS) and E11 (the GPU has no SMMU). The QNX analysis's stale-translation case needs R46 to be false; it is kept as H4s with its own J6 row. J4 still comes first for cost reasons, with its limits stated (§15.3) |
+| 4 | First test arm | wireless only (design rules); "max" (harness) | **"max"**, with wireless only as the pre-registered fallback | The priors weaken wireless alone, and the budget is small: one run excludes or implicates the whole removable class, and both outcomes classify. Bisecting only follows a clean result (D27), toward the xHCI first under Q-x |
+| 5 | A GPU arm (Linux mechanisms: no `rmmod nvgpu` control, or a GPU-state gate) | run it; defer | **Reserved (J5)**; GPU state read as a record only (D23) | It relaxes a fixed setting, and the budget goes to arms that classify. C24 shows only that the same error **lines** appear on both paths; it does not show the same GPU or page state, so the arm is not shown to be uninformative (corrected after the power review). The decisive H1-versus-H2 test is J7a |
+| 6 | Where the instrument's code lives | a new mode in `memcanary` (moves `PIN_MEMCANARY`); a second binary from the same source; a separate `canaryshape` source | **A second binary from the same source behind a determinism gate; separate source as the fallback** | Keeps `memcanary`'s pin and every existing kimg byte-identical, so a later B2 rerun changes one variable; reuses the refusal code B2 exercised |
+| 7 | What leaves the target | QNX instrument: a private binary dump of values through `tcu-cat`; Linux mechanisms and design rules: counters and classes only | **Counters, classes and page bitmaps only, through `xport`; values reserved (D28)** | The owner's rule requires any capture of frames to be private **and** redacted. Base64 in the raw COM3 capture cannot be redacted by the harness's regexes. Classes answer the ranking's questions first |
+| 8 | Signal classes | QNX instrument: pattern copies, pointers, signatures; Linux mechanisms: bit-flip histogram | **Both,** plus half-pattern, small-integer and stride classes, and a three-read `osc`/`prog` split | H3 needs the flip and oscillation classes; H2, H4 and H5 need the pattern, ring and structure classes |
+| 9 | Rehearsal | three L4T boots (W0a, W0b, W0m) | **One rung (J3) with `FINAL=none` and J4's exact set**, after J1's cheap marker and timer probe | The fallback firing proves the stronger recovery claim with the same `systemctl reboot` the sequence would issue; rehearsing the exact set avoids a gap; it saves two boots of owner time |
+| 10 | SMMU `sCR0` read | owner approval (Linux mechanisms); Never (design rules); flag only (QNX instrument) | **Out of revision 3; on the new Never list; J7b in revision 4** | An SError at EL2 is a power-cut class, and the read needs its own design |
+| 11 | Extra canaries (window-2 grid, window-1 in RCE's window) | now (Linux mechanisms); later (others) | **Revision 4 (J7c)** and the freeze gate; J6's hold covers sysram in the meantime without a startup change | Any constant change reruns B1 and moves `PIN_STARTUP_S1` |
+| 12 | Budget | three board rounds (design rules); open-ended (harness) | **Two kexec and two L4T-only runs today, then the owner; four kexec in total** | Keeps the owner's day bounded and the A/B pair intact |
+| 13 | NVMe in the removal set | the harness assumed it holds the root filesystem and cannot be removed | **J1 decides from every mount, swap and the storage parent chain of `$HOME` and `KD`** | Where the root filesystem lives is UNKNOWN here; an unused drive is a removable master |
+| 14 | The Ethernet-cable variant (harness E0, D2E) | a test arm | **Recovery path only (D25)** | An active Ethernet driver is a new confound, and "max" unbinds it anyway |
+| 15 | B1 rerun after a harness-only fix | §5.3's "only if startup changed"; D8's "reruns B1 and B2" | **Rerun B1 (D26, recommended)** | D8's wording was accepted, and the quiesce is part of B1's entry |
+
+---
+
+### 15.11 Review outcomes
+
+#### 15.11.1 Conflicts between reviewers, and how they were resolved
+
+| # | Conflict | Resolution |
+|---|---|---|
+| X1 | Safety (major 1) wanted J2's snapshots and PCI reads moved out of `b_kexec_go`, or its ssh timeout raised; power (blocker 1) wanted J2 to become a null-set detached arm; power (major 7) wanted the final snapshot dropped | Power's blockers 1 and 7 were applied: J2 no longer issues through `b_kexec_go`, and no snapshot is taken at the jump. Safety's ordering rule was carried into the sequence: nothing slow between the governor read and `systemctl kexec`, and on a Phase A timeout `kexec_loaded` is read and `b_unload` runs before exit 3 |
+| X2 | Power (blocker 1) puts a detached kexec (J2) before the fallback rehearsal (J3); safety's lens wants the detached path proven before a jump depends on it | J2 keeps ssh up, so the PC can stop the units and unload at any point before the issue; and J1 now proves the `/dev/kmsg` marker path and a transient timer firing before J2. J3 still proves the no-network fallback before J4, the only arm without ssh |
+| X3 | Power (blocker 4) asked for J2b as "`cmd_run` unchanged"; feasibility (major 4) showed that `cmd_run` on `s1-h1` writes a `B2-aN` attempt and a pass-looking B2 parse | J2b is `jrun s1-h1 b2repeat`: `cmd_run`'s B2 flow with no additions, `STEP=J2b` set after `resolve_kimg`, and `run --diag j2b` |
+| X4 | Safety (minor 12) and feasibility (minor 13) both flagged the trace's console cost. Safety offered "the default console level"; feasibility offered "drop the trace from J2 and J4 and rely on J1's reboot"; power's matched-arm change requires the arms to be equal | Trace in J2 and J4 as a matched pair or in neither, never in J2b, gated by J1's go rule (lines present, shutdown section under half of `S1_STUCK_S`). Safety's default-console-level option was rejected: the per-device print is informational (R73, HYPOTHESIS), so it would not reach COM3. Feasibility's J1-only option was rejected: a reboot is not a kexec shutdown (E17's condition), so J1 cannot show which hooks ran at kexec |
+| X5 | Safety (major 4) and feasibility (major 8) described the same advice defect with different fixes (a hold on every class versus wiring F25w before F25a) | Both applied: offset keys parsed for J logs, NO CUT in every class until the fallback deadline plus 1,200 s, then F25w decided before F25a with safety's narrowed definition (major 5) |
+| X6 | Safety (major 9) and feasibility (major 7) both asked for an exact allow-list, with different contents | Merged into one exact list (§15.5 A5), including `WQ_FUNCS`, `ip link set dev … down`, the redirect targets and both `systemd-run` lines. Safety's "`rfkill` except a read" became stricter: no `rfkill` command at all, state read from sysfs |
+| X7 | Safety (minor 13) and feasibility (minor 10) both asked for rule-5 handling of the sequence's files | Merged: one dated rule-5 exception for three named files, removal on every return path, leftovers removed by the next command |
+| X8 | Power (blocker 2) asked for the hold "in any B2 rerun that is to make Q final"; the revision's Never items forbid changing `s1-h1`, and class Q requires the B2 rerun to be judged by §6.7 unchanged | The hold goes into `s1-j1` only. Q-final requires a J6r run (remove arm, with the hold) **and** the unchanged B2 rerun |
+| X9 | Safety (minor 15) wanted D29 before the J0 commit; feasibility (major 9) found D29 wording already in the draft | Driver names are resolved at run time, so the commit carries none; D29 gates any push of the commit or of §15 as written, and a substitution table gives neutral wording |
+| X10 | Power (major 8) wanted `b_pci_state final` in J2 to decide whether E17 is false; safety's and the draft's own limits note that the read comes before the shutdown | The split was applied as Q-p and Q-x, with the limit stated: the read shows the Bus Master state before the shutdown only, so Q-p is an interpretation (HYPOTHESIS), not a proof that E17 is false |
+
+#### 15.11.2 Every required change
+
+| Reviewer | Severity | Issue | Applied or rejected | Why |
+|---|---|---|---|---|
+| safety | major | J2's snapshot work inside `b_kexec_go` can exceed the 300 s ssh timeout between load and issue | applied (adapted) | J2 and J4 issue from the detached sequence and no snapshot is taken at the jump (X1); the sequence keeps nothing slow between the governor read and `systemctl kexec`; a Phase A timeout reads `kexec_loaded` and runs `b_unload` before exit 3 |
+| safety | major | uptime limits checked only at rung start; the detached dwell can push the issue past 1,800 s | applied | issue-time `abort reason=uptime` at 1,800 s (7,200 s without exception), fixed in the script; start margin = start uptime plus the printed worst case under 1,800 s |
+| safety | major | one-capture rule: `com3_has_records` misses L4T-only rungs, so J1's or J3's capture could be reused | applied | `used-captures.log`, refusal of captures with `s1wq:` or earlier rung output, "stop the previous capture" in the boot chain, self-tests |
+| safety | major | advice cannot parse J logs and may advise a cut before the fallback deadline | applied | offset and NO RETURN keys for `jrun` and `j3`; NO CUT in every class until `armed_epoch + WQ_FALLBACK_S + 1,200 s`; self-tests (X5) |
+| safety | major | F25w allowed a cut after the fallback or an abort had already reset the board | applied | F25w requires no reset marker; any reset marker classes F25b under M5's exception word for word (§15.7.2, §15.7.3 item 7) |
+| safety | major | the sequence did not abort on a kernel Oops during unbind or removal | applied | per-slot and pre-issue Oops and D-state scan with b_quiesce's pattern; `abort reason=oops` (F47), also in J3's gates |
+| safety | major | `dd` config-space write fallback is an unmasked general write primitive | applied | only `setpci -s <BDF> COMMAND=0000:0004` with read-back; no fallback; `dd` and `of=` on `/sys` refused; `setpci` absent means F44 |
+| safety | major | only NVMe had an in-use rule; other mounts, `$HOME` and `KD` could sit under a removed controller | applied | J1 records every mount, swaps and the parent chain of `/`, `$HOME`, `/dev/shm` and `KD`; a controller with a mounted or swap descendant leaves the set; the sequence refuses if `$HOME` resolves under a set member |
+| safety | major | the forbidden-token gate's allow-list could not be both enforced and passed | applied | exact allow-list of command forms and redirect targets, one `systemctl reboot --force`, explicit refusals, self-test on the real scripts (X6) |
+| safety | minor | governor pin checked in Phase A, minutes before a unit issues the kexec | applied | governor re-read just before `kexec issuing`; `abort reason=governor` |
+| safety | minor | post-issue `kexec -u` and reboot could interrupt a slow kexec shutdown | applied | sequence and fallback check `systemctl is-system-running` and only mark and exit on `stopping`; non-zero rc is the only "rejected" case (R72) |
+| safety | minor | console level 7 plus `initcall_debug` lengthens the kexec shutdown and makes J2 unlike B2 | applied in part; the default-console-level option rejected | slow shutdown with growing COM3 is not a hang; J1 go rule bounds the cost; matched arms; J2b repeats B2 without the trace. Default console level rejected because the per-device line would not reach COM3 (R73) (X4) |
+| safety | minor | J3 and failed paths leave sequence files and tarballs on the rootfs | applied | no tarballs at all; three named files under a dated rule-5 exception, removed on every return path and by the next command after a failure (X7) |
+| safety | minor | Q16 reads function bodies, which may exceed "documentation pages only" | applied | Q16 limited to documentation, mailing-list and patch pages; per-file source views are owner decision D33 |
+| safety | minor | the J0 commit names drivers before D29, and the repo is public | applied in part; "precondition of the commit" rejected | drivers resolved at run time from class codes and J1's private set file, so the commit names none; D29 gates the **push**, not a local commit, because a local commit publishes nothing and PO-A needs commits before builds (X9) |
+| power | blocker | J2 and J4 differed in dwell and issuing context, confounding the removal with fading GPU residue | applied | J2 is a null-set detached arm with the same fixed slots, start delay, unit, snapshots and trace; each slot padded to `WQ_SLOT_S` (adapted from "sleeps WQ_STEP_S", which would not equalise slots whose actions differ in length) |
+| power | blocker | a clean c2 can hide a moved writer; nothing watches the rest of sysram; Q could become final on a blind B2 rerun | applied in part; "hold in the B2 rerun" rejected | large timed `memcanary hold` added to `s1-j1` and required (J6r) for Q-final; placement stated as HYPOTHESIS. Adding it to the B2 rerun was rejected: it would change `s1-h1`'s script (a revision-3 Never item) and the rerun would no longer be judged by §6.7 unchanged (X8) |
+| power | major | outcome tables had gaps (mixed J2 checks, F35 with F34, J3 not met, J6 none or static, K through read instability) | applied | F32a and F32b rows with J6 first; U extended; K split into K-r and K-w with different revision-4 consequences |
+| power | major | a clean J2 stopped the ladder uninformatively; false-Q risk unstated | applied (adapted) | J2b in J4's slot after F33, run as `jrun … b2repeat` rather than raw `cmd_run` (X3); F45 and F46; the false-Q estimate stated in §15.4.6 |
+| power | major | F34 misclassified a fast live writer as read instability | applied | third read; `osc` (A-B-A) against `prog` (A-B-B, A-B-C) and `stable`; F34 = `osc` above 0 and `flip2` dominant and `prog` 0; `flip2_same` and `flip2_var` |
+| power | major | classes could not separate rings, counters and 32-bit field writes; signatures used as negative evidence | applied | `hi_pat`, `lo_pat`, `small32`, stride histogram, signatures at every byte offset, stated positive-only; words line split to stay under 255 B |
+| power | major | pre-kexec page flags cannot map to post-kexec DMA targets; the "supports H1" row had no weight; the final snapshot perturbs the jump boot | applied | final snapshot dropped from both arms; the H1-support row removed; R45 restated as a VERIFIED limit; snapshots kept as a record only |
+| power | major | J4 tests the lowest-prior hypothesis, and F35's meaning was not split; C24's inference was a non sequitur | applied (with a stated limit) | Q-p and Q-x split pre-registered, with the limit that `pci final` precedes the shutdown (X10); §15.3 states J4 gives no evidence on H1, H2, H3, H5; C24 and §15.10 item 5 corrected; J5 unrun for budget and fixed-setting reasons; D24 asks the owner whether J4 runs today |
+| power | minor | no row compared the change rate across B2-style allocation fill | applied | fill-rate row (label c against b, factor pre-registered in `J-prereg.log`); H4s added (R76) |
+| power | minor | "network RX appends contradict K-d" treated as settled | applied | labelled HYPOTHESIS; status-bit set and clear in DMA rings added as a K-d-compatible H4 mechanism |
+| feasibility | blocker | SSID added to `redact` but not `ident_hits`, so an SSID-only file is kept raw; optional on trace rungs; no length guard; `awk -v` backslash issue | applied | SSID class in `ident_hits` and `redact`, via `ENVIRON`, refused under 3 bytes, mandatory for every J rung, self-tests for SSID-only, short and backslash cases |
+| feasibility | major | `tar czf` stores the board user name in binary records | applied | no tar: raw slices plus a text header in tmpfs, fetched, sha256-verified, header privacy-scanned, removed |
+| feasibility | major | bitmaps sent as raw binary on COM3; host mode has no export path | applied | export only through `xport` in a new `@BOARD@@J1@` block after `FAIL_STATE`, outside the `MODE != host` guard; parse-s1 self-test for `com3_last_kind` |
+| feasibility | major | J parses print `step=B2`, `b2=pass`; `image_step` would write a `B2-aN` directory | applied | `run --diag j2|j2b|j4` with `verdict=diagnostic …`; `STEP` set after `resolve_kimg`; self-tests for no `B*` directory and no `b2=pass` |
+| feasibility | major | `PO_A_PATHS` misses the edited templates; gate 8.2 regeneration would overwrite `s1-h1.params` | applied | five paths added to `PO_A_PATHS`; gate 8.2 only with a scratch `--out` or a worktree; Q17 params-hash check before J2, J2b, J4 and the B2 rerun |
+| feasibility | major | exit-5 and fallback returns would file the previous L4T console as a black box and parse it | applied | black-box copy and parser skipped on those returns; optional `-l4t-console-ramoops.log`, SSID-scanned, never `--blackbox` |
+| feasibility | major | `declare -f` of `BOARD_FUNCS` would emit quiesce and pin functions; allow-list incomplete; `systemd-run` lines ungated | applied | `WQ_FUNCS` subset; exact redirect targets and commands; `remove`, `rescan`, `reset`, `driver_override`, `new_id`, `power/control` refused; both `systemd-run` lines gated (X6) |
+| feasibility | major | advice reads only `run com3_bytes_before_kexec=`; F25a could advise a cut before the fallback | applied | `jrun` writes that key, `j3` writes its own parsed key; the hold on every class; self-test of markers plus 400 s silence (X5) |
+| feasibility | major | the draft already contained D29-reserved wording and mask widths; §15.8 and §15.9 disagreed | applied in part; generic 32-bit reasoning kept | [D29] marks and a neutral substitution table; run-read mask widths removed from E9 and added to the Never list; §15.8 and §15.9 reconciled on the f33611d precedent. C20's and the pivot's reasoning about any 32-bit master is design reasoning, not a run fact, so it stays |
+| feasibility | minor | sequence files and the fallback's `dmesg` tail persist on the rootfs against rule 5 | applied | dated rule-5 exception for three named files; removal on every return path (X7) |
+| feasibility | minor | "no MAC read" rule too narrow; hyphen MAC form not redacted | applied | census restricted to `driver`, `idVendor`, `idProduct`, `bInterfaceClass`; `address`, `serial`, `lsusb`, `hciconfig` refused; hyphen-form MAC self-test |
+| feasibility | minor | adding `memcanary-w` to the global TCG tool list changes every T variant | applied | added only for `-Variant j1`; gate 8.2 extended to T1-T3 `files.list` and params |
+| feasibility | minor | the determinism gate after an edit on main could overwrite the pinned binary and force a revert | applied | gate 8.1 in a scratch worktree on an uncommitted copy; B versus B' decided before any commit; pinned binary copied outside the tree |
+| feasibility | minor | trace perturbation of J2 not named; F33 reading with the trace on unspecified | applied in part; the "trace in J1 only" option rejected | risk named in §15.7.4; F33 sends J2b without the trace; J1 go rule. J1-only rejected because a reboot is not a kexec shutdown (X4) |
+| feasibility | minor | J records cannot show which harness ran | applied | `s1-board.sh` sha256, `git rev-parse HEAD`, clean-tree check of harness, `kpf-decode.py`, `parse-s1.py`; refuse dirty |
+| feasibility | minor | no black-box estimate for `s1-j1` | applied | gate B8.6: worst-case text under the 60,000 B threshold |
+| feasibility | minor | `kpf-decode.py` declared MIT against Apache-2.0 siblings; D28 could export QNX structure content | applied | Apache-2.0 SPDX header; D28 and J7d exclude `pte`, `kva` and any QNX-structure class; J6 stays counts |
+| feasibility | minor | the raw COM3 capture path is unchecked and never redacted | applied | gate A refuses a capture outside the git-ignored record directory; raw capture never copied, quoted or scanned by hand |
