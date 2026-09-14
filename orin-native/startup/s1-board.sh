@@ -55,11 +55,16 @@
 #                                      set and no kexec; ends through the fallback timer. Only
 #                                      after J2's F32. Needs D20, D22, D25
 #   s1-board.sh jrun IMG control|remove|b2repeat
-#                                      J2, J4, J2b (§15.4.4, §15.4.6); IMG is s1-h1. control and
+#                                      J2, J4, J2b (§15.4.4, §15.4.6) with IMG s1-h1; J6c, J6r
+#                                      (§15.4.8) with IMG s1-j1, control|remove only. control and
 #                                      remove run the detached sequence (§15.4.3: J-set.conf's set,
 #                                      empty in control), b2repeat is run's B2 flow as J2b. Parser
-#                                      run --diag j2|j4|j2b. Exit 5: the sequence aborted or its
-#                                      fallback fired, no kexec
+#                                      run --diag j2|j4|j2b|j1; J6 adds canwatch.txt. Exit 5: the
+#                                      sequence aborted or its fallback fired, no kexec. J6 needs
+#                                      D27=yes in <rec>/J-waivers.conf; J6c follows J4's F36, J2's
+#                                      F32a|F32b or J2b's F46 (else D27_J6C=yes), J6r J4's F35
+#                                      (else D27_J6R=yes); its first attempt per arm appends the J6
+#                                      stage to J-prereg.log (S1_J6_FILL_FACTOR)
 #   s1-board.sh wq-status BOARDLOG     §15.4.6's state (ARMED, PROGRESS, ISSUED, JUMPED, ABORTED,
 #                                      STALLED) of a j3 or jrun board log, from S1_COM3_LOG
 #   s1-board.sh kpf-decode HEADER [HEADER] | --selftest
@@ -68,6 +73,7 @@
 # IMAGES (the step each one is, §6.12)
 #   s1-m1b-p6 B1 (no S1 host script; no parser)   s1-h1 B2 (host)
 #   s1-n1 B3 (boot)   s1-n2 B4 (hold)   s1-q2 B5 (q2)   s1-d1 d1 (boot; a diagnostic)
+#   s1-j1 J6 (host; the watcher, §15.4.8: stage and p0 as any image, then jrun only, never run)
 #
 # ENVIRONMENT (no host, user, key or path is written into this file)
 #   ORIN_HOST              board commands: user@address of the board (required)
@@ -100,6 +106,9 @@
 #                          bytes). Mandatory for the J diagnostic rungs (§15.5 A4)
 #   S1_J_RULE_FILE         J rungs: a file holding §15.6's pre-registered rule
 #                          text; its sha256 goes into J-prereg.log (§15.4.1)
+#   S1_J6_FILL_FACTOR      jrun s1-j1: the fill-rate factor of §15.4.8's row (a decimal >= 1),
+#                          read only when the first J6 attempt appends the J6 stage to
+#                          J-prereg.log; afterwards it must be unset or equal the registered one
 #   S1_J_L4T_CONSOLE       yes: after an exit-5 (no kexec) return of jrun or j3, copy the
 #                          previous console as -l4t-console-ramoops.log (scanned, never a
 #                          black box, never parsed); unset: not copied
@@ -1512,7 +1521,8 @@ image_step() {
 	s1-n2)     STEP=B4; MODE=hold ;;
 	s1-q2)     STEP=B5; MODE=q2 ;;
 	s1-d1)     STEP=d1; MODE=boot ;;
-	*) die "image '$1' is not an S1 board image (s1-m1b-p6, s1-h1, s1-n1, s1-n2, s1-q2, s1-d1)" ;;
+	s1-j1)     STEP=J6; MODE=host ;;    # jrun sets J6c|J6r after resolve_kimg; run refuses it
+	*) die "image '$1' is not an S1 board image (s1-m1b-p6, s1-h1, s1-n1, s1-n2, s1-q2, s1-d1, s1-j1)" ;;
 	esac
 }
 
@@ -1884,19 +1894,28 @@ j_prereg_write() {
 	check_private "$f"
 }
 
-# The stage J-prereg.log was written at: j1 (J1's draft), j2 (the pre-registration), or empty.
+# The stage J-prereg.log was last appended at: j1 (J1's draft), j2 (the pre-registration), j6
+# (J6's stage, appended after it by j6_prereg_append), or empty.
 j_prereg_stage() { sed -n 's/^prereg stage=//p' "$RECDIR/J-prereg.log" 2>/dev/null | tail -n 1; }
+
+# 0 when J-prereg.log holds a 'prereg stage=$1' line. The J2 pre-registration is recognised by its
+# line, not by being the last stage, so J6's appended stage never makes it look unwritten.
+j_prereg_has_stage() { grep -qx "prereg stage=$1" "$RECDIR/J-prereg.log" 2>/dev/null; }
 
 # Verifies J-prereg.log is the J2 pre-registration and still describes the current harness
 # (§15.4.1): the stage, s1-board.sh, the set's member lines, D24_SET, the rule text (set, and
 # S1_J_RULE_FILE's hash equal to it), kpf-decode.py, parse-s1.py and the decisions file; dies
-# otherwise. Every jrun and j3 cites it. Echoes the prereg's own sha256 on success.
+# otherwise. Every jrun and j3 cites it. For $1 s1-j1 and $2 the arm it also needs J6's stage for
+# that arm and checks it against the image (j6_prereg_verify). Echoes the prereg's own sha256.
 j_prereg_check() {
-	local f pre cur
+	local f pre cur img="${1:-}" arm="${2:-}" j6=""
 	f="$RECDIR/J-prereg.log"
 	[ -f "$f" ] || die "no J-prereg.log in the record directory: run the pre-registration before the first J kexec run (§15.4.1)"
-	[ "$(j_prereg_stage)" = j2 ] \
+	j_prereg_has_stage j2 \
 		|| die "J-prereg.log is J1's draft, not the J2 pre-registration: jrun control (or, after J1's F42 row, jrun b2repeat) writes it first (§15.4.1)"
+	# a later stage (J6's) is appended after J2's, never before it
+	awk '$0 == "prereg stage=j2" && !j2 { j2 = NR } /^prereg stage=j6$/ && !j6 { j6 = NR } END { exit !(j6 == 0 || (j2 > 0 && j6 > j2)) }' "$f" \
+		|| die "J-prereg.log holds a J6 stage before the J2 pre-registration: the file was not appended in order (§15.4.1)"
 	pre="$(sed -n 's/^prereg s1-board.sh sha256=//p' "$f" | tail -n 1)"
 	cur="$(j_sha256 "$HERE/$PROG")"
 	[ "$pre" = "$cur" ] || die "J-prereg.log recorded s1-board.sh sha256=$pre, but it is now $cur: re-register, or restore the pre-registered harness (§15.4.1)"
@@ -1916,8 +1935,140 @@ j_prereg_check() {
 		[ "$pre" = "$(j_sha256 "${cur#*:}")" ] \
 			|| die "J-prereg.log recorded ${cur%%:*} as sha256=${pre:-none}, but it is now $(j_sha256 "${cur#*:}"): re-register, or restore the pre-registered file (§15.4.1)"
 	done
+	if [ "$img" = s1-j1 ]; then
+		j6="$(j6_prereg_verify "$arm")" || exit 1
+	fi
 	j_require_clean_tree "a J run"
-	echo "prereg ok sha256=$(j_sha256 "$f")"
+	echo "prereg ok sha256=$(j_sha256 "$f")${j6:+ $j6}"
+}
+
+# ---- J6's pre-registration stage (§15.4.1, §15.4.8, §15.5 B)
+#
+# Appended to J-prereg.log by the first jrun s1-j1 attempt of each arm, before anything is read
+# from the board, and never rewritten: the parse-s1.py hash (the J6 rows are its code), the
+# memcanary-w pin, the hold size and its margin, the fill-rate factor, the arm, and the image's
+# params and kimg hashes. It re-emits the three tracked files' 'prereg <file> sha256=' lines, as
+# the dated amendments do, so the s1-h1 checks above read the harness this stage registered; the
+# rule text, the set, the decisions and the trace are not re-emitted and stay J2's.
+
+# make-s1-images.sh, whose PIN_MEMCANARY_W, J1_HOLD_MIB and J1_HOLD_MARGIN_MIB the stage records.
+# Not read from the environment; only the self-tests point it at a synthetic copy, in-process.
+J6_GENERATOR="$HERE/make-s1-images.sh"
+
+# One NAME=value constant line of the generator. $1 the name.
+j6_gen_const() { sed -n "s/^$1=\\([0-9A-Za-z_-]*\\)\$/\\1/p" "$J6_GENERATOR" 2>/dev/null | tr -d '\r' | head -n 1; }
+
+# parse-s1.py's J1_HOLD_MIB (its own constant, which the generator's constant check compares).
+j6_parser_hold() { sed -n 's/^J1_HOLD_MIB = \([0-9][0-9]*\)\([^0-9].*\)\{0,1\}$/\1/p' "$PARSER" 2>/dev/null | tr -d '\r' | head -n 1; }
+
+# 0 when $1 is a fill-rate factor parse-s1.py accepts: a plain decimal, 1 or above.
+j6_factor_ok() {
+	[[ "$1" =~ ^[0-9]+(\.[0-9]+)?$ ]] || return 1
+	awk -v f="$1" 'BEGIN { exit !(f + 0 >= 1) }'
+}
+
+# One key's value from an s1-j1 params file. $1 the file, $2 the key.
+j6_pkey() { awk -F= -v k="$2" '$1 == k { print substr($0, length(k) + 2); exit }' "$1" 2>/dev/null | tr -d '\r'; }
+
+# The values J6's stage and its check compare, from the s1-j1 params file $1: dies unless the file
+# is s1-j1's (rung, host mode, diag j1), the pin is a real sha256 equal to the generator's, the
+# hold size equals the generator's and parse-s1.py's, and the guard and return bound are the
+# generator's shape (the guard at most 3,600 s, the return bound at least the guard + 300 s).
+# Sets J6_PIN, J6_HOLD, J6_MARGIN, J6_HOLD_T, J6_GUARD.
+j6_params_values() {
+	local p="$1" v
+	[ -f "$p" ] || die "no s1-j1.params under S1_KIMG_DIR: build s1-j1 with make-s1-images.sh (§15.5 B9)"
+	[ "$(j6_pkey "$p" rung)" = s1-j1 ] && [ "$(j6_pkey "$p" mode)" = host ] && [ "$(j6_pkey "$p" diag)" = j1 ] \
+		|| die "s1-j1.params is not the watcher's (rung=$(j6_pkey "$p" rung) mode=$(j6_pkey "$p" mode) diag=$(j6_pkey "$p" diag); want s1-j1, host, j1)"
+	J6_PIN="$(j6_pkey "$p" memcanary_w_sha256)"
+	[[ "$J6_PIN" =~ ^[0-9a-f]{64}$ ]] || die "s1-j1.params' memcanary_w_sha256 is '${J6_PIN:-missing}', not a sha256 (§15.5 B9)"
+	v="$(j6_gen_const PIN_MEMCANARY_W)"
+	[ "$v" = "$J6_PIN" ] || die "make-s1-images.sh's PIN_MEMCANARY_W is '${v:-missing}', not s1-j1.params' $J6_PIN: rebuild s1-j1 from the committed pin (§15.5 B9)"
+	J6_HOLD="$(j6_pkey "$p" j1_hold_mib)"
+	[[ "$J6_HOLD" =~ ^[1-9][0-9]*$ ]] || die "s1-j1.params' j1_hold_mib is '${J6_HOLD:-missing}', not a whole number of MiB"
+	v="$(j6_gen_const J1_HOLD_MIB)"
+	[ "$v" = "$J6_HOLD" ] || die "make-s1-images.sh's J1_HOLD_MIB is '${v:-missing}', not s1-j1.params' $J6_HOLD (§15.4.8)"
+	v="$(j6_parser_hold)"
+	[ "$v" = "$J6_HOLD" ] || die "parse-s1.py's J1_HOLD_MIB is '${v:-missing}', not s1-j1.params' $J6_HOLD: the parser would judge another hold (§15.5 B7)"
+	J6_MARGIN="$(j6_gen_const J1_HOLD_MARGIN_MIB)"
+	[[ "$J6_MARGIN" =~ ^[0-9]+$ ]] || die "make-s1-images.sh has no whole-number J1_HOLD_MARGIN_MIB (D27: the hold margin is recorded before J6)"
+	J6_HOLD_T="$(j6_pkey "$p" j1_hold_t)"
+	[[ "$J6_HOLD_T" =~ ^[0-9]+$ ]] || die "s1-j1.params has no whole-number j1_hold_t"
+	J6_GUARD="$(j6_pkey "$p" guard_s)"
+	v="$(j6_pkey "$p" return_bound_s)"
+	[[ "$J6_GUARD" =~ ^[0-9]+$ ]] && [[ "$v" =~ ^[0-9]+$ ]] && (( J6_GUARD <= 3600 && v >= J6_GUARD + 300 )) \
+		|| die "s1-j1.params' guard_s=${J6_GUARD:-missing} and return_bound_s=${v:-missing} are not the generator's shape (guard <= 3600 s, return bound >= guard + 300 s)"
+	return 0
+}
+
+# The registered fill-rate factor (the newest J6 stage's), or empty.
+j6_prereg_factor() { sed -n 's/^prereg j6 fill_rate_factor=//p' "$RECDIR/J-prereg.log" 2>/dev/null | tail -n 1; }
+
+# 0 when a complete J6 stage for arm $1 is in J-prereg.log (its last line, 'prereg j6 arm=', written).
+j6_prereg_has_arm() { grep -qx "prereg j6 arm=$1" "$RECDIR/J-prereg.log" 2>/dev/null; }
+
+# Appends J6's stage for arm $1 (control|remove) once; a later attempt of the arm finds it and
+# appends nothing. Needs the J2 pre-registration, a clean tree (the caller's gate), the s1-j1
+# params and kimg, and the factor: S1_J6_FILL_FACTOR on the first stage; for the other arm's stage
+# it must be unset or equal the one already registered (one factor for the revision).
+j6_prereg_append() {
+	local arm="$1" f="$RECDIR/J-prereg.log" dir="${S1_KIMG_DIR:-$HERE/../shim/out/s1}" factor old step
+	case "$arm" in control) step=J6c ;; remove) step=J6r ;; *) die "j6_prereg_append: no J6 arm '$arm'" ;; esac
+	j6_prereg_has_arm "$arm" && return 0
+	j_prereg_has_stage j2 || die "J-prereg.log holds no J2 pre-registration: J6's stage is appended after it (§15.4.1)"
+	j6_params_values "$dir/s1-j1.params"
+	[ -f "$dir/s1-j1.kimg" ] || die "no s1-j1.kimg under S1_KIMG_DIR"
+	old="$(j6_prereg_factor)"
+	factor="${S1_J6_FILL_FACTOR:-$old}"
+	[ -n "$factor" ] || die "S1_J6_FILL_FACTOR is unset: the fill-rate factor of §15.4.8's row is pre-registered by the first J6 attempt (§15.4.1)"
+	j6_factor_ok "$factor" || die "S1_J6_FILL_FACTOR='$factor' is not a decimal of 1 or above (parse-s1.py --fill-factor)"
+	[ -z "$old" ] || [ "$old" = "$factor" ] \
+		|| die "S1_J6_FILL_FACTOR=$factor differs from the fill-rate factor $old already registered for J6: one factor holds for the revision (§15.4.1)"
+	{
+		echo "prereg stage=j6"
+		echo "prereg j6 utc=$(utc_now) step=$step image=s1-j1 by=first-attempt reason=J6's pre-registration before its first run; rule text, set, decisions and trace unchanged"
+		echo "prereg head=$(git -C "$HERE" rev-parse HEAD 2>/dev/null || echo unknown)"
+		echo "prereg tree=$(j_tree_clean && echo clean || echo DIRTY)"
+		echo "prereg s1-board.sh sha256=$(j_sha256 "$HERE/$PROG")"
+		echo "prereg kpf-decode.py sha256=$(j_sha256 "$S1DIR/kpf-decode.py")"
+		echo "prereg parse-s1.py sha256=$(j_sha256 "$PARSER")"
+		echo "prereg fill_rate_factor=$factor"
+		echo "prereg j6 parse-s1.py sha256=$(j_sha256 "$PARSER")"
+		echo "prereg j6 pin_memcanary_w=$J6_PIN"
+		echo "prereg j6 hold_mib=$J6_HOLD hold_margin_mib=$J6_MARGIN hold_t_s=$J6_HOLD_T guard_s=$J6_GUARD"
+		echo "prereg j6 fill_rate_factor=$factor"
+		echo "prereg j6 params sha256=$(j_sha256 "$dir/s1-j1.params") kimg_sha256=$(j_sha256 "$dir/s1-j1.kimg")"
+		echo "prereg j6 waivers sha256=$(j_sha256 "$RECDIR/J-waivers.conf")"
+		echo "prereg j6 arm=$arm"
+	} >> "$f"
+	check_private "$f"
+	note "J-prereg.log: J6's stage for the $arm arm appended (fill_rate_factor=$factor); it is never rewritten by the harness (§15.4.1)"
+}
+
+# Checks J6's stage for arm $1 against the image about to run (§15.4.1): the stage is present and
+# complete, and parse-s1.py, the memcanary-w pin, the hold size, the params and the kimg are the
+# registered ones, and the factor is usable. Dies otherwise; prints one 'j6' summary.
+j6_prereg_verify() {
+	local arm="$1" f="$RECDIR/J-prereg.log" dir="${S1_KIMG_DIR:-$HERE/../shim/out/s1}" pre factor
+	case "$arm" in control|remove) ;; *) die "J6 runs in the control or remove arm, not '${arm:-none}'" ;; esac
+	j_prereg_has_stage j6 && j6_prereg_has_arm "$arm" \
+		|| die "J-prereg.log holds no J6 stage for the $arm arm: jrun s1-j1 $arm appends it before its first run (§15.4.1)"
+	pre="$(sed -n 's/^prereg j6 parse-s1.py sha256=//p' "$f" | tail -n 1)"
+	[ "$pre" = "$(j_sha256 "$PARSER")" ] \
+		|| die "J6's stage registered parse-s1.py as sha256=${pre:-none}, but it is now $(j_sha256 "$PARSER"): J6's rows are that code, fixed before any result (§15.4.1)"
+	j6_params_values "$dir/s1-j1.params"
+	pre="$(sed -n 's/^prereg j6 pin_memcanary_w=//p' "$f" | tail -n 1)"
+	[ "$pre" = "$J6_PIN" ] || die "J6's stage registered PIN_MEMCANARY_W=${pre:-none}, but s1-j1.params now carries $J6_PIN (§15.4.1)"
+	pre="$(sed -n 's/^prereg j6 hold_mib=\([0-9]*\) .*/\1/p' "$f" | tail -n 1)"
+	[ "$pre" = "$J6_HOLD" ] || die "J6's stage registered hold_mib=${pre:-none}, but s1-j1.params now says $J6_HOLD (§15.4.1)"
+	pre="$(sed -n 's/^prereg j6 params sha256=\([0-9a-f]*\) kimg_sha256=\([0-9a-f]*\)$/\1 \2/p' "$f" | tail -n 1)"
+	[ "$pre" = "$(j_sha256 "$dir/s1-j1.params") $(j_sha256 "$dir/s1-j1.kimg")" ] \
+		|| die "J6's stage registered other s1-j1.params and s1-j1.kimg hashes than the ones under S1_KIMG_DIR: the image changed after its pre-registration (§15.4.1)"
+	factor="$(j6_prereg_factor)"
+	j6_factor_ok "$factor" || die "J6's stage holds no usable fill-rate factor ('${factor:-none}')"
+	[ -z "${S1_J6_FILL_FACTOR:-}" ] || [ "$S1_J6_FILL_FACTOR" = "$factor" ] \
+		|| die "S1_J6_FILL_FACTOR=$S1_J6_FILL_FACTOR differs from the registered fill-rate factor $factor: unset it (§15.4.1)"
+	echo "j6_arm=$arm fill_rate_factor=$factor hold_mib=$J6_HOLD pin_memcanary_w=registered"
 }
 
 # §15.5 A4 for the J records: rec() redacts every board-log line, and J-set.conf is redacted in
@@ -3047,6 +3198,10 @@ JA_PC_S=30
 JRUN=""
 JDIAG=""
 J_Q17_LINE=""
+# jrun s1-j1 (J6): the parser's extra arguments, and the factor and kpf headers canwatch reads.
+J6_PARGS=()
+J6_FACTOR=""
+J6_KPF=()
 JPREREG=""
 JGATE=""
 J_RETURN_HOOK=""
@@ -3066,13 +3221,18 @@ j_set_in_members() {
 	awk '/^member=/ && index($0, " in_set=yes ") { split($1, a, "="); s = s (s == "" ? "" : ",") a[2] } END { print (s == "" ? "none" : s) }' "$RECDIR/J-set.conf"
 }
 
-# §15.5 A1: jrun accepts s1-h1 with control, remove or b2repeat, and refuses anything else
-# (s1-j1 waits for §15.5 B).
+# §15.5 A1: jrun accepts s1-h1 with control, remove or b2repeat, and s1-j1 (J6, §15.4.8) with
+# control or remove only (J6 is J2's or J4's harness arm; no J2b of the watcher); anything else
+# is refused.
 jrun_args() {
 	case "$1" in
 	s1-h1) ;;
-	s1-j1) die "jrun s1-j1 waits for the watcher image (§15.5 B, J6): only s1-h1 is accepted by this harness" ;;
-	*)     die "jrun accepts s1-h1 only (§15.5 A1); '$1' is refused" ;;
+	s1-j1)
+		case "$2" in
+		control|remove) ;;
+		b2repeat) die "jrun s1-j1 runs the control or remove arm only (§15.4.8): b2repeat is J2b's, with s1-h1" ;;
+		esac ;;
+	*)     die "jrun accepts s1-h1 and s1-j1 only (§15.5 A1); '$1' is refused" ;;
 	esac
 	case "$2" in
 	control|remove|b2repeat) ;;
@@ -3080,14 +3240,18 @@ jrun_args() {
 	esac
 }
 
-# §15.5 A1: STEP and MODE for a J arm, set after resolve_kimg so image_step's B2 for s1-h1
-# never reaches a record path. $1 control|remove|b2repeat|j3.
+# §15.5 A1: STEP and MODE for a J arm, set after resolve_kimg so image_step's B2 for s1-h1 (and
+# J6 for s1-j1) never reaches a record path. $1 control|remove|b2repeat|j3, $2 the image (s1-j1
+# gives J6c or J6r; anything else, or none, the s1-h1 steps).
 jrun_step() {
-	case "$1" in
-	control)  STEP=J2 ;;
-	remove)   STEP=J4 ;;
-	b2repeat) STEP=J2b ;;
-	j3)       STEP=J3 ;;
+	case "${2:-}:$1" in
+	s1-j1:control) STEP=J6c ;;
+	s1-j1:remove)  STEP=J6r ;;
+	s1-j1:*)       die "no J6 step for '$1'" ;;
+	*:control)     STEP=J2 ;;
+	*:remove)      STEP=J4 ;;
+	*:b2repeat)    STEP=J2b ;;
+	*:j3)          STEP=J3 ;;
 	*) die "no J step for '$1'" ;;
 	esac
 	MODE=host
@@ -3130,10 +3294,60 @@ j_waiver_f39() {
 		&& grep -qx 'S1PC c1_start=ok' "$p" 2>/dev/null && grep -qx 'S1PC c1_end=ok' "$p" 2>/dev/null
 }
 
+# 0 when <rec>/J-waivers.conf holds the owner's '$1=yes' line (D34_F39, D27, D27_J6C, D27_J6R).
+j_waiver() { grep -qx "$1=yes" "$RECDIR/J-waivers.conf" 2>/dev/null; }
+
+# The newest parse row of a J step (parse-s1.txt beside its newest board log), or empty. J2, J2b
+# and J4 print one token; J6's is a comma list of every §15.4.8 row that holds. $1 STEP.
+j_step_row() {
+	local b
+	b="$(j_newest_board "$1")"
+	[ -n "$b" ] && sed -n 's/^S1PC j_row=//p' "$(dirname "$b")/parse-s1.txt" 2>/dev/null | tail -n 1
+	return 0
+}
+
+# 0 when the row list $1 holds the code $2 (membership in a comma list, J6's form; a single
+# token, J2's and J4's form, is a list of one).
+j_row_has() { case ",$1," in *",$2,"*) return 0 ;; *) return 1 ;; esac; }
+
+# §15.4.8 'Run' and §15.6: J6's arm, as refusals. Both need D27 (the owner's, after J4's memo) in
+# J-waivers.conf, and no J6 row so far with F39 or F49 (§15.6's immediate stops). j6control (J6c)
+# follows J4's F36, J2's F32a or F32b, or J2b's F46; j6remove (J6r) follows J4's F35. Otherwise the
+# arm runs only by the owner's D27 for it: D27_J6C=yes or D27_J6R=yes. Prints the reason. $1 the arm.
+j6_precondition() {
+	local r2 r2b r4 s why=""
+	j_waiver D27 || die "J6 needs D27 (build s1-j1 and run J6, §15.6): the owner's 'D27=yes' is not in J-waivers.conf (§15.4.8 preconditions)"
+	for s in J6c J6r; do
+		r2="$(j_step_row "$s")"
+		if j_row_has "$r2" F39 || j_row_has "$r2" F49; then
+			die "the newest $s parse row '$r2' holds F39 or F49, an immediate stop (§15.6): no further J6 run; the owner decides"
+		fi
+	done
+	r2="$(j_step_row J2)"; r2b="$(j_step_row J2b)"; r4="$(j_step_row J4)"
+	case "$1" in
+	j6control)
+		if [ "$r4" = F36 ]; then why="J4's row is F36"
+		elif [ "$r2" = F32a ] || [ "$r2" = F32b ]; then why="J2's row is $r2"
+		elif [ "$r2b" = F46 ]; then why="J2b's row is F46"
+		elif j_waiver D27_J6C; then why="the owner's D27_J6C (the other arm, §15.4.8)"
+		else die "J6c runs after J4's F36, J2's F32a or F32b, or J2b's F46, or by the owner's D27_J6C=yes in J-waivers.conf (§15.4.8); the rows are J2=${r2:-none} J2b=${r2b:-none} J4=${r4:-none}"
+		fi ;;
+	j6remove)
+		if [ "$r4" = F35 ]; then why="J4's row is F35"
+		elif j_waiver D27_J6R; then why="the owner's D27_J6R (the other arm, §15.4.8)"
+		else die "J6r runs after J4's F35, or by the owner's D27_J6R=yes in J-waivers.conf (§15.4.8); J4's row is ${r4:-none}"
+		fi ;;
+	*) die "no J6 arm '$1'" ;;
+	esac
+	echo "j6 precondition: $why; D27 in J-waivers.conf sha256=$(j_sha256 "$RECDIR/J-waivers.conf")"
+}
+
 # §15.4's ladder, as refusals: control after J1 met; b2repeat after J2's F33 or J1's F42 row;
-# j3 after J2's F32 (or its F39 under D34); remove after J3 met. $1 the arm.
+# j3 after J2's F32 (or its F39 under D34); remove after J3 met; j6control and j6remove as
+# j6_precondition. $1 the arm.
 j_precondition() {
 	local b1 b2 b3 row=""
+	case "$1" in j6control|j6remove) j6_precondition "$1"; return 0 ;; esac
 	b1="$(j_newest_board J1)"
 	b2="$(j_newest_board J2)"
 	b3="$(j_newest_board J3)"
@@ -3574,6 +3788,54 @@ j_kexec_extras() {
 	check_private "$base-wq.sh" "$base-wqfb.sh" "$base-wq.log"
 }
 
+# J6 (§15.4.8, §15.5 B7) before run_return_records: the parser's J6 arguments. The factor is the
+# registered one (J-prereg.log), the hold size s1-j1.params' j1_hold_mib, and the kpf headers the
+# rung's own b_kpf_snap headers that were fetched (prequiesce first; none is a cpu-side-lean row,
+# never a refusal). Sets J6_PARGS, J6_FACTOR and J6_KPF. $1 the arm, $2 the record base.
+j6_parse_setup() {
+	local arm="$1" b="$2" f
+	J6_FACTOR="$(j6_prereg_factor)"
+	J6_KPF=()
+	for f in "$b-kpf-prequiesce-header.txt" "$b-kpf-postquiesce-header.txt"; do [ -f "$f" ] && J6_KPF+=("$f"); done
+	J6_PARGS=(--arm "$arm" --fill-factor "$J6_FACTOR" --hold-mib "$(param j1_hold_mib)")
+	for f in "${J6_KPF[@]}"; do J6_PARGS+=(--kpf "$f"); done
+	rec "jrun j6 parse: --arm $arm --fill-factor $J6_FACTOR --hold-mib $(param j1_hold_mib) kpf_headers=${#J6_KPF[@]} (the registered factor; the rung's own snapshots)"
+}
+
+# J6 after the parser, still on the raw COM3 copy (before any privacy scan): the four exports
+# the parser wrote (s1-j1a..d.bin, decoded from COM3's S1 BEGIN/S1 END frames by run's export
+# path), 'parse-s1.py canwatch' into canwatch.txt (counts, classes and page bitmaps only, §15.1),
+# and J6's stop rows. j_row is a comma list (§15.4.8's rows are not exclusive), so F39 and F49 are
+# found by membership (j_row_has), never by equality. Reads SD, PY_BIN and the J6_* settings. $1
+# the COM3 copy.
+j6_after_parse() {
+	local log="$1" out rc row l cw="$SD/canwatch.txt" res
+	local -a cargs=(canwatch "$log" --fill-factor "$J6_FACTOR" --bin-dir "$SD" --out-dir "$SD")
+	for l in a b c d; do
+		if [ -f "$SD/s1-j1$l.bin" ]; then
+			rec "run j6 export s1-j1$l.bin bytes=$(stat -c %s "$SD/s1-j1$l.bin") sha256=$(j_sha256 "$SD/s1-j1$l.bin")"
+			check_private "$SD/s1-j1$l.bin"
+		else
+			rec "run j6 export s1-j1$l.bin NOT written by the parser (canwatch records it as absent)"
+		fi
+	done
+	for l in "${J6_KPF[@]}"; do cargs+=(--kpf "$l"); done
+	out="$(timeout 900 "$PY_BIN" "$PARSER" "${cargs[@]}" 2>&1)"
+	rc=$?
+	printf '%s\n' "$out" | grep -E '^parse-s1: ' | rec_pipe
+	res="$(grep -a '^S1CW result=' "$cw" 2>/dev/null | tail -n 1)"
+	rec "run canwatch rc=$rc ${res:-S1CW result=unwritten} (0 printed, 1 an input error, 2 a usage error or a refused output path; its record: $(basename "$SD")/canwatch.txt)"
+	if [ -f "$cw" ]; then
+		check_private "$cw"
+		privacy_scan "$cw"
+	fi
+	row="$(sed -n 's/^S1PC j_row=//p' "$SD/parse-s1.txt" 2>/dev/null | tail -n 1)"
+	rec "run j6 j_row=${row:-none}"
+	if j_row_has "$row" F39 || j_row_has "$row" F49; then
+		rec "run j6 IMMEDIATE STOP: j_row holds $(j_row_has "$row" F39 && echo F39)$(j_row_has "$row" F39 && j_row_has "$row" F49 && echo ' and ')$(j_row_has "$row" F49 && echo F49) (§15.6): stop; the owner decides; the exposure item is raised; no further J6 run (§15.4.8)"
+	fi
+}
+
 # §15.5 A1's exit-5 return (F43, F47, F48, a fallback reboot: an abort, 'kexec did not happen'
 # or fallback marker on COM3 after the offset): no black box and no parser. $1 the state.
 j_return_aborted() { j_return_noparse aborted "$1"; }
@@ -3787,7 +4049,7 @@ j3_return() {
 # §15.4.3-§15.4.6: J2 (control), J4 (remove) and J3 (j3). Phase A over ssh, the detached
 # sequence, COM3 progress, and the return paths. $1 the arm, $2 the image (s1-h1).
 j_detached() {
-	local arm="$1" img="$2" kw=jrun out old up rc wrc left gate worst name base q17="" pre_ok home homedev kddev trace=no j1b st
+	local arm="$1" img="$2" kw=jrun out old up rc wrc left gate worst name base q17="" pre_ok home homedev kddev trace=no j1b st jpre="" cmin
 	local wq wqfb line_main line_fb fb_s armed com3_off gok gov0 gov4 rcs oops L v p SD pstore_before
 	local conf="$S1DIR/s1-linux.conf" tree="" pc_conf_sha="" pc_image_sha="" pc_l4t_initrd_sha="" pc_initrd_sha="" conf_gate
 	local pc_image="$S1DIR/out/l4t/Image" pc_l4t_initrd="$S1DIR/out/l4t/initrd" pc_initrd="$S1DIR/out/initrd.cpio.gz"
@@ -3800,7 +4062,7 @@ j_detached() {
 	if [ "$arm" != j3 ]; then q17="$(j_q17_check "$img")" || exit 1; fi
 	IMG="$img"
 	resolve_kimg "$IMG"
-	jrun_step "$arm"
+	jrun_step "$arm" "$img"
 	[ "$arm" = j3 ] && RETURN_BOUND=1200
 	KEXEC_MODE=s
 	UTC="$(utc_now)"
@@ -3811,18 +4073,25 @@ j_detached() {
 	[ "$arm" = remove ] && j_require D24 "J4 today (§15.6 D24)"
 	j_decision_set >/dev/null
 	j_require_clean_tree "$STEP"
-	j_precondition "$arm"
+	if [ "$img" = s1-j1 ]; then
+		jpre="$(j_precondition "j6$arm")" || exit 1
+	else
+		j_precondition "$arm"
+	fi
 	[ "$arm" = j3 ] || run_pc_inputs
 	j_set_select "$arm"
 	j1b="$(j_newest_board J1)"
 	if [ "$arm" != j3 ] && [ "$(j_decision D21)" = yes ] && [ -n "$j1b" ] && grep -aq '^j1 next=J2 trace=go$' "$j1b"; then trace=yes; fi
 	# the J2 pre-registration is written once, by J2's first attempt over J1's draft, and never
-	# rewritten by the harness afterwards: every later attempt and rung is checked against it
-	if [ "$arm" = control ] && [ "$(j_prereg_stage)" != j2 ]; then
+	# rewritten by the harness afterwards: every later attempt and rung is checked against it.
+	# It is found by its stage line, so J6's later stage never makes it look unwritten.
+	if [ "$arm" = control ] && [ "$img" = s1-h1 ] && ! j_prereg_has_stage j2; then
 		j_prereg_write "" "" j2 "$trace"
 		note "J-prereg.log written as the J2 pre-registration, with the decisions taken now (§15.4.1); it is never rewritten by the harness"
 	fi
-	pre_ok="$(j_prereg_check)" || exit 1
+	# J6's stage (§15.4.1): appended by the arm's first attempt, before anything reads the board
+	[ "$img" = s1-j1 ] && j6_prereg_append "$arm"
+	pre_ok="$(j_prereg_check "$img" "$arm")" || exit 1
 	# the trace is carried by J2 and J4 together or by neither (§15.4.6)
 	if [ "$arm" != j3 ]; then
 		[ "$(sed -n 's/^prereg trace=//p' "$RECDIR/J-prereg.log" | tail -n 1)" = "$trace" ] \
@@ -3844,11 +4113,20 @@ j_detached() {
 	rec "$kw record_dir=$(basename "$RECDIR")/$(basename "$SD")"
 	j_stamps "$WQ_SLOT_COUNT" | rec_pipe
 	rec "$kw $pre_ok"
+	[ -n "$jpre" ] && rec "$kw $jpre"
 	[ -n "$q17" ] && rec "$kw $q17"
 	rec "$kw decisions D20=$(j_decision D20) D21=$(j_decision D21) D22=$(j_decision D22) D24=$(j_decision D24) D24_SET=$(j_decision D24_SET) D25=$(j_decision D25) D25_F25W_CUT=$(j_decision D25_F25W_CUT)"
 	rec "$kw set in_this_arm=$([ "$arm" = control ] && echo empty || echo "$J_SETDESC") wireless_only_fallback=$J_SET_FB setpci=$WQG_SETPCI trace=$trace slots=$WQ_SLOT_COUNT"
 	[ "$arm" != control ] && [ "$WQG_W_MOD" != none ] \
 		&& rec "$kw note: slot 3's modprobe -r also unloads the dependencies of the wireless function's module that become unused (modprobe(8)); runtime-only, like the unbinds"
+	if [ "$img" = s1-j1 ]; then
+		# J6's host run (four watches, the hold, four exports) lies after the jump, in QNX: it adds
+		# nothing to the start margin, which bounds L4T's uptime up to the issue (j_worst_case, the
+		# same Phase A and Phase B as J2 and J4). It lengthens the return bound, and through it the
+		# capture life of gates A and B, both taken from s1-j1.params (guard + 300 s, C14)
+		cmin="$(j_capture_life_min "$arm" "$RETURN_BOUND" "$WQ_SLOT_COUNT")"
+		rec "$kw j6 bounds from s1-j1.params: guard_s=$(param guard_s) return_bound_s=$RETURN_BOUND capture_s=$CAPTURE_S; capture life needed at gate A $cmin s (return bound + 2180 + fallback); start the capture with -Seconds $(( CAPTURE_S > cmin ? CAPTURE_S : cmin + 300 )) or more. The host run follows the jump, so the start margin is J2's and J4's"
+	fi
 	gate="$(j_capture_gate "$arm" "$WQ_SLOT_COUNT")" || die "gate A: ${gate#*FAIL: }"
 	rec "$gate"
 	left="$(capture_left_s)"
@@ -4084,7 +4362,12 @@ j_detached() {
 		fi
 		;;
 	esac
-	JDIAG="$([ "$arm" = remove ] && echo j4 || echo j2)"
+	if [ "$img" = s1-j1 ]; then
+		JDIAG=j1
+		j6_parse_setup "$arm" "$base"
+	else
+		JDIAG="$([ "$arm" = remove ] && echo j4 || echo j2)"
+	fi
 	J_RETURN_HOOK=j_kexec_extras
 	run_return_records
 }
@@ -4540,6 +4823,7 @@ run_return_records() {
 		[ -n "$bb" ] && pargs+=(--blackbox "$bb")
 		[ -n "$reason" ] && pargs+=(--reset-reason "$reason")
 		[ -n "${JDIAG:-}" ] && pargs+=(--diag "$JDIAG")    # jrun (§15.5 A3); empty for every B rung
+		[ "${JDIAG:-}" = j1 ] && pargs+=("${J6_PARGS[@]}")   # J6: arm, factor, hold, kpf headers (§15.5 B7)
 		case "$MODE" in
 		boot|hold|q2)
 			pargs+=(--ref-conf-sha256 "$S1_REF_CONF_SHA256")
@@ -4550,6 +4834,7 @@ run_return_records() {
 		rc=$?
 		printf '%s\n' "$verdict" | grep -E '^(S1PC |parse-s1: )' | rec_pipe
 		rec "run parser rc=$rc (0 a verdict, 3 refused for missing item-5 stamps; its record: $(basename "$SD")/parse-s1.txt)"
+		[ "${JDIAG:-}" = j1 ] && j6_after_parse "$com3"    # J6: the exports, canwatch.txt, the stop rows
 	else
 		rec "run parser NOT run: no COM3 copy"
 	fi
@@ -4580,6 +4865,8 @@ cmd_run() {
 	local conf="$S1DIR/s1-linux.conf" pargs conf_gate cstate
 	local pc_image="$S1DIR/out/l4t/Image" pc_l4t_initrd="$S1DIR/out/l4t/initrd" pc_initrd="$S1DIR/out/initrd.cpio.gz"
 	local pc_conf_sha="" pc_image_sha="" pc_l4t_initrd_sha="" pc_initrd_sha=""
+	# §15.4.8: s1-j1 is J6's watcher, never a pass run; only jrun s1-j1 control|remove runs it
+	[ "$1" = s1-j1 ] && die "run refuses s1-j1: J6's watcher image runs only as 'jrun s1-j1 control|remove' (§15.4.8)"
 	need_host
 	need_record_dir
 	IMG="$1"
@@ -4594,8 +4881,8 @@ cmd_run() {
 		j_require_clean_tree "J2b"
 		j_precondition b2repeat
 		# after J1's F42 row J2b runs in J2's place, so it writes the J2 pre-registration (J2b
-		# carries no trace)
-		if [ "$(j_prereg_stage)" != j2 ]; then
+		# carries no trace); found by its stage line, never rewritten over a later stage
+		if ! j_prereg_has_stage j2; then
 			j_prereg_write "" "" j2 no
 			note "J-prereg.log written as the J2 pre-registration by J2b's first attempt (§15.4.1)"
 		fi
@@ -6230,9 +6517,18 @@ cmd_harness_selftest() {
 
 	# jrun refusals, Q17, the J step after resolve_kimg (no B* directory) and the start margin
 	out="$(bash "$0" jrun s1-n1 control 2>&1)"; rcx=$?
-	check "jrun refuses another image" "$rcx/$(has "$out" 'accepts s1-h1 only')" "1/yes"
-	out="$(bash "$0" jrun s1-j1 control 2>&1)"; rcx=$?
-	check "jrun refuses s1-j1 until §15.5 B" "$rcx/$(has "$out" 'waits for the watcher image')" "1/yes"
+	check "jrun refuses another image" "$rcx/$(has "$out" 'accepts s1-h1 and s1-j1 only')" "1/yes"
+	# ORIN_HOST is emptied, so an accepted jrun s1-j1 stops at need_host before any board session
+	out="$(ORIN_HOST= bash "$0" jrun s1-j1 b2repeat 2>&1)"; rcx=$?
+	check "jrun s1-j1 refuses b2repeat (J6 is control or remove, §15.4.8)" "$rcx/$(has "$out" 'control or remove arm only')" "1/yes"
+	for arm in control remove; do
+		out="$(ORIN_HOST= bash "$0" jrun s1-j1 "$arm" 2>&1)"; rcx=$?
+		check "jrun s1-j1 $arm passes the argument check (stops at ORIN_HOST here)" \
+			"$rcx/$(has "$out" 'ORIN_HOST is not set')/$(has "$out" 'accepts s1-h1')/$(has "$out" 'waits for the watcher image')" "1/yes/no/no"
+	done
+	out="$(ORIN_HOST= bash "$0" run s1-j1 2>&1)"; rcx=$?
+	check "run refuses s1-j1: the watcher runs only through jrun (§15.4.8)" "$rcx/$(has "$out" 'run refuses s1-j1')" "1/yes"
+	check "image table: s1-j1 is J6 host (jrun sets J6c|J6r after it)" "$(image_step s1-j1; echo "$STEP $MODE")" "J6 host"
 	out="$(bash "$0" jrun s1-h1 bogus 2>&1)"; rcx=$?
 	check "jrun refuses another arm" "$rcx/$(has "$out" "arm is control, remove or b2repeat")" "1/yes"
 	bash "$0" jrun s1-h1 >/dev/null 2>&1
@@ -6331,6 +6627,215 @@ cmd_harness_selftest() {
 	out="$( RECDIR="$jr2a"; J_DEC_LOADED=0; j_read_decisions; j_prereg_check 2>&1 )"
 	check "prereg check: J1's draft is not the J2 pre-registration" "$(has "$out" 'is J1')" yes
 	sed -i 's/^prereg stage=j1$/prereg stage=j2/' "$jr2/J-prereg.log"
+
+	# ---- J6 (§15.4.8, §15.5 A1's jrun s1-j1): its own record directory, a copy of the J2
+	# pre-registration above, a synthetic s1-j1 kimg and params, and a synthetic generator whose
+	# three constant lines stand for make-s1-images.sh's. The tree is stubbed clean in each case.
+	local jr6 jr6a kd6 gen6 h6 pin6 k6 cap6
+	jr6="$d/jrec6"; mkdir -p "$jr6"; jr6a="$(cd "$jr6" && pwd)"
+	cp "$jr2/J-prereg.log" "$jr2/J-set.conf" "$jr2/J-decisions.conf" "$jr6/"
+	kd6="$d/kimg6"; mkdir -p "$kd6"
+	h6="$(j6_parser_hold)"
+	check "j6: parse-s1.py's J1_HOLD_MIB reads as a whole number" "$(printf '%s\n' "$h6" | grep -cE '^[1-9][0-9]*$')" 1
+	pin6="$(printf 'synthetic memcanary-w' | sha256sum | cut -d' ' -f1)"
+	gen6="$d/gen6.sh"
+	printf 'PIN_MEMCANARY_W=%s\nJ1_HOLD_MIB=%s\nJ1_HOLD_MARGIN_MIB=256\n' "$pin6" "$h6" > "$gen6"
+	printf 'synthetic s1-j1 kimg\n' > "$kd6/s1-j1.kimg"
+	k6="$(sha256sum "$kd6/s1-j1.kimg" | cut -d' ' -f1)"
+	printf 'image=s1-j1\nrung=s1-j1\nmode=host\ndiag=j1\nguard_s=1800\nreturn_bound_s=2100\ncapture_s=5100\nkimg_sha256=%s\nmemcanary_w_sha256=%s\nj1_hold_mib=%s\nj1_hold_t=600\nbb_worst_b=1\n' \
+		"$k6" "$pin6" "$h6" > "$kd6/s1-j1.params"
+	j6s() { ( RECDIR="$jr6a"; S1_KIMG_DIR="$kd6"; J6_GENERATOR="$gen6"; j_tree_clean() { return 0; }; J_DEC_LOADED=0; j_read_decisions; "$@" ) 2>&1; }
+
+	# the step table and the record directory: J6c and J6r, never a B* directory
+	out="$(
+		RECDIR="$jr6a"; S1_KIMG_DIR="$kd6"
+		for arm in control remove; do
+			resolve_kimg s1-j1
+			printf '%s>' "$STEP"
+			jrun_step "$arm" s1-j1
+			j_step_dir "$STEP"
+			printf '%s/%s/%s ' "$STEP" "$MODE" "$(basename "$JSD")"
+		done
+	)"
+	check "jrun s1-j1: resolve_kimg gives J6, the J step is set after it: J6c, J6r" "$out" "J6>J6c/host/J6c J6>J6r/host/J6r "
+	check "jrun s1-j1: no B* directory was created" "$(ls -1 "$jr6" | grep -c '^B')" 0
+	rmdir "$jr6/J6c" "$jr6/J6r"
+	( jrun_step b2repeat s1-j1 ) >/dev/null 2>&1
+	check "jrun_step: no J6 step for b2repeat" "$?" 1
+
+	# J6's arm (§15.4.8 'Run'), and the membership test on J6's comma-list rows
+	check "j_row_has: a member of a comma list" "$(j_row_has 'F49,writer-static' F49 && echo yes || echo no)" yes
+	check "j_row_has: a single token is a list of one" "$(j_row_has F36 F36 && echo yes || echo no)" yes
+	check "j_row_has: F490 is not F49, F4 is not F49" "$(j_row_has 'F490,writer-none' F49 && echo yes || echo no)/$(j_row_has 'F4' F49 && echo yes || echo no)" "no/no"
+	j6pre() { ( RECDIR="$jr6a"; j_precondition "$1" ) >/dev/null 2>&1; echo $?; }
+	mkdir -p "$jr6/J4"; printf 'run image=s1-h1\n' > "$jr6/J4/s1-h1-20260914T010000Z-board.log"; printf 'S1PC j_row=F36\n' > "$jr6/J4/parse-s1.txt"
+	check "j6 precondition: J6c after J4's F36 without D27 is refused" "$(j6pre j6control)" 1
+	check "j6 precondition: the refusal names D27" "$(has "$( ( RECDIR="$jr6a"; j_precondition j6control ) 2>&1 )" "'D27=yes'")" yes
+	printf 'D34_F39=yes\nD27=yes\n' > "$jr6/J-waivers.conf"
+	check "j6 precondition: J6c after J4's F36 under D27" "$(j6pre j6control)" 0
+	check "j6 precondition: the reason is printed" "$(has "$( RECDIR="$jr6a"; j_precondition j6control 2>/dev/null )" "j6 precondition: J4's row is F36")" yes
+	check "j6 precondition: J6r after J4's F36 is refused" "$(j6pre j6remove)" 1
+	printf 'S1PC j_row=F35\n' > "$jr6/J4/parse-s1.txt"
+	check "j6 precondition: J6r after J4's F35" "$(j6pre j6remove)" 0
+	check "j6 precondition: J6c after J4's F35 alone is refused" "$(j6pre j6control)" 1
+	mkdir -p "$jr6/J2"; printf 'run image=s1-h1\n' > "$jr6/J2/s1-h1-20260914T000000Z-board.log"; printf 'S1PC j_row=F32b\n' > "$jr6/J2/parse-s1.txt"
+	check "j6 precondition: J6c after J2's F32b" "$(j6pre j6control)" 0
+	printf 'S1PC j_row=F33\n' > "$jr6/J2/parse-s1.txt"
+	mkdir -p "$jr6/J2b"; printf 'run image=s1-h1\n' > "$jr6/J2b/s1-h1-20260914T005000Z-board.log"; printf 'S1PC j_row=F46\n' > "$jr6/J2b/parse-s1.txt"
+	check "j6 precondition: J6c after J2b's F46" "$(j6pre j6control)" 0
+	rm -rf "$jr6/J2" "$jr6/J2b"
+	printf 'S1PC j_row=F36\n' > "$jr6/J4/parse-s1.txt"
+	printf 'D27=yes\nD27_J6R=yes\n' > "$jr6/J-waivers.conf"
+	check "j6 precondition: J6r after F36 by the owner's D27_J6R (the other arm)" "$(j6pre j6remove)" 0
+	mkdir -p "$jr6/J6c"; printf 'run image=s1-j1\n' > "$jr6/J6c/s1-j1-20260914T060000Z-board.log"; printf 'S1PC j_row=F49,writer-static\n' > "$jr6/J6c/parse-s1.txt"
+	check "j6 precondition: a J6c row holding F49 stops every J6 run" "$(j6pre j6remove)/$(j6pre j6control)" "1/1"
+	printf 'S1PC j_row=F40,writer-none\n' > "$jr6/J6c/parse-s1.txt"
+	check "j6 precondition: a J6c row without F39 or F49 does not stop J6" "$(j6pre j6remove)" 0
+	rm -rf "$jr6/J6c"
+	printf 'D27=yes\n' > "$jr6/J-waivers.conf"
+
+	# J6's pre-registration stage (§15.4.1): appended once per arm, checked against the image
+	out="$(j6s j6_prereg_append control)"
+	check "j6 prereg: no S1_J6_FILL_FACTOR is refused" "$(has "$out" 'S1_J6_FILL_FACTOR is unset')" yes
+	for g in 0.5 2x; do
+		out="$(S1_J6_FILL_FACTOR="$g" j6s j6_prereg_append control)"
+		check "j6 prereg: factor '$g' is refused" "$(has "$out" 'not a decimal of 1 or above')" yes
+	done
+	printf 'PIN_MEMCANARY_W=UNSET-integrate-sets-the-memcanary-w-sha256\nJ1_HOLD_MIB=%s\nJ1_HOLD_MARGIN_MIB=256\n' "$h6" > "$d/gen6-unset.sh"
+	out="$(S1_J6_FILL_FACTOR=2 J6_GENERATOR="$d/gen6-unset.sh" j6s eval 'J6_GENERATOR="$d/gen6-unset.sh"; j6_prereg_append control')"
+	check "j6 prereg: an unset PIN_MEMCANARY_W in the generator is refused" "$(has "$out" "make-s1-images.sh's PIN_MEMCANARY_W is 'UNSET")" yes
+	check "j6 prereg: nothing was appended by a refusal" "$(grep -c '^prereg stage=j6$' "$jr6/J-prereg.log")" 0
+	n=$(wc -l < "$jr6/J-prereg.log")
+	out="$(S1_J6_FILL_FACTOR=2 j6s j6_prereg_append control)"
+	k="$(cat "$jr6/J-prereg.log")"
+	check "j6 prereg: the stage is appended after J2's (J2's lines kept, stage j6 last)" \
+		"$(head -n "$n" "$jr6/J-prereg.log" | cmp -s - "$jr2/J-prereg.log" && echo kept)/$(RECDIR="$jr6a" j_prereg_stage)/$(RECDIR="$jr6a"; j_prereg_has_stage j2 && echo j2)" "kept/j6/j2"
+	check "j6 prereg: the arm, the factor, the pin, the hold and its margin" \
+		"$(has "$k" 'prereg j6 arm=control')/$(has "$k" 'prereg j6 fill_rate_factor=2')/$(has "$k" "prereg j6 pin_memcanary_w=$pin6")/$(has "$k" "prereg j6 hold_mib=$h6 hold_margin_mib=256 hold_t_s=600 guard_s=1800")" "yes/yes/yes/yes"
+	check "j6 prereg: parse-s1.py's hash, and the params and kimg hashes" \
+		"$(has "$k" "prereg j6 parse-s1.py sha256=$(j_sha256 "$PARSER")")/$(has "$k" "kimg_sha256=$k6")" "yes/yes"
+	check "j6 prereg: the complete-stage line is the last" "$(tail -n 1 "$jr6/J-prereg.log")" "prereg j6 arm=control"
+	n=$(wc -l < "$jr6/J-prereg.log")
+	S1_J6_FILL_FACTOR=9 j6s j6_prereg_append control >/dev/null
+	check "j6 prereg: a second attempt of the arm appends nothing (never rewritten)" "$(wc -l < "$jr6/J-prereg.log")" "$n"
+	out="$(j6s j_prereg_check s1-j1 control)"
+	check "j6 prereg check: s1-j1 control passes with its stage" "$(has "$out" 'prereg ok sha256=')/$(has "$out" 'j6_arm=control fill_rate_factor=2')" "yes/yes"
+	out="$(j6s j_prereg_check)"
+	check "j6 prereg check: the s1-h1 checks still pass after J6's stage" "$(has "$out" 'prereg ok sha256=')/$(has "$out" 'j6_arm=')" "yes/no"
+	out="$(j6s j_prereg_check s1-j1 remove)"
+	check "j6 prereg check: the remove arm without its stage is refused" "$(has "$out" 'no J6 stage for the remove arm')" yes
+	out="$(S1_J6_FILL_FACTOR=3 j6s j6_prereg_append remove)"
+	check "j6 prereg: the other arm with another factor is refused" "$(has "$out" 'differs from the fill-rate factor 2')" yes
+	out="$(S1_J6_FILL_FACTOR=5 j6s j_prereg_check s1-j1 control)"
+	check "j6 prereg check: S1_J6_FILL_FACTOR other than the registered one is refused" "$(has "$out" 'differs from the registered fill-rate factor 2')" yes
+	j6s j6_prereg_append remove >/dev/null
+	out="$(j6s j_prereg_check s1-j1 remove)"
+	check "j6 prereg: the other arm's stage takes the registered factor" "$(has "$out" 'j6_arm=remove fill_rate_factor=2')" yes
+	cp "$jr6/J-prereg.log" "$d/prereg6.bak"
+	sed -i "s/^prereg j6 parse-s1.py sha256=.*/prereg j6 parse-s1.py sha256=$(printf '%064d' 0)/" "$jr6/J-prereg.log"
+	check "j6 prereg check: another parse-s1.py than the registered one is refused" "$(has "$(j6s j_prereg_check s1-j1 control)" "J6's rows are that code")" yes
+	cp "$d/prereg6.bak" "$jr6/J-prereg.log"
+	printf 'rebuilt\n' >> "$kd6/s1-j1.kimg"
+	check "j6 prereg check: a kimg changed after the stage is refused" "$(has "$(j6s j_prereg_check s1-j1 control)" 'the image changed after its pre-registration')" yes
+	printf 'synthetic s1-j1 kimg\n' > "$kd6/s1-j1.kimg"
+	sed -i "s/^memcanary_w_sha256=.*/memcanary_w_sha256=$(printf '%064d' 1)/" "$kd6/s1-j1.params"
+	check "j6 prereg check: a params pin other than the generator's is refused" "$(has "$(j6s j_prereg_check s1-j1 control)" "not s1-j1.params'")" yes
+	sed -i "s/^memcanary_w_sha256=.*/memcanary_w_sha256=$pin6/" "$kd6/s1-j1.params"
+	sed -i "s/^j1_hold_mib=.*/j1_hold_mib=$(( h6 - 1 ))/" "$kd6/s1-j1.params"
+	check "j6 params: a hold size other than the generator's is refused" "$(has "$(j6s j_prereg_check s1-j1 control)" "J1_HOLD_MIB is '$h6', not s1-j1.params'")" yes
+	sed -i "s/^j1_hold_mib=.*/j1_hold_mib=$h6/" "$kd6/s1-j1.params"
+	sed -i 's/^guard_s=.*/guard_s=3900/' "$kd6/s1-j1.params"
+	check "j6 params: a guard over 3,600 s is refused" "$(has "$(j6s j_prereg_check s1-j1 control)" "not the generator's shape")" yes
+	sed -i 's/^guard_s=.*/guard_s=1900/' "$kd6/s1-j1.params"
+	check "j6 params: a return bound under the guard + 300 s is refused" "$(has "$(j6s j_prereg_check s1-j1 control)" "not the generator's shape")" yes
+	sed -i 's/^guard_s=.*/guard_s=1800/; s/^diag=.*/diag=-/' "$kd6/s1-j1.params"
+	check "j6 params: another image's params (diag) are refused" "$(has "$(j6s j_prereg_check s1-j1 control)" "not the watcher's")" yes
+	sed -i 's/^diag=.*/diag=j1/' "$kd6/s1-j1.params"
+	check "j6 prereg check: the restored image passes again" "$(has "$(j6s j_prereg_check s1-j1 control)" 'prereg ok sha256=')" yes
+	{ printf 'prereg stage=j6\nprereg j6 arm=control\n'; cat "$d/prereg6.bak"; } > "$jr6/J-prereg.log"
+	check "j6 prereg check: a J6 stage before J2's is refused" "$(has "$(j6s j_prereg_check s1-j1 control)" 'before the J2 pre-registration')" yes
+	cp "$d/prereg6.bak" "$jr6/J-prereg.log"
+	check "no J2 pre-registration is written over a later stage (the stage-line test, not the last stage)" \
+		"$(grep -cE '^[[:space:]]*if .*j_prereg_stage\)" != j2' "$HERE/$PROG")" 0
+
+	# capture life and the start margin for J6's longer host run: s1-j1.params' return bound
+	# lengthens gates A and B; the start margin (L4T up to the issue) is J2's and J4's
+	out="$(
+		RECDIR="$jr6a"; S1_KIMG_DIR="$kd6"; resolve_kimg s1-j1; jrun_step control s1-j1
+		printf '%s/%s/%s' "$RETURN_BOUND" "$(j_capture_life_min control "$RETURN_BOUND" 9)" "$(j_worst_case control)"
+	)"
+	check "j6 bounds: return bound from s1-j1.params, gate A life = return bound + 2180 + fallback, start margin J2's" \
+		"$out" "2100/$(( 2100 + 2180 + $(wq_fallback_s 9) ))/$(j_worst_case control)"
+	# the captures' deadlines are taken from the clock now, not from the self-test's start. Its own
+	# name (cap6): the gate-A checks further down still read J1-J4's $cap in $jrec
+	cap6="$jr6/j6-cap.log"
+	printf -- '--- raw capture started on COMX at 115200, 2026-09-14T00:00:00Z epoch=%s seconds=4600 ---\n' "$(date +%s)" > "$cap6"
+	printf 'MB1 version synthetic\r\n' >> "$cap6"
+	out="$( RECDIR="$jr6a"; RETURN_BOUND=1200; S1_COM3_LOG="$cap6" j_capture_gate control 9 )"
+	check "j6 bounds: a 4,600 s capture passes gate A at s1-h1's return bound (1,200 s)" "$(has "$out" 'jgate control ok')" yes
+	out="$( RECDIR="$jr6a"; S1_KIMG_DIR="$kd6"; resolve_kimg s1-j1; S1_COM3_LOG="$cap6" j_capture_gate control 9 )"
+	check "j6 bounds: the same capture is refused at s1-j1's longer return bound" "$(has "$out" "under $(( 2100 + 2180 + $(wq_fallback_s 9) )) s for control")" yes
+	printf -- '--- raw capture started on COMX at 115200, 2026-09-14T00:00:00Z epoch=%s seconds=3500 ---\n' "$(date +%s)" > "$jr6/j6-capb.log"
+	printf 'MB1 version synthetic\r\n' >> "$jr6/j6-capb.log"
+	out="$( RECDIR="$jr6a"; mark_capture "$jr6/j6-capb.log"; RETURN_BOUND=1200; S1_COM3_LOG="$jr6/j6-capb.log" j_gate_b remove )"
+	check "j6 bounds: a 3,500 s capture passes gate B at s1-h1's return bound" "$(has "$out" 'jgateB remove ok')" yes
+	out="$( RECDIR="$jr6a"; S1_KIMG_DIR="$kd6"; resolve_kimg s1-j1; S1_COM3_LOG="$jr6/j6-capb.log" j_gate_b remove )"
+	check "j6 bounds: gate B's life uses s1-j1's return bound too" "$(has "$out" "under $(( 2100 + 1200 + $(wq_fallback_s 9) )) s")" yes
+
+	# J6's export frames on COM3 (§15.5 B8.4): its S1 BEGIN/S1 END bodies keep the record classes
+	out="$(printf '%s\n' 'S1 CANARY c2 watch=verdict label=d writer=static heal=no reads=stable content=unclassified' \
+		'  S1 BEGIN name=j1a bytes=1632 md5=00000000000000000000000000000000 enc=base64' 'UzFKMVBCTVABAAAAYzIAAGEAAAAAAAAAAAAAAA==' | com3_last_kind)"
+	check "com3_last_kind: an open J6 export's body is export-body" "$out" export-body
+	out="$(printf '%s\n' 'S1 BEGIN name=j1d bytes=1632 md5=00000000000000000000000000000000 enc=base64' 'UzFKMVBCTVAB' \
+		'S1 END name=j1d' 'S1 EXPORT name=j1d bytes=1632 md5=00000000000000000000000000000000 enc=base64 rc=0' | com3_last_kind)"
+	check "com3_last_kind: J6's closed frame and its S1 EXPORT record are record" "$out" record
+	cp "$d/c.log" "$d/j6e.log"
+	printf 'S1 CANARY c1 watch=time label=d snaps=60 changed_snaps=0 changed_words=0 healed=0 osc=0 prog=0 stable=0 stop=count\r\nS1 BEGIN name=j1c bytes=1632 md5=00000000000000000000000000000000 enc=base64\r\nUzFKMVBCTVAB\r\n' >> "$d/j6e.log"
+	touch -d "@$(( now - 400 ))" "$d/j6e.log"
+	check "advice: a J6 export body as the last line after the jump is F25a" "$(has "$(ADVICE_SSH=silent com3_advice "$d/j6e.log" "$off" 0 passed)" 'class=F25a')" yes
+
+	# J6's parse arguments, canwatch.txt and the stop rows (parser and python are stubs)
+	printf '%s\n' '#!/bin/bash' 'printf "%s\n" "$@" > "$FAKEPY_ARGS"' 'prev=""' 'for a in "$@"; do' \
+		'	if [ "$prev" = --out-dir ]; then printf "S1CW result=complete\n" > "$a/canwatch.txt"; fi' '	prev="$a"' 'done' 'exit 0' > "$d/fakepy.sh"
+	chmod +x "$d/fakepy.sh"
+	for g in F49,writer-static writer-none; do
+		out="$(
+			RECDIR="$jr6a"; S1_KIMG_DIR="$kd6"; ORIN_HOST=""; R_HOSTNAME=synthetic-board
+			resolve_kimg s1-j1 >/dev/null; jrun_step control s1-j1
+			SD="$jr6a/J6c-t$([ "$g" = writer-none ] && echo 2 || echo 1)"; mkdir -p "$SD"; UTC=20260914T070000Z; base="$SD/s1-j1-$UTC"
+			rec_open "$base-board.log" >/dev/null
+			printf 'kpf_header=1\n' > "$base-kpf-prequiesce-header.txt"
+			export FAKEPY_ARGS="$d/fakepy-$g.args"
+			PY_BIN="$d/fakepy.sh"
+			j6_parse_setup control "$base" >/dev/null
+			printf '%s|' "${J6_PARGS[@]}"
+			for l in a b c; do printf 'S1J1PBMP' > "$SD/s1-j1$l.bin"; done
+			printf 'S1PC step=J6c\nS1PC j_row=%s\n' "$g" > "$SD/parse-s1.txt"
+			printf 'synthetic\n' > "$base-com3.log"
+			j6_after_parse "$base-com3.log" >/dev/null 2>&1
+			echo
+			cat "$base-board.log"
+		)"
+		k="$(cat "$d/fakepy-$g.args" 2>/dev/null | tr '\n' '|')"
+		case "$g" in
+		F49,writer-static)
+			check "j6 parse args: arm, the registered factor, the params' hold and the one fetched kpf header" "$(printf '%s\n' "$out" | head -n 1)" \
+				"--arm|control|--fill-factor|2|--hold-mib|$h6|--kpf|$jr6a/J6c-t1/s1-j1-20260914T070000Z-kpf-prequiesce-header.txt|"
+			check "j6 canwatch: run on the COM3 copy with the factor, the rung's directory and the kpf header" \
+				"$(has "$k" "canwatch|$jr6a/J6c-t1/s1-j1-20260914T070000Z-com3.log|--fill-factor|2|--bin-dir|$jr6a/J6c-t1|--out-dir|$jr6a/J6c-t1|--kpf|")" yes
+			check "j6 canwatch: its rc and result line are recorded, and canwatch.txt exists" \
+				"$(has "$out" 'run canwatch rc=0 S1CW result=complete')/$([ -f "$jr6a/J6c-t1/canwatch.txt" ] && echo written)" "yes/written"
+			check "j6 exports: three written are recorded, the missing fourth is said" \
+				"$(printf '%s\n' "$out" | grep -c '^run j6 export s1-j1[abc].bin bytes=8 ')/$(has "$out" 'run j6 export s1-j1d.bin NOT written')" "3/yes"
+			check "j6 stop: a j_row holding F49 is an IMMEDIATE STOP in the board log" "$(has "$out" 'run j6 IMMEDIATE STOP: j_row holds F49 (')" yes
+			;;
+		writer-none)
+			check "j6 stop: a j_row without F39 or F49 is no stop" "$(has "$out" 'run j6 j_row=writer-none')/$(has "$out" 'IMMEDIATE STOP')" "yes/no"
+			;;
+		esac
+	done
+	check "run_return_records passes J6's arguments to the parser only for --diag j1" \
+		"$(grep -cE '^[[:space:]]*\[ "\$\{JDIAG:-\}" = j1 \] && pargs\+=\("\$\{J6_PARGS\[@\]\}"\)' "$HERE/$PROG")/$(grep -cE '^[[:space:]]*\[ "\$\{JDIAG:-\}" = j1 \] && j6_after_parse "\$com3"' "$HERE/$PROG")" "1/1"
 
 	# J3's gates as rows (§15.4.5), on synthetic records
 	res="$(

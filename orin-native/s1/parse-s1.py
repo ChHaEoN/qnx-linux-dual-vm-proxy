@@ -6,8 +6,9 @@ Implements results/orin-native-port/20260909T1100Z/s1-design.md (revision 2;
 the owner took D1-D19 as recommended): the configuration gate of §3.7 (D13,
 D19), the FDT checklist of §6.2 read with our own reader (D12), the tier and
 pass rules of §5.1-§5.2 with D10's end_ok, and the pipe-free rule of §2 rule 7.
-Also revision 3's §15.5 A3: the J diagnostic parse of B2's image (run --diag).
-Standard library only.
+Also revision 3's §15.5 A3: the J diagnostic parse of B2's image (run --diag), and §15.5 B7:
+the J6 watcher's parse (run --diag j1) and its analyzer (canwatch). Standard library only
+(canwatch's --kpf loads kpf-decode.py, beside this script, on first use).
 
   parse-s1.py conf FILE [--allow FILE] [--overlay FILE]
   parse-s1.py fdt DTB [--conf FILE]
@@ -15,7 +16,10 @@ Standard library only.
                   [--blackbox FILE] [--out-dir DIR|none] [--conf FILE]
                   [--ref-conf-sha256 HEX] [--reset-reason TEXT]
                   [--kexec-tree-sha256 HEX] [--image FILE] [--initrd FILE]
-                  [--diag j2|j2b|j4]
+                  [--diag j2|j2b|j4|j1] [--arm control|remove] [--fill-factor F]
+                  [--hold-mib MIB] [--kpf HEADER [--kpf HEADER]]
+  parse-s1.py canwatch LOG --fill-factor F [--bin-dir DIR] [--kpf HEADER [--kpf HEADER]]
+                  [--out-dir DIR|none]
   parse-s1.py kshcheck FILE | --selftest
   parse-s1.py --selftest
 
@@ -90,6 +94,146 @@ run --diag j2|j2b|j4   (s1-design.md §15.5 A3; --profile board --mode host only
        Exit as run: 3 when item-5 stamps are missing, and the verdict line then
        reads incomplete with item5 among failed=.
 
+run --diag j1 --arm control|remove --fill-factor F [--hold-mib MIB] [--kpf HEADER]...
+       (s1-design.md §15.4.8, §15.5 B7; --profile board --mode host) J6: the s1-j1 image in
+       jrun's control arm (step=J6c) or remove arm (step=J6r). A diagnostic parse, never a pass
+       run: no b2= field, verdict=diagnostic complete, or diagnostic incomplete failed=...
+       B2's line rules give conf_gate, L0, L1_records, L7 and item 5 as for J2; complete also means:
+         the procnto line names s1-j1 (rung_j1=yes), and no B2 allocation line (b2_alloc_line=none);
+         S1 CONFIG carries a 64-hex memcanary_w_sha256 (the generator's diag-j1 EXTRA_FIELDS stamp; not an
+         item-5 field, so ITEM5_FIELDS is unchanged);
+         each of the six canary checks exactly once, ok or bad: start = before the first watch or
+         hold line, end = after the hold's verify line; no other S1 CANARY line in between
+         (canary_between=0: a watch refusal printed in verify's form lands there);
+         the hold (memcanary.c's hold forms): one 'S1 ALLOC hold mib=N fill=ok', then one verify
+         line, N equal to J1_HOLD_MIB (make-s1-images.sh's, which its constant check compares with
+         this file's) on both and to --hold-mib when given: hold=ok|bad (else timeout,
+         timeout-bad, map-fail (F28), absent, multiple, unread, mib-differs);
+         watches a, b, c and d (§15.4.8's table below): each exactly the seven success lines once,
+         base to verdict in that order, on its table canary, and consistent within themselves
+         (watch_<l>=ok; else absent, fail, malformed, multiple, incomplete, wrong-canary, order,
+         inconsistent problems=...);
+         a and b before the hold's fill line, c and d between fill and verify, a before b and c
+         before d (watch_order=ok);
+         exports j1a..j1d decoded and accepted by canwatch's structure and cross-check
+         (export_j1<l>=ok);
+         the detached sequence's markers as for J2 and J4 (wq_kexec_issuing=yes, wq_reset_marker=no).
+       Also printed, never gating: kpf=, fillrate=, coincide= (canwatch's), and on a complete parse
+       c2_sums (the counts the rows use).
+       j_row= lists every row of §15.4.8's table that holds, comma-separated, stops first:
+         F39   a c1 or c3 check bad, or a well-formed watch line on c1 with bad above 0 (both
+               readable in an incomplete parse);
+         F49   the hold's verify=bad, or verify=timeout data=bad (also readable when incomplete);
+         F40   incomplete; no row below is read then.
+         The rest are read over c2's watches a, b and c summed (the parser's reading of the
+         table, pre-registered here):
+         F34                 osc above 0, prog 0, and flip2_same + flip2_var above half of bad;
+         live-writer         prog above 0, or changed_words above 0 with stable above 0;
+         restoring-writer    healed above 0 with pat_same|pat_other dominant, or a whole-page heal
+                             (canwatch's necessary condition, on any c2 watch);
+         ring-record         small32|hi_pat|lo_pat dominant, or bad at least 8 with the two
+                             largest stride bins above half of bad;
+         cpu-side            ptr_ram|u32page dominant and coincide=yes; cpu-side-lean when
+                             dominant and coincide was not computed (no prequiesce --kpf);
+         qnx-shaped          pte|kva dominant;
+         positive-signature  ipv4 + beacon + trb_evt above 0 on any of the four watches
+                             (positive-only: an absence excludes nothing);
+         fill-rate           canwatch's fill-rate row differs;
+         writer-none         every c2 watch writer=none;
+         writer-static       no c2 watch stopped or ongoing, and at least one static;
+         no-row              none of the above.
+       "Dominant": the group's largest class count is above 0 and no class outside the group is
+       larger (ties included); flip2_same and flip2_var count as one class, flip2.
+       Exit as run.
+
+run --diag j1 on --profile tcg --mode dryrun (§15.5 B8.5): step=T-J1, the TCG j1 variant. T1's
+       items (conf_gate, profile, L2, fdt_gating, conf_identity), item 5, a 64-hex
+       memcanary_w_sha256 in S1 CONFIG, and exactly one
+       'MEMCANARY-W SELFTEST PASS <n> checks' line with n above 0 and no FAIL form
+       (cw_selftest=ok|failed|absent|multiple). A watch line fails profile, as asinfo and canary
+       lines do. --arm, --fill-factor, --hold-mib and --kpf are usage errors here. No j_row.
+
+canwatch LOG --fill-factor F [--bin-dir DIR] [--kpf HEADER]... [--out-dir DIR|none]
+       (§15.5 B7) The J6 analyzer: counts, classes and page bitmaps only; it never reads or
+       prints a word value. It reads s1-j1a.bin .. s1-j1d.bin from --bin-dir (default: LOG's
+       directory, where run writes them) and LOG's watch lines. For each label: the console
+       status as run gives it; the export's structure (reasons below); bin_vs_log, the file's
+       bytes and md5 against LOG's S1 BEGIN (or else S1 EXPORT) record for it, which redaction of
+       an export body cannot change; and the cross-check of every count with the console lines.
+       For each accepted bitmap: pages set, first and last page, runs, and per-MiB page counts;
+       per watch the whole-page-heal condition healed >= 512 x healed pages (necessary, not
+       sufficient). With --kpf (kpf-decode.py headers of the boot that jumped: one, or a
+       prequiesce and postquiesce pair, checked as kpf-decode checks them): each bitmap's pages by
+       kpageflags class, and coincide: the union of bad_final and changed_ever over c2's watches
+       a-c, yes when more than half of its pages were held (not free, not nopage) in the
+       prequiesce snapshot (R45: a record of Linux's CPU-side ownership, weak evidence). The
+       fill-rate row: label c's changed_words per snapshot against label b's, differs when
+       either rate exceeds F times the other (exact rational arithmetic; F a decimal >= 1,
+       pre-registered in J-prereg.log). Output: S1CW key=value lines on stdout and in
+       OUT/canwatch.txt (OUT = --out-dir or LOG's directory, git-ignored; none writes nothing),
+       the last S1CW result=complete, or result=incomplete failed=... (console, export or
+       bin_vs_log per label). A kpf refusal is recorded and never makes it incomplete: a snapshot
+       failure never stops a rung (§15.4.3). Exit 0 printed; 1 an input error; 2 usage or a
+       refused output path.
+
+Watcher records (memcanary-w, §15.4.8; each at most 255 B, fields in exactly this order):
+  S1 CANARY <c> watch=base label=<l> bad=<n> pages=<n> first_off=0x<hex> last_off=0x<hex>
+  S1 CANARY <c> watch=time label=<l> snaps=<n> changed_snaps=<n> changed_words=<n> healed=<n> osc=<n> prog=<n> stable=<n> stop=count|deadline
+  S1 CANARY <c> watch=words label=<l> bad=<n> zero=<n> ones=<n> flip2_same=<n> flip2_var=<n> flip8=<n> pat_same=<n> pat_other=<n>
+  S1 CANARY <c> watch=words2 label=<l> hi_pat=<n> lo_pat=<n> pte=<n> kva=<n> ptr_self=<n> ptr_ram=<n> u32page=<n> small32=<n> other=<n>
+  S1 CANARY <c> watch=stride label=<l> b0=<n> b1=<n> b2=<n> b3=<n> b4=<n> b5=<n> b6=<n> b7=<n>
+  S1 CANARY <c> watch=bytes label=<l> ascii_runs=<n> ascii_bytes=<n> ipv4=<n> beacon=<n> trb_evt=<n>
+  S1 CANARY <c> watch=verdict label=<l> writer=none|static|stopped|ongoing heal=no|yes reads=stable|osc|prog content=<list>|unclassified|none
+  S1 CANARY <c> watch=fail label=<l> reason=nomem|dump-open|dump-write errno=<n>
+A watch= line is never one of B2's canary checks: every rule of the steps above reads the S1
+CANARY lines without watch=, so B2's six_verify_* semantics are unchanged.
+§15.4.8's table as constants: a on c2, 0 ms, 100,000 snapshots; b and c on c2, 1,000 ms, 180;
+d on c1, 1,000 ms, 60. Consistency a console watch must show (the parser's reading; <n> decimal):
+  base      pages <= bad, pages <= 4096, bad = 0 exactly when pages = 0, bad <= 512 x pages; when
+            bad > 0: both offsets 8-aligned, first <= last < 16 MiB, (last - first) / 8 + 1 >= bad;
+  time      snaps <= the table count, and snaps = count when stop=count; changed_snaps <= snaps;
+            changed_snaps = 0 exactly when changed_words = 0 (changed_words counts change events,
+            one per word per snapshot); osc + prog + stable <= changed_words (the A-A-C re-read is
+            none of the three); healed <= changed_words;
+  words     the 16 word classes of words and words2 sum to words' bad (first match wins);
+  stride    b0..b7 sum to words' bad;
+  bytes     ascii_bytes >= 16 x ascii_runs; all five 0 when words' bad is 0;
+  verdict   when changed_words = 0: none (base's and words' bad both 0), static (base's bad above
+            0 and words' bad equal to it), or ongoing (memcanary-w's final read differed from the
+            last snapshot, which no console count shows); when changed_words > 0: stopped or
+            ongoing; heal=yes exactly when healed > 0; reads=prog when prog > 0, else osc when
+            osc > 0, else stable; content=none exactly when words' bad is 0; otherwise
+            unclassified alone, or tokens that are word classes, flip2, ascii_runs, ipv4, beacon
+            or trb_evt.
+
+Watcher export s1-j1<l>.bin (xport name j1<l>; content-free, little-endian, 1,632 B; the layout
+memcanary.c's cw_export writes):
+  offset 0   8 B   magic S1J1PBMP
+         8   u32   version 1
+         12  4 B   canary name, ASCII, NUL-padded (c1|c2|c3)
+         16  8 B   label, ASCII [a-z0-9], NUL-padded
+         24  u64   the canary's physical base (§3.3)
+         32  u32   page count, 4096
+         36  u32   interval, ms, -i (= the table's)
+         40  u32   snapshots taken (= time's snaps)
+         44  u32   snapshots asked, -c (= the table's count)
+         48  u32   deadline, s, -T (= the table's)
+         52  u32   stop: 1 count, 2 deadline (= time's stop)
+         56  8 B   zero
+         64  512 B bad_final     one bit per 4 KiB page, page p = bit p % 8 of byte p // 8 (LSB first)
+         576 512 B changed_ever
+         1088 512 B healed_ever
+         1600 4 u64: bad_base, bad_final, changed_words, healed
+  Refusal reasons, first failing check in this order: short, magic, version, page-count, size,
+  name (not the label's table canary), label (not the expected label), base, reserved,
+  interval, request (the asked count or deadline is not the table's, or stop is neither 1 nor
+  2), snaps (above the asked count), counts (healed <= changed_words; snaps = the count when
+  stop is 1; or a bitmap against its count: pages set 0 exactly when the count is 0, pages <=
+  count, and bad_final <= 512 x its pages), healed-not-changed (a healed page not in
+  changed_ever); then, against the console, console-absent (no parsed watch for the label) and
+  console-mismatch fields=... (snaps and stop against time's, and the four tail counts against
+  base's bad, words' bad and time's).
+
 kshcheck  parse-m4.py's implementation, imported, so the rule cannot drift (§4.2).
 
 Record formats this parser expects from the S1 host script (§5.1):
@@ -155,10 +299,12 @@ import importlib.util
 import io
 import os
 import re
+import shutil
 import struct
 import sys
 import tempfile
 import zlib
+from fractions import Fraction
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.normpath(os.path.join(HERE, "..", ".."))
@@ -338,6 +484,74 @@ def diag_row(diag, checks, complete):
     if diag == "j2b":
         return "F46" if both == ("ok", "ok") else "F45"
     return "F35" if both == ("ok", "ok") else "F36"
+
+
+# Revision 3's J6 watcher (s1-design.md §15.4.8, §15.5 B7): memcanary-w's console lines and its
+# page-bitmap exports, read by run --diag j1 and canwatch. Counts, classes and page bitmaps only:
+# no word value, byte or pointer value leaves the target, so none is read or printed here.
+J1_STEPS = {("board", "host"): {"control": "J6c", "remove": "J6r"}, ("tcg", "dryrun"): {None: "T-J1"}}
+J1_ARMS = ("control", "remove")
+J1_RUNG = "s1-j1"
+J1_HOLD_MIB = 2896      # make-s1-images.sh's J1_HOLD_MIB, s1-j1's hold size (its constant check compares the two)
+DIAG_CHOICES = tuple(DIAG_STEPS) + ("j1",)
+WPAGE = 4096
+WPAGES = CANARY_SIZE // WPAGE                   # pages per canary: one bit each in a bitmap
+WWORDS = WPAGE // 8                             # 8-byte words per page
+# §15.4.8's host-script table: label -> (canary, interval ms, count). Deadlines and bounds are the script's.
+WATCH_LABELS = {"a": ("c2", 0, 100000), "b": ("c2", 1000, 180), "c": ("c2", 1000, 180), "d": ("c1", 1000, 60)}
+# The same table's deadlines (-T, seconds), which the export's header carries.
+WATCH_DEADLINE_S = {"a": 20, "b": 190, "c": 190, "d": 70}
+WATCH_C2 = ("a", "b", "c")
+WATCH_KINDS = ("base", "time", "words", "words2", "stride", "bytes", "verdict")   # a complete watch, in order
+_NUM = r"[0-9]{1,20}"                           # memcanary-w prints its u64 counts in decimal
+_WORDS1 = ("zero", "ones", "flip2_same", "flip2_var", "flip8", "pat_same", "pat_other")
+_WORDS2 = ("hi_pat", "lo_pat", "pte", "kva", "ptr_self", "ptr_ram", "u32page", "small32", "other")
+WORD_CLASSES = _WORDS1 + _WORDS2
+SIGNATURES = ("ipv4", "beacon", "trb_evt")
+WATCH_FIELDS = {
+    "base": (("bad", _NUM), ("pages", _NUM), ("first_off", r"0x[0-9a-f]{1,8}"), ("last_off", r"0x[0-9a-f]{1,8}")),
+    "time": tuple((k, _NUM) for k in ("snaps", "changed_snaps", "changed_words", "healed", "osc", "prog", "stable"))
+    + (("stop", "count|deadline"),),
+    "words": (("bad", _NUM),) + tuple((k, _NUM) for k in _WORDS1),
+    "words2": tuple((k, _NUM) for k in _WORDS2),
+    "stride": tuple((f"b{k}", _NUM) for k in range(8)),
+    "bytes": tuple((k, _NUM) for k in ("ascii_runs", "ascii_bytes") + SIGNATURES),
+    "verdict": (("writer", "none|static|stopped|ongoing"), ("heal", "no|yes"), ("reads", "stable|osc|prog"),
+                ("content", r"[a-z0-9_]+(?:,[a-z0-9_]+)*")),
+    "fail": (("reason", "nomem|dump-open|dump-write"), ("errno", _NUM)),
+}
+WATCH_RE = {kind: re.compile(r"^S1 CANARY (c1|c2|c3) watch=" + kind + r" label=([a-z0-9]{1,8})" +
+                             "".join(f" {name}=({pat})" for name, pat in fields) + r"$")
+            for kind, fields in WATCH_FIELDS.items()}
+WATCH_ANY_RE = re.compile(r"^S1 CANARY (\S+) watch=(\S*)(?: label=(\S+))?")
+WATCH_LINE_MAX = 255
+CONTENT_WORDS = frozenset(WORD_CLASSES + ("flip2", "ascii_runs") + SIGNATURES)
+# Dominance reads flip2_same and flip2_var as one class (§15.4.8: "flip2 (same and var together)").
+DOM_CLASSES = ("zero", "ones", "flip2", "flip8", "pat_same", "pat_other") + _WORDS2
+LEAN_RESTORING = ("pat_same", "pat_other")
+LEAN_RING = ("hi_pat", "lo_pat", "small32")
+LEAN_CPU = ("ptr_ram", "u32page")
+LEAN_QNX = ("pte", "kva")
+STRIDE_MIN_BAD = 8
+J6_ROWS = ("F39", "F49", "F40", "F34", "live-writer", "restoring-writer", "ring-record", "cpu-side", "cpu-side-lean",
+           "qnx-shaped", "positive-signature", "fill-rate", "writer-none", "writer-static", "no-row")
+CW_MAGIC = b"S1J1PBMP"
+CW_VERSION = 1
+# memcanary.c's cw_export: magic, version, name, label, base, pages, interval, snaps, count, deadline, stop, zero
+CW_HEAD = struct.Struct("<8sI4s8sQIIIIII8s")
+CW_TAIL = struct.Struct("<4Q")
+CW_MAPS = ("bad_final", "changed_ever", "healed_ever")
+CW_TAIL_FIELDS = ("bad_base", "bad_final", "changed_words", "healed")
+CW_STOPS = {1: "count", 2: "deadline"}
+CW_MAP_BYTES = (WPAGES + 7) // 8
+CW_SIZE = CW_HEAD.size + len(CW_MAPS) * CW_MAP_BYTES + CW_TAIL.size
+CW_REASONS = ("short", "magic", "version", "page-count", "size", "name", "label", "base", "reserved", "interval",
+              "request", "snaps", "counts", "healed-not-changed", "console-absent", "console-mismatch")
+CW_SELFTEST_RE = re.compile(r"^MEMCANARY-W SELFTEST (?:PASS ([0-9]+) checks|FAIL ([0-9]+) of ([0-9]+) checks)$")
+CW_LIMIT = ("counts, classes and page bitmaps only: no word value, byte or pointer value is read or printed "
+            "(s1-design.md 15.4.8); page classes from kpageflags describe Linux's CPU-side ownership only (R45)")
+EXPORT_REC_RE = re.compile(r"^S1 EXPORT name=(\S+)(?: (.*))?$")
+FACTOR_RE = re.compile(r"^[0-9]{1,6}(?:\.[0-9]{1,6})?$")
 
 
 # ------------------------------------------------------------------ conf: the gate (§3.7)
@@ -1173,14 +1387,25 @@ def is_subsequence(sub, seq):
 
 
 def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_data=None, ref_conf_sha256=None,
-                reset_reason=None, kexec_tree_sha256=None, pc_image=None, pc_initrd=None, diag=None):
+                reset_reason=None, kexec_tree_sha256=None, pc_image=None, pc_initrd=None, diag=None, arm=None,
+                fill_factor=None, hold_mib=None, kpf_paths=()):
     """The §5.1 tiers and §5.2 items of one run. Returns a dict: lines, blocks, verdict, refused.
 
     conf_gate_ok is conf_check's result for conf_bytes; pc_image and pc_initrd are
     the PC's payload bytes, or None when not given. diag is None, or j2, j2b or j4
-    for §15.5 A3's diagnostic parse of a board host-mode log (the dict adds j_row).
+    for §15.5 A3's diagnostic parse of a board host-mode log (the dict adds j_row),
+    or j1 for §15.5 B7's: J6 on a board host-mode log with arm control|remove, the
+    pre-registered fill_factor, and optionally hold_mib and kpf_paths (the dict adds
+    j_row), or T-J1 on a TCG dryrun log with none of those.
     """
-    if diag is not None and (diag not in DIAG_STEPS or (profile, mode) != ("board", "host")):
+    if diag == "j1":
+        steps = J1_STEPS.get((profile, mode))
+        if steps is None or arm not in steps:
+            raise InputError("--diag j1 reads J6's board host-mode log with --arm control|remove, or T-J1's TCG "
+                             "dryrun log with no --arm (s1-design.md 15.5 B7)")
+        if profile == "board":
+            fill_factor = cw_factor(fill_factor)
+    elif diag is not None and (diag not in DIAG_STEPS or (profile, mode) != ("board", "host")):
         raise InputError(f"--diag {diag} reads only a board host-mode log (s1-design.md 15.5 A3)")
     out = []
     put = lambda k, v: out.append(f"{k}={v}")  # noqa: E731
@@ -1206,7 +1431,10 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
     cfg_i, cfg_m = R.first(RX["config"])
     cfg = kvs(cfg_m, 1) if cfg_m else None
     guard_i, guard_m = R.first(RX["guard"])
-    cans = R.all(RX["canary"])
+    # §15.5 B7: a watch= line (memcanary-w, J6) is never one of the canary checks, so every rule
+    # below that reads cans (B2's six_verify_* included) is unchanged by one.
+    watches = [(i, m) for i, m in R.all(RX["canary"]) if WATCH_ANY_RE.match(m.group(0))]
+    cans = [(i, m) for i, m in R.all(RX["canary"]) if not WATCH_ANY_RE.match(m.group(0))]
 
     def verify_of(m):
         return kvs(m, 2).get("verify")
@@ -1273,7 +1501,7 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
         need("L1", R.first(RX["hostcheck"])[0] is not None, "hostcheck")
     miss["profile"] = []
     if not board:
-        need("profile", R.first(RX["asinfo"])[0] is None and not cans, "tcg_asinfo_or_canary")
+        need("profile", R.first(RX["asinfo"])[0] is None and not cans and not watches, "tcg_asinfo_or_canary")
     if board:
         need("canaries_all_ok", bool(cans) and all(verify_of(m) == "ok" for _, m in cans), "canary_not_ok")
 
@@ -1539,7 +1767,7 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
         return [n for n in names if n not in miss or miss[n]]
 
     step, needs = STEPS[(profile, mode)]
-    if (profile, mode) == ("tcg", "dryrun"):
+    if (profile, mode) == ("tcg", "dryrun") and diag is None:
         put("item1_t1", "pass" if comp_ok(ITEM1_T1_NEEDS) else "fail failed=" + ",".join(failed(ITEM1_T1_NEEDS)))
     elif (profile, mode) == ("tcg", "boot"):
         put("item1_t2", "pass" if comp_ok(ITEM1_T2_NEEDS) else "fail failed=" + ",".join(failed(ITEM1_T2_NEEDS)))
@@ -1567,6 +1795,103 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
         put("item5", "refused missing=" + ",".join(missing))
     else:
         put("item5", "ok" if not miss["item5"] else "bad " + ",".join(miss["item5"]))
+    if diag == "j1" and not board:
+        # §15.5 B8.5: T-J1, the TCG j1 variant's dryrun and memcanary-w's self-test; never pass.
+        sl = R.all(CW_SELFTEST_RE)
+        cw_self = ("absent" if not sl else "multiple" if len(sl) > 1 else
+                   "ok" if sl[0][1].group(1) is not None and int(sl[0][1].group(1)) > 0 else "failed")
+        put("cw_selftest", cw_self)
+        mcw = (cfg or {}).get("memcanary_w_sha256", "").lower()
+        put("memcanary_w_sha256", mcw if HEX64_RE.match(mcw) else "absent")
+        want = [(n, n in miss and not miss[n]) for n in ITEM1_T1_NEEDS]
+        want += [("item5", not refused and not miss["item5"]), ("memcanary_w_sha256", bool(HEX64_RE.match(mcw))),
+                 ("cw_selftest", cw_self == "ok")]
+        dfailed = [k for k, ok_ in want if not ok_]
+        step = J1_STEPS[(profile, mode)][None]
+        verdict = "diagnostic " + ("incomplete" if dfailed else "complete")
+        put("step", step)
+        put("verdict", verdict + ("" if not dfailed else " failed=" + ",".join(dfailed)))
+        return {"lines": out, "blocks": blocks, "verdict": verdict, "refused": refused, "step": step}
+    if diag == "j1":
+        # §15.4.8 J6: s1-j1's records, read without any canary or watch value; never pass, never b2=.
+        labs, stray = cw_watches(R)
+        widx = [i for L in labs.values() for i in L["idx"]] + stray
+        holds = R.all(RX["alloc_hold"])
+        hidx = [i for i, _ in holds]
+        hold, fill_i, verify_i, hold_bad = j1_hold(holds, hold_mib)
+        # The checks: start before the first watch or hold line, end after the hold's verify line
+        # (or after the last watch or hold line when there is none, so F39 stays readable).
+        start_before = min(widx + hidx) if widx or hidx else None
+        end_after = verify_i if verify_i is not None else (max(widx + hidx) if widx or hidx else None)
+        checks = {}
+        for c in CANARIES:
+            mine = [(i, m) for i, m in cans if m.group(1) == c]
+            for k in ("start", "end"):
+                part = [] if start_before is None else [m for i, m in mine
+                                                        if (i < start_before if k == "start" else i > end_after)]
+                v = verify_of(part[0]) if len(part) == 1 else None
+                checks[f"{c}_{k}"] = ("unsplit" if start_before is None else "absent" if not part else
+                                      "multiple" if len(part) > 1 else v if v in ("ok", "bad") else "unread")
+        between = 0 if start_before is None else sum(1 for i, _ in cans if start_before <= i <= end_after)
+        order = "unread"
+        if fill_i is not None and verify_i is not None and all(labs[l]["idx"] for l in WATCH_LABELS):
+            lo = {l: min(labs[l]["idx"]) for l in WATCH_LABELS}
+            hi = {l: max(labs[l]["idx"]) for l in WATCH_LABELS}
+            order = "ok" if (hi["a"] < lo["b"] and hi["b"] < fill_i < lo["c"] and hi["c"] < lo["d"] and
+                             hi["d"] < verify_i) else "bad"
+        b2_alloc = "present" if R.first(RX["alloc"])[0] is not None else "none"
+        hold_mibs = {int(m.group(1)) for _, m in holds}
+        cw = cw_analyze(labs, cw_bins_from_blocks(blocks), fill_factor, kpf_paths)
+        l1_records = [x for x in miss["L1"] if not x.startswith("canary_start_")]
+        put("L1_records", "ok" if not l1_records else "missing " + ",".join(l1_records))
+        for k in CANARY_CHECKS:
+            put(k, checks[k])
+        put("canary_between", between)
+        put("hold", hold)
+        put("hold_mib_vs_pc", "not_given" if hold_mib is None else "absent" if not hold_mibs else
+            "match" if hold_mibs == {hold_mib} else "differs")
+        put("b2_alloc_line", b2_alloc)
+        put("rung_j1", "yes" if rung == J1_RUNG else "no")
+        # The watcher binary that ran: the generator's EXTRA_FIELDS stamp for diag j1 (not an item-5 field).
+        mcw = (cfg or {}).get("memcanary_w_sha256", "").lower()
+        put("memcanary_w_sha256", mcw if HEX64_RE.match(mcw) else "absent")
+        put("watch_stray", len(stray))
+        for l, L in labs.items():
+            put(f"watch_{l}", q(L["status"] + (" problems=" + ",".join(L["problems"]) if L["problems"] else "")))
+        put("watch_order", order)
+        for l in WATCH_LABELS:
+            put(f"export_j1{l}", q(cw["export"][l]))
+        put("kpf", q(cw["kpf"]))
+        put("fillrate", q(" ".join(cw["fill"])))
+        put("coincide", q(" ".join(cw["coincide"])))
+        shim_i = R.first(RX["shim"])[0]
+        issuing = "yes" if R.first(WQ_ISSUING_RE, before=shim_i)[0] is not None else "no"
+        reset_marker = "yes" if R.first(WQ_RESET_RE)[0] is not None else "no"
+        put("wq_kexec_issuing", issuing)
+        put("wq_reset_marker", reset_marker)
+        want = [("conf_gate", not miss["conf_gate"]), ("L0", not miss["L0"]), ("L1_records", not l1_records),
+                ("L7", not miss["L7"]), ("item5", not refused and not miss["item5"]), ("rung_j1", rung == J1_RUNG),
+                ("memcanary_w_sha256", bool(HEX64_RE.match(mcw))), ("b2_alloc_line", b2_alloc == "none")]
+        want += [(k, checks[k] in ("ok", "bad")) for k in CANARY_CHECKS]
+        want += [("canary_between", between == 0), ("hold", hold in ("ok", "bad")), ("watch_stray", not stray)]
+        want += [(f"watch_{l}", labs[l]["status"] == "ok") for l in WATCH_LABELS]
+        want.append(("watch_order", order == "ok"))
+        want += [(f"export_j1{l}", cw["export"][l] == "ok") for l in WATCH_LABELS]
+        want += [("wq_kexec_issuing", issuing == "yes"), ("wq_reset_marker", reset_marker == "no")]
+        dfailed = [k for k, ok_ in want if not ok_]
+        rows, sums = j6_rows(checks, labs, hold_bad, not dfailed, cw)
+        if sums is not None:
+            dom = j6_dom_counts(sums)
+            top = max(dom.values())
+            put("c2_sums", " ".join(f"{k}={v}" for k, v in sums.items()) + " dominant=" +
+                (",".join(k for k in DOM_CLASSES if dom[k] == top) if top else "none"))
+        row = ",".join(rows)
+        step = J1_STEPS[(profile, mode)][arm]
+        verdict = "diagnostic " + ("incomplete" if dfailed else "complete")
+        put("j_row", row)
+        put("step", step)
+        put("verdict", verdict + ("" if not dfailed else " failed=" + ",".join(dfailed)))
+        return {"lines": out, "blocks": blocks, "verdict": verdict, "refused": refused, "step": step, "j_row": row}
     if diag is not None:
         # §15.5 A3: B2's records, read without their canary values; never pass, never b2=.
         checks = {}
@@ -1622,7 +1947,7 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
 
 
 def run_report(a_log, data, bb_data, a_blackbox, conf_path, conf_bytes, allow_bytes, res, profile, mode,
-               pins=(), diag=None):
+               pins=(), diag=None, j1=None):
     head = [f"parser={rel_repo(__file__)} sha256={sha256(open(__file__, 'rb').read())}",
             f"kshcheck_impl={rel_repo(PARSE_M4_PATH)} sha256={sha256(open(PARSE_M4_PATH, 'rb').read())}",
             f"input_log={rel_repo(a_log)} sha256={sha256(data)} bytes={len(data)}",
@@ -1632,7 +1957,14 @@ def run_report(a_log, data, bb_data, a_blackbox, conf_path, conf_bytes, allow_by
             f"input_allow sha256={sha256(allow_bytes)}"]
     head += [f"input_{key}={rel_repo(p)} sha256={sha256(b)}" if b is not None else f"input_{key}=none"
              for key, p, b in pins]
-    head.append(f"profile={profile} mode={mode}" + (f" diag={diag}" if diag is not None else ""))
+    if j1:
+        # §15.5 B7: J6's pre-registered inputs, stamped with the record they produced.
+        head.append(f"fill_factor={j1['fill_factor']}")
+        head.append(f"hold_mib={j1['hold_mib'] if j1['hold_mib'] is not None else 'not_given'}")
+        head += [f"input_kpf={rel_repo(p)} " + (f"sha256={sha256(PM.read_bytes(p))}" if os.path.isfile(p) else "absent")
+                 for p in j1["kpf"]] or ["input_kpf=none"]
+    head.append(f"profile={profile} mode={mode}" + (f" diag={diag}" if diag is not None else "") +
+                (f" arm={j1['arm']}" if j1 else ""))
     return "".join(out_line("S1PC " + ln) + "\n" for ln in head + res["lines"])
 
 
@@ -1662,9 +1994,36 @@ def cmd_run(a):
               file=sys.stderr)
         return 2
     diag = getattr(a, "diag", None)
-    if diag is not None and (a.profile, a.mode) != ("board", "host"):
+    arm = getattr(a, "arm", None)
+    fill_factor = getattr(a, "fill_factor", None)
+    hold_mib = getattr(a, "hold_mib", None)
+    kpf = list(getattr(a, "kpf", None) or [])
+    j1_opts = arm is not None or fill_factor is not None or hold_mib is not None or bool(kpf)
+    if diag in DIAG_STEPS and (a.profile, a.mode) != ("board", "host"):
         print("parse-s1: usage: --diag j2|j2b|j4 reads B2's image: --profile board --mode host "
               "(s1-design.md 15.5 A3)", file=sys.stderr)
+        return 2
+    if diag == "j1":
+        if (a.profile, a.mode) not in J1_STEPS:
+            print("parse-s1: usage: --diag j1 reads J6's log (--profile board --mode host) or T-J1's "
+                  "(--profile tcg --mode dryrun) (s1-design.md 15.5 B7)", file=sys.stderr)
+            return 2
+        if a.profile == "tcg" and j1_opts:
+            print("parse-s1: usage: T-J1 takes no --arm, --fill-factor, --hold-mib or --kpf", file=sys.stderr)
+            return 2
+        if a.profile == "board":
+            try:
+                cw_factor(fill_factor)
+            except InputError as e:
+                print(out_line(f"parse-s1: usage: --diag j1 needs the pre-registered --fill-factor: {e}"),
+                      file=sys.stderr)
+                return 2
+            if arm not in J1_ARMS or len(kpf) > 2:
+                print("parse-s1: usage: --diag j1 needs --arm control|remove, and takes at most two --kpf "
+                      "headers (s1-design.md 15.4.8)", file=sys.stderr)
+                return 2
+    elif j1_opts:
+        print("parse-s1: usage: --arm, --fill-factor, --hold-mib and --kpf belong to --diag j1", file=sys.stderr)
         return 2
     data = PM.read_bytes(a.log)
     bb_data = PM.read_bytes(a.blackbox) if a.blackbox else None
@@ -1676,15 +2035,580 @@ def cmd_run(a):
     res = analyze_run(data, profile=a.profile, mode=a.mode, conf_bytes=conf_bytes, conf_info=info,
                       conf_gate_ok=gate_ok, bb_data=bb_data, ref_conf_sha256=a.ref_conf_sha256,
                       reset_reason=a.reset_reason, kexec_tree_sha256=a.kexec_tree_sha256, pc_image=pc_image,
-                      pc_initrd=pc_initrd, diag=diag)
+                      pc_initrd=pc_initrd, diag=diag, arm=arm, fill_factor=fill_factor, hold_mib=hold_mib,
+                      kpf_paths=kpf)
+    j1 = ({"arm": arm, "fill_factor": fill_factor, "hold_mib": hold_mib, "kpf": kpf}
+          if diag == "j1" and a.profile == "board" else None)
     text = run_report(a.log, data, bb_data, a.blackbox, conf_path, conf_bytes, allow_bytes, res, a.profile, a.mode,
-                      pins=(("image", a.image, pc_image), ("initrd", a.initrd, pc_initrd)), diag=diag)
+                      pins=(("image", a.image, pc_image), ("initrd", a.initrd, pc_initrd)), diag=diag, j1=j1)
     out_dir = None if a.out_dir == "none" else (a.out_dir or os.path.dirname(os.path.abspath(a.log)))
     if out_dir is not None:
         for p in write_run_outputs(out_dir, res, text):
             text += out_line(f"S1PC wrote={rel_repo(p)}") + "\n"
     sys.stdout.write(text)
     return 3 if res["refused"] else 0
+
+
+# ------------------------------------------------------------------ canwatch: the J6 watcher (§15.4.8, §15.5 B7)
+
+_KPF = None
+
+
+def _kpf():
+    """kpf-decode.py as a module, loaded on first use: its snapshot checks and classes, not a copy."""
+    global _KPF
+    if _KPF is None:
+        path = os.path.join(HERE, "kpf-decode.py")
+        spec = importlib.util.spec_from_file_location("kpf_decode", path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"cannot load {path}")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _KPF = mod
+    return _KPF
+
+
+def cw_factor(v):
+    """The pre-registered fill-rate factor as an exact Fraction: a decimal of at least 1. InputError otherwise."""
+    if isinstance(v, Fraction):
+        f = v
+    elif v is None or not FACTOR_RE.match(str(v)):
+        raise InputError(f"fill factor {v!r} is not a decimal such as 2 or 1.5")
+    else:
+        f = Fraction(str(v))
+    if f < 1:
+        raise InputError(f"fill factor {v} is below 1")
+    return f
+
+
+def _ftext(f):
+    return str(f.numerator) if f.denominator == 1 else f"{float(f):g}"
+
+
+def _pop(mask):
+    return bin(mask).count("1")
+
+
+def _bits(mask):
+    """The set bit positions of mask, lowest first (page numbers of a bitmap)."""
+    while mask:
+        low = mask & -mask
+        yield low.bit_length() - 1
+        mask ^= low
+
+
+def cw_time_ok(snaps, changed_snaps, changed_words, healed, osc, prog, stable):
+    """The time counts' own relations on the console (an export's tail carries only changed_words and healed)."""
+    return (changed_snaps <= snaps and (changed_snaps == 0) == (changed_words == 0) and
+            osc + prog + stable <= changed_words and healed <= changed_words)
+
+
+def cw_console_problems(label, f):
+    """Names of the relations one parsed watch breaks (the docstring's consistency table)."""
+    count = WATCH_LABELS[label][2]
+    b, t, w, w2, s, y, v = (f[k] for k in WATCH_KINDS)
+    bad = w["bad"]
+    p = []
+    if not (b["pages"] <= min(b["bad"], WPAGES) and (b["bad"] == 0) == (b["pages"] == 0) and
+            b["bad"] <= b["pages"] * WWORDS):
+        p.append("base_pages")
+    if b["bad"] and not (b["first_off"] % 8 == 0 and b["last_off"] % 8 == 0 and
+                         b["first_off"] <= b["last_off"] < CANARY_SIZE and
+                         (b["last_off"] - b["first_off"]) // 8 + 1 >= b["bad"]):
+        p.append("base_offsets")
+    if not (t["snaps"] <= count and (t["stop"] == "deadline" or t["snaps"] == count)):
+        p.append("time_snaps")
+    if not cw_time_ok(t["snaps"], t["changed_snaps"], t["changed_words"], t["healed"], t["osc"], t["prog"],
+                      t["stable"]):
+        p.append("time_counts")
+    if bad > WPAGES * WWORDS or sum(w[k] for k in _WORDS1) + sum(w2[k] for k in _WORDS2) != bad:
+        p.append("words_sum")
+    if sum(s[f"b{k}"] for k in range(8)) != bad:
+        p.append("stride_sum")
+    if y["ascii_bytes"] < 16 * y["ascii_runs"] or (bad == 0 and any(y.values())):
+        p.append("bytes")
+    if t["changed_words"] == 0:
+        # memcanary.c's cw_writer: with no change in the snapshots, none or static when its final read
+        # equals the last snapshot (then words' bad is base's), else ongoing (a change seen only there).
+        want_writer = ("ongoing",) + (("none",) if b["bad"] == 0 and bad == 0 else
+                                      ("static",) if b["bad"] > 0 and bad == b["bad"] else ())
+    else:
+        want_writer = ("stopped", "ongoing")
+    if v["writer"] not in want_writer:
+        p.append("verdict_writer")
+    if (v["heal"] == "yes") != (t["healed"] > 0):
+        p.append("verdict_heal")
+    if v["reads"] != ("prog" if t["prog"] else "osc" if t["osc"] else "stable"):
+        p.append("verdict_reads")
+    toks = v["content"].split(",")
+    if bad == 0:
+        content_ok = toks == ["none"]
+    else:
+        content_ok = toks == ["unclassified"] or all(x in CONTENT_WORDS for x in toks)
+    if not content_ok:
+        p.append("verdict_content")
+    return p
+
+
+def cw_watches(R):
+    """(labels, stray) of a log's watch lines.
+
+    labels maps a, b, c and d to a dict: idx (every line's index), lines (kind ->
+    [(index, canary, {field: text})]), status (the docstring's), problems, and f (kind ->
+    {field: int or text}, offsets read from hex) when the seven success lines were read
+    once each, on the table canary, in order. stray: indexes of watch lines whose label is
+    missing or outside the table.
+    """
+    labs = {l: {"idx": [], "lines": {}, "malformed": 0, "f": None, "problems": []} for l in WATCH_LABELS}
+    stray = []
+    for i, t in R.r:
+        m = WATCH_ANY_RE.match(t)
+        if not m:
+            continue
+        L = labs.get(m.group(3))
+        if L is None:
+            stray.append(i)
+            continue
+        L["idx"].append(i)
+        rx = WATCH_RE.get(m.group(2))
+        mm = rx.match(t) if rx is not None and len(t) <= WATCH_LINE_MAX else None
+        if mm is None:
+            L["malformed"] += 1
+            continue
+        fields = {name: mm.group(3 + k) for k, (name, _) in enumerate(WATCH_FIELDS[m.group(2)])}
+        L["lines"].setdefault(m.group(2), []).append((i, mm.group(1), fields))
+    for l, L in labs.items():
+        ls = L["lines"]
+        if not L["idx"]:
+            st = "absent"
+        elif "fail" in ls:
+            st = "fail"
+        elif L["malformed"]:
+            st = "malformed"
+        elif any(len(v) > 1 for v in ls.values()):
+            st = "multiple"
+        elif any(k not in ls for k in WATCH_KINDS):
+            st = "incomplete"
+        elif any(v[0][1] != WATCH_LABELS[l][0] for v in ls.values()):
+            st = "wrong-canary"
+        elif [ls[k][0][0] for k in WATCH_KINDS] != sorted(ls[k][0][0] for k in WATCH_KINDS):
+            st = "order"
+        else:
+            L["f"] = {k: {n: int(x, 16) if x.startswith("0x") else int(x) if x.isdigit() else x
+                          for n, x in ls[k][0][2].items()} for k in WATCH_KINDS}
+            L["problems"] = cw_console_problems(l, L["f"])
+            st = "inconsistent" if L["problems"] else "ok"
+        L["status"] = st
+    return labs, stray
+
+
+def cw_decode(data, label):
+    """(facts, reason, detail) of one watch export s1-j1<label>.bin; reason None when its structure holds.
+
+    The checks run in the docstring's order and the first failing one names the refusal.
+    facts: name, label, snaps, interval, maps (bitmap name -> int, bit p = page p) and tail.
+    """
+    name, interval, count = WATCH_LABELS[label]
+    if len(data) < CW_HEAD.size + CW_TAIL.size:
+        return None, "short", f"bytes={len(data)}"
+    (magic, version, rname, rlabel, base, pages, ival, snaps, rcount, rsecs, stop,
+     zero) = CW_HEAD.unpack_from(data, 0)
+    if magic != CW_MAGIC:
+        return None, "magic", ""
+    if version != CW_VERSION:
+        return None, "version", f"version={version}"
+    if pages != WPAGES:
+        return None, "page-count", f"pages={pages}"
+    if len(data) != CW_SIZE:
+        return None, "size", f"bytes={len(data)} want={CW_SIZE}"
+    nm, lb = rname.rstrip(b"\0"), rlabel.rstrip(b"\0")
+    if b"\0" in nm or nm != name.encode("ascii"):
+        return None, "name", ""
+    if b"\0" in lb or lb != label.encode("ascii"):
+        return None, "label", ""
+    if base != CANARIES[name]:
+        return None, "base", ""
+    if zero != bytes(len(zero)):
+        return None, "reserved", ""
+    if ival != interval:
+        return None, "interval", f"interval={ival}"
+    if rcount != count or rsecs != WATCH_DEADLINE_S[label] or stop not in CW_STOPS:
+        return None, "request", f"count={rcount} deadline_s={rsecs} stop={stop}"
+    if snaps > count:
+        return None, "snaps", f"snaps={snaps}"
+    off = CW_HEAD.size
+    maps = {}
+    for m in CW_MAPS:
+        maps[m] = int.from_bytes(data[off:off + CW_MAP_BYTES], "little")
+        off += CW_MAP_BYTES
+    tail = dict(zip(CW_TAIL_FIELDS, CW_TAIL.unpack_from(data, off)))
+    pops = {m: _pop(v) for m, v in maps.items()}
+    broken = []
+    if tail["healed"] > tail["changed_words"] or (CW_STOPS[stop] == "count" and snaps != count):
+        broken.append("time")
+    if max(tail["bad_base"], tail["bad_final"]) > WPAGES * WWORDS:
+        broken.append("bad")
+    for m, n in (("bad_final", tail["bad_final"]), ("changed_ever", tail["changed_words"]),
+                 ("healed_ever", tail["healed"])):
+        if (pops[m] == 0) != (n == 0) or pops[m] > n:
+            broken.append(m)
+    if tail["bad_final"] > pops["bad_final"] * WWORDS:
+        broken.append("bad_final_pages")
+    if broken:
+        return None, "counts", "broken=" + ",".join(broken)
+    if maps["healed_ever"] & ~maps["changed_ever"]:
+        return None, "healed-not-changed", ""
+    return {"name": name, "label": label, "snaps": snaps, "interval": ival, "stop": CW_STOPS[stop], "maps": maps,
+            "tail": tail}, None, ""
+
+
+def cw_cross(fx, f):
+    """The fields of an accepted export that differ from its parsed console watch."""
+    t = f["time"]
+    want = {"snaps": t["snaps"], "stop": t["stop"], "bad_base": f["base"]["bad"], "bad_final": f["words"]["bad"],
+            "changed_words": t["changed_words"], "healed": t["healed"]}
+    got = dict(fx["tail"], snaps=fx["snaps"], stop=fx["stop"])
+    return [k for k in want if got[k] != want[k]]
+
+
+def cw_bins_from_blocks(blocks):
+    """label -> a decoded j1<label> export's bytes, or its status text (absent when LOG has no block)."""
+    out = {}
+    for l in WATCH_LABELS:
+        blk = next((b for b in blocks if b["name"] == f"j1{l}"), None)
+        out[l] = "absent" if blk is None else blk["data"] if blk.get("status") == "ok" else blk.get("status", "unread")
+    return out
+
+
+def cw_log_records(R, blocks):
+    """label -> (bytes, md5) of j1<label> from LOG's S1 BEGIN line, else its S1 EXPORT record; None if neither."""
+    out = {}
+    for l in WATCH_LABELS:
+        name = f"j1{l}"
+        kv = next((b["kv"] for b in blocks if b["name"] == name), None)
+        if kv is None:
+            m = next((m for _, m in R.all(EXPORT_REC_RE) if m.group(1) == name), None)
+            kv = kvs(m, 2) if m else {}
+        n, h = to_int(kv.get("bytes")), (kv.get("md5") or "").lower()
+        out[l] = (n, h) if n is not None and HEX32_RE.match(h) else None
+    return out
+
+
+def cw_kpf_load(paths):
+    """(status, {tag: {canary: class index per page}}) of kpf-decode.py headers.
+
+    status is not-given, ok, input-error or 'refused reason=R' (kpf-decode's reasons, and
+    its two-header rules: one tag each, one boot_id, postquiesce uptime above prequiesce).
+    Only the canaries' own page frames are classified.
+    """
+    if not paths:
+        return "not-given", {}
+    K = _kpf()
+    if dict(K.CANARIES) != CANARIES or K.PAGE != WPAGE or K.CANARY_SIZE != CANARY_SIZE:
+        return "refused reason=constants", {}
+    if len(paths) > 2:
+        return "refused reason=usage", {}
+    try:
+        snaps = [K.load_snapshot(p) for p in paths]
+        if len(snaps) == 2:
+            if sorted(s["kv"]["tag"] for s in snaps) != sorted(K.TAGS):
+                raise K.Refused("tag")
+            if snaps[0]["kv"]["boot_id"] != snaps[1]["kv"]["boot_id"]:
+                raise K.Refused("boot-id-mismatch")
+            snaps.sort(key=lambda s: K.TAGS.index(s["kv"]["tag"]))
+            if float(snaps[1]["kv"]["uptime_s"]) <= float(snaps[0]["kv"]["uptime_s"]):
+                raise K.Refused("uptime-order")
+    except K.Refused as e:
+        return f"refused reason={e.reason}", {}
+    except K.InputError:
+        return "input-error", {}
+    starts = {r[0]: r[1] for r in K.RANGES}
+    out = {}
+    for s in snaps:
+        offs = {r[0]: r[4] for r in s["ranges"]}
+        cls = {}
+        for name, base in K.CANARIES:
+            rname = K.CANARY_RANGE[name]
+            lo = offs[rname] + (base // K.PAGE - starts[rname]) * 8
+            cls[name] = K.classify_slice(s["flags"][lo:lo + WPAGES * 8], s["count"][lo:lo + WPAGES * 8])
+        out[s["kv"]["tag"]] = cls
+    return "ok", out
+
+
+def cw_kpf_counts(K, cls, mask):
+    """(per-class page counts, held, free) of a bitmap's pages under one snapshot's classes."""
+    n = [0] * len(K.CLASSES)
+    for p in _bits(mask):
+        n[cls[p]] += 1
+    free = sum(n[i] for i in K.FREE)
+    return n, sum(n) - free - n[K.NOPAGE], free
+
+
+def cw_fill_rate(labs, factor):
+    """(result, detail) of §15.4.8's fill-rate row: differs, within or not-computed (exact arithmetic)."""
+    if labs["b"]["status"] != "ok" or labs["c"]["status"] != "ok":
+        return "not-computed", "reason=watch-b-or-c-not-ok"
+    tb, tc = labs["b"]["f"]["time"], labs["c"]["f"]["time"]
+    detail = (f"label_b=changed_words:{tb['changed_words']}/snaps:{tb['snaps']} "
+              f"label_c=changed_words:{tc['changed_words']}/snaps:{tc['snaps']} factor={_ftext(factor)}")
+    if not tb["snaps"] or not tc["snaps"]:
+        return "not-computed", detail + " reason=no-snapshots"
+    rb, rc = Fraction(tb["changed_words"], tb["snaps"]), Fraction(tc["changed_words"], tc["snaps"])
+    return ("differs" if rc > factor * rb or rb > factor * rc else "within"), detail
+
+
+def cw_coincide(facts, kpf):
+    """(result, detail): do c2's changed or finally bad pages (watches a-c) sit on pages Linux held before the
+    quiesce? A record only (R45)."""
+    if "prequiesce" not in kpf:
+        return "not-computed", "reason=no-prequiesce-snapshot"
+    used = [l for l in WATCH_C2 if l in facts]
+    if not used:
+        return "not-computed", "reason=no-c2-bitmap"
+    mask = 0
+    for l in used:
+        mask |= facts[l]["maps"]["bad_final"] | facts[l]["maps"]["changed_ever"]
+    n, held, _free = cw_kpf_counts(_kpf(), kpf["prequiesce"]["c2"], mask)
+    pages = sum(n)
+    return (("yes" if pages and 2 * held > pages else "no"),
+            f"labels={','.join(used)} pages={pages} held_prequiesce={held}")
+
+
+def cw_bitmap_line(label, fx, m):
+    pages = list(_bits(fx["maps"][m]))
+    runs = sum(1 for k, p in enumerate(pages) if k == 0 or pages[k - 1] != p - 1)
+    per = [0] * (CANARY_SIZE // MIB)
+    for p in pages:
+        per[p // (MIB // WPAGE)] += 1
+    return (f"bitmap label={label} name={fx['name']} map={m} pages={len(pages)} "
+            f"first_page={pages[0] if pages else '-'} last_page={pages[-1] if pages else '-'} runs={runs} "
+            f"per_mib={','.join(str(x) for x in per)}")
+
+
+def cw_analyze(labs, bins, factor, kpf_paths=(), log_recs=None):
+    """The analyzer: canwatch's lines (key=value, no prefix) and the facts run --diag j1 reads.
+
+    bins maps each label to the export's bytes, or to a status text when there are none
+    (absent, truncated, mismatch(...)). log_recs, canwatch's only, maps a label to LOG's
+    (bytes, md5) record or None; a file that does not match it is counted as failed.
+    Returns lines, failed, facts (accepted exports), export (label -> ok or the refusal),
+    kpf (status), fill and coincide ((result, detail) each).
+    """
+    lines = [f"limit: {CW_LIMIT}"]
+    failed, facts, export = [], {}, {}
+    kstat, kpf = cw_kpf_load(list(kpf_paths))
+    for l, (name, _interval, _count) in WATCH_LABELS.items():
+        L = labs[l]
+        data = bins.get(l, "absent")
+        extra = ""
+        if isinstance(data, (bytes, bytearray)):
+            data = bytes(data)
+            fx, reason, detail = cw_decode(data, l)
+            if reason is None:
+                facts[l] = fx
+                if L["f"] is None:
+                    reason = "console-absent"
+                else:
+                    mism = cw_cross(fx, L["f"])
+                    if mism:
+                        reason, detail = "console-mismatch", "fields=" + ",".join(mism)
+            export[l] = "ok" if reason is None else f"refused reason={reason}" + (f" {detail}" if detail else "")
+            if log_recs is not None:
+                rec = log_recs.get(l)
+                bvl = "no-record" if rec is None else "match" if rec == (len(data), md5(data)) else "differs"
+                extra = f" bin_vs_log={bvl}"
+                if bvl != "match":
+                    failed.append(f"bin_vs_log_j1{l}")
+        else:
+            export[l] = str(data)
+        if L["status"] != "ok":
+            failed.append(f"watch_{l}")
+        if export[l] != "ok":
+            failed.append(f"export_j1{l}")
+        probs = f" problems={','.join(L['problems'])}" if L["problems"] else ""
+        lines.append(f"watch label={l} name={name} console={L['status']}{probs} export={q(export[l])}{extra}")
+    for l, fx in facts.items():
+        lines += [cw_bitmap_line(l, fx, m) for m in CW_MAPS]
+        hp = _pop(fx["maps"]["healed_ever"])
+        whole = "n/a" if hp == 0 else "consistent" if fx["tail"]["healed"] >= WWORDS * hp else "no"
+        fx["whole_page_heal"] = whole == "consistent"
+        lines.append(f"heal label={l} healed_pages={hp} healed={fx['tail']['healed']} whole_page={whole} "
+                     f"condition=necessary-only")
+    lines.append(f"kpf result={kstat}" + (f" tags={','.join(kpf)}" if kpf else ""))
+    if kpf:
+        K = _kpf()
+        for l, fx in facts.items():
+            for tag, cls in kpf.items():
+                for m in CW_MAPS:
+                    n, held, free = cw_kpf_counts(K, cls[fx["name"]], fx["maps"][m])
+                    lines.append(f"kpf tag={tag} label={l} name={fx['name']} map={m} pages={sum(n)} held={held} "
+                                 f"free={free} " + " ".join(f"{c}={n[i]}" for i, c in enumerate(K.CLASSES)))
+    fill = cw_fill_rate(labs, factor)
+    lines.append(f"fillrate result={fill[0]} {fill[1]}")
+    coincide = cw_coincide(facts, kpf) if kpf else ("not-computed", "reason=no-kpf")
+    lines.append(f"coincide result={coincide[0]} {coincide[1]} record_only=yes")
+    lines.append("result=" + ("complete" if not failed else "incomplete failed=" + ",".join(failed)))
+    return {"lines": lines, "failed": failed, "facts": facts, "export": export, "kpf": kstat, "fill": fill,
+            "coincide": coincide}
+
+
+def j1_hold(holds, hold_mib):
+    """(status, fill index, verify index, bad) of J6's hold lines (memcanary.c's hold forms).
+
+    bad is True when a verify line reads verify=bad, or verify=timeout data=bad (F49),
+    whatever the status. Both lines' MIB must be J1_HOLD_MIB, and hold_mib when given.
+    """
+    parsed = [(i, int(m.group(1)), kvs(m, 2)) for i, m in holds]
+    fills = [i for i, _, d in parsed if d.get("fill") == "ok" and "verify" not in d and "map" not in d]
+    verifies = [(i, d) for i, _, d in parsed if "verify" in d]
+    bad = any(d["verify"] == "bad" or (d["verify"] == "timeout" and d.get("data") == "bad") for _, d in verifies)
+    fill_i = fills[0] if len(fills) == 1 else None
+    verify_i = verifies[0][0] if len(verifies) == 1 else None
+    mibs = {mib for _, mib, _ in parsed}
+    if not parsed:
+        st = "absent"
+    elif any(d.get("map") == "fail" for _, _, d in parsed):
+        st = "map-fail"
+    elif len(fills) > 1 or len(verifies) > 1:
+        st = "multiple"
+    elif fill_i is None or verify_i is None:
+        st = "absent"
+    elif verify_i < fill_i or len(parsed) != 2:
+        st = "unread"
+    elif mibs != {J1_HOLD_MIB} or (hold_mib is not None and hold_mib != J1_HOLD_MIB):
+        st = "mib-differs"
+    else:
+        d = verifies[0][1]
+        st = {("ok", None): "ok", ("bad", None): "bad", ("timeout", "ok"): "timeout",
+              ("timeout", "bad"): "timeout-bad"}.get((d["verify"], d.get("data")), "unread")
+    return st, fill_i, verify_i, bad
+
+
+def j6_sums(labs, labels):
+    """The counts the J6 rows read, summed over the given (parsed) watches."""
+    s = dict.fromkeys(("bad_base", "bad", "changed_words", "healed", "osc", "prog", "stable") + WORD_CLASSES +
+                      SIGNATURES + tuple(f"b{k}" for k in range(8)), 0)
+    for l in labels:
+        f = labs[l]["f"]
+        s["bad_base"] += f["base"]["bad"]
+        s["bad"] += f["words"]["bad"]
+        for k in ("changed_words", "healed", "osc", "prog", "stable"):
+            s[k] += f["time"][k]
+        for k in _WORDS1:
+            s[k] += f["words"][k]
+        for k in _WORDS2:
+            s[k] += f["words2"][k]
+        for k in SIGNATURES:
+            s[k] += f["bytes"][k]
+        for k in range(8):
+            s[f"b{k}"] += f["stride"][f"b{k}"]
+    return s
+
+
+def j6_dom_counts(s):
+    d = {k: s[k] for k in DOM_CLASSES if k != "flip2"}
+    d["flip2"] = s["flip2_same"] + s["flip2_var"]
+    return d
+
+
+def j6_dominant(d, group):
+    """The group's largest class count is above 0 and no class outside the group is larger."""
+    top = max(d[k] for k in group)
+    return top > 0 and all(v <= top for k, v in d.items() if k not in group)
+
+
+def j6_rows(checks, labs, hold_bad, complete, cw):
+    """(rows, c2 sums or None): every row of §15.4.8's table that holds, stops first (docstring)."""
+    rows = []
+    c1_watch_bad = any(int(fields["bad"]) > 0 for L in labs.values() for kind in ("base", "words")
+                       for _i, canary, fields in L["lines"].get(kind, ()) if canary == "c1")
+    if c1_watch_bad or any(checks[f"{c}_{k}"] == "bad" for c in ("c1", "c3") for k in ("start", "end")):
+        rows.append("F39")
+    if hold_bad:
+        rows.append("F49")
+    if not complete:
+        return rows + ["F40"], None
+    s = j6_sums(labs, WATCH_C2)
+    d = j6_dom_counts(s)
+    bad = s["bad"]
+    if s["osc"] > 0 and s["prog"] == 0 and 2 * (s["flip2_same"] + s["flip2_var"]) > bad:
+        rows.append("F34")
+    if s["prog"] > 0 or (s["changed_words"] > 0 and s["stable"] > 0):
+        rows.append("live-writer")
+    if (s["healed"] > 0 and j6_dominant(d, LEAN_RESTORING)) or any(cw["facts"][l]["whole_page_heal"] for l in WATCH_C2):
+        rows.append("restoring-writer")
+    top2 = sum(sorted(s[f"b{k}"] for k in range(8))[-2:])
+    if j6_dominant(d, LEAN_RING) or (bad >= STRIDE_MIN_BAD and 2 * top2 > bad):
+        rows.append("ring-record")
+    if j6_dominant(d, LEAN_CPU):
+        if cw["coincide"][0] == "yes":
+            rows.append("cpu-side")
+        elif cw["coincide"][0] == "not-computed":
+            rows.append("cpu-side-lean")
+    if j6_dominant(d, LEAN_QNX):
+        rows.append("qnx-shaped")
+    if sum(labs[l]["f"]["bytes"][k] for l in WATCH_LABELS for k in SIGNATURES) > 0:
+        rows.append("positive-signature")
+    if cw["fill"][0] == "differs":
+        rows.append("fill-rate")
+    writers = {labs[l]["f"]["verdict"]["writer"] for l in WATCH_C2}
+    if writers == {"none"}:
+        rows.append("writer-none")
+    elif not writers & {"stopped", "ongoing"}:
+        rows.append("writer-static")
+    return rows or ["no-row"], s
+
+
+def write_canwatch(out_dir, text, check=True):
+    """canwatch.txt into out_dir, its path checked first (parse-m4.py's check_out_path when check is True)."""
+    checker = PM.check_out_path if check is True else (check or (lambda p: None))
+    p = os.path.join(out_dir, "canwatch.txt")
+    checker(p)
+    os.makedirs(out_dir, exist_ok=True)
+    with open(p, "wb") as f:
+        f.write(text.encode("utf-8"))
+    return p
+
+
+def cmd_canwatch(a):
+    try:
+        factor = cw_factor(a.fill_factor)
+    except InputError as e:
+        print(out_line(f"parse-s1: usage: canwatch needs the pre-registered --fill-factor: {e}"), file=sys.stderr)
+        return 2
+    kpf = list(a.kpf or [])
+    if len(kpf) > 2:
+        print("parse-s1: usage: canwatch takes one --kpf header, or a prequiesce and a postquiesce pair",
+              file=sys.stderr)
+        return 2
+    data = PM.read_bytes(a.log)
+    recs, blocks, _, _ = split_log(data)
+    for blk in blocks:
+        decode_block(blk)
+    R = Recs(recs)
+    labs, _stray = cw_watches(R)
+    bin_dir = a.bin_dir or os.path.dirname(os.path.abspath(a.log))
+    head = [f"parser={rel_repo(__file__)} sha256={sha256(open(__file__, 'rb').read())}",
+            f"input_log={rel_repo(a.log)} sha256={sha256(data)} bytes={len(data)}"]
+    bins = {}
+    for l in WATCH_LABELS:
+        p = os.path.join(bin_dir, export_filename(f"j1{l}"))
+        if os.path.isfile(p):
+            bins[l] = PM.read_bytes(p)
+            head.append(f"input_bin label={l} file={rel_repo(p)} sha256={sha256(bins[l])} bytes={len(bins[l])}")
+        else:
+            bins[l] = "absent"
+            head.append(f"input_bin label={l} file={rel_repo(p)} absent")
+    head += [f"input_kpf={rel_repo(p)} " + (f"sha256={sha256(PM.read_bytes(p))}" if os.path.isfile(p) else "absent")
+             for p in kpf] or ["input_kpf=none"]
+    head.append(f"fill_factor={a.fill_factor}")
+    res = cw_analyze(labs, bins, factor, kpf, cw_log_records(R, blocks))
+    text = "".join(out_line("S1CW " + ln) + "\n" for ln in head + res["lines"])
+    out_dir = None if a.out_dir == "none" else (a.out_dir or os.path.dirname(os.path.abspath(a.log)))
+    if out_dir is not None:
+        text += out_line(f"S1CW wrote={rel_repo(write_canwatch(out_dir, text))}") + "\n"
+    sys.stdout.write(text)
+    return 0
 
 
 # ------------------------------------------------------------------ selftest (synthetic inputs only)
@@ -1904,6 +2828,96 @@ def edit_lines(lines, drop=(), sub=(), add_after=()):
     return out
 
 
+def syn_watch(label, **kw):
+    """(console lines, export bytes) of one memcanary-w watch, consistent by construction (SYNTHETIC; not a record).
+
+    kw: classes {class: n} (words' bad is their sum), bad_base (default that bad), the time
+    counts (snaps, changed_snaps, changed_words, healed, osc, prog, stable), stride (eight
+    bins; default the bad words at offsets 0, 8, 16 ... in turn), sig {ascii_runs,
+    ascii_bytes, ipv4, beacon, trb_evt}, writer, content, and the page lists bad_pages,
+    changed_pages, healed_pages (defaults: the first pages the count needs, page 0, page 0).
+    """
+    name, interval, count = WATCH_LABELS[label]
+    cls = dict.fromkeys(WORD_CLASSES, 0)
+    cls.update(kw.get("classes", {}))
+    bad = sum(cls.values())
+    t = {"snaps": min(count, 180), "changed_snaps": 0, "changed_words": 0, "healed": 0, "osc": 0, "prog": 0,
+         "stable": 0}
+    t.update((k, kw[k]) for k in list(t) if k in kw)
+    if t["changed_words"] and not t["changed_snaps"]:
+        t["changed_snaps"] = 1
+    bad_base = kw.get("bad_base", bad)
+    stride = list(kw.get("stride", [bad // 8 + (1 if k < bad % 8 else 0) for k in range(8)]))
+    sig = dict.fromkeys(("ascii_runs", "ascii_bytes") + SIGNATURES, 0)
+    sig.update(kw.get("sig", {}))
+    cwords = t["changed_words"]
+    writer = kw.get("writer") or (("none" if bad_base == 0 and bad == 0 else "static") if cwords == 0 else "stopped")
+    reads = "prog" if t["prog"] else "osc" if t["osc"] else "stable"
+    pfx = f"S1 CANARY {name} watch="
+    lines = [
+        f"{pfx}base label={label} bad={bad_base} pages={-(-bad_base // WWORDS)} first_off=0x0 "
+        f"last_off=0x{8 * max(bad_base - 1, 0):x}",
+        f"{pfx}time label={label} " + " ".join(f"{k}={v}" for k, v in t.items()) +
+        f" stop={'count' if t['snaps'] == count else 'deadline'}",
+        f"{pfx}words label={label} bad={bad} " + " ".join(f"{k}={cls[k]}" for k in _WORDS1),
+        f"{pfx}words2 label={label} " + " ".join(f"{k}={cls[k]}" for k in _WORDS2),
+        f"{pfx}stride label={label} " + " ".join(f"b{k}={v}" for k, v in enumerate(stride)),
+        f"{pfx}bytes label={label} " + " ".join(f"{k}={v}" for k, v in sig.items()),
+        f"{pfx}verdict label={label} writer={writer} heal={'yes' if t['healed'] else 'no'} reads={reads} "
+        f"content={kw.get('content', 'unclassified' if bad else 'none')}"]
+
+    def mask(key, n, default):
+        return sum(1 << p for p in set(kw.get(key, default if n else ())))
+
+    maps = (mask("bad_pages", bad, range(-(-bad // WWORDS))), mask("changed_pages", cwords, (0,)),
+            mask("healed_pages", t["healed"], (0,)))
+    stop = 1 if t["snaps"] == count else 2
+    data = (CW_HEAD.pack(CW_MAGIC, CW_VERSION, name.encode("ascii"), label.encode("ascii"), CANARIES[name], WPAGES,
+                         interval, t["snaps"], count, WATCH_DEADLINE_S[label], stop, bytes(8)) +
+            b"".join(m.to_bytes(CW_MAP_BYTES, "little") for m in maps) +
+            CW_TAIL.pack(bad_base, bad, cwords, t["healed"]))
+    return lines, data
+
+
+SYN_WQ_MARKS = ("[  100.000001] s1wq: begin arm=control result=0", "[  400.000001] s1wq: kexec issuing",
+                "[  401.000001] kexec_core: Starting new kernel")
+SYN_MCW = "a" * 64      # a synthetic memcanary_w_sha256 stamp
+
+
+def syn_j6_log(conf_bytes, cmdline, *, watches=None, hold=("fill=ok", "verify=ok"), hold_mib=J1_HOLD_MIB,
+               drop_exports=(), mcw=SYN_MCW):
+    """A J6 COM3 capture of s1-j1 in host mode, in §15.4.8's order, and its exports (SYNTHETIC; not a record).
+
+    B2's synthetic log with the allocation replaced by watches a and b, the hold's fill line,
+    watches c and d and the hold's verify line (hold: the two lines' texts after mib=; None
+    leaves one out), the detached sequence's markers before the kexec, and the j1a..j1d
+    exports after FAIL_STATE.
+    """
+    made = {l: syn_watch(l, **(watches or {}).get(l, {})) for l in WATCH_LABELS}
+    hl = [None if h is None else f"S1 ALLOC hold mib={hold_mib} {h}" for h in hold]
+    block = made["a"][0] + made["b"][0] + hl[:1] + made["c"][0] + made["d"][0] + hl[1:]
+    out = []
+    for ln in syn_log("board", "host", b"", conf_bytes, cmdline):
+        ln = ln.replace("T234 S1 s1-h1 ", f"T234 S1 {J1_RUNG} ")
+        if ln.startswith("S1 CONFIG ") and mcw:
+            ln += f" memcanary_w_sha256={mcw}"
+        if ln == f"S1 ALLOC mib={B2_ALLOC_MIB} fill=ok verify=ok":
+            out += [x for x in block if x is not None]
+            continue
+        out.append(ln)
+        if ln.startswith("--- raw capture started"):
+            out += list(SYN_WQ_MARKS)
+        if ln == "S1 FAIL_STATE none":
+            for l, (_, data) in made.items():
+                if l in drop_exports:
+                    continue
+                b = base64.b64encode(data).decode("ascii")
+                out += [f"S1 BEGIN name=j1{l} bytes={len(data)} md5={md5(data)} enc=base64"]
+                out += [b[k:k + 76] for k in range(0, len(b), 76)]
+                out += [f"S1 END name=j1{l}", f"S1 EXPORT name=j1{l} bytes={len(data)} md5={md5(data)} enc=base64 rc=0"]
+    return out, {l: d for l, (_, d) in made.items()}
+
+
 def selftest():
     results = []
 
@@ -2086,7 +3100,8 @@ def selftest():
 
     # ---- run
     def run(profile, mode, lines=None, *, bb="auto", ref=True, reset="MAINSWRST", kexec=SYN_KEXEC, tree=None,
-            enc="base64", gate_ok=True, image=None, initrd=None, qvmlog=SYN_QVMLOG, diag=None):
+            enc="base64", gate_ok=True, image=None, initrd=None, qvmlog=SYN_QVMLOG, diag=None, arm=None,
+            fill_factor=None, hold_mib=None, kpf_paths=()):
         blob = fdt_build(tree) if tree is not None else dtb
         if lines is None:
             lines = syn_log(profile, mode, blob, conf_bytes, cmdline, enc=enc, qvmlog=qvmlog)
@@ -2096,7 +3111,8 @@ def selftest():
                            conf_gate_ok=gate_ok, bb_data=bbd, ref_conf_sha256=sha256(conf_bytes) if ref else None,
                            reset_reason=reset if profile == "board" else None,
                            kexec_tree_sha256=kexec if profile == "board" else None, pc_image=image,
-                           pc_initrd=initrd, diag=diag)
+                           pc_initrd=initrd, diag=diag, arm=arm, fill_factor=fill_factor, hold_mib=hold_mib,
+                           kpf_paths=kpf_paths)
 
     def has(res, text):
         return any(ln.startswith(text) for ln in res["lines"])
@@ -2390,6 +3406,417 @@ def selftest():
     rc, b2text = jcmd(diag=None)
     check("run cmd B2 without --diag keeps b2=pass and verdict=pass", rc == 0 and "S1PC b2=pass\n" in b2text and
           b2text.endswith("S1PC verdict=pass\n") and "diag=" not in b2text and "j_row=" not in b2text)
+
+    # ---- run --diag j1, canwatch and T-J1 (s1-design.md §15.4.8, §15.5 B7 and B8.4): J6's watcher
+    # (SYNTHETIC; not a record). The watch lines and exports follow the formats in the docstring.
+    watch_line = "S1 CANARY c2 watch=base label=a bad=0 pages=0 first_off=0x0 last_off=0x0"
+    r = run("board", "host", edit_lines(bl, add_after=((r"^S1 ALLOC mib=1536", watch_line),)))
+    check("run B2 synthetic with an added watch= line still gives b2=pass (six_verify unchanged)",
+          r["verdict"] == "pass" and has(r, "b2=pass"))
+    r = run("tcg", "boot", edit_lines(syn_log("tcg", "boot", dtb, conf_bytes, cmdline),
+                                      add_after=((r"^S1 GATE mem ok", watch_line),)))
+    check("run T2 a watch= line on TCG fails the profile check", r["verdict"] == "fail" and
+          has(r, "missing_profile=tcg_asinfo_or_canary"))
+    j6res = []
+
+    def j6(watches=None, *, arm="control", lines_=None, factor="2", hold_mib=None, kpf=(), **kw):
+        if lines_ is None:
+            lines_, _ = syn_j6_log(conf_bytes, cmdline, watches=watches, **kw)
+        res = run("board", "host", lines_, diag="j1", arm=arm, fill_factor=factor, hold_mib=hold_mib, kpf_paths=kpf)
+        j6res.append(res)
+        return res
+
+    def j6_is(res, verdict, rows_, failed_=()):
+        last = res["lines"][-1]
+        return (res["verdict"] == "diagnostic " + verdict and field(res, "j_row") == res["j_row"] and
+                set(res["j_row"].split(",")) == set(rows_) and len(res["j_row"].split(",")) == len(rows_) and
+                all(f in last.split("failed=", 1)[-1].split(",") for f in failed_) and
+                (verdict == "incomplete") == ("failed=" in last))
+
+    def c2w(**kw):
+        return {l: kw for l in WATCH_C2}
+
+    other16 = {"classes": {"other": 16}}
+    r = j6()
+    check("run --diag j1 synthetic control arm: complete, step J6c, row writer-none, no b2= field",
+          j6_is(r, "complete", ["writer-none"]) and r["step"] == "J6c" and has(r, "step=J6c") and
+          r["lines"][-1] == "verdict=diagnostic complete" and not has(r, "b2=") and
+          [field(r, k) for k in CANARY_CHECKS] == ["ok"] * 6 and field(r, "hold") == "ok" and
+          field(r, "watch_order") == "ok" and field(r, "canary_between") == "0" and field(r, "rung_j1") == "yes" and
+          all(field(r, f"watch_{l}") == "ok" and field(r, f"export_j1{l}") == "ok" for l in WATCH_LABELS) and
+          field(r, "kpf") == "not-given" and has(r, "c2_sums=") and field(r, "hold_mib_vs_pc") == "not_given")
+    r = j6(arm="remove")
+    check("run --diag j1 remove arm is step J6r", j6_is(r, "complete", ["writer-none"]) and r["step"] == "J6r")
+    r = j6(c2w(classes={"zero": 16}))
+    check("run --diag j1 c2 bad and unchanged at every watch: writer-static", j6_is(r, "complete", ["writer-static"]))
+    r = j6(c2w(classes={"flip2_same": 12, "flip2_var": 4}, changed_words=20, osc=20, writer="ongoing"))
+    check("run --diag j1 osc above 0, prog 0, flip2 the majority: F34", j6_is(r, "complete", ["F34"]))
+    r = j6(c2w(classes={"flip2_same": 12, "flip2_var": 4}, changed_words=20, osc=18, prog=2, writer="ongoing"))
+    check("run --diag j1 the same with prog above 0: a live writer, not F34", j6_is(r, "complete", ["live-writer"]))
+    r = j6(c2w(classes={"other": 16}, changed_words=3, stable=3))
+    check("run --diag j1 changed words with stable re-reads: live-writer", j6_is(r, "complete", ["live-writer"]))
+    r = j6(c2w(classes={"small32": 16}, changed_words=4, prog=2, stable=2))
+    check("run --diag j1 prog with small32 dominant: live-writer and ring-record",
+          j6_is(r, "complete", ["live-writer", "ring-record"]))
+    r = j6(c2w(classes={"pat_same": 10, "pat_other": 6}, changed_words=2, healed=2))
+    check("run --diag j1 healed with pat_same dominant: restoring-writer", j6_is(r, "complete", ["restoring-writer"]))
+    heal = {"a": other16, "c": other16, "b": {"classes": {"other": 16}, "changed_words": 1100, "changed_snaps": 20,
+                                              "healed": 1100, "changed_pages": (0, 1), "healed_pages": (0, 1)}}
+    r = j6(heal)
+    check("run --diag j1 healed >= 512 x healed pages on one watch: restoring-writer (b changes and c does not: "
+          "fill-rate too)", j6_is(r, "complete", ["restoring-writer", "fill-rate"]))
+    heal["b"] = dict(heal["b"], healed=600)
+    r = j6(heal)
+    check("run --diag j1 a heal short of whole pages, other classes, mixed writers: fill-rate only",
+          j6_is(r, "complete", ["fill-rate"]))
+    r = j6(c2w(classes={"other": 16}, stride=(16, 0, 0, 0, 0, 0, 0, 0)))
+    check("run --diag j1 one dominant stride bin: ring-record", j6_is(r, "complete", ["ring-record", "writer-static"]))
+    r = j6(c2w(classes={"other": 16}))
+    check("run --diag j1 spread stride bins and other dominant: writer-static only",
+          j6_is(r, "complete", ["writer-static"]))
+    r = j6(c2w(classes={"other": 16}, writer="ongoing"))
+    check("run --diag j1 no change in the snapshots but writer=ongoing (memcanary-w's final read differed): "
+          "consistent, and neither writer-none nor writer-static", j6_is(r, "complete", ["no-row"]))
+    r = j6(c2w(classes={"pte": 10, "kva": 6}))
+    check("run --diag j1 pte dominant: qnx-shaped", j6_is(r, "complete", ["qnx-shaped", "writer-static"]))
+    r = j6({"a": {"classes": {"other": 16}, "sig": {"ipv4": 1}}, "b": other16, "c": other16})
+    check("run --diag j1 a positive signature: positive-signature",
+          j6_is(r, "complete", ["positive-signature", "writer-static"]))
+    fill = {"a": other16, "b": {"classes": {"other": 16}, "changed_words": 10},
+            "c": {"classes": {"other": 16}, "changed_words": 100}}
+    r = j6(fill)
+    check("run --diag j1 label c's change rate above factor 2 times label b's: fill-rate",
+          j6_is(r, "complete", ["fill-rate"]) and field(r, "fillrate").startswith("'differs "))
+    r = j6(fill, factor="10")
+    check("run --diag j1 a rate exactly the factor times the other is within: no-row",
+          j6_is(r, "complete", ["no-row"]) and field(r, "fillrate").startswith("'within "))
+    r = j6(dict(fill, c={"classes": {"other": 16}, "changed_words": 15}))
+    check("run --diag j1 rates within the factor: no-row", j6_is(r, "complete", ["no-row"]))
+    r = j6(hold=("fill=ok", "verify=bad first_off=0x28 words=2"))
+    check("run --diag j1 the hold's verify=bad: F49, still complete",
+          j6_is(r, "complete", ["F49", "writer-none"]) and field(r, "hold") == "bad")
+    r = j6({"d": {"classes": {"zero": 16}}})
+    check("run --diag j1 a c1 watch with bad above 0: F39", j6_is(r, "complete", ["F39", "writer-none"]))
+    j6l, j6bins = syn_j6_log(conf_bytes, cmdline)
+    r = j6(lines_=sub_nth(j6l, c3_ok, bad("c3"), 1))
+    check("run --diag j1 c3 bad at the end check: F39", j6_is(r, "complete", ["F39", "writer-none"]) and
+          field(r, "c3_end") == "bad" and field(r, "c3_start") == "ok")
+    fail_c = ((r"^S1 CANARY c2 watch=\S+ label=c ",),
+              ((rf"^S1 ALLOC hold mib={J1_HOLD_MIB} fill=ok$",
+                "S1 CANARY c2 watch=fail label=c reason=nomem errno=12"),))
+    r = j6(lines_=edit_lines(j6l, drop=fail_c[0], add_after=fail_c[1]))
+    check("run --diag j1 watch=fail: incomplete, F40", j6_is(r, "incomplete", ["F40"], ("watch_c", "export_j1c")) and
+          field(r, "watch_c") == "fail" and not has(r, "c2_sums="))
+    fd, _ = syn_j6_log(conf_bytes, cmdline, watches={"d": {"classes": {"zero": 16}}})
+    r = j6(lines_=edit_lines(fd, drop=fail_c[0], add_after=fail_c[1]))
+    check("run --diag j1 a c1 watch bad in an incomplete parse is still F39", j6_is(r, "incomplete", ["F39", "F40"]))
+    r = j6(hold=("map=fail errno=12", None))
+    check("run --diag j1 the hold's map=fail (F28): incomplete, F40", j6_is(r, "incomplete", ["F40"], ("hold",)) and
+          field(r, "hold") == "map-fail")
+    r = j6(hold=("fill=ok", "verify=timeout data=bad first_off=0x0 words=1"))
+    check("run --diag j1 a hold timeout with bad data: F49 and F40", j6_is(r, "incomplete", ["F49", "F40"], ("hold",))
+          and field(r, "hold") == "timeout-bad")
+    r = j6(hold_mib=1024)
+    check("run --diag j1 a --hold-mib that differs: incomplete", j6_is(r, "incomplete", ["F40"], ("hold",)) and
+          field(r, "hold") == "mib-differs" and field(r, "hold_mib_vs_pc") == "differs")
+    r = j6(hold_mib=J1_HOLD_MIB)
+    check("run --diag j1 a --hold-mib that matches", j6_is(r, "complete", ["writer-none"]) and
+          field(r, "hold_mib_vs_pc") == "match")
+    r = j6(lines_=syn_j6_log(conf_bytes, cmdline, hold_mib=2048)[0])
+    check("run --diag j1 hold lines at another size than J1_HOLD_MIB, no --hold-mib: incomplete",
+          j6_is(r, "incomplete", ["F40"], ("hold",)) and field(r, "hold") == "mib-differs" and
+          field(r, "hold_mib_vs_pc") == "not_given")
+    r = j6(lines_=syn_j6_log(conf_bytes, cmdline, mcw="")[0])
+    check("run --diag j1 without the memcanary_w_sha256 stamp in S1 CONFIG: incomplete",
+          j6_is(r, "incomplete", ["F40"], ("memcanary_w_sha256",)) and field(r, "memcanary_w_sha256") == "absent")
+    r = j6(drop_exports=("b",))
+    check("run --diag j1 a missing export: incomplete", j6_is(r, "incomplete", ["F40"], ("export_j1b",)) and
+          field(r, "export_j1b") == "absent")
+    r = j6(lines_=edit_lines(j6l, drop=(rf"^S1 ALLOC hold mib={J1_HOLD_MIB} fill=ok$",),
+                             add_after=((r"^S1 CANARY c1 watch=verdict label=d ",
+                                         f"S1 ALLOC hold mib={J1_HOLD_MIB} fill=ok"),)))
+    check("run --diag j1 watches c and d before the hold's fill line: watch_order bad",
+          j6_is(r, "incomplete", ["F40"], ("watch_order",)) and field(r, "watch_order") == "bad")
+    r = j6(lines_=edit_lines(j6l, add_after=((rf"^S1 ALLOC hold mib={J1_HOLD_MIB} verify=ok$",
+                                               "S1 ALLOC mib=1536 fill=ok verify=ok"),)))
+    check("run --diag j1 B2's allocation line in the log: incomplete",
+          j6_is(r, "incomplete", ["F40"], ("b2_alloc_line",)))
+    r = j6(lines_=[ln.replace(f"T234 S1 {J1_RUNG} ", "T234 S1 s1-h1 ") for ln in j6l])
+    check("run --diag j1 a procnto line naming another image: incomplete",
+          j6_is(r, "incomplete", ["F40"], ("rung_j1",)))
+    r = j6(lines_=edit_lines(j6l, drop=(r"s1wq: kexec issuing",)))
+    check("run --diag j1 without the kexec issuing marker: incomplete",
+          j6_is(r, "incomplete", ["F40"], ("wq_kexec_issuing",)))
+    r = j6(lines_=edit_lines(j6l, add_after=((r"^S1 CANARY c2 watch=verdict label=a ",
+                                               "S1 CANARY c2 refuse=in-sysram"),)))
+    check("run --diag j1 a verify-form line between the checks: incomplete",
+          j6_is(r, "incomplete", ["F40"], ("canary_between",)) and field(r, "canary_between") == "1")
+    r = j6(lines_=edit_lines(j6l, sub=((r"^(S1 CANARY c2 watch=bytes label=b .*)$", r"\1 extra=1"),)))
+    check("run --diag j1 a watch line with an extra field is malformed",
+          j6_is(r, "incomplete", ["F40"], ("watch_b", "export_j1b")) and field(r, "watch_b") == "malformed")
+    r = j6(lines_=edit_lines(j6l, sub=((r"^(S1 CANARY c2 watch=words label=a bad=)0 ", r"\g<1>5 "),)))
+    check("run --diag j1 words' classes that do not sum to bad: inconsistent, and the export mismatches",
+          j6_is(r, "incomplete", ["F40"], ("watch_a", "export_j1a")) and "words_sum" in field(r, "watch_a") and
+          field(r, "watch_a").startswith("'inconsistent ") and "console-mismatch" in field(r, "export_j1a"))
+    r = j6(lines_=edit_lines(j6l, add_after=((r"^S1 CANARY c2 watch=verdict label=a ",
+                                               watch_line.replace("=a ", "=e ")),)))
+    check("run --diag j1 a watch line outside the table's labels: incomplete",
+          j6_is(r, "incomplete", ["F40"], ("watch_stray",)))
+    r = j6(lines_=edit_lines(j6l, sub=((r"^(S1 CANARY c2 watch=time label=b .*) stop=count$", r"\1 stop=deadline"),)))
+    check("run --diag j1 stop=deadline with snaps equal to count: the console stays consistent, but the export's "
+          "stop (count) does not match it",
+          j6_is(r, "incomplete", ["F40"], ("export_j1b",)) and field(r, "watch_b") == "ok" and
+          "stop" in field(r, "export_j1b"))
+    r = j6(lines_=edit_lines(j6l, sub=((r"^(S1 CANARY c2 watch=time label=a .*) stop=deadline$", r"\1 stop=count"),)))
+    check("run --diag j1 stop=count with fewer snapshots than the count is inconsistent",
+          j6_is(r, "incomplete", ["F40"], ("watch_a",)) and "time_snaps" in field(r, "watch_a"))
+    r = j6(lines_=edit_lines(j6l, sub=((r"^(S1 CANARY c1 watch=verdict label=d .*) content=none$",
+                                         r"\1 content=unclassified"),)))
+    check("run --diag j1 content other than none on a watch with no bad word is inconsistent",
+          j6_is(r, "incomplete", ["F40"], ("watch_d",)) and "verdict_content" in field(r, "watch_d"))
+
+    # kpf-decode.py headers: c2's first 16 pages as slab (held) or free, for cpu-side.
+    K = _kpf()
+    kd = tempfile.mkdtemp(prefix="s1pc-j6-")
+    try:
+        def kpf_hdr(tag, flags, uptime):
+            snap = K._Snap()
+            snap.set("w2", 0, 16, flags)
+            fb, cb = snap.blobs()
+            stem = f"{tag}-{flags:x}"
+            for suffix, blob in (("flags", fb), ("count", cb)):
+                with open(os.path.join(kd, f"{stem}.{suffix}.bin"), "wb") as fh:
+                    fh.write(blob)
+            p = os.path.join(kd, f"{stem}.hdr")
+            with open(p, "w", encoding="ascii", newline="\n") as fh:
+                fh.write(K._header_text(tag, K.FIX_BOOT, uptime, f"{stem}.flags.bin", sha256(fb), f"{stem}.count.bin",
+                                        sha256(cb)))
+            return p
+
+        pre_held, pre_free = kpf_hdr("prequiesce", 1 << 7, "100.25"), kpf_hdr("prequiesce", 0, "100.5")
+        post_held = kpf_hdr("postquiesce", 1 << 7, "240.5")
+        cpu = c2w(classes={"ptr_ram": 16})
+        r = j6(cpu)
+        check("run --diag j1 ptr_ram dominant without --kpf: cpu-side-lean",
+              j6_is(r, "complete", ["cpu-side-lean", "writer-static"]) and
+              field(r, "coincide").startswith("'not-computed"))
+        r = j6(cpu, kpf=(pre_held,))
+        check("run --diag j1 with a prequiesce header holding those pages: cpu-side",
+              j6_is(r, "complete", ["cpu-side", "writer-static"]) and field(r, "kpf") == "ok" and
+              field(r, "coincide").startswith("'yes "))
+        r = j6(cpu, kpf=(pre_held, post_held))
+        check("run --diag j1 with a prequiesce and postquiesce pair: cpu-side",
+              j6_is(r, "complete", ["cpu-side", "writer-static"]))
+        r = j6(cpu, kpf=(pre_free,))
+        check("run --diag j1 with those pages free before the quiesce: no cpu-side row",
+              j6_is(r, "complete", ["writer-static"]) and field(r, "coincide").startswith("'no "))
+        r = j6(cpu, kpf=(post_held,))
+        check("run --diag j1 with a postquiesce header only: cpu-side-lean",
+              j6_is(r, "complete", ["cpu-side-lean", "writer-static"]))
+        r = j6(cpu, kpf=(os.path.join(kd, "absent.hdr"),))
+        check("run --diag j1 a kpf refusal is recorded and never makes the parse incomplete",
+              j6_is(r, "complete", ["cpu-side-lean", "writer-static"]) and
+              field(r, "kpf") == "'refused reason=header-missing'")
+        r = j6(cpu, kpf=(pre_held, pre_free))
+        check("run --diag j1 two prequiesce headers are kpf-decode's tag refusal",
+              j6_is(r, "complete", ["cpu-side-lean", "writer-static"]) and field(r, "kpf") == "'refused reason=tag'")
+        check("run --diag j1 no J6 parse prints a b2= field, verdict=pass, or pass on any line but conf_gate's",
+              len(j6res) == 48 and all(not has(x, "b2=") and not any("verdict=pass" in ln for ln in x["lines"]) and
+                                       all(ln.startswith("conf_gate=") for ln in x["lines"]
+                                           if re.search(r"=pass\b", ln)) for x in j6res))
+
+        # the export structure: accepted, then each malformation refused by name
+        _, good = syn_watch("b", classes={"other": 16}, changed_words=4, stable=2, healed=1)
+        fx, reason, _ = cw_decode(good, "b")
+        check("canwatch a synthetic export is accepted", reason is None and len(good) == CW_SIZE == 1632 and
+              fx["snaps"] == 180 and fx["tail"]["bad_final"] == 16 and _pop(fx["maps"]["changed_ever"]) == 1)
+
+        def patched(off, new):
+            return good[:off] + new + good[off + len(new):]
+
+        tail_off = CW_HEAD.size + len(CW_MAPS) * CW_MAP_BYTES
+        bad_exports = (
+            ("short", good[:90], "b"), ("magic", patched(0, b"S1J1XXXX"), "b"),
+            ("version", patched(8, struct.pack("<I", 2)), "b"),
+            ("page-count", patched(32, struct.pack("<I", 4095)), "b"),
+            ("size", good + b"\0", "b"), ("size", good[:-8], "b"), ("name", patched(12, b"c1\0\0"), "b"),
+            ("name", patched(12, b"c2\0x"), "b"), ("label", good, "c"), ("label", patched(16, b"bb\0\0\0\0\0\0"), "b"),
+            ("base", patched(24, struct.pack("<Q", CANARIES["c2"] + WPAGE)), "b"),
+            ("reserved", patched(63, b"\1"), "b"),
+            ("interval", patched(36, struct.pack("<I", 500)), "b"),
+            ("request", patched(44, struct.pack("<I", 179)), "b"), ("request", patched(48, struct.pack("<I", 191)), "b"),
+            ("request", patched(52, struct.pack("<I", 3)), "b"),
+            ("snaps", patched(40, struct.pack("<I", 181)), "b"),
+            ("counts", patched(40, struct.pack("<I", 179)), "b"),
+            ("counts", patched(tail_off + 16, struct.pack("<Q", 0)), "b"),
+            ("counts", patched(CW_HEAD.size, bytes(CW_MAP_BYTES)), "b"),
+            ("counts", patched(tail_off + 8, struct.pack("<Q", 5000)), "b"),
+            ("healed-not-changed", patched(CW_HEAD.size + 2 * CW_MAP_BYTES, b"\2"), "b"))
+        for want, blob, label in bad_exports:
+            got = cw_decode(blob, label)
+            check(f"canwatch refuses an export by name: {want}", got[0] is None and got[1] == want)
+        check("canwatch every structure reason is exercised",
+              {w for w, _, _ in bad_exports} == set(CW_REASONS) - {"console-absent", "console-mismatch"})
+
+        # the analyzer on its own: the log's records against the files
+        jrecs, jblocks, _, _ = split_log(("\n".join(j6l) + "\n").encode("latin-1"))
+        for blk in jblocks:
+            decode_block(blk)
+        JR = Recs(jrecs)
+        jlabs, _ = cw_watches(JR)
+        jlog_recs = cw_log_records(JR, jblocks)
+        cwr = cw_analyze(jlabs, j6bins, Fraction(2), (), jlog_recs)
+        check("canwatch analyzer on the synthetic J6 log: complete, every file matches its log record",
+              cwr["lines"][-1] == "result=complete" and
+              sum("bin_vs_log=match" in ln for ln in cwr["lines"] if ln.startswith("watch ")) == 4)
+        _, alt_b = syn_watch("b", changed_words=4, stable=4)
+        cwr = cw_analyze(jlabs, dict(j6bins, b=alt_b), Fraction(2), (), jlog_recs)
+        check("canwatch a file whose counts differ from the console: console-mismatch and bin_vs_log differs",
+              "export_j1b" in cwr["failed"] and "bin_vs_log_j1b" in cwr["failed"] and
+              cwr["export"]["b"].startswith("refused reason=console-mismatch fields=") and
+              "changed_words" in cwr["export"]["b"])
+        nod = cw_watches(Recs([(i, t) for i, t in jrecs if " label=d " not in t]))[0]
+        cwr = cw_analyze(nod, j6bins, Fraction(2))
+        check("canwatch an export with no console watch: console-absent",
+              cwr["export"]["d"] == "refused reason=console-absent" and "watch_d" in cwr["failed"])
+
+        # the command end to end, files in a temporary directory (no git-ignore query outside the repository)
+        cwlog = os.path.join(kd, "j6-com3.log")
+        cpul, cpubins = syn_j6_log(conf_bytes, cmdline, watches=cpu)
+        with open(cwlog, "wb") as fh:
+            fh.write(("\n".join(cpul) + "\n").encode("latin-1"))
+        for l, blob in cpubins.items():
+            with open(os.path.join(kd, export_filename(f"j1{l}")), "wb") as fh:
+                fh.write(blob)
+
+        def cwcmd(**kw):
+            ns = dict(log=cwlog, fill_factor="2", bin_dir=None, kpf=[pre_held], out_dir="none")
+            ns.update(kw)
+            b = io.StringIO()
+            with contextlib.redirect_stdout(b), contextlib.redirect_stderr(io.StringIO()):
+                rc_ = cmd_canwatch(argparse.Namespace(**ns))
+            return rc_, b.getvalue()
+
+        rc, cwtext = cwcmd()
+        check("canwatch cmd: exit 0, complete, bitmaps, kpf page classes, coincide yes, fill-rate within, limit",
+              rc == 0 and cwtext.endswith("S1CW result=complete\n") and f"S1CW limit: {CW_LIMIT}\n" in cwtext and
+              cwtext.count("S1CW bitmap ") == 12 and cwtext.count("S1CW kpf tag=prequiesce ") == 12 and
+              "S1CW kpf result=ok tags=prequiesce\n" in cwtext and "S1CW coincide result=yes " in cwtext and
+              "S1CW fillrate result=within " in cwtext and "S1CW fill_factor=2\n" in cwtext)
+        cwtexts = [cwtext]
+        wrote = write_canwatch(os.path.join(kd, "cwout"), cwtext, check=False)
+        with open(wrote, "rb") as fh:
+            check("canwatch writes canwatch.txt", os.path.basename(wrote) == "canwatch.txt" and
+                  fh.read() == cwtext.encode("utf-8"))
+        check("canwatch cmd a factor below 1 is a usage error", cwcmd(fill_factor="0.9")[0] == 2)
+        check("canwatch cmd a factor that is not a decimal is a usage error", cwcmd(fill_factor="2x")[0] == 2)
+        check("canwatch cmd three --kpf headers are a usage error", cwcmd(kpf=[pre_held, post_held, pre_free])[0] == 2)
+        rc, t_ = cwcmd(kpf=None)
+        cwtexts.append(t_)
+        check("canwatch cmd without --kpf: coincide not computed, still complete",
+              rc == 0 and "S1CW kpf result=not-given\n" in t_ and
+              "S1CW coincide result=not-computed reason=no-kpf" in t_ and t_.endswith("S1CW result=complete\n"))
+        _, alt_c = syn_watch("c", changed_words=4, stable=4)
+        with open(os.path.join(kd, export_filename("j1c")), "wb") as fh:
+            fh.write(alt_c)
+        os.remove(os.path.join(kd, export_filename("j1d")))
+        rc, t_ = cwcmd()
+        cwtexts.append(t_)
+        check("canwatch cmd a file that differs from LOG's record, and a missing file: incomplete",
+              rc == 0 and "bin_vs_log=differs" in t_ and "input_bin label=d " in t_ and
+              t_.rstrip("\n").split("\n")[-1].startswith("S1CW result=incomplete failed=") and
+              all(x in t_.rstrip("\n").split("\n")[-1] for x in ("bin_vs_log_j1c", "export_j1c", "export_j1d")))
+        value_hex = re.compile(r"(?<![0-9A-Fa-f])(?:0[xX])?[0-9A-Fa-f]{16}(?![0-9A-Fa-f])")
+        quad = re.compile(r"(?<![0-9.])[0-9]{1,3}(?:\.[0-9]{1,3}){3}(?![0-9.])")
+        mac = re.compile(r"(?<![0-9A-Fa-f])[0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5}(?![0-9A-Fa-f])")
+        check("canwatch the value-token screens catch their planted positives",
+              value_hex.search("x=0x0123456789abcdef") and quad.search("at 192.0.2.1 ") and
+              mac.search("02:00:5e:10:00:01"))
+        check("canwatch and J6 output hold no 16-hex-digit value token, dotted quad or MAC pattern",
+              not any(rx.search(t) for rx in (value_hex, quad, mac)
+                      for t in cwtexts + ["\n".join(x["lines"]) for x in j6res]))
+
+        # run cmd --diag j1: the report head and the usage errors
+        j6log, j6bb = os.path.join(kd, "j6-run.log"), os.path.join(kd, "j6-blackbox.log")
+        with open(j6log, "wb") as fh:
+            fh.write(("\n".join(j6l) + "\n").encode("latin-1"))
+        with open(j6bb, "wb") as fh:
+            fh.write(syn_blackbox(j6l))
+
+        def j6cmd(**kw):
+            ns = dict(log=j6log, profile="board", mode="host", blackbox=j6bb, out_dir="none", conf=None,
+                      ref_conf_sha256=None, reset_reason="MAINSWRST", kexec_tree_sha256=SYN_KEXEC, image=None,
+                      initrd=None, diag="j1", arm="control", fill_factor="2", hold_mib=None, kpf=None)
+            ns.update(kw)
+            b = io.StringIO()
+            with contextlib.redirect_stdout(b), contextlib.redirect_stderr(io.StringIO()):
+                rc_ = cmd_run(argparse.Namespace(**ns))
+            return rc_, b.getvalue()
+
+        rc, jt = j6cmd(kpf=[pre_held], hold_mib=J1_HOLD_MIB)
+        check("run cmd --diag j1 prints its inputs, arm, step J6c and the diagnostic verdict last, exit 0",
+              rc == 0 and "S1PC fill_factor=2\n" in jt and f"S1PC hold_mib={J1_HOLD_MIB}\n" in jt and
+              "S1PC input_kpf=" in jt and
+              "S1PC profile=board mode=host diag=j1 arm=control\n" in jt and "S1PC step=J6c\n" in jt and
+              "S1PC j_row=writer-none\n" in jt and jt.endswith("S1PC verdict=diagnostic complete\n") and
+              "S1PC b2=" not in jt)
+        for label, kw in (("without --arm", {"arm": None}), ("without --fill-factor", {"fill_factor": None}),
+                          ("with a factor below 1", {"fill_factor": "0.5"}),
+                          ("with three --kpf headers", {"kpf": [pre_held, post_held, pre_free]}),
+                          ("with --mode boot", {"mode": "boot"}),
+                          ("on a TCG dryrun with --arm", {"profile": "tcg", "mode": "dryrun"}),
+                          ("--arm with --diag j2", {"diag": "j2"}),
+                          ("--kpf without --diag",
+                           {"diag": None, "arm": None, "fill_factor": None, "kpf": [pre_held]})):
+            check(f"run cmd --diag j1 {label} is a usage error", j6cmd(**kw)[0] == 2)
+    finally:
+        shutil.rmtree(kd, ignore_errors=True)
+
+    # T-J1: the TCG j1 variant's dryrun with memcanary-w's self-test (§15.5 B8.5)
+    t1_plain = syn_log("tcg", "dryrun", dtb, conf_bytes, cmdline)
+    t1l = edit_lines(t1_plain, sub=((r"^(S1 CONFIG .*)$", rf"\1 memcanary_w_sha256={SYN_MCW}"),))
+    cw_pass = "MEMCANARY-W SELFTEST PASS 120 checks"
+    tjres = []
+
+    def tj(lines_):
+        res = run("tcg", "dryrun", lines_, diag="j1")
+        tjres.append(res)
+        return res
+
+    def with_line(*extra):
+        return edit_lines(t1l, add_after=tuple((r"^S1 GATE mem ok$", x) for x in extra))
+
+    r = tj(with_line(cw_pass))
+    check("run --diag j1 T-J1 synthetic: complete, step T-J1, cw_selftest ok, no item1_t1 pass",
+          r["verdict"] == "diagnostic complete" and r["step"] == "T-J1" and field(r, "cw_selftest") == "ok" and
+          r["lines"][-1] == "verdict=diagnostic complete" and not has(r, "item1_t1=") and "j_row" not in r)
+    r = tj(edit_lines(t1_plain, add_after=((r"^S1 GATE mem ok$", cw_pass),)))
+    check("run --diag j1 T-J1 without the memcanary_w_sha256 stamp: incomplete",
+          r["verdict"] == "diagnostic incomplete" and field(r, "memcanary_w_sha256") == "absent" and
+          r["lines"][-1] == "verdict=diagnostic incomplete failed=memcanary_w_sha256")
+    r = tj(t1l)
+    check("run --diag j1 T-J1 without the watcher's self-test line: incomplete",
+          r["verdict"] == "diagnostic incomplete" and field(r, "cw_selftest") == "absent" and
+          r["lines"][-1] == "verdict=diagnostic incomplete failed=cw_selftest")
+    r = tj(with_line("MEMCANARY SELFTEST PASS 50 checks"))
+    check("run --diag j1 T-J1 memcanary's own self-test line is not the watcher's",
+          field(r, "cw_selftest") == "absent" and r["verdict"] == "diagnostic incomplete")
+    r = tj(with_line("MEMCANARY-W SELFTEST FAIL 2 of 120 checks"))
+    check("run --diag j1 T-J1 a FAIL line: incomplete", field(r, "cw_selftest") == "failed")
+    r = tj(with_line("MEMCANARY-W SELFTEST PASS 0 checks"))
+    check("run --diag j1 T-J1 a PASS of 0 checks: incomplete", field(r, "cw_selftest") == "failed")
+    r = tj(with_line(cw_pass, "MEMCANARY-W SELFTEST FAIL 2 of 120 checks"))
+    check("run --diag j1 T-J1 PASS and FAIL together: incomplete", field(r, "cw_selftest") == "multiple")
+    r = tj(with_line(cw_pass, watch_line))
+    check("run --diag j1 T-J1 a watch line under TCG fails profile: incomplete",
+          r["verdict"] == "diagnostic incomplete" and "profile" in r["lines"][-1].split("failed=", 1)[-1].split(","))
+    r = tj(edit_lines(with_line(cw_pass), sub=((r"logger_errors=0", "logger_errors=2"),)))
+    check("run --diag j1 T-J1 a dryrun logger error fails L2: incomplete",
+          "L2" in r["lines"][-1].split("failed=", 1)[-1].split(","))
+    check("run --diag j1 no T-J1 parse prints verdict=pass or pass on any line but conf_gate's",
+          len(tjres) == 9 and all(not any("verdict=pass" in ln for ln in x["lines"]) and
+                                  all(ln.startswith("conf_gate=") for ln in x["lines"] if re.search(r"=pass\b", ln))
+                                  for x in tjres))
     r = run("board", "boot")
     check("run B3 synthetic passes", r["verdict"] == "pass" and r["step"] == "B3" and has(r, "item2=pass") and
           has(r, "tier_L7=ok") and has(r, "bb_consistent=yes"))
@@ -2537,7 +3964,19 @@ def main(argv=None):
     r.add_argument("--kexec-tree-sha256")
     r.add_argument("--image")
     r.add_argument("--initrd")
-    r.add_argument("--diag", choices=tuple(DIAG_STEPS), help="J diagnostic parse of B2's image (s1-design.md 15.5 A3)")
+    r.add_argument("--diag", choices=DIAG_CHOICES,
+                   help="J diagnostic parse: j2|j2b|j4 of B2's image (15.5 A3), j1 of s1-j1 or T-J1 (15.5 B7)")
+    r.add_argument("--arm", choices=J1_ARMS, help="--diag j1 on the board: jrun's arm (J6c or J6r)")
+    r.add_argument("--fill-factor", help="--diag j1 on the board: the pre-registered fill-rate factor (>= 1)")
+    r.add_argument("--hold-mib", type=int, help="--diag j1 on the board: the generator's @J1_HOLD_MIB@")
+    r.add_argument("--kpf", action="append", help="--diag j1 on the board: a kpf-decode.py header (at most two)")
+
+    w = sub.add_parser("canwatch")
+    w.add_argument("log")
+    w.add_argument("--fill-factor", required=True)
+    w.add_argument("--bin-dir")
+    w.add_argument("--kpf", action="append")
+    w.add_argument("--out-dir")
 
     k = sub.add_parser("kshcheck")
     k.add_argument("file", nargs="?")
@@ -2549,7 +3988,7 @@ def main(argv=None):
     if not a.cmd:
         ap.print_usage(sys.stderr)
         return 2
-    handlers = {"conf": cmd_conf, "fdt": cmd_fdt, "run": cmd_run, "kshcheck": cmd_kshcheck}
+    handlers = {"conf": cmd_conf, "fdt": cmd_fdt, "run": cmd_run, "canwatch": cmd_canwatch, "kshcheck": cmd_kshcheck}
     try:
         return handlers[a.cmd](a)
     except Refused as e:

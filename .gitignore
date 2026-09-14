@@ -103,6 +103,7 @@ orin-native/tools/trcctl
 orin-native/tools/m4count
 orin-native/tools/s1con
 orin-native/tools/memcanary
+orin-native/tools/memcanary-w
 
 # mkifs [+keeplinked] drops symbol files next to the buildfile; they are derived
 # from QNX binaries and must never be committed.

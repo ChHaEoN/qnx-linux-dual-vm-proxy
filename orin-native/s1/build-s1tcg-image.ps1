@@ -34,13 +34,17 @@
           with debug and verbose added (§3.7); never a pass run
     d2    -Mode boot: TCG diagnostic s1-d2 (I-c), the stock L4T initrd staged at
           /data/s1/initrd.cpio.gz and rdinit=/bin/sh; never a pass run
+    j1    -Mode dryrun: T-J1 (revision 3, §15.5 B6 and B8.5), the pinned configuration
+          with memcanary-w staged beside memcanary for its --selftest only; no watch
+          runs under TCG. Only this variant's tool list, files and params gain
+          memcanary-w, so no T1-T3 image changes; never a pass run
   The image directory is qhv/s1tcg/host-<variant>[-<mode>]-<tag>: the mode is
   named when the variant has more than one. -Tag is required and must be new.
 
   The host script is always the TCG profile make-s1-images.sh --tcg rendered from
   orin-native/startup/s1-host.ksh.in, used unchanged: by default
   orin-native/shim/out/s1/tcg/s1tcg-<variant>/s1-host.ksh, where <variant> is
-  lin-dryrun, lin-boot, hold, d1-dryrun, d1-boot, d2 or q2, or -HostScript FILE.
+  lin-dryrun, lin-boot, hold, d1-dryrun, d1-boot, d2, q2 or j1, or -HostScript FILE.
   The template's @BOARD@/@TCG@/@DIAG@/@Q2@ line prefixes are resolved only by the
   generator. Checks: exactly one MODE=<Mode>, PROFILE=tcg and RUNG=tcg-<Variant>
   line; the generator's s1tcg.params beside the script, when present, agrees on
@@ -60,8 +64,9 @@
        and the gate's command files under qhv/s1tcg/ (its configuration copy is
        removed); it also checks the host script (default or -HostScript) and the SDP files exist
     4. guest copy: qhv/guest -> qhv/s1tcg/guest.partial -> qhv/s1tcg/guest
-    5. tools: make bwait stamp s1con memcanary in the SDP environment (not
-       tcu-cat: under QEMU virt 0x0C168000 is not a TCU mailbox)
+    5. tools: make bwait stamp s1con memcanary (and memcanary-w for -Variant j1)
+       in the SDP environment (not tcu-cat: under QEMU virt 0x0C168000 is not a
+       TCU mailbox)
     6. stage host-<name>/local: post_start, data_files and system_files lines,
        s1-host.ksh (TCG profile), s1-g2.conf for q2, s1tcg.params (LF, no BOM);
        kshcheck --selftest, then kshcheck on the script
@@ -88,7 +93,7 @@
   powershell -ExecutionPolicy Bypass -File orin-native\s1\build-s1tcg-image.ps1 -Variant hold -Tag t3a -CheckOnly
 #>
 param(
-  [ValidateSet('lin','hold','q2','d1','d2')][string]$Variant = 'lin',
+  [ValidateSet('lin','hold','q2','d1','d2','j1')][string]$Variant = 'lin',
   [ValidateSet('','dryrun','boot','hold','q2')][string]$Mode = '',
   [Parameter(Mandatory = $true)][ValidatePattern('^[a-z0-9]{1,16}$')][string]$Tag,
   [string]$HostScript = '',
@@ -112,7 +117,7 @@ $MkqnximageBoundSec = 1800
 $PythonBoundSec     = 120
 
 # §4.2 variants. A variant with one mode defaults to it; one with two needs -Mode, because the mode is inside the image.
-$VariantModes = @{ 'lin' = @('boot', 'dryrun'); 'hold' = @('hold'); 'q2' = @('q2'); 'd1' = @('boot', 'dryrun'); 'd2' = @('boot') }
+$VariantModes = @{ 'lin' = @('boot', 'dryrun'); 'hold' = @('hold'); 'q2' = @('q2'); 'd1' = @('boot', 'dryrun'); 'd2' = @('boot'); 'j1' = @('dryrun') }
 if (-not $Mode) {
   if ($VariantModes[$Variant].Count -gt 1) {
     Write-Host "FAIL: -Variant $Variant needs -Mode $($VariantModes[$Variant] -join '|'): the mode is inside the image, so there is no default (T1 builds -Mode dryrun, T2 -Mode boot; s1-design.md 6.2-6.3)"
@@ -323,7 +328,7 @@ try {
   $initrdSrcRel = $initrdRel
   $initrdWant   = $InitrdPin
   if ($Variant -eq 'd2') { $initrdSrcRel = $stockRel; $initrdWant = $StockInitrdPin }
-  Log "profile rung=tcg-$Variant mode=$Mode smp=4 not-a-twin-leg windows='tcg -m 2G' startup=tcg-profile canaries=none gpu_range=none guest_set=$guestSet hold_s=$holdS hold_mib=$holdMib mem_gate_mib=$gateMib initrd_src=$initrdSrcRel diagnostic=$(if ($Variant -eq 'd1' -or $Variant -eq 'd2') { 'yes (never a pass run)' } else { 'no' })"
+  Log "profile rung=tcg-$Variant mode=$Mode smp=4 not-a-twin-leg windows='tcg -m 2G' startup=tcg-profile canaries=none gpu_range=none guest_set=$guestSet hold_s=$holdS hold_mib=$holdMib mem_gate_mib=$gateMib initrd_src=$initrdSrcRel diagnostic=$(if ($Variant -eq 'd1' -or $Variant -eq 'd2' -or $Variant -eq 'j1') { 'yes (never a pass run)' } else { 'no' })"
 
   # 2. Canonical checks.
   foreach ($d in @($hostDir, $stageDir, $guestCopy, $guestPart)) { Assert-TargetPath $d }
@@ -446,6 +451,8 @@ try {
 
   # 5. Tools.
   $toolNames = @('bwait', 'stamp', 's1con', 'memcanary')
+  # §15.5 B6: the watcher only in -Variant j1, so no other variant's tool list, files or params change.
+  if ($Variant -eq 'j1') { $toolNames += 'memcanary-w' }
   $r = Invoke-CmdBounded 'make-tools' @(
     '@echo off',
     "call `"$sdpEnv`" >nul 2>&1",
@@ -569,6 +576,7 @@ try {
                @('initrd_sha256', [string]$subs['@INITRD_SHA256@']), @('init_sha256', $initSha),
                @('s1con_sha256', $toolSha['s1con']), @('memcanary_sha256', $toolSha['memcanary']),
                @('stamp_sha256', $toolSha['stamp']), @('bwait_sha256', $toolSha['bwait']))
+    if ($Variant -eq 'j1') { $pairs += ,@('memcanary_w_sha256', $toolSha['memcanary-w']) }
     foreach ($kv in $pairs) {
       if ($gp[$kv[0]] -ne $kv[1]) { Fail "the generator's s1tcg.params has $($kv[0])=$($gp[$kv[0]]), this build computed $($kv[1])" }
     }
@@ -582,10 +590,18 @@ try {
   foreach ($l in $ksh.Split("`n")) {
     if ($l -match '^\s*#') { continue }
     if ($l -match 'memcanary["'']?\s+["'']?(asinfo|verify)\b') { Fail "host script (TCG profile) calls memcanary $($Matches[1]): '$($l.Trim())'" }
+    # §15.4.8, §15.5 B5: memcanary-w only in -Variant j1, and there only its --selftest; watch never runs under TCG.
+    if ($l -match 'memcanary-w') {
+      if ($Variant -ne 'j1') { Fail "host script (TCG profile, -Variant $Variant) names memcanary-w, which only -Variant j1 carries: '$($l.Trim())'" }
+      if ($l -match 'memcanary-w["'']?\s+["'']?(watch|asinfo|verify|alloc|hold)\b') { Fail "host script (TCG profile) calls memcanary-w $($Matches[1]): '$($l.Trim())'" }
+    }
   }
   foreach ($key in @('@IMAGE_SHA256@', '@INITRD_SHA256@', '@CONF_SHA256@', '@CMDLINE_SHA256@', '@INIT_SHA256@',
                      '@S1CON_SHA256@', '@MEMCANARY_SHA256@', '@STAMP_SHA256@', '@BWAIT_SHA256@', '@STARTUP_SHA256@')) {
     if (-not $ksh.Contains([string]$subs[$key])) { Fail "host script lacks the item-5 stamp value of $key ($($subs[$key])): its S1 CONFIG cannot match this build" }
+  }
+  if ($Variant -eq 'j1' -and -not $ksh.Contains([string]$toolSha['memcanary-w'])) {
+    Fail "host script lacks memcanary-w's sha256 ($($toolSha['memcanary-w'])): its S1 CONFIG cannot match this build"
   }
   Log "check host script ($kshSource): no marker left, no memcanary asinfo|verify, every item-5 stamp value present: ok"
   $kshPath = Join-Path $stageDir 's1-host.ksh'
@@ -601,7 +617,7 @@ try {
 
   $params = [ordered]@{
     image = "tcg-$Variant"; variant = $Variant; mode = $Mode; tag = $Tag; profile = 'tcg'; smp = '4'; p = '4'
-    diagnostic = $(if ($Variant -eq 'd1' -or $Variant -eq 'd2') { 'yes' } else { 'no' })
+    diagnostic = $(if ($Variant -eq 'd1' -or $Variant -eq 'd2' -or $Variant -eq 'j1') { 'yes' } else { 'no' })
     guest_set = $guestSet; hold_s = "$holdS"; hold_mib = "$holdMib"; mem_gate_mib = "$gateMib"; guard_s = 'none'
     image_src = $imageRel; image_sha256 = [string]$subs['@IMAGE_SHA256@']
     initrd_src = $initrdSrcRel; initrd_sha256 = [string]$subs['@INITRD_SHA256@']
@@ -611,6 +627,7 @@ try {
     # The generator's worst case for the script (a bound, never a result); launch-s1tcg.ps1 sizes its wall bound from it.
     ksh_worst_s = $(if ($gp.ContainsKey('ksh_worst_s') -and $gp['ksh_worst_s'] -match '^\d+$') { $gp['ksh_worst_s'] } else { '-' })
   }
+  if ($Variant -eq 'j1') { $params['memcanary_w_sha256'] = $toolSha['memcanary-w'] }
   $paramsText = "# s1tcg.params: S1-F TCG rehearsal parameters (s1-design.md 4.2, 6.2-6.4); emulated, never a board image's.`n"
   foreach ($key in $params.Keys) { $paramsText += "$key=$($params[$key])`n" }
   Write-Lf (Join-Path $stageDir 's1tcg.params') $paramsText

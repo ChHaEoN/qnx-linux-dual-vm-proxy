@@ -9,7 +9,10 @@
 ## Profiles and line prefixes. A line that begins @BOARD@ is kept only in the
 ## board profile and @TCG@ only in the TCG profile; @DIAG@ only in the board
 ## diagnostic s1-d1, which stages its configuration beside the pinned one; @Q2@
-## only in mode q2. A TCG diagnostic (d1, d2) stages its configuration, and d2 its
+## only in mode q2; @J1@ only in revision 3's watcher, the board image s1-j1 and the
+## TCG variant j1, and @NOTJ1@ in every script but those two (s1-design.md §15.4.8:
+## in s1-j1 the watcher and a large hold replace B2's allocation, and no other
+## generated script changes by a byte). A TCG diagnostic (d1, d2) stages its configuration, and d2 its
 ## stock initrd, under the pinned names in /data/s1/, as build-s1tcg-image.ps1
 ## does, so it needs no prefix. The generator strips the prefix from each line it
 ## keeps. A TCG script therefore carries no memcanary
@@ -37,6 +40,9 @@
 ##   @SEND_STREAM_T@ @MEM_GATE@ @CAP@
 ##   mode q2 only: @GUEST_IFS@ @GUEST_DISK@ @G2CONF@ @CLIENT@ @GUEST_MD5@
 ##   @DISK_MD5@ @G2CONF_MD5@ @BANNER_T@ @GRACE@ @GRACE_WAIT@ @IPC_K@
+##   s1-j1 only (§15.4.8): the watch bounds @J1_WA_K@ @J1_WB_K@ @J1_WC_K@ @J1_WD_K@,
+##   the hold @J1_HOLD_MIB@ @J1_HOLD_T@ @J1_FILL_T@ @J1_HOLDV_T@ @J1_HOLD_K@, and
+##   the bitmap send bounds @J1_SEND@ @J1_SEND_T@
 ## and fails if any @[A-Z0-9_]+@ survives.
 ##
 ## Rules (§2 rule 7, as m4-host.ksh.in): no pipe, no command substitution, no
@@ -183,6 +189,15 @@ fi
 @TCG@bwait -k @QC_K@ -o "$S/mc.self" -e "$S/mc.self.err" -- "$B/memcanary" --selftest > "$S/mc.self.b" 2>&1
 @TCG@show "$S/mc.self" "$S/mc.self.b"
 @TCG@grep -q ' SELFTEST PASS [0-9]' "$S/mc.self" || { say "NOTE memcanary_selftest not-passed"; headc 256 "$S/mc.self.err"; MCSELF=1; }
+## §15.5 B8.5 (T-J1): the watcher's own self-test, in the TCG j1 image only, beside
+## memcanary's. memcanary-w --selftest prints 'MEMCANARY-W SELFTEST PASS <m> checks' and
+## then memcanary's own line, whose count includes the watcher's checks, so a failed watcher
+## check turns both lines into FAIL forms and the pattern below misses. parse-s1.py judges
+## the watcher's own line (T-J1). watch never runs under TCG (§15.4.8).
+@TCG@@J1@MCWSELF=
+@TCG@@J1@bwait -k @QC_K@ -o "$S/mcw.self" -e "$S/mcw.self.err" -- "$B/memcanary-w" --selftest > "$S/mcw.self.b" 2>&1
+@TCG@@J1@show "$S/mcw.self" "$S/mcw.self.b"
+@TCG@@J1@grep -q ' SELFTEST PASS [0-9]' "$S/mcw.self" || { say "NOTE memcanary_w_selftest not-passed"; headc 256 "$S/mcw.self.err"; MCWSELF=1; }
 
 @BOARD@state asinfo
 @BOARD@bwait -k @ASINFO_K@ -o "$S/asinfo.out" -e "$S/asinfo.err" -- "$B/memcanary" asinfo > "$S/asinfo.b" 2>&1
@@ -197,12 +212,47 @@ fi
 
 # B2 (§6.7): the window-2 allocation, a minute's wait, and the canaries again.
 @BOARD@if [ "$MODE" = host ]; then
-@BOARD@	state alloc
-@BOARD@	bwait -k @ALLOC_K@ -o "$S/alloc.out" -e "$S/alloc.err" -- "$B/memcanary" alloc -s 1536 > "$S/alloc.b" 2>&1
-@BOARD@	show "$S/alloc.out"
-@BOARD@	[ -s "$S/alloc.out" ] || { show "$S/alloc.b"; headc 256 "$S/alloc.err"; }
-@BOARD@	state host_hold
-@BOARD@	bwait -s @HOSTHOLD_S@ -c "$S/host.hold"
+@BOARD@@NOTJ1@	state alloc
+@BOARD@@NOTJ1@	bwait -k @ALLOC_K@ -o "$S/alloc.out" -e "$S/alloc.err" -- "$B/memcanary" alloc -s 1536 > "$S/alloc.b" 2>&1
+@BOARD@@NOTJ1@	show "$S/alloc.out"
+@BOARD@@NOTJ1@	[ -s "$S/alloc.out" ] || { show "$S/alloc.b"; headc 256 "$S/alloc.err"; }
+@BOARD@@NOTJ1@	state host_hold
+@BOARD@@NOTJ1@	bwait -s @HOSTHOLD_S@ -c "$S/host.hold"
+## J6 (s1-design.md §15.4.8, §15.5 B4), s1-j1 only: the watcher and a large hold in place
+## of the allocation above and its unheld minute. Watches a and b run before the hold,
+## c and d while it holds its pages. The hold is memcanary's own hold subcommand, B4's,
+## started in the background and silent until its marker files; its size is the
+## generator's design constant J1_HOLD_MIB, never a FreeMem value (§2 rule 8).
+## memcanary-w prints nothing inside its loop: its lines go to a file and are shown
+## after it returns (§2 rule 7). -i, -c and -T are the design table's; the generator's
+## profile check refuses any other row, name, path or an address. The bitmaps it
+## writes to /dev/shmem/j1<label>.bin leave only by xport, after FAIL_STATE.
+@BOARD@@J1@	state j1_watch_a
+@BOARD@@J1@	bwait -k @J1_WA_K@ -o "$S/j1a.out" -e "$S/j1a.err" -- "$B/memcanary-w" watch -n c2 -l a -i 0 -c 100000 -T 20 -d /dev/shmem/j1a.bin > "$S/j1a.b" 2>&1
+@BOARD@@J1@	show "$S/j1a.out"
+@BOARD@@J1@	[ -s "$S/j1a.out" ] || { show "$S/j1a.b"; headc 256 "$S/j1a.err"; }
+@BOARD@@J1@	state j1_watch_b
+@BOARD@@J1@	bwait -k @J1_WB_K@ -o "$S/j1b.out" -e "$S/j1b.err" -- "$B/memcanary-w" watch -n c2 -l b -i 1000 -c 180 -T 190 -d /dev/shmem/j1b.bin > "$S/j1b.b" 2>&1
+@BOARD@@J1@	show "$S/j1b.out"
+@BOARD@@J1@	[ -s "$S/j1b.out" ] || { show "$S/j1b.b"; headc 256 "$S/j1b.err"; }
+@BOARD@@J1@	state j1_hold
+@BOARD@@J1@	bwait -k @J1_HOLD_K@ -o "$S/j1hold.bo" -e "$S/j1hold.be" -- "$B/memcanary" hold -s @J1_HOLD_MIB@ -f /dev/shmem/j1hold.go -T @J1_HOLD_T@ -o /dev/shmem/j1hold.out > "$S/j1hold.b" 2>&1 &
+@BOARD@@J1@	bwait -p /dev/shmem/j1hold.out.fill -t @J1_FILL_T@ > "$S/j1hold.w1" 2>&1
+@BOARD@@J1@	show /dev/shmem/j1hold.out
+@BOARD@@J1@	state j1_watch_c
+@BOARD@@J1@	bwait -k @J1_WC_K@ -o "$S/j1c.out" -e "$S/j1c.err" -- "$B/memcanary-w" watch -n c2 -l c -i 1000 -c 180 -T 190 -d /dev/shmem/j1c.bin > "$S/j1c.b" 2>&1
+@BOARD@@J1@	show "$S/j1c.out"
+@BOARD@@J1@	[ -s "$S/j1c.out" ] || { show "$S/j1c.b"; headc 256 "$S/j1c.err"; }
+@BOARD@@J1@	state j1_watch_d
+@BOARD@@J1@	bwait -k @J1_WD_K@ -o "$S/j1d.out" -e "$S/j1d.err" -- "$B/memcanary-w" watch -n c1 -l d -i 1000 -c 60 -T 70 -d /dev/shmem/j1d.bin > "$S/j1d.b" 2>&1
+@BOARD@@J1@	show "$S/j1d.out"
+@BOARD@@J1@	[ -s "$S/j1d.out" ] || { show "$S/j1d.b"; headc 256 "$S/j1d.err"; }
+@BOARD@@J1@	state j1_verify
+@BOARD@@J1@	: > /dev/shmem/j1hold.go
+@BOARD@@J1@	bwait -p /dev/shmem/j1hold.out.done -t @J1_HOLDV_T@ > "$S/j1hold.w2" 2>&1
+@BOARD@@J1@	[ -s /dev/shmem/j1hold.out ] && tail -n 1 /dev/shmem/j1hold.out
+@BOARD@@J1@	[ -s /dev/shmem/j1hold.out ] || { show "$S/j1hold.b"; headc 256 "$S/j1hold.be"; }
+@BOARD@@J1@	show "$S/j1hold.w1" "$S/j1hold.w2"
 @BOARD@	state canary_end
 @BOARD@	canaries end
 @BOARD@fi
@@ -456,11 +506,22 @@ fi
 
 [ -n "$LOGERR" ] && FAIL=${FAIL:-dryrun_logger_errors}
 @TCG@[ -n "$MCSELF" ] && FAIL=${FAIL:-memcanary_selftest}
+@TCG@@J1@[ -n "$MCWSELF" ] && FAIL=${FAIL:-memcanary_w_selftest}
 state summary
 show "$S/s1.stamps" "$S/s1con.stamps"
 @Q2@show "$S/q2.stamps"
 say "FAIL_STATE ${FAIL:-none}"
 
+## J6 (§15.4.8, §15.11.2): s1-j1's four page bitmaps, after FAIL_STATE (records first)
+## and outside the MODE != host guard below, because s1-j1 runs in host mode. On the
+## board xport sends the frames and bodies through tcu-cat, so no body enters the black
+## box, and parse-s1.py's export_filename names them s1-j1a.bin to s1-j1d.bin. Counts,
+## classes and page offsets only: no word value is in them (§15.1's Never items).
+@BOARD@@J1@state export
+@BOARD@@J1@xport j1a /dev/shmem/j1a.bin @J1_SEND@ @J1_SEND_T@
+@BOARD@@J1@xport j1b /dev/shmem/j1b.bin @J1_SEND@ @J1_SEND_T@
+@BOARD@@J1@xport j1c /dev/shmem/j1c.bin @J1_SEND@ @J1_SEND_T@
+@BOARD@@J1@xport j1d /dev/shmem/j1d.bin @J1_SEND@ @J1_SEND_T@
 if [ "$MODE" != host ]; then
 @BOARD@	state export
 @BOARD@	xport fdt /dev/shmem/s1-fdt.dtb @SEND_FDT@ @SEND_FDT_T@

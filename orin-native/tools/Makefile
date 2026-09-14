@@ -12,15 +12,20 @@
 # s1con and memcanary are S1-F's console and canary tools (s1-design.md §3.4,
 # §3.8): s1con is stamp's stream mode with bounded writes, so stamp.c is not
 # edited; memcanary has no physical write mode.
+# memcanary-w is J6's watcher (s1-design.md §15.4.8, §15.5 B2): the same
+# memcanary.c with -DMEMCANARY_WATCH, so memcanary itself keeps its pin.
 
 CC      := qcc -Vgcc_ntoaarch64le
 CFLAGS  := -Wall -Wextra -Werror -O2
-TOOLS   := tcu-cat stamp smpcheck bwait clkcmp trcctl m4count s1con memcanary
+TOOLS   := tcu-cat stamp smpcheck bwait clkcmp trcctl m4count s1con memcanary memcanary-w
 
 all: $(TOOLS)
 
 %: %.c
 	$(CC) $(CFLAGS) -o $@ $<
+
+memcanary-w: memcanary.c
+	$(CC) $(CFLAGS) -DMEMCANARY_WATCH -o $@ $<
 
 clean:
 	rm -f $(TOOLS)

@@ -80,6 +80,48 @@
  * Exit: 0 ok; 1 a refusal, a mismatch, a map failure, a timeout, an
  * undecodable section or a failed self-test; 2 on a malformed command line or
  * an unknown name.
+ *
+ * memcanary-w is J6's watcher (s1-design.md §15.4.8, §15.5 B1-B2), built from
+ * this file with -DMEMCANARY_WATCH. Every addition sits under that macro, so the
+ * plain build stays byte-identical to its pin (§15.5 B8.1). It adds one mode:
+ *
+ *   memcanary-w watch -n c1|c2|c3 -l LABEL -i MS -c COUNT -T SECS -d /dev/shmem/j1NAME
+ *
+ * LABEL is [a-z0-9]{1,8}; MS 0-60000 is the sleep before each snapshot; COUNT is
+ * 1-100000 snapshots; SECS 1-3600 is the deadline, counted from the end of BASE;
+ * NAME is [a-z0-9._-]{1,32} with no "..". A hex or any other address is refused
+ * like any unknown name. watch keeps verify's refusals and its PROT_READ
+ * mapping; its only writes are two heap copies of the range (BASE and the last
+ * read) and one small file. It reads every word once (BASE), then takes
+ * snapshots until COUNT or the deadline: a word that differs from its last read
+ * is read twice more at once and counted osc (A-B-A), stable (A-A-A) or prog
+ * (anything else: A-B-B, A-B-C, A-A-C), and healed when the last read is the
+ * pattern. Nothing is printed inside the loop (§2 rule 7). A final read (FINL)
+ * gives the bad set, which is classified by word class (first match wins), by
+ * in-page offset modulo 64, and by byte signatures scanned at every offset of
+ * each bad extent; signatures are positive-only. Then one file write, and seven
+ * lines, each under 255 bytes at maximum field widths:
+ *
+ *   S1 CANARY <n> watch=base label=<l> bad=<n> pages=<n> first_off=0x<hex> last_off=0x<hex>
+ *   S1 CANARY <n> watch=time label=<l> snaps=<n> changed_snaps=<n> changed_words=<n> healed=<n> osc=<n> prog=<n> stable=<n> stop=count|deadline
+ *   S1 CANARY <n> watch=words label=<l> bad=<n> zero=<n> ones=<n> flip2_same=<n> flip2_var=<n> flip8=<n> pat_same=<n> pat_other=<n>
+ *   S1 CANARY <n> watch=words2 label=<l> hi_pat=<n> lo_pat=<n> pte=<n> kva=<n> ptr_self=<n> ptr_ram=<n> u32page=<n> small32=<n> other=<n>
+ *   S1 CANARY <n> watch=stride label=<l> b0=<n> ... b7=<n>
+ *   S1 CANARY <n> watch=bytes label=<l> ascii_runs=<n> ascii_bytes=<n> ipv4=<n> beacon=<n> trb_evt=<n>
+ *   S1 CANARY <n> watch=verdict label=<l> writer=none|static|stopped|ongoing heal=no|yes reads=stable|osc|prog content=<list>|unclassified|none
+ *   S1 CANARY <n> watch=fail label=<l> reason=nomem|dump-open|dump-write errno=<n>
+ *
+ * The file holds offsets and counts only, never a word value or a byte: a 64 B
+ * header (magic S1J1PBMP), three page bitmaps (bad_final, changed_ever,
+ * healed_ever) and a 32 B tail of counts; cw_export below gives the layout. No
+ * value of the range leaves this program (D28 is not taken). Under the macro,
+ * --selftest also runs the watch checks and prints first
+ *
+ *   MEMCANARY-W SELFTEST PASS <n> checks  |  MEMCANARY-W SELFTEST FAIL <f> of <n> checks
+ *
+ * watch exits 0 when complete, whatever the words hold; 1 on a refusal, a map
+ * failure, no memory or a file failure; 2 on a malformed command line or an
+ * unknown name.
  */
 
 #include <errno.h>
@@ -610,6 +652,772 @@ cmd_hold(unsigned const mib, const char *const trigger, unsigned const secs, con
 	return (ok && hit && bad == 0) ? 0 : 1;
 }
 
+#ifdef MEMCANARY_WATCH
+/* ---------------------------------------------------------------- watch */
+
+/* DRAM's end, T234_RAM_BASE + 8 GiB; make-s1-images.sh's constant check reads this line
+ * (s1-design.md §15.5 B5). DRAM starts at S1_W1_BASE. */
+#define S1_DRAM_END         0x280000000ull
+
+#define CW_PAGE             0x1000ull
+#define CW_WORDS_PER_PAGE   (CW_PAGE / 8u)
+#define CW_PAGES            4096u               /* S1_CANARY_SIZE / CW_PAGE */
+#define CW_BMAP             ((CW_PAGES + 7u) / 8u)
+#define CW_MS_MAX           60000u
+#define CW_COUNT_MAX        100000u
+#define CW_SECS_MAX         3600u
+#define CW_LABEL_MAX        8u
+#define CW_NAME_MAX         32u
+#define CW_DUMP_PREFIX      "/dev/shmem/j1"
+#define CW_FILE_VERSION     1u
+#define CW_FILE_HEAD        64u
+#define CW_FILE_TAIL        32u
+#define CW_FILE_MAX         (CW_FILE_HEAD + 3u * CW_BMAP + CW_FILE_TAIL)
+#define CW_ASCII_MIN        16u
+#define CW_LIST_BUF         128
+#define CW_U(x)             ((unsigned long long)(x))
+
+/* Word classes in precedence order: the first rule that matches wins, so they sum to bad. */
+enum cw_class {
+	K_ZERO, K_ONES, K_FLIP2_SAME, K_FLIP2_VAR, K_FLIP8, K_PAT_SAME, K_PAT_OTHER, K_HI_PAT, K_LO_PAT,
+	K_PTE, K_KVA, K_PTR_SELF, K_PTR_RAM, K_U32PAGE, K_SMALL32, K_OTHER, K_NCLASS
+};
+
+static const char *const cw_class_name[K_NCLASS] = {
+	"zero", "ones", "flip2_same", "flip2_var", "flip8", "pat_same", "pat_other", "hi_pat", "lo_pat",
+	"pte", "kva", "ptr_self", "ptr_ram", "u32page", "small32", "other"
+};
+
+/* The inverse of an odd a modulo 2^64: each Newton step doubles the correct low bits, 3 to 96. */
+static uint64_t
+inv64(uint64_t const a)
+{
+	uint64_t x = a;
+
+	for (int k = 0; k < 5; k++) {
+		x *= 2u - a * x;
+	}
+	return x;
+}
+
+/* The inverse of y = z ^ (z >> s), 0 < s < 64: each step fixes s more high bits. */
+static uint64_t
+unshift(uint64_t const y, unsigned const s)
+{
+	uint64_t z = y;
+
+	for (unsigned k = s; k < 64u; k += s) {
+		z = y ^ (z >> s);
+	}
+	return z;
+}
+
+/* splitmix64's input from its output: unmix64(splitmix64(x)) == x. */
+static uint64_t
+unmix64(uint64_t const v)
+{
+	uint64_t z = unshift(v, 31u);
+
+	z = unshift(z * inv64(0x94D049BB133111EBull), 27u);
+	z = unshift(z * inv64(0xBF58476D1CE4E5B9ull), 30u);
+	return z - 0x9E3779B97F4A7C15ull;
+}
+
+/* The class of one bad word v at byte offset off of the canary at cbase, whose BASE read was b
+ * (§15.4.8). Each rule is our reading of a public specification, from memory: HYPOTHESIS, and
+ * cw_selftest encodes that reading.
+ *   flip2 and flip8: 1-2 and 3-8 bits differ from the pattern; flip2_same when they are the bits
+ *     BASE's read differed in;
+ *   pat_same and pat_other: splitmix64's inverse lands on another 8-byte-aligned offset of this
+ *     canary, or of another table canary;
+ *   hi_pat and lo_pat: only the low, or only the high, 32 bits differ;
+ *   pte: an ARMv8-A VMSA descriptor with bits[1:0] = 0b11 (a table descriptor at levels 0-2, a page
+ *     descriptor at level 3), bits[51:48] clear (RES0 for a 48-bit output address with a 4 KiB
+ *     granule), and an output address bits[47:12] in DRAM;
+ *   kva: the top 16 bits all ones; ptr_self: inside this canary; ptr_ram: inside DRAM;
+ *   u32page: below 4 GiB and page-aligned; small32: below 4 GiB otherwise (ring indices, counters
+ *     and queue headers; HYPOTHESIS on such layouts). */
+static enum cw_class
+cw_classify(uint64_t const v, uint64_t const off, uint64_t const b, uint64_t const cbase)
+{
+	uint64_t const p     = splitmix64(cbase + off);
+	uint64_t const d     = v ^ p;
+	int const      flips = __builtin_popcountll(d);
+	uint64_t const oa    = v & 0x0000FFFFFFFFF000ull;
+	uint64_t const x     = unmix64(v);
+
+	if (v == 0) {
+		return K_ZERO;
+	}
+	if (v == ~0ull) {
+		return K_ONES;
+	}
+	if (flips <= 2) {
+		return (d == (b ^ p)) ? K_FLIP2_SAME : K_FLIP2_VAR;
+	}
+	if (flips <= 8) {
+		return K_FLIP8;
+	}
+	if (x - cbase < S1_CANARY_SIZE && (x - cbase) % 8u == 0) {
+		return K_PAT_SAME;
+	}
+	for (size_t k = 0; k < NCANARY; k++) {
+		if (table[k].base != cbase && x - table[k].base < S1_CANARY_SIZE && (x - table[k].base) % 8u == 0) {
+			return K_PAT_OTHER;
+		}
+	}
+	if ((v >> 32) == (p >> 32)) {
+		return K_HI_PAT;
+	}
+	if ((uint32_t)v == (uint32_t)p) {
+		return K_LO_PAT;
+	}
+	if ((v & 3u) == 3u && (v & 0x000F000000000000ull) == 0 && oa >= S1_W1_BASE && oa < S1_DRAM_END) {
+		return K_PTE;
+	}
+	if ((v >> 48) == 0xFFFFu) {
+		return K_KVA;
+	}
+	if (v - cbase < S1_CANARY_SIZE) {
+		return K_PTR_SELF;
+	}
+	if (v >= S1_W1_BASE && v < S1_DRAM_END) {
+		return K_PTR_RAM;
+	}
+	if (v < 0x100000000ull) {
+		return ((v & (CW_PAGE - 1u)) == 0) ? K_U32PAGE : K_SMALL32;
+	}
+	return K_OTHER;
+}
+
+/* watch's arguments. The name is only a string here; lookup() refuses anything but c1-c3. */
+struct cw_args {
+	const char *name;
+	const char *label;
+	const char *dump;
+	unsigned    ms;
+	unsigned    count;
+	unsigned    secs;
+};
+
+static int cw_parse(int argc, char **argv, struct cw_args *a);
+
+/* [a-z0-9]{1,8} */
+static int
+cw_label_ok(const char *const s)
+{
+	size_t const n = strlen(s);
+
+	if (n < 1u || n > CW_LABEL_MAX) {
+		return 0;
+	}
+	for (size_t i = 0; i < n; i++) {
+		if (!((s[i] >= 'a' && s[i] <= 'z') || (s[i] >= '0' && s[i] <= '9'))) {
+			return 0;
+		}
+	}
+	return 1;
+}
+
+/* /dev/shmem/j1 then [a-z0-9._-]{1,32}, with no ".." anywhere. */
+static int
+cw_dump_ok(const char *const s)
+{
+	size_t const pre = sizeof(CW_DUMP_PREFIX) - 1u;
+	size_t const n   = strlen(s);
+
+	if (n <= pre || n - pre > CW_NAME_MAX || strncmp(s, CW_DUMP_PREFIX, pre) != 0 || strstr(s, "..") != NULL) {
+		return 0;
+	}
+	for (size_t i = pre; i < n; i++) {
+		char const c = s[i];
+
+		if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-')) {
+			return 0;
+		}
+	}
+	return 1;
+}
+
+/* One word source: the device mapping, or a self-test's scripted buffer. */
+struct cw_src {
+	uint64_t (*read)(void *ctx, uint64_t i);
+	void     *ctx;
+};
+
+/* The mapping is read through volatile, so the compiler can never merge a word's three reads. */
+static uint64_t
+cw_read_dev(void *const ctx, uint64_t const i)
+{
+	const volatile uint64_t *const w = ctx;
+
+	return w[i];
+}
+
+enum cw_stop { STOP_NONE, STOP_COUNT, STOP_DEADLINE };
+
+struct cw_state {
+	uint64_t     cbase;
+	uint64_t     nwords;             /* a whole number of pages, at most S1_CANARY_SIZE / 8 */
+	uint64_t    *base;               /* BASE's read */
+	uint64_t    *prev;               /* each word's last read; FINL's after cw_final */
+	uint64_t     base_bad;
+	uint64_t     base_pages;
+	uint64_t     first_off;
+	uint64_t     last_off;
+	uint64_t     snaps;
+	uint64_t     changed_snaps;
+	uint64_t     changed_words;
+	uint64_t     healed;
+	uint64_t     osc;
+	uint64_t     prog;
+	uint64_t     stable;
+	uint64_t     last_change;        /* the last snapshot with a change, from 1; 0 for none */
+	enum cw_stop stop;
+	uint64_t     final_diff;         /* words whose FINL read differs from their last read */
+	uint64_t     final_bad;
+	uint64_t     cls[K_NCLASS];
+	uint64_t     stride[8];
+	uint64_t     ascii_runs;
+	uint64_t     ascii_bytes;
+	uint64_t     ipv4;
+	uint64_t     beacon;
+	uint64_t     trb_evt;
+	uint8_t      bad_final[CW_BMAP];
+	uint8_t      changed_ever[CW_BMAP];
+	uint8_t      healed_ever[CW_BMAP];
+};
+
+static void
+bit_set(uint8_t *const map, uint64_t const page)
+{
+	map[page / 8u] |= (uint8_t)(1u << (page % 8u));
+}
+
+/* BASE: one read of every word, kept as base and prev, and its bad words against the pattern. */
+static void
+cw_base(struct cw_state *const st, const struct cw_src *const src)
+{
+	uint64_t last_page = UINT64_MAX;
+
+	for (uint64_t i = 0; i < st->nwords; i++) {
+		uint64_t const a = src->read(src->ctx, i);
+
+		st->base[i] = a;
+		st->prev[i] = a;
+		if (a != splitmix64(st->cbase + i * 8u)) {
+			if (st->base_bad == 0) {
+				st->first_off = i * 8u;
+			}
+			st->last_off = i * 8u;
+			st->base_bad++;
+			if (i / CW_WORDS_PER_PAGE != last_page) {
+				last_page = i / CW_WORDS_PER_PAGE;
+				st->base_pages++;
+			}
+		}
+	}
+}
+
+/* One snapshot. A word whose read A differs from its last read is read twice more at once, B and C:
+ * stable A-A-A, osc A-B-A (a marginal read), prog otherwise (A-B-B, A-B-C, A-A-C: a writer in
+ * progress); healed when C is the pattern. C becomes the last read. */
+static void
+cw_snap(struct cw_state *const st, const struct cw_src *const src)
+{
+	uint64_t changed = 0;
+
+	st->snaps++;
+	for (uint64_t i = 0; i < st->nwords; i++) {
+		uint64_t const a = src->read(src->ctx, i);
+		uint64_t       b;
+		uint64_t       c;
+
+		if (a == st->prev[i]) {
+			continue;
+		}
+		b = src->read(src->ctx, i);
+		c = src->read(src->ctx, i);
+		if (a == b && b == c) {
+			st->stable++;
+		} else if (b != a && c == a) {
+			st->osc++;
+		} else {
+			st->prog++;
+		}
+		bit_set(st->changed_ever, i / CW_WORDS_PER_PAGE);
+		if (c == splitmix64(st->cbase + i * 8u)) {
+			st->healed++;
+			bit_set(st->healed_ever, i / CW_WORDS_PER_PAGE);
+		}
+		st->prev[i] = c;
+		changed++;
+	}
+	if (changed != 0) {
+		st->changed_snaps++;
+		st->changed_words += changed;
+		st->last_change = st->snaps;
+	}
+}
+
+/* FINL: one more read of every word into prev; nothing else is counted from it but final_diff. */
+static void
+cw_final(struct cw_state *const st, const struct cw_src *const src)
+{
+	for (uint64_t i = 0; i < st->nwords; i++) {
+		uint64_t const v = src->read(src->ctx, i);
+
+		if (v != st->prev[i]) {
+			st->final_diff++;
+			st->prev[i] = v;
+		}
+	}
+}
+
+static uint32_t
+le32(const uint8_t *const b)
+{
+	return (uint32_t)b[0] | ((uint32_t)b[1] << 8) | ((uint32_t)b[2] << 16) | ((uint32_t)b[3] << 24);
+}
+
+static uint64_t
+le64(const uint8_t *const b)
+{
+	return (uint64_t)le32(b) | ((uint64_t)le32(b + 4) << 32);
+}
+
+/* An IPv4 header at b: version 4, IHL 5-15 inside len, a total length of at least the header, the
+ * reserved flag clear, TTL non-zero, protocol ICMP, IGMP, TCP or UDP, and a one's-complement sum
+ * of 0xffff over the header (RFC 791, RFC 1071; our reading, HYPOTHESIS). */
+static int
+cw_is_ipv4(const uint8_t *const b, uint64_t const len)
+{
+	unsigned const ihl = (unsigned)(b[0] & 0x0Fu) * 4u;
+	uint32_t       sum = 0;
+
+	if (len < 20u || (b[0] >> 4) != 4u || ihl < 20u || ihl > len) {
+		return 0;
+	}
+	if ((((unsigned)b[2] << 8) | b[3]) < ihl || (b[6] & 0x80u) != 0 || b[8] == 0) {
+		return 0;
+	}
+	if (b[9] != 1u && b[9] != 2u && b[9] != 6u && b[9] != 17u) {
+		return 0;
+	}
+	for (unsigned k = 0; k < ihl; k += 2u) {
+		sum += ((uint32_t)b[k] << 8) | b[k + 1u];
+	}
+	while ((sum >> 16) != 0) {
+		sum = (sum & 0xFFFFu) + (sum >> 16);
+	}
+	return sum == 0xFFFFu;
+}
+
+/* An 802.11 beacon's MAC header at b: frame control 0x80 0x00, the broadcast receiver address after
+ * the 2-byte duration, and a transmitter address that is unicast, not zero, and equal to the BSSID
+ * (IEEE 802.11 management frame layout; our reading, HYPOTHESIS). No address leaves this function. */
+static int
+cw_is_beacon(const uint8_t *const b, uint64_t const len)
+{
+	static const uint8_t bc[6]   = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+	static const uint8_t zero[6] = { 0 };
+
+	if (len < 24u || b[0] != 0x80u || b[1] != 0x00u) {
+		return 0;
+	}
+	return memcmp(b + 4, bc, 6u) == 0 && (b[10] & 1u) == 0 && memcmp(b + 10, zero, 6u) != 0
+	       && memcmp(b + 10, b + 16, 6u) == 0;
+}
+
+/* An xHCI event TRB at b, 16 bytes little-endian (parameter, status, control): completion code 1-36,
+ * control bits 9:3 clear, and TRB type 32 (transfer: bits 1 and 23:21 clear, endpoint and slot
+ * non-zero), 33 (command completion: bits 9:1 clear, a non-zero command TRB pointer with its low
+ * 4 bits clear) or 34 (port status change: only the port id set in the parameter, status bits 23:0
+ * and control bits 31:16 and 9:1 clear) (xHCI 1.2 §6.4.2; our reading, HYPOTHESIS). */
+static int
+cw_is_trb_evt(const uint8_t *const b, uint64_t const len)
+{
+	uint64_t param;
+	uint32_t status;
+	uint32_t ctl;
+	unsigned cc;
+
+	if (len < 16u) {
+		return 0;
+	}
+	param  = le64(b);
+	status = le32(b + 8);
+	ctl    = le32(b + 12);
+	cc     = status >> 24;
+	if (cc < 1u || cc > 36u || (ctl & 0x3F8u) != 0) {
+		return 0;
+	}
+	switch ((ctl >> 10) & 0x3Fu) {
+	case 32u:
+		return (ctl & 0x00E00002u) == 0 && ((ctl >> 16) & 0x1Fu) != 0 && (ctl >> 24) != 0;
+	case 33u:
+		return (ctl & 0x3FEu) == 0 && param != 0 && (param & 0xFu) == 0;
+	case 34u:
+		return (param & 0xFFFFFFFF00FFFFFFull) == 0 && (param >> 24) != 0 && (status & 0x00FFFFFFu) == 0
+		       && (ctl & 0xFFFF03FEu) == 0;
+	default:
+		return 0;
+	}
+}
+
+static void
+cw_ascii_end(struct cw_state *const st, uint64_t const run)
+{
+	if (run >= CW_ASCII_MIN) {
+		st->ascii_runs++;
+		st->ascii_bytes += run;
+	}
+}
+
+/* The byte signatures of one bad extent, at every byte offset; each stays inside the extent. */
+static void
+cw_scan_extent(struct cw_state *const st, const uint8_t *const b, uint64_t const len)
+{
+	uint64_t run = 0;
+
+	for (uint64_t j = 0; j < len; j++) {
+		if (b[j] >= 0x20u && b[j] <= 0x7Eu) {
+			run++;
+		} else {
+			cw_ascii_end(st, run);
+			run = 0;
+		}
+		st->ipv4    += (uint64_t)cw_is_ipv4(b + j, len - j);
+		st->beacon  += (uint64_t)cw_is_beacon(b + j, len - j);
+		st->trb_evt += (uint64_t)cw_is_trb_evt(b + j, len - j);
+	}
+	cw_ascii_end(st, run);
+}
+
+/* FINL's bad set: the page bitmap, the classes, the stride and the signatures. It needs no mapping.
+ * The stride bin is the in-page offset modulo 64 over 8; a page is 4096 bytes, so that is i mod 8. */
+static void
+cw_summarise(struct cw_state *const st)
+{
+	uint64_t run = 0;
+
+	for (uint64_t i = 0; i <= st->nwords; i++) {
+		if (i < st->nwords && st->prev[i] != splitmix64(st->cbase + i * 8u)) {
+			st->final_bad++;
+			bit_set(st->bad_final, i / CW_WORDS_PER_PAGE);
+			st->cls[cw_classify(st->prev[i], i * 8u, st->base[i], st->cbase)]++;
+			st->stride[i % 8u]++;
+			run++;
+		} else if (run != 0) {
+			cw_scan_extent(st, (const uint8_t *)st->prev + (i - run) * 8u, run * 8u);
+			run = 0;
+		}
+	}
+}
+
+/* The verdict line's writer field. none: no bad word at BASE and no change at all; static: bad at
+ * BASE and no change; ongoing: FINL differed from the last snapshot, or the last change fell in
+ * the last quarter of the snapshots; stopped: changes, but none there. */
+static const char *
+cw_writer(const struct cw_state *const st)
+{
+	if (st->changed_words == 0 && st->final_diff == 0) {
+		return (st->base_bad == 0) ? "none" : "static";
+	}
+	if (st->final_diff != 0 || st->last_change * 4u > st->snaps * 3u) {
+		return "ongoing";
+	}
+	return "stopped";
+}
+
+static const char *
+cw_reads(const struct cw_state *const st)
+{
+	return (st->prog != 0) ? "prog" : (st->osc != 0) ? "osc" : "stable";
+}
+
+/* The content field: every class but other that holds at least a quarter of FINL's bad words, most
+ * first, ties in class order; "unclassified" when none does, "none" when there is no bad word. */
+static void
+cw_content(const struct cw_state *const st, char *const list, size_t const cap)
+{
+	int    used[K_NCLASS] = { 0 };
+	size_t off            = 0;
+
+	if (st->final_bad == 0) {
+		(void)snprintf(list, cap, "none");
+		return;
+	}
+	list[0] = '\0';
+	for (;;) {
+		int best = -1;
+		int n;
+
+		for (int k = 0; k < K_OTHER; k++) {
+			if (!used[k] && st->cls[k] != 0 && st->cls[k] * 4u >= st->final_bad
+			    && (best < 0 || st->cls[k] > st->cls[best])) {
+				best = k;
+			}
+		}
+		if (best < 0) {
+			break;
+		}
+		used[best] = 1;
+		n = snprintf(list + off, cap - off, "%s%s", (off != 0) ? "," : "", cw_class_name[best]);
+		if (n < 0 || (size_t)n >= cap - off) {
+			break;
+		}
+		off += (size_t)n;
+	}
+	if (off == 0) {
+		(void)snprintf(list, cap, "unclassified");
+	}
+}
+
+enum cw_line { W_BASE, W_TIME, W_WORDS, W_WORDS2, W_STRIDE, W_BYTES, W_VERDICT, W_NLINE };
+
+static int
+cw_format(char *const line, size_t const cap, enum cw_line const which, const char *const name,
+          const char *const label, const struct cw_state *const st)
+{
+	char list[CW_LIST_BUF];
+	int  n = -1;
+
+	switch (which) {
+	case W_BASE:
+		n = snprintf(line, cap, "S1 CANARY %s watch=base label=%s bad=%llu pages=%llu first_off=0x%llx last_off=0x%llx",
+		             name, label, CW_U(st->base_bad), CW_U(st->base_pages), CW_U(st->first_off), CW_U(st->last_off));
+		break;
+	case W_TIME:
+		n = snprintf(line, cap, "S1 CANARY %s watch=time label=%s snaps=%llu changed_snaps=%llu changed_words=%llu"
+		             " healed=%llu osc=%llu prog=%llu stable=%llu stop=%s", name, label, CW_U(st->snaps),
+		             CW_U(st->changed_snaps), CW_U(st->changed_words), CW_U(st->healed), CW_U(st->osc),
+		             CW_U(st->prog), CW_U(st->stable), (st->stop == STOP_COUNT) ? "count" : "deadline");
+		break;
+	case W_WORDS:
+		n = snprintf(line, cap, "S1 CANARY %s watch=words label=%s bad=%llu zero=%llu ones=%llu flip2_same=%llu"
+		             " flip2_var=%llu flip8=%llu pat_same=%llu pat_other=%llu", name, label, CW_U(st->final_bad),
+		             CW_U(st->cls[K_ZERO]), CW_U(st->cls[K_ONES]), CW_U(st->cls[K_FLIP2_SAME]),
+		             CW_U(st->cls[K_FLIP2_VAR]), CW_U(st->cls[K_FLIP8]), CW_U(st->cls[K_PAT_SAME]),
+		             CW_U(st->cls[K_PAT_OTHER]));
+		break;
+	case W_WORDS2:
+		n = snprintf(line, cap, "S1 CANARY %s watch=words2 label=%s hi_pat=%llu lo_pat=%llu pte=%llu kva=%llu"
+		             " ptr_self=%llu ptr_ram=%llu u32page=%llu small32=%llu other=%llu", name, label,
+		             CW_U(st->cls[K_HI_PAT]), CW_U(st->cls[K_LO_PAT]), CW_U(st->cls[K_PTE]), CW_U(st->cls[K_KVA]),
+		             CW_U(st->cls[K_PTR_SELF]), CW_U(st->cls[K_PTR_RAM]), CW_U(st->cls[K_U32PAGE]),
+		             CW_U(st->cls[K_SMALL32]), CW_U(st->cls[K_OTHER]));
+		break;
+	case W_STRIDE:
+		n = snprintf(line, cap, "S1 CANARY %s watch=stride label=%s b0=%llu b1=%llu b2=%llu b3=%llu b4=%llu b5=%llu"
+		             " b6=%llu b7=%llu", name, label, CW_U(st->stride[0]), CW_U(st->stride[1]), CW_U(st->stride[2]),
+		             CW_U(st->stride[3]), CW_U(st->stride[4]), CW_U(st->stride[5]), CW_U(st->stride[6]),
+		             CW_U(st->stride[7]));
+		break;
+	case W_BYTES:
+		n = snprintf(line, cap, "S1 CANARY %s watch=bytes label=%s ascii_runs=%llu ascii_bytes=%llu ipv4=%llu"
+		             " beacon=%llu trb_evt=%llu", name, label, CW_U(st->ascii_runs), CW_U(st->ascii_bytes),
+		             CW_U(st->ipv4), CW_U(st->beacon), CW_U(st->trb_evt));
+		break;
+	case W_VERDICT:
+		cw_content(st, list, sizeof(list));
+		n = snprintf(line, cap, "S1 CANARY %s watch=verdict label=%s writer=%s heal=%s reads=%s content=%s", name,
+		             label, cw_writer(st), (st->healed != 0) ? "yes" : "no", cw_reads(st), list);
+		break;
+	default:
+		break;
+	}
+	return n > 0 && (size_t)n < cap;
+}
+
+static int
+cw_format_fail(char *const line, size_t const cap, const char *const name, const char *const label,
+               const char *const reason, int const err)
+{
+	int const n = snprintf(line, cap, "S1 CANARY %s watch=fail label=%s reason=%s errno=%d", name, label, reason, err);
+
+	return n > 0 && (size_t)n < cap;
+}
+
+static void
+put_le(uint8_t *const p, uint64_t v, unsigned const n)
+{
+	for (unsigned k = 0; k < n; k++) {
+		p[k] = (uint8_t)(v & 0xFFu);
+		v >>= 8;
+	}
+}
+
+/* The export file, content-free and little-endian (§15.4.8); its length, or 0 if it does not fit:
+ *    0  8  magic "S1J1PBMP"               36  4  interval in ms (-i)
+ *    8  4  version, 1                     40  4  snapshots taken
+ *   12  4  name, NUL-padded               44  4  snapshots asked (-c)
+ *   16  8  label, NUL-padded              48  4  deadline in s (-T)
+ *   24  8  the canary's base (§3.3)       52  4  stop: 1 count, 2 deadline
+ *   32  4  pages P                        56  8  zero
+ * then three bitmaps of ceil(P/8) bytes each, page p in bit (p % 8) of byte p / 8: bad_final,
+ * changed_ever, healed_ever; then a 32 B tail of u64 counts: bad at BASE, bad at FINL,
+ * changed_words, healed. A 16 MiB canary has P = 4096, so the file is 1,632 B. */
+static size_t
+cw_export(const struct cw_state *const st, const char *const name, const char *const label, unsigned const ms,
+          unsigned const count, unsigned const secs, uint8_t *const out, size_t const cap)
+{
+	uint64_t const pages = st->nwords / CW_WORDS_PER_PAGE;
+	size_t const   bm    = (size_t)((pages + 7u) / 8u);
+	size_t const   len   = CW_FILE_HEAD + 3u * bm + CW_FILE_TAIL;
+	uint8_t       *p;
+
+	if (pages > CW_PAGES || len > cap || strlen(name) > 4u || strlen(label) > CW_LABEL_MAX) {
+		return 0;
+	}
+	memset(out, 0, len);
+	memcpy(out, "S1J1PBMP", 8u);
+	put_le(out + 8, CW_FILE_VERSION, 4u);
+	memcpy(out + 12, name, strlen(name));
+	memcpy(out + 16, label, strlen(label));
+	put_le(out + 24, st->cbase, 8u);
+	put_le(out + 32, pages, 4u);
+	put_le(out + 36, ms, 4u);
+	put_le(out + 40, st->snaps, 4u);
+	put_le(out + 44, count, 4u);
+	put_le(out + 48, secs, 4u);
+	put_le(out + 52, (uint64_t)st->stop, 4u);
+	p = out + CW_FILE_HEAD;
+	memcpy(p, st->bad_final, bm);
+	memcpy(p + bm, st->changed_ever, bm);
+	memcpy(p + 2u * bm, st->healed_ever, bm);
+	p += 3u * bm;
+	put_le(p, st->base_bad, 8u);
+	put_le(p + 8, st->final_bad, 8u);
+	put_le(p + 16, st->changed_words, 8u);
+	put_le(p + 24, st->healed, 8u);
+	return len;
+}
+
+/* One write of the file: 0, or 1 when it cannot be opened, 2 when the write or close fails. */
+static int
+cw_dump(const char *const path, const uint8_t *const buf, size_t const len, int *const err)
+{
+	int const fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	ssize_t   w;
+
+	if (fd < 0) {
+		*err = errno;
+		return 1;
+	}
+	do {
+		w = write(fd, buf, len);
+	} while (w < 0 && errno == EINTR);
+	if (w != (ssize_t)len) {
+		*err = (w < 0) ? errno : EIO;
+		(void)close(fd);
+		return 2;
+	}
+	if (close(fd) != 0) {
+		*err = errno;
+		return 2;
+	}
+	return 0;
+}
+
+static int
+cmd_watch(const struct cw_args *const a)
+{
+	static struct as_view      v[AS_MAX];
+	static struct cw_state     st;
+	static uint8_t             file[CW_FILE_MAX];
+	const struct canary *const c = lookup(a->name);
+	struct cw_src              src;
+	char                       line[LINE_BUF];
+	uint64_t                   deadline;
+	size_t                     len;
+	enum refusal               k;
+	int                        n;
+	int                        err = 0;
+	int                        dumped;
+	void                      *p;
+
+	if (c == NULL) {
+		say("S1 CANARY refuse=unknown-name\n");
+		return 2;
+	}
+	n = view_load(v, AS_MAX);
+	k = (n < 0) ? C_NO_ENTRY : canary_check(v, (unsigned)n, c->base);
+	if (k != C_OK) {
+		(void)format_canary(line, sizeof(line), c->name, (k == C_NO_ENTRY) ? V_NOENTRY : V_INSYSRAM, 0, 0, 0);
+		say("%s%s\n", line, (n < 0) ? " asinfo=undecodable" : "");
+		return 1;
+	}
+	cps = SYSPAGE_ENTRY(qtime)->cycles_per_sec;
+	if (cps == 0) {
+		fprintf(stderr, "memcanary-w: qtime reports no cycles_per_sec\n");
+		return 1;
+	}
+
+	memset(&st, 0, sizeof(st));
+	st.cbase  = c->base;
+	st.nwords = S1_CANARY_SIZE / 8u;
+	st.base   = malloc((size_t)S1_CANARY_SIZE);
+	st.prev   = malloc((size_t)S1_CANARY_SIZE);
+	if (st.base == NULL || st.prev == NULL) {
+		err = errno;
+		free(st.base);
+		free(st.prev);
+		(void)cw_format_fail(line, sizeof(line), c->name, a->label, "nomem", err);
+		say("%s\n", line);
+		return 1;
+	}
+	p = mmap_device_memory(NULL, (size_t)S1_CANARY_SIZE, PROT_READ, 0, c->base);
+	if (p == MAP_FAILED) {
+		err = errno;
+		free(st.base);
+		free(st.prev);
+		(void)format_canary(line, sizeof(line), c->name, V_MAPFAIL, 0, 0, err);
+		say("%s\n", line);
+		return 1;
+	}
+
+	/* Nothing is printed from here to the lines below (§2 rule 7). */
+	src.read = cw_read_dev;
+	src.ctx  = p;
+	cw_base(&st, &src);
+	deadline = ClockCycles() + (uint64_t)a->secs * cps;
+	for (;;) {
+		if (st.snaps >= a->count) {
+			st.stop = STOP_COUNT;
+			break;
+		}
+		if (a->ms != 0) {
+			nap_toward(deadline, a->ms);
+		}
+		if (ClockCycles() >= deadline) {
+			st.stop = STOP_DEADLINE;
+			break;
+		}
+		cw_snap(&st, &src);
+	}
+	cw_final(&st, &src);
+	(void)munmap_device_memory(p, (size_t)S1_CANARY_SIZE);
+	cw_summarise(&st);
+	len    = cw_export(&st, c->name, a->label, a->ms, a->count, a->secs, file, sizeof(file));
+	dumped = (len == 0) ? 2 : cw_dump(a->dump, file, len, &err);
+	free(st.base);
+	free(st.prev);
+
+	for (int w = W_BASE; w < W_NLINE; w++) {
+		(void)cw_format(line, sizeof(line), (enum cw_line)w, c->name, a->label, &st);
+		say("%s\n", line);
+	}
+	if (dumped != 0) {
+		(void)cw_format_fail(line, sizeof(line), c->name, a->label, (dumped == 1) ? "dump-open" : "dump-write", err);
+		say("%s\n", line);
+		return 1;
+	}
+	return 0;
+}
+
+#endif /* MEMCANARY_WATCH: watch engine */
+
 /* ---------------------------------------------------------------- self-test */
 
 static unsigned st_ran;
@@ -750,6 +1558,451 @@ disjoint(uint64_t const a, uint64_t const asize, uint64_t const b, uint64_t cons
 	return a + asize <= b || b + bsize <= a;
 }
 
+#ifdef MEMCANARY_WATCH
+/* ---------------------------------------------------------------- watch self-test */
+
+#define CW_ST_WORDS         (2u * CW_WORDS_PER_PAGE)
+#define CW_ST_OVR           8u
+
+/* A scripted source: the buffer, except that a read of an armed word returns its three values first. */
+struct cw_script {
+	uint64_t *w;
+	unsigned  nov;
+	struct {
+		uint64_t idx;
+		uint64_t seq[3];
+		unsigned pos;
+	} ovr[CW_ST_OVR];
+};
+
+static uint64_t
+cw_read_script(void *const ctx, uint64_t const i)
+{
+	struct cw_script *const s = ctx;
+
+	for (unsigned k = 0; k < s->nov; k++) {
+		if (s->ovr[k].idx == i && s->ovr[k].pos < 3u) {
+			return s->ovr[k].seq[s->ovr[k].pos++];
+		}
+	}
+	return s->w[i];
+}
+
+static void
+cw_arm(struct cw_script *const s, uint64_t const idx, uint64_t const a, uint64_t const b, uint64_t const c)
+{
+	if (s->nov < CW_ST_OVR) {
+		s->ovr[s->nov].idx    = idx;
+		s->ovr[s->nov].seq[0] = a;
+		s->ovr[s->nov].seq[1] = b;
+		s->ovr[s->nov].seq[2] = c;
+		s->ovr[s->nov].pos    = 0;
+		s->nov++;
+	}
+}
+
+static void
+cw_trb(uint8_t *const t, uint64_t const param, uint32_t const status, uint32_t const ctl)
+{
+	put_le(t, param, 8u);
+	put_le(t + 8, status, 4u);
+	put_le(t + 12, ctl, 4u);
+}
+
+/* cw_parse on a good command line, with flag's value replaced (or the pair dropped when value is
+ * NULL), and x1 and x2 appended when given. */
+static int
+cw_try(const char *const flag, const char *const value, const char *const x1, const char *const x2,
+       struct cw_args *const a)
+{
+	char *argv[16] = { "memcanary-w", "watch", "-n", "c2", "-l", "b", "-i", "1000", "-c", "180", "-T", "190",
+	                   "-d", "/dev/shmem/j1b.bin" };
+	int   argc     = 14;
+
+	for (int i = 2; i < argc; i += 2) {
+		if (flag != NULL && strcmp(argv[i], flag) == 0) {
+			if (value == NULL) {
+				argv[i]     = argv[argc - 2];
+				argv[i + 1] = argv[argc - 1];
+				argc -= 2;
+			} else {
+				argv[i + 1] = (char *)value;
+			}
+			break;
+		}
+	}
+	if (x1 != NULL) {
+		argv[argc++] = (char *)x1;
+	}
+	if (x2 != NULL) {
+		argv[argc++] = (char *)x2;
+	}
+	return cw_parse(argc, argv, a);
+}
+
+/* §15.5 B8.5: the inverse, one crafted value per class with precedence, the signatures at byte
+ * offsets that are not word-aligned (documentation addresses only: RFC 5737 IPv4, RFC 7042 MAC),
+ * the engine's changes, heals, osc, prog and stable on a scripted buffer, the stride histogram,
+ * the export round trip, every line's text and its length at maximum field widths, and the
+ * refusals. It maps no physical memory and reads no system page. */
+static void
+cw_selftest(void)
+{
+	static uint64_t             w[CW_ST_WORDS];
+	static uint64_t             b[CW_ST_WORDS];
+	static uint64_t             q[CW_ST_WORDS];
+	static struct cw_state      st;
+	static struct cw_state      mx;
+	static struct cw_script     sc;
+	static uint8_t              file[CW_FILE_MAX];
+	static const unsigned       shifts[] = { 1u, 27u, 30u, 31u, 32u, 63u };
+	static const uint8_t        ipv4[20] = { 0x45, 0x00, 0x00, 0x54, 0x00, 0x00, 0x40, 0x00, 0x40, 0x01, 0x4E, 0x72,
+	                                         0xC0, 0x00, 0x02, 0x01, 0xC6, 0x33, 0x64, 0x02 };
+	static const uint8_t        beacon[24] = { 0x80, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	                                           0x00, 0x00, 0x5E, 0x00, 0x53, 0x01, 0x00, 0x00, 0x5E, 0x00, 0x53, 0x01,
+	                                           0x10, 0x00 };
+	static const char           ascii20[] = "S1-J1-SELFTEST-ASCII";
+	static const char           ascii15[] = "SHORT-RUN-15-CH";
+	static const char *const    want[W_NLINE] = {
+		"S1 CANARY c2 watch=base label=t1 bad=2 pages=2 first_off=0x18 last_off=0x12c0",
+		"S1 CANARY c2 watch=time label=t1 snaps=4 changed_snaps=2 changed_words=7 healed=2 osc=1 prog=3 stable=3 stop=count",
+		"S1 CANARY c2 watch=words label=t1 bad=5 zero=1 ones=1 flip2_same=1 flip2_var=1 flip8=0 pat_same=0 pat_other=0",
+		"S1 CANARY c2 watch=words2 label=t1 hi_pat=0 lo_pat=0 pte=0 kva=0 ptr_self=0 ptr_ram=0 u32page=0 small32=1 other=0",
+		"S1 CANARY c2 watch=stride label=t1 b0=2 b1=0 b2=2 b3=0 b4=0 b5=0 b6=1 b7=0",
+		"S1 CANARY c2 watch=bytes label=t1 ascii_runs=0 ascii_bytes=0 ipv4=0 beacon=0 trb_evt=0",
+		"S1 CANARY c2 watch=verdict label=t1 writer=stopped heal=yes reads=prog content=unclassified",
+	};
+	static const char *const    bad_args[][2] = {
+		{ "-i", "60001" }, { "-i", "-1" }, { "-i", "0x10" }, { "-i", "1e3" }, { "-i", "" }, { "-i", " 1" },
+		{ "-c", "0" }, { "-c", "100001" }, { "-T", "0" }, { "-T", "3601" }, { "-T", "0xe10" },
+		{ "-l", "" }, { "-l", "abcdefghi" }, { "-l", "B" }, { "-l", "a-b" }, { "-l", "a b" }, { "-l", ".." },
+		{ "-d", "/dev/shmem/j2b.bin" }, { "-d", "/tmp/j1b.bin" }, { "-d", "/dev/shmem/j1" },
+		{ "-d", "/dev/shmem/j1../x" }, { "-d", "/dev/shmem/j1a/b" }, { "-d", "/dev/shmem/j1a..b" },
+		{ "-d", "/dev/shmem/J1b.bin" }, { "-d", "/dev/shmem/j1abcdefghijklmnopqrstuvwxyz0123456" },
+		{ "-n", NULL }, { "-l", NULL }, { "-i", NULL }, { "-c", NULL }, { "-T", NULL }, { "-d", NULL },
+	};
+	static const char *const    addresses[] = { "0x100000000", "0x272770000", "272770000", "4294967296", "0xbd000000" };
+	unsigned const              ran0  = st_ran;
+	unsigned const              fail0 = st_fail;
+	uint64_t const              p     = splitmix64(S1_CANARY_C2_BASE + 0x40u);
+	struct cw_vec {
+		uint64_t      v;
+		uint64_t      b;
+		enum cw_class want;
+	} const                     vec[] = {
+		{ 0, p, K_ZERO }, { ~0ull, p, K_ONES }, { p ^ 5u, p ^ 5u, K_FLIP2_SAME }, { p ^ 1u, p ^ 1u, K_FLIP2_SAME },
+		{ p ^ 5u, p, K_FLIP2_VAR }, { p ^ 4u, p ^ 1u, K_FLIP2_VAR }, { p ^ 7u, p, K_FLIP8 }, { p ^ 0xFFu, p, K_FLIP8 },
+		{ p ^ 0x1FFu, p, K_HI_PAT }, { p ^ (0x1FFull << 40), p, K_LO_PAT },
+		{ splitmix64(S1_CANARY_C2_BASE + 0x48u), p, K_PAT_SAME }, { splitmix64(S1_CANARY_C2_BASE), p, K_PAT_SAME },
+		{ splitmix64(S1_CANARY_C3_BASE + 0x10u), p, K_PAT_OTHER },
+		{ splitmix64(S1_CANARY_C1_BASE + S1_CANARY_SIZE - 8u), p, K_PAT_OTHER },
+		{ splitmix64(S1_CANARY_C2_BASE + 0x44u), p, K_OTHER }, { splitmix64(S1_CANARY_C2_BASE + S1_CANARY_SIZE), p, K_OTHER },
+		{ 0x100001003ull, p, K_PTE }, { 0x80000003ull, p, K_PTE }, { 0xFFFFFFFFull, p, K_PTE },
+		{ 0x300001003ull, p, K_OTHER }, { 0x0001000100001003ull, p, K_OTHER }, { 0x100001001ull, p, K_PTR_SELF },
+		{ 0xFFFF800012345678ull, p, K_KVA }, { 0xFFFF000000000003ull, p, K_KVA },
+		{ S1_CANARY_C2_BASE + 0x1234u, p, K_PTR_SELF }, { 0x200000010ull, p, K_PTR_RAM }, { 0x80000000ull, p, K_PTR_RAM },
+		{ 0x27FFFFFF8ull, p, K_PTR_RAM }, { 0xFFFFFFFEull, p, K_PTR_RAM }, { 0x280000000ull, p, K_OTHER },
+		{ 0x40000000ull, p, K_U32PAGE }, { 0x1000u, p, K_U32PAGE }, { 0x1234u, p, K_SMALL32 },
+		{ 0x7FFFFFFFull, p, K_SMALL32 }, { 0x123456789ABCDEF0ull, p, K_OTHER },
+	};
+	struct cw_src               src;
+	struct cw_args              a;
+	uint8_t                     t[24];
+	uint8_t                    *e;
+	char                        line[LINE_BUF];
+	char                        list[CW_LIST_BUF];
+	char                        what[80];
+	size_t                      len;
+	int                         ok;
+
+	/* The inverse. */
+	check(inv64(0x94D049BB133111EBull) * 0x94D049BB133111EBull == 1u
+	      && inv64(0xBF58476D1CE4E5B9ull) * 0xBF58476D1CE4E5B9ull == 1u && inv64(3u) * 3u == 1u
+	      && inv64(~0ull) * ~0ull == 1u, "watch: inv64 of the two multipliers, 3 and -1");
+	ok = 1;
+	for (size_t i = 0; i < sizeof(shifts) / sizeof(shifts[0]); i++) {
+		uint64_t const z = 0x0123456789ABCDEFull;
+
+		ok &= (unshift(z ^ (z >> shifts[i]), shifts[i]) == z);
+	}
+	check(ok, "watch: unshift undoes z ^ (z >> s)");
+	ok  = (unmix64(splitmix64(0)) == 0) && (unmix64(splitmix64(S1_CANARY_C1_BASE)) == S1_CANARY_C1_BASE);
+	ok &= (unmix64(splitmix64(S1_CANARY_C2_BASE + 8u)) == S1_CANARY_C2_BASE + 8u);
+	ok &= (unmix64(splitmix64(S1_CANARY_C3_BASE + S1_CANARY_SIZE - 8u)) == S1_CANARY_C3_BASE + S1_CANARY_SIZE - 8u);
+	ok &= (unmix64(splitmix64(~0ull)) == ~0ull) && (splitmix64(unmix64(0x0123456789ABCDEFull)) == 0x0123456789ABCDEFull);
+	check(ok, "watch: unmix64 and splitmix64 round trips");
+
+	/* One crafted value per class, at c2 + 0x40, with the precedence cases. */
+	for (size_t i = 0; i < sizeof(vec) / sizeof(vec[0]); i++) {
+		(void)snprintf(what, sizeof(what), "watch: class vector %u is %s", (unsigned)i, cw_class_name[vec[i].want]);
+		check(cw_classify(vec[i].v, 0x40u, vec[i].b, S1_CANARY_C2_BASE) == vec[i].want, what);
+	}
+	check(cw_classify(0xBD000010ull, 0x40u, splitmix64(S1_CANARY_C1_BASE + 0x40u), S1_CANARY_C1_BASE) == K_PTR_SELF,
+	      "watch: ptr_self in c1 comes before ptr_ram");
+
+	/* The signatures, positive and negative. */
+	check(cw_is_ipv4(ipv4, 20u) == 1 && cw_is_ipv4(ipv4, 19u) == 0, "watch: an ipv4 header, and not past len");
+	memcpy(t, ipv4, 20u);
+	t[15] ^= 1u;
+	check(cw_is_ipv4(t, 20u) == 0, "watch: an ipv4 header with a bad checksum is not one");
+	memcpy(t, ipv4, 20u);
+	t[0] = 0x65u;
+	check(cw_is_ipv4(t, 20u) == 0, "watch: version 6 is not ipv4");
+	check(cw_is_beacon(beacon, 24u) == 1 && cw_is_beacon(beacon, 23u) == 0, "watch: a beacon, and not past len");
+	memcpy(t, beacon, 24u);
+	t[21] = 0x02u;
+	check(cw_is_beacon(t, 24u) == 0, "watch: a transmitter other than the BSSID is not a beacon");
+	memcpy(t, beacon, 24u);
+	t[0] = 0x40u;
+	check(cw_is_beacon(t, 24u) == 0, "watch: a probe request is not a beacon");
+	memcpy(t, beacon, 24u);
+	t[10] = 0x01u;
+	t[16] = 0x01u;
+	check(cw_is_beacon(t, 24u) == 0, "watch: a group transmitter address is not a beacon");
+	cw_trb(t, 0x03000000u, 0x01000000u, 0x00008801u);
+	check(cw_is_trb_evt(t, 16u) == 1 && cw_is_trb_evt(t, 15u) == 0, "watch: a port status change TRB, and not past len");
+	cw_trb(t, 0x12345670u, 0x01000400u, 0x01028001u);
+	check(cw_is_trb_evt(t, 16u) == 1, "watch: a transfer event TRB");
+	cw_trb(t, 0x12345670u, 0x01000000u, 0x00008401u);
+	check(cw_is_trb_evt(t, 16u) == 1, "watch: a command completion event TRB");
+	cw_trb(t, 0x03000000u, 0x00000000u, 0x00008801u);
+	check(cw_is_trb_evt(t, 16u) == 0, "watch: completion code 0 is not an event TRB");
+	cw_trb(t, 0x03000000u, 0x01000000u, 0x00008C01u);
+	check(cw_is_trb_evt(t, 16u) == 0, "watch: TRB type 35 is not counted");
+	cw_trb(t, 0x03000001u, 0x01000000u, 0x00008801u);
+	check(cw_is_trb_evt(t, 16u) == 0, "watch: a port status change with a reserved bit is not one");
+
+	/* The engine on a scripted two-page buffer: BASE, four snapshots, FINL. */
+	memset(&st, 0, sizeof(st));
+	memset(&sc, 0, sizeof(sc));
+	st.cbase  = S1_CANARY_C2_BASE;
+	st.nwords = CW_ST_WORDS;
+	st.base   = b;
+	st.prev   = q;
+	for (uint64_t i = 0; i < CW_ST_WORDS; i++) {
+		w[i] = splitmix64(S1_CANARY_C2_BASE + i * 8u);
+	}
+	w[3] ^= 0xF0F0u;
+	w[600] ^= 5u;
+	sc.w     = w;
+	src.read = cw_read_script;
+	src.ctx  = &sc;
+	cw_base(&st, &src);
+	check(st.base_bad == 2u && st.base_pages == 2u && st.first_off == 0x18u && st.last_off == 0x12C0u,
+	      "watch: BASE counts two bad words on two pages");
+	cw_snap(&st, &src);
+	check(st.snaps == 1u && st.changed_words == 0 && st.changed_snaps == 0 && st.last_change == 0,
+	      "watch: an unchanged snapshot counts nothing");
+	w[10] = 0;
+	cw_arm(&sc, 20u, 0x1234u, splitmix64(S1_CANARY_C2_BASE + 160u), 0x1234u);
+	cw_arm(&sc, 30u, 0x55u, ~0ull, ~0ull);
+	w[30] = ~0ull;
+	cw_arm(&sc, 40u, 0x66u, 0x77u, splitmix64(S1_CANARY_C2_BASE + 320u) ^ 3u);
+	w[40] = splitmix64(S1_CANARY_C2_BASE + 320u) ^ 3u;
+	cw_arm(&sc, 50u, 0x88u, 0x88u, 0x1234u);
+	w[50] = 0x1234u;
+	cw_snap(&st, &src);
+	check(st.changed_words == 5u && st.stable == 1u && st.osc == 1u && st.prog == 3u && st.healed == 0
+	      && st.last_change == 2u, "watch: stable A-A-A, osc A-B-A, and prog A-B-B, A-B-C and A-A-C");
+	w[3] = splitmix64(S1_CANARY_C2_BASE + 24u);
+	cw_snap(&st, &src);
+	check(st.changed_words == 7u && st.stable == 3u && st.healed == 2u && st.changed_snaps == 2u && st.last_change == 3u,
+	      "watch: a bad word and an oscillating word heal");
+	cw_snap(&st, &src);
+	cw_final(&st, &src);
+	st.stop = STOP_COUNT;
+	check(st.snaps == 4u && st.final_diff == 0, "watch: FINL equals the last snapshot");
+	cw_summarise(&st);
+	check(st.final_bad == 5u && st.cls[K_ZERO] == 1u && st.cls[K_ONES] == 1u && st.cls[K_FLIP2_VAR] == 1u
+	      && st.cls[K_SMALL32] == 1u && st.cls[K_FLIP2_SAME] == 1u, "watch: FINL's five bad words by class");
+	check(st.stride[0] == 2u && st.stride[2] == 2u && st.stride[6] == 1u
+	      && st.stride[1] + st.stride[3] + st.stride[4] + st.stride[5] + st.stride[7] == 0,
+	      "watch: the stride histogram by in-page offset modulo 64");
+	check(st.bad_final[0] == 0x03u && st.changed_ever[0] == 0x01u && st.healed_ever[0] == 0x01u, "watch: the page bitmaps");
+	check(st.ascii_runs + st.ascii_bytes + st.ipv4 + st.beacon + st.trb_evt == 0, "watch: no signature in single words");
+	for (int k = W_BASE; k < W_NLINE; k++) {
+		(void)snprintf(what, sizeof(what), "watch: line %d text", k);
+		check(line_is(line, cw_format(line, sizeof(line), (enum cw_line)k, "c2", "t1", &st), want[k]), what);
+	}
+	check(line_is(line, cw_format_fail(line, sizeof(line), "c2", "t1", "dump-open", 2),
+	              "S1 CANARY c2 watch=fail label=t1 reason=dump-open errno=2"), "watch: line fail text");
+
+	/* The export round trip. */
+	len = cw_export(&st, "c2", "t1", 1000u, 180u, 190u, file, sizeof(file));
+	check(len == 99u && memcmp(file, "S1J1PBMP", 8u) == 0 && le32(file + 8) == 1u && memcmp(file + 12, "c2\0\0", 4u) == 0
+	      && memcmp(file + 16, "t1\0\0\0\0\0\0", 8u) == 0 && le64(file + 24) == S1_CANARY_C2_BASE && le32(file + 32) == 2u
+	      && le32(file + 36) == 1000u && le32(file + 40) == 4u && le32(file + 44) == 180u && le32(file + 48) == 190u
+	      && le32(file + 52) == 1u && le64(file + 56) == 0, "watch: export header round trip");
+	check(file[64] == 0x03u && file[65] == 0x01u && file[66] == 0x01u && le64(file + 67) == 2u && le64(file + 75) == 5u
+	      && le64(file + 83) == 7u && le64(file + 91) == 2u, "watch: export bitmaps and tail round trip");
+	memset(&mx, 0, sizeof(mx));
+	mx.cbase  = S1_CANARY_C3_BASE;
+	mx.nwords = S1_CANARY_SIZE / 8u;
+	mx.stop   = STOP_DEADLINE;
+	bit_set(mx.bad_final, CW_PAGES - 1u);
+	bit_set(mx.healed_ever, 9u);
+	len = cw_export(&mx, "c3", "abcdefgh", 0u, 100000u, 3600u, file, sizeof(file));
+	check(len == 1632u && len == CW_FILE_MAX && le32(file + 32) == 4096u && le32(file + 52) == 2u && file[64 + 511] == 0x80u
+	      && file[576] == 0 && file[1088 + 1] == 0x02u && memcmp(file + 16, "abcdefgh", 8u) == 0,
+	      "watch: a 16 MiB canary's export is 1,632 B with each bit in place");
+	check(cw_export(&mx, "c3", "abcdefgh", 0u, 1u, 1u, file, 1631u) == 0, "watch: an export that does not fit is refused");
+
+	/* The byte signatures inside one 16-word bad extent, at byte offsets 3, 29, 57 and 77. */
+	memset(&st, 0, sizeof(st));
+	memset(&sc, 0, sizeof(sc));
+	st.cbase  = S1_CANARY_C2_BASE;
+	st.nwords = CW_ST_WORDS;
+	st.base   = b;
+	st.prev   = q;
+	sc.w      = w;
+	for (uint64_t i = 0; i < CW_ST_WORDS; i++) {
+		w[i] = splitmix64(S1_CANARY_C2_BASE + i * 8u);
+	}
+	e = (uint8_t *)w + 100u * 8u;
+	memset(e, 0, 128u);
+	memcpy(e + 3, ipv4, 20u);
+	memcpy(e + 29, beacon, 24u);
+	cw_trb(e + 57, 0x03000000u, 0x01000000u, 0x00008801u);
+	memcpy(e + 77, ascii20, 20u);
+	memcpy(e + 99, ascii15, 15u);
+	cw_base(&st, &src);
+	cw_final(&st, &src);
+	cw_summarise(&st);
+	check(st.base_bad == 16u && st.base_pages == 1u && st.first_off == 0x320u && st.last_off == 0x398u && st.final_bad == 16u,
+	      "watch: a 16-word bad extent");
+	check(st.ascii_runs == 1u && st.ascii_bytes == 20u && st.ipv4 == 1u && st.beacon == 1u && st.trb_evt == 1u,
+	      "watch: signatures at non-aligned byte offsets; a 15-byte printable run is not counted");
+	ok = 1;
+	for (size_t k = 0; k < 8u; k++) {
+		ok &= (st.stride[k] == 2u);
+	}
+	check(ok, "watch: 16 consecutive bad words put two in each stride bin");
+
+	/* The verdict fields. */
+	memset(&mx, 0, sizeof(mx));
+	ok = (strcmp(cw_writer(&mx), "none") == 0);
+	mx.base_bad = 3u;
+	ok &= (strcmp(cw_writer(&mx), "static") == 0);
+	mx.changed_words = 1u;
+	mx.snaps         = 4u;
+	mx.last_change   = 3u;
+	ok &= (strcmp(cw_writer(&mx), "stopped") == 0);
+	mx.last_change = 4u;
+	ok &= (strcmp(cw_writer(&mx), "ongoing") == 0);
+	mx.snaps       = 100u;
+	mx.last_change = 75u;
+	ok &= (strcmp(cw_writer(&mx), "stopped") == 0);
+	mx.last_change = 76u;
+	ok &= (strcmp(cw_writer(&mx), "ongoing") == 0);
+	mx.changed_words = 0;
+	mx.base_bad      = 0;
+	mx.final_diff    = 1u;
+	ok &= (strcmp(cw_writer(&mx), "ongoing") == 0);
+	check(ok, "watch: writer none, static, stopped and ongoing, at the last-quarter boundary and after FINL");
+	memset(&mx, 0, sizeof(mx));
+	ok = (strcmp(cw_reads(&mx), "stable") == 0);
+	mx.osc = 1u;
+	ok &= (strcmp(cw_reads(&mx), "osc") == 0);
+	mx.prog = 1u;
+	ok &= (strcmp(cw_reads(&mx), "prog") == 0);
+	check(ok, "watch: reads stable, osc, and prog over osc");
+	memset(&mx, 0, sizeof(mx));
+	cw_content(&mx, list, sizeof(list));
+	ok = (strcmp(list, "none") == 0);
+	mx.final_bad          = 12u;
+	mx.cls[K_SMALL32]     = 6u;
+	mx.cls[K_HI_PAT]      = 3u;
+	mx.cls[K_OTHER]       = 3u;
+	cw_content(&mx, list, sizeof(list));
+	ok &= (strcmp(list, "small32,hi_pat") == 0);
+	mx.cls[K_SMALL32] = 3u;
+	mx.cls[K_OTHER]   = 6u;
+	cw_content(&mx, list, sizeof(list));
+	ok &= (strcmp(list, "hi_pat,small32") == 0);
+	memset(mx.cls, 0, sizeof(mx.cls));
+	mx.cls[K_OTHER] = 12u;
+	cw_content(&mx, list, sizeof(list));
+	ok &= (strcmp(list, "unclassified") == 0);
+	memset(mx.cls, 0, sizeof(mx.cls));
+	mx.final_bad         = 10u;
+	mx.cls[K_FLIP2_SAME] = 2u;
+	mx.cls[K_FLIP2_VAR]  = 2u;
+	mx.cls[K_PTE]        = 2u;
+	mx.cls[K_KVA]        = 2u;
+	mx.cls[K_OTHER]      = 2u;
+	cw_content(&mx, list, sizeof(list));
+	ok &= (strcmp(list, "unclassified") == 0);
+	check(ok, "watch: content none, a quarter or more most first, ties in class order, and unclassified");
+
+	/* Every line at maximum field widths: all words bad, every snapshot changing every word. */
+	memset(&mx, 0, sizeof(mx));
+	mx.base_bad      = S1_CANARY_SIZE / 8u;
+	mx.final_bad     = S1_CANARY_SIZE / 8u;
+	mx.base_pages    = CW_PAGES;
+	mx.first_off     = S1_CANARY_SIZE - 8u;
+	mx.last_off      = S1_CANARY_SIZE - 8u;
+	mx.snaps         = CW_COUNT_MAX;
+	mx.changed_snaps = CW_COUNT_MAX;
+	mx.last_change   = CW_COUNT_MAX;
+	mx.changed_words = (uint64_t)CW_COUNT_MAX * (S1_CANARY_SIZE / 8u);
+	mx.healed        = mx.changed_words;
+	mx.osc           = mx.changed_words;
+	mx.prog          = mx.changed_words;
+	mx.stable        = mx.changed_words;
+	mx.stop          = STOP_DEADLINE;
+	for (size_t k = 0; k < K_NCLASS; k++) {
+		mx.cls[k] = S1_CANARY_SIZE / 8u;
+	}
+	for (size_t k = 0; k < 8u; k++) {
+		mx.stride[k] = S1_CANARY_SIZE / 8u;
+	}
+	mx.ascii_runs  = S1_CANARY_SIZE;
+	mx.ascii_bytes = S1_CANARY_SIZE;
+	mx.ipv4        = S1_CANARY_SIZE;
+	mx.beacon      = S1_CANARY_SIZE;
+	mx.trb_evt     = S1_CANARY_SIZE;
+	ok = 1;
+	for (int k = W_BASE; k < W_NLINE; k++) {
+		if (k == W_VERDICT) {
+			mx.osc  = 0;         /* reads=stable is the longest form */
+			mx.prog = 0;
+		}
+		ok &= cw_format(line, sizeof(line), (enum cw_line)k, "c1", "abcdefgh", &mx) && strlen(line) + 1u <= 255u;
+	}
+	ok &= cw_format_fail(line, sizeof(line), "c1", "abcdefgh", "dump-write", -2147483647 - 1) && strlen(line) + 1u <= 255u;
+	check(ok, "watch: every line with its newline within 255 bytes at maximum field widths");
+
+	/* The refusals: ranges, labels, file names, missing and repeated flags, and addresses as names. */
+	ok = (cw_try(NULL, NULL, NULL, NULL, &a) == 0) && strcmp(a.name, "c2") == 0 && strcmp(a.label, "b") == 0
+	     && a.ms == 1000u && a.count == 180u && a.secs == 190u && strcmp(a.dump, "/dev/shmem/j1b.bin") == 0;
+	ok &= (cw_try("-i", "0", NULL, NULL, &a) == 0) && (cw_try("-i", "60000", NULL, NULL, &a) == 0);
+	ok &= (cw_try("-c", "100000", NULL, NULL, &a) == 0) && (cw_try("-T", "3600", NULL, NULL, &a) == 0);
+	ok &= (cw_try("-l", "abcdefgh", NULL, NULL, &a) == 0);
+	ok &= (cw_try("-d", "/dev/shmem/j1abcdefghijklmnopqrstuvwxyz012345", NULL, NULL, &a) == 0);
+	check(ok, "watch: good command lines and their boundaries parse");
+	ok = 1;
+	for (size_t i = 0; i < sizeof(bad_args) / sizeof(bad_args[0]); i++) {
+		ok &= (cw_try(bad_args[i][0], bad_args[i][1], NULL, NULL, &a) == 2);
+	}
+	ok &= (cw_try(NULL, NULL, "-l", "c", &a) == 2) && (cw_try(NULL, NULL, "-s", "16", &a) == 2);
+	ok &= (cw_try(NULL, NULL, "-o", "/dev/shmem/j1x", &a) == 2) && (cw_try(NULL, NULL, "extra", NULL, &a) == 2);
+	check(ok, "watch: out-of-range, malformed, missing, repeated and unknown arguments refused");
+	ok = 1;
+	for (size_t i = 0; i < sizeof(addresses) / sizeof(addresses[0]); i++) {
+		ok &= (cw_try("-n", addresses[i], NULL, NULL, &a) == 0) && lookup(a.name) == NULL;
+	}
+	check(ok, "watch: an address as a name, the black box's among them, is refused by lookup");
+	check(sim_refusal(SIM_TCG, S1_CANARY_C2_BASE, C_NO_ENTRY) && sim_refusal(SIM_GOOD, S1_CANARY_C2_BASE, C_OK),
+	      "watch: the canary check it shares with verify");
+
+	if (st_fail == fail0) {
+		say("MEMCANARY-W SELFTEST PASS %u checks\n", st_ran - ran0);
+	} else {
+		say("MEMCANARY-W SELFTEST FAIL %u of %u checks\n", st_fail - fail0, st_ran - ran0);
+	}
+}
+#endif
+
 static int
 selftest(void)
 {
@@ -764,6 +2017,9 @@ selftest(void)
 	int                   n;
 	int                   ok;
 
+#ifdef MEMCANARY_WATCH
+	cw_selftest();
+#endif
 	/* The pattern: splitmix64's first two outputs from state 0, and canary words
 	 * at fixed places, so a startup fill can be checked against the same numbers. */
 	check(splitmix64(0) == 0xE220A8397B1DCDAFull, "splitmix64(0)");
@@ -926,6 +2182,10 @@ usage(void)
 	        "       memcanary --selftest\n"
 	        "  MIB is 1-3072 and SECS 1-86400; hold writes FILE, then FILE.fill and FILE.done\n"
 	        "  no mode writes physical memory, and none takes an address\n");
+#ifdef MEMCANARY_WATCH
+	fprintf(stderr, "       memcanary-w watch -n c1|c2|c3 -l LABEL -i MS -c COUNT -T SECS -d /dev/shmem/j1NAME\n"
+	                "  LABEL is [a-z0-9]{1,8}, MS 0-60000, COUNT 1-100000, SECS 1-3600, NAME [a-z0-9._-]{1,32}\n");
+#endif
 	return 2;
 }
 
@@ -946,6 +2206,54 @@ parse_uint(const char *const s, unsigned const lo, unsigned const hi, unsigned *
 	*v = (unsigned)x;
 	return 1;
 }
+
+#ifdef MEMCANARY_WATCH
+/* watch's command line after the mode: 0 when every flag is present once and in range, else 2.
+ * The numbers are decimal only, so a hex address is refused here, and a name by lookup() later. */
+static int
+cw_parse(int const argc, char **const argv, struct cw_args *const a)
+{
+	int have_i = 0;
+	int have_c = 0;
+	int have_t = 0;
+
+	memset(a, 0, sizeof(*a));
+	for (int i = 2; i < argc; i++) {
+		const char *const f   = argv[i];
+		int const         val = (i + 1 < argc);
+
+		if (val && strcmp(f, "-n") == 0 && a->name == NULL) {
+			a->name = argv[++i];
+		} else if (val && strcmp(f, "-l") == 0 && a->label == NULL) {
+			a->label = argv[++i];
+		} else if (val && strcmp(f, "-i") == 0 && !have_i) {
+			if (!parse_uint(argv[++i], 0u, CW_MS_MAX, &a->ms)) {
+				return 2;
+			}
+			have_i = 1;
+		} else if (val && strcmp(f, "-c") == 0 && !have_c) {
+			if (!parse_uint(argv[++i], 1u, CW_COUNT_MAX, &a->count)) {
+				return 2;
+			}
+			have_c = 1;
+		} else if (val && strcmp(f, "-T") == 0 && !have_t) {
+			if (!parse_uint(argv[++i], 1u, CW_SECS_MAX, &a->secs)) {
+				return 2;
+			}
+			have_t = 1;
+		} else if (val && strcmp(f, "-d") == 0 && a->dump == NULL) {
+			a->dump = argv[++i];
+		} else {
+			return 2;
+		}
+	}
+	if (a->name == NULL || a->label == NULL || a->dump == NULL || !have_i || !have_c || !have_t
+	    || !cw_label_ok(a->label) || !cw_dump_ok(a->dump)) {
+		return 2;
+	}
+	return 0;
+}
+#endif
 
 int
 main(int argc, char **argv)
@@ -969,6 +2277,13 @@ main(int argc, char **argv)
 		}
 		return (mode[0] == '-') ? selftest() : cmd_asinfo();
 	}
+#ifdef MEMCANARY_WATCH
+	if (strcmp(mode, "watch") == 0) {
+		struct cw_args a;
+
+		return (cw_parse(argc, argv, &a) != 0) ? usage() : cmd_watch(&a);
+	}
+#endif
 
 	for (int i = 2; i < argc; i++) {
 		const char *const a   = argv[i];

@@ -18,13 +18,14 @@
 #   s1-n2    hold  s1-linux.conf    B4: the ten-minute run (pass item 4)
 #   s1-d1    boot  s1-d1.conf       diagnostic after a board-only failure (§5.3); never a pass run
 #   s1-q2    q2    both guests      B5: only after D1 keeps the QNX guest and D14's limit is given
+#   s1-j1    host  s1-linux.conf    J6 (revision 3, §15.4.8): s1-h1 plus memcanary-w; never a pass run
 # s1-m1b-p6 (B1) has no template here: it is M1b's m1b-p6 buildfile byte for
 # byte, built with S1's startup (make-s1-images.sh).
 #
 ## THIS FILE IS THE TEMPLATE, not a buildfile. The generator drops every line
-## that begins @D1@ unless the image is s1-d1 and every line that begins @Q2@
-## unless it is s1-q2, strips those prefixes from the lines it keeps, and
-## replaces:
+## that begins @D1@ unless the image is s1-d1, every line that begins @Q2@
+## unless it is s1-q2 and every line that begins @J1@ unless it is s1-j1, strips
+## those prefixes from the lines it keeps, and replaces:
 ##   @RUNG@     the image name
 ##   @P@        the CPU count, 4
 ##   @GUARD@    the guard in seconds, from the generator's bound table (C14)
@@ -136,6 +137,9 @@ openssl-3 tags=*
 /proc/boot/smpcheck=smpcheck
 /proc/boot/s1con=s1con
 /proc/boot/memcanary=memcanary
+# J6 only (s1-design.md §15.4.8, §15.5 B3): the watcher, memcanary.c built with
+# -DMEMCANARY_WATCH. memcanary itself stays at PIN_MEMCANARY in every image.
+@J1@/proc/boot/memcanary-w=memcanary-w
 [perms=0444] /proc/boot/s1-host.ksh=@KSH@
 [+raw perms=0444] /data/s1/Image=@IMAGE@
 [+raw perms=0444] /data/s1/initrd.cpio.gz=@INITRD@

@@ -13,6 +13,7 @@
 #   BSP=/path/to/BSP QNX_BASE=/path/to/qnx800 \
 #       ./make-s1-images.sh [--generate-only] [--out DIR] [--q2-limit 0xADDR] [image ...]
 #   ./make-s1-images.sh --tcg [--out DIR] [--q2-limit 0xADDR] [variant ...]
+#   ./make-s1-images.sh --selftest [--out DIR]
 #
 #   image      startup line                              role (design §6.12)
 #   s1-m1b-p6  M1b's -P6 line, no -b                     B1: M1b's m1b-p6 buildfile byte for byte, S1's startup
@@ -21,7 +22,10 @@
 #   s1-n2      the same                                  B4: hold mode, pass item 4
 #   s1-d1      the same                                  diagnostic, boot mode with s1-d1.conf; never a pass run
 #   s1-q2      the same                                  B5: q2 mode; refused without --q2-limit (D1, D14)
-# With no names the board form does the first five, in that order.
+#   s1-j1      the same                                  J6 (revision 3, §15.4.8): host mode with memcanary-w
+#                                                        and a large hold in place of B2's allocation; never a pass run
+# With no names the board form does the first five, in that order; s1-q2 and s1-j1
+# only when named.
 #
 #   variant    mode    at /data/s1/s1-linux.conf         role (TCG profile, design §6.2-§6.4, §5.3)
 #   lin-dryrun dryrun  the pinned configuration          T1
@@ -31,7 +35,8 @@
 #   d1-boot    boot    logger with debug,verbose         diagnostic; never a pass run
 #   d2         boot    rdinit=/bin/sh, the stock initrd  diagnostic I-c: the L4T initrd at /data/s1/initrd.cpio.gz
 #   q2         q2      the pinned configuration, M3's guest  T3's optional q2 rehearsal; refused without --q2-limit
-# With no names --tcg does the first six. The names and the staging (a diagnostic's
+#   j1         dryrun  the pinned configuration          T-J1 (§15.5 B8.5): memcanary-w --selftest; never a pass run
+# With no names --tcg does the first six; q2 and j1 only when named. The names and the staging (a diagnostic's
 # configuration and d2's initrd under the pinned names) are build-s1tcg-image.ps1's
 # -Variant, -Mode and data_files lines, so its -HostScript can take these scripts.
 #
@@ -57,7 +62,8 @@
 #    8. per image: the bound table, guard and return bound (C14); the
 #       buildfile (verbatim ranges, startup line, script lines); the host script
 #       (markers, CONFIG fields, the profile check); kshcheck --selftest, each
-#       script, an injected pipe; bash -n; <image>.params
+#       script, an injected pipe; bash -n; <image>.params; the profile check's own
+#       self-test (§15.5 B5's injections); for s1-j1 the black-box text estimate (B8.6)
 #   --generate-only stops here (after the step-15 guard) and needs no SDP.
 #    9. SDP environment, inputs, the symbol precondition on S1's startup
 #   10. per image: the size check, mkifs, dumpifs (names, script), geometry
@@ -71,6 +77,12 @@
 # --tcg runs steps 1-7, then per variant writes <out>/tcg/s1tcg-<variant>/
 # (s1-host.ksh, s1tcg.params, files.list, system_files.lines, data_files.lines)
 # with kshcheck and the profile check, then step 15. It needs no SDP.
+#
+# --selftest runs steps 1-2, the constant check, the profile check's self-test, s1-j1's
+# black-box estimate and kshcheck's pipe injection on scripts it generates under
+# <out>/gate/selftest, then step 15. It skips PO-A and the pins, so it runs on an
+# uncommitted edit; it needs the S1 payload inputs present (their md5s go into the
+# scripts) and no SDP, and nothing it writes is an image input.
 #
 # QNX files are handled as opaque bytes only: mkifs, dumpifs and hashes, as the
 # M3 and M4 generators do; dumpifs -x extracts only our own payload from our
@@ -129,6 +141,12 @@ PIN_CMDLINE=da47f63ebedf99e1c560e1157ce176d6c56ad2953d040287bf6db8704f337638
 # The tools as built at T0 part 1 (s1con, memcanary) and as M4 left them.
 PIN_S1CON=ed4a5a0be95e96b091d9bffc8780070e44265663775f2dfb4e41dd323a83cfe9
 PIN_MEMCANARY=d3749ffff064f5a3b7f9c4de9afb6bd849c22824a9531e2fc4b50d894bde5dc4
+# Revision 3's watcher (s1-design.md §15.4.8, §15.5 B2 and B5): memcanary.c built with
+# -DMEMCANARY_WATCH, checked only when s1-j1 or the TCG variant j1 is named. memcanary's
+# own pin above never moves. The sha256 of the memcanary-w built beside gate B8.1's
+# determinism builds (the same toolchain and flags, identical in two scratch builds and the
+# tree), set in the commit that adds the watcher; pins_tools refuses any other binary.
+PIN_MEMCANARY_W=544c48453e106715e4fc78f69a79a97606547a337b1f79466979a0cdbe3537ea
 PIN_STAMP=b41cde750fea863d549c6978f08098e59189a705555cb76f681ec8a5b0c450bb
 PIN_BWAIT=81daef09bfbb4cac6931a0f67d1ef2336a0b4a239a621312addd59dff9a98eca
 PIN_TCUCAT=2dd6099a9d9dac3f7ad25d8e573553097d1fef74990c445578267b874dff066e
@@ -156,6 +174,30 @@ declare -A HOLD_MIB_OF=([tcg]=64 [board]=256)
 HOLD_S=600
 HB_COUNT=10
 B2_ALLOC_MIB=1536
+# J6 (s1-design.md §15.4.8, D27): the size of s1-j1's hold, design arithmetic only, never a
+# FreeMem value (§2 rule 8). Windows 1 and 2 are 992 + 2,208 MiB, less the three 16 MiB
+# canaries: 3,152 MiB. D27 leaves the margin below that to the implementation; it is set
+# here, and each row is a design estimate (HYPOTHESIS):
+#     64  the IFS in window 1, which alloc_ram keeps out of sysram (§4.4 estimates about 52)
+#     16  procnto, the syspage, startup and the early processes (§3.3's 15.4, from M1b)
+#     16  slogger2, pipe, devc-pty, ksh, the bwaits, toybox runs and memcanary's own process
+#         (§3.3 budgets 4 for the first of these)
+#     32  memcanary-w's two heap copies of a 16 MiB canary (base and prev), while watches c
+#         and d run beside the hold
+#      8  page tables for the hold's mapping (2,896 MiB of 4 KiB pages at 8 B each is under 6)
+#      8  /dev/shmem: the four bitmaps (about 2 KiB each), pidin, bwait and slog2info output
+#    112  slack for procnto's allocator and whatever this list misses
+#    256  in all. Too small a margin shows as map=fail, F28: diagnostic incomplete, no verdict.
+# By pigeonhole on the design sizes (R70), 2,896 MiB covers at least 1,920 of window 2's
+# 2,176 MiB outside the canaries and at least 720 of window 1's 976; where procnto places the
+# pages is HYPOTHESIS (R75). constant_check holds the sum and memcanary's 3,072 MiB limit.
+J1_HOLD_MARGIN_MIB=256
+J1_HOLD_MIB=2896
+# §15.4.8's watch table as label:name:interval_ms:count:deadline_s. The bounds are the
+# bound table's J1_W<label>_K; the profile check accepts exactly these four calls.
+J1_WATCH_ROWS="a:c2:0:100000:20 b:c2:1000:180:190 c:c2:1000:180:190 d:c1:1000:60:70"
+# M3's rebuild-at--vv threshold, R22's gate (parse-s1.py BB_GATE), for s1-j1's estimate (B8.6).
+BB_GATE=60000
 ITEM5_FIELDS="image_sha256 initrd_sha256 conf_sha256 cmdline_sha256 init_sha256 s1con_sha256 memcanary_sha256 stamp_sha256 bwait_sha256 startup_sha256 startup_line cpu_lines ram_line windows canaries guest_set hold_s guard_s gpu_range"
 
 # PO-A (step 3): M1b-M4's sources, the shim, and every source S1's images are built from.
@@ -182,6 +224,12 @@ PO_A_PATHS=(
 	orin-native/s1/s1-conf.allow
 	orin-native/s1/init.sh
 	orin-native/s1/initrd.manifest
+	# Revision 3 (§15.5 B5): S1's own templates, this generator, the tools' Makefile and the parser.
+	orin-native/startup/s1.build.in
+	orin-native/startup/s1-host.ksh.in
+	orin-native/startup/make-s1-images.sh
+	orin-native/tools/Makefile
+	orin-native/s1/parse-s1.py
 )
 
 # /proc/boot names of a Linux-only image (design §3.9), each exactly once (step 10).
@@ -220,19 +268,22 @@ trap 'echo "FAIL: $STEP (line $LINENO exited non-zero)" >&2' ERR
 usage() {
 	echo "usage: $0 [--generate-only] [--out DIR] [--q2-limit 0xADDR] [image ...]" >&2
 	echo "       $0 --tcg [--out DIR] [--q2-limit 0xADDR] [variant ...]" >&2
-	echo "  images:   s1-m1b-p6 s1-h1 s1-n1 s1-n2 s1-d1 (default), s1-q2 (needs --q2-limit)" >&2
-	echo "  variants: lin-dryrun lin-boot hold d1-dryrun d1-boot d2 (default), q2 (needs --q2-limit)" >&2
+	echo "       $0 --selftest [--out DIR]" >&2
+	echo "  images:   s1-m1b-p6 s1-h1 s1-n1 s1-n2 s1-d1 (default), s1-q2 (needs --q2-limit), s1-j1 (needs PIN_MEMCANARY_W)" >&2
+	echo "  variants: lin-dryrun lin-boot hold d1-dryrun d1-boot d2 (default), q2 (needs --q2-limit), j1 (needs PIN_MEMCANARY_W)" >&2
 	exit 2
 }
 
 GEN_ONLY=0
 TCG=0
+SELFTEST=0
 Q2_LIMIT=""
 NAMES=()
 while [ $# -gt 0 ]; do
 	case "$1" in
 	--generate-only) GEN_ONLY=1 ;;
 	--tcg) TCG=1 ;;
+	--selftest) SELFTEST=1 ;;
 	--out)
 		[ $# -ge 2 ] || usage
 		OUT="$2"
@@ -249,22 +300,31 @@ while [ $# -gt 0 ]; do
 	esac
 	shift
 done
-if [ "$TCG" = 1 ]; then
+if [ "$SELFTEST" = 1 ]; then
+	[ "$GEN_ONLY" = 0 ] && [ "$TCG" = 0 ] && [ -z "$Q2_LIMIT" ] && [ "${#NAMES[@]}" = 0 ] \
+		|| die "--selftest takes only --out: it generates its own scripts under <out>/gate/selftest and builds nothing"
+elif [ "$TCG" = 1 ]; then
 	[ "$GEN_ONLY" = 0 ] || die "--tcg generates only; --generate-only belongs to the board form"
 	[ "${#NAMES[@]}" -gt 0 ] || NAMES=(lin-dryrun lin-boot hold d1-dryrun d1-boot d2)
 	for n in "${NAMES[@]}"; do
-		case "$n" in lin-dryrun|lin-boot|hold|d1-dryrun|d1-boot|d2|q2) ;; *) echo "unknown variant: $n" >&2; usage ;; esac
+		case "$n" in lin-dryrun|lin-boot|hold|d1-dryrun|d1-boot|d2|q2|j1) ;; *) echo "unknown variant: $n" >&2; usage ;; esac
 	done
 else
 	[ "${#NAMES[@]}" -gt 0 ] || NAMES=(s1-m1b-p6 s1-h1 s1-n1 s1-n2 s1-d1)
 	for n in "${NAMES[@]}"; do
-		case "$n" in s1-m1b-p6|s1-h1|s1-n1|s1-n2|s1-d1|s1-q2) ;; *) echo "unknown image: $n" >&2; usage ;; esac
+		case "$n" in s1-m1b-p6|s1-h1|s1-n1|s1-n2|s1-d1|s1-q2|s1-j1) ;; *) echo "unknown image: $n" >&2; usage ;; esac
 	done
 fi
 WANT_Q2=0
+WANT_J1=0
 for n in "${NAMES[@]}"; do
-	case "$n" in s1-q2|q2) WANT_Q2=1 ;; esac
+	case "$n" in s1-q2|q2) WANT_Q2=1 ;; s1-j1|j1) WANT_J1=1 ;; esac
 done
+# Revision 3's watcher is an input of s1-j1 and j1 only (§15.5 B5): pinned, present and
+# unchanged during the run only when one of them is named.
+if [ "$WANT_J1" = 1 ]; then
+	TOOL_NAMES+=(memcanary-w)
+fi
 if [ "$WANT_Q2" = 1 ]; then
 	[ -n "$Q2_LIMIT" ] || die "s1-q2 and the q2 variant are refused without --q2-limit: they wait until D1 keeps the QNX guest and D14's limit, 'window 1 keeps the two-guest budget's non-guest share', is derived (design §6.1 step 7, §4.5)"
 fi
@@ -306,8 +366,10 @@ block_matches() {
 }
 # expand KIND KEEP IN OUT KEY=VALUE...: make-m4-images.sh's literal substitution
 # (its subst), plus line prefixes. KIND build drops every comment line; KIND ksh
-# drops ## lines. A line that begins @BOARD@, @TCG@, @D1@, @D2@, @DIAG@ or @Q2@
-# is kept without the prefix when that name is in KEEP, and dropped otherwise.
+# drops ## lines. A line that begins @BOARD@, @TCG@, @D1@, @D2@, @DIAG@, @Q2@ or @J1@
+# is kept without the prefix when that name is in KEEP, and dropped otherwise. A line
+# that begins @NOTJ1@ is kept without it unless J1 is in KEEP: s1-j1's watcher replaces
+# B2's allocation lines (§15.4.8), and every other script keeps them byte for byte.
 expand() {
 	local kind="$1" keep="$2" in="$3" out="$4" kv i=0
 	local -a envs=()
@@ -335,9 +397,11 @@ expand() {
 		{
 			line = $0
 			drop = 0
-			while (match(line, /^@(BOARD|TCG|D1|D2|DIAG|Q2)@/)) {
+			while (match(line, /^@(BOARD|TCG|D1|D2|DIAG|Q2|J1|NOTJ1)@/)) {
 				p = substr(line, 2, RLENGTH - 2)
-				if (index(keep, " " p " ") == 0) drop = 1
+				if (p == "NOTJ1") {
+					if (index(keep, " J1 ") > 0) drop = 1
+				} else if (index(keep, " " p " ") == 0) drop = 1
 				line = substr(line, RLENGTH + 1)
 			}
 			if (drop) next
@@ -417,7 +481,7 @@ po_a() {
 	1) die "PO-A: a source S1 builds from, or an earlier milestone's, differs from git HEAD: commit it or restore it, then rebuild" ;;
 	*) die "PO-A: git diff failed (exit $rc)" ;;
 	esac
-	echo "   PO-A ${#PO_A_PATHS[@]} sources (M1b-M4, the shim, the tools, the S1 inputs and the startup board source) match git HEAD: ok"
+	echo "   PO-A ${#PO_A_PATHS[@]} sources (M1b-M4, the shim, the tools and their Makefile, the S1 inputs, templates, generator and parser, and the startup board source) match git HEAD: ok"
 }
 
 # ---- step 4: pins --------------------------------------------------------------------
@@ -454,6 +518,11 @@ pins_tools() {
 	STEP="tool pins (step 4)"
 	check_pin "$TOOLS/s1con" "$PIN_S1CON" "s1con"
 	check_pin "$TOOLS/memcanary" "$PIN_MEMCANARY" "memcanary"
+	if [ "$WANT_J1" = 1 ]; then
+		[[ "$PIN_MEMCANARY_W" =~ ^[0-9a-f]{64}$ ]] \
+			|| die "$STEP: PIN_MEMCANARY_W is not a sha256 yet ($PIN_MEMCANARY_W): s1-j1 and j1 wait until memcanary-w passes gate B8.1 and its pin is committed (§15.5 B9)"
+		check_pin "$TOOLS/memcanary-w" "$PIN_MEMCANARY_W" "memcanary-w (revision 3's watcher)"
+	fi
 	check_pin "$TOOLS/stamp" "$PIN_STAMP" "stamp"
 	check_pin "$TOOLS/bwait" "$PIN_BWAIT" "bwait"
 	check_pin "$TOOLS/tcu-cat" "$PIN_TCUCAT" "tcu-cat"
@@ -500,12 +569,12 @@ constant_check() {
 	timeout 120 "$PY_BIN" - "$STARTUP_HDR" "$MEMCANARY_C" "$PARSER" "$ITEM5_FIELDS" \
 		"${MEM_GATE[tcg:dryrun]},${MEM_GATE[tcg:boot]},${MEM_GATE[tcg:hold]},${MEM_GATE[tcg:q2]},${MEM_GATE[board:dryrun]},${MEM_GATE[board:boot]},${MEM_GATE[board:hold]},${MEM_GATE[board:q2]}" \
 		"${HOLD_MIB_OF[tcg]},${HOLD_MIB_OF[board]},$HOLD_S,$HB_COUNT,$B2_ALLOC_MIB,$W1_MIB" \
-		"$GEOMETRY_CAP" "${Q2_LIMIT:-0}" <<'PY' || die "$STEP: the startup header, memcanary.c, the design and parse-s1.py disagree (reason above)"
+		"$GEOMETRY_CAP" "${Q2_LIMIT:-0}" "$J1_HOLD_MIB,$J1_HOLD_MARGIN_MIB,$WANT_J1" <<'PY' || die "$STEP: the startup header, memcanary.c, the design and parse-s1.py disagree (reason above)"
 import importlib.util
 import re
 import sys
 
-hdr, mc, parser, item5, gates, misc, cap, q2 = sys.argv[1:9]
+hdr, mc, parser, item5, gates, misc, cap, q2, j1 = sys.argv[1:10]
 bad = []
 
 def defs(path, prefix):
@@ -615,12 +684,49 @@ if (hm_tcg, hm_board, hold_s, hb, b2, w1) != (P.HOLD_MIB["tcg"], P.HOLD_MIB["boa
                                              P.B2_ALLOC_MIB, P.W1_MIB):
     bad.append("hold sizes, hold seconds, heartbeat count, B2 allocation or W1 differ from parse-s1.py")
 
+# Revision 3 (s1-design.md 15.5 B5). The J6 hold: below windows 1 and 2 less the canaries, by
+# exactly the stated margin, and within memcanary's MIB_MAX. The watcher's DRAM bound, used by
+# its pte and ptr_ram classes: T234_RAM_BASE + 8 GiB. It sits in memcanary.c's MEMCANARY_WATCH
+# block as S1_DRAM_END (or _LIMIT or _TOP, exclusive), or S1_DRAM_SIZE with an optional
+# S1_DRAM_BASE, each on its own line in the S1_* form; checked whenever that block exists, and
+# required when s1-j1 or j1 is named.
+j1_hold, j1_margin, want_j1 = (int(x) for x in j1.split(","))
+mc_text = open(mc, encoding="latin-1").read()
+w_sysram = (W1[1] + W2[1] - len(CAN) * SZ) >> 20
+if not 0 < j1_hold < w_sysram:
+    bad.append(f"J1_HOLD_MIB={j1_hold} is not below windows 1 and 2 less the canaries ({w_sysram} MiB)")
+if j1_hold + j1_margin != w_sysram:
+    bad.append(f"J1_HOLD_MIB={j1_hold} plus J1_HOLD_MARGIN_MIB={j1_margin} is not {w_sysram} MiB")
+m = re.search(r"^#define\s+MIB_MAX\s+(\d+)[uU]?\b", mc_text, re.M)
+if m is None or j1_hold > int(m.group(1)):
+    bad.append("J1_HOLD_MIB is above memcanary.c's MIB_MAX, or MIB_MAX is missing")
+if hasattr(P, "J1_HOLD_MIB") and P.J1_HOLD_MIB != j1_hold:
+    bad.append(f"parse-s1.py J1_HOLD_MIB={P.J1_HOLD_MIB} differs from the generator's {j1_hold}")
+dram_end = T["T234_RAM_BASE"] + (8 << 30)
+watch = "MEMCANARY_WATCH" in mc_text
+if watch:
+    dram = {k: v for k, v in S.items() if k.startswith("S1_DRAM_")}
+    ends = [v for k, v in dram.items() if k in ("S1_DRAM_END", "S1_DRAM_LIMIT", "S1_DRAM_TOP")]
+    if "S1_DRAM_BASE" in dram and dram["S1_DRAM_BASE"] != T["T234_RAM_BASE"]:
+        bad.append(f"memcanary.c S1_DRAM_BASE=0x{dram['S1_DRAM_BASE']:x} is not T234_RAM_BASE")
+    if "S1_DRAM_SIZE" in dram:
+        ends.append(dram.get("S1_DRAM_BASE", T["T234_RAM_BASE"]) + dram["S1_DRAM_SIZE"])
+    if not ends:
+        bad.append("memcanary.c has a MEMCANARY_WATCH block but no S1_DRAM_END, _LIMIT, _TOP or _SIZE define in the S1_* form")
+    for e in ends:
+        if e != dram_end:
+            bad.append(f"memcanary.c's DRAM bound 0x{e:x} is not T234_RAM_BASE + 8 GiB (0x{dram_end:x})")
+elif want_j1:
+    bad.append("s1-j1 or j1 is named, but memcanary.c has no MEMCANARY_WATCH block")
+
 if bad:
     for b in bad:
         print("   constant check: " + b)
     sys.exit(1)
 print("   constant check: t234_startup.h's T234_* equal memcanary.c's S1_* and the design's values; windows,")
 print("   GPU range and canaries are placed as section 3.3 says, and parse-s1.py carries the same constants: ok")
+print(f"   constant check: the s1-j1 hold {j1_hold} MiB plus its {j1_margin} MiB margin is windows 1 and 2 less the"
+      f" canaries, within MIB_MAX; DRAM bound {'T234_RAM_BASE + 8 GiB' if watch else 'not checked (no MEMCANARY_WATCH block)'}: ok")
 PY
 }
 
@@ -734,11 +840,19 @@ bounds() {
 		    [DRY_K]=60 [HASH_K]=15 [TCU_K]=5 [READER_T]=5 [LK]=240 [IR]=480 [SHELL_T]=60 [FILL_T]=60
 		    [HB_S]=60 [END_T]=60 [HOLDV_T]=120 [HOLD_T]=900 [TD_TERM]=15 [TD_KILL]=5 [EOF_T]=5 [SLOG_K]=15
 		    [SEND_FDT]=30 [SEND_LOG]=30 [SEND_STREAM]=60 [BANNER_T]=240 [GRACE]=90 [IPC_K]=240 [CAP]=65536)
+		# J6 (§15.4.8), s1-j1 only: the watch table's bounds; the hold's fill and verify waits,
+		# not B4's FILL_T and HOLDV_T because the hold is eleven times B4's; its -T, which counts
+		# from its fill; and the bitmap send bound (each file is a few KiB, like the FDT).
+		BT+=([J1_WA_K]=60 [J1_WB_K]=230 [J1_WC_K]=230 [J1_WD_K]=110 [J1_FILL_T]=300 [J1_HOLDV_T]=300
+		     [J1_HOLD_T]=600 [J1_SEND]=30 [J1_HOLD_MIB]="$J1_HOLD_MIB")
 	else
 		BT=([PTY_T]=10 [ASINFO_K]=0 [VERIFY_K]=0 [ALLOC_K]=0 [HOSTHOLD_S]=0 [IO_K]=600 [QC_K]=60
 		    [DRY_K]=600 [HASH_K]=120 [TCU_K]=0 [READER_T]=30 [LK]=900 [IR]=1800 [SHELL_T]=120 [FILL_T]=300
 		    [HB_S]=60 [END_T]=120 [HOLDV_T]=600 [HOLD_T]=1800 [TD_TERM]=60 [TD_KILL]=30 [EOF_T]=30 [SLOG_K]=60
 		    [SEND_FDT]=0 [SEND_LOG]=0 [SEND_STREAM]=0 [BANNER_T]=600 [GRACE]=90 [IPC_K]=600 [CAP]=65536)
+		# No watch or large hold runs under TCG (§15.4.8): zero and unused.
+		BT+=([J1_WA_K]=0 [J1_WB_K]=0 [J1_WC_K]=0 [J1_WD_K]=0 [J1_FILL_T]=0 [J1_HOLDV_T]=0
+		     [J1_HOLD_T]=0 [J1_SEND]=0 [J1_HOLD_MIB]=0)
 	fi
 	BT[HOLD_MIB]="${HOLD_MIB_OF[$1]}"
 	BT[LK_WAIT]=$(( ${BT[LK]} + 5 ))
@@ -748,6 +862,8 @@ bounds() {
 	BT[SEND_FDT_T]=$(( ${BT[SEND_FDT]} > 5 ? ${BT[SEND_FDT]} - 5 : 0 ))
 	BT[SEND_LOG_T]=$(( ${BT[SEND_LOG]} > 5 ? ${BT[SEND_LOG]} - 5 : 0 ))
 	BT[SEND_STREAM_T]=$(( ${BT[SEND_STREAM]} > 5 ? ${BT[SEND_STREAM]} - 5 : 0 ))
+	BT[J1_HOLD_K]=$(( ${BT[J1_FILL_T]} + ${BT[J1_HOLD_T]} + ${BT[J1_HOLDV_T]} + 60 ))
+	BT[J1_SEND_T]=$(( ${BT[J1_SEND]} > 5 ? ${BT[J1_SEND]} - 5 : 0 ))
 	(( ${BT[IR]} > ${BT[LK]} )) || die "bound table: i_ready's bound must exceed l_kernel's"
 	(( HB_COUNT * ${BT[HB_S]} == HOLD_S )) || die "bound table: $HB_COUNT heartbeats of ${BT[HB_S]} s are not the $HOLD_S s hold"
 	(( ${BT[HOLD_T]} > HOLD_S + ${BT[END_T]} + 30 )) || die "bound table: memcanary hold -T ${BT[HOLD_T]} does not outlast the hold and probe 2"
@@ -759,18 +875,33 @@ bounds() {
 	(( ${BT[DRY_K]} < ${BT[LK]} )) || die "bound table: the hvc0 open wait (DRY_K) must end before l_kernel's timer"
 	(( ${BT[LK_WAIT]} > ${BT[LK]} && ${BT[LK]} + ${BT[IR_REST]} > ${BT[IR]} )) \
 		|| die "bound table: a chained -t would end its wait before the launch timer"
+	# J6: each watch's bound outlasts its own -T, and the hold's -T, which starts at its fill,
+	# outlasts watches c and d, so a verify=timeout means the trigger never came.
+	if [ "$1" = board ]; then
+		local row lab dl
+		for row in $J1_WATCH_ROWS; do
+			lab="${row%%:*}"
+			dl="${row##*:}"
+			(( ${BT[J1_W${lab^^}_K]} > dl )) \
+				|| die "bound table: watch $lab's bound ${BT[J1_W${lab^^}_K]} s does not outlast its -T $dl s"
+		done
+		(( ${BT[J1_HOLD_T]} > ${BT[J1_WC_K]} + 5 + ${BT[J1_WD_K]} + 5 + 30 )) \
+			|| die "bound table: the s1-j1 hold's -T ${BT[J1_HOLD_T]} does not outlast watches c and d after its fill"
+	fi
 }
 
-# ksh_worst PROFILE MODE: the host script's worst case from the bound table, each
+# ksh_worst PROFILE MODE [DIAG]: the host script's worst case from the bound table, each
 # bwait -k counted as its bound plus bwait's 5 s kill grace (bwait.c:22-28), each
 # -p, -s and heartbeat as its bound. pidin and the console are not bounded and are
-# not counted, as in M3 and M4.
+# not counted, as in M3 and M4. DIAG j1 is revision 3's watcher (s1-j1, TCG j1).
 ksh_worst() {
-	local p="$1" m="$2" w set=0 ex
+	local p="$1" m="$2" diag="${3:-}" w set=0 ex
 	w=$(( 2 * ${BT[PTY_T]} + 10 ))
 	[ "$m" = q2 ] && w=$(( w + 2 * ${BT[PTY_T]} ))
 	# TCG only: memcanary --selftest under the qvm-check bound (§6.1 step 6).
 	[ "$p" = tcg ] && w=$(( w + ${BT[QC_K]} + 5 ))
+	# TCG j1 only: memcanary-w --selftest under the same bound (§15.5 B8.5).
+	[ "$p" = tcg ] && [ "$diag" = j1 ] && w=$(( w + ${BT[QC_K]} + 5 ))
 	if [ "$p" = board ]; then
 		set=$(( 3 * (${BT[VERIFY_K]} + 5) ))
 		w=$(( w + ${BT[ASINFO_K]} + 5 + set ))
@@ -779,7 +910,14 @@ ksh_worst() {
 	[ "$p" = tcg ] && ex=$(( 3 * (${BT[HASH_K]} + 5) ))
 	case "$m" in
 	host)
-		w=$(( w + ${BT[ALLOC_K]} + 5 + ${BT[HOSTHOLD_S]} + set ))
+		if [ "$diag" = j1 ]; then
+			# J6 (§15.4.8): watches a to d, the hold's fill and verify waits (the hold itself
+			# runs in the background, as in hold mode), canaries end, and four bitmap exports.
+			w=$(( w + ${BT[J1_WA_K]} + 5 + ${BT[J1_WB_K]} + 5 + ${BT[J1_FILL_T]} + ${BT[J1_WC_K]} + 5 + ${BT[J1_WD_K]} + 5 ))
+			w=$(( w + ${BT[J1_HOLDV_T]} + set + 4 * (ex + ${BT[J1_SEND]}) ))
+		else
+			w=$(( w + ${BT[ALLOC_K]} + 5 + ${BT[HOSTHOLD_S]} + set ))
+		fi
 		;;
 	*)
 		w=$(( w + 2 * (${BT[IO_K]} + 5) + ${BT[QC_K]} + 5 + ${BT[DRY_K]} + 5 + 2 * (${BT[HASH_K]} + 5) ))
@@ -802,11 +940,11 @@ ksh_worst() {
 
 mode_of() {
 	case "$1" in
-	s1-h1) echo host ;;
+	s1-h1|s1-j1) echo host ;;
 	s1-n1|s1-d1) echo boot ;;
 	s1-n2) echo hold ;;
 	s1-q2) echo q2 ;;
-	lin-dryrun|d1-dryrun) echo dryrun ;;
+	lin-dryrun|d1-dryrun|j1) echo dryrun ;;
 	lin-boot|d1-boot|d2) echo boot ;;
 	hold|q2) echo "$1" ;;
 	esac
@@ -815,6 +953,7 @@ diag_of() {
 	case "$1" in
 	s1-d1|d1-dryrun|d1-boot) echo d1 ;;
 	d2) echo d2 ;;
+	s1-j1|j1) echo j1 ;;
 	*) echo "" ;;
 	esac
 }
@@ -840,6 +979,7 @@ gen_ksh() {
 	tcg:d1)   conf_file="$(tcg_conf_file d1)"; base_file="$conf_file" ;;
 	tcg:d2)   conf_file="$(tcg_conf_file d2)"; base_file="$conf_file"; initrd_file="$(tcg_initrd_file d2)"
 	          cmd_sha="$D2_CMDLINE_SHA"; initrd_sha="$PIN_L4T_INITRD" ;;
+	board:j1|tcg:j1) keep="$keep J1" ;;
 	board:) ;;
 	tcg:) ;;
 	*) die "gen_ksh: no $prof profile for diagnostic $diag" ;;
@@ -849,6 +989,7 @@ gen_ksh() {
 	if [ "$prof" = board ]; then extra="$extra cpus=4 q=el2-host A=1"; else extra="$extra smp=4 not-a-twin-leg"; fi
 	[ "$m" = host ] && extra="$extra fdt=none"
 	[ -n "$diag" ] && extra="$extra diag=$diag base_conf_sha256=$PIN_CONF"
+	[ "$diag" = j1 ] && extra="$extra memcanary_w_sha256=$PIN_MEMCANARY_W"
 	[ "$m" = q2 ] && extra="$extra guest_sha256=$PIN_GUEST disk_sha256=$PIN_DISK client_sha256=$PIN_CLIENT q2_limit=$Q2_LIMIT"
 	local cpu_lines ram_line guest_set=linux hold_s=0 cfgline stripped
 	cpu_lines=$(awk '{ sub(/\r$/, "") } /^cpu / { o = o (o == "" ? "" : ";") $0 } END { print o }' "$conf_file")
@@ -878,7 +1019,8 @@ gen_ksh() {
 	fi
 	for pv in PTY_T ASINFO_K VERIFY_K ALLOC_K HOSTHOLD_S IO_K QC_K DRY_K HASH_K TCU_K READER_T LK LK_WAIT IR IR_REST \
 	          SHELL_T FILL_T HB_S END_T HOLDV_T HOLD_T HOLD_K HOLD_MIB TD_TERM TD_KILL EOF_T SLOG_K SEND_FDT SEND_FDT_T \
-	          SEND_LOG SEND_LOG_T SEND_STREAM SEND_STREAM_T CAP BANNER_T GRACE GRACE_WAIT IPC_K; do
+	          SEND_LOG SEND_LOG_T SEND_STREAM SEND_STREAM_T CAP BANNER_T GRACE GRACE_WAIT IPC_K \
+	          J1_WA_K J1_WB_K J1_WC_K J1_WD_K J1_FILL_T J1_HOLDV_T J1_HOLD_T J1_HOLD_K J1_HOLD_MIB J1_SEND J1_SEND_T; do
 		kv+=("$pv=${BT[$pv]}")
 	done
 	if [ "$m" = q2 ]; then
@@ -924,7 +1066,7 @@ gen_ksh() {
 	else
 		grep -qF -- '-m "S1 BEGIN name=$n bytes=$XB md5=$XM enc=base64"' "$f" || die "$rung: the TCU export frame is missing"
 	fi
-	profile_check "$f" "$prof"
+	profile_check "$f" "$prof" "$diag"
 
 	STEP="$rung: kshcheck (step 8)"
 	out="$("$PY_BIN" "$PARSER" kshcheck "$f" 2>&1)" || { printf '%s\n' "$out" >&2; die "$rung: the generated host script breaks the pipe-free rule"; }
@@ -932,28 +1074,73 @@ gen_ksh() {
 	bash -n "$f" || die "$rung: $f does not parse (bash -n)"
 }
 
-# profile_check FILE PROFILE (design §3.8, §4.2, §7.3): a TCG script never calls
-# memcanary asinfo or verify and carries no canary, asinfo or TCU text; a board
-# script calls verify only with c1, c2 and c3, each at least once, and asinfo
-# once. alloc only with -s 1536 on the board; hold only with the profile's size.
-profile_check() {
-	local f="$1" prof="$2" res
-	STEP="$(basename "$f"): profile check (step 8)"
-	res=$(awk -v prof="$prof" -v hold="${HOLD_MIB_OF[$prof]}" -v alloc="$B2_ALLOC_MIB" '
+# profile_scan FILE PROFILE [DIAG] prints ok or its reasons (design §3.8, §4.2, §7.3;
+# revision 3's §15.5 B5). A TCG script never calls memcanary asinfo or verify and carries
+# no canary, asinfo or TCU text; a board script calls verify only with c1, c2 and c3, each
+# at least once, and asinfo once. alloc only with -s 1536 on the board, and never in s1-j1;
+# hold only with the profile's size, except s1-j1's own hold (trigger /dev/shmem/j1hold.go),
+# which only s1-j1 may carry, once, with J1_HOLD_MIB. memcanary-w only with DIAG j1: on the
+# board exactly the four watch calls of J1_WATCH_ROWS, each with a compiled name, the
+# bounded flags in their order, its dump at /dev/shmem/j1<label>.bin and no address; on
+# TCG exactly one --selftest. The tool name is matched as a whole word, so memcanary-w is
+# neither read as memcanary nor skipped as a longer word.
+profile_scan() {
+	local j1=0
+	[ "${3:-}" = j1 ] && j1=1
+	awk -v prof="$2" -v hold="${HOLD_MIB_OF[$2]}" -v alloc="$B2_ALLOC_MIB" -v j1="$j1" \
+	    -v j1hold="$J1_HOLD_MIB" -v rows="$J1_WATCH_ROWS" '
+		function num(s, lo, hi) { return s ~ /^[0-9]+$/ && s + 0 >= lo && s + 0 <= hi }
+		# memcanary-w, whose words after the tool name are w[1] to w[nw]
+		function scan_w(    i, lab) {
+			if (w[1] == "--selftest") {
+				if (prof != "tcg") bad = bad " line" NR ":w-selftest-in-board"
+				wself++
+				return
+			}
+			if (w[1] != "watch") { bad = bad " line" NR ":w-mode-" w[1]; return }
+			if (prof != "board") { bad = bad " line" NR ":watch-in-tcg"; return }
+			for (i = 2; i <= nw; i++)
+				if (w[i] ~ /0[xX][0-9a-fA-F]/) { bad = bad " line" NR ":watch-address"; return }
+			if (w[2] != "-n" || w[4] != "-l" || w[6] != "-i" || w[8] != "-c" || w[10] != "-T" || w[12] != "-d" ||
+			    (nw > 13 && w[14] != ">")) { bad = bad " line" NR ":watch-form"; return }
+			if (w[3] != "c1" && w[3] != "c2" && w[3] != "c3") { bad = bad " line" NR ":watch-name-" w[3]; return }
+			lab = w[5]
+			if (lab !~ /^[a-z0-9]+$/ || length(lab) > 8) { bad = bad " line" NR ":watch-label"; return }
+			if (!num(w[7], 0, 60000)) { bad = bad " line" NR ":watch-interval-" w[7]; return }
+			if (!num(w[9], 1, 100000)) { bad = bad " line" NR ":watch-count-" w[9]; return }
+			if (!num(w[11], 1, 3600)) { bad = bad " line" NR ":watch-deadline-" w[11]; return }
+			if (w[13] != "/dev/shmem/j1" lab ".bin") { bad = bad " line" NR ":watch-dump-path"; return }
+			if (!(lab in want) || want[lab] != w[3] ":" w[7] ":" w[9] ":" w[11]) { bad = bad " line" NR ":watch-row-" lab; return }
+			seen_w[lab]++
+		}
+		BEGIN {
+			n = split(rows, r, " ")
+			for (i = 1; i <= n; i++) { split(r[i], x, ":"); want[x[1]] = x[2] ":" x[3] ":" x[4] ":" x[5] }
+		}
 		{ sub(/\r$/, "") }
 		/^[[:space:]]*#/ { next }
 		{
 			if (prof == "tcg" && (index($0, "tcu-cat") || index($0, "CANARY") || index($0, "asinfo") || index($0, "ASINFO")))
 				bad = bad " line" NR ":board-only-text"
+			if (!j1 && index($0, "memcanary-w"))
+				bad = bad " line" NR ":memcanary-w-outside-j1"
 			line = $0
 			while ((k = index(line, "memcanary")) > 0) {
 				nxt = substr(line, k + 9, 1)
 				line = substr(line, k + 9)
+				tool = "m"
+				if (nxt == "-" && substr(line, 2, 1) == "w") {
+					tool = "w"
+					nxt = substr(line, 3, 1)
+					line = substr(line, 3)
+				}
 				if (nxt != "\"" && nxt != " " && nxt != "\t") continue
 				rest = line
 				sub(/^"?[ \t]+/, "", rest)
-				split(rest, w, /[ \t]+/)
-				if (w[1] == "verify") {
+				nw = split(rest, w, /[ \t]+/)
+				if (tool == "w") {
+					scan_w()
+				} else if (w[1] == "verify") {
 					if (prof != "board") { bad = bad " line" NR ":verify-in-tcg"; continue }
 					if (w[2] != "-n" || (w[3] != "c1" && w[3] != "c2" && w[3] != "c3")) { bad = bad " line" NR ":verify-" w[2] "-" w[3]; continue }
 					seen[w[3]]++
@@ -962,8 +1149,14 @@ profile_check() {
 					asinfo++
 				} else if (w[1] == "alloc") {
 					if (prof != "board" || w[2] != "-s" || w[3] != alloc) bad = bad " line" NR ":alloc-" w[3]
+					else if (j1) bad = bad " line" NR ":alloc-in-j1"
 				} else if (w[1] == "hold") {
-					if (w[2] != "-s" || w[3] != hold) bad = bad " line" NR ":hold-" w[3]
+					if (w[4] == "-f" && w[5] == "/dev/shmem/j1hold.go") {
+						# the s1-j1 hold (section 15.4.8)
+						if (!j1 || prof != "board") bad = bad " line" NR ":hold-j1-outside-j1"
+						else if (w[2] != "-s" || w[3] != j1hold) bad = bad " line" NR ":hold-j1-" w[3]
+						j1holds++
+					} else if (w[2] != "-s" || w[3] != hold) bad = bad " line" NR ":hold-" w[3]
 				} else if (w[1] == "--selftest") {
 					# §6.1 step 6: the self-test runs on the TCG host only.
 					if (prof != "tcg") bad = bad " line" NR ":selftest-in-board"
@@ -979,10 +1172,125 @@ profile_check() {
 				if (asinfo != 1) bad = bad " asinfo-calls-" (asinfo + 0)
 			}
 			if (prof == "tcg" && selftest != 1) bad = bad " selftest-calls-" (selftest + 0)
+			if (j1 && prof == "board") {
+				for (lab in want) if (seen_w[lab] != 1) bad = bad " watch-rows-" lab "-" (seen_w[lab] + 0)
+				if (j1holds != 1) bad = bad " j1-hold-calls-" (j1holds + 0)
+			}
+			if (j1 && prof == "tcg" && wself != 1) bad = bad " w-selftest-calls-" (wself + 0)
 			print (bad == "" ? "ok" : bad)
-		}' "$f")
+		}' "$1"
+}
+
+profile_check() {
+	local f="$1" prof="$2" res
+	STEP="$(basename "$f"): profile check (step 8)"
+	res=$(profile_scan "$f" "$prof" "${3:-}")
 	[ "$res" = ok ] || die "$STEP: $res"
 	echo "   profile check $(basename "$f") ($prof): ok"
+}
+
+# pst_case FILE PROFILE DIAG REASON sub FROM TO | add LINE | del NEEDLE: a copy of FILE with
+# one change must be refused by profile_scan with REASON among its reasons. Text reaches awk
+# through ENVIRON, never -v, which would expand backslashes.
+PST_N=0
+pst_case() {
+	local f="$1" prof="$2" diag="$3" want="$4" how="$5" inj res
+	inj="$GATE/selftest/inject-$PST_N.ksh"
+	case "$how" in
+	sub)
+		FROM="$6" TO="$7" awk '
+			{ sub(/\r$/, "") }
+			!done && (k = index($0, ENVIRON["FROM"])) > 0 {
+				$0 = substr($0, 1, k - 1) ENVIRON["TO"] substr($0, k + length(ENVIRON["FROM"]))
+				done = 1
+			}
+			{ print }
+			END { exit (done ? 0 : 1) }' "$f" > "$inj" \
+			|| die "$STEP: '$6' is not in $(basename "$f"); the self-test no longer matches the template"
+		;;
+	add)
+		{ cat "$f"; printf '%s\n' "$6"; } > "$inj"
+		;;
+	del)
+		NEEDLE="$6" awk '{ sub(/\r$/, "") } index($0, ENVIRON["NEEDLE"]) > 0 { c++; next } { print } END { exit (c == 1 ? 0 : 1) }' \
+			"$f" > "$inj" || die "$STEP: '$6' is not on exactly one line of $(basename "$f")"
+		;;
+	esac
+	res=$(profile_scan "$inj" "$prof" "$diag")
+	case "$res" in
+	*"$want"*) ;;
+	*) die "$STEP: a copy of $(basename "$f") with $how '$6' was not refused as $want (the scan said: $res)" ;;
+	esac
+	rm -f "$inj"
+	echo "   profile check on $(basename "$f") with $how '$6': refused as $want: ok"
+	PST_N=$((PST_N + 1))
+}
+
+# profile_selftest (§15.5 B5): the profile check still refuses each form revision 3 forbids.
+# It generates an s1-h1 host script, an s1-j1 script and the TCG j1 script under
+# <out>/gate/selftest; gen_ksh runs the profile check and kshcheck on each, so the real
+# scripts pass first. Then one changed copy per form must be refused by name. Nothing
+# written here is an image input.
+profile_selftest() {
+	local d="$GATE/selftest" h1 j1 tj
+	local wl='bwait -k 60 -o "$S/j1a.out" -e "$S/j1a.err" -- "$B/memcanary-w" watch -n c2 -l a -i 0 -c 100000 -T 20 -d /dev/shmem/j1a.bin > "$S/j1a.b" 2>&1'
+	local sl='bwait -k 60 -o "$S/x.out" -e "$S/x.err" -- "$B/memcanary-w" --selftest > "$S/x.b" 2>&1'
+	local al='bwait -k 120 -o "$S/alloc.out" -e "$S/alloc.err" -- "$B/memcanary" alloc -s 1536 > "$S/alloc.b" 2>&1'
+	mkdir -p "$d"
+	h1="$d/s1-h1.ksh"; j1="$d/s1-j1.ksh"; tj="$d/tcg-j1.ksh"
+	bounds board
+	gen_ksh board host "" s1-h1 900 "$h1"
+	gen_ksh board host j1 s1-j1 900 "$j1"
+	bounds tcg
+	gen_ksh tcg dryrun j1 tcg-j1 none "$tj"
+	STEP="profile check self-test (step 8)"
+	PST_N=0
+	pst_case "$j1" board j1 watch-name-c4 sub "-n c2 -l a " "-n c4 -l a "
+	pst_case "$j1" board j1 watch-address sub "-n c2 -l a " "-n 0x100000000 -l a "
+	pst_case "$j1" board j1 watch-dump-path sub "-d /dev/shmem/j1a.bin" "-d /tmp/j1a.bin"
+	pst_case "$j1" board j1 watch-interval-60001 sub "-l b -i 1000 " "-l b -i 60001 "
+	pst_case "$tj" tcg j1 watch-in-tcg add "$wl"
+	pst_case "$j1" board j1 w-selftest-in-board add "$sl"
+	pst_case "$h1" board "" memcanary-w-outside-j1 add "$wl"
+	pst_case "$j1" board j1 "hold-j1-$((J1_HOLD_MIB - 1))" sub "hold -s $J1_HOLD_MIB -f /dev/shmem/j1hold.go" \
+		"hold -s $((J1_HOLD_MIB - 1)) -f /dev/shmem/j1hold.go"
+	pst_case "$j1" board j1 watch-rows-d-0 del "-n c1 -l d "
+	pst_case "$j1" board j1 alloc-in-j1 add "$al"
+	pst_case "$tj" tcg j1 w-selftest-calls-2 add "$sl"
+	pst_case "$tj" tcg "" memcanary-w-outside-j1 add "$sl"
+	echo "   profile check self-test: the generated s1-h1, s1-j1 and TCG j1 scripts pass; $PST_N changed copies refused by name: ok"
+}
+
+# bb_worst_j1 FILE (§15.5 B8.6, R22): the worst-case console text of s1-j1's host script,
+# in parse-s1.py's bb_text_bytes scope (from the first S1 line; the board's export bodies
+# go by tcu-cat and never reach the black box), counting every failure path as taken as
+# well as its success path. Terms: the S1 CONFIG line as generated; one S1 STATE line per
+# state call in the whole script, reachable in host mode or not; memcanary-w's line
+# contract, at most 255 B a line (§15.4.8), for 8 lines a watch; the caps the script
+# itself sets (headc 256 of each .err, 4,096 of pidin syspage=asinfo, 1,024 of slog2info);
+# and two allowances (HYPOTHESIS): 160 B for one of our record lines, 512 B for a bwait
+# status file shown on a failure path.
+bb_worst_j1() {
+	local f="$1" cfg states t
+	local line_b=160 bwait_b=512 wline_b=256 err_b=256 state_b=40
+	cfg=$(grep -m 1 '^say "CONFIG ' "$f" || true)
+	states=$(grep -cE '^[[:space:]]*state [a-z0-9_]+$' "$f" || true)
+	t=$(( ${#cfg} + 64 + states * state_b ))
+	# preflight's two NOTE lines, MEM boot and end, W2 reflected, FAIL_STATE twice
+	t=$(( t + 7 * line_b ))
+	# S1 ASINFO or its failure path, and pidin syspage=asinfo's cap
+	t=$(( t + line_b + bwait_b + err_b + 4096 ))
+	# canaries start and end: each verify line, and its tool=no-output path
+	t=$(( t + 2 * 3 * (line_b + line_b + bwait_b + err_b) ))
+	# four watches: 8 lines at the tool's limit, and the failure path
+	t=$(( t + 4 * (8 * wline_b + bwait_b + err_b) ))
+	# the hold: its fill and verify lines, its failure path, the two wait lines
+	t=$(( t + 2 * line_b + bwait_b + err_b + 2 * bwait_b ))
+	# four exports: S1 EXPORT and four shown status files, and the skip path
+	t=$(( t + 4 * (line_b + 4 * bwait_b + line_b + bwait_b + err_b) ))
+	# slog2info's head
+	t=$(( t + 1024 ))
+	echo "$t"
 }
 
 kshcheck_selftest() {
@@ -1009,6 +1317,8 @@ PARAM_KEYS=(image rung mode profile p b_opt diag conf conf_sha256 cmdline_sha256
 	s1con_sha256 memcanary_sha256 stamp_sha256 bwait_sha256 tcucat_sha256 smpcheck_sha256 startup_sha256
 	startup_line mem_gate_mib hold_mib hold_s geometry_limit bounds ksh_worst_s guard_s return_bound_s capture_s
 	build_sha256 ksh_sha256 kimg_sha256 transport q2_limit)
+# s1-j1 only (§15.5 B9), appended after the common keys so no other image's .params changes.
+PARAM_KEYS_J1=(memcanary_w_sha256 j1_hold_mib j1_hold_t bb_worst_b)
 write_params() {
 	local f="$OUT/$IMAGE.params" k
 	{
@@ -1016,11 +1326,18 @@ write_params() {
 		for k in "${PARAM_KEYS[@]}"; do
 			printf '%s=%s\n' "$k" "${PARAM[$k]:--}"
 		done
+		if [ "${PARAM[diag]:-}" = j1 ]; then
+			for k in "${PARAM_KEYS_J1[@]}"; do
+				printf '%s=%s\n' "$k" "${PARAM[$k]:--}"
+			done
+		fi
 	} > "$f"
 }
+# bounds_string [DIAG]: DIAG j1 appends the J6 bounds.
 bounds_string() {
-	local k o=""
-	for k in LK IR SHELL_T IO_K DRY_K HB_S END_T FILL_T HOLDV_T HOLD_T VERIFY_K SEND_FDT SEND_LOG SEND_STREAM; do
+	local k o="" keys="LK IR SHELL_T IO_K DRY_K HB_S END_T FILL_T HOLDV_T HOLD_T VERIFY_K SEND_FDT SEND_LOG SEND_STREAM"
+	if [ "${1:-}" = j1 ]; then keys="$keys J1_WA_K J1_WB_K J1_WC_K J1_WD_K J1_FILL_T J1_HOLD_T J1_HOLDV_T J1_SEND"; fi
+	for k in $keys; do
 		o="$o${o:+,}$k:${BT[$k]}"
 	done
 	echo "$o"
@@ -1035,7 +1352,7 @@ gen_board() {
 	STEP="$img: bounds (step 8)"
 	bounds board
 	PARAM=()
-	PARAM[ksh_worst_s]=$(ksh_worst board "$m")
+	PARAM[ksh_worst_s]=$(ksh_worst board "$m" "$diag")
 	# C14: guard = ceil((ksh worst + 125 + 240) / 300) x 300; return bound = guard + 300
 	# (m4-design.md:1252-1267); capture = return bound + 3000, as make-m4-images.sh.
 	PARAM[guard_s]=$(( ( (${PARAM[ksh_worst_s]} + 125 + 240 + 299) / 300 ) * 300 ))
@@ -1048,6 +1365,7 @@ gen_board() {
 	body="$OUT/$img.build.body"
 	keep=""
 	[ "$diag" = d1 ] && keep="D1"
+	[ "$diag" = j1 ] && keep="$keep J1"
 	[ "$m" = q2 ] && keep="$keep Q2"
 	local -a kv=(RUNG="$img" P=4 GUARD="${PARAM[guard_s]}" B_OPT="-b w2,canary" KSH="$(hostpath "$OUT/$img.ksh")"
 		IMAGE="$(hostpath "$IMAGE_SRC")" INITRD="$(hostpath "$INITRD_SRC")" CONF="$(hostpath "$CONF_SRC")"
@@ -1088,8 +1406,18 @@ gen_board() {
 	want=0; [ "$m" = q2 ] && want=1
 	[ "$(grep -c '^\[+raw perms=0444\] /proc/boot/guest-ifs.bin=' "$build" || true)" = "$want" ] \
 		|| die "$img: the guest pair is $([ "$want" = 1 ] && echo "missing" || echo "present in a Linux-only image")"
+	want=0; [ "$diag" = j1 ] && want=1
+	[ "$(count_line "$build" "/proc/boot/memcanary-w=memcanary-w")" = "$want" ] \
+		|| die "$img: memcanary-w is $([ "$want" = 1 ] && echo "not staged" || echo "staged, which only s1-j1 may be")"
 
 	gen_ksh board "$m" "$diag" "$img" "${PARAM[guard_s]}" "$OUT/$img.ksh"
+	if [ "$diag" = j1 ]; then
+		STEP="$img: black-box text estimate (step 8, §15.5 B8.6)"
+		PARAM[bb_worst_b]=$(bb_worst_j1 "$OUT/$img.ksh")
+		(( ${PARAM[bb_worst_b]} < BB_GATE )) \
+			|| die "$STEP: the worst-case console text is ${PARAM[bb_worst_b]} B, not under $BB_GATE B (R22); rebuild at -vv or cut the script's text first"
+		echo "   $STEP: worst case ${PARAM[bb_worst_b]} B, under $BB_GATE B: ok"
+	fi
 
 	PARAM[image]="$img"; PARAM[rung]="$img"; PARAM[mode]="$m"; PARAM[profile]=board; PARAM[p]=4; PARAM[b_opt]="w2,canary"
 	PARAM[diag]="${diag:--}"
@@ -1102,8 +1430,11 @@ gen_board() {
 	PARAM[mem_gate_mib]="${MEM_GATE[board:$m]}"; PARAM[hold_mib]="$([ "$m" = hold ] && echo "${BT[HOLD_MIB]}" || echo -)"
 	PARAM[hold_s]="$([ "$m" = hold ] && echo "$HOLD_S" || echo 0)"
 	PARAM[geometry_limit]="$([ "$m" = q2 ] && echo "$Q2_LIMIT" || printf '0x%x' "$GEOMETRY_CAP")"
-	PARAM[bounds]="$(bounds_string)"; PARAM[build_sha256]="$(sha "$build")"; PARAM[ksh_sha256]="$(sha "$OUT/$img.ksh")"
+	PARAM[bounds]="$(bounds_string "$diag")"; PARAM[build_sha256]="$(sha "$build")"; PARAM[ksh_sha256]="$(sha "$OUT/$img.ksh")"
 	PARAM[kimg_sha256]=-; PARAM[transport]=tcu; PARAM[q2_limit]="${Q2_LIMIT:--}"
+	if [ "$diag" = j1 ]; then
+		PARAM[memcanary_w_sha256]="$PIN_MEMCANARY_W"; PARAM[j1_hold_mib]="$J1_HOLD_MIB"; PARAM[j1_hold_t]="${BT[J1_HOLD_T]}"
+	fi
 	write_params
 	printf '   %-10s %-5s guard=%s return=%s capture=%s ksh_worst=%s\n' "$img" "$m" "${PARAM[guard_s]}" \
 		"${PARAM[return_bound_s]}" "${PARAM[capture_s]}" "${PARAM[ksh_worst_s]}"
@@ -1232,6 +1563,10 @@ gen_tcg() {
 	: > "$d/files.list"; : > "$d/system_files.lines"; : > "$d/data_files.lines"
 	add_file "$d" system 555 bin/s1con "$TOOLS/s1con"
 	add_file "$d" system 555 bin/memcanary "$TOOLS/memcanary"
+	# §15.5 B6: the watcher only in j1, so no T1-T3 files.list or lines file changes.
+	if [ "$diag" = j1 ]; then
+		add_file "$d" system 555 bin/memcanary-w "$TOOLS/memcanary-w"
+	fi
 	add_file "$d" system 555 bin/stamp "$TOOLS/stamp"
 	add_file "$d" system 555 bin/bwait "$TOOLS/bwait"
 	add_file "$d" system 555 bin/s1-host.ksh "$d/s1-host.ksh"
@@ -1257,6 +1592,7 @@ gen_tcg() {
 		echo "init_sha256=$PIN_INIT"
 		echo "s1con_sha256=$PIN_S1CON"
 		echo "memcanary_sha256=$PIN_MEMCANARY"
+		if [ "$diag" = j1 ]; then echo "memcanary_w_sha256=$PIN_MEMCANARY_W"; fi
 		echo "stamp_sha256=$PIN_STAMP"
 		echo "bwait_sha256=$PIN_BWAIT"
 		echo "mem_gate_mib=${MEM_GATE[tcg:$m]}"
@@ -1265,14 +1601,14 @@ gen_tcg() {
 		echo "qemu_smp=4"
 		echo "qemu_mem=2G"
 		echo "bounds=$(bounds_string)"
-		echo "ksh_worst_s=$(ksh_worst tcg "$m")"
+		echo "ksh_worst_s=$(ksh_worst tcg "$m" "$diag")"
 		echo "sends=console-unbounded"
 		echo "ksh_sha256=$(sha "$d/s1-host.ksh")"
 		echo "files_list_sha256=$(sha "$d/files.list")"
 		echo "q2_limit=${Q2_LIMIT:--}"
 		echo "post_start=ksh /system/bin/s1-host.ksh"
 	} > "$d/s1tcg.params"
-	printf '   tcg-%-7s mode=%-6s ksh_worst=%s files=%s ksh sha256 %s\n' "$v" "$m" "$(ksh_worst tcg "$m")" \
+	printf '   tcg-%-7s mode=%-6s ksh_worst=%s files=%s ksh sha256 %s\n' "$v" "$m" "$(ksh_worst tcg "$m" "$diag")" \
 		"$(wc -l < "$d/files.list")" "$(sha "$d/s1-host.ksh")"
 }
 
@@ -1442,6 +1778,8 @@ check_dumpifs_s1() {
 	STEP="$IMAGE: dumpifs (step 10)"
 	dumpifs_list
 	if [ "$m" = q2 ]; then names+=("${Q2_NAMES[@]}"); else absent+=("${Q2_NAMES[@]}"); fi
+	# §15.5 B5: memcanary-w only in s1-j1.
+	if [ "$diag" = j1 ]; then names+=(memcanary-w); else absent+=(memcanary-w); fi
 	[ "$diag" = d1 ] && data+=(s1-d1.conf)
 	awk '
 		$4 == "proc/boot/.script" { in_s = 1; next }
@@ -1680,6 +2018,25 @@ resolved_path() {
 
 # ---- main ------------------------------------------------------------------------------
 
+if [ "$SELFTEST" = 1 ]; then
+	echo "== S1 ($DESIGN): self-tests only"
+	echo "== no PO-A, no pins, no image: the output guard, the constant check, the profile check's injections (§15.5 B5),"
+	echo "   s1-j1's black-box text estimate (B8.6) and kshcheck's pipe injection"
+	guard_output
+	snapshot_status
+	find_python
+	constant_check
+	profile_selftest
+	STEP="black-box text estimate self-test (§15.5 B8.6)"
+	BBW=$(bb_worst_j1 "$GATE/selftest/s1-j1.ksh")
+	(( BBW < BB_GATE )) || die "$STEP: s1-j1's worst-case console text is $BBW B, not under $BB_GATE B"
+	echo "   $STEP: s1-j1's worst case $BBW B, under $BB_GATE B: ok"
+	kshcheck_selftest "$GATE/selftest/s1-j1.ksh"
+	tracked_guard
+	echo "== done: every self-test passed; the scripts under $GATE/selftest are test copies, never image inputs"
+	exit 0
+fi
+
 echo "== S1 ($DESIGN): $([ "$TCG" = 1 ] && echo "TCG profile" || echo "board images"): ${NAMES[*]}"
 echo "== guards, pins and gates (steps 1-7)"
 guard_output
@@ -1700,6 +2057,7 @@ if [ "$TCG" = 1 ]; then
 		gen_tcg "$v"
 		[ -n "$FIRST" ] || FIRST="$OUT/tcg/s1tcg-$v/s1-host.ksh"
 	done
+	profile_selftest
 	kshcheck_selftest "$FIRST"
 	tracked_guard
 	echo "== done: the TCG builder reads $OUT/tcg/s1tcg-<variant>/ (s1-host.ksh, s1tcg.params, files.list, *_files.lines)"
@@ -1736,6 +2094,7 @@ for img in "${NAMES[@]}"; do
 	esac
 done
 [ -z "$FIRST" ] || kshcheck_selftest "$FIRST"
+profile_selftest
 
 if [ "$GEN_ONLY" = 1 ]; then
 	tracked_guard

@@ -15,7 +15,8 @@
     - -Mode dryrun|boot|hold|q2 names the host script mode the image was built
       with (build-s1tcg-image.ps1 -Mode); a mismatch with the image's
       s1tcg.params is refused. It also selects parse-s1.py's step: dryrun T1,
-      boot T2, hold T3, q2 T3-q2
+      boot T2, hold T3, q2 T3-q2; -Variant j1 (dryrun) adds --diag j1, step T-J1
+      (revision 3, §15.5 B8.5: memcanary-w's self-test; never a pass run)
     - refuses to start while any qemu-system-aarch64 process exists (one QEMU at a
       time); stops QEMU in finally and confirms it gone with a bounded re-check
     - writes qhv/s1tcg/attempt<N>/serial-raw.log (QEMU -serial file: is
@@ -42,7 +43,7 @@
 #>
 param(
   [Parameter(Mandatory = $true)][ValidateRange(1, 9999)][int]$Attempt,
-  [ValidateSet('lin','hold','q2','d1','d2')][string]$Variant = 'lin',
+  [ValidateSet('lin','hold','q2','d1','d2','j1')][string]$Variant = 'lin',
   [Parameter(Mandatory = $true)][ValidateSet('dryrun','boot','hold','q2')][string]$Mode,
   [Parameter(Mandatory = $true)][ValidatePattern('^[a-z0-9]{1,16}$')][string]$Tag,
   [string]$QemuPath,
@@ -60,7 +61,7 @@ $GuestIfsPin  = '968029316b940f53580228f44e393877e032e251d78f3c752600cae726a7cf4
 $GuestDiskPin = 'cf5b06d0b3cb524201c71440fdda42a18d2636d45938acd8ec95cfa21314216b'
 
 # build-s1tcg-image.ps1's variant table; the image directory names the mode when a variant has more than one.
-$VariantModes = @{ 'lin' = @('boot', 'dryrun'); 'hold' = @('hold'); 'q2' = @('q2'); 'd1' = @('boot', 'dryrun'); 'd2' = @('boot') }
+$VariantModes = @{ 'lin' = @('boot', 'dryrun'); 'hold' = @('hold'); 'q2' = @('q2'); 'd1' = @('boot', 'dryrun'); 'd2' = @('boot'); 'j1' = @('dryrun') }
 if ($VariantModes[$Variant] -notcontains $Mode) {
   Write-Host "REFUSED: -Variant $Variant is built with -Mode $($VariantModes[$Variant] -join '|'), not $Mode"
   exit 1
@@ -443,6 +444,8 @@ try {
     '--image', ('"' + ($payload['image_src'] -replace '\\','/') + '"'),
     '--initrd', ('"' + ($payload['initrd_src'] -replace '\\','/') + '"')
   )
+  # §15.5 B8.5: the j1 variant is T-J1, parse-s1.py's --diag j1 on the TCG dryrun (no --arm or --fill-factor).
+  if ($Variant -eq 'j1') { $pargs += @('--diag', 'j1') }
   LL ('parser_cmd=python ' + ($pargs -join ' '))
   $parserHow = 'interrupted'
   $parserProc = Start-Process -FilePath $py -ArgumentList $pargs -PassThru -NoNewWindow `
