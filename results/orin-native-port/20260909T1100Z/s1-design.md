@@ -2256,6 +2256,11 @@ The export block is placed after `FAIL_STATE`, **outside** the `MODE != host` gu
   - **D31:** today's class is U.
   - **D30 (the UEFI arm):** decided at J6's memo.
   - **Next:** J6 in the control arm (J6c), with the owner at the board.
+- **Owner decisions before J6c (2026-09-14):**
+  - **D34 extended to J6c.** J2's F39 does not block J6c. Every other immediate stop stands, including an F39 inside J6c itself.
+  - **The fill-rate factor is 4,** pre-registered by J6's first stage and fixed for the revision.
+  - **The J6 stage's amendment is named `owner-D27`.**
+  - **J6c runs in the owner's current session.**
 
 ### 15.7 Claims, failure signatures, risks
 
