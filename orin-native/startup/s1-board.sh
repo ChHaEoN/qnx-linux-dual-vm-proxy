@@ -154,6 +154,9 @@ PARSER="$S1DIR/parse-s1.py"
 usage() { sed -n '3,/^set -uo/p' "$0" | grep '^#' | sed 's/^# \{0,1\}//' >&2; exit 2; }
 ON_DIE=""
 die()   { echo "$PROG: FAIL: $*" >&2; [ -n "${REC:-}" ] && printf '%s\n' "FAIL: $*" | redact >> "$REC"; [ -n "$ON_DIE" ] && "$ON_DIE"; exit 1; }
+# J6c (2026-09-14): a set -u stop (status 127) skipped ON_DIE and left a crashed attempt's records
+# in place. No path exits 127 on purpose, so only that status runs the handler here.
+trap '__rc=$?; if [ "$__rc" = 127 ] && [ -n "${ON_DIE:-}" ]; then __f="$ON_DIE"; ON_DIE=""; "$__f"; fi' EXIT
 note()  { echo "$PROG: $*" >&2; }
 utc_now() { date -u +%Y%m%dT%H%M%SZ; }
 iso_now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
@@ -3714,7 +3717,7 @@ j_wq_lines() {
 }
 
 # §15.4.6's state from COM3 after the offset, a pure function of the capture and the clock:
-#   JUMPED   'kexec_core: Starting new kernel' or 'T234-SHIM'
+#   JUMPED   'kexec_core: Starting new kernel', 'T234-SHIM', or a record line of the image (S1, STAMP, BWAIT, T234, t234:)
 #   ABORTED  'abort reason=', 'kexec did not happen' or 'fallback firing'
 #   ISSUED   'kexec issuing'
 #   STALLED  no new marker by the fixed schedule's bound (begin by the start delay + 60 s; slot
@@ -3728,7 +3731,8 @@ wq_state() {
 	{
 		s = $0
 		sub(/^[ \t]+/, "", s); sub(/^[^ -~]+[ \t]*/, "", s); sub(/[ \t]+$/, "", s)
-		if (s ~ /kexec_core: Starting new kernel/ || s ~ /T234-SHIM/) jump = 1
+		# record lines of the image prove the jump too, when COM3 lost both texts (as com3_wq_class)
+		if (s ~ /kexec_core: Starting new kernel/ || s ~ /T234-SHIM/ || s ~ /^(S1 |STAMP |BWAIT |T234 |t234: )/) jump = 1
 		m = s
 		sub(/^\[ *[0-9]+\.[0-9]+\] */, "", m); sub(/^\[ *[CT][0-9]+\] */, "", m)
 		if (m !~ /^s1wq: / || m ~ /^s1wq: j1 /) next
@@ -3771,6 +3775,8 @@ wait_wq() {
 	grow=$(date +%s)
 	fbd=$(( armed + $(wq_fallback_s "$WQ_SLOT_COUNT") ))
 	deadline=$(( fbd + 600 ))
+	# s1-j1's host run outlasts that bound: a lost jump text must not give up while QNX still watches
+	[ "${IMG:-}" = s1-j1 ] && (( fbd + RETURN_BOUND > deadline )) && deadline=$(( fbd + RETURN_BOUND ))
 	WQ_END=""
 	while :; do
 		now=$(date +%s)
@@ -4305,7 +4311,7 @@ j_detached() {
 		# same Phase A and Phase B as J2 and J4). It lengthens the return bound, and through it the
 		# capture life of gates A and B, both taken from s1-j1.params (guard + 300 s, C14)
 		cmin="$(j_capture_life_min "$arm" "$RETURN_BOUND" "$WQ_SLOT_COUNT")"
-		rec "$kw j6 bounds from s1-j1.params: guard_s=$(param guard_s) return_bound_s=$RETURN_BOUND capture_s=$CAPTURE_S; capture life needed at gate A $cmin s (return bound + 2180 + fallback); start the capture with -Seconds $(( CAPTURE_S > cmin ? CAPTURE_S : cmin + 300 )) or more. The host run follows the jump, so the start margin is J2's and J4's"
+		rec "$kw j6 bounds from s1-j1.params: guard_s=$(param guard_s) return_bound_s=$RETURN_BOUND capture_s=$CAPTURE_S; capture life needed at gate A $cmin s (return bound + 2180 + fallback); start the capture with -Seconds $(( CAPTURE_S > cmin + 600 ? CAPTURE_S : cmin + 600 )) or more. The host run follows the jump, so the start margin is J2's and J4's"
 	fi
 	gate="$(j_capture_gate "$arm" "$WQ_SLOT_COUNT")" || die "gate A: ${gate#*FAIL: }"
 	rec "$gate"
@@ -6602,6 +6608,8 @@ cmd_harness_selftest() {
 	check "wq_state JUMPED: Starting new kernel" "$(wqs "$d/wqj.log" $(( a + 5000 )))" JUMPED
 	cp "$d/wqi.log" "$d/wqj.log"; printf 'T234-SHIM EL=2 PC=0000000080080000\r\n' >> "$d/wqj.log"
 	check "wq_state JUMPED: a shim line" "$(wqs "$d/wqj.log" $(( a + 5000 )))" JUMPED
+	cp "$d/wqi.log" "$d/wqj.log"; printf 't234: WDT0 CR=00710010 SR=00000010\r\nS1 STATE config\r\n' >> "$d/wqj.log"
+	check "wq_state JUMPED: the image's record lines when COM3 lost both jump texts (J6c review)" "$(wqs "$d/wqj.log" $(( a + 5000 )))" JUMPED
 	for line in 'abort reason=oops' 'kexec did not happen' 'fallback firing'; do
 		cp "$cw" "$d/wqa.log"; printf '[  400.000000] s1wq: %s\r\n' "$line" >> "$d/wqa.log"
 		check "wq_state ABORTED: $line" "$(wqs "$d/wqa.log" $(( a + 100 )))" ABORTED
