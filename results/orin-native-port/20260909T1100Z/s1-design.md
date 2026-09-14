@@ -1444,3 +1444,44 @@ Both runs below are under QEMU TCG on the PC, from images built from commit `00c
 - **`s1-d1`:** whether qvm accepts `unsupported <class> abort` is still untested, since no run used `s1-d1`.
 
 **What this does not show (§10).** No timing of any kind. No isolation or containment. Nothing about A78AE, the board's PSCI, window 2 or physical pinning, and a TCG pass does not predict a native pass. No GPU result, and not publishable before the 4.6(i) consultation.
+
+### 14.12 The first board session: B0, B1 and B2 (2026-09-14)
+
+The owner was at the board, with the TX wire off. The images are the ones rebuilt from `00c61db` (§14.11). The records are private and git-ignored, and no figure, hash, size, address or duration from them is copied here.
+
+**B0 met, after two harness fixes.** These are two deviations from §6.6's p0 as designed, both in the harness, neither a board finding.
+- **Pre-flight and staging** passed for all four board images.
+- **The first p0 was NOT MET** on two gates:
+  - `item6_iomem` listed an entry inside the candidate window 2. It was the running L4T kernel's own image (`Kernel code`, `reserved`, `Kernel data`), placed there by KASLR. That is not a reservation, and it moves with every boot.
+  - `landing` failed because the board's kernel has no dynamic debug, so the kexec landing line cannot be read.
+- **The fixes (`e4b3e03`, after an adversarial review):**
+  - `item6_iomem` now excludes only that exact triple: one `Kernel code` and one `Kernel data` at the same indent, with exactly one contiguous `reserved` between them. Anything else in the window still fails. Seven self-test cases were added.
+  - `landing` is recorded as SKIPPED when dynamic debug is absent. The guard is the shim's own landing check (`BAD-LANDING`, then a PSCI reset before any QNX code), plus B1's tokens and `parse-s1.py`'s L0 for B2 and B3, which require the expected entry PC and no `BAD-LANDING`. B4 and B5 report L0 without gating on it.
+- **The p0 rerun passed** on all four images.
+- **The reboot to a fresh boot** hit the known long-uptime pattern: L4T oopsed in its shutdown path and came back through a watchdog reset. The bootloader slot state was unchanged.
+
+**B1 met.**
+- **Tokens (§6.6).** Present: the shim at EL2 with the expected PC, the startup's WDT0 line, `procnto up` and the image's reset line. Absent: every `-b` line (`ram w2`, `gpu range`, `canary`), `BAD-LANDING`, `EXC` and `EL!=2`.
+- **The return.** The firmware banner followed the reset, the reset reason was a software main reset, and the bootloader slot and `nvbootctrl` matched the session's first reading.
+- **b1-compare: a third deviation.** M1b R2's raw black box is not in the repository, so the reference is the curated R2 COM3 capture's section from the shim line to the reset line, with its trailing blanks and blank lines removed. After `b1_normalise`, five places differ, and nothing else:
+  - the WDT0 control value read by the shim at hand-off. The firmware and L4T set it, not the image. That the preceding watchdog reset explains it is a HYPOTHESIS;
+  - two syspage map entries, which depend on the startup's size (the S1 startup carries the `-b` code);
+  - `smpcheck`'s sample counts, which are figures. After B2, `b1_normalise` masks them, trailing blanks and blank lines. On the unmodified inputs it now leaves only the other three kinds;
+  - `pidin`'s thread total, one higher than R2's. Unexplained, and not a B1 token.
+
+  None of these points at the option-off startup changing QNX's behaviour.
+- **A harness defect found in B1's output (`60f830a`).** The privacy scan used `grep -c … || echo 0`. With no match that yields two zeros, so the sum failed. A copy with hits in another class was then recorded as clean and kept raw. The fix defaults each count instead, and three redaction self-test cases were added. B0's and B1's copies were rescanned by hand: no address, MAC or user name. The hostname class is rechecked with the board up.
+
+**B2 NOT MET, on data: kill condition 1 for the 11c candidate (§5.3, F23, D8).** It ran on a fresh, unused boot inside the quiesce's uptime limit, after a clean quiesce (four modules removed, no Oops, no SMMU lines), with the privacy fix above in the harness.
+- **What held.** Startup added window 2 and left the GPU range out. It filled all three canaries, and procnto came up. `S1 W2 reflected=yes`, and `S1 ASINFO` showed both windows in sysram, three canary entries, and neither a canary nor the GPU range in sysram. c1 and c3 verified at both checks, and the `alloc` path filled and verified.
+- **What failed.** c2, the canary at the very start of window 2, gave `verify=bad` at both checks. The first mismatching word was its first word each time, but the number of mismatching words differed between the two checks. Something wrote the range after startup's fill and kept writing while QNX ran. `parse-s1.py` gave `verdict=fail` on L1, b2 and `canaries_all_ok`, with L0, L7 and item 5 ok.
+- **The return was clean.** The image's own reset brought L4T back, and the bootloader slot and `nvbootctrl` matched the session's first reading.
+- **Not the writer (VERIFIED):** procnto's allocator. The canary was out of `ram_list` before the fill, and `S1 ASINFO` shows it outside sysram.
+- **Candidates (HYPOTHESIS, untested):**
+  - an L4T device still doing DMA after the kexec, into buffers its kernel had placed at the low end of the RAM above 4 GiB: a network or USB controller's rings, say;
+  - a firmware or coprocessor user that `/proc/iomem` does not show (K5, R17).
+
+  memcanary prints only a count, not the mismatching words, so their content cannot yet tell these apart.
+- **What follows, per the design.** S1-F stops, and B3 to B5 do not run. No window-1-only continuation is offered (V14). Under D8, the next step is a new design revision, owned by the owner's decision, which reruns B1 and B2: another range derived from the three-boot `/proc/iomem` comparison, a diagnosis of the writer first, or both. D8 names this record `r/s1-runs.md`. Because S1's figures stay private, the number-free record is this section, and the private run notes sit beside the B2 records.
+
+**What this does not show.** B0 and B1 show that the harness, the staging and the option-off startup work on the board. B2 shows that 11c's window-2 candidate is not free after the quiesce, at its lowest canary. It does not show that the rest of window 2 is free, since two canaries of 16 MiB sample a range of more than 2 GiB, and the allocation checks its pages only for the moment it holds them. It shows nothing about a Linux guest on the board, and no timing.

@@ -1525,7 +1525,7 @@ NEG_PATTERNS=(
 
 # Durations, clock counts and FreeMem values are masked in everything extracted.
 mask_figures() {
-	sed -E 's/(^| )(ms|cycles|cps|mono_ns)=[0-9]+/\1\2=<masked>/g; s/^(S1 MEM [^ ]+) [^ ]+/\1 <masked>/'
+	sed -E 's/(^| )(ms|cycles|cps|mono_ns|samples)=[0-9]+/\1\2=<masked>/g; s/^(S1 MEM [^ ]+) [^ ]+/\1 <masked>/'
 }
 
 extract_file() {
@@ -1621,8 +1621,11 @@ b1_tokens() {
 
 # §6.6: B1's black box against M1b R2's, with addresses and hex words masked.
 # The pass judgement ("apart from startup-size-dependent addresses") is the run note's.
+# Trailing blanks and blank lines go too: B1's only R2 reference is a curated
+# COM3 capture, which carries both where a black box has neither.
 b1_normalise() {
-	tr -d '\r' < "$1" | sed -E 's/0x[0-9a-fA-F]+/0x<n>/g; s/(^|[^0-9A-Za-z_])[0-9a-fA-F]{8,}([^0-9A-Za-z_]|$)/\1<hex>\2/g'
+	tr -d '\r' < "$1" | sed -E 's/[[:space:]]+$//; /^$/d' | mask_figures \
+		| sed -E 's/0x[0-9a-fA-F]+/0x<n>/g; s/(^|[^0-9A-Za-z_])[0-9a-fA-F]{8,}([^0-9A-Za-z_]|$)/\1<hex>\2/g'
 }
 
 cmd_b1_compare() {
