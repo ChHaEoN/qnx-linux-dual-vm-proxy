@@ -2061,7 +2061,7 @@ The export block is placed after `FAIL_STATE`, **outside** the `MODE != host` gu
      - refuse a capture name already in `<rec>/used-captures.log`, and refuse a capture that holds an `s1wq:` marker or any earlier rung's output (today's `com3_has_records` misses L4T-only rungs);
      - `S1_REDACT_SSID` must be set.
    - **Refused environment variables:** `S1_WQ_*` and every existing fixed setting.
-2. **`orin-native/s1/kpf-decode.py`** (new, stdlib, `SPDX-License-Identifier: Apache-2.0` like its siblings, `--selftest`).
+2. **`orin-native/s1/kpf-decode.py`** (new, stdlib, `SPDX-License-Identifier: MIT` like its siblings, `--selftest`; corrected 2026-09-14 during implementation: `parse-s1.py`, `mkcpio.py` and the repository `LICENSE` are MIT, not Apache-2.0).
    - **Classes** from `/proc/kpageflags` bits: buddy, slab, pgtable, LRU anon or file, compound head or tail, nopage, reserved, other held (count ≥ 1 and none of the above), free or tail (VENDOR_CLAIM for bits 0-26, docs.kernel.org `pagemap`; bit 32 HYPOTHESIS).
    - **Outputs:** per-canary class counts, per-MiB classes for c1-c3, a map of window 2 in 16 MiB buckets, and `prequiesce` → `postquiesce` counts for c2's pages (held-to-free, free-to-held, held-to-held), labelled "record only".
    - **Refusals:** a size not a multiple of 8; an entry count different from the header; a missing header.
@@ -2472,5 +2472,5 @@ If D29 declines, §15 itself is pushed only as a pointer plus these neutral form
 | feasibility | minor | trace perturbation of J2 not named; F33 reading with the trace on unspecified | applied in part; the "trace in J1 only" option rejected | risk named in §15.7.4; F33 sends J2b without the trace; J1 go rule. J1-only rejected because a reboot is not a kexec shutdown (X4) |
 | feasibility | minor | J records cannot show which harness ran | applied | `s1-board.sh` sha256, `git rev-parse HEAD`, clean-tree check of harness, `kpf-decode.py`, `parse-s1.py`; refuse dirty |
 | feasibility | minor | no black-box estimate for `s1-j1` | applied | gate B8.6: worst-case text under the 60,000 B threshold |
-| feasibility | minor | `kpf-decode.py` declared MIT against Apache-2.0 siblings; D28 could export QNX structure content | applied | Apache-2.0 SPDX header; D28 and J7d exclude `pte`, `kva` and any QNX-structure class; J6 stays counts |
+| feasibility | minor | `kpf-decode.py` declared MIT against Apache-2.0 siblings; D28 could export QNX structure content | applied, then corrected at implementation (the siblings are MIT) | MIT SPDX header, matching the siblings; D28 and J7d exclude `pte`, `kva` and any QNX-structure class; J6 stays counts |
 | feasibility | minor | the raw COM3 capture path is unchecked and never redacted | applied | gate A refuses a capture outside the git-ignored record directory; raw capture never copied, quoted or scanned by hand |
