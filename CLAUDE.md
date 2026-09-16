@@ -427,7 +427,8 @@ Quick summary for context:
   stock L4T kernel then booted as a qvm guest with three vCPUs, to a busybox shell that answered the host's probe (pass
   item 1), and the ten-minute hold path was rehearsed. ~~Nothing of S1 has run on the board; B0-B5 are next, with the
   owner present;~~ On the board the same day, with the owner present, B0 and B1 met, and B2 was not met on data: the
-  lowest window-2 canary was overwritten after kexec, so S1-F stopped before B3. S1-F is paused in writer diagnosis.
+  lowest window-2 canary was overwritten after kexec, so S1-F stopped before B3. S1-F was then paused in writer
+  diagnosis (resolved for that rung on 2026-09-16, below).
   J1 met. J2, the matched control, reproduced that canary (c2) and also hit c3 (F39; the owner waived that stop for
   J3 and J4 only, D34). J3 met after a harness gate defect was re-judged from its records. J4, with the removable DMA
   masters removed, was F36: they are excluded as c2's writer, and J4 says nothing about the GPU, firmware or a
@@ -436,8 +437,18 @@ Quick summary for context:
   steps deferred (D54). Revision 3 closed as U, with a CPU cache-residue hypothesis leading (HYPOTHESIS, untested); the
   secondary-CPU offline arm is designed and shelved (D65). Revision 4, accepted by the owner, is a startup cache clean
   by virtual address before the fill, under the S1 option only; next B1, then a watcher run, then B2, with the owner
-  present. Its startup is built on the PC and pinned; the board images are regenerated on the new pin, nothing of
-  revision 4 has run on the board, and B2 stays not met on data; s1-design.md §14.9-14.12, §15
+  present. Its startup is built on the PC and pinned; the board images are regenerated on the new pin. **2026-09-16:
+  that ladder ran on the board in one session with the owner at the plug, and all three rungs passed.** B1 met with
+  no cache-clean line at all (the option gating is correct) and only admitted classes in its comparison; the watcher
+  run (J6x) saw window 2's base canary verified at both checks, no writer active, empty page bitmaps in every bucket
+  and label, and the timed hold verified, with both cache-clean lines emitted by the real binary for the first time;
+  B2 then passed every canary check with the window reflected as registered and the allocation verified, so **B2 is
+  MET for the rebuilt image** and the reading is X-f final. The public interpretive sentence and any class sentence
+  wait on the owner's D83 (D77) and are not written anywhere yet. The original 2026-09-14 B2 record is unchanged and
+  stays NOT MET, on data, for the old startup (D72). Two process incidents: the watcher run's first attempt refused
+  at the pre-registration check on an unset rule-file variable, before any board contact and with nothing appended
+  twice; and B1's oversized capture blocked the exclusive serial port, so captures are now sized per rung. S1-F is
+  **not complete** — B3-B5 have never run; s1-design.md §14.9-14.12, §15
   and §16; figures unpublished)**; freeze
   reference architecture v1; then one measurement campaign on it (the M3 and M4 numbers, the M5 comparison, the twin
   diff), every record stamped with the version. ~~Awaiting the owner's confirmation: the M path ends at M5's functional
@@ -528,7 +539,11 @@ Quick summary for context:
    the owner's decision on a UEFI-entry arm; s1-design.md §15~~
    **2026-09-15:** revision 3 closed as U with a cache-residue hypothesis
    leading; revision 4 is a startup cache clean before the fill, and next
-   are B1, a watcher run and B2, in that order, not yet run;
+   are B1, a watcher run and B2, in that order, ~~not yet run~~
+   **2026-09-16: all three ran and passed, so B2 is MET for the rebuilt
+   image and the reading is X-f final; the original 2026-09-14 B2 record
+   stays NOT MET, on data, and the public interpretive sentence waits on
+   the owner's D83. Next: D83, then B3-B5, which have never run**;
    s1-design.md §16).
    Then settle the freeze gate and write the v1 manifest. Then run the
    single campaign, native leg and both TCG twin legs, every record stamped

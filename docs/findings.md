@@ -9,6 +9,56 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-16 — S1-F's revision-4 ladder ran on the board: B1, the watcher run and B2 all passed, and B2 is met on the rebuilt image
+
+With the owner at the plug, revision 4's three rungs ran in one session, in the pre-registered order, and each met
+its rule. The rule that reads them, its reference and the image pins were registered before any of them ran, so
+none of this reading was chosen after a result.
+
+**B1, the option-off startup regression, met.** Its tokens were all present, and the console carried no cache-clean
+line at all: with the S1 option off the rebuilt startup does not clean, so the flag gating is correct on the board
+and B1 keeps the meaning it had. Its comparison against the M1b reference differed only in classes the rule already
+admits — syspage map entries that move because the startup binary is larger again, a figure the normaliser masks,
+and the same unexplained process-thread difference the original B1 recorded. The reference this time was the black
+box of the curated M1b capture rather than the live serial span the original B1 cut; the two were diffed and found
+byte-identical before use, so this was black box against black box.
+
+**The watcher run met its diagnostic rule.** Under the rebuilt startup, on the control arm, window 2's base canary
+verified at both checks; its watches saw no changed word, no heal and no writer active while QNX ran; every page
+bitmap they produce — bad at the end, changed at any point, healed at any point — was empty in every bucket and for
+every watch label; the window-1 canary was clean; and the large timed hold over sysram filled and verified. Both
+cache-clean console lines were present and in position, the first time the real binary has emitted them — before
+today they existed only in fixtures. At that point in the ladder the reading was provisional.
+
+**B2, the rung that claims the second memory window, passed on the rebuilt image, and B2 is MET for it.** Every
+canary check was ok at both points, the window was reflected in the host's address-space view as registered,
+neither a canary nor the GPU range appeared in sysram, the window-2 allocation filled and verified, and no failure
+state was recorded. That makes the reading X-f final. **The original 2026-09-14 B2 record is unchanged and stays
+NOT MET, on data,** for the old startup; it is never regenerated, and this is a line beside it for the rebuilt
+image. The public interpretive sentence that would say what these readings mean together is deliberately not
+written here: under the owner's D77 it waits on D83.
+
+What this does not show, none of it changed by the pass: which cache held the residue, since the clean reaches
+cluster 1's L3, cores 1-3's caches and the boot cluster's at once; that the VA operation rather than the interval
+it takes removed it, since the whole-window clean is of the order of seconds and a delayed cluster power-down
+inside that interval is the competing account; DMA quiescence after kexec, since a cache clean removes a CPU-cache
+writer and says nothing about DMA, firmware or coprocessor writers outside the canaries' and the hold's coverage;
+window 1's library writes and the black box, both still unmaintained in revision 4; and repeatability beyond what
+this ladder observed. No Linux guest has run on the board, and there is no timing, isolation or containment claim.
+
+Two process incidents, recorded because they are process rather than board findings: the watcher run's first
+attempt refused at the pre-registration check because its rule-file variable was unset in the session environment
+— before any board contact, with no kexec issued and the budget untouched, and the re-run matched the stage the
+refused attempt had already appended to the append-only ledger, so nothing was recorded twice; and B1's capture was
+started far larger than that rung needed and had to be stopped by hand to free the exclusive serial port for the
+next rung, so captures are now sized per rung.
+
+What remains: D83 — whether a further observation is wanted before the ladder resumes — is open and the owner's;
+the public interpretive sentence waits on it; and B3-B5, the rungs that boot the Linux guest natively, hold it and
+stamp it, have never run. The records are private and git-ignored, and no figure is published here.
+[s1-design.md](../results/orin-native-port/20260909T1100Z/s1-design.md) §16;
+[the plan's S1-F block](orin-native-port-plan.md#the-revised-ladder).
+
 ## 2026-09-16 — M4's r0 image rebuilt under the frozen instruments, and the guest-disk rebuild deliberately not done
 
 Two freeze-gate items were taken up while the board was unattended. One is now done on the PC; the other
