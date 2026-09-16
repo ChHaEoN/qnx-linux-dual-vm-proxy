@@ -9,6 +9,42 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-15 — S1-F writer diagnosis: revision 3 closes with a CPU cache-residue hypothesis leading, and revision 4 opens with a startup cache clean (designed, not run)
+
+The J6c watcher run, on the kexec control arm, stopped on F39 again (a small static write at c3). Its watches showed stable
+re-reads at c2 and no writer active while QNX ran. The owner then chose a UEFI-entry arm (J7a), which was designed
+([s1-design.md](../results/orin-native-port/20260909T1100Z/s1-design.md) §15.6.1, §15.13). Before any J7a board step, a
+desk analysis of the four kexec runs' private records made a CPU cache-maintenance gap at the hand-over the leading
+hypothesis (HYPOTHESIS, untested; §15.14). In that reading, the corrupted data comes in whole cache lines and looks like
+the previous kernel's own data. Startup fills the canaries with the MMU off, and its only cache maintenance is a
+set/way clean, which reaches only the boot CPU's own caches. A cache line of the same address that Linux left elsewhere
+can later be written back over the pattern. Under that hypothesis both of J7a's pre-registered consequences would route
+to the wrong next step, so the owner deferred J7a's board steps and suspended those consequence clauses, with a two-part
+lift (D54). A Linux-side arm that takes every secondary CPU offline before the jump (J6o) was designed and then shelved
+(D65), because it added no cache maintenance the controls lacked. Revision 3 closed as class U, and B2 stays not met on
+data.
+
+Revision 4 (s1-design §16, accepted by the owner with every recommendation) is a startup change. Under the S1 option
+only, the T234 startup cleans by virtual address (`dc civac`, stride from `CTR_EL0`), before writing them, the ranges
+the option adds: the second window as a whole and the top-of-window-1 canary's range. That is the maintenance the
+architecture prescribes for a hand-over made this way. Two new console lines record that each clean ran. With the
+option off, the binary behaves as before, so B1 keeps its meaning. B1, a watcher run and B2 then rerun on the rebuilt
+images, in that order, with the owner present. The rule that reads the result was fixed before any run, including what
+a clean, a partial and an unchanged canary mean and how a provisional reading is withdrawn.
+
+What it shows: a design and a pre-registered reading, reviewed three times (cache maintenance, power of the reading,
+feasibility against the harness), with the owner's decisions recorded. The exposure register gains a row: the startup
+library's own MMU-off writes in window 1 were made without the same maintenance in every earlier kexec rung.
+
+What it does not show: that the cache-residue hypothesis is right. Revision 4's startup is built on the PC and pinned; the board images are not yet regenerated, and nothing of
+revision 4 has run on the board. Even a
+clean rerun would not show which CPU cache held the residue, or that the clean removed it rather than the time it took,
+and it would not show DMA quiescence after kexec. An unchanged canary would weaken the hypothesis only as far as the
+clean reached every cache, which no QNX-side read shows. Window 1's library writes and the black box stay unmaintained
+in revision 4. No Linux guest has run on the board, and there is no timing, isolation or containment claim. The records
+are private and git-ignored, and no figure is published here. The plan's
+[S1-F block](orin-native-port-plan.md#the-revised-ladder) carries the status.
+
 ## 2026-09-14 — S1-F on the board: B0 and B1 met, B2 not met on data, and the writer diagnosis excludes the removable DMA masters (J1-J4)
 
 S1-F's first board session ran with the owner at the board. B0 and B1 met. B2, the first rung to use the second RAM

@@ -8,6 +8,8 @@ Phase 3b. Architect pass, revision 2, 2026-09-13 (revision 1 reviewed; outcomes 
 
 **2026-09-14, revision 3 (owner, D8 option 1):** after B2 was not met on data, the writer is diagnosed first (§15, three adversarial reviews in §15.11). The J rungs' session record is §15.6.1, and the J6 watcher's implementation readings, fixed before its pre-registration, are §15.12. B2 stays NOT MET on data until §15.6's rule says otherwise.
 
+**2026-09-15, revision 3 closed, revision 4 opened (owner, D54-D85):** revision 3 closed as class U, with a CPU cache-residue hypothesis leading (HYPOTHESIS, untested; §15.14). The secondary-CPU offline arm (J6o) is designed and shelved (D65), and J7a's board steps are deferred (D54). Revision 4 (§16) is a startup change: under `-b` only, startup cleans window 2 and c1's range by virtual address before the fill. B1, a watcher run (J6x) and B2 then rerun on the rebuilt images, in that order. **2026-09-16:** the startup is built on the PC and pinned; the board images are not yet regenerated, and nothing of revision 4 has run on the board. B2 stays NOT MET on data.
+
 **Path prefixes used below**
 - `lib/` = `C:/Users/<user>/AppData/Local/Temp/orin-native-port-bsp/src/hardware/startup/lib/` (Apache-2.0)
 - `board/` = `orin-native/startup/t234-orin-nano/`; `startup/` = `orin-native/startup/`; `tools/` = `orin-native/tools/`; `qhvc/` = `orin-native/qhv/`; `s1/` = `orin-native/s1/` ~~(proposed; it does not exist)~~ (**2026-09-14:** it exists, §14)
@@ -197,6 +199,7 @@ Phase 3b. Architect pass, revision 2, 2026-09-13 (revision 1 reviewed; outcomes 
 - No canary ends exactly where another `ram_list` entry starts: `alloc_ram`'s overlap test would then also match that entry (`lib/ram.c:297-299`). The constants below satisfy this (VERIFIED arithmetic); the generator's constant check (§6.1) keeps it so.
 - The constants go in `board/t234_startup.h`, next to `T234_RAM_BASE`. Window 2 ends at `0x1_89FF_FFFF`; the GPU range ends at `0x2_49FF_FFFF`, below CMA at `0x2_4A00_0000`, ramoops at `0x2_725F_0000` and the black box at `0x2_7277_0000` (VERIFIED arithmetic; plan:864, `t234_startup.h:116`). `0x8A000000 + 0xC0000000 = 0x14A000000`, the whole 11c candidate.
 - **The window size is provisional for freeze item 6** (D18). Any resize changes the startup binary, so it reruns B1 and B2.
+- **2026-09-15 (revision 4, D66):** under `-b` the startup cleans window 2 and c1's range by VA before the fill (§16.3); the window-1 residual is R111 and the black-box residual R112. **2026-09-16:** built on the PC and pinned; not yet run on the board.
 
 **Canary ranges** (design constants, 16 MiB each):
 
@@ -346,6 +349,8 @@ vdev virtio-console
 **Can detect:** a write into any of the three fixed ranges, by anyone (qvm, a guest escaping stage 2, an untranslated DMA master, firmware, a stray allocation that reached them), between startup's fill and the last verify; a range that reached `sysram`; corruption of the checked payload files; window-2 pages that do not hold data (B2); a change to one host allocation's data during the hold.
 
 **Cannot detect:** writes elsewhere in host-allocated memory or guest RAM; reads; a write restored before the verify; **writes before startup's fill**, that is from the quiesce, Linux's shutdown, kexec and the shim; DMA outside the watched ranges. DMA is uncontained: the GPU's is CPU-physical with no SMMU even under L4T, with the quiesce as its only control (RT:54), and the other masters are untranslated after kexec (RT:81).
+
+**2026-09-15 (revision 4, D66):** under `-b` the startup cleans window 2 and c1's range by VA before the fill (§16.3), so a CPU-cache copy of those ranges left by the previous kernel is maintained before the watched interval starts; whether that reaches every cache is R105's conditions. The window-1 residual is R111 and the black-box residual R112. Not yet built or run.
 
 **Not adopted: RT B6's GPU BAR0 read in B2** (RT:245). It is a GPU check, which the owner left to the first GPU stage (plan:465), and its expected failure is an SError at EL2, likely class PP. It stays listed for that stage (§5.4).
 
@@ -1622,6 +1627,8 @@ Addresses that appear are design constants already public in §3.3, or page-fram
 
 **What J4 can and cannot separate.** J4 (removal of the removable masters) tests H4 and H4s only. It gives **no evidence on H1, H2, H3 or H5**. It is kept as the first test arm because it needs no image, it is the only arm whose clean result is itself a harness fix, and its bad result is the precondition of every class except Q (§15.6). The decisive H1-versus-H2 test is J7a.
 
+**2026-09-15:** HC, a Linux-era CPU cache residue at the hand-over, now leads, with HL as its component (§15.14.1; HYPOTHESIS, untested). It is tested by revision 4 (§16).
+
 ---
 
 ### 15.4 The diagnostic rung ladder
@@ -2034,6 +2041,8 @@ The export block is placed after `FAIL_STATE`, **outside** the `MODE != host` gu
 | **J7d:** a restricted value export (pattern classes only; never `other`, `ascii`, `pte`, `kva` or any class that would carry QNX kernel structure or pointer content) | device or structure identity | privacy (§15.7.4) and the 4.6(c) stance (source and docs only, no analysis of QNX internals). D28 |
 | **J7e:** window 2's base shifted with c2 at the new base | H5 | startup change. Revision 4 |
 
+**2026-09-15:** J6o, the secondary-CPU offline arm, was designed in §15.14 (D55, D59) and is shelved (D65). J7a's board steps are deferred (D54, §15.14.6). J7b-J7e stay revision-4 candidates behind class X-u (§16.7).
+
 ---
 
 ### 15.5 Implementation changes
@@ -2165,6 +2174,23 @@ The export block is placed after `FAIL_STATE`, **outside** the `MODE != host` gu
 
 **Records.** B2's `parse-s1.txt` and verdict line are never regenerated or replaced. Every class line is appended, dated, and cites the J records and `J-prereg.log`. Public text changes class only when Q is final, or when the owner accepts K-r, K-w or E (§15.8).
 
+**Dated appends, 2026-09-15 (§15.14, §16; not edits in place)**
+- **J6o's rows** (C, C-p and U (J6o), §15.14.5) are on file as designed, not run: J6o is shelved (D65), and they take effect only if J6o is ever run.
+- **Revision 4's rows** (§16.6 holds the full rule, fixed before B1):
+
+| Class | Holds when | Then |
+|---|---|---|
+| **X-f: clean under the VA clean** (HC, HYPOTHESIS) | **Provisional:** J6x `clean`, c1 clean, the hold verified, no F39c3. **Final:** provisional, the B1 rerun passed, and the B2 rerun `clean` and MET by §6.7 with c1 and c3 `verify=ok` | Provisional: no append to §5.3 or §6.12; B3 does not proceed. Final: D72's append for the rebuilt image, with the original B2 record standing as data; B3 subject to D83; D54 stays |
+| **X-m: mixed** | a provisional X-f, then the B2 rerun `drop`, `unchanged`, `bad, no count` or `onset` | the provisional X-f withdrawn by a dated line; U with its lead; B2 stays NOT MET on data; not routed to D71 |
+| **X-p: partial** | J6x `drop` | B2 not rerun and stays NOT MET on data; S1-F stays stopped; owner decides |
+| **X-u: unchanged** | J6x `unchanged` | HC weakened to the extent R105's conditions (i)-(v) held; D71's pre-registered branch: D54 lifted in both parts, J7a on the old `s1-j1` pinned by D36 |
+| **X-c3** | c2 clean and c3 hit, in J6x or in the B2 rerun | B2 NOT MET; S1-F stays stopped; owner decides |
+| **K-r** (revision 4) | J6x `unstable` | as above |
+| **U** (revision 4) | anything else | B2 stays data; S1-F stays stopped; owner decides |
+
+- **Immediate stops** gain F70-F77 for revision-4 runs (§16.8, §16.9).
+- **Budget:** revision 3's fourth kexec diagnostic run lapses unused (D55 gave it to J6o; D65 shelved J6o). Revision 4's runs, B1, J6x and B2, are S1 ladder work, not diagnostic budget (§16.8).
+
 **Budget**
 - **Today's session:** J1 and J3 (L4T only), J2, and one of J4 or J2b (kexec): **at most two kexec and two L4T-only diagnostic runs.**
   - One harness-reason retry per rung does not count: a run that never reached `procnto up`, an exit-5 abort, or a J1 or J3 that stopped before its quiesce or reads.
@@ -2273,6 +2299,7 @@ The export block is placed after `FAIL_STATE`, **outside** the `MODE != host` gu
   - **c3 again carried a small static write,** at a different place from J2's.
 - **What follows.** Three of the revision's four kexec runs are used. §15.6 stops here: the class stays U, and the owner decides. D30's UEFI-entry arm (J7a) is the test that separates a Linux-left writer from one anchored at the window-2 base.
 - **Owner decision, 2026-09-14 (D30): J7a, UEFI entry.** A short J7a design is written and reviewed before anything is built. It has to settle the exceptions to §2 rule 5 (the ESP write), the TX refit, firmware use of window 2 (§3.2, never checked) and how its result is read under §15.6. No board step runs before the owner approves that design.
+- **2026-09-15 (owner, D54-D65): revision 3 closed.** A desk analysis of the four kexec runs' private records made a CPU cache-maintenance gap at the hand-over the leading hypothesis (§15.14.1). J7a's board steps were deferred (D54). J6o was designed and shelved (D65), so the fourth kexec run lapses unused. Class line, appended 2026-09-15: "Revision 3 closed. Leading hypothesis HC (CPU cache residue at the hand-over), HYPOTHESIS, untested. Revision 4 opens with a startup change (§16, D65)." U, unresolved (owner, D31), stands as revision 3's last class.
 
 ### 15.7 Claims, failure signatures, risks
 
@@ -2427,6 +2454,7 @@ If D29 declines, §15 itself is pushed only as a pointer plus these neutral form
   - **RCE's IOVA window** overlaps the upper part of window 1 (R68).
   - **Every kexec rung** showed the SMMU disable (E4) and the GPU teardown error lines (E5): M1 and M1b without the module quiesce; M3, M4, 11c, B1 and B2 with it.
   - **M5-F** entered from UEFI with no Linux, so it is exposed only to firmware-class writers (UNKNOWN).
+  - **2026-09-15 (D85): the cache class (HYPOTHESIS).** In every kexec rung before revision 4, the startup library's MMU-off writes in window 1 (the workspace, the temporary syspage, the page tables, procnto's segments, the real syspage) were made without cache maintenance by VA. Under HC that is the same hazard class as c2, and those writes were never watched (R111). No M-line or S1 record shows a failure of this class there (class only). Revision 4 does not maintain them either. The row is carried into D73's exposure declaration.
 - **What limits the risk:**
   - c1 (top of window 1, inside RCE's window) was clean at both B2 checks, in one run;
   - M3's md5 and `cmp` checks passed for the files they covered;
@@ -2440,6 +2468,7 @@ If D29 declines, §15 itself is pushed only as a pointer plus these neutral form
   - plan §8 unknown #6 is annotated with B2's observation and R48 and R68, and stays HYPOTHESIS;
   - a window-1 canary is a J7c and revision-4 item, because it is a startup change;
   - until then, no campaign record claims memory integrity or rests on a clean kexec entry.
+  - **2026-09-15 (D73):** freeze gate item 3's sub-item is split in the plan: "not reproduced under the startup clean" (class X-f) apart from DMA quiescence after the chosen entry, which stays HYPOTHESIS. The declared exposure includes the cache-class row above.
 
 ---
 
@@ -3240,6 +3269,7 @@ There is **no map label.** UM4's pre-claim makes every complete run's c2 Convent
 
 | Differs in | Reading (all HYPOTHESIS) |
 |---|---|
+| **2026-09-15 (D54): UEFI cache residue** (read before the `anchored` reading) | `content=` leading with `zero`, `ptr_ram` or `u32page`, without `kva`: the residue of UEFI's own last CPU writes fits at least as well as H2, since the loader cleans only its image and trampoline by VA (HYPOTHESIS) |
 | none (`same`) | the same lay-down, on the same pages, with no Linux in the power cycle. J6c's leading content includes `kva`, so Linux-specific structures are excluded **unless startup's fill did not land on those pages and pre-cut DRAM content survived `DRAM_OFF_S`** (R95; the fill has no read-back). Remanence plus a failed fill would also predict pages Linux held, so P7 same does not break that tie; only the unpowered wait argues against it. Among the remaining writers, QNX-side (H5) and a secure-world writer with high virtual addresses lead over non-secure firmware, which runs identity-mapped (m5-design C4). A `resmem` node over c2 (UM9) is named as the lead. J7e (base shift) is next in revision 4, not J7d |
 | P4 only | the same kind of lay-down with different data: the data depends on the entry state, two writers, or (with `zero` or `ones` dominant) a fill that did not land after decayed DRAM (R95) |
 | P2 | not tied to the base word; weakens H2's "user of window 2's base"; raises J7c's priority |
@@ -3267,6 +3297,8 @@ Preconditions met (VERIFIED, private record): J4 is F36; J6c's parser row carrie
 4. K-o needs no counted run.
 5. A clean run then a bad run gives K-w/intermittent.
 6. A first run reading K-w `anchored` or K-r(u) ends J7a. A first run reading K-w `differs` or `partial` allows J7a-2 (§15.13.11). If J7a-2 then reads bad with P1, P2 and P7 same **as J7a-1**, the label is `differs,repeated` (a UEFI-path lay-down of its own); bad with an anchored profile against J6c gives `anchored`; clean gives `intermittent`.
+
+**2026-09-15 (D54): the consequence clauses of the E row's Then and the K-w row's Then are suspended:** K-w's revision-4 range derivation and "Kill condition 1 stands for the 11c candidate"; E's owner options (a wider quiesce search, UEFI entry for S1-F, stopping S1-F). **§15.13.11's stops, including "After `anchored`, J7a stops", and precedence rules 1-6 stay in force.** A J7a result read while suspended records its class and sub-labels; no suspended consequence follows from it until the owner rules. **The lift is two-part:** `D54_LIFT=owner-<decision>` lifts the board-step deferral, and `D54_READING=restored|amended-<sha>` records the owner's ruling on the two Then clauses (restored unchanged, or amended by a dated append whose commit is named). `j7a_precondition` refuses without both. Without the second part, a lift would restore the clauses exactly as the desk analysis showed they route wrongly under HC (§15.14.1). Under revision 4's X-f, any later lift is `amended-<sha>` only (D82); under X-u, D71's branch lifts both parts.
 
 ##### 15.13.10.5 Cases the analyses raised, read in advance
 
@@ -3311,6 +3343,7 @@ Preconditions met (VERIFIED, private record): J4 is F36; J6c's parser row carrie
   - a second failure for one cause;
   - F65 (J7a cannot run on this design; D45);
   - any need for a loader change at the board, a firmware setting change, a value dump or an SMMU read (scope stop).
+- **2026-09-15 (D54):** no J7a board step while D54 stands; `j7a_precondition` refuses until both parts of the lift are named. (§16.7: that gate is absent at `ecc6c3c`. Until the harness change adds it, the D36 kimg check refuses J7a on a rebuilt `s1-j1`, and only the owner's discipline refuses it on the old one.) **2026-09-16:** the revision-4 harness change implements it — `j7a_precondition` requires both `D54_LIFT` and `D54_READING` in their value forms, with self-tests — and the D36 kimg check stands as a second guard.
 - **After J7a ends, at any stop, or after each counted run:** a number-free classification memo to the owner, with the private notes.
 
 ---
@@ -3560,3 +3593,973 @@ Three reviews read the draft: safety (RS), power of the reading (RP), feasibilit
 | RF11 | minor | no raw segment in the record directory, even briefly; record range and hash; self-test | **Applied** (pipe or an outside `mktemp` with an EXIT trap) | §15.13.7 P13, offsets and segments; self-tests |
 
 **Rejected outright:** none. **Rejected in part:** RS1's new token (K2); RS6's route, kept as analysis (K1); RF5's gate-B change (not reached by any J7a phase); RP1's "every USB device except the adapter", adjusted to the board's ports with the wireless card recorded; RF9's suggested placement on the start line.
+
+---
+
+### 15.14 Revision 3, continued: the cache-residue hypothesis and J6o, the secondary-CPU offline arm (D54-D58, 2026-09-15; revised after review)
+
+**Status: designed, shelved (D65, 2026-09-15); D59-D64 accepted except D61, effective only if J6o is ever run.** Nothing in this section was implemented or run, and revision 3's fourth kexec run lapses unused (§16.7). Revision 4 (§16) opens with a startup change instead. The review outcomes (§15.14.15) are kept as written.
+
+Phase 3b. Written after J6c's memo, a private desk synthesis of the four kexec runs' records (three analyses and two reviews), and the owner's decisions D54-D58. Revised after three reviews (reading, harness feasibility, board safety); §15.14.15 records every required change and what happened to it. Nothing in this section has been built or run on the board. It is number-free in §15.13's sense: no count, offset, page-class figure, ratio, probability, uptime, idle-state usage, configuration value or hash from a run or record appears here. Durations and thresholds are design constants. Evidence classes are as in §15.13.
+
+---
+
+#### 15.14.1 What changed since §15.13
+
+**A hypothesis §15.3 did not list now leads (HC, HYPOTHESIS, untested): Linux-era CPU cache residue.** At the jump, Linux leaves lines of c2's addresses in a CPU cache, dirty (its last writes) or stale (its last reads). Startup's one cache maintenance is a set/way clean on the boot CPU, before the fill (VERIFIED, source), and set/way reaches only that CPU's own hierarchy. The fill is made with the MMU off, so it lands in DRAM without updating or invalidating a cached copy of the same address (VENDOR_CLAIM, the architecture's rule for untranslated accesses; X14 desk read pending. **2026-09-15:** the X14 desk read is done: the hand-over hazard and the maintenance by VA the architecture prescribes are VERIFIED at architecture level, and the conditions under which a VA clean reaches every cache are R105's (i)-(v); §16.1, R105). The stale lines are later written back over the pattern, or served in its place.
+
+**Why it leads (class only, D58).**
+- Every count, and every change between checks, in the four kexec runs is a whole number of cache lines, and the watcher's per-line position histogram is flat.
+- Heals come in whole lines, and the healed words are exactly the pattern.
+- The content classes are CPU-kernel-shaped, not device-shaped.
+- The bad pages follow Linux's recent CPU writes more closely than page class alone.
+- The bad set did not change through the large hold, whose cacheable fill evicts the boot cluster's own caches.
+- Every kexec run used four cores (`-P4`): the cluster-1 cores never ran a QNX instruction, and cores 1-3 were started after the fill, each running its own set/way clean on entry (VERIFIED, source and records).
+
+**Sub-mechanisms (HYPOTHESIS).**
+- **HC-a:** cluster 1's caches, which nothing QNX-side maintains under `-P4`.
+- **HC-c:** cores 1-3's private caches, written back by their own set/way clean at `CPU_ON`, after the fill.
+- **HL:** a deterministic Linux object at window 2's first page is a component of either, not a rival.
+- H1, H4x, H2 and H5 fit the records poorly; H3 stays excluded as the primary.
+
+**What the controls already did, and what J6o adds (the arm's premise, stated).** In every control (B2, J2, J4, J6c) Linux's kexec shutdown took cpus 1-5 through PSCI `CPU_OFF` at the jump (VERIFIED, record: the kernel's per-CPU kill lines on J6c's COM3; the same path in each run). So J6o adds no cache maintenance the controls lacked. It changes two things only:
+- **the dwell:** the secondaries are off for minutes before the fill instead of milliseconds, which is time for a core or a cluster to reach a power-down state that flushes or discards its caches (R97, R98). J6o's power to test HC rests entirely on those two claims;
+- **which CPU does Linux's last work:** with only CPU0 online, the last CPU writes over c2's pages (bearing on HL) and the shutdown's own activity move onto CPU0, which is the R101 confound.
+
+**What follows for J7a.** Under HC, J7a's expected result is clean, the reading §15.13 itself calls weak. Both of J7a's pre-registered consequences would then route to a wrong next step:
+- E's Then: a wider quiesce search, UEFI entry for S1-F, or stopping S1-F.
+- K-w `anchored`'s Then: a new range, which would carry the same residue.
+
+These consequences cannot be amended after a result, so D54 suspends them now (the consequence clauses only; §15.14.6).
+
+**The cheapest discriminator is Linux-side.** Take every secondary CPU offline well before the jump, and verify with the unchanged `memcanary`. That is J6o, the fourth and last kexec diagnostic run of revision 3 (D55).
+
+---
+
+#### 15.14.2 Owner decisions
+
+| # | Decision | Recommendation |
+|---|---|---|
+| D54 | Defer J7a's board steps. Append a dated suspension of §15.13.10.4's E and K-w consequence clauses, and a UEFI-cache-residue row to §15.13.10.3, before any `go` (§15.14.6) | defer; append both |
+| D55 | Give revision 3's fourth kexec diagnostic run to J6o (§15.14.3): image `s1-j1` unchanged. It needs: a named `WQ_FUNCS` change; a waiver of the two-policy governor guard for J6o only; D34 extended to J6o (`D34_J6O`), so J2's and J6c's F39 do not block it. The record-only L4T reads (§15.14.10) do not count against the two L4T-only runs | accept, with `s1-j1` |
+| D56 | Accept a startup VA clean of each claimed window before its use (X8) as the likely fix, in principle; decide after J6o's memo. It moves `PIN_STARTUP_S1` and reruns B1 and B2, as S1 ladder work | accept in principle |
+| D57 | A startup-line-only variant (for example a `-P` change) is a new image with its own T-J1 and B1 decision. §15.4.8's "startup line unchanged" reading governs, not §15.1's "startup binary" reading | accept |
+| D58 | Public text states HC in class-only form (§15.14.11). The synthesis's figures stay in the private records, and the 4.6(i) consultation is asked about them before any of them leaves | accept |
+
+**Taken 2026-09-15 (owner):** D54-D58 as recommended. D55's image is the unchanged `s1-j1`. The synthesis's two-view read (X1), and the timing class it would need, are not in `s1-j1`, so that question was not asked.
+
+**New after review (open; §15.14.2.1 lists them with recommendations):** D59 accepts this section's reading and rules before J6o's stage, as D20, D35 and D38 did for earlier readings; D60-D64 are the points only the owner can settle.
+
+##### 15.14.2.1 Open for the owner (D59-D64)
+
+| # | Decision | Recommendation | When |
+|---|---|---|---|
+| D59 | Accept §15.14 as revised, before J6o's stage is appended: the reading (§15.14.5: the half-of-L band, the readings, classes C, C-p and U (J6o), the record-only list, the precedence rules), F67-F69, the Never items (§15.14.13), the start-state gate, the design constants, and these three scope points: (i) an F39c3 inside J6o stays §15.6's immediate stop, with rule 1 classifying the run (no waiver, unlike D39 for J7a); (ii) the offline arm reads `D34_J6O` only, and that waiver covers J6c's F39 only in its recorded shape (c3 bad, c1 ok at both checks and in watch d), never an F39c1; (iii) D54's lift is two-part (§15.14.6). Also the loop order `5 4 3 2 1` (longest cluster-1 off time, the HC-a purpose) rather than the kexec shutdown's ascending order; the difference is R100's recorded residual | accept | before the stage |
+| D60 | F69, a blocked (not refused) `online` write that may also block every software reboot behind the hotplug lock (R104): which exit is pre-registered: (a) `echo b > /proc/sysrq-trigger` over ssh after `sync`, a new write outside every allow-list needing a dated Never-list exception, possible only while ssh answers; or (b) one power cut under the new rule in §15.14.8 (the kernel still running is the validated boot; no firmware boot followed the marker), after `WQ_F69_HOLD_S`. Either exit ends J6o with no retry; a cut is §15.6's power-cut stop | (b): it needs no new write path, and it also covers the case where the shutdown has already stopped sshd | before the stage |
+| D61 | Record-only reads inside `b_wq_offline`, before and after the offline writes and again in the final reads: each CPU's idle-state usage files and the power-domain summary, the two paths §15.14.10's session read (FN-scoped literal read paths on the allow-list; values private). Without them, an `unchanged` result cannot be split at the desk between "HC-a refuted" and "the cluster stayed powered" (R98) | allow; the reads write nothing | before the stage |
+| D62 | Public text and the kernel address-space size: none until the 4.6(i) consultation (the value was read from the board's configuration, a record); or a cited public L4T default, if the owner names the source | no figure; cite a public source later if wanted | before any push |
+| D63 | CPU-affinity tools (`taskset` and its kin) in any J arm: never in revision 3 (added to §15.14.13); X4, the Linux-side scrub, needs them and would be revision-4 work under its own pre-registration | never in revision 3 | before the stage |
+| D64 | The reference L: read from the four controls' raw COM3 copies (B2's lies under `B2/`, a directory the J rungs otherwise never touch); B2, an `s1-h1` run before revision 3, is a control beside J2, J4 and J6c; the registered value is a number in the git-ignored `J-prereg.log`, within D58 | allow all three | before the stage |
+
+**Taken 2026-09-15 (owner, with D65):** J6o is shelved. D59, D60, D62, D63 and D64 are accepted as recommended and take effect only if J6o is ever run; D61 is dropped. D64's reference-L method is reused by revision 4 (§16.6, `r4-ref`).
+
+---
+
+#### 15.14.3 J6o: the arm
+
+**Image and pins.**
+- `s1-j1`, with the kimg and params J6c's stage registered, unchanged.
+- `PIN_MEMCANARY`, `PIN_MEMCANARY_W` and `PIN_STARTUP_S1` are unchanged, and T-J1 stands.
+- The start and end canary verifies are the unchanged `memcanary`'s, so a clean c2 cannot be an artefact of the watcher.
+
+**Phase A** is J6c's control arm with one added gate: gates, snapshots, `kexec -s -l`, the governor pin on both policies, generation, the allow-list gate, arming.
+- **Start-state gate (new, step 1, before the quiesce):** `/sys/devices/system/cpu/online` must read `0-5`, and the active nvpmodel mode is recorded (it already appears in `b_session`'s record; private). Any other `online` value, or a mode whose configuration keeps a core offline, refuses with exit 3 ("start state", no quiesce). Nothing in the arm changes the mode. The value read here is the run's own start reading, which F68 compares against.
+
+**Phase B** is J6c's sequence, with one added step and two added guards. The offline arm is **control-like**: its set is empty (`WQ_<L>_IN=no` for every member, `set in_this_arm=empty`), the Bus-Master check block does not run, and `bme_at_issue` is recorded as in the control arm (§15.14.4 names each dispatch site).
+
+**Step 2a, `cpu-offline`.** It runs after step 2's `kexec_loaded` check and before step 3's `b_pci_state pre`, in the new function `b_wq_offline`, and only when `WQ_ARM=offline`:
+1. Record-only reads, before the loop (D61): the per-CPU idle-state usage files and the power-domain summary, printed to `wq.log` (values private).
+2. For `c` in the function's literal list `5 4 3 2 1`: `printf '0\n' > /sys/devices/system/cpu/cpu$c/online`, read the file back, and print the `wq.log` line `offline cpu<c> write_rc=<rc> online=<value>` (a `wq.log` printf line, not an `s1wq:` marker; `rc=` is allowed there, as `systemctl_kexec_rc=` is).
+3. Read `/sys/devices/system/cpu/online` and print `offline online_list=<value>` (`wq.log`). It must read exactly `0`.
+4. Count the kernel's per-CPU kill lines: `dmesg | grep -c 'killed (polled'` less the same count taken beside `WQ_OOPS0` at `begin`, printed as `offline psci_killed=<n>` (`wq.log`; a line count, record only; a count other than the number of offlined CPUs does not abort when the list reads `0`).
+5. Run the Oops scan (§15.4.3 step 5's pattern).
+6. Mark `s1wq: slot0 cpu-offline result=<rc>`. `rc` is 0 only when every write returned 0, every read-back is `0`, the list is `0` and the scan is clean.
+7. Any other `rc`: `abort reason=offline-write` (a write's rc not 0), `offline-readback` (a read-back not `0`), `offline-list` (the list not `0`) or `offline-oops` (the scan hit; also F47's record). All are F67; the sub-reason decides the retry (§15.14.8).
+8. Record-only reads again (D61), then sleep until `WQ_OFFLINE_S` has passed since the step began, and set `WQ_OFFLINE_END=$(date +%s)` (a plain assignment, which the gate allows). A longer step marks `overrun slot=0 s=<n>`, as the slots do; `j_wq_after`'s `slot_overruns` count includes slot 0.
+
+No step brings a CPU back online. The kexec hands over to QNX at `-P4`, which starts cores 1-3 and never touches cluster 1; the abort's and the fallback's reboots, and the firmware boot after the image's reset, each start L4T with all six cores (Linux does not persist sysfs hotplug state across a boot; only an nvpmodel mode, which the arm never changes, offlines cores at boot: VENDOR_CLAIM).
+
+**Step 11 in J6o.**
+- **Uptime guard:** unchanged.
+- **Governor guard (D55 waiver):** `policy0` must read `performance`. `policy4` is printed as read and never gated (R99). This is an arm-conditional change to `b_wq_governor_read`, not only to `b_wq_main`.
+- **Offline guard (new, `b_wq_offline_guard`, in `WQ_FUNCS`):** `/sys/devices/system/cpu/online` must still read `0`, and at least `WQ_OFFLINE_MIN_AGE_S` must have passed since `WQ_OFFLINE_END`. Otherwise `abort reason=offline-list` or `offline-age` (F67). By construction, the nine slots and the final reads already exceed the minimum age; the guard is a backstop. An abort here leaves the CPUs offline through the abort's reboot, which is the expected path.
+- `b_freq final` is unchanged in text; its `policy4` lines are record only, an error string there is expected under R99, and the read runs under the final-reads timeout as the other final reads do.
+- D61's record-only reads are repeated in the final reads.
+
+**Design constants,** refused from the environment like §15.4.3's, printed in the board log, in the generated header, in `wq_gate`'s header-constant check and in `wq_constants_line`: `WQ_OFFLINE_S` 15, `WQ_OFFLINE_MIN_AGE_S` 60, `WQ_F69_HOLD_S` 600.
+- The timing functions become arm-aware: `wq_arm_extra_s <arm>` is `WQ_OFFLINE_S` for `offline` and 0 otherwise, and `wq_fallback_s SLOTS ARM` and `wq_worst_case SLOTS ARM` add it. Every call site passes the arm (§15.14.4), so the PC's deadlines and the armed timer agree.
+- The start-uptime ceiling the gate prints is the control arm's worst case plus `WQ_OFFLINE_S`, so it is that much lower. J2's, J4's and J6c's recorded starts fit inside it (class only).
+- `wq_state`'s schedule gains the arm's extra for `offline` (slot 1's deadline and the final-reads deadline shift by `WQ_OFFLINE_S`), so a normal J6o run is never recorded STALLED; the constant is also under `wq_state`'s slack, a design invariant with a self-test.
+- The control, remove and j3 arms' constants, worst cases and fallbacks are unchanged (their existing timing self-tests stay).
+
+**The allow-list (§15.5 A5) gains exactly these, all FN-scoped to `b_wq_offline` unless said otherwise:**
+- **Write:** the redirect `> $WQ_ROOT/sys/devices/system/cpu/cpu$c/online`, whose feeding command must be exactly `printf '0\n'` (`checkredir` adds the target form for `FN == b_wq_offline`; `checkcmd` refuses any other feeding command or value). Any `cpu0/online`, a `cpu` form with another variable name, or `cpu[6-9]` is refused; the target is refused in every other function, including `b_wq_slot`.
+- **Read:** the read path `$WQ_ROOT/sys/devices/system/cpu/cpu$c/online` (`readpath`, FN-scoped). The literal `/sys/devices/system/cpu/online` already passes. Under D61: the two literal record-only paths, FN-scoped to `b_wq_offline` (and, in the final reads, the same two through the same function).
+- **`dmesg`** in `b_wq_offline`, as in `b_wq_main`, `b_wq_oops` and `b_wq_fallback`; `grep -c` reading stdin is already allowed.
+- **Loop list:** in `b_wq_offline`, `checkcmd` requires the one `for` command to be exactly the words `for c in 5 4 3 2 1` (`declare -f` prints the `;` before `do`, ending the command), refuses a second `for`, and refuses any word matching `^c\+?=`, a `read` or a `printf -v` naming `c`.
+- **Guarded call:** `b_wq_offline` and `b_wq_offline_guard` may be called only inside a `case` on `WQ_ARM` (or with the remembered preceding command `[ "$WQ_ARM" = offline ] &&`); a call anywhere else is refused.
+- **Arm pair:** `WQ_ARM=offline` with `WQ_FINAL=kexec` as an allowed pair; `offline` with `none` refused.
+- **Refusals restated (RH-6):** any redirect target naming `cpu0/online`, `cpufreq`, `cpuidle` or `nvpmodel` is refused; the word `nvpmodel` is refused on every line; `cpuidle` is refused outside `b_wq_offline`'s D61 read paths; `cpufreq` and `cpu0` are refused as write targets only, so the unchanged governor read still passes the gate (a self-test).
+- **Unchanged:** every other refusal.
+
+**Markers** keep §15.4.3's rules: the `s1wq:` prefix; `result=`, never `rc=`; none of the refused words; no line ending in `$`, `#` or `>`. The only new markers are `s1wq: slot0 cpu-offline result=<rc>`, `s1wq: overrun slot=0 s=<n>` and `s1wq: abort reason=offline-<sub>`. Everything else in step 2a is a `wq.log` line.
+
+**`WQ_FUNCS`** changes in exactly these places: `b_wq_offline` (new), `b_wq_offline_guard` (new), `b_wq_governor_read` (the arm-conditional `policy4` handling), and `b_wq_main` (the two guarded calls, under `WQ_ARM=offline`).
+- The self-test diffs `j6_wq_text` at the registered commit (`git show`, as `j6_wq_sha_at` does) against HEAD and expects exactly those hunks; it is skipped with a note when git cannot show the commit. It never depends on J6c's private record files.
+- Because `WQ_FUNCS`' hash changes, J6o's stage is an amendment under §15.12 D1. The amendment's "old" hash is the newest registered commit's (J2's, or a later amendment's such as J7a's stage), which is correct because `WQ_FUNCS` was unchanged between them; no code change is needed there.
+
+---
+
+#### 15.14.4 Harness and parser changes (PC, before any board step)
+
+**`jrun s1-j1 offline`.** Every site that dispatches on the arm names `offline`:
+- `jrun_args`: `offline` with `s1-j1` only (`s1-h1 offline` refused, §15.14.13); `jrun_step`: `s1-j1:offline` gives `STEP=J6o`, records under `<rec>/J6o/`;
+- `j_set_select`: `offline` is control-like (`IN=no` for every member, `J_SETDESC=empty`, no wireless-in-set requirement); `b_wq_main`'s Bus-Master check condition, the `set in_this_arm=` record line and `j_kexec_extras`' `bme_at_issue` treat `offline` as `control`;
+- `j_worst_case`: the control branch plus `WQ_OFFLINE_S`; `j_capture_life_min`: the control arm's minimum plus `WQ_OFFLINE_S` plus `WQ_F69_HOLD_S`; `j_gate_b`, `wq_state`, `wait_wq`, `j_phase_a_unconfirmed`, `j_detached`'s `fb_s` (which feeds the runline and `wq_gate_runline`) and `wq_constants_line` all pass the arm to `wq_fallback_s`/`wq_worst_case`;
+- `j6_prereg_append` (`offline` → step J6o), `j6_prereg_verify` (`control|remove|offline`), `j_precondition` (`j6offline`), `j_kexec_runs` (J6o in its step list), `wq_gate`'s header check (the pair `offline`/`kexec`), `b_wq_gen`'s header comment, `mark_boot`'s `by=j6o` and §15.7.4's `by=` list, the `WQ_FUNCS` comment and `jrun`'s usage text;
+- `J_READBACK_TEXT` gains the lines the harness reads back: `prereg j6 ref_c2_start_min=`, `prereg j6 rule_j6o sha256=`, `cpu_online_after=`, `cpu_online_start=`.
+- Parser: `J1_ARMS += ('offline',)`, `J1_STEPS['offline'] = 'J6o'`; `run --diag j1 --arm offline`.
+
+**Precondition `j6offline`, as refusals** (a new branch beside `j6control` and `j6remove`; the J6c/J6r loop stays as it is for those arms):
+- `D27`, `D55`, `D59` and `D34_J6O` in `J-waivers.conf`. `D34_J6` is not consulted (D59 (ii)).
+- J4's row F36.
+- J6c's newest row present, with no F34 and no F49; its F39 is allowed under `D34_J6O` only when its c3 was bad and its c1 was ok at both checks and in watch d (read from J6c's parse fields); any other F39 shape refuses.
+- T-J1 met with the image's pin.
+- Attempts, from records the harness can read: a J6o attempt is **complete** when its directory (`J6o/` or `J6o-aN/`) holds a `parse-s1.txt` with `step=J6o`; it is a **harness-reason return** when its board log holds an abort-class line (the `ABORTED` return), or when it holds neither a parse nor a `procnto up` line on its COM3 copy. The precondition refuses when a complete J6o exists, or when two non-complete attempts exist, or when a non-complete attempt's abort marker is `offline-write` or `offline-readback` (F67's no-retry sub-reasons).
+- Prints `kexec_runs_before=` and the waivers' hash.
+
+**Stage.**
+- J6's stage for the arm `offline` (step J6o) is appended after gate A. It is an amendment by `owner-D55` with `S1_J6_WQ_CHANGED=yes`, and the fill-rate factor stays the registered one.
+- `j6_prereg_append offline` requires `$RECDIR/J6o-rule-15.14.md` (die otherwise, as `j7a_prereg_append` does for its rule file) and the reference from `j6o-ref`, and emits:
+  - `prereg j6 rule_j6o sha256=` of that file (§15.14.5's text, extracted after commit);
+  - `prereg j6 ref_c2_start_min=<n> refs=B2,J2,J4,J6c inputs=<sha256 of each COM3 copy>`, computed by the new parser subcommand `j6o-ref DIR...` from the four runs' raw `-com3.log` copies (their c2 start-check canary lines; no kexec-entry `parse-s1.txt` carries the count). The number stays private (`J-prereg.log` is git-ignored, D64), and §15.6's "never regenerated" rule is untouched because no `parse-s1.txt` is rewritten.
+- `j6_prereg_verify offline` checks both lines against the file and the registered value; `j6_stage_matches offline` includes the rule hash, so a changed rule file needs a supersede under `S1_J6_AMEND_BY` before the arm's first run.
+
+**Parser fields for the offline arm** (guarded on the arm, so J6c's and J6r's output is byte-identical; part of the D1 amendment, its hash registered by the stage):
+- `c2_check_words=start:N,end:N` and `c2_start_anchor` (today emitted only under `--entry uefi`) are also emitted under kexec entry for `--arm offline`;
+- `j6_rows` emits `F39c1` and `F39c3` in place of `F39` for `--arm offline` (as `j7a_rows` does), leaving control and remove unchanged. `j6_after_parse`'s stop test is unchanged (any F39, or F49, records an IMMEDIATE STOP); `j6_precondition` uses the split.
+- `canwatch --ref-j6c` is **not** run for J6o (the profile P1-P7 would need five registered J6c reference hashes and a parser exception, for a record-only result). P2 comes from `c2_start_anchor`; the counts from `c2_check_words`; the page-set comparison with J6c (X3) is a desk record from the private exports, not a harness step.
+
+**Reading.**
+- New parser subcommand `j6o-read`: from J6o's `parse-s1.txt` and the reference passed as `--ref-c2-start-min` (read by the harness from `j6_block_value offline`, never recomputed from the controls), it prints `S1PC j6o_reading=clean|revert-only|onset|drop|unchanged|unstable|n/a`, `S1PC j6o_sub=<sub-labels>` and `S1PC j6o_class=C|C-p|U|K-r|n/a`, by §15.14.5's field rules. `canwatch.txt` is not an input.
+- The harness runs it at the return and records its lines.
+
+**Return reads.** In both return paths (`j_kexec_extras` and `j_return_noparse`, so at exit 5 too), one board read of `/sys/devices/system/cpu/online`, recorded as `cpu_online_after=<value>`. A value that differs from `cpu_online_start=` is F68, recorded as a STOP line with exit 3. It is read only when L4T answers, so a NO RETURN end reads it at the next harness command.
+
+**Abort classes.** `j_return_noparse`'s map gains `*reason=offline*) cls=F67` before the catch-all (today it would read F43).
+
+**`wait_wq` in the offline arm.** A new state, **HUNG-LIVE (F69):** after a reset marker (`fallback firing` or `fallback forcing`) the reboot bound passes with no firmware banner, and either ssh answers on the armed `boot_id` or COM3 carries new output from the same kernel. `wait_wq` then leaves ABORTED/GIVEUP, prints the F69 advice with the hold clock (`WQ_F69_HOLD_S` from the marker), runs the record-only ssh reads §15.14.8 names while ssh answers, and does not sit in GIVEUP for the `s1-j1` return bound.
+
+**J7a (D54).**
+- `j7a_precondition`'s first check: `[ "$(j7a_conf D54)" = yes ]` without both a `D54_LIFT` matching `^owner-[A-Za-z0-9._-]{1,40}$` and a `D54_READING` matching `^(restored|amended-[0-9a-f]{7,40})$` → die naming §15.14.6.
+- No other J7a code changes.
+
+**Self-tests, at least:**
+- **Gate:** refuses a `cpu0` write, `printf '1\n'`, `echo $v` or `echo 0` as the feeding command, the target inside `b_wq_slot`, a loop list `5 4 3 2 1 0`, `cpu${c}` with `c` assigned elsewhere, a second `for`, an offline function called outside the `WQ_ARM` case, the pair `offline`/`none`, a `cpufreq` or `cpuidle` write target, `nvpmodel` on any line, and a header carrying a changed `WQ_OFFLINE_S`; the unchanged governor read passes.
+- **Timing:** the offline arm's `wq_armed wq_fallback_s=` equals the runline's `--on-active`, `j_gate_b`'s minimum, `wait_wq`'s deadline and `wq_state`'s `fallback_deadline`; the offline worst case and ceiling; `WQ_OFFLINE_S` under `wq_state`'s slack; the control, remove and j3 arms' values unchanged (the existing checks stay); the start-margin self-test gains the offline row.
+- **Sequence (dry run under `WQ_ROOT`):** `wqfx` gains `sys/devices/system/cpu/cpu{1..5}/online` and `sys/devices/system/cpu/online`; a `date` stub advances per call so the age guard sees the constants; cases: a failed write (a missing `cpu<N>` directory), a list of `0,4`, an aged-too-young issue, each giving the named `abort reason=offline-<sub>`; a clean offline run reaching `kexec issuing` with no unbind, `modprobe` or clear executed and every `WQ_<L>_IN=no`; the governor guard passing with `policy4` unread in the offline arm and failing on it in the control arm. The read-back-of-`1` case is an in-process unit check of the read-back test (a fixture cannot produce it after a successful write).
+- **Precondition:** each branch: D27, D55, D59 or D34_J6O missing; J2's F39 with D34_J6O; J6c's F39 in the allowed shape and in a c1 shape; J6c's F34; J6c's F49; J4 not F36; T-J1 not met; a complete J6o present; two non-complete attempts; one attempt with `offline-write`.
+- **Reading:** a synthetic J6o log (`syn_j6_log` with `begin arm=offline` and the slot0 marker): clean; revert-only; onset (ok at start, bad at a watch base; ok at start, bad at the end check); drop and unchanged at the band's boundary; `unchanged,high` and `unchanged,low`; heal-all; unstable; clean with F39c1; clean with F49; drop with F49; clean with F39c3 (C with `c3=hit`); incomplete (U, with the lead); no parse-valid c2 check (`n/a`); a synthetic J6c parse carries no `c2_check_words`.
+- **Return:** `cpu_online_after` read at both paths; F68 on a difference; the abort class F67 for each sub-reason.
+- **J7a:** refused with `D54=yes`; refused with `D54_LIFT` alone; accepted with both parts.
+- **Unchanged:** the `WQ_FUNCS` diff against the registered commit is exactly the named hunks; every existing check passes.
+
+---
+
+#### 15.14.5 Pre-registered reading (fixed before J6o's stage; extracted as `J6o-rule-15.14.md`)
+
+**Terms.**
+- **The controls:** the kexec runs B2, J2, J4 and J6c. They span two images (`s1-h1` for B2, J2 and J4; `s1-j1` for J6c).
+- **L:** the lowest c2 bad-word count at the start check among the controls, read by `j6o-ref` from their raw COM3 copies (D64). It is registered privately in J6o's stage and never appears in public text.
+- **The band, half of L:** a design constant, deliberately far outside the controls' spread (class only), set before J6o's stage as P7's threshold was (§15.13.10.3). Natural variation therefore cannot read as `drop`; a partial outcome that lands above the band reads `unchanged`, whose class says "weakened, not refuted"; the finer information is carried by the record-only sub-labels below.
+
+**Complete J6o run.**
+- J6c's complete-parse rules (`--diag j1`) hold.
+- `slot0 cpu-offline result=0` is on COM3, before `kexec issuing`.
+- The image's reset and a return to L4T follow.
+- A counted run past `procnto up` with the watcher's data missing is incomplete for an image or tool reason, as §15.12 C (counted, nothing resized).
+
+**c2's reading (field rules, the pre-registered rule `j6o-read` implements).**
+
+| Reading | Holds when |
+|---|---|
+| **n/a** | no parse-valid c2 start check (`c2_start` neither `ok` nor `bad`, or `c2_check_words` absent) |
+| **unstable** | F34 in the J row (§15.12 B5), whatever the counts |
+| **clean** | `c2_start=ok`, `c2_end=ok`, the `writer-none` row present, and `bad_base` 0 in every c2 watch (no revert, §15.12 B7) |
+| **revert-only** | not bad by the rule below, but a c2 revert or oscillation above 0 (as §15.13.10.1): a misread with no write shown |
+| **onset** | `c2_start=ok`, and c2 bad at any later point: a c2 watch `bad_base` above 0, a change event with stable re-reads, or `c2_end=bad` (F32b's shape) |
+| **drop** | `c2_start=bad`, and twice the start-check count is below L |
+| **unchanged** | `c2_start=bad`, and twice the start-check count is at least L |
+
+`drop` and `unchanged` therefore hold only on a c2 that was bad at the start check. A reading is made for an incomplete run too, whenever the start check is parse-valid; it then feeds U's lead.
+
+**Sub-labels (record only; none moves the reading or the class).**
+- `end=ok|bad`: the end-check state. `heal-all` when `c2_start=bad` and `c2_end=ok` (F32a's shape): a restoring writer, HYPOTHESIS, recorded as a lead.
+- `anchor=first-word|other` (P2, from `c2_start_anchor`), printed for `drop` and `unchanged`: whether the first mismatch is still c2's first word. It is the one record that separates HL-under-HC from an anchored writer.
+- `unchanged,high` when the start count is above every control's; `unchanged,low` when it is below every control's but at least half of L.
+- The end-check count and the heal counts (`healed`, `whole_heal`), from the parse fields.
+- `c3=clean|hit`.
+- The D61 reads' change across the offline (whether a power-down state was entered; class only in the memo).
+
+**Pre-registered predictions of HC, record only (so nothing is fitted later).**
+- c3: under HC with R97 and R98, c3's late CPU-written hits should vanish too. A c3 hit with c2 clean is a lead against HC's completeness, recorded; it changes no class.
+- Heals: HC's forward-and-drop predicts heals in whole lines in any bad run; none in a clean run.
+- Anchor: under HL as a component of HC, a `drop` or `unchanged` run keeps `anchor=first-word`; `other` weakens HL.
+- The D61 reads: an `unchanged` run in which cluster 1 entered no power-down state does not weaken HC-a (R98).
+
+**Other observations.**
+- c1 bad at either check or in watch d: **F39c1, an immediate stop.** c2's reading still stands (rule 1).
+- c3 bad: **F39c3, an immediate stop, as §15.6** (D59 (i); unlike D39 for J7a, no waiver, because no diagnostic run follows in revision 3 and stopping costs nothing). c2's reading still stands, and the class line gains `c3=hit`.
+- The hold's verify bad: **F49, an immediate stop.** c2's reading still stands.
+- F67: exit 5, a harness-reason return; the retry rule is by sub-reason (§15.14.8).
+- F68: an immediate stop (a STOP line); the reading of the run stands.
+- F69: ends J6o, no retry; the class is U.
+- F48: as §15.7.2.
+
+**Classes (dated appends to §15.6's table).**
+
+| Class | Holds when | Then |
+|---|---|---|
+| **C: clean with the secondaries offline** (cache residue, HYPOTHESIS; provisional) | J6o complete; c2 `clean`; c1 clean (no F39c1); the hold `verify=ok` (no F49); `c3=clean\|hit` as a sub-label | "The corruption did not appear when every secondary CPU was offline before the jump, in one run." Consistent with HC (HYPOTHESIS until C is final); which cache (HC-a or HC-c) is not shown. The offline is a harness-level mitigation for kexec entry, not a fix: S1-F's host starts its cores. **C becomes final only when all of these hold:** (a) the watcher image rebuilt on the X8 startup (a new image with its own T-J1, since `PIN_STARTUP_S1` moves; D56), run in the control arm with every CPU online at the jump as a revision-4 kexec run, shows `writer=none` on c2, c1 clean and the hold verified; (b) B1 reruns and passes (D26); (c) B2 reruns with the unchanged `s1-h1` judgement (§6.7) and passes. Those runs are revision 4's S1 ladder work, not diagnostic budget. J7a stays suspended; whether it keeps a purpose for freeze item 3 is the owner's (D54, both parts of the lift) |
+| **C-p: partial** | J6o complete; c2 `drop`; c1 clean; the hold `verify=ok` | "The corruption at the lowest window-2 canary fell when the secondary CPUs were offline before the jump, but did not disappear." HYPOTHESIS: most of the residue was in the secondaries' caches; the remainder is not identified (the boot cluster beyond its set/way clean, a cluster that did not power down (R98), or a second writer). X8 is still next, since a VA clean also reaches the boot cluster. J7a stays suspended until the owner rules (D54); the owner decides |
+| **U** (J6o) | anything else, including: c2 `unchanged` (the lead: "taking every secondary CPU offline before the jump did not change the corruption"); c2 `onset` (the lead: a writer active after QNX came up, F32b's shape, never C-p); c2 `revert-only` (an H3 lead; the run counts); c2 `clean` or `drop` with F39c1 or F49 (the c2 reading recorded as a lead, rule 1); an incomplete run (§15.12 C, with any reading from a parse-valid start check as its lead); F67 twice, or one F67 with a no-retry sub-reason; F68; F69; any immediate stop before a class holds | Under `unchanged`: HC-a and HC-c are weakened, not refuted: refuted only where R97 and R98 hold (the D61 reads say whether a power-down state was entered). H1, H4x, H2, H5 and a boot-cluster residue beyond set/way remain. The owner decides among, all revision 4: lifting D54 (J7a regains its purpose; both parts of the lift), X8, the D57 `-P1` image (X6: HC-c alone), X4 the Linux-side scrub (D63), or stopping S1-F. B2 stays data; S1-F stays stopped |
+| **K-r** | J6o `unstable` | as §15.6 |
+
+`j6o-read` prints class U with the lead for every catch-all case, and `n/a` only for a run with no parse-valid c2 check.
+
+**Precedence.**
+1. An immediate stop ends the diagnosis for revision 3. A reading made in the stopping run still classifies (C or C-p with F39c3; U with F39c1 or F49).
+2. K-r outranks C, C-p and U for the same run.
+3. The record-only sub-labels, the HC predictions above, and any desk comparison of page sets with J6c (X3, from the private exports) never move a reading or a class.
+
+**Not a class change.** B2 stays NOT MET on data under every J6o outcome.
+
+**False-C risk, stated.** One clean run is weak evidence, as §15.4.6 said for one clean J4 and §15.13.2 says for one clean J7a: under a uniform prior over the four exchangeable bad kexec runs, the chance of one clean run if the offline has no effect is the estimate §15.13.2 states (about one in six), with the same caveat that the four runs used two images. R101 adds that the offline moves Linux's last CPU activity onto CPU0 and changes shutdown timing, which is not separable in one run. C therefore stays provisional until its "final" conditions hold, and the public C sentence says "provisional" and "in one run".
+
+---
+
+#### 15.14.6 J7a under D54 (dated appends to §15.13, not edits)
+
+- **§15.13.10.3 gains a row, read before the `anchored` reading:** "**2026-09-15 (D54): UEFI cache residue.** `content=` leading with `zero`, `ptr_ram` or `u32page`, without `kva`: the residue of UEFI's own last CPU writes fits at least as well as H2, since the loader cleans only its image and trampoline by VA (HYPOTHESIS)."
+- **§15.13.10.4 gains:** "**2026-09-15 (D54): the consequence clauses of the E row's Then and the K-w row's Then are suspended:** K-w's revision-4 range derivation and 'Kill condition 1 stands for the 11c candidate'; E's owner options (a wider quiesce search, UEFI entry for S1-F, stopping S1-F). **§15.13.11's stops, including 'After `anchored`, J7a stops', and precedence rules 1-6 stay in force.** A J7a result read while suspended records its class and sub-labels; no suspended consequence follows from it until the owner rules. **The lift is two-part:** `D54_LIFT=owner-<decision>` lifts the board-step deferral, and `D54_READING=restored|amended-<sha>` records the owner's ruling on the two Then clauses after J6o's memo (restored unchanged, or amended by a dated append whose commit is named). `j7a_precondition` refuses without both." Without the second part, a lift after a C result would restore the clauses exactly as the synthesis showed they route wrongly.
+- **§15.13.11 gains:** "**2026-09-15 (D54):** no J7a board step while D54 stands; `j7a_precondition` refuses until both parts of the lift are named."
+- **J7a's PC-side work** (loader, T0 record, harness, parser) is kept unchanged.
+
+---
+
+#### 15.14.7 Budget and stops
+
+- J6o is revision 3's fourth and last kexec diagnostic run (D55). Revision 3 then holds no kexec or L4T-only diagnostic run. X6 (the D57 `-P1` image) and X4 (D63) are revision 4.
+- One harness-reason retry does not count: an exit 5 (F67 with a retry sub-reason included), or a run that never reached `procnto up`. A second harness failure stops. An F67 with a no-retry sub-reason (`offline-write`, `offline-readback`) stops after one.
+- **Immediate stops:** §15.6's, with D34_J6O's scope (J2's and J6c's earlier F39 do not block J6o; an F39c1 or F39c3 inside J6o stops, D59 (i)); F67 twice; F68; F69; any write the allow-list does not name; the start-state gate's refusal twice.
+- **After J6o, and at any stop:** a number-free classification memo to the owner, with the private notes.
+
+---
+
+#### 15.14.8 Failure signatures (the §15.7.2 and §15.13.12 tables continue)
+
+| # | Observable | Meaning | Class | Next |
+|---|---|---|---|---|
+| F67 | `abort reason=offline-<sub>`: `offline-write` (a write's rc not 0), `offline-readback` (a read-back not `0`), `offline-list` (the online list not `0` at step 2a or at the issue), `offline-age` (the minimum age not reached), `offline-oops` (the scan hit in step 2a; F47's record too) | CPU hotplug refused (`write`, `readback`: deterministic on this kernel), reverted or slow (`list`, `age`), or an Oops | SR (L4T reboot) | exit 5. `offline-write` or `offline-readback`: no retry; memo (J6o cannot run as designed on this kernel). `offline-list`, `offline-age` or `offline-oops`: one retry on a fresh boot; a second F67 stops; memo |
+| F68 | after the return, `cpu_online_after` differs from the run's `cpu_online_start` | a core did not come back on the return boot: an nvpmodel mode or command-line change (neither made by the arm) or a core or firmware fault (HYPOTHESIS). Not "hotplug state persisted": Linux does not persist it across a boot | — | STOP line, exit 3; record `nvpmodel -q` and `dmesg` (read only); a second reboot is the first remedy (§15.7.3 item 8's logic, for CPUs); stop board work if it repeats. J6o's reading stands |
+| F69 | `s1wq: begin` on COM3 and no `slot0 cpu-offline` marker by `begin` plus `WQ_OFFLINE_S` plus 60 s; later a reset marker (`fallback firing`, `fallback forcing`) with no firmware banner within the reboot bound, and evidence the kernel is still up: ssh answering on the armed `boot_id`, or new COM3 output from the same kernel after the marker. (A reset marker followed only by silence is §15.7.3 item 7, F25b, not F69) | the offline write is blocked (a teardown callback or `stop_machine` waiting on a stuck CPU; HYPOTHESIS, rare), and every software reboot path may be blocked behind the hotplug lock it holds (R104). `com3_advice` would otherwise print NO CUT indefinitely while ssh answers, and no existing rule gives an exit (F25w needs no ssh; F25b needs silence) | — | PC: record-only ssh reads while ssh answers (`/sys/devices/system/cpu/online`, the sequence unit's task states, `dmesg` for an Oops); NO CUT until `WQ_F69_HOLD_S` after the reset marker; then the D60 exit, chosen before the stage, never at the board: (a) sysrq-b over ssh after `sync`, or (b) one power cut under the new rule: the running kernel is the boot validated at the rung's start (F25a's reasoning), no firmware boot followed the marker, so the next boot is a firmware boot validated by the usual return gates. Either exit ends J6o with no retry (a second hang is the same class); a cut counts as §15.6's power-cut stop; F27's Oops record is read on the return. Class U |
+
+---
+
+#### 15.14.9 Claims (the §15.7.1 and §15.13.13 tables continue)
+
+| # | Claim | Class | Answered by |
+|---|---|---|---|
+| R97 | A core that stays offline (PSCI `CPU_OFF`) for the dwell reaches a power-down state in which its private caches are cleaned or discarded, so no stale line of theirs survives to startup's fill. (The controls' `CPU_OFF` at the jump left no such dwell.) | HYPOTHESIS (X14 desk read of the core and DSU manuals pending. **2026-09-15:** the desk read is done; a flush at a core's power-down is a cited VENDOR_CLAIM (X14(c-prior)), and R97 stays HYPOTHESIS for this board: §16.1, R105, R106). The record-only L4T read lists, per CPU, WFI and one core power-gate idle state; that list describes cpuidle, not the level PSCI `CPU_OFF` reaches, so it sets a prior only | desk; the D61 reads (record); not separable by J6o alone |
+| R98 | With both cluster-1 cores offline for the dwell, cluster 1's shared cache is cleaned or powered down before startup's fill | HYPOTHESIS. The tree read on L4T lists no cluster-level idle state, and the cluster's fixed low rate under QNX (m3-design §4.3) hints that it may stay powered | desk; the D61 power-domain read (record); J6o `unchanged` does not refute HC-a without it |
+| R99 | After cores 4 and 5 go offline, `policy4`'s attributes do not read | HYPOTHESIS (upstream cpufreq behaviour, from memory). The waiver does not depend on it; `b_freq final`'s `policy4` lines are record only and read under the final-reads timeout | the J6o record |
+| R100 | Writing `0` to `cpuN/online` runs the same per-CPU hotplug teardown (`cpu_die` → PSCI `CPU_OFF`) that the kexec shutdown ran for cpus 1-5 in B2, J2, J4 and J6c; with the secondaries already offline, `smp_shutdown_nonboot_cpus` has nothing to do and `machine_kexec` runs on CPU0 | VENDOR_CLAIM (research-kexec-tcu.md §3.1; upstream `kernel/cpu.c` from memory). The record-only read shows the hotplug option on and the `online` files writable (class only). Residuals, HYPOTHESIS: the timing (minutes before the jump, not milliseconds), the order (`5 4 3 2 1`, not ascending), and live drivers at the offline (IRQ migration onto CPU0 with the wireless link up; the out-of-tree wireless driver's hotplug callbacks, unread). The nvpmodel precedent covers cluster 1 only: cluster-0 secondaries' offline has no on-board precedent outside the kexec shutdown | J6o; `offline psci_killed=` |
+| R101 | Taking the secondaries offline adds no DMA, firmware or coprocessor state that creates or suppresses a c2 writer | HYPOTHESIS (a confound with J6c: Linux's last CPU activity moves onto CPU0, and shutdown timing changes) | not separable |
+| R102 | The PSCI and GIC state of cores 1-5 at the jump is the state J6c's kexec shutdown left (the GICv3 driver has no CPU-offline teardown; the M2 design already handles the redistributor state firmware leaves on offlined cores), differing only in time off and in cluster 1's residency; startup's `CPU_ON` of cores 1-3 behaves as in J6c | HYPOTHESIS | J6o's `CPU_ON` lines (`affinity_info`; no ALREADY_ON or ON_PENDING). A `CPU_ON` failure is F40-class (image or harness), counted as a kexec run only if procnto came up |
+| R103 | CPU hotplug on this fork, with the wireless link up and the PSCI cpuidle-domain driver active, neither hangs nor oopses | HYPOTHESIS, bounded by the Oops scan (F47, `offline-oops`) and by F69's rule; not separable from R101 | J6o |
+| R104 | A `cpu_down` blocked in a teardown holds the CPU-hotplug lock for its whole duration, and `migrate_to_reboot_cpu()` on every software reboot path of this kernel (`kernel_restart`, `kernel_kexec`, `reboot --force`) takes that lock, so the abort's and the fallback's reboots would block behind it | HYPOTHESIS (research-kexec-tcu.md on `kernel_kexec`; upstream `cpu_maps_update_begin`/`cpu_hotplug_disable` from memory). The abort and fallback paths are unproven with a CPU mid-teardown | not testable by design; F69's signature if it happens |
+
+---
+
+#### 15.14.10 Record-only reads on L4T, 2026-09-15 (D55; not an L4T-only run)
+
+One read-only ssh session wrote nothing on the board. The private record is under `diag/`. It covered:
+- the kernel's virtual-address size, for a later kva split (X2, not in `s1-j1`);
+- each CPU's idle states, their names and usage (usage private): every CPU lists WFI and one core power-gate state, and the tree lists no cluster-level state;
+- the nvpmodel configuration's `CPU_ONLINE` lines: one mode keeps the cluster-1 cores offline;
+- a read-only power-domain summary;
+- the CPU-hotplug configuration option and the writable `online` files (R100).
+
+The idle-state usage files and the power-domain summary are the two paths D61 would read inside the sequence.
+
+---
+
+#### 15.14.11 Public text (D58)
+
+**May be stated now:** "A desk analysis of the private records makes a CPU cache-maintenance gap at the hand-over the leading hypothesis. The corrupted data comes in whole cache lines and, in the analysis's reading (HYPOTHESIS), looks like the previous kernel's own data. It is untested. The next run takes every secondary CPU offline before the jump; a UEFI-entry run is deferred."
+
+**2026-09-15:** superseded by §16.12's pre-run sentence (J6o shelved, D65). The class sentences below stay on file for a J6o that is never run.
+
+**After D31, one class sentence, verbatim or close:**
+- **C:** "With every secondary CPU offline before the jump, the lowest window-2 canary stayed clean in one run. A CPU cache residue left by the previous kernel is the provisional reading; which cache is not shown. The startup fix and the B1 and B2 reruns are still to come, and B2 stays not met until then."
+- **C-p:** "With every secondary CPU offline before the jump, the corruption at the lowest window-2 canary fell but did not disappear (HYPOTHESIS: their caches held most of it). The remainder is not explained."
+- **U:** "Taking every secondary CPU offline before the jump did not change the corruption. The cache-residue hypothesis is weakened, not refuted; the writer is not identified." (For the other U cases: "Unresolved.")
+- **K-r:** as §15.13.16's K-r(u) sentence, for kexec entry.
+
+**Never in public text:**
+- the synthesis's figures: counts, ratios, page-class tables, correlations, probabilities or line counts; the registered reference count; the band's position;
+- idle-state usage, the power-domain summary, or any value from the kernel configuration read, including the address-space size (D62: no figure until the 4.6(i) consultation, or a cited public default if the owner names one);
+- "the cause", "fixed" or "cache bug in firmware or QNX", except a named cause labelled HYPOTHESIS;
+- anything softening "NOT MET, on data".
+
+**May be stated** (§15.13.16's precedent): the run count, and the one-clean-run chance worded as §15.13.2 words it, with its two-images caveat.
+
+---
+
+#### 15.14.12 What J6o does not show
+
+- **Which cache.** The offline removes cluster 1's caches and cores 1-3's at once, so HC-a and HC-c are not separated.
+- **That a clean J6o is a fix.** S1-F's host starts its cores; the startup VA clean is the fix candidate, and its B1 and B2 reruns decide.
+- **That `unchanged` refutes HC,** unless R97 and R98 hold.
+- **Whether cluster 1 entered a power-down state during the dwell** (R98); the D61 reads say so only in class and only if the owner allows them.
+- **Whether the memcanary mapping is cacheable, or whether DRAM ever held the bad data.** The two-view read (X1) was not run, so a clean J6o still says nothing about a DRAM view.
+- **Anything about UEFI entry, the GPU's residue or a firmware writer** beyond what a clean or unchanged c2 implies under R101.
+- **That the abort and fallback paths recover a board with a CPU mid-teardown** (R104); F69 is the pre-registered signature, not a test.
+- **Repeatability.** One run, with the false-C risk §15.14.5 states.
+- **Timing, isolation, containment,** or anything about a Linux guest.
+- **No figure is publishable** before the 4.6(i) consultation.
+
+---
+
+#### 15.14.13 Never (J6o additions; §7.3, §15.1's items and §15.13.15 apply)
+
+- Write any CPU's `online` file other than cpu1-cpu5's, write anything but `0` to one, or write any `cpufreq`, `cpuidle` or `nvpmodel` setting, after Phase A's governor pin.
+- Bring a CPU back online in the sequence, or take CPUs offline over ssh or outside the detached sequence.
+- Run the offline arm with any image but `s1-j1`, or with a non-empty removal set, or on a boot whose `online` did not read `0-5` at the start-state gate.
+- Run a second offline attempt on the same boot (the fresh-boot gate refuses; the abort reboots).
+- Write `/proc/sysrq-trigger`, or run any `reboot -f` or `echo b` form, except as D60's chosen exit under F69 with its dated exception.
+- Use `taskset`, `isolcpus`, `maxcpus=`, `nr_cpus=` or an nvpmodel mode change as a step of J6o (D63; the command-line half is already in §15.1).
+- Put idle-state usage, the power-domain summary, the synthesis's figures, the registered reference count or the kernel configuration's values in public text.
+
+---
+
+#### 15.14.14 Pointers to add later (list only; the orchestrator edits)
+
+- §15.3: "2026-09-15: HC and HL lead, §15.14.1."
+- §15.4.9: a J6o row, "designed in §15.14 (D55, D59)".
+- §15.6: the C, C-p and J6o U rows (§15.14.5); the budget line, "the fourth kexec run is J6o (D55)"; the immediate stops gain F68 and F69, and the power-cut line gains "or D60's F69 cut".
+- §15.7.3: item 9, F69's hold and exit (§15.14.8), and the `by=` list gains `j6o`.
+- §15.13.10.3, §15.13.10.4 and §15.13.11: the D54 appends (§15.14.6).
+- The plan's freeze gate item 3 and S1-F block, `CLAUDE.md` and `findings.md`: the number-free status line of §15.14.11.
+
+**2026-09-15 (applied with §16; J6o shelved):** the §15.3, §15.4.9, §15.13.10.3, §15.13.10.4 and §15.13.11 pointers are added. §15.6 records J6o's C, C-p and U rows only as designed, not run; its budget line records the fourth kexec run as lapsed (§16.7), and its stops do not gain F68 or F69. §15.7.3's item 9 is not added. The status lines take §16.12's sentence, not §15.14.11's.
+
+---
+
+#### 15.14.15 Review outcomes
+
+Three reviews read the draft: the reading (RR), harness and parser feasibility (RH), board safety and recovery (RS). Every required change is listed with what happened to it.
+
+##### 15.14.15.1 Conflicts between reviewers, and how they were resolved
+
+| # | Conflict | Resolution |
+|---|---|---|
+| K1 | RR3 asks that an F39c3 inside J6o stay §15.6's immediate stop or get its own owner decision; RH-4 asks the parser to split F39 into F39c1/F39c3 so that J6o's stop test reads F39c1 or F49 only (F39c3 recorded) | F39c3 stays a stop, with rule 1 classifying the run (D59 (i), recommended, for the owner). The split is still made, because the precondition needs it to accept J6c's F39 only in its c3 shape and `j6o-read` needs it for the `c3=hit` sub-label; `j6_after_parse`'s stop test is unchanged (any F39) |
+| K2 | RR6 wants P2 (the first-word anchor), heals, the end count and c3 pre-registered as records; RH-5 shows `canwatch --ref-j6c` cannot run for J6o without a parser exception and five registered J6c hashes | The profile run is dropped from J6o. P2 and the counts come from the parse fields RH-3 adds for the offline arm (`c2_start_anchor`, `c2_check_words`); the page-set comparison with J6c is a desk record from the private exports (X3), never a harness step |
+| K3 | RR7 asks for record-only idle-state and power-domain reads inside `b_wq_offline`; RH-6 asks that the word `cpuidle` be refused on every line | The reads are FN-scoped literal read paths in `b_wq_offline` only (D61, the owner's); `cpuidle` is refused outside those paths, `nvpmodel` on every line, `cpufreq` and `cpu0` as write targets only, so the governor read still passes |
+| K4 | RS5 rewrites F68 ("a core did not come back": start-state gate, second reboot first, stop if it repeats); the draft and RH-11 read F68 as "hotplug state persisted" with an immediate stop of all board work (exit 3 or 4) | RS5's meaning and start-state gate; the consequence is RH-11's STOP line with exit 3, with a second reboot as the first remedy and board work stopped only on a repeat |
+| K5 | RS11 splits F67's retry by cause; the draft and RH-10 give one retry for any F67 | Sub-reasons in the marker text; `offline-write` and `offline-readback` never retry; the abort-class map reads every sub-reason as F67 |
+| K6 | RR4 makes D54's lift two-part; RH-20 specifies the single `D54_LIFT` check | Both parts required in `j7a_precondition`, with the value forms RH-20 gives |
+| K7 | RS1's F69 needs a hold with no silence; the draft's holds are silence-based | A new design constant, `WQ_F69_HOLD_S`, counted from the reset marker; the exit is D60's, chosen before the stage |
+| K8 | RS4 and RH-8 both make the timing arm-aware; RH-15 offers either an invariant on `wq_state`'s slack or a schedule shift | The schedule shift (RS4's ask, so a normal run is never STALLED) and the invariant self-test both |
+
+##### 15.14.15.2 Every required change
+
+| ID | Sev. | Change asked | Outcome | Where |
+|---|---|---|---|---|
+| RR1 | blocker | U (J6o) as the catch-all; parser prints U with the lead, `n/a` only with no parse-valid c2 check; self-tests per combination | **Applied** | §15.14.5 classes, field rules; §15.14.4 reading and self-tests |
+| RR2 | major | readings `revert-only` and `onset`; `drop`/`unchanged` need c2 bad at the start check; end count and heals recorded | **Applied** (`heal-all` added as a sub-label) | §15.14.5 field rules and sub-labels |
+| RR3 | major | F39c3 inside J6o: keep the stop or add an owner decision; J6c's F39 accepted only in its c3-bad/c1-ok shape | **Applied:** the stop is kept, put to the owner as D59 (i); the precondition shape added (K1) | §15.14.5 other observations; §15.14.4 precondition; D59 |
+| RR4 | major | suspend only the consequence clauses; §15.13.11's stops and precedence stay; a two-part lift with `D54_READING`; `j7a_precondition` refuses without both | **Applied** (K6) | §15.14.6; §15.14.4 J7a |
+| RR5 | major | a D59 accepting the reading before the stage; gate the stage on it | **Applied** (D59 also carries D34_J6O's scope, the two-part lift, the start-state gate and the constants) | §15.14.2.1; §15.14.4 precondition |
+| RR6 | major | pre-register HC's record-only predictions: c3, P2, heals, `unchanged,high/low`, the end count | **Applied** (K2) | §15.14.5 sub-labels and predictions |
+| RR7 | major | state that the controls also `CPU_OFF`'d the secondaries; reword R97's evidence; record-only power-state reads around the offline | **Applied;** the reads are D61's, the owner's (K3) | §15.14.1; R97; §15.14.3 step 2a; D61 |
+| RR8 | major | a false-C paragraph citing §15.13.2 and R101; "consistent with HC (HYPOTHESIS until C is final)"; "provisional" and "in one run" in public text | **Applied** | §15.14.5 false-C risk and C row; §15.14.11 |
+| RR9 | major | C-final (a) as the watcher rebuilt on the X8 startup, control arm, every CPU online, writer=none, c1 clean, hold verified, a revision-4 run | **Applied** | §15.14.5 C row |
+| RR10 | minor | justify the half-of-L band as a design constant; note the two images | **Applied** | §15.14.5 terms |
+| RR11 | minor | name the parser and harness details (F39 split source, canwatch under kexec, capture life, `by=`, jrun refusal) | **Applied,** except canwatch, which is dropped (K2) | §15.14.4 |
+| RR12 | minor | label the data-shape clause HYPOTHESIS; C-p's mechanism as HYPOTHESIS; the address-space figure cited or dropped | **Applied;** the figure is dropped, and citing a public default is D62 | §15.14.11; D62 |
+| RR13 | minor | U's options: D54 lift, X8, the D57 `-P1` image, X4, stop; C-p says D54 stays | **Applied** (X4 under D63) | §15.14.5 U and C-p rows |
+| RR14 | minor | rename C by the observation, mechanism labelled in the Then | **Applied** | §15.14.5 C row |
+| RR15 | minor | §15.14.12 gains cacheability/DRAM view and R98's power-down question | **Applied** | §15.14.12 |
+| RH-1 | blocker | `offline` control-like at `j_set_select`, the Bus-Master block, the set record line, `bme_at_issue`; self-test | **Applied** | §15.14.3 Phase B; §15.14.4 jrun and self-tests |
+| RH-2 | blocker | L from the four raw COM3 copies through a new `j6o-ref` subcommand with input hashes; private; no parse rewritten | **Applied;** B2's copy and the private number put to the owner as D64 | §15.14.4 stage; §15.14.5 terms; D64 |
+| RH-3 | major | `c2_check_words` (and `c2_start_anchor`) under kexec entry for `--arm offline`, arm-guarded; self-test | **Applied** | §15.14.4 parser fields |
+| RH-4 | major | F39c1/F39c3 for `--arm offline`; `j6_precondition` branch `j6offline`; which J6c F39 the waiver covers | **Applied in part:** the split and the branch as asked; the stop test unchanged because F39c3 stays a stop (K1) | §15.14.4; D59 (i), (ii) |
+| RH-5 | major | drop `canwatch --ref-j6c` from J6o or specify it fully | **Applied** (dropped; K2) | §15.14.4 parser fields |
+| RH-6 | major | restate the `cpufreq`/`cpu0`/`cpuidle`/`nvpmodel` refusals so the governor read passes; self-test | **Applied** (K3) | §15.14.3 allow-list |
+| RH-7 | major | list every changed function; define the `WQ_FUNCS` self-test as a diff at the registered commit | **Applied** | §15.14.3 `WQ_FUNCS` |
+| RH-8 | blocker | arm-aware `wq_fallback_s`/`wq_worst_case`, the eight call sites, the constants in the refusal loop, header and gate; timing self-tests | **Applied** (K8) | §15.14.3 design constants; §15.14.4 |
+| RH-9 | blocker | name every jrun/stage/precondition/gate site that must accept `offline` | **Applied** | §15.14.4 jrun |
+| RH-10 | major | `*reason=offline*) cls=F67`; define complete and harness-reason attempts from records | **Applied** (with RS11's no-retry sub-reasons) | §15.14.4 precondition and abort classes |
+| RH-11 | major | read `online` in both return paths; F68's exit and STOP line; NO RETURN reads later | **Applied** (exit 3; K4) | §15.14.4 return reads; F68 |
+| RH-12 | major | exact gate forms: `readpath`, `checkredir`, `checkcmd`'s loop and assignment checks, the guarded call, the age timestamp | **Applied** | §15.14.3 allow-list |
+| RH-13 | major | the rule file required by `j6_prereg_append offline`; both lines written and verified; `j6_stage_matches` includes the rule hash | **Applied** | §15.14.4 stage |
+| RH-14 | minor | item 1's line is a `wq.log` line; name the only new markers | **Applied** | §15.14.3 step 2a and markers |
+| RH-15 | minor | `wq_state`'s slack invariant or a schedule shift; `slot_overruns` includes slot 0 | **Applied** (both; K8) | §15.14.3 design constants; step 2a item 8 |
+| RH-16 | major | `D34_J6O` alone or with `D34_J6`; precondition self-tests | **Applied:** `D34_J6O` alone, under D59 (ii) | §15.14.4 precondition; D59 |
+| RH-17 | major | field rules for `j6o-read`; `--ref-c2-start-min` from `j6_block_value`; drop `canwatch.txt` | **Applied** | §15.14.5 field rules; §15.14.4 reading |
+| RH-18 | minor | `J1_ARMS`, `J1_STEPS`, the new subcommands, a `syn_j6_log` offline variant | **Applied** | §15.14.4 |
+| RH-19 | major | a `date` stub in the dry run; the read-back-of-`1` case in-process; `wqfx` fixtures | **Applied** | §15.14.4 self-tests |
+| RH-20 | minor | `j7a_conf D54` check with the `D54_LIFT` value form; two self-tests | **Applied,** extended to `D54_READING` (K6) | §15.14.4 J7a |
+| RH-21 | minor | note the amendment's "old" hash is the newest registered commit's | **Applied** | §15.14.3 `WQ_FUNCS` |
+| RH-22 | minor | record sites and comments; `J_READBACK_TEXT` | **Applied** | §15.14.4 jrun |
+| RH-24 | minor | name the guard `b_wq_offline_guard` in `WQ_FUNCS`; count it in the diff | **Applied** | §15.14.3 step 11 and `WQ_FUNCS` |
+| RH-25 | minor | the ceiling as derived; the offline value in the start-margin self-test | **Applied** | §15.14.3 design constants; §15.14.4 self-tests |
+| RS1 | blocker | F69: signature, record-only reads, a hold constant, an owner-chosen exit, `wait_wq` handling, "unproven mid-teardown" in §15.14.12 | **Applied;** the exit is D60's, recommended (b) (K7) | F69; R104; §15.14.4 `wait_wq`; §15.14.12; D60 |
+| RS2 | major | `offline` dispatched as `control` at every site; self-test on the generated offline script | **Applied** (with RH-1, RH-9) | §15.14.3; §15.14.4 |
+| RS3 | major | gate the value written (`printf '0\n'` only), the target in other functions, `$c`'s form; injection self-tests | **Applied** | §15.14.3 allow-list; §15.14.4 self-tests |
+| RS4 | major | arm-aware timing at every site, including `wq_state`'s schedule; the constants in the refusal loop and gate; equality self-tests | **Applied** (K8) | §15.14.3; §15.14.4 |
+| RS5 | major | a start-state gate (`online` `0-5`, active mode); F68 rewritten; a Never item | **Applied** (K4); the mode name in the private log and a non-six-core mode as a refusal are in D59 | §15.14.3 Phase A; F68; §15.14.13 |
+| RS6 | major | R100 on the kexec-shutdown precedent, with the three residuals; nvpmodel as cluster-1 precedent only | **Applied** | R100; §15.14.10 |
+| RS7 | minor | R102 on the `CPU_ON` state QNX sees; F40-class note | **Applied** | R102 |
+| RS8 | minor | count the kernel's kill lines after the loop; allow `dmesg` in `b_wq_offline` | **Applied** | §15.14.3 step 2a item 4; allow-list |
+| RS9 | minor | reword "a new kernel with all six cores"; `policy4` reads record only, under the final-reads timeout | **Applied** | §15.14.3; R99 |
+| RS10 | minor | Never items (start state, sysrq, affinity tools, a second attempt per boot); R103 | **Applied;** affinity tools put to the owner as D63; the order question is in D59 | §15.14.13; R103; D59; D63 |
+| RS11 | minor | split F67's retry by cause; sub-reasons in the marker; the step-11 abort's expected path | **Applied** (K5) | F67; §15.14.3 step 2a and step 11 |
+
+##### 15.14.15.3 Open for the owner
+
+D59 (accept the revised reading and rules, including the F39c3 stop, `D34_J6O`'s scope and the two-part D54 lift), D60 (F69's exit and its hold), D61 (the record-only power-state reads in the sequence), D62 (the public address-space figure), D63 (affinity tools; X4 as revision 4) and D64 (L from the raw COM3 copies, B2 as a control, the private registered number). Recommendations are in §15.14.2.1.
+
+---
+
+## 16. Revision 4: X8, a startup cache clean by VA before the fill (2026-09-15, reviewed)
+
+Phase 3b. Proposed as **§16 of `results/orin-native-port/20260909T1100Z/s1-design.md`**. Written after the owner's 2026-09-15 ruling "X8 FIRST; J6o shelved" (§16.15, D65), on the private desk synthesis (`c2-writer-research-final.md`, X8 row), its desk-read addendum (`x14-desk-reads.md`, X14(a)-(c), g1) and three read-only source inventories of the T234 board startup, the BSP startup library it links against, the image generator and the harness. This is the merge of two §16 drafts (§16.18), revised after three reviews: cache maintenance (RC), power of the reading (RR) and feasibility against the harness at HEAD (RB); §16.19 lists every required change and what happened to it. Nothing in this section has been built or run. It creates no code, configuration or image, and no board step runs before the owner accepts it (D66).
+
+**2026-09-15 (owner):** accepted with every recommendation; the decisions are recorded in §16.15's Taken block. **2026-09-16:** the startup is built on the PC and its pin moved; the board images are not yet regenerated, and nothing of revision 4 has run on the board.
+
+**Angle taken, stated up front.** Revision 4 makes **one** startup binary that cleans by VA, **under `-b` only**, the two ranges startup will write with the MMU off inside the claimed windows that the S1 option adds: window 2 as a whole (which holds c2 and c3 and is later handed to procnto), and c1's range in window 1. The option-off path is behaviourally unchanged, so B1 keeps §2 rule 4's premise exactly. The confirming runs are the S1 ladder's own B1 and B2 reruns plus one watcher run, **in the order B1, then the watcher, then B2**, the order §15.6's Q-final and §15.14.5's C-final already use, so that no B2-MET line is written before the watcher has read (§16.5). The fix-first draft's wider remedy, a whole-window-1 clean in `board_init` for the library's own MMU-off writes, is **not** in the revision-4 binary; it is designed here with the carve-out the review found it needs (§16.3.6), carried as a declared residual (R111), and put to the owner as D66's alternative (b).
+
+**Hard rules kept while writing.** No board contact, no ssh, no download, no repository edit, no QNX-shipped binary read. The BSP startup library was read as source (Apache-2.0 headers on every file cited; the extracted tree this file's `lib/` prefix names); the IFS preboot stub (`*.boot`, mkifs output) was not read. Every file:line below is from the three inventories or the reviews, each checked against HEAD (`ecc6c3c`) where it is load-bearing.
+
+**Evidence classes** as in §15's header, §15.13's additions ("VERIFIED (source)", "class only") and "VERIFIED (private record)".
+
+**Number-free, as §15.13.** No count, offset, ratio, probability, uptime, duration, hash or figure from any run, record or build appears here. Addresses and sizes are the design constants of `t234_startup.h` (public in §3.3) or source facts. Bounds are design constants. One derivation from design constants appears (the clean's cost class, §16.3.3, R108): it uses two header constants and the architecture's line size, and no measurement; whether it stays in the public text is D81. Where a figure would otherwise be needed (L, a count) the text says "class only" or names the private record that will hold it.
+
+---
+
+### 16.1 Purpose, the owner's decisions, the trigger
+
+**Trigger (revision 3's own rules).** §15.6's immediate stops include "any need for a startup change ... (scope stop, revision 4)"; §15.1's Out list excludes "any change to the startup binary ... (each reruns B1, so revision 4)"; §15.1's Never list forbids any startup-source change inside revision 3. X8 is therefore revision 4 by construction, and it is S1 ladder work, not diagnostic budget (D56; §15.14.5 C row).
+
+**Decisions already taken (owner, 2026-09-15).**
+- **D54** stands: J7a's board steps deferred; §15.13.10.4's E and K-w consequence clauses suspended; the lift two-part (`D54_LIFT`, `D54_READING`). Whether that two-part gate exists in the harness is answered in §16.7: it did not at `ecc6c3c`, and the revision-4 harness change implements it (2026-09-16).
+- **D56:** the startup VA clean of each claimed window before its use is accepted in principle as the likely fix; `PIN_STARTUP_S1` moves; B1 and B2 rerun as S1 ladder work.
+- **D57:** a startup-line-only variant is a new image with its own T-J1 and B1 decision; §15.4.8's "startup line unchanged" reading governs.
+- **D58:** public text is class-only; figures stay private pending the 4.6(i) consultation.
+- **D65 (taken the same day):** X8 first; revision 4 opens with the startup change. J6o is shelved: designed (§15.14), not implemented, its fourth kexec run unused. D59-D64 take effect only if J6o is ever run; D61 is dropped.
+
+**Purpose of this revision.**
+1. Specify the startup change exactly: site, ranges, instruction, order, console output, refusals (§16.3).
+2. Specify the build, the pin move and every gate it touches (§16.4).
+3. Put the board reruns in order with the owner present, each with its harness command and the sessions they need (§16.5).
+4. Pre-register, before any run, how a clean, a drop and an unchanged c2 are read against the four controls, what each means for HC and for S1-F, what follows a bad result, and how a provisional class is withdrawn (§16.6).
+5. Close revision 3 in writing (§16.7).
+
+**Scope.**
+- **In:** the T234 board startup's cache maintenance, under `-b`, before its MMU-off writes into the ranges the S1 option adds; the rebuild of every board image on the new pin; B1, one watcher run and B2; the parser and harness changes those need; the dated appends to §5.3, §6.12, §15.6, §15.8 and the plan's freeze gate item 3.
+- **Out:** any change to window 2's size, the canary constants, the `-b` grammar, `memcanary`, `memcanary-w` or the host scripts; any shim change (R112 records the black-box residual); a window-1 whole clean (R111; D66(b)); GPU pass-through; J7a's board steps (D54); any timing result; B3-B5 (they wait on §16.6's outcome and the owner).
+
+**What this revision asserts.** The corruption's leading explanation (HC, HYPOTHESIS) is a hand-over hazard the architecture names: a location written with a non-Write-Back attribute while another agent holds a dirty or stale Write-Back copy (Arm ARM B2.11; X14(a), VERIFIED). The architecture's own remedy is maintenance by VA to the PoC before the write (D7.5.9.5, D8.2.12.4; X14(b), VERIFIED). Our startup's only maintenance is one set/way clean on the boot CPU (`lib/aarch64/cstart.S:83` -> `aarch64_cache_flush.S:34-75`, VERIFIED (source)), which the architecture says is local to that PE. Whether or not HC is the cause of the observed c2 corruption, the S1 fill writes MMU-off into memory the previous kernel used without that maintenance, and adding it before the fill is owed to S1-F regardless of what the diagnostic later says. That is why the change goes first, and why the reading in §16.6 is written so that a clean result does not over-claim which cache held the residue, or that the operation rather than the time it took removed it.
+
+---
+
+### 16.2 What revision 4 tests, and what it does not
+
+**What it tests.** The same images, rebuilt on a startup that cleans by VA, before the fill, every range the S1 option writes MMU-off, run through the ladder's own gates.
+- **A clean c2 (and c3) under the VA clean** is consistent with HC and is the fix S1-F needs. It does not say which cache held the residue (HC-a, cluster 1's L3; HC-c, cores 1-3's private caches; a boot-cluster line beyond set/way's reach): the clean reaches all of them at once (§16.13). It does not say the operation rather than the interval removed it (§16.6).
+- **A drop** says most of the residue was in a cache the clean reaches, and something remains: a cache outside coherency at the clean (MEM_RET or a parked core, X14(c-prior)), HC-c's write-back at `CPU_ON` (R106), or a second writer.
+- **Unchanged** says either that the corruption is not a coherent-cache residue (H1, H4x, H2, H5), or that the clean did not reach the cache that holds it (R105's reach conditions, none of which a QNX-side read shows). The failure branch is pre-registered (§16.6, class X-u) and is conditional on the owner accepting those conditions by assumption (D71).
+
+| Hypothesis (§15.3, §15.14.1) | Under the VA clean | What the reruns can say |
+|---|---|---|
+| HC-a cluster 1's L3 | reached while cluster 1 is ON or FUNC_RET (X14(b)); nothing to reach if OFF; unreachable in MEM_RET | clean fits; unchanged weakens it only if cluster 1 was in coherency, which no QNX-side read shows (R105) |
+| HC-c cores 1-3's private caches, written back at their own set/way after the fill | reached only while those cores are in coherency at the clean; a core parked Off was flushed at `CPU_OFF` (X14(c-prior), cited VENDOR_CLAIM) | clean fits; a small `drop` with `anchor=first-word` is HC-c's residual shape (R106); not separable |
+| HL a deterministic Linux object at window 2's first page | a component of HC; removed with it | clean fits; `anchor=other` in a drop weakens HL |
+| H1 GPU residue, H4x a remaining master, H2 firmware, H5 QNX-side | untouched by any cache operation | unchanged fits; then J7a regains its question (§16.6 X-u, D71) |
+| H3 read instability | untouched | the watcher's re-read rules (K-r) |
+
+**Not tested here:** the memo's optional second variant (a repeated set/way clean just before the fill): X14(b) made set/way's local scope VERIFIED, so it could only re-test cluster 0, and a second source variant is a second binary and its own B1 (§16.14, alternative 6). The library's MMU-off writes into window 1 (R111) are not covered by the revision-4 binary; §16.3.6 and D66(b). Whether any earlier kexec rung was free of the same residue in window 1 is not tested either (§16.13).
+
+---
+
+### 16.3 The startup change
+
+#### 16.3.1 Where: the order on CPU0, and the site
+
+The order on the boot CPU, VERIFIED (source): shim (MMU and caches off; `dc civac` over the console zone's first 4 KiB only, `t234-shim.S:120-130`; jump at EL2) -> IFS preboot stub (not read) -> `cstart.S`: registers saved (`boot_regs`, an MMU-off write into the image's `.data`), `_start_el2_or_el1`, `vbar_default`, **the set/way clean** (`cstart.S:83`), stack (in the image, live from here on), `bl _main` -> `_main`: `shdr`, `full_image_paddr`, `full_ram_paddr` set (`lib/_main.c:106-123`) -> `board_init()` (`_main.c:126`; the board's own, `main.c:126-131`, which writes `t234_ap_diag[0].stage` in the image) -> `setup_cmdline` (`:128`) -> `cpu_startup` (`:132`, a no-op for `cpuid_a78ae`) -> `ws_alloc` (`:135`), the library's first RAM write outside the image (`ws_init`, `lib/ram.c:57-73`: the avoid list at `ROUND(full_ram_paddr + ram_size, 8)`) -> `init_syspage_memory` (`:139`) -> `main()` (`:145`): `fdt_init` (read only; `fdt_size` known only from here, `main.c:268-269`), `getopt` (`-b` recorded, `main.c:188-197`), `select_debug` (`:204`, the black box written from here), `-b` resolved (`:219-227`), `t234_wdt_report` (`:253`), **`t234_init_raminfo`** (`:256`): `add_ram(w1)` (`init_raminfo.c:212`, which itself writes the temporary syspage into the lowest free RAM of window 1, `lib/ram.c:387-392`), under `-b` `add_ram(w2)` (`:241`) and its two lines (`:242-245`), then the three canary fills (`:249-253` -> `t234_canary`, `:185-201`) -> `avoid_ram(shim)`, `hypervisor_init(0)` (`:275`), `init_smp`, `init_mmu` (page tables `calloc_ram`'d, MMU stays off), `init_intrinfo`, `init_qtime`, `init_cpuinfo`, `init_system_private` (`:314`: procnto's segments copied by `calloc_ram`+`copy_memory`, `lib/elf64.c:56-120`; **every `CPU_ON` issued here**, `init_system_private.c:305` -> `start_aps`, after the fill) -> the real syspage written -> `startnext` -> `vstart`: the first and only MMU and cache enable (`lib/aarch64/vstart.S:45-97`) -> procnto.
+
+**CPU0's state at the site (RC4).** At site B CPU0 is at EL2 with `SCTLR_EL2.{M,C,I}=0` (the shim leaves them clear; `at_el2` clears them if set) and `HCR_EL2 = RW|HCD` (plus `API`/`APK`; `lib/aarch64/_start_el1.S:132-139`, `:143-156`), so `DC=0`, `VM=0`, `E2H=0`; `hypervisor_init(0)`, which sets `E2H|TGE`, runs later at `main.c:275`, after `t234_init_raminfo` at `:256`. The EL2 regime's stage 1 is therefore disabled, the CMO's operand is the PA and its attribute is Device-nGnRnE, Outer Shareable (D8.2.12.1 with `DC=0`; D8.2.12.4). VERIFIED (source) for the register state; VERIFIED for the architectural consequence.
+
+Three source facts fix the site:
+- **Nothing writes c1's range or window 2 before `t234_init_raminfo`'s fills.** Every library MMU-off write outside the image lands lowest-free-first in window 1 (`find_ram` walks `ram_list` ascending, `lib/ram.c:212-258`), far below c1 at the top of window 1; window 2 is not in `ram_list` before `add_ram(w2)` at `:241`, and no allocator takes from it afterwards (`lib/ram.c:275-361`, `:445-466`); the top-of-RAM users (`-R`, the Spectre page, an EL1-host vector table, LPI tables, an IFS copy) are inactive on this line, mode and CPU (`init_system_private.c:229-231`; `init_mitigation_mem.c:23-38` with `init_cpuinfo.c:241-247`; `hypervisor.c:101`; `gic_v3.c:1390-1407` with board `init_intrinfo.c:328-334`; `load_ifs.c:30-76` with `s1-h1.build:7-8`). So a clean placed anywhere in `t234_init_raminfo` before `:249` is correctly ordered for all three canaries (inventory 3a). VERIFIED (source) as a derivation; B2's private asinfo capture can confirm the placement (R110).
+- **The site runs after `select_debug`,** so it may print (§16.3.4), and after `-b` is resolved, so each clean is gated by the flag its fill uses: window 2's clean by the `T234_RAMOPT_W2` flag, c1's clean by the canary flag (RR11).
+- **Every `CPU_ON` is issued after the fills** (`init_system_private.c:305`, from `main.c:314`), so the clean precedes every secondary's own set/way (`smp_start.S:50`). **Between `CPU_ON` and `vstart` no secondary can re-allocate or re-dirty a cleaned line (RC8):** each of cores 1-3 runs with `SCTLR_EL2.{M,C}=0` from `t234_ap_entry` on (`at_el2` finds them clear on a warm-booted core; inventory U1 (5)), its caches were invalidated at reset deassertion (A78AE TRM, cited in X14(c)), and its MMU-off writes (the diag record, the AP stack, the cpupage) are Device stores that do not allocate. Hence the one clean closes route S and a later cluster-1 OFF (route F) alike, whenever cluster 1 was in coherency at the clean. R106 records the parked-core case that this does not cover.
+
+**Site B, in `t234_init_raminfo`, under `-b`.** Inside the `T234_RAMOPT_W2` branch (`:237`), immediately after `add_ram(T234_RAM2_BASE, T234_RAM2_SIZE)` (`:241`) and before the two window lines (`:242-245`), in this order, each followed by its line (§16.3.4):
+1. **Under the `w2` flag:** `[T234_RAM2_BASE, T234_RAM2_BASE + T234_RAM2_SIZE)` (`t234_startup.h:111-112`): window 2 as a whole. This covers c2 and c3 (the only MMU-off writes into window 2 before procnto, `:249-253`) and, beyond them, every line of the window `add_sysram` later hands to procnto, so that a stale dirty line cannot later be written back over memory QNX uses uncached (the memcanary mapping's cacheability is itself unread, X1; a DMA or Device-mapped use of window 2 by the guest in B3-B5 is the same hazard class).
+2. **Under the canary flag only:** c1's range, `[T234_CANARY_C1_BASE, +T234_CANARY_SIZE)` from the canary table (the same constant the generator checks as `CANARY_C1_BASE`, `make-s1-images.sh:169-170`): the one S1 MMU-off write in window 1. Cleaning c1's range rather than all of window 1 keeps the option-off path unchanged (§16.3.6 for the whole-window-1 alternative). An image on `-b w2` alone runs the window-2 clean and prints its line, and neither cleans nor mentions c1.
+
+Absent `-b` neither clean runs, no line prints, no flag is set. The per-canary variant the memo sketched (inside `t234_canary` between `:186` and `:193`) is not added: the two ranges above are a superset of it at one site (§16.14, alternative 1). It stays the fallback scope (D76, D80).
+
+**Order, restated as the invariant reviewers check:** set/way (local, `cstart.S:83`) -> `board_init` (unchanged) -> the library's window-1 writes (unchanged, R111) -> `add_ram(w1)` -> `add_ram(w2)` -> **VA clean of window 2, then of c1's range** (site B) -> the three fills -> `CPU_ON` of cores 1-3 (`init_system_private.c:305`) -> each secondary's own set/way (`smp_start.S:50`, local to that PE, after the fill; R106) -> `vstart`. No clean is ever issued after the first MMU-off write into its range (Never, §16.11). Site B satisfies the invariant by construction because nothing writes either range earlier; §16.3.6 records that the `board_init` alternative does **not** satisfy it for the whole of window 1.
+
+**2026-09-16, the ordering against c1's runtime refusals.** c1's clean runs before `t234_canary`'s own overlap refusals (image, fdt, shim, black box, GPU range, unclaimed), which are runtime checks on values the site does not yet have. The `_Static_assert`s added with the clean bound c1 against the two windows and page alignment only, so for the image the guard against a clean over live image pages is the generator's `check_geometry` (`make-s1-images.sh`), which refuses any image whose stored end reaches `CANARY_C1_BASE` — a PC-side gate, before the image is ever staged. For the kexec-placed DTB the guard is that it lies outside window 1 altogether on this entry path (§16.3.6). Both are stated here so the Never rule of §16.11 is checkable without reading the runtime order.
+
+#### 16.3.2 Ranges, and what the clean never covers
+
+| Range | Site | Reason | Class |
+|---|---|---|---|
+| window 2, `T234_RAM2_BASE` for `T234_RAM2_SIZE` | B, first, under `w2` | c2 and c3; the whole claimed window before `add_sysram` hands it to procnto | VERIFIED (source) |
+| c1's range, `T234_CANARY_C1_BASE` for `T234_CANARY_SIZE` (inside window 1) | B, second, under `canary` | the S1 option's one MMU-off write in window 1 | VERIFIED (source) |
+| **not in revision 4:** the rest of window 1 (the workspace after the image, the temporary syspage, later `ws_alloc` blocks, page tables, procnto's segments, the real syspage and callouts; the shim page, the IFS, the DTB) | none | the library's MMU-off writes, same hazard class as c2 in principle; no M-line or S1 record shows a failure of this class there (class only); a clean correctly ordered for the library's writes can sit only in `board_init` (§16.3.6), which changes the option-off path, and even there the image, stack and DTB are already written and need a carve-out or R107 | R111; D66(b) |
+| **never:** the black box `T234_BB_BASE` for `T234_BB_MAP` (`t234_startup.h:141-144`), the ramoops carveout, the GPU range, the CMA pool, `0x40000000`, the `0xBE000000` range, the swiotlb child | — | outside both windows by construction (the asserts below). The black box's first 4 KiB is the shim's: it cleans and writes it (`t234-shim.S:120-138`), so a startup clean of that page would be wrongly ordered. The rest of the mapped zone is written first by startup itself (`init_tcu`, from `select_debug`, `main.c:204`), so a startup clean of `[T234_BB_BASE + 4 KiB, T234_BB_BASE + T234_BB_MAP)` issued before `select_debug` would be correctly ordered; it is unconditional and silent, so it belongs to D66(b)'s class (B1's premise re-worded), and is out of revision 4 (R112, D75, RC9) | — |
+
+Compile-time refusals, beside `init_raminfo.c:65-78`'s existing asserts: window 2 does not overlap `[T234_BB_BASE, +T234_BB_MAP)`; c1's range lies inside window 1 and below window 2 (already implied by `:65-66`); window 2 ends at the GPU base (already `:67-68`); **page alignment of both ranges' base and size** (`T234_RAM2_BASE`, `T234_RAM2_SIZE`, `T234_CANARY_C1_BASE`, `T234_CANARY_SIZE`), which covers every `DminLine` the architecture allows, a line being at most 2 KiB (RC7). The clean takes no address argument and reads no option beyond the `-b` flags already parsed: its ranges are the header constants and the canary table and nothing else, so `memcanary`'s black-box self-test pattern and the generator's constant check (the canary-table agreement) extend naturally to it (§16.4).
+
+#### 16.3.3 Instruction, line size, form, cost
+
+- **Instruction: `dc civac` (clean and invalidate by VA to the PoC).** Never `dc cvau` (PoU only, the wrong level: X14(b)). `dc cvac` would write back dirty stale lines but leave clean stale copies, which a later cacheable read of the pattern could still hit (route S); the invalidate removes them. **Not `dc ivac`** (RC6): the architecture permits an implementation to perform an invalidate of a dirty line as a clean-and-invalidate (IMPLEMENTATION DEFINED), so `ivac` saves the write-back traffic only unreliably; `civac` is the conservative form, and its write-backs land only in window 2 and c1's range, which are free by construction, so they corrupt nothing. With stage 1 off the VA operand is the PA (D8.2.12.4; §16.3.1's state sentence; the identity `startup_io_map`, `lib/aarch64/map_startup_io.c:24-28`), and the Device attribute gives the operation Outer Shareable scope (D7.5.9.5), reaching every PE cache in coherency including both DSU L3s (LoC includes the L3; X14(b), VERIFIED at architecture level; R105 for the T234 conditions).
+- **Line size: `CTR_EL0.DminLine`**, bits [19:16]; line bytes are `4 << DminLine`. The library reads `ctr_el0` this way on this board in every run (`lib/aarch64/init_cpuinfo.c:293`; `:105-112` prints it under `-v`), and its own helper computes exactly this stride (`lib/aarch64/aarch64_sysctl.S:42-54`). The shim uses a fixed 64-byte stride (`t234-shim.S:126`); the board code reads the register instead, so a different `DminLine` cannot silently under-clean. **If the computed stride is zero the function refuses (`crash`)** (RC7); the loop's termination test is `< base + size` on a line-aligned base.
+- **Form: a board-directory C function, inline maintenance,** rather than the library's `aarch64_dcache_flush_va` (D67). The helper is a global with no prototype in `lib/public/`, and referencing it pulls `aarch64_sysctl.o` (which also carries unused MMU/cache enable and disable routines) into the link; the inline form keeps the change inside our Apache-2.0 directory, keeps the link map unchanged apart from our object, and uses only forms the toolchain already assembles in this tree: `aa64_sr_rd32(ctr_el0)` (`aarch64/inline.h:98-127`; used at EL2 in board `hvtimer.c:121-148`), `__asm__ __volatile__("dc civac, %0" :: "r"(pa) : "memory")` (as `aarch64_sysctl.S:48`, `callout_cache_armv8.S:98`, the shim's `:125`) and `__asm__ __volatile__("dsb sy" ::: "memory")` (as board `crash_done.c:46`). Shape: `t234_dcache_clean_va(base, size)`: read `DminLine` once; refuse on a zero stride; loop `dc civac` from `base` by the line stride while below `base + size`; `dsb sy`. No print, no option, no MMIO, no library call.
+- **Cost, derived from design constants (RC3; R108).** The number of operations is a range's size over the line bytes. For window 2 that is `T234_RAM2_SIZE` over the architecture's line size, a count in the tens of millions; for c1's range, `T234_CANARY_SIZE` over the same, three orders smaller. Each operation is a VA CMO broadcast as a snoop to every cluster in coherency (cluster 1 running at its fixed low rate, m3-design §4.3), on a PE with its data cache disabled. At tens of nanoseconds per operation, a general architectural figure and not a measurement, the whole-window clean is of order seconds, comparable to or longer than the existing fill of the three canaries, and not the memo's "milliseconds", which was for the three canary ranges only. Three consequences: (a) whether the clean fits the B2 and J6x guard, return and capture bound constants (`ksh_worst`; `make-s1-images.sh:1364-1373`) is decidable at the PC from those constants before any run, so D76 is decided before B2, not on F71; (b) the "removed by time" confound (§16.6) is not small for the whole-window scope, and is small for the per-canary fallback; (c) the s1-j1 hold and the B1 bounds are unaffected (site B does not run in B1; the hold follows the fill).
+- **No `.data` flag and no new `t234_ap_diag` stage value.** Both cleans run at one site after `select_debug`, so their lines are the record that they ran; the diag record's stage numbers appear in the black box, and a new value is a B1 diff risk for no post-mortem gain.
+
+#### 16.3.4 Console lines
+
+- **Nothing prints with `-b` absent** (B1's black box must be byte-identical to M1b R2's after masking, `s1-board.sh:5585-5604`; a new line reads DIFFER, F17).
+- **Site B prints, under `-b` only,** after each clean and before the existing `ram w2` line, lines byte-exact in this form: `t234: dcache w2 base=0x100000000 size=0x8a000000 cleaned` (under `w2`) and `t234: dcache c1 base=0xbd000000 size=0x1000000 cleaned` (under `canary`), formatted by `t234_hex` from the same constants as the window and canary lines. They contain none of the parser's negative substrings (`EXC `, `BAD-LANDING`, `EL!=2`, `canary cN overlaps`; `parse-s1.py:1332-1335`), leave the three `filled` lines and the two window lines byte-exact, and are kept in the black-box extract by `BB_PREFIXES` (`parse-s1.py:1336`; RB5's correction of the citation). No duration, count or rate is printed (§2 rule 8).
+- **Parser (RB5):** two new anchors, `dcache_w2` and `dcache_c1`, exact-match like `ram_w2` (RX, `:1294-1331`), required in L0 between `wdt0` and `ram_w2` (the loop at `:1698`) for board runs whose params carry the new `startup_sha256` (already an item-5 field, `:427-429`), `dcache_c1` required only when the startup line carries `canary` (RR11); older records are never re-parsed (§15.6 Records). The parser's synthetic board fixture (`:3431-3440`) gains the two lines and `--selftest` (`:3629`) gains a negative case (a missing or reordered line fails L0 as F73). In the same commit: `extract_file`'s grep pattern in `s1-board.sh` (`:5504`) gains `dcache`, or the new lines would not appear in the board log's extract, and `b1_tokens`' absent lists (`:5553`, `:5567`) gain `t234: dcache`, so B1 catches a leak into the option-off path by token as well as by `b1-compare`. Both edits move the `s1-board.sh` and `parse-s1.py` hashes, which is one reason the J6x stage is an amendment (`owner-D70`).
+- **Black-box size (RB9):** the two lines add a fixed number of bytes to the black box, under `T234_BB_LIMIT` by construction (design constants); `extract_file`'s size warning (`:5496-5502`) is the record-side check. `bb_worst_j1` counts host-script text only (`make-s1-images.sh:1285-1306`), so `BB_GATE` is not touched by startup lines.
+
+#### 16.3.5 What the change leaves untouched
+
+The `-b` grammar (`w2`, `w2,canary`; `main.c:219-227`), so the startup line is unchanged and D57 is not triggered; `board_init` and everything before `t234_init_raminfo`; `t234_canary`'s refusals and fill (`init_raminfo.c:158-201`); the window and canary constants; `memcanary`, `memcanary-w`, every host script, the shim, the loader; the library. With `-b` absent the binary differs from today's only in size and in code that never executes.
+
+#### 16.3.6 The window-1 whole clean, designed and deferred (D66(b)), with the carve-out the review found (RC1)
+
+The fix-first draft's site A, kept so the owner can choose it or a later revision can take it without redesign. **Where:** only `board_init` (`_main.c:126`) runs after cstart's set/way and before the library's first out-of-image write (`ws_alloc`, `_main.c:135`); a window-1 clean placed later than `_main.c:135` (for the workspace) or `lib/ram.c:391` (for the temporary syspage) would come after those writes and, under B2.11's ordering, could put a stale dirty line over them instead of ahead of them (inventory 3b).
+
+**What the merge draft missed, and the review found.** Even at `board_init`, a clean over the **whole** of window 1 (`T234_RAM_BASE` for `T234_RAM_SIZE`) is after the first MMU-off write into part of its range, and so breaks §16.3.1's invariant: window 1 contains the shim page (`T234_SHIM_BASE`, `t234_startup.h:149-150`), the IFS image whose `.data` cstart has already written (`boot_regs`; the stack, live while the loop runs) and `board_init` itself writes (`t234_ap_diag[0].stage`)~~, and the kexec-placed DTB, whose size is not known at `board_init` (`fdt_init` runs in `main()`)~~. (**2026-09-16:** on this entry path the kexec-placed DTB lies above window 2 and below the black box — the public M1b capture's `T234-SHIM` line names where the kernel placed it — so it is outside window 1 and a window-1 clean would not reach it; its size being unknown at `board_init` therefore does not matter here.) If a stale dirty Linux-era line existed for any of those PAs, the clean would write it over the running startup's image or stack, deterministically. The safety of those pages rests not on the ordering invariant but on R107 (kexec's relocator `dc ivac`s each destination page before its MMU-off copy: VERIFIED for upstream v5.15, HYPOTHESIS for L4T's fork) plus "no agent has allocated a line for them since" (caches off on every PE since the relocator). **So (b), if taken, is specified as:** a `board_init` clean of window 1 **excluding** `[T234_SHIM_BASE, full_ram_paddr + shdr->ram_size)` (known at `board_init` from `shdr`, `_main.c:106-123`), ~~relying on R107 for the DTB alone (its extent unknown there)~~ (**2026-09-16:** no DTB carve-out is needed on this entry path; the shim page and the image/stack range from `shdr` are the whole of it), with the reliance recorded; or, if the owner prefers the whole window, an explicit statement that its safety for the image, stack and shim page rests on R107 entirely. The image, stack and diag record are live during the loop; the argument for them is "no line can be cached for them", never the ordering invariant.
+
+**What it costs:** at `board_init` `-b` is not parsed (`setup_cmdline` is `:128`), so the clean is unconditional, runs in every image including `s1-m1b-p6` and the M-line images, and cannot print (`print_char` is the dummy until `select_debug`, `lib/kprintf.c:28`); a fault there still resets through `psci_smc` but a hang is a power pull (F70); its cost is window 1's bytes over the line bytes, of the same order as window 2's (§16.3.3); and B1 would then exercise the clean rather than show that option-off changes nothing, so §2 rule 4's premise would have to be re-worded. **What it buys:** the syspage, page tables and procnto's own segments maintained before use, entry-independent, on every image. **Why deferred:** the evidence is window-2-only, no record shows a window-1 failure of the class, the carve-out above depends on R107 for the shim page and the image/stack range (2026-09-16: not for the DTB, which lies outside window 1 here), and revision 4's reading is cleanest when the option-off binary is behaviourally identical. If X-f holds and the owner wants the wider remedy, it is a revision-5 startup change with its own B1 (and, if the black box is to be covered too, R112's startup-side or shim-side option, D75).
+
+---
+
+### 16.4 Build, pins and gates
+
+**Order (T0 for revision 4; §2 rule 4 and §6.1 re-applied; RB4's re-ordering).**
+0. **Aside copy first (RB4, B8.1's rule, D74).** `build-board.sh` writes the shared BSP output path (`$STARTUP/boards/$BOARD/aarch64/le/startup-$BOARD`, `build-board.sh:104`) on every run, and re-stages the whole board directory from scratch (`rm -rf` then copy, `:72-74`), and that path is the very file `pins_startup` checks against `PIN_STARTUP_M` (`make-s1-images.sh:536-552`). So before any build: copy the shared path's `PIN_STARTUP_M` binary outside the tree and verify its hash. Every `build-board.sh` run below sets `BSP=` to the extracted tree (`C:/Users/<user>/AppData/Local/Temp/orin-native-port-bsp`, the root of this file's `lib/` prefix) (the script's default `$HOME/orin-native-port-bsp`, `:25`, does not exist on this PC).
+1. **Edit** `init_raminfo.c` (site B, the two gated cleans, the lines, the asserts) and `t234_startup.h` (the function's declaration if it lives in its own file). No generator or harness edit in the same commit as the source (PO-A covers both paths, `make-s1-images.sh:207-237`, but the pin move is its own commit for the ledger).
+2. **Determinism (D74).** In a scratch worktree with the ignored inputs copied in (the generator writes the fixed output root of its own checkout): (a) first ever, record whether HEAD's unedited source rebuilds to the current `PIN_STARTUP_S1` (no such record exists: `s1-design.md:1218` "no rebuild"; informational, private); (b) build the edited source twice, same sha256 (§15.13.4 D0a's form; `build-board.sh` re-stages the board objects from scratch, so "clean between" is automatic for them, while the installed library is reused). There is no compile switch, so no D0b leak test (§16.14, alternative 7).
+3. **Symbol gates:** `build-board.sh:119-185` (one `board_init`, the map not pulling `libstartup.a(board_init.o)`, no stale probe, no `efi_`/`acpi_`; the printed libc members read for any new FP/SIMD dependency, which the inline form must not add) and `make-s1-images.sh:1710-1725` (`t234_install_el2_vectors` and `t234_hvt_probe` once).
+4. **Pin move:** copy the output to `orin-native/s1/out/startup/`; restore the shared path from step 0's copy and re-verify both hashes; set `PIN_STARTUP_S1` (`make-s1-images.sh:126-130`; `orin-native/s1/README.md:56-60`); commit.
+5. **Generator gates:** `check_geometry` (`image_paddr` inside the page at `0x80082000`, the end below the cap and c1; `:1860-1883`), `size_check` (`:1727-1765`), `check_startup_args` (`:1885-1948`), `wrap` (`:1992-2010`) re-run on every board image. `image_paddr` is preboot-determined (`ram_paddr = 0x80082000 + preboot_size`, with `startup_size` inside `stored_size`; RB6), so a larger startup cannot move it out of its page; what grows is the image's end, checked against the cap and c1 with a large margin, and every derived address (`startup_vaddr`, the workspace, the temporary syspage), which B1's "startup-size-dependent addresses" clause already admits. If `size_check` or `check_geometry` dies, that is a stop (F77), not a run.
+6. **Regenerate with `--out` on a scratch root first** (B8.2's form; never the default root, whose regeneration writes `kimg_sha256=-` and trips Q17, `s1-board.sh:3576-3588`): the expected drift is exactly `kimg_sha256` in every board `.params`, `ksh_sha256` in the six host scripts (their `S1 CONFIG` carries `startup_sha256`, `:1017`, `:1045-1054`) and `startup_sha256`; `build_sha256`, `conf_sha256` (`:1436-1437`), the guard/return/capture bounds (`:1364-1373`; `s1-m1b-p6`'s fixed pair, `:1549`), `memcanary_w_sha256`, `j1_hold_*` and `bb_worst_b` byte-identical, **unless D76 raised a bound constant before B2, in which case that drift is expected too and named in the commit**. T1-T3's files and params byte-identical (no board startup in the TCG profile, `:1563-1625`, `:1021`). Then build into the default root.
+7. **Bound comparison (RC3, D76):** compare §16.3.3's cost class with the B2 and J6x guard, return and capture bound constants at the PC; if the whole-window clean does not fit with margin, D76 is decided now (raise the constants, a generator change under PO-A, or narrow to the per-canary scope, D80), never on an F71 stop.
+8. **Parser and harness (one commit, RB5, RB1-RB3):** the two anchors, the fixture and the negative self-test; `extract_file` and `b1_tokens`; the `r4-ref`/`r4-read` subcommands; the `r4control` arm as one normalisation (§16.5); the `D34_J6X` key and the `j6r4control` precondition branch; `j_kexec_runs` (`:3656`) counting J6x; `cmd_run`'s revision-4 registration check for `s1-h1`; self-tests for each.
+9. **Stage and `p0`** for the three images the ladder runs (`s1-m1b-p6`, `s1-j1`, `s1-h1`; `cmd_stage :4817-4839`, `cmd_p0 :4856-4869`); the other four are rebuilt, not staged, until needed.
+
+**Pins after the move.** `PIN_STARTUP_S1` new; `PIN_STARTUP_M`, `PIN_MEMCANARY`, `PIN_MEMCANARY_W`, `PIN_CONF`, the L4T image and initrd pins unchanged. Every board image is a new kimg. J6c's registered `s1-j1` stage no longer matches the rebuilt `s1-j1` (`j6_stage_matches`, `:2257-2266`), and `j7a pre`'s D36 check (`:6693-6694`) refuses the rebuilt image: **that mismatch is the effective guard against J7a running by accident, because the D54 two-part gate is not implemented at HEAD** (RB10; §16.7). **2026-09-16:** the two-part gate is implemented in the revision-4 harness change, so the mismatch is now the second guard, not the only one. J7a is deferred under D54, so nothing is re-pointed now; which image a later J7a runs on is D71 (under X-u) or D82 (under X-f).
+
+**TCG gates.** None rerun for the startup change (§2 rule 2 reruns T1/T2 on a configuration change only; X13: no TCG leg runs the T234 startup). PO-A's commit requirement is the only coupling.
+
+**T-J1 (D69).** In the harness T-J1 is startup-independent (`j6_tj1_met`, `:3636-3649`: step, verdict, the `memcanary-w` pin). D57's "its own T-J1" was written for a startup-*line* variant, and the startup line does not change here. Recommendation: the standing T-J1 is recorded as applying to the rebuilt `s1-j1` by a dated note, since its TCG variant contains no board startup and a rerun would exercise nothing that changed.
+
+**Registration before B1 (RR3, RB2).** The reading's rule text (`R4-rule-16.md`, §16.6) and the reference L are registered before the first revision-4 board step, as a dated amendment in `J-prereg.log` named `owner-D70`, in D34's form, carrying `prereg r4 rule=R4-rule-16.md sha256=<sha> ref=<r4-ref output, inputs hashed>`. It is a revision-4 field, **not** a `rule_text` line: `j_prereg_check` compares `S1_J_RULE_FILE` against the last `rule_text` line (`s1-board.sh:2117-2122`), so a new `rule_text` line would re-point every later J check in the directory, including any lifted J7a, to the revision-4 rule (RB2's option (b), rejected). The J6x stage cites the amendment rather than creating it (`j6_prereg_append`, `:2328-2345`, gains the citation; `j6_prereg_verify`, `:2354-2385`, checks it for the `r4control` kind only), and `cmd_run` for `s1-h1` in revision 4 verifies the line before issuing (a new check keyed on the params' `startup_sha256` equalling the new pin).
+
+**2026-09-15 (implementation interface, fixed for the parser and harness commit; replaces the single-line form above).** The amendment is written by a harness command, `s1-board.sh r4-register`, after the commit, as three `J-prereg.log` lines: `prereg amendment utc=<utc> by=owner-D70 commit=<sha> reason=revision 4 (§16.4) rule and reference`, then `prereg r4 rule=R4-rule-16.md sha256=<sha>`, then `prereg r4 ref <S1R4 line>`.
+- `parse-s1.py r4-ref DIR...` reads the raw `-com3.log` copies of the four controls (the B2, J2, J4 and J6c directories under a record directory) and prints one line: `S1R4 ref_c2_start_min=<n> refs=<step,...> inputs=<file>:<sha256>,...`. The value stays private.
+- `parse-s1.py r4-read --step J6x|B2 --parse <parse-s1.txt> --ref-c2-start-min <n> [--j6x-class X-f|none]` prints `S1PC r4_reading=<n/a|unstable|clean|revert-only|onset|drop|unchanged|bad-no-count>`, `S1PC r4_sub=<labels>` and `S1PC r4_class=<X-f-provisional|X-f-final|X-m|X-p|X-u|X-c3|K-r|U|n/a>`, by §16.6's field rules. Where a parse lacks a needed field (for example `c2_check_words` under kexec entry), the parser emits it for `--arm r4control` and for B2 runs on the new startup, guarded so that every existing output stays byte-identical.
+- L0: the anchors `dcache_w2` and `dcache_c1` are required between `wdt0` and `ram_w2` when the params' `startup_sha256` equals the new `PIN_STARTUP_S1` (`dcache_c1` only when the startup line carries `canary`); missing or reordered is F73. `BB_PREFIXES` keeps both lines.
+- `J1_ARMS` gains `r4control`, which `J1_STEPS` maps to `J6x` for board and host runs.
+- `J-waivers.conf` keys: `D34_J6X=yes` (J6c's F39 stop waived for J6x only), `D54_LIFT=owner-<decision>`, `D54_READING=restored|amended-<sha>`.
+
+---
+
+### 16.5 The board ladder (owner present at the plug for every kexec run, §2 rule 6)
+
+Each rung: a fresh L4T boot; the quiesce and governor pin unchanged; one COM3 capture started from PowerShell with its header; `j7a_tx_guard` (no TX wire); records never replaced (§5.3 Retries). Attempts record as `B1-aN`/`B2-aN` and the J6x stage in the revision-3 record directory, so one ledger holds the controls and the reruns, each revision-4 row marked `rev=4` (§16.14, alternative 9 for the new-directory option).
+
+**Order: B1, then J6x, then B2 (RR2; D79).** B1 first keeps §2 rule 4 (the new binary without the option first). The watcher before B2 is §15.6 Q-final's and §15.14.5 C-final's order, chosen there so that "Q could become final on a blind B2 rerun" cannot happen (§15.7.4): J6x's clean c2, its c1 watch and its hold precede any B2-MET line, and B2's §6.7 pass is the ladder's last gate. A J6x fail on data classifies just as a B2 fail would, and ends the ladder without spending B2. The merge draft's B2-first order and its "B3 may follow a provisional X-f at the owner's risk" alternative are withdrawn.
+
+| Rung | Image | Command (PC) | Judge | Pass |
+|---|---|---|---|---|
+| **B0'** | the three staged images | `s1-board.sh stage <img>`; `s1-board.sh p0 <img>`; `s1-board.sh reboot` | the harness's own sha256 and kexec-tree checks | as §6.5 |
+| **B1 rerun** | `s1-m1b-p6` (M1b's buildfile byte for byte; no `-b`; site B does not run) | `s1-board.sh run s1-m1b-p6` (STEP=B1, MODE=b1, `:5185-5193`); then `s1-board.sh b1-compare <BB> <M1b-R2-REF>` (`:5590-5604`) | `b1_tokens` (`:5545-5579`, with `t234: dcache` in the absent list) and the normalised black-box comparison | tokens MET; `identical after masking`, or DIFFER limited to startup-size-dependent addresses (§6.6 wording, unchanged). **The reference is fixed (RB7):** the R2 section of `logs/sample-boot/orin-native-m1b-el2-host.log`, cut as the original B1's `b1-note.log` records; the rerun's `b1-compare` `reference= sha256=` line must equal the original B1 record's before the DIFFER/identical line is read. Both sides pass through the same `b1_normalise`, so no separate normalisation question remains |
+| **J6x, the watcher confirming run** (D70) | `s1-j1` rebuilt (every CPU online at the jump, as every control; the hold as J6c) | `jrun s1-j1 r4control` (§16.5.1); precondition: the B1 rerun passed (the newest `B1-aN` board log reads `B1 RESULT tokens met` and `b1-compare` reported), D54 still in force, T-J1 recorded (D69), the `owner-D70` amendment present, `D34_J6X=yes` and `D27` in `J-waivers.conf` (§16.5.1) | `--diag j1`'s complete-parse rules; `r4-read` (§16.6) | `writer=none` on c2; c1 clean (no F39c1); the hold `verify=ok` (no F49); c3 as a sub-label |
+| **B2 rerun** | `s1-h1` (`-b w2,canary`; site B runs; no hold, the script unchanged) | `ORIN_HOST=... S1_RECORD_DIR=... S1_COM3_LOG=... s1-board.sh run s1-h1` (STEP=B2, MODE=host, `:5235-5303`); the parser: `parse-s1.py run <com3> --profile board --mode host --out-dir ... --conf ... --kexec-tree-sha256 ... [--blackbox] [--reset-reason]` (`:5195-5209`; rule set B2, `parse-s1.py:460`); precondition: J6x read `clean` (X-f provisional, §16.6) | §6.7 verbatim, plus the two `dcache` anchors in L0 | L0; `reflected=yes`; the `S1 ASINFO` line; six `verify=ok`; `S1 ALLOC ... verify=ok`; L7 |
+
+**Why the watcher run is kept.** B2's `memcanary verify` sees two checks of three canaries and nothing else; the watcher adds re-read-stable change detection (a `writer=none` needs no revert), c1's watch d, and the large hold's pigeonhole over most of window 2 and much of window 1 (§15.4.8; R75). Revision 3 introduced it precisely because "a clean c2 can hide a moved writer; nothing watches the rest of sysram; Q could become final on a blind B2 rerun" (§15.7.4). Its precedents make it a required leg of every "final" class (§15.6 Q-final (a); §15.14.5 C-final (a)). It is one kexec run and needs no new QNX code. The minimal-first position (B1 and B2 alone, the watcher optional) is recorded in §16.18 and refused for that reason.
+
+#### 16.5.1 J6x in the harness (RB1, RB3; D70)
+
+- **The owner key (RB1).** `j6_precondition` dies whenever the newest J6c or J6r parse row carries F39 or F49 (`s1-board.sh:3674-3679`), and J6c's row does (its label, VERIFIED (private record)). No key at HEAD passes that stop. Revision 4 adds `D34_J6X=yes` to `J-waivers.conf`, in D34's form, reading "J6c's F39 stop waived for the revision-4 watcher run only", pre-registered before the stage and never after a result. A new `j6r4control` branch in `j6_precondition` (`:3686-3699`) skips the J6c/J6r F39 loop under that key and instead requires the newest `B1-aN` board log to read `B1 RESULT tokens met`; it keeps the D27 and T-J1 checks (`:3673`, `:3685`) and J2's `D34_J6` requirement (`:3681-3684`). It does **not** require a B2 pass: J6x precedes B2 (RR2).
+- **One normalisation, not per-site cases (RB3).** `j_set_select` puts every `J-set.conf` member into the set whenever the arm is not literally `control` (`:3769`), the control-equivalence tests are string compares (`:3779-3782`, `:4484-4486`), and `remove` demands D24 (`:4439`): an unmapped `r4control` at any one site would run the detached sequence with J4's removal set. So `jrun_args` accepts `r4control` for `s1-j1` only and sets `STEP=J6x` plus one kind variable equal to `control` that every set and sequence site reads, while the stage, the step directory, the parser's `--arm` and the record rows carry `r4control`/J6x. The sites that still change by name: `jrun_args` (`:3545-3556`), `jrun_step` (`:3563-3573`), `j6_prereg_append` (`:2293`), `j6_prereg_verify` (`:2356`), `j6_precondition` and `j_precondition` (`:3686-3699`, `:3711`), `j_capture_life_min` (`:2452`), `j_kexec_runs` (`:3656`, so J6x is counted in the printed kexec count), the usage text (`:57-61`), the J6 self-tests (near `:8847-9005`); `parse-s1.py` `J1_STEPS`/`J1_ARMS` (`:502-503`), `:2371`, `:5167`. A self-test asserts that `r4control` yields `in_this_arm=empty` and needs no D24. No `WQ_FUNCS` change, so the stage is an amendment `owner-D70` with `S1_J6_WQ_CHANGED=no`; the detached sequence's rule-5 exception is restated dated for revision 4 (D78).
+
+#### 16.5.2 Sessions and the power-cut path (RB8; D84)
+
+Default: **two attended sessions**, every kexec run with the owner at the plug. Session 1: stage and `p0` for the three images, `s1-board.sh reboot`, B1 with its capture, `b1-compare`, then J6x on the boot B1's reset produced if the harness's uptime gates allow (the quiesce limit, §6.12; `fresh_boot_gate`, `:1819-1823`; the start margin, `:2483-2496`), with a capture of at least the return bound plus the hold's constant plus the fallback and the start margin. Session 2: B2 on a fresh boot. Collapsible to one session if the gates allow all three runs in a day; the count is the owner's (D84). A power cut is a stop, never a second (§16.8); with site B after the WDT lines, a silent hang leaves `t234: WDT0 CR=` as the last COM3 line, a record line (`:5648`), so `s1-board.sh advice <board.log>` (`:5853`) classifies F25a (`:5606-5654`) and allows one cut only after the return bound has passed and COM3 has been silent for the advice's fixed interval; the fault form prints `t234: EL2 <class> ... stage=2` (`el1_fault.c:120`, `T234_STAGE_BOOT_OPTIONS`) and resets, carrying none of the parser's negative tokens. **2026-09-16:** that is the synchronous form only; an SError forced by the clean's write-back stays masked through startup and surfaces after `procnto up` (F70), so a run that reaches procnto and then dies is an F70 candidate, not only a QNX-side fault.
+
+**Precedence of the rungs.** B1 before J6x (§2 rule 4). J6x before B2 (the watcher before any B2-MET line). B2 runs only after a J6x `clean`; after X-p, X-u, X-c3, K-r or U the ladder ends and B2 is not rerun. B3 waits for a final X-f and the owner (D72, D83).
+
+---
+
+### 16.6 Pre-registered reading (fixed before B1; extracted as `R4-rule-16.md` and registered before B1, §16.4)
+
+**Terms.**
+- **The controls:** B2, J2, J4 and J6c, all on the old startup, spanning two images.
+- **L:** the lowest c2 bad-word count at the start check among the controls, read from their raw COM3 copies by a parser subcommand `r4-ref DIR...` (the `j6o-ref` specification of §15.14.4, renamed; inputs hashed; the value private in `J-prereg.log`'s `owner-D70` amendment, D64's precedent).
+- **The band, half of L:** a design constant far outside the controls' spread (class only), as §15.14.5. It was set for J6o's conditional power; a remedy that, if HC holds, should remove the residue entirely makes a residue above the band itself informative (RR8), which is why `unchanged,low` enters the lead the owner reads (below).
+
+**Complete run.** B1: `b1_tokens` MET and `b1-compare` reported against the pinned reference. J6x: J6c's complete-parse rules; the image's reset; a return to L4T. B2 rerun: §6.7's parse present with a parse-valid c2 check.
+
+**c2's reading (field rules; `r4-read` implements them for J6x's and the B2 rerun's COM3 copies).**
+
+| Reading | Holds when |
+|---|---|
+| **n/a** | no parse-valid c2 check |
+| **unstable** | J6x only: F34 in the J row |
+| **clean** | J6x: `c2_start=ok`, `c2_end=ok`, the `writer-none` row, `bad_base` 0 in every c2 watch. B2 rerun: c2 `verify=ok` at both checks |
+| **revert-only** | J6x only, as §15.14.5 |
+| **onset** | J6x: `c2_start=ok` and bad later (F32b's shape). B2 rerun: c2 `ok` at the first check and `bad` at the second (RR7) |
+| **drop** | c2 bad at the start check with a parse-valid count, and twice the start-check count is below L |
+| **unchanged** | c2 bad at the start check with a parse-valid count, and twice the start-check count is at least L |
+| **bad, no count** | c2 `verify=bad` with no readable count: U with the lead, never X-u (RR7) |
+
+**Sub-labels, record only:** `end=ok|bad`, `heal-all`, `anchor=first-word|other` (J6x), `unchanged,high|low`, `c3=clean|hit`, `c1=clean|hit`. `unchanged,low` is carried into the lead the owner reads at D71 (RR8).
+
+**Pre-registered predictions of HC, record only.** c3's hits vanish with c2's. Heals in whole lines in any bad run, none in a clean one. In a drop, `anchor=first-word` keeps HL as a component; `other` weakens it.
+
+**Classes (dated appends to §15.6's table; J6o's C, C-p and U(J6o) rows stay on file as designed-not-run).**
+
+| Class | Holds when | Then |
+|---|---|---|
+| **X-f: clean under the VA clean** (HC, HYPOTHESIS; provisional at J6x, final after B2) | **Provisional:** J6x `clean`, c1 clean, the hold verified, no F39c3. **Final:** provisional, and B1 rerun passed, and the B2 rerun `clean` and MET by §6.7 with c1 and c3 `verify=ok` | Provisional: "With the startup cleaning window 2 and c1's range by VA before the fill, the watcher run saw no writer on c2." Nothing is appended to §5.3 or §6.12 yet; B3 does not proceed. **Final, and only then:** D72's append ("B2 MET for the rebuilt image; the original B2 record stands as data on the old startup and is never regenerated; the 11c candidate stands; kill condition 1 does not apply to the rebuilt image"); public text may say the observed corruption did not reproduce under the startup clean (§16.12); B3 may proceed, subject to D83. **D54 stays in force** (RR6): any later lift is `D54_READING=amended-<sha>` with E's and K-w's Then clauses rewritten for HC, never `restored`, and J7a's only remaining purpose is freeze item 3's entry-validity question (D82). Which cache held the residue, and whether the operation or the interval removed it, are not shown (§16.13) |
+| **X-m: mixed** (RR1) | a provisional X-f from J6x, then the B2 rerun `drop`, `unchanged`, `bad, no count` or `onset` | **The provisional X-f is withdrawn by a dated line** (the pass parse never regenerated); U with the lead "intermittent under the clean, two images" (B2's `onset`: "writer active after QNX came up"); B2 stays NOT MET on data for the rebuilt image; S1-F stays stopped; **not routed to D71**; owner decides at the memo. §15.13.2's own estimate says one clean run under no effect is not rare, so a clean-then-bad pair is §15.7.4's intermittency case, not a refutation of anything |
+| **X-p: partial** | J6x `drop` | "The corruption fell but did not disappear." B2 is not rerun; B2 stays NOT MET on data; S1-F stays stopped. HYPOTHESIS: a cache outside coherency at the clean (R105), HC-c's write-back at `CPU_ON` (R106; its shape is a small `drop` with `anchor=first-word`, readable here because J6x carries the anchor), or a second writer. The owner decides among: the D57 `-P1` image (X6, HC-c alone; low prior after X14(c-prior)), lifting D54 (J7a, both parts, amended), stopping S1-F |
+| **X-u: unchanged** | J6x `unchanged` | "Cleaning window 2 and c1's range by VA before the fill did not change the corruption." **HC is weakened to the extent R105's reach conditions (i)-(v) held, none of which a QNX-side read shows; it is refuted only if they held** (RC2, RR8). `unchanged,low` is in the lead. **The failure branch, fixed now (D71), conditional on the owner accepting (i)-(v) by assumption at D71:** lift D54 in both parts (`D54_READING=amended-<sha>`; the harness gate first, §16.7) and run J7a on the old `s1-j1` pinned by D36 (no loader rebuild; §15.13's entry-path pre-registration kept; D71 names the image), since with the cache class assumed removed "Linux residue in this power cycle versus anchored at the address" is again the discriminating question; the §15.13.10.3 UEFI-residue row is read on that image as pre-registered there. If the owner does not accept (i)-(v) by assumption, X-u's Then is "owner decides at the memo", as revision 3's U row. X4 (D63), a revived J6o and the window-1 whole clean (§16.3.6) are not the recommended next step (§16.14, alternatives 3, 10, 11). B2 is not rerun; B2 stays data; S1-F stays stopped |
+| **X-c3: c2 clean, c3 hit** | J6x c2 `clean` with F39c3; or the B2 rerun c2 `ok` at both checks and c3 `verify=bad` | B2 NOT MET (`canaries_all_ok` fails; a provisional X-f from J6x is withdrawn if B2 shows it); S1-F stays stopped. A lead against HC's completeness (a late CPU-written hit that the clean did not remove, or a non-cache writer at the top of window 2); freeze gate item 3's exposure stands unchanged. Owner decides (D31's form) |
+| **K-r** | J6x `unstable` | as §15.6 |
+| **U** (revision 4) | anything else: J6x `onset` (F76); `revert-only`; `bad, no count`; F39c1 anywhere (F75); F49; F70-F77; an incomplete run; any immediate stop before a class holds | B2 stays data; S1-F stays stopped; owner decides at the memo |
+
+**Precedence.** 1. A B1 fail (F72, F77 at the generator) is a T0 stop: nothing later runs, no class is read (RR10: F71 is not a B1 signature). 2. An immediate stop ends the ladder; a reading made in the stopping run still classifies. 3. K-r outranks X-f, X-p, X-u for J6x. 4. A withdrawal (X-m, X-c3 at B2) outranks a provisional X-f. 5. Record-only sub-labels and desk comparisons never move a class; `unchanged,low` enters a lead, not a class.
+
+**Not a class change.** The original B2 record stays "NOT MET, on data" for the old startup; a rebuilt-image class line is appended beside it, dated, citing the new pin, only at X-f final.
+
+**False-fix risk, stated (RR12).** Under a uniform prior over the four bad controls, one clean run if the change has no effect is the estimate §15.13.2 states in words, two the smaller one, with the same caveats: two images, and not strictly exchangeable. X-f final rests on **two** clean c2 observations on two images (J6x and the B2 rerun); B1 contributes no c2 observation (it does not fill or check c2). Two observations at that estimate were the E standard, whose consequence was only "owner decides"; X-f final licenses more: B3-B5 on window 2, D72's kill-condition lift and the public "did not reproduce" sentence. A third clean observation (a repeat B2 or J6x) before B3 and before any public sentence is therefore an explicit owner option (D83). One confound specific to a whole-window clean is stated in §16.3.3 and §16.16: the clean's own duration, of order seconds, lengthens the interval between cluster 1's `CPU_OFF` and the fill, so a delayed cluster power-down (X14(c-prior) case iii) could clean the L3 by hardware inside that interval. Both mechanisms are "coherent-cache residue removed before the fill", so the class is unaffected; the attribution "removed by the VA operation" is not separable from "removed by time" in these runs, and the confound is not small for the whole-window scope (it is small for the per-canary fallback, D80).
+
+---
+
+### 16.7 How revision 3 closes
+
+- **Class line:** U, unresolved (owner, D31), after J6c's F39 stop, stands as revision 3's last class. Appended, dated 2026-09-15: "Revision 3 closed. Leading hypothesis HC (CPU cache residue at the hand-over), HYPOTHESIS, untested. Revision 4 opens with a startup change (§16, D65)."
+- **The fourth kexec run** lapses unused (D55 assigned it to J6o; D65 shelved J6o). Revision 3 holds no further kexec or L4T-only diagnostic run; no revision-3 budget carries into revision 4, which sets its own (§16.8).
+- **J6o** stays on file as designed-not-run (§15.14); D59-D64 effective only if it ever runs; D61 dropped. §15.14.14's pointers are added with "designed, shelved (D65)".
+- **D54 stays in force:** J7a's board steps deferred; the E and K-w consequence clauses suspended; the two-part lift required. **The `D54_LIFT`/`D54_READING` gate does not exist at HEAD (RB10):** no such key appears in `orin-native/`; `j7a_precondition` (`s1-board.sh:6353-6378`) gates J7a on D30, D34_J7A, D35, D38, D45, D46, J4=F36, J6c live-writer and Q20 only. Until it is implemented, the D36 kimg check (`:6693-6694`) against J6c's registered `s1-j1` is what refuses J7a on the rebuilt image, and nothing refuses it on the old one but the owner's discipline. **2026-09-16:** the revision-4 harness change implements the gate — `j7a_precondition` refuses unless `D54_LIFT=owner-<decision>` and `D54_READING=restored|amended-<sha>` are both present in their value forms, and a `D54` key other than `yes` is not a lift form — so J7a is now refused on the old image too, and the D36 kimg check remains as the second guard. The `j7a_precondition` edit and any D36 re-pointing are one harness change required before any lift, so X-u's branch cannot run J7a by accident; the D54 appends to §15.13.10.3/10.4/11 are checked for presence in the same pass (§16.17).
+- **The J7 reserved arms** (J7b-J7e, §15.4.9) stay revision-4 candidates behind X-u.
+- **§15.13.19's and §15.14.14's status-line pointers** (plan freeze gate item 3 and S1-F block, `CLAUDE.md`, `findings.md`) take §16.12's pre-run sentence.
+
+---
+
+### 16.8 Budget and stops
+
+- **Board budget:** three kexec runs, all S1 ladder work: B1, J6x, B2. One harness-reason retry per rung does not count (a run that never reached `procnto up`; an exit-5 abort); a second harness failure stops. A run that reached the host script is recorded as it happened, never replaced. An F71 stop is a recorded run if it reached `procnto up`, and consumes the rung's one retry only if it did not (RC3). **2026-09-16 (owner):** a rung the harness has already read is never rerun to get a better reading — both gates refuse it, naming the attempt and its recorded class. The one exception is a rung whose recorded **class** is `n/a`, no parse-valid c2 check (§16.6): it produced no reading about c2, so it is a harness-reason case like the two above and stays rerunnable, under the same one-retry-per-rung budget. A reading of `n/a` with a parse-valid start check classes U (§16.6), and U refuses like every other real class. The exception stops where RC3 does: a run that reached `procnto up` and then died writes no c2 check either — F70's 2026-09-16 form (§16.9) — and is a recorded run, not a harness-reason retry, so both gates refuse a rerun after it, reading `procnto up` from that attempt's own parse (its `tier_L0` line). That budget is a rule for the owner, not a harness gate: both gates print the rung's recorded attempts, the J6x gate prints the J-rung kexec count too, and neither refuses on their number.
+- **PC budget before any board step:** the aside copy, the determinism rebuild, the pin move, the regeneration drift check, the bound comparison, the parser anchors and fixtures, the extract and token edits, the `r4-ref`/`r4-read` subcommands, the `r4control` normalisation with its self-test, the `D34_J6X` branch, the `owner-D70` amendment, `cmd_run`'s registration check, `j_kexec_runs`, a review of the startup diff against §16.3.1's invariant.
+- **Immediate stops:** F30; any power cut (never a second); `EXC`, an SError or a silent hang after kexec; F17/F72 (B1 DIFFER beyond addresses), F71 (bounds), F73, F75, F39c1, F49; F77 at the generator; two refusals for one cause; any need for a further startup, shim, memcanary or constant change (scope stop, revision 5).
+- **After B2, or at any stop:** a number-free memo to the owner with the private records.
+
+---
+
+### 16.9 Failure signatures (the §15.7.2, §15.13.12 and §15.14.8 tables continue)
+
+| # | Observable | Meaning | Class | Next |
+|---|---|---|---|---|
+| F70 | under `-b`: `t234: WDT0 CR=` and the wdt lines present, then **either** no `dcache w2` line and no `ram w2` line, **or** the `dcache` lines present followed by an `EXC` line before the first `filled` line (RC5); then a firmware banner (a reset) or silence; **or (2026-09-16)** the whole startup through `procnto up` present and then an SError, a QNX-side fault or a silent hang, on the first `-b` run on the new pin | a fault or hang inside site B's clean, or an asynchronous abort on a write-back the clean forced. A VA CMO on a line absent from every cache issues no memory transaction, so the clean cannot abort on an absent or firewalled address; the exposure is the write-back of a dirty line, reported as an SError, asynchronously, normally at the closing `dsb sy` but architecturally possibly after the lines print or during the fill (R109). **2026-09-16:** on this configuration it cannot be taken inside startup at all — `_start_el1.S` masks DAIF (`:62`, and the EL3 drop sets the same in SPSR, `:118`) and nothing unmasks `PSTATE.A` before `vstart`, so such an SError pends and is taken only once procnto unmasks it, or at EL3 if the firmware routes it there. Its signature is therefore the post-`procnto up` form above, which a reading would otherwise file as a QNX-side fault (U). A `crash` prints through the TCU and resets through `psci_smc`; silence is a hang. (If D66(b) is ever taken, the same signature at `board_init` shows as the shim's landing lines followed by no `WDT0` line and cannot print) | — (reset) or power cut (silence) | no retry on the same image; revise (narrow the range, or the form); T0. A silence is §15.6's power-cut stop (§16.5.2) |
+| F71 | J6x or B2 returns outside its fixed bounds, or `procnto up` later than the guard, with tokens otherwise MET (B1 cannot show it: site B does not run there) | the window-2 clean's cost (R108) exceeds the design margin after the PC comparison (§16.4 step 7) under-estimated it; the existing guard-bound failure class, adding no timing record (class only: within/over) | — | stop; D76 as re-decided: raise the generator's bound constants (PO-A) or narrow the clean to the three canary ranges (D80); never a printed or reported duration |
+| F72 | `b1-compare` DIFFER with lines other than startup-size-dependent addresses, or `t234: dcache` in B1's tokens | a print or a token change in the option-off path; §6.6's premise broken (not expected: the option-off path is unchanged by construction) | — | revise the startup change; T0 (F17's revision-4 shape) |
+| F73 | under `-b`, the `dcache w2` line absent or out of order, or `dcache c1` absent when the startup line carries `canary` | site B did not run where designed (an image or build defect) | — | T0; no class read |
+| F74 | c2 clean and c3 `verify=bad` (B2 rerun), or F39c3 with c2 `clean` (J6x) | class X-c3 | — | as §16.6; immediate stop after the reading |
+| F75 | c1 `verify=bad` at either check, or F39c1 in J6x, on the rebuilt startup | a writer into c1's range after its clean: not a cache residue the clean reaches (a late writer, or a residue outside coherency) | — | immediate stop; the c2 reading still stands (rule 2); owner memo; the exposure item's window-1 half is now positive evidence |
+| F76 | J6x `onset` | a writer active after QNX came up (F32b's shape) | — | U; as §15.14.5 |
+| F77 | `size_check` or `check_geometry` dies on the rebuilt startup: the image end passes the cap or c1 (`image_paddr` is preboot-determined and unaffected by startup size, RB6) | the larger startup moved the image's end past a limit | — | no image; revise (trim, or the owner re-bases a limit, itself a generator change); T0 |
+
+---
+
+### 16.10 Claims (the §15.7.1, §15.13.13 and §15.14.9 tables continue)
+
+| # | Claim | Class | Answered by |
+|---|---|---|---|
+| R105 | A `dc civac` by VA issued by CPU0 at EL2 with stage 1 off and `HCR_EL2.DC=0` reaches every PE's data and unified caches to the PoC in the Outer Shareable domain, including both DSU L3s, **under five reach conditions (RC2):** (i) cluster 1 in coherency, ON or FUNC_RET (VENDOR_CLAIM/HYPOTHESIS: the T234 MCE's cluster-1 policy after `CPU_OFF` is unread); (ii) not MEM_RET, which is unreachable by the clean and by any QNX-side action, and which a firmware-initiated ON could resurface (HYPOTHESIS, low; RC8); (iii) cores 1-3 not parked out of coherency with dirty lines (R106; HYPOTHESIS, low); (iv) no system cache outside CLIDR that ignores VA maintenance to the PoC (the X14(d) "system cache as an L4" statement; `booting.rst` prohibits such a cache, but NVIDIA states kexec was not validated on this SoC; HYPOTHESIS); (v) the interconnect forwards the Outer Shareable CMO as a snoop to cluster 1's DSU (standard CHI, VENDOR_CLAIM; the addendum's "fabric residual", HYPOTHESIS low). A cluster OFF has nothing to reach | VERIFIED at architecture level (D7.5.9.5, D8.2.12.1, D8.2.12.4; DSU-AE A4.9.1, A4.1; X14(b)); each condition classed as listed | not separable by the reruns; a clean c2 is consistent, an unchanged c2 weakens HC to the extent (i)-(v) held, and no QNX-side read shows any of them |
+| R106 | HC-c is not covered by CPU0's clean if cores 1-3 were parked out of coherency with dirty lines; their own set/way at `smp_start.S:50` runs after the fill and would write those lines back over the pattern. Under the documented C7 power-gating those cores were flushed at `CPU_OFF` and the residual is empty. Once started, no secondary can re-allocate or re-dirty a cleaned line before procnto (§16.3.1) | HYPOTHESIS, low prior (X14(c-prior)); VERIFIED (source) for the no-allocation argument | X-p with a small `drop` and `anchor=first-word` is its shape; the D57 `-P1` image separates it, if the owner wants it |
+| R107 | The shim page, the IFS and the DTB carry no Linux-era cache line at entry (kexec's relocator `dc ivac`s each destination page before its MMU-off copy), and no agent has allocated a line for them since | VERIFIED for v5.15 upstream (g1); HYPOTHESIS for L4T's fork | not tested; load-bearing for D66(b)'s carve-out (§16.3.6), information for R111 |
+| R108 | The window-2 and c1 cleans complete inside the J6x and B2 guard bounds and the capture life; the AP start deadlines are unaffected (the cleans precede every `CPU_ON`) | HYPOTHESIS, with the design-constant derivation of §16.3.3 (order of seconds for the whole window); compared with the bound constants at the PC before B2 (§16.4 step 7); no VA clean has been timed on this board and none will be reported | the PC comparison; then J6x and B2 (class only: within/over); F71 |
+| R109 | Every line of window 2 and of c1's range is DRAM-backed. The clean generates a memory transaction only for a dirty line, so its abort exposure is that of the write-back, not of the range's presence; such a write-back would have happened at a later eviction or at cluster power-down anyway, so the clean advances and makes deterministic an existing hazard rather than creating one (RC5) | VERIFIED (private record: System RAM and unreserved in `/proc/iomem` on the compared boots, §3.3); the firewall configuration of the interconnect is unread (HYPOTHESIS, low) | F70's absence in J6x and B2 |
+| R110 | Every library MMU-off write before procnto lies in window 1, below c1 (lowest-free-first allocation; no top-of-RAM user active) | VERIFIED (source) as a derivation from `lib/ram.c:212-258`, `:275-361`, `:445-466` and the inactive users listed in §16.3.1 | B2's private asinfo capture (record) |
+| R111 | The library's MMU-off writes in window 1 (workspace, temporary syspage, page tables, procnto's segments, the real syspage) are the same B2.11 hazard class as c2 and are not maintained by revision 4; they were exposed in every kexec rung before revision 4 and never watched (RR5); no M-line or S1 record shows a failure of this class there (class only). The only correctly ordered site is `board_init`, and there only with §16.3.6's carve-out or R107 | HYPOTHESIS (hazard); VERIFIED (source) for the site and its carve-out | not tested; D66(b) or revision 5; §15.8's cache-class row (D73) |
+| R112 | The black box beyond its first 4 KiB is the same hazard class: startup appends MMU-off Device writes into a zone Linux's ramoops driver last wrote through a cacheable mapping; a stale dirty line there could overwrite startup's text. Not fixed by revision 4. The shim is the correct site only for the first 4 KiB, which it already cleans; the rest of the mapped zone can be cleaned from startup before `select_debug` (in `board_init`, or at the top of `init_tcu` before its first write), unconditionally and silently, with a static assert that the shim's write cursor stays below 4 KiB (RC9) | HYPOTHESIS | a garbled or truncated black box would read as F72 DIFFER or missing tokens; D75 offers both sites |
+
+---
+
+### 16.11 Never (revision 4 additions; §7.3, §15.1, §15.13.15 and §15.14.13 apply)
+
+- Clean by VA any range other than window 2's constant and c1's canary-table range: never the black box, ramoops, the GPU range, the CMA pool, `0x40000000`, the `0xBE000000` range, the swiotlb child, or any address taken from an option, the DTB or a register.
+- Issue a clean after the first MMU-off write into its range, or move site B later than `init_raminfo.c:241`'s branch or into `t234_canary` after `:193`; place any window-1 clean anywhere but `board_init`, and there never over the image, stack, shim page or DTB without §16.3.6's carve-out or an explicit R107 reliance.
+- Run any clean, set any flag or print anything with `-b` absent (B1's premise); clean c1's range or print its line without the canary flag.
+- Use `dc cvau`, `dc ivac`, any `ic` op, or a set/way op in board code; enable the MMU or the caches in startup to speed the clean; call the library's enable/disable helpers.
+- Print a duration, a rate or a count from the clean.
+- Change the `-b` grammar or the startup line (D57 would then apply), the window or canary constants, `memcanary`, `memcanary-w`, the host scripts, the shim or the loader inside revision 4.
+- Start cluster 1 (`-P6`), `CPU_ON` any core before the fill, or read the MCE, SMMU, GPU or any unclocked MMIO to condition the clean (X7, X10 are not revision 4).
+- Regenerate, replace or relabel the original B2 record or J6c's stage; supersede J6c's control stage; write D72's append, or any B2-MET line, before X-f is final; leave a withdrawn provisional X-f without its dated withdrawal line.
+- Add a `rule_text` line to `J-prereg.log` for revision 4 (it would re-point every later J check); add `D34_J6X` after any revision-4 result.
+- Dispatch `r4control` at any site by a string compare against `control` (one kind variable only).
+- Run `build-board.sh` before the aside copy of the `PIN_STARTUP_M` binary.
+- Regenerate images into the default output root before the scratch-root drift check; run any rung before the pin commit (PO-A) and the `p0` of the staged image.
+- Say "fixed", "corrected", "the cause" or "reclassified" in public text before X-f is final (D58; §15.8; §15.14.11), and "fixed" or "the cause" even then.
+
+---
+
+### 16.12 Public text (D58; class only; RR4's wording)
+
+**May be stated now, replacing §15.14.11's pre-run sentence:** "A desk analysis of the private records makes a CPU cache-maintenance gap at the hand-over the leading hypothesis (HYPOTHESIS, untested). Revision 4 opens with a startup change: under the S1 option, the T234 startup cleans by virtual address, before writing them, the ranges the S1 option adds (the second window and its canaries), the maintenance the architecture prescribes for a hand-over made that way. B1 and B2 rerun on the rebuilt images, with a watcher run between them; B2 stays not met until then. The secondary-CPU-offline run is shelved; the UEFI-entry run stays deferred."
+
+**After the runs, one class sentence:**
+- **X-f, provisional:** "With the startup cleaning the claimed window and the canary ranges before the fill, the watcher run saw no writer on the lowest window-2 canary. The reading is provisional until B2 reruns; which cache held the residue is not shown."
+- **X-f, final:** "The window-2 corruption seen in four runs did not appear in two runs on a startup that cleans those ranges by virtual address before the fill. The reading is a CPU cache residue removed before the fill (HYPOTHESIS: the mechanism and which cache are not shown). B2 is met on the rebuilt image; the original B2 record stands as recorded."
+- **X-m:** "The watcher run was clean and the B2 rerun was not; the result is intermittent under the startup clean and is unresolved. B2 stays not met."
+- **X-p:** "The corruption fell but did not disappear under the startup clean (HYPOTHESIS: part of the residue sat outside the clean's reach). The remainder is not explained; B2 stays not met."
+- **X-u:** "Cleaning the memory before the fill did not change the corruption. The cache-residue hypothesis is weakened; it is refuted only if the clean reached every cache that could hold the residue, which is not shown. The writer is not identified. The UEFI-entry run regains its purpose." (The last sentence only if D71's condition is accepted.)
+- **X-c3:** "The lowest window-2 canary stayed clean under the startup clean, but the highest did not. B2 stays not met; the exposure stands."
+
+**Never in public text:** any count, ratio, band, probability beyond §15.13.2's worded estimate, duration of the clean, black-box diff, hash of a private record or build; "fixed", "corrected" or "the cause"; anything softening "NOT MET, on data" for the original B2; "explained" for the corruption (its explanation stays HYPOTHESIS).
+
+**May be stated:** the run count; the one-clean-run estimate in §15.13.2's words with its two-images caveat; the design constants; the cost class if D81 allows.
+
+---
+
+### 16.13 What revision 4 does not show
+
+- **Which cache held the residue.** The clean reaches cluster 1's L3, cores 1-3's caches and cluster 0's caches at once; HC-a, HC-c and a boot-cluster line beyond set/way are not separated (R105, R106).
+- **That the VA operation, rather than the time it takes, removed the residue** (§16.3.3, §16.6, §16.16): not small for the whole-window scope.
+- **That any earlier kexec rung was free of the same residue in window 1 (RR5).** The library's MMU-off writes there were exposed in every run before revision 4 (M1-M4, 11c, B1, B2, J2, J4, J6c) and were never watched; the M-line functional verdicts rest on no memory-integrity claim. R111 is unmaintained in revision 4, and a clean B2 says nothing about window 1 beyond the ladder having passed on it before. §15.8's "Exposure of earlier rungs" gains a dated cache-class row (HYPOTHESIS), carried into D73's exposure declaration (D85).
+- **DMA quiescence after kexec.** A cache clean removes a CPU-cache writer and says nothing about DMA, firmware or coprocessor writers outside the canaries' and the hold's coverage (§3.8 "Cannot detect"; §10). Freeze gate item 3's sub-item is split accordingly (D73).
+- **Anything about cluster 1's power state** (R98 stays; no QNX-side read; the D61 reads were J6o's and are dropped). R105's conditions (i)-(v) are assumed, never observed.
+- **Whether the memcanary mapping is cacheable or whether DRAM ever held the bad data** (X1 not run).
+- **The black box's own residue** (R112).
+- **Repeatability beyond two clean observations on two images** (D83 for a third).
+- **Timing, isolation, containment, the Linux guest.** No figure is publishable before the 4.6(i) consultation.
+
+---
+
+### 16.14 Alternatives considered
+
+| # | Alternative | Why not (or where kept) |
+|---|---|---|
+| 1 | **Per-canary clean** inside `t234_canary` between `as_add_containing` (`:186`) and the fill (`:193`): the memo's X8 as written; the smallest change, the shortest interval before the fill and the closest to one variable against the controls | The chosen site B is its superset at one site: c2 and c3 lie inside window 2's clean, c1 gets its own range, the cost difference is window 2's remainder, of order seconds (§16.3.3). Kept as the fallback scope: decided before B2 on the bound comparison (D76), and offered to the owner as the first-run scope on cost and confound grounds (D80). Its X-f needs its own two observations (RR10) |
+| 2 | **Window 2 only, under `-b`** | Leaves c1's fill unmaintained: the one MMU-off S1 write in window 1 would be the only one without the remedy, and a c1 hit could then not be read against HC |
+| 3 | **Window 1 whole in `board_init`, unconditional** (the fix-first draft's site A), with or without window 2 | Designed in §16.3.6 with its carve-out and deferred: it changes the option-off path (B1's premise), cannot print, risks a silent hang at the one site that cannot reset with a message, needs R107 for the DTB, costs one more order, and answers a hazard no record has shown. D66(b); a revision-5 candidate after X-f |
+| 4 | **Both windows in `board_init`, unconditional** | Simplest invariant, but cleans window 2 in images that never claim it (B1 and the M-line images), against §7.3's spirit; and alternative 3's costs |
+| 5 | **The library helper `aarch64_dcache_flush_va`** (extern declaration; `aarch64_sysctl.S:42-54`) | Correct and already `dc civac` with the CTR stride; rejected for the link-map reason in §16.3.3 (D67 offers it) |
+| 6 | **The memo's second variant** (repeat set/way just before the fill) | Re-tests only cluster 0 (set/way is local, VERIFIED); a second binary and its own B1 |
+| 7 | **A compile switch** (`-DT234_DCACHE_CLEAN`, memcanary-w's pattern, `tools/Makefile:31-32`) with a D0b leak test | The switch-off binary is a new pin anyway (no determinism record exists, `s1-design.md:1218`), so B1 and B2 rerun regardless (D56); two startup binaries need a generator change to choose per image; the BSP build names one output per variant (`build-board.sh:71-74`). No gain for the ladder |
+| 8 | **A `-b` sub-option** (`w2,canary,clean`) to keep the clean separately optional | A startup-line change: under D57 every image is a new image with its own T-J1 and B1 decision; and a fill without its clean has no remaining use |
+| 9 | **A new revision-4 record directory** for the reruns and J6x | Clean ledger, but `jrun s1-j1` needs a J2 stage in that directory, written only by an `s1-h1` control run (`s1-board.sh:2096-2101`, `:4454-4457`), plus `D27_J6C`: an extra kexec run for bookkeeping. Rejected; the new arm name in revision 3's ledger, rows marked `rev=4`, costs the normalisation and dispatch-site edits and no board run |
+| 10 | **J6o first** (the Linux-side offline arm) | Shelved by D65. Its power rested on R97/R98 (unobservable from L4T on this kernel, D61 dropped) and it added no maintenance the controls lacked; a clean J6o would still have needed X8 |
+| 11 | **J7a first** | Under HC both of its pre-registered consequences route wrongly (§15.14.1); it keeps its purpose behind X-u, on the D36-pinned image (D71) |
+| 12 | **X10, the pre-fill flush trampoline** (`CPU_ON` each secondary into a set/way-and-`CPU_OFF` stub) | Highest-risk startup change on the memo's list (a hang is a power pull); X8 reaches the same caches from CPU0 by VA |
+| 13 | **Extending the shim's clean to the whole black-box map** | The right fix for the first 4 KiB is already in the shim; for the rest, a startup-side silent clean before `select_debug` is the cheaper correctly ordered fix (RC9); both deferred (D75) because either changes the option-off path or re-pins every image |
+| 14 | **Fill through a cacheable mapping and clean after** | Would need the MMU on in startup, against the library's model (`cpu_syspage_memory.c:91-98`) and every existing boot record |
+| 15 | **B1 and B2 reruns only, no watcher run** (the minimal-first ladder) | Two checks of three canaries cannot show `writer=none`, watch c1 or cover sysram; every prior "final" class needed the watcher leg (§16.5). The watcher stays required for X-f final and now precedes B2 |
+| 16 | **B2 before the watcher** (the merge draft's order) | Departs from Q-final's and C-final's order; lets a B2-MET line and a provisional X-f exist before the watcher reads, and creates mixed outcomes that contradict an append already made (RR1, RR2). Withdrawn; D79 |
+| 17 | **A `rule_text` amendment for the revision-4 rule** | Re-points every later J check in the directory, including a lifted J7a, to the revision-4 rule (RB2). Rejected for a revision-4-specific field |
+| 18 | **Per-site `r4control` dispatch** | A missed site runs the detached sequence with J4's removal set (RB3). Rejected for one normalisation |
+
+---
+
+### 16.15 Owner decisions (D65 onward)
+
+| # | Decision | Recommendation | When |
+|---|---|---|---|
+| **D65** | **Taken 2026-09-15 (owner): X8 first; revision 4 opens with the startup change; J6o shelved (designed, not implemented; its fourth kexec run unused; D59-D64 effective only if J6o ever runs; D61 dropped)** | — | taken |
+| D66 | Accept §16 with scope (a): site B under `-b`, window 2 whole (under `w2`) then c1's range (under `canary`), the option-off path unchanged; or (b): add the fix-first draft's unconditional window-1 clean in `board_init` **with §16.3.6's carve-out of the shim page, image and stack and its stated reliance on R107 for the DTB** (or, at the owner's word, the whole window on R107 entirely), re-wording §2 rule 4's B1 premise and accepting F70's silent form; or withdraw (b) to a revision-5 design item; plus the ordering invariant, the reading (§16.6), F70-F77, R105-R112, the Never items | (a); (b) kept offered only in the carve-out form | before the edit |
+| D67 | Implementation form: inline `dc civac` in the board directory (recommended) or the library's `aarch64_dcache_flush_va` | inline | before the edit |
+| D68 | The two `-b`-only `dcache` lines and their L0 anchors (recommended), or no console output at all | the lines: they are the only in-run evidence that the cleans ran, and they cost B1 nothing | before the edit |
+| D69 | T-J1 for the rebuilt `s1-j1`: the standing T-J1 recorded as applying (recommended), or a rerun | stands, with a dated note | before J6x's stage |
+| D70 | J6x: required for X-f to become final (recommended); registered as the new arm `r4control` (step J6x, one `control` kind, §16.5.1) in revision 3's ledger as an amendment `owner-D70`, rows marked `rev=4`; the rule text and L registered in that amendment before B1 as a revision-4 field, not a `rule_text` line (§16.4); the `D34_J6X=yes` key pre-registered in `J-waivers.conf` before the stage | required; the arm; the amendment before B1; the key | before B1 |
+| D71 | The pre-registered failure branch after X-u, **conditional on accepting R105's reach conditions (i)-(v) by assumption without a cluster-1 read**: lift D54 in both parts (`amended-<sha>`; the harness gate implemented first) and run J7a on the old `s1-j1` pinned by D36 (no loader rebuild; §15.13's pre-registration kept; the UEFI-residue row read there as pre-registered), or on the rebuilt `s1-j1` (loader rebuild, D36 re-pointed, UEFI's own residue then also cleaned); or, if (i)-(v) are not accepted by assumption, "owner decides at the memo" as revision 3's U row; or X6, X4, a revived J6o, the window-1 clean, or stop | accept (i)-(v) by assumption for the branch only; D54 lift and J7a on the D36-pinned old image | now, so no consequence is chosen after a result |
+| D72 | Dated append to §5.3's B2 bullet and §6.12's B2 row **only at X-f final**: a passing B2 rerun after a clean J6x is B2 MET for the rebuilt image; the original record stands as data on the old startup; the 11c candidate stands; B3 waits for X-f final and D83 (the "B3 at the owner's risk" alternative is withdrawn) | accept | before J6x |
+| D73 | Dated append to the plan's freeze gate item 3: split "the observed window-2 corruption was not reproduced under the startup clean (class X-f, from N runs, canary and hold coverage only; its explanation stays HYPOTHESIS)" from "DMA quiescence after the chosen entry", which stays HYPOTHESIS (plan §8 unknown #6); the manifest field reads "not shown; c2 cause class <x>; exposure declared, including the window-1 cache-class exposure of every earlier kexec rung" unless the campaign carries a window-1 watch or a J7c window-1 canary is folded into a later startup change | accept the split and the exposure wording; decide the watch at the freeze | before the freeze |
+| D74 | Determinism scope: the aside copy of the `PIN_STARTUP_M` binary before any build (B8.1's rule), the reproducibility rebuild (build twice, same hash), plus the first-ever record of whether HEAD's old source reproduces the old pin (private, informational) | accept | before the commit |
+| D75 | The black-box residual (R112): defer both correctly ordered fixes, the startup-side silent clean of the zone beyond the shim's 4 KiB before `select_debug` (cheaper; D66(b)'s class) and the shim-side extension (re-pins every image); record in §3.8 and the plan | defer both, record; the startup-side option first if ever taken | now |
+| D76 | Decided **before B2, at the PC**, from §16.3.3's cost class against the bound constants: keep the whole-window scope within the existing bounds, raise the generator's bound constants (PO-A), or narrow the clean to the three canary ranges (alternative 1; then its own two observations). F71 re-opens it only if the comparison under-estimated | compare first; whole window if it fits with margin, else narrow rather than raise | before B2 |
+| D77 | Public wording after X-f: the final sentence of §16.12 only after X-f final (and D83 if a third observation is wanted); the rerun figures are put to the 4.6(i) consultation together with the synthesis's | accept | before any push |
+| D78 | Restate §15.4.3's rule-5 exception (the detached sequence's three files) dated for revision 4's J6x, or run J6x through the plain `cmd_run` flow (then not "in the control arm" as C(a) is worded) | restate the exception; keep `jrun` | before J6x |
+
+**Open for the owner (new after the reviews; taken 2026-09-15, below).**
+
+| # | Decision | Recommendation | When |
+|---|---|---|---|
+| D79 | Order of the confirming runs: B1 -> J6x -> B2 (Q-final's and C-final's order; the watcher before any B2-MET line; taken as this section's design), or B1 -> B2 -> J6x with D72's append withheld until J6x has read clean | B1 -> J6x -> B2 | before B1 |
+| D80 | First-run scope on cost and confound grounds: window 2 whole (the fix the window procnto is handed deserves; the "removed by time" confound not small), or the three canary ranges first (the tighter one-variable comparison against the four controls, the confound small) with the whole-window clean taken as the fix after X-f, itself then a revision-5 startup change with its own B1 | window 2 whole, if D76's comparison fits the bounds with margin; otherwise the canary ranges first | before the edit |
+| D81 | Whether §16.3.3's and R108's design-constant cost derivation (a count in the tens of millions of line operations for window 2; order of seconds) stays in the §16 text, or is reduced to "class only: order of seconds" | keep it: it uses two header constants and a general architectural figure, no measurement, and it is load-bearing for D76 and the confound | before the edit |
+| D82 | Under X-f final: D54 stays as taken here, with any later lift only as `amended-<sha>` (E's and K-w's Then clauses rewritten for HC) and J7a's purpose reduced to freeze item 3's entry-validity question; or D54 lifted at the freeze; or J7a dropped from S1-F. **2026-09-16:** whichever is taken, a J7a on the new pin must re-derive Phase A's `procnto up` bound (`j7a_bound1`, 120 s after the shim line) to include the startup clean, or a clean near D76's class limit aborts J7a as a harness failure | stays; amended lift only; entry-validity purpose only | at X-f final |
+| D83 | A third clean c2 observation (a repeat B2 or J6x) before B3-B5 resume and before the public "did not reproduce" sentence, given that the two-observation standard was E's and licensed only "owner decides" | one repeat B2 before B3 if the session budget allows; the public sentence may wait for it | at X-f final |
+| D84 | Attended sessions for revision 4: two (B0', B1 and J6x; then B2), or one if the harness's uptime, start-margin and capture gates allow all three kexec runs in a day | two | before B1 |
+| D85 | §15.8's "Exposure of earlier rungs" gains a dated cache-class row: the library's MMU-off writes in window 1 in every kexec rung before revision 4, HYPOTHESIS, carried into D73's exposure declaration | accept | before the freeze |
+
+**Taken 2026-09-15 (owner): D66-D85, every recommendation; D83 deferred to X-f final.**
+- **D66 (a):** under `-b` only, site B in `t234_init_raminfo`, after `add_ram(w2)` and before the two window lines and the fills: `dc civac` by VA over window 2 whole (under the `w2` flag), then over c1's range (under the canary flag). The option-off path is unchanged. (b) is not taken: the window-1 whole clean stays designed and deferred (§16.3.6, R111).
+- **D67:** inline board C: the `DminLine` stride from `aa64_sr_rd32(ctr_el0)`; a zero stride refuses; `dsb sy` after the loop.
+- **D68:** two `-b`-only lines, byte-exact, printed with `t234_hex` from the constants: `t234: dcache w2 base=0x100000000 size=0x8a000000 cleaned` and `t234: dcache c1 base=0xbd000000 size=0x1000000 cleaned`.
+- **D69:** T-J1 stands for the rebuilt `s1-j1`, with a dated note.
+- **D70:** J6x is required for X-f final; the arm `r4control`; the `owner-D70` amendment before B1; the `D34_J6X` key.
+- **D71:** X-u's branch is pre-registered: R105's conditions (i)-(v) accepted by assumption, for the branch only; D54 lifted in both parts; J7a on the old `s1-j1` pinned by D36.
+- **D72-D78 and D81:** as recommended. D81 keeps the design-constant cost derivation in this text.
+- **D79:** the order B1 -> J6x -> B2.
+- **D76:** the bound comparison is made at the PC before B2; if the whole-window clean does not fit with margin, the clean falls back to the per-canary scope.
+- **D80:** window 2 whole, if D76's comparison fits.
+- **D82:** D54 stays.
+- **D83:** not decided now; decided at X-f final.
+- **D84:** two attended sessions.
+- **D85:** the §15.8 exposure row, added 2026-09-15.
+
+---
+
+### 16.16 What the chosen scope costs, stated plainly
+
+**Against the fix-first remedy (D66(b)).** The library's MMU-off writes in window 1 stay unmaintained (R111). If HC is right about window 2, the same mechanism could in principle strike the syspage, the page tables or procnto's segments; no record shows it has, and a clean B2 under scope (a) does not show it cannot. The fix-first draft's argument that a clean c2 would then "license S1-F to proceed on ranges QNX itself uses with the hazard intact" is fair and is why §16.3.6 is written out and D66 offers (b). The reasons (a) is recommended are the ones §16.3.6 lists: B1's premise, the unprintable site, the silent-hang form, a cost of the same order as window 2's, the carve-out and the R107 reliance the review found (b) needs, and a reading that is cleanest when the option-off binary is behaviourally identical to today's.
+
+**Against the minimal per-canary variant (alternative 1).** Window 2's whole clean adds cost the canaries alone would not (window 2's constant over the canary total: three orders, order of seconds against milliseconds, §16.3.3) and lengthens the interval before the fill by that much, which makes the "removed by time" confound not small (§16.6). It buys maintenance of the whole window procnto is handed, which matters for any uncached use of window 2 after B2 (the guest's memory in B3-B5), and is one line of code more. The per-canary scope is the tighter one-variable comparison; the whole-window scope is the better fix. D80 puts the choice to the owner; D76 decides the bounds before B2 either way.
+
+**In the one-variable comparison with the controls.** The four controls (B2, J2, J4, J6c) ran the old startup. The reruns differ from them in: the startup binary (size, every derived address; B1's own comparison already admits address differences); the clean's duration before the fill (order of seconds for the whole window); DRAM traffic before the fill (every Linux-era dirty line in window 2 and c1's range is written back; irrelevant to the canaries, filled afterwards, but the memory state at the fill is not the controls'); two images and different boots, as every revision-3 comparison already had. If c2 stays bad, "not a coherent-cache residue" cannot be separated from "the clean did not reach" (R105 (i)-(v)) by anything QNX-side. Which cache is never shown (§16.13); J6o (shelved) and X6 were the arms that could have.
+
+**In time.** On the PC: the aside copy, the source edit, the determinism rebuild in a worktree, the pin move and commit, the scratch-root regeneration and drift check, the bound comparison, the default-root build, the parser anchors, fixture and negative self-test, the extract and token edits, two subcommands, the `r4control` normalisation with its self-test, the precondition branch and key, the registration amendment, `cmd_run`'s check, `j_kexec_runs`, and a review of the startup diff against the ordering invariant. On the board, with the owner at the plug: stage and `p0` for three images, then three kexec runs (B1, J6x, B2), each on a fresh boot with the quiesce, a capture and the return, in two attended sessions by default (§16.5.2). Every variant, from per-canary to fix-first, moves the pin, rebuilds every image and reruns B1 and B2 (D56); the scopes differ in the clean's cost, the confound and B1's meaning, not in the ladder's length.
+
+**What it buys.** Every MMU-off write the S1 option makes is maintained the way the architecture prescribes; the fix is entry-independent (it runs on the UEFI path too), needs no Linux-side step, no new option, no new pin beyond the startup's; and the option-off binary is, in behaviour, today's.
+
+---
+
+### 16.17 Open items and pointers (list only; the orchestrator edits)
+
+**Open, to settle before the named step.**
+- Before B1: whether HEAD's old startup source reproduces the old `PIN_STARTUP_S1` (D74, informational); the `owner-D70` amendment written; `D34_J6X` and D27 present; the bound comparison recorded (D76). (The B1 reference is no longer open: §16.5 pins it by the original B1's `reference= sha256=` line.)
+- Before J6x: the `r4control` normalisation and its self-test at HEAD; D78's rule-5 restatement; D69's note.
+- Before any J7a: whether the D54 appends to §15.13.10.3/10.4/11 are in the repository; ~~the `j7a_precondition` `D54_LIFT`/`D54_READING` gate, absent at HEAD (RB10), implemented~~ (**2026-09-16:** implemented in the revision-4 harness change, with self-tests); under D71's rebuilt-image option only, the loader rebuild and the re-pointed D36 reference.
+- Before the freeze: D73's manifest wording; D85's §15.8 row; whether a window-1 watch or a J7c canary is carried; whether D66(b) or R112's startup-side clean becomes a revision-5 startup change.
+
+**Pointers.**
+- §3.3 and §3.8: "2026-09-15: under `-b` the startup cleans window 2 and c1's range by VA before the fill (§16.3); the window-1 residual R111 and the black-box residual R112."
+- §5.3 B2 bullet and §6.12 B2 row: D72's append, at X-f final only.
+- §15.3: "2026-09-15: HC leads; tested by revision 4 (§16)."
+- §15.4.9: "J6o designed, shelved (D65)."
+- §15.6: the X-f, X-m, X-p, X-u, X-c3 and revision-4 U rows; the closing line of §16.7; F70-F77 in the stops.
+- §15.8 "Exposure of earlier rungs": the dated cache-class row (D85).
+- §15.13.11 and §15.14.6: unchanged (D54 in force; the gate's absence at HEAD noted); §15.13.19 and §15.14.14: the status line of §16.12.
+- The plan's freeze gate item 3 (D73's append), the S1-F block, `CLAUDE.md` and `findings.md`: §16.12's pre-run sentence.
+
+**2026-09-15 (applied):** §3.3 and §3.8; §15.3; §15.4.9; §15.6 (J6o's rows as designed-not-run, the revision-4 rows, F70-F77 in the stops, and §16.7's closing line in §15.6.1); §15.8 (D85); the D54 appends to §15.13.10.3, §15.13.10.4 and §15.13.11, which were not yet in this file; the plan's freeze gate item 3 and S1-F block; `CLAUDE.md`; `findings.md`. Not applied: §5.3 and §6.12 (D72, at X-f final only). **2026-09-16 (applied, revision-4 implementation pass):** the `j7a_precondition` `D54_LIFT`/`D54_READING` gate (§16.7, §16.17, RB10) and the dated corrections to §16.3.1, §16.3.6, §16.5.2, F70 and D82; the status sentences in §16.1, §16.4, §3.3/§3.8's append, the plan, `CLAUDE.md` and `findings.md` now say the startup is built and pinned and nothing has run on the board.
+
+---
+
+### 16.18 Where the drafts disagreed, and what this draft chose
+
+Two drafts were requested. The fix-first draft arrived complete; the minimal-diagnostic-first draft did not arrive, so its positions are reconstructed from the memo's X8 row (the per-canary clean, `-b`-gated), from the three inventories' open questions (scope, placement, print, ledger, T-J1, the watcher) and from §15's precedents. Every disagreement below is therefore between the fix-first draft and that reconstructed position; the choices are the design lead's, and the last column notes where the reviews then moved them.
+
+| Point | Fix-first draft | Minimal-first position | This draft chose | Why; and after review |
+|---|---|---|---|---|
+| Scope | window 1 whole (unconditional) plus window 2 whole (under `-b`) | the three canary ranges only, under `-b` | window 2 whole plus c1's range, under `-b`; window 1 whole designed (§16.3.6) and deferred (D66(b)) | every MMU-off write the S1 option makes is covered; the option-off path stays behaviourally identical; the library's window-1 hazard is declared (R111). After review: (b) needs a carve-out (RC1); the per-canary scope is offered as the first-run scope on cost grounds (D80) |
+| Placement | site A in `board_init` and site B in `t234_init_raminfo` | inside `t234_canary` before each fill | one site, in `t234_init_raminfo` after `add_ram(w2)`, before the fills | correctly ordered for all three canaries; after `select_debug`, so it can print; the per-canary site is a subset |
+| B1's meaning | B1 exercises the window-1 clean; §2 rule 4 re-worded | B1 unchanged: option off changes nothing | the minimal position | §2 rule 4's premise is kept in letter and substance |
+| Console | two `-b`-only lines, a `.data` flag for site A | none, or one `-b`-only line | two `-b`-only lines, no flag; c1's line under the canary flag (RR11) | the lines are the in-run evidence |
+| Form | inline board C | inline or the library helper | inline (D67) | the fix-first draft's link-map reason |
+| Confirming runs | B1, B2, J6x (watcher required for final) | B1 and B2; watcher optional | three runs, **B1, J6x, B2** after review (RR2) | every prior "final" class needed the watcher leg, and put it before B2 |
+| Reading band | half of L from the four controls, via `r4-ref` | same (§15.14.5's form) | agreed; registered before B1 (RR3) | — |
+| Failure branch after unchanged | lift D54, J7a | not fixed | D71, now conditional on R105 (i)-(v) by assumption, on the D36-pinned image (RC2, RR6) | a consequence chosen after the result is what D54 exists to prevent; the premise is stated |
+| Ledger | new arm `r4control` in revision 3's directory | not fixed | the new arm as one `control` kind (RB3), rows marked `rev=4`; D78 | a new directory costs a bookkeeping kexec run |
+| T-J1 | the standing T-J1 applies, dated note | D57's "its own T-J1" | the standing T-J1 (D69) | the startup line does not change |
+| Cost confound | stated for whole-window cleans | absent for a short clean | stated, derived from design constants (RC3), not small for the whole window | honesty about "removed by time" |
+| F71 fallback | raise the bounds or narrow to per-canary | n/a | D76, decided before B2 at the PC | keeps the per-canary variant as the floor |
+| The black box (R112) | deferred to a shim change (D75) | out of scope | deferred; both the startup-side and the shim-side fix named (RC9) | the shim is the right site only for its own 4 KiB |
+
+What was not chosen from either draft: the fix-first draft's F70 form at `board_init` (kept only as a note inside F70 for D66(b)); the minimal position's "no print" option (D68 offers it). Nothing in the merge or the revision introduces a figure from a private record; every address and size is a design constant or a source fact, and the one derivation is D81's.
+
+Sources for this draft: `board/{main.c,init_raminfo.c,t234_startup.h}`, `orin-native/shim/t234-shim.S`, `startup/{s1-board.sh,build-board.sh,make-s1-images.sh}`, `s1/parse-s1.py`, `lib/{_main.c,ram.c,aarch64/cstart.S,aarch64/aarch64_sysctl.S}`, the three inventories, the three reviews, this file (§2, §6.12, §15 header, §15.6, §15.7.4, §15.13 header, §15.13.20), and the private, git-ignored desk records (`s1-15.14-rev.md`, `c2-writer-research-final.md`, `x14-desk-reads.md`).
+
+---
+
+### 16.19 Review outcomes
+
+Three reviews read the merged draft: cache maintenance (RC), power of the reading (RR), feasibility against the harness at HEAD (RB). Every required change is listed with what happened to it. Each load-bearing source claim in an applied change was checked against HEAD (`ecc6c3c`) before it was accepted: `j6_precondition`'s F39 stop and the `D34_J6` key (`s1-board.sh:3665-3682`), `j_set_select`'s literal `control` compare (`:3769`, `:3779`, `:4439`, `:4484`), `build-board.sh`'s default `BSP` and shared output path (`:25`, `:72`, `:104`), the `main.c` call order (`:204`, `:253`, `:256`, `:275`), `check_geometry`'s page test (`make-s1-images.sh:1866-1882`), the parser's L0 loop and `BB_PREFIXES` (`parse-s1.py:1698`, `:1336`, `:502-503`), §15.6's Q-row order and withdrawal clause (`s1-design.md:2160`), §15.7.4's intermittency note (`:2381`), §6.12's two-session split (`:623`) and the private §15.14.5 "weakened, not refuted" band paragraph.
+
+#### 16.19.1 Conflicts between reviewers, and how they were resolved
+
+| # | Conflict | Resolution |
+|---|---|---|
+| K1 | RR2 asks for the watcher before B2 (Q-final's and C-final's order); RB1's proposed `j6r4control` branch requires the newest B2 parse to carry a pass, which presumes B2 first; the draft had B2 first | The order is B1 -> J6x -> B2 (D79). The precondition branch requires the B1 rerun's pass only; B2 runs only after a J6x `clean`. RR9's anchor gap disappears with the order (every X-p now comes from J6x) |
+| K2 | RR3 asks that the rule text and L be registered in `J-prereg.log` before B1 as a dated amendment; RB2 shows the only rule registration is the `rule_text` line, which re-points every later J check, and offers a J6x-only stage field instead | A dated amendment before B1 (`owner-D70`) carrying a revision-4-specific field, never a `rule_text` line; the J6x stage cites it; `cmd_run` for `s1-h1` verifies it. RR3's timing and RB2's option (a) are both honoured; RB2's option (b) is rejected (alternative 17) |
+| K3 | RC2 and RR8 ask that X-u read "weakened", conditional on reach; the draft's D71 fixes the failure branch (lift D54, J7a) on the premise that the cache class is removed | X-u's Then is "weakened to the extent (i)-(v) held; refuted only if they held". D71 keeps the pre-registered branch, now conditional on the owner accepting (i)-(v) by assumption at D71, with the image named (RR6: the D36-pinned old `s1-j1`) and the harness gate implemented first (RB10). If not accepted, "owner decides at the memo" |
+| K4 | RC3 asks for a design-constant cost derivation (a count in the tens of millions, order of seconds); the draft's and the task's number-free rule forbids figures from private records | The derivation uses two header constants and a general architectural per-operation figure, no measurement, so it is within the rule as written; it is included (§16.3.3, R108) and its retention in the public text is put to the owner (D81) |
+| K5 | RC1 asks that D66(b) be re-specified with a carve-out and R107, or withdrawn; the draft offers (b) unqualified | (b) stays offered only in the carve-out form, with the R107 reliance stated for the DTB; withdrawal to revision 5 is the third option in D66; the recommendation (a) is unchanged |
+| K6 | RC9 offers a startup-side clean of the black-box zone beyond the shim's 4 KiB as the cheaper correctly ordered fix; the draft (and RR's B1-premise reasoning) keeps every unconditional clean out of revision 4 | R112 and D75 name both fixes; both stay deferred, because the startup-side clean is unconditional and silent and so changes the option-off path (D66(b)'s class) |
+| K7 | RR1 asks for a mixed-pair class and a withdrawal rule for a provisional X-f declared at B2; RR2 moves the watcher first, which changes which pair is mixed | With J6x first, the provisional X-f is declared at J6x and the mixed pair is "J6x clean, then B2 not clean": class X-m, U with its lead, a dated withdrawal line, never routed to D71 (precedence rule 4) |
+| K8 | RC3 asks that D76 be decided before B2; RR10 asks that F71's within/over class be put to the owner or stated as the existing guard-bound class | D76 is decided at the PC before B2 from the bound constants; F71 is stated as the existing guard-bound failure class that adds no timing record, re-opening D76 only if the comparison under-estimated |
+
+#### 16.19.2 Every required change
+
+| ID | Sev. | Change asked | Outcome | Where |
+|---|---|---|---|---|
+| RC1 | major | D66(b)'s window-1 clean must exclude the shim page, image and stack, rely on R107 for the DTB, and say the stack and `.data` are live; else withdraw (b) | **Applied** (K5): the carve-out `[T234_SHIM_BASE, full_ram_paddr + shdr->ram_size)`, the R107 reliance for the DTB, the "no line can be cached" argument for the live pages; (b) offered only in that form, withdrawal offered | §16.3.1 (invariant note); §16.3.2 row; §16.3.6; §16.11; R107, R111; D66 |
+| RC2 | major | list reach conditions (i)-(v) with classes in R105 and X-u; X-u "weakened to the extent"; D71 conditional on accepting them by assumption | **Applied** (K3) | R105; §16.2; §16.6 X-u; §16.12 X-u; §16.13; D71 |
+| RC3 | major | the design-constant cost derivation in R108 and §16.16; compare with the bound constants before B2; D76 before B2; the time confound not small for the whole window, small for per-canary; F71's retry accounting | **Applied** (K4, K8); retention in public text is D81 | §16.3.3 cost; §16.4 step 7; §16.6 false-fix; §16.8; §16.16; R108; D76, D80, D81 |
+| RC4 | minor | one sentence on CPU0's EL2 state at site B | **Applied** | §16.3.1 "CPU0's state at the site" |
+| RC5 | minor | widen F70 to the asynchronous SError form; R109: the exposure is the write-back's, an existing hazard advanced | **Applied** | F70; R109 |
+| RC6 | minor | say why not `dc ivac`; add it to the Never list | **Applied** | §16.3.3; §16.11 |
+| RC7 | minor | page-alignment asserts on both ranges; refuse on a zero CTR stride; termination `< base + size` | **Applied** | §16.3.2; §16.3.3 |
+| RC8 | minor | the secondaries' no-allocation argument; one clean closes route S and route F; MEM_RET "unreachable by QNX, resurfaced only by firmware" | **Applied** | §16.3.1 (`CPU_ON` bullet); R105 (ii); R106 |
+| RC9 | minor | correct R112 and the black-box row: the shim is the right site only for its 4 KiB; a startup-side silent clean before `select_debug` is correctly ordered; add it to D75 | **Applied** (K6) | §16.3.2 row; R112; D75; alternative 13 |
+| RR1 | blocker | a class for the mixed pair; move D72's append out of the provisional Then or add a withdrawal clause; reserve X-u for a bad first result | **Applied** (K7): X-m; D72's append at X-f final only; the withdrawal line; X-u on J6x `unchanged` only | §16.6 X-f, X-m, X-u, precedence 4; §16.11; §16.12; D72 |
+| RR2 | major | order B1 -> J6x -> B2, or withhold D72 until J6x and strike "at the owner's risk" | **Applied** (K1): the first option; the alternative struck; the departure from the draft recorded | §16.5; §16.14 row 16; D79 |
+| RR3 | major | register the rule hash and L before B1 as a dated amendment; `cmd_run` for `s1-h1` verifies it; J6x's stage cites it | **Applied** (K2) | §16.4 "Registration before B1"; §16.5 J6x precondition; §16.6 header; D70 |
+| RR4 | major | re-word the pre-run, X-f final and D73 sentences: no "corrected", no "explained", the mechanism HYPOTHESIS, the scope stated | **Applied** | §16.12; §16.11; D73 |
+| RR5 | major | a does-not-show item on window 1's exposure in every earlier kexec rung; a §15.8 cache-class row; carried into D73 | **Applied** | §16.2; §16.13; R111; §16.17 pointers; D73, D85 |
+| RR6 | major | X-f: D54 stays, a lift only `amended-<sha>`, J7a's purpose entry-validity only; D71 names the image and how the UEFI-residue row is read | **Applied** | §16.6 X-f, X-u; §16.4 pins; D71, D82 |
+| RR7 | minor | define `onset` for the B2 rerun; a bad c2 with no count is U, never X-u | **Applied** | §16.6 field rules; X-m; U |
+| RR8 | minor | X-u "weakened; refuted only if reach held"; `unchanged,low` in the lead; the band's origin stated | **Applied** (K3) | §16.6 terms, sub-labels, X-u |
+| RR9 | minor | allow J6x after a B2 drop, or drop the anchor clause from a B2-based X-p | **Applied in part:** made moot by the order change (K1); X-p is read from J6x, which carries the anchor; a B2 drop after a clean J6x is X-m | §16.6 X-p, X-m |
+| RR10 | minor | rule 1: F71 is not a B1 fail; the per-canary fallback's own confound and observations; F71's class to the owner or stated as existing | **Applied** (K8) | §16.6 precedence 1; F71; alternative 1; D76 |
+| RR11 | minor | gate c1's clean and line on the canary flag; say what L0 requires for a `-b w2` image | **Applied** | §16.3.1 site B; §16.3.2; §16.3.4; F73; §16.11 |
+| RR12 | minor | B1 adds no c2 observation; X-f final licenses more than E did; an owner option for a third observation | **Applied** | §16.6 false-fix; §16.13; D77, D83 |
+| RB1 | blocker | the owner key to pass `j6_precondition`'s F39 stop; a `j6r4control` branch; keep D27 and T-J1 | **Applied,** with the branch requiring B1's pass only (K1) | §16.5.1; §16.5 J6x row; §16.4 step 8; §16.11; D70 |
+| RB2 | major | choose a J6x-only rule field or a `rule_text` amendment; name it in §16.4 and D70 | **Applied,** the revision-4 field (K2); the `rule_text` form rejected (alternative 17) | §16.4; §16.11; D70 |
+| RB3 | major | one normalisation to a `control` kind; the named sites; a self-test that `r4control` yields an empty set and needs no D24 | **Applied** | §16.5.1; §16.11; alternative 18 |
+| RB4 | major | aside copy of the `PIN_STARTUP_M` binary before any build; `BSP=` the Temp tree; restore and re-verify before the generator | **Applied** | §16.4 steps 0, 2, 4; §16.11; D74 |
+| RB5 | major | list the parser RX, L0, fixture and negative self-test edits, `extract_file`'s pattern, `b1_tokens`' absent lists; correct `BB_PREFIXES` to `:1336` | **Applied** | §16.3.4; §16.4 step 8; B1 row; F72 |
+| RB6 | minor | restate F77: `image_paddr` is preboot-determined; the end is what grows | **Applied** | §16.4 step 5; F77 |
+| RB7 | minor | pin the B1 reference to the original B1's cut by `reference= sha256=`; move it out of §16.17 | **Applied** | §16.5 B1 row; §16.17 |
+| RB8 | minor | the attended-session schedule and the power-cut path with the advice command and F25a | **Applied;** the count put to the owner | §16.5.2; F70; D84 |
+| RB9 | minor | replace the `BB_GATE` sentence; count J6x in `j_kexec_runs` or say why not | **Applied** (counted) | §16.3.4; §16.5.1; §16.4 step 8 |
+| RB10 | minor | say the D54 gate is not implemented at HEAD and that the D36 mismatch is the effective guard; list the `j7a_precondition` edit and D36 re-pointing as one change before any lift | **Applied** | §16.1; §16.4 pins; §16.7; §16.17 |
+
+**Rejected outright:** none. **Applied in part:** RR9 (made moot by K1's order change rather than by either of its two options). **Rejected in part:** RB2's option (b), the `rule_text` amendment (K2); RC1's "withdraw (b)" taken as an offered option rather than done (K5); RC9's startup-side black-box clean named and deferred, not adopted (K6). Every owner question the reviews raised is a row in §16.15 (D66, D70, D71 revised; D79-D85 new).

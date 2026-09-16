@@ -126,7 +126,10 @@ BSP="${BSP:-}"
 # ---- pins ---------------------------------------------------------------------------
 # S1's startup (-b), kept at orin-native/s1/out/startup. The shared BSP output keeps
 # the M1b-M4 build, which make-m1b..m4-images.sh read; this script never writes it.
-PIN_STARTUP_S1=781533054c913773355b85cc0b46dbbe7236998d60a175d618dff8213a11103f
+# 2026-09-15, revision 4 (s1-design §16.3-16.4, D66-D68): moved with the -b-only data cache
+# clean by VA at site B; the determinism rebuild matched, the symbol gates re-run, PIN_STARTUP_M
+# unchanged.
+PIN_STARTUP_S1=4df167a5739e8669dce59046550173eaac90d925f9004b9b599b569e7dc8a424
 PIN_STARTUP_M=90bf724c222b61f9791ad3bcaff60c6516be7180012333be9186a58d06d61896
 # D3's copies of the board's /boot/Image and /boot/initrd (L4T R36.4.7).
 PIN_IMAGE=b844b7cfaafd071a25f1dc91d2ad1d7369008c28ce84b25625efc425825a2120

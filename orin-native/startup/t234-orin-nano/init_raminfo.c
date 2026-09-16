@@ -78,6 +78,28 @@ _Static_assert(T234_CANARY2_BASE + T234_CANARY_SIZE < T234_CANARY3_BASE,
                "c2 and c3 must not overlap or touch");
 #undef T234_CANARY_IN
 
+/*
+ * The two ranges t234_dcache_clean_va cleans under -b (s1-design.md §16.3.2):
+ * window 2 whole, and c1's range. Neither may reach the black box, whose first
+ * page the shim has already cleaned and written; c1's range must lie in window 1
+ * below window 2. Page alignment of every base and size covers any DminLine the
+ * architecture allows (a line is at most 2 KiB), so the loop's last line ends
+ * exactly at the range's end.
+ */
+#define T234_PAGE_ALIGNED(v) (((v) & 0xFFFull) == 0)
+_Static_assert(T234_RAM2_BASE + T234_RAM2_SIZE <= T234_BB_BASE ||
+               T234_BB_BASE + T234_BB_MAP <= T234_RAM2_BASE,
+               "window 2 must not overlap the black box: its clean would come after the shim's writes");
+_Static_assert(T234_CANARY1_BASE >= T234_RAM_BASE &&
+               T234_CANARY1_BASE + T234_CANARY_SIZE <= T234_RAM_BASE + T234_RAM_SIZE &&
+               T234_CANARY1_BASE + T234_CANARY_SIZE < T234_RAM2_BASE,
+               "c1's range must lie inside window 1 and below window 2");
+_Static_assert(T234_PAGE_ALIGNED(T234_RAM2_BASE) && T234_PAGE_ALIGNED(T234_RAM2_SIZE),
+               "window 2's base and size must be page-aligned for the line-stride clean");
+_Static_assert(T234_PAGE_ALIGNED(T234_CANARY1_BASE) && T234_PAGE_ALIGNED(T234_CANARY_SIZE),
+               "c1's base and the canary size must be page-aligned for the line-stride clean");
+#undef T234_PAGE_ALIGNED
+
 /* In the order they are checked, allocated and filled. */
 static const struct {
 	const char *name;
@@ -134,6 +156,36 @@ t234_splitmix64(_Uint64t x)
 	z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
 	z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
 	return z ^ (z >> 31);
+}
+
+/*
+ * Clean and invalidate the data cache by VA over [base, base + size), to the
+ * point of coherency (s1-design.md §16.3.3). Called under -b only, before
+ * startup's first MMU-off write into the range, so that no agent's stale or
+ * dirty Write-Back copy of it can later land over the canaries or over memory
+ * procnto is handed.
+ *
+ * CPU0 is at EL2 with its MMU and caches off, so the VA operand is the PA and
+ * the operation has Outer Shareable scope. dc civac rather than dc cvau (the
+ * wrong level) or dc ivac (an implementation may clean a dirty line anyway).
+ * The stride is CTR_EL0.DminLine's line size, as the library's own
+ * aarch64_dcache_flush_va computes it, read from the register rather than
+ * assumed. No print, no option, no MMIO and no library call.
+ */
+static void
+t234_dcache_clean_va(_Uint64t const base, _Uint64t const size)
+{
+	_Uint64t const line = (_Uint64t)4u << ((aa64_sr_rd32(ctr_el0) >> 16) & 0xfu);
+	_Uint64t const end = base + size;
+	_Uint64t       va;
+
+	if (line == 0) {
+		crash("t234: dcache line size is zero\n");
+	}
+	for (va = base; va < end; va += line) {
+		__asm__ __volatile__("dc civac, %0" :: "r"(va) : "memory");
+	}
+	__asm__ __volatile__("dsb sy" ::: "memory");
 }
 
 /*
@@ -239,6 +291,22 @@ t234_init_raminfo(void)
 		char hs[T234_HEX_LEN];
 
 		add_ram(T234_RAM2_BASE, T234_RAM2_SIZE);
+
+		/*
+		 * s1-design.md §16.3.1, site B: nothing has written window 2 or c1's
+		 * range yet, and every CPU_ON comes after the fills. Window 2 whole
+		 * under w2 (c2, c3 and everything add_sysram later hands to
+		 * procnto), then c1's range under canary; each line says it ran.
+		 */
+		t234_dcache_clean_va(T234_RAM2_BASE, T234_RAM2_SIZE);
+		kprintf("t234: dcache w2 base=%s size=%s cleaned\n",
+		        t234_hex(hb, T234_RAM2_BASE), t234_hex(hs, T234_RAM2_SIZE));
+		if ((t234_ram_opts & T234_RAMOPT_CANARY) != 0) {
+			t234_dcache_clean_va(T234_CANARY1_BASE, T234_CANARY_SIZE);
+			kprintf("t234: dcache c1 base=%s size=%s cleaned\n",
+			        t234_hex(hb, T234_CANARY1_BASE), t234_hex(hs, T234_CANARY_SIZE));
+		}
+
 		kprintf("t234: ram w2 base=%s size=%s\n",
 		        t234_hex(hb, T234_RAM2_BASE), t234_hex(hs, T234_RAM2_SIZE));
 		kprintf("t234: gpu range base=%s size=%s not added\n",

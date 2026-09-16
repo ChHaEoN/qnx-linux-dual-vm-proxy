@@ -54,9 +54,15 @@
 #   s1-board.sh j3                     J3 (§15.4.5): the detached removal rehearsed on L4T with J4's
 #                                      set and no kexec; ends through the fallback timer. Only
 #                                      after J2's F32. Needs D20, D22, D25
-#   s1-board.sh jrun IMG control|remove|b2repeat
+#   s1-board.sh jrun IMG control|remove|b2repeat|r4control
 #                                      J2, J4, J2b (§15.4.4, §15.4.6) with IMG s1-h1; J6c, J6r
-#                                      (§15.4.8) with IMG s1-j1, control|remove only. control and
+#                                      (§15.4.8) with IMG s1-j1, control|remove only; J6x, revision
+#                                      4's watcher (§16.5.1, D70), with IMG s1-j1 r4control only: the
+#                                      control kind's sequence and set, step J6x, parser --arm
+#                                      r4control, then parse-s1.py r4-read --step J6x. It needs
+#                                      D34_J6X=yes and D27 in J-waivers.conf, T-J1, the owner-D70
+#                                      amendment (r4-register) and the newest B1 attempt on the new
+#                                      PIN_STARTUP_S1 reading 'B1 RESULT tokens met'. control and
 #                                      remove run the detached sequence (§15.4.3: J-set.conf's set,
 #                                      empty in control), b2repeat is run's B2 flow as J2b. Parser
 #                                      run --diag j2|j4|j2b|j1; J6 adds canwatch.txt. Exit 5: the
@@ -67,6 +73,13 @@
 #                                      D27_J6C=yes), J6r J4's F35 (else D27_J6R=yes); its first
 #                                      attempt per arm appends the J6 stage to J-prereg.log after
 #                                      gate A (S1_J6_FILL_FACTOR; S1_J6_AMEND_BY for an amendment)
+#   s1-board.sh r4-register            revision 4 (§16.4, D70): after the commit, on a clean tree, appends
+#                                      the owner-D70 amendment to J-prereg.log: R4-rule-16.md's sha256
+#                                      and parse-s1.py r4-ref over the four controls (B2, J2, J4, J6c);
+#                                      once, before any board step on the new PIN_STARTUP_S1. Never a
+#                                      rule_text line. run s1-h1 and s1-m1b-p6 on the new pin, and jrun
+#                                      s1-j1 r4control, refuse without it; run s1-h1 (B2) there also
+#                                      needs J6x's r4_class=X-f-provisional and runs r4-read --step B2
 #   s1-board.sh wq-status BOARDLOG     §15.4.6's state (ARMED, PROGRESS, ISSUED, JUMPED, ABORTED,
 #                                      STALLED) of a j3 or jrun board log, from S1_COM3_LOG
 #   s1-board.sh kpf-decode HEADER [HEADER] | --selftest
@@ -81,7 +94,9 @@
 #   s1-board.sh j7a return BOARDLOG    re-enters an interrupted go's return reads, idempotently
 #   s1-board.sh j7a clean              b_esp_clean (S1_J7A_TX_REMOVED=yes), ~/M5LOAD.EFI absent, nvbootctrl
 #   s1-board.sh j7a-status BOARDLOG    the J7a watch states from S1_COM3_LOG (no board contact)
-#                                      J7a needs D30, D34_J7A, D35, D38, D45=esp, D46, Q20_BRANCH, D0A_REFERENCE,
+#                                      J7a needs D54_LIFT=owner-<decision> and D54_READING=restored|amended-<sha>
+#                                      (D54 is in force until both are present, §16.7),
+#                                      D30, D34_J7A, D35, D38, D45=esp, D46, Q20_BRANCH, D0A_REFERENCE,
 #                                      T0_RECORD and M5_RECORD in <rec>/J-waivers.conf, and J7a-rule-15.13.md
 #
 # IMAGES (the step each one is, §6.12)
@@ -2244,10 +2259,12 @@ j6_wq_sha_at() {
 }
 
 # The newest commit J-prereg.log registers: J2's 'prereg head=', or a later amendment's 'commit='.
+# Revision 4's owner-D70 amendment (reason $R4_AMEND_REASON) is skipped: it registers the rule and
+# the reference, and never re-points a later J check (§16.4)
 j6_registered_commit() {
-	awk '{ sub(/\r$/, "") }
+	awk -v rs=" reason=$R4_AMEND_REASON" '{ sub(/\r$/, "") }
 		/^prereg head=/ { c = substr($0, 13) }
-		/^prereg amendment / && match($0, / commit=[0-9a-f]+/) { c = substr($0, RSTART + 8, RLENGTH - 8) }
+		/^prereg amendment / && !(length($0) >= length(rs) && substr($0, length($0) - length(rs) + 1) == rs) && match($0, / commit=[0-9a-f]+/) { c = substr($0, RSTART + 8, RLENGTH - 8) }
 		END { print c }' "$RECDIR/J-prereg.log" 2>/dev/null
 }
 
@@ -2289,9 +2306,19 @@ j6_arm_has_run() {
 # commit=, reason=, old -> new per changed file).
 j6_prereg_append() {
 	local arm="$1" f="$RECDIR/J-prereg.log" dir="${S1_KIMG_DIR:-$HERE/../shim/out/s1}" factor old step k pre cur
-	local amend="" supersede="" commit wq_old wq_cur wq_note by="${S1_J6_AMEND_BY:-}"
-	case "$arm" in control) step=J6c ;; remove) step=J6r ;; *) die "j6_prereg_append: no J6 arm '$arm'" ;; esac
+	local amend="" supersede="" commit wq_old wq_cur wq_note by="${S1_J6_AMEND_BY:-}" r4cite="" wq_j6c
+	case "$arm" in control) step=J6c ;; remove) step=J6r ;; r4control) step=J6x ;; *) die "j6_prereg_append: no J6 arm '$arm'" ;; esac
 	j_prereg_has_stage j2 || die "J-prereg.log holds no J2 pre-registration: J6's stage is appended after it (§15.4.1)"
+	if [ "$arm" = r4control ]; then
+		# §16.4, §16.5.1 (D70): J6x's stage cites the owner-D70 amendment and is itself an amendment by
+		# owner-D70; WQ_FUNCS is unchanged, with no S1_J6_WQ_CHANGED override
+		r4cite="$(r4_amendment_check)" || die "J6x's stage cites the owner-D70 amendment, which does not verify: $r4cite"
+		[ -z "${S1_J6_WQ_CHANGED:-}" ] \
+			|| die "S1_J6_WQ_CHANGED is set: J6x repeats the detached sequence J2 and J6c ran, unchanged (§16.5.1, D78); unset it"
+		[ -z "$by" ] || [ "$by" = owner-D70 ] \
+			|| die "S1_J6_AMEND_BY=$by: J6x's stage is the amendment by owner-D70 (§16.5.1); unset it or set owner-D70"
+		by=owner-D70
+	fi
 	j6_params_values "$dir/s1-j1.params"
 	[ -f "$dir/s1-j1.kimg" ] || die "no s1-j1.kimg under S1_KIMG_DIR"
 	if j6_prereg_has_arm "$arm"; then
@@ -2315,12 +2342,21 @@ j6_prereg_append() {
 	wq_old="$(j6_wq_sha_at "$commit")"
 	wq_cur="$(j6_wq_sha)"
 	wq_note="wq_funcs unchanged since ${commit:-unknown}"
+	if [ "$arm" = r4control ]; then
+		[ "$wq_old" = "$wq_cur" ] \
+			|| die "WQ_FUNCS differs from the registered commit ${commit:-unknown} (or git cannot show it): J6x repeats that sequence unchanged, and no override exists for it (§16.5.1)"
+		wq_j6c="$(j6_block_value control 'prereg j6 wq_funcs sha256=')"
+		[ -n "$wq_j6c" ] && [ "$wq_j6c" = "$wq_cur" ] \
+			|| die "WQ_FUNCS is not the one J6c's stage registered (${wq_j6c:-no J6c stage}): J6x is J6c's matched watcher run (§16.5.1)"
+		wq_note="$wq_note, equal to J6c's stage; revision 4's watcher J6x (§16.5.1), the control kind; cites $r4cite"
+	fi
 	if [ "$wq_old" != "$wq_cur" ]; then
 		[ "${S1_J6_WQ_CHANGED:-}" = yes ] \
 			|| die "WQ_FUNCS, the detached sequence J2 and J4 ran, differs from the registered commit ${commit:-unknown} (or git cannot show it): J6 would not repeat J2's sequence (§15.4.3). Only the owner names that change, with S1_J6_WQ_CHANGED=yes and S1_J6_AMEND_BY"
 		wq_note="wq_funcs changed, named by the owner"
 		amend="$amend; wq_funcs sha256 $wq_old -> $wq_cur"
 	fi
+	[ "$arm" = r4control ] && [ -z "$amend$supersede" ] && amend="; no tracked file differs"
 	if [ -n "$amend$supersede" ]; then
 		[[ "$by" =~ ^owner-[A-Za-z0-9._-]{1,40}$ ]] \
 			|| die "J6's $arm stage is an amendment (${amend#; }${supersede:+${amend:+; }it supersedes the stage of $supersede}): name the owner's decision with S1_J6_AMEND_BY=owner-<decision>, as the D34 and J3 amendments were (§15.4.1)"
@@ -2341,6 +2377,7 @@ j6_prereg_append() {
 		echo "prereg j6 fill_rate_factor=$factor"
 		echo "prereg j6 params sha256=$(j_sha256 "$dir/s1-j1.params") kimg_sha256=$(j_sha256 "$dir/s1-j1.kimg")"
 		echo "prereg j6 waivers sha256=$(j_sha256 "$RECDIR/J-waivers.conf")"
+		[ -z "$r4cite" ] || echo "prereg j6 r4 $r4cite kind=control rev=4"
 		echo "prereg j6 arm=$arm"
 	} >> "$f"
 	check_private "$f"
@@ -2352,8 +2389,8 @@ j6_prereg_append() {
 # kpf-decode.py, WQ_FUNCS, the memcanary-w pin, the hold size, the params and the kimg, and the
 # factor. It never reads another arm's stage. Dies otherwise; prints one 'j6' summary.
 j6_prereg_verify() {
-	local arm="$1" dir="${S1_KIMG_DIR:-$HERE/../shim/out/s1}" pre factor k
-	case "$arm" in control|remove) ;; *) die "J6 runs in the control or remove arm, not '${arm:-none}'" ;; esac
+	local arm="$1" dir="${S1_KIMG_DIR:-$HERE/../shim/out/s1}" pre factor k r4cite="" r4note=""
+	case "$arm" in control|remove|r4control) ;; *) die "J6 runs in the control, remove or r4control arm, not '${arm:-none}'" ;; esac
 	j_prereg_has_stage j6 && j6_prereg_has_arm "$arm" \
 		|| die "J-prereg.log holds no J6 stage for the $arm arm: jrun s1-j1 $arm appends it before its first run (§15.4.1)"
 	pre="$(j6_block_value "$arm" 'prereg j6 parse-s1.py sha256=')"
@@ -2381,7 +2418,247 @@ j6_prereg_verify() {
 		|| die "J6's $arm stage registered fill-rate factor $factor, but a later stage holds $(j6_prereg_factor): one factor holds for the revision (§15.4.1)"
 	[ -z "${S1_J6_FILL_FACTOR:-}" ] || [ "$S1_J6_FILL_FACTOR" = "$factor" ] \
 		|| die "S1_J6_FILL_FACTOR=$S1_J6_FILL_FACTOR differs from the registered fill-rate factor $factor: unset it (§15.4.1)"
-	echo "j6_arm=$arm fill_rate_factor=$factor hold_mib=$J6_HOLD pin_memcanary_w=registered"
+	if [ "$arm" = r4control ]; then
+		# §16.4, §16.5.1: the stage cites the owner-D70 amendment as it verifies now, is an amendment by
+		# owner-D70, and runs with S1_J6_WQ_CHANGED unset (WQ_FUNCS was checked against the stage above)
+		r4cite="$(r4_amendment_check)" || die "J6x's stage cites the owner-D70 amendment, which does not verify: $r4cite"
+		[ "$(j6_block_value r4control 'prereg j6 r4 ')" = "$r4cite kind=control rev=4" ] \
+			|| die "J6x's stage cites '$(j6_block_value r4control 'prereg j6 r4 ')', not the owner-D70 amendment as it reads now ($r4cite) (§16.4)"
+		j6_prereg_block r4control | grep -q '^prereg amendment utc=[0-9TZ]* by=owner-D70 commit=' \
+			|| die "J6x's stage is not an amendment by owner-D70 (§16.5.1, D70)"
+		[ -z "${S1_J6_WQ_CHANGED:-}" ] || die "S1_J6_WQ_CHANGED is set: J6x runs the registered detached sequence unchanged (§16.5.1); unset it"
+		r4note=" r4=cited by=owner-D70 kind=control rev=4"
+	fi
+	echo "j6_arm=$arm fill_rate_factor=$factor hold_mib=$J6_HOLD pin_memcanary_w=registered$r4note"
+}
+
+# ---- revision 4 (§16.4, §16.5, §16.6; D70): the owner-D70 amendment of the pre-registration
+#
+# Written once by r4-register, after the commit and before any board step on the new startup, as three
+# lines appended to J-prereg.log: the amendment line (by=owner-D70), the rule text's hash and the
+# reference L (parse-s1.py r4-ref's S1R4 line, inputs hashed). It is a revision-4 field, never a
+# rule_text line, so no later J check is re-pointed to the revision-4 rule (§16.4, RB2).
+
+R4_RULE_NAME=R4-rule-16.md
+R4_AMEND_REASON="revision 4 (§16.4) rule and reference"
+
+# The new PIN_STARTUP_S1, read from make-s1-images.sh (never written into this file), or empty.
+r4_pin() { local p; p="$(j6_gen_const PIN_STARTUP_S1)"; [[ "$p" =~ ^[0-9a-f]{64}$ ]] && echo "$p"; return 0; }
+
+# 0 when the params file $1 carries a startup_sha256 equal to the new PIN_STARTUP_S1.
+r4_params_new() { local p s; p="$(r4_pin)"; [ -f "$1" ] || return 1; s="$(j6_pkey "$1" startup_sha256)"; [ -n "$p" ] && [ "$s" = "$p" ]; }
+
+# A record file named in S1R4's inputs, resolved: as given, under RECDIR, or by its name in the four
+# controls' attempt directories. $1 the name. Prints the path, or nothing.
+r4_input_path() {
+	local f="$1" s c
+	if [ -f "$f" ]; then printf '%s\n' "$f"; return 0; fi
+	if [ -f "$RECDIR/$f" ]; then printf '%s\n' "$RECDIR/$f"; return 0; fi
+	for s in B2 J2 J4 J6c; do
+		for c in "$RECDIR/$s/$(basename "$f")" "$RECDIR/$s"-a[0-9]*/"$(basename "$f")"; do
+			[ -f "$c" ] && { printf '%s\n' "$c"; return 0; }
+		done
+	done
+	return 0
+}
+
+# Verifies the owner-D70 amendment in J-prereg.log (§16.4): exactly one amendment line by owner-D70
+# with revision 4's reason, followed by 'prereg r4 rule=R4-rule-16.md sha256=' equal to RECDIR's rule
+# file and 'prereg r4 ref S1R4 ...' with a whole reference of 1 or more and every hashed input still
+# equal. Never dies: prints 'r4_amendment utc= commit= rule_sha256= ref_c2_start_min= inputs=' and
+# returns 0, or prints the reason and returns 1.
+r4_amendment_check() {
+	local f="$RECDIR/J-prereg.log" rule="$RECDIR/$R4_RULE_NAME" blk n a b c utc commit sha ref min inputs x p want k=0
+	[ -f "$f" ] || { echo "no J-prereg.log in the record directory"; return 1; }
+	blk="$(awk -v r=" reason=$R4_AMEND_REASON" '
+		{ sub(/\r$/, ""); L[NR] = $0 }
+		END {
+			for (i = 1; i <= NR; i++)
+				if (index(L[i], "prereg amendment utc=") == 1 && index(L[i], " by=owner-D70 commit=") && substr(L[i], length(L[i]) - length(r) + 1) == r) { n++; a = L[i]; b = L[i + 1]; c = L[i + 2] }
+			printf "%d\n%s\n%s\n%s\n", n, a, b, c
+		}' "$f")"
+	n="$(printf '%s\n' "$blk" | sed -n 1p)"
+	a="$(printf '%s\n' "$blk" | sed -n 2p)"; b="$(printf '%s\n' "$blk" | sed -n 3p)"; c="$(printf '%s\n' "$blk" | sed -n 4p)"
+	[ "$n" = 1 ] || { echo "J-prereg.log holds ${n:-0} owner-D70 amendments of revision 4, not one: run '$PROG r4-register' once (§16.4)"; return 1; }
+	utc="$(printf '%s\n' "$a" | sed -n 's/^prereg amendment utc=\([0-9]\{8\}T[0-9]\{6\}Z\) by=owner-D70 commit=\([0-9a-f]\{7,40\}\) reason=.*/\1/p')"
+	commit="$(printf '%s\n' "$a" | sed -n 's/^prereg amendment utc=[0-9TZ]* by=owner-D70 commit=\([0-9a-f]\{7,40\}\) reason=.*/\1/p')"
+	[ -n "$utc" ] && [ -n "$commit" ] || { echo "the owner-D70 amendment line is not in the form 'prereg amendment utc=<utc> by=owner-D70 commit=<sha> reason=...'"; return 1; }
+	sha="$(printf '%s\n' "$b" | sed -n "s/^prereg r4 rule=$R4_RULE_NAME sha256=\\([0-9a-f]\\{64\\}\\)\$/\\1/p")"
+	[ -n "$sha" ] || { echo "the owner-D70 amendment is not followed by 'prereg r4 rule=$R4_RULE_NAME sha256=<sha>'"; return 1; }
+	[ -f "$rule" ] || { echo "no $R4_RULE_NAME in the record directory: the registered rule text is missing"; return 1; }
+	[ "$(j_sha256 "$rule")" = "$sha" ] || { echo "$R4_RULE_NAME is now sha256=$(j_sha256 "$rule"), not the registered $sha: the reading is fixed before any result (§16.6)"; return 1; }
+	ref="${c#prereg r4 ref }"
+	[[ "$c" == "prereg r4 ref "* ]] && [[ "$ref" =~ ^S1R4\ ref_c2_start_min=[1-9][0-9]*\ refs=[^\ ]+\ inputs=[^\ ]+$ ]] \
+		|| { echo "the owner-D70 amendment's third line is not 'prereg r4 ref S1R4 ref_c2_start_min=<n> refs=<steps> inputs=<file>:<sha256>,...'"; return 1; }
+	min="$(tok "$ref" ref_c2_start_min)"
+	inputs="$(tok "$ref" inputs)"
+	IFS=, read -r -a R4_INPUTS <<< "$inputs"
+	for x in "${R4_INPUTS[@]}"; do
+		want="${x##*:}"
+		[[ "$want" =~ ^[0-9a-f]{64}$ ]] || { echo "S1R4 input '$x' carries no sha256"; return 1; }
+		p="$(r4_input_path "${x%:*}")"
+		[ -n "$p" ] || { echo "S1R4 input '$(basename "${x%:*}")' is not in the record directory: the reference's controls are never moved (§16.6)"; return 1; }
+		[ "$(j_sha256 "$p")" = "$want" ] || { echo "S1R4 input '$(basename "$p")' is now sha256=$(j_sha256 "$p"), not the registered $want"; return 1; }
+		k=$(( k + 1 ))
+	done
+	echo "r4_amendment utc=$utc commit=$commit rule_sha256=$sha ref_c2_start_min=$min inputs=$k"
+}
+
+# A board log under RECDIR of B1, B2 or J6x whose params copy is on the new PIN_STARTUP_S1: a
+# revision-4 board step already ran. Prints the first, or nothing.
+r4_board_steps_run() {
+	local f
+	for f in "$RECDIR"/B1/*-board.log "$RECDIR"/B1-a[0-9]*/*-board.log "$RECDIR"/B2/*-board.log "$RECDIR"/B2-a[0-9]*/*-board.log \
+		"$RECDIR"/J6x/*-board.log "$RECDIR"/J6x-a[0-9]*/*-board.log; do
+		[ -f "$f" ] && r4_params_new "${f%-board.log}-params.log" && { printf '%s\n' "$f"; return 0; }
+	done
+	return 0
+}
+
+# The four controls' record directories for r4-ref, in B2 J2 J4 J6c order (§16.6): B2's newest attempt
+# not on the new startup, and J2's, J4's and J6c's newest; each must hold a raw -com3.log copy. Sets
+# R4_CTRL; returns 1 with R4_WHY set otherwise.
+r4_control_dirs() {
+	local f u best="" bu="" s b
+	R4_CTRL=()
+	R4_WHY=""
+	for f in "$RECDIR"/B2/*-board.log "$RECDIR"/B2-a[0-9]*/*-board.log; do
+		[ -f "$f" ] || continue
+		r4_params_new "${f%-board.log}-params.log" && continue
+		compgen -G "$(dirname "$f")/*-com3.log" >/dev/null || continue
+		u="$(basename "$f" | sed -n 's/.*-\([0-9]\{8\}T[0-9]\{6\}Z\)-board\.log$/\1/p')"
+		if [ -n "$u" ] && [[ "$u" > "$bu" ]]; then bu="$u"; best="$f"; fi
+	done
+	[ -n "$best" ] || { R4_WHY="no B2 control on the old startup with a -com3.log copy under the record directory (§16.6)"; return 1; }
+	R4_CTRL+=("$(dirname "$best")")
+	for s in J2 J4 J6c; do
+		b="$(j_newest_board "$s")"
+		{ [ -n "$b" ] && compgen -G "$(dirname "$b")/*-com3.log" >/dev/null; } \
+			|| { R4_WHY="no $s control with a -com3.log copy under the record directory (§16.6)"; return 1; }
+		R4_CTRL+=("$(dirname "$b")")
+	done
+	return 0
+}
+
+# §16.4 (D70): the owner-D70 amendment. Refuses a dirty tree, a missing R4-rule-16.md, a second
+# amendment and any revision-4 board step already run; runs parse-s1.py r4-ref over the four controls;
+# appends the three lines and verifies them. The reference's value stays in J-prereg.log (private).
+cmd_r4_register() {
+	local f rule out rc line ran head
+	need_record_dir
+	f="$RECDIR/J-prereg.log"
+	j_require_clean_tree "r4-register"
+	git_paths_clean "$HERE" "$J6_GENERATOR" \
+		|| die "make-s1-images.sh is dirty: the owner-D70 amendment is written after the pin commit (§16.4 step 4)"
+	j_prereg_has_stage j2 || die "J-prereg.log holds no J2 pre-registration: the owner-D70 amendment is appended to revision 3's ledger (§16.4)"
+	rule="$RECDIR/$R4_RULE_NAME"
+	[ -f "$rule" ] || die "no $R4_RULE_NAME in the record directory: extract §16.6's reading into it before registering (§16.4, D70)"
+	[ -n "$(r4_pin)" ] || die "make-s1-images.sh holds no PIN_STARTUP_S1 sha256"
+	if grep -q '^prereg r4 ' "$f" || grep -qF " by=owner-D70 commit=" "$f"; then
+		die "J-prereg.log already holds an owner-D70 amendment: it is written once and never rewritten (§16.4)"
+	fi
+	ran="$(r4_board_steps_run)"
+	[ -z "$ran" ] || die "a revision-4 board step already ran ($(basename "$(dirname "$ran")")): the rule and the reference are registered before B1 (§16.4, RR3)"
+	r4_control_dirs || die "$R4_WHY"
+	find_python || die "no python 3.8 or newer here: parse-s1.py r4-ref cannot run"
+	out="$(timeout 900 "$PY_BIN" "$PARSER" r4-ref "${R4_CTRL[@]}" 2>&1)"
+	rc=$?
+	line="$(printf '%s\n' "$out" | tr -d '\r' | grep '^S1R4 ' | tail -n 1)"
+	{ [ "$rc" = 0 ] && [[ "$line" =~ ^S1R4\ ref_c2_start_min=[1-9][0-9]*\ refs=[^\ ]+\ inputs=[^\ ]+$ ]]; } \
+		|| die "parse-s1.py r4-ref (rc=$rc) printed no usable S1R4 line; nothing was appended"
+	head="$(git -C "$HERE" rev-parse HEAD 2>/dev/null)"
+	[[ "$head" =~ ^[0-9a-f]{40}$ ]] || die "git cannot name HEAD: the amendment records the commit"
+	{
+		echo "prereg amendment utc=$(utc_now) by=owner-D70 commit=$head reason=$R4_AMEND_REASON"
+		echo "prereg r4 rule=$R4_RULE_NAME sha256=$(j_sha256 "$rule")"
+		echo "prereg r4 ref $line"
+	} >> "$f"
+	check_private "$f"
+	out="$(r4_amendment_check)" || die "the owner-D70 amendment just appended does not verify: $out"
+	note "J-prereg.log: the owner-D70 amendment appended (rule sha256 and the reference over $(printf '%s ' "${R4_CTRL[@]##*/}")); never rewritten (§16.4)"
+	printf '%s\n' "$out" | sed 's/ ref_c2_start_min=[0-9]*/ ref_c2_start_min=registered/'
+}
+
+# The class the newest J6x record's r4-read gave, for B2's --j6x-class: X-f when it is
+# X-f-provisional, otherwise none:<class|unread>.
+r4_j6x_class() {
+	local b c
+	b="$(j_newest_board J6x)"
+	[ -n "$b" ] && c="$(tr -d '\r' < "$(dirname "$b")/r4-read.txt" 2>/dev/null | sed -n 's/^S1PC r4_class=//p' | tail -n 1)"
+	if [ "${c:-}" = X-f-provisional ]; then echo X-f; else echo "none:${c:-unread}"; fi
+}
+
+# §15.7.4, §16.6 precedence 4: one data run per revision-4 rung. Prints '<dir> <class>' for the first
+# record of step $1 (<rec>/$1 or <rec>/$1-aN) whose r4-read.txt holds a real S1PC r4_class, and
+# returns 0; returns 1 when none does. Two kinds of record hold no real class, and neither refuses a
+# rerun: an attempt that never reached a parse writes no r4_class line at all, and a run with no
+# parse-valid c2 check writes r4_class=n/a (§16.6's 'n/a' reading). The owner's 2026-09-16 decision:
+# a rung that produced a reading is never rerun to get a better one; a rung that produced no reading
+# about c2 is a harness-reason case, like §16.8's exit-5 and no-procnto-up cases, and stays
+# rerunnable under the same one-retry-per-rung budget. Every real class still refuses.
+r4_read_classed() {
+	local f c
+	for f in "$RECDIR/$1"/r4-read.txt "$RECDIR/$1"-a[0-9]*/r4-read.txt; do
+		[ -f "$f" ] || continue
+		c="$(tr -d '\r' < "$f" | sed -n 's/^S1PC r4_class=//p' | tail -n 1)"
+		[ -n "$c" ] && [ "$c" != n/a ] && { echo "$(basename "$(dirname "$f")") $c"; return 0; }
+	done
+	return 1
+}
+
+# The n/a exception's limit (§16.8 RC3, F70's 2026-09-16 form in §16.9). A run that reached
+# 'procnto up' and then took an SError, a QNX-side fault or a silent hang writes no canary check, so
+# it too classes n/a - and §16.8 records such a run as it happened ('no retry on the same image'),
+# never as a harness-reason retry. Prints the first record of step $1 whose recorded class is n/a and
+# whose own parse shows the run reached 'procnto up', and returns 0; returns 1 when none does. The
+# parse decides, by its tier_L0 line: 'ok' reached it, and so did a missing list without the
+# procnto_up token; a missing list holding that token, 'n/a', an absent line and an unreadable parse
+# are all 'not shown to have reached it', which keeps the rung rerunnable as before.
+r4_na_post_procnto() {
+	local f d t
+	for f in "$RECDIR/$1"/r4-read.txt "$RECDIR/$1"-a[0-9]*/r4-read.txt; do
+		[ -f "$f" ] || continue
+		[ "$(tr -d '\r' < "$f" | sed -n 's/^S1PC r4_class=//p' | tail -n 1)" = n/a ] || continue
+		d="$(dirname "$f")"
+		t="$(tr -d '\r' < "$d/parse-s1.txt" 2>/dev/null | sed -n 's/^S1PC tier_L0=//p' | tail -n 1)"
+		case "$t" in
+		ok) ;;
+		"missing "*) case ",${t#missing }," in *,procnto_up,*) continue ;; esac ;;
+		*) continue ;;
+		esac
+		echo "$(basename "$d")"
+		return 0
+	done
+	return 1
+}
+
+# How many attempt directories of rung $1 hold anything (<rec>/$1, <rec>/$1-aN). §16.8's one
+# harness-reason retry per rung is a rule for the owner, not a gate, so both revision-4 gates print
+# this and refuse nothing on its number.
+r4_rung_attempts() {
+	local x n=0
+	for x in "$RECDIR/$1" "$RECDIR/$1"-a[0-9]*; do
+		[ -d "$x" ] && [ -n "$(ls -A "$x" 2>/dev/null)" ] && n=$(( n + 1 ))
+	done
+	echo "$n"
+}
+
+# §16.6 at the return (J6x, and the B2 rerun on the new startup): parse-s1.py r4-read on this rung's
+# parse-s1.txt with the registered reference; its S1PC r4_ lines go to <step>/r4-read.txt and the board
+# log. Reads SD, PY_BIN, R4_READ_STEP, R4_REF_MIN and, for B2, R4_J6X_CLASS.
+r4_read_after() {
+	local p="$SD/parse-s1.txt" out rc cls
+	local -a args
+	if [ ! -f "$p" ]; then rec "run r4-read NOT run: no parse-s1.txt (§16.6 reading n/a)"; return 0; fi
+	args=(r4-read --step "$R4_READ_STEP" --parse "$p" --ref-c2-start-min "$R4_REF_MIN")
+	[ "$R4_READ_STEP" = B2 ] && args+=(--j6x-class "${R4_J6X_CLASS:-none}")
+	out="$(timeout 300 "$PY_BIN" "$PARSER" "${args[@]}" 2>&1)"
+	rc=$?
+	printf '%s\n' "$out" | tr -d '\r' | grep -E '^S1PC r4_(reading|sub|class)=' > "$SD/r4-read.txt"
+	check_private "$SD/r4-read.txt"
+	rec_pipe < "$SD/r4-read.txt"
+	cls="$(sed -n 's/^S1PC r4_class=//p' "$SD/r4-read.txt" | tail -n 1)"
+	rec "run r4-read --step $R4_READ_STEP rc=$rc r4_class=${cls:-unread} rev=4 (§16.6 against R4-rule-16.md and the registered reference; record: $(basename "$SD")/r4-read.txt)"
 }
 
 # §15.5 A4 for the J records: rec() redacts every board-log line, and J-set.conf is redacted in
@@ -2389,7 +2666,7 @@ j6_prereg_verify() {
 # rewritten to <ssid> there (a cut hold, an offset, a ladder row, a member value). These are
 # those lines' fixed words; a record's numbers are guarded by refusing an SSID of digits and
 # separators only. Prints the refusal, or nothing when the SSID is usable. $1 the SSID.
-J_READBACK_TEXT="run com3_log= com3_bytes_before_kexec= j3 com3_log= com3_bytes_before_arm= wq_armed armed_epoch= wq_fallback_s= jrun j1 p1 reboot NO RETURN within next=J2b trace=go trace=no-go trace=off RESULT MET wireless-only NOT MET S1PC j_row= set in_this_arm= trace=yes wq.sh wqfb.sh sha256= fallback=wireless set_version= set_rule=max member=wireless member=xhci member=ethernet member=nvme candidates= subsystem=pci subsystem=platform bdf= path=/sys/devices/ driver= module= netdev= root_port= root_port_children= rp_clear=yes mounted_descendant= home_or_kd_under= in_set=yes in_set=no reason=ok note=no-j3-j4 tools systemd_run= setpci=yes none"
+J_READBACK_TEXT="run com3_log= com3_bytes_before_kexec= j3 com3_log= com3_bytes_before_arm= wq_armed armed_epoch= wq_fallback_s= jrun j1 p1 reboot NO RETURN within next=J2b trace=go trace=no-go trace=off RESULT MET wireless-only NOT MET S1PC j_row= set in_this_arm= trace=yes wq.sh wqfb.sh sha256= fallback=wireless set_version= set_rule=max member=wireless member=xhci member=ethernet member=nvme candidates= subsystem=pci subsystem=platform bdf= path=/sys/devices/ driver= module= netdev= root_port= root_port_children= rp_clear=yes mounted_descendant= home_or_kd_under= in_set=yes in_set=no reason=ok note=no-j3-j4 tools systemd_run= setpci=yes none B1 RESULT tokens met S1PC r4_class= X-f-provisional startup_sha256="
 ssid_refusal() {
 	local s="$1"
 	if [ "${#s}" -lt 3 ]; then echo "S1_REDACT_SSID is unset or under 3 bytes (mandatory for J rungs, §15.5 A4)"; return 0; fi
@@ -2449,7 +2726,7 @@ j_capture_life_min() {
 	case "$kind" in
 	j1)                echo 1800 ;;
 	b2repeat)          echo $(( rb + 2180 )) ;;
-	j3|control|remove) echo $(( rb + 2180 + $(wq_fallback_s "$slots") )) ;;
+	j3|control|remove|r4control) echo $(( rb + 2180 + $(wq_fallback_s "$slots") )) ;;
 	*)                 echo $(( rb + 2180 )) ;;
 	esac
 }
@@ -3540,21 +3817,35 @@ j_set_in_members() {
 # §15.5 A1: jrun accepts s1-h1 with control, remove or b2repeat, and s1-j1 (J6, §15.4.8) with
 # control or remove only (J6 is J2's or J4's harness arm; no J2b of the watcher); anything else
 # is refused.
+#
+# Revision 4 (§16.5.1, RB3): r4control is J6x, the watcher confirming run, accepted for s1-j1 only.
+# It is normalised here, once: J_ARM keeps the name (the stage, the step directory, the parser's
+# --arm, the record rows) and J_KIND is the kind every set and sequence site reads, 'control' for
+# r4control. No site compares the name r4control against 'control' (§16.11).
 jrun_args() {
+	J_ARM="$2"
+	J_KIND="$2"
 	case "$1" in
-	s1-h1) ;;
+	s1-h1)
+		[ "$2" != r4control ] || die "jrun r4control runs with s1-j1 only (J6x, §16.5.1): the B2 rerun is 'run s1-h1'" ;;
 	s1-j1)
 		case "$2" in
 		control|remove) ;;
+		r4control) J_KIND=control ;;
 		b2repeat) die "jrun s1-j1 runs the control or remove arm only (§15.4.8): b2repeat is J2b's, with s1-h1" ;;
 		esac ;;
 	*)     die "jrun accepts s1-h1 and s1-j1 only (§15.5 A1); '$1' is refused" ;;
 	esac
 	case "$2" in
-	control|remove|b2repeat) ;;
-	*) die "jrun's arm is control, remove or b2repeat; '$2' is refused" ;;
+	control|remove|b2repeat|r4control) ;;
+	*) die "jrun's arm is control, remove or b2repeat (r4control: s1-j1 only); '$2' is refused" ;;
 	esac
 }
+
+# The J6 kinds' set description and D24 need, as the detached sequence reads them: the kind, never
+# the name (so r4control, normalised to control, gives an empty set and needs no D24). $1 the kind.
+j_in_this_arm() { if [ "$1" = control ]; then echo empty; else echo "$J_SETDESC"; fi; }
+j_kind_needs_d24() { [ "$1" = remove ]; }
 
 # §15.5 A1: STEP and MODE for a J arm, set after resolve_kimg so image_step's B2 for s1-h1 (and
 # J6 for s1-j1) never reaches a record path. $1 control|remove|b2repeat|j3, $2 the image (s1-j1
@@ -3563,6 +3854,7 @@ jrun_step() {
 	case "${2:-}:$1" in
 	s1-j1:control) STEP=J6c ;;
 	s1-j1:remove)  STEP=J6r ;;
+	s1-j1:r4control) STEP=J6x ;;
 	s1-j1:*)       die "no J6 step for '$1'" ;;
 	*:control)     STEP=J2 ;;
 	*:remove)      STEP=J4 ;;
@@ -3653,7 +3945,7 @@ j6_tj1_met() {
 # does not count those retries, so this is printed for the owner, never a refusal.
 j_kexec_runs() {
 	local s f n=0
-	for s in J2 J2b J4 J5 J6c J6r; do
+	for s in J2 J2b J4 J5 J6c J6r J6x; do
 		for f in "$RECDIR/$s"/*-board.log "$RECDIR/$s"-a[0-9]*/*-board.log; do
 			[ -f "$f" ] && grep -aq '^run com3_bytes_before_kexec=' "$f" && n=$(( n + 1 ))
 		done
@@ -3669,9 +3961,16 @@ j_kexec_runs() {
 # arm runs only by the owner's D27 for it: D27_J6C=yes or D27_J6R=yes. Prints the reason and the
 # kexec runs so far (j_kexec_runs). $1 the arm.
 j6_precondition() {
-	local r2 r2b r4 s why="" d34="" tj1
+	local r2 r2b r4 s why="" d34="" att="" tj1 steps="J6c J6r J6x" b1 cite rdone rnapp bc hdr bbf
 	j_waiver D27 || die "J6 needs D27 (build s1-j1 and run J6, §15.6): the owner's 'D27=yes' is not in J-waivers.conf (§15.4.8 preconditions)"
-	for s in J6c J6r; do
+	if [ "$1" = j6r4control ]; then
+		# §16.5.1 (RB1, D70): J6c's F39 stop is waived for the revision-4 watcher run only, by the owner's
+		# D34_J6X pre-registered before the stage; J6x's own rows still stop it
+		j_waiver D34_J6X \
+			|| die "J6x (revision 4's watcher, §16.5.1) needs the owner's 'D34_J6X=yes' in J-waivers.conf: J6c's F39 stop is waived for J6x only, and only by that key (D70)"
+		steps=J6x
+	fi
+	for s in $steps; do
 		r2="$(j_step_row "$s")"
 		if j_row_has "$r2" F39 || j_row_has "$r2" F49; then
 			die "the newest $s parse row '$r2' holds F39 or F49, an immediate stop (§15.6): no further J6 run; the owner decides"
@@ -3696,9 +3995,39 @@ j6_precondition() {
 		elif j_waiver D27_J6R; then why="the owner's D27_J6R (the other arm, §15.4.8)"
 		else die "J6r runs after J4's F35, or by the owner's D27_J6R=yes in J-waivers.conf (§15.4.8); J4's row is ${r4:-none}"
 		fi ;;
+	j6r4control)
+		# §16.5 J6x row, D79: after the B1 rerun on the new startup, before B2; the rebuilt s1-j1 only
+		[ -n "$(r4_pin)" ] || die "make-s1-images.sh holds no PIN_STARTUP_S1 sha256: J6x runs on revision 4's startup (§16.4)"
+		r4_params_new "${S1_KIMG_DIR:-$HERE/../shim/out/s1}/s1-j1.params" \
+			|| die "s1-j1.params' startup_sha256 is not make-s1-images.sh's PIN_STARTUP_S1: J6x runs the rebuilt s1-j1 only (§16.4)"
+		b1="$(j_newest_board B1)"
+		{ [ -n "$b1" ] && r4_params_new "${b1%-board.log}-params.log"; } \
+			|| die "J6x follows the B1 rerun on the new PIN_STARTUP_S1 (§16.5, D79): the newest B1 board log ($([ -n "$b1" ] && basename "$(dirname "$b1")" || echo none)) is not a run on it"
+		grep -aq '^B1 RESULT tokens met' "$b1" \
+			|| die "the newest B1 attempt ($(basename "$(dirname "$b1")")) does not read 'B1 RESULT tokens met': no J6x (§16.5.1)"
+		# §16.5 J6x row: b1-compare reported on that attempt's black box (its record, b1-compare.txt)
+		bc="$(dirname "$b1")/b1-compare.txt"; bbf="${b1%-board.log}-blackbox.log"
+		hdr="$(tr -d '\r' < "$bc" 2>/dev/null | tail -n 2 | sed -n 1p)"
+		{ [ -f "$bbf" ] && [[ "$hdr" == b1-compare\ run=* ]] && [ "$(tok "$hdr" run)" = "$(basename "$bbf")" ] \
+			&& [ "$(printf '%s\n' "$hdr" | sed -n 's/^b1-compare run=[^ ]* sha256=\([0-9a-f]*\) .*/\1/p')" = "$(j_sha256 "$bbf")" ] \
+			&& tr -d '\r' < "$bc" | tail -n 1 | grep -qE '^b1-compare (identical|DIFFER) '; } \
+			|| die "J6x follows a reported b1-compare (§16.5): $(basename "$(dirname "$b1")")/b1-compare.txt holds no comparison of that attempt's black box ('$PROG b1-compare <its blackbox.log> <reference>')"
+		# §16.5 J6x row: D54 still in force
+		[ -z "$(j7a_conf D54_LIFT)$(j7a_conf D54_READING)" ] \
+			|| die "J6x runs while D54 is in force (§16.5): J-waivers.conf holds D54_LIFT or D54_READING; the owner decides"
+		# §15.7.4: one J6x data run; a record already read by r4-read is never rerun blind. A recorded
+		# class of exactly n/a is no reading about c2, so it stays rerunnable (owner, 2026-09-16)
+		rdone="$(r4_read_classed J6x)" \
+			&& die "J6x has already been read ($rdone): attempt ${rdone% *} recorded class ${rdone#* }; a further J6x is §15.7.4's blind rerun (§16.6); the owner decides"
+		# §16.8 RC3: the n/a exception stops at a run that reached 'procnto up' (F70's 2026-09-16 form)
+		rnapp="$(r4_na_post_procnto J6x)" \
+			&& die "attempt $rnapp recorded class n/a, and its parse shows the run reached 'procnto up' (tier_L0): §16.8 records such a run as it happened, F70's 2026-09-16 form is that signature (§16.9, 'no retry on the same image; revise'), and the n/a exception covers only a rung that did not get that far; the owner decides"
+		att="; J6x attempts_before=$(r4_rung_attempts J6x) (§16.8's one harness-reason retry per rung is the owner's rule, not a gate)"
+		cite="$(r4_amendment_check)" || die "J6x needs the owner-D70 amendment before its stage ('$PROG r4-register', §16.4): $cite"
+		why="revision 4's watcher J6x (D70): the B1 rerun $(basename "$(dirname "$b1")") reads 'B1 RESULT tokens met' and b1-compare reported against reference $(printf '%s\n' "$hdr" | sed -n 's/.* reference=\([^ ]*\) .*/\1/p') sha256=${hdr##*sha256=}; J6c's F39 stop waived for J6x only by D34_J6X; D54 in force; the owner-D70 amendment verifies" ;;
 	*) die "no J6 arm '$1'" ;;
 	esac
-	echo "j6 precondition: $why$d34; $tj1; kexec_runs_before=$(j_kexec_runs) (§15.6's budget is four kexec diagnostic runs, harness-reason retries not counted); D27 in J-waivers.conf sha256=$(j_sha256 "$RECDIR/J-waivers.conf")"
+	echo "j6 precondition: $why$d34$att; $tj1; kexec_runs_before=$(j_kexec_runs) (§15.6's budget is four kexec diagnostic runs, harness-reason retries not counted); D27 in J-waivers.conf sha256=$(j_sha256 "$RECDIR/J-waivers.conf")"
 }
 
 # §15.4's ladder, as refusals: control after J1 met; b2repeat after J2's F33 or J1's F42 row;
@@ -3708,7 +4037,7 @@ j_precondition() {
 	local b1 b2 b3 row="" tx=""
 	# §15.13.5 X5, §15.13.15: no J rung while J7a's TX wire may be on J14 pin 3
 	tx="$(j7a_tx_guard)" || die "${tx#j7a_tx REFUSED: }"
-	case "$1" in j6control|j6remove) j6_precondition "$1"; return 0 ;; esac
+	case "$1" in j6control|j6remove|j6r4control) j6_precondition "$1"; return 0 ;; esac
 	b1="$(j_newest_board J1)"
 	b2="$(j_newest_board J2)"
 	b3="$(j_newest_board J3)"
@@ -4415,11 +4744,17 @@ j3_return() {
 j_detached() {
 	# J6c (2026-09-14): an s1-j1 run defers pre_ok to after gate A, and 'set -u' stopped it at
 	# the first read; every local starts empty
-	local arm="$1" img="$2" kw=jrun out="" old="" up="" rc="" wrc="" left="" gate="" worst="" name="" base="" q17="" pre_ok="" home="" homedev="" kddev="" trace=no j1b="" st="" jpre="" cmin=""
+	# $1 the kind (control|remove|j3) every set and sequence site reads; $3 the arm's name (r4control
+	# for J6x, §16.5.1), which only the step, the precondition, the J6 stage, the parser's --arm and
+	# the record rows read; it defaults to the kind
+	local arm="$1" img="$2" aname="${3:-$1}" kw=jrun out="" r4cite="" old="" up="" rc="" wrc="" left="" gate="" worst="" name="" base="" q17="" pre_ok="" home="" homedev="" kddev="" trace=no j1b="" st="" jpre="" cmin=""
 	local wq wqfb line_main line_fb fb_s armed com3_off gok gov0 gov4 rcs oops L v p SD pstore_before
 	local conf="$S1DIR/s1-linux.conf" tree="" pc_conf_sha="" pc_image_sha="" pc_l4t_initrd_sha="" pc_initrd_sha="" conf_gate
 	local pc_image="$S1DIR/out/l4t/Image" pc_l4t_initrd="$S1DIR/out/l4t/initrd" pc_initrd="$S1DIR/out/initrd.cpio.gz"
 	local newrec shim reason lsha bb names n f want got rmfiles com3 pargs verdict slots_state_post j2b
+	# revision 4: only an r4control run sets these below; nothing inherited reaches run_return_records
+	R4_READ_STEP=""
+	R4_REF_MIN=""
 	need_host
 	need_record_dir
 	j_norm_capture
@@ -4428,7 +4763,7 @@ j_detached() {
 	if [ "$arm" != j3 ]; then q17="$(j_q17_check "$img")" || exit 1; fi
 	IMG="$img"
 	resolve_kimg "$IMG"
-	jrun_step "$arm" "$img"
+	jrun_step "$aname" "$img"
 	[ "$arm" = j3 ] && RETURN_BOUND=1200
 	KEXEC_MODE=s
 	UTC="$(utc_now)"
@@ -4436,11 +4771,11 @@ j_detached() {
 	j_require D20 "the J ledger (§15.6 D20)"
 	j_require D22 "the snapshots, the PCI reads and the Bus Master clear (§15.6 D22)"
 	j_require D25 "the detached sequence, exit 5 and the rule-5 exception (§15.6 D25)"
-	[ "$arm" = remove ] && j_require D24 "J4 today (§15.6 D24)"
+	j_kind_needs_d24 "$arm" && j_require D24 "J4 today (§15.6 D24)"
 	j_decision_set >/dev/null
 	j_require_clean_tree "$STEP"
 	if [ "$img" = s1-j1 ]; then
-		jpre="$(j_precondition "j6$arm")" || exit 1
+		jpre="$(j_precondition "j6$aname")" || exit 1
 	else
 		j_precondition "$arm"
 	fi
@@ -4456,7 +4791,7 @@ j_detached() {
 		note "J-prereg.log written as the J2 pre-registration, with the decisions taken now (§15.4.1); it is never rewritten by the harness"
 	fi
 	# an s1-j1 run's check needs J6's stage, which is appended after gate A below
-	if [ "$img" != s1-j1 ]; then pre_ok="$(j_prereg_check "$img" "$arm")" || exit 1; fi
+	if [ "$img" != s1-j1 ]; then pre_ok="$(j_prereg_check "$img" "$aname")" || exit 1; fi
 	# the trace is carried by J2 and J4 together or by neither (§15.4.6)
 	if [ "$arm" != j3 ]; then
 		[ "$(sed -n 's/^prereg trace=//p' "$RECDIR/J-prereg.log" | tail -n 1)" = "$trace" ] \
@@ -4474,14 +4809,14 @@ j_detached() {
 	base="$SD/$name"
 	rec_open "$base-board.log"
 	ON_DIE=run_refused_move
-	rec "$kw arm=$arm step=$STEP image=$IMG utc=$UTC: the detached sequence (§15.4.3), FINAL=$([ "$arm" = j3 ] && echo none || echo kexec)"
+	rec "$kw arm=$aname$([ "$aname" != "$arm" ] && echo " kind=$arm rev=4") step=$STEP image=$IMG utc=$UTC: the detached sequence (§15.4.3), FINAL=$([ "$arm" = j3 ] && echo none || echo kexec)"
 	rec "$kw record_dir=$(basename "$RECDIR")/$(basename "$SD")"
 	j_stamps "$WQ_SLOT_COUNT" | rec_pipe
 	[ -n "$pre_ok" ] && rec "$kw $pre_ok"
 	[ -n "$jpre" ] && rec "$kw $jpre"
 	[ -n "$q17" ] && rec "$kw $q17"
 	rec "$kw decisions D20=$(j_decision D20) D21=$(j_decision D21) D22=$(j_decision D22) D24=$(j_decision D24) D24_SET=$(j_decision D24_SET) D25=$(j_decision D25) D25_F25W_CUT=$(j_decision D25_F25W_CUT)"
-	rec "$kw set in_this_arm=$([ "$arm" = control ] && echo empty || echo "$J_SETDESC") wireless_only_fallback=$J_SET_FB setpci=$WQG_SETPCI trace=$trace slots=$WQ_SLOT_COUNT"
+	rec "$kw set in_this_arm=$(j_in_this_arm "$arm") wireless_only_fallback=$J_SET_FB setpci=$WQG_SETPCI trace=$trace slots=$WQ_SLOT_COUNT"
 	[ "$arm" != control ] && [ "$WQG_W_MOD" != none ] \
 		&& rec "$kw note: slot 3's modprobe -r also unloads the dependencies of the wireless function's module that become unused (modprobe(8)); runtime-only, like the unbinds"
 	if [ "$img" = s1-j1 ]; then
@@ -4497,10 +4832,18 @@ j_detached() {
 	if [ "$img" = s1-j1 ]; then
 		# J6's stage (§15.4.1): appended by the arm's first attempt once gate A has passed and before
 		# anything reads the board, so a refused capture registers nothing; then the full check
-		j6_prereg_append "$arm"
+		j6_prereg_append "$aname"
 		# ON_DIE is cleared in the check's subshell, so only this shell moves a refused attempt's records
-		pre_ok="$(ON_DIE=""; j_prereg_check "$img" "$arm")" || die "J6's pre-registration check refused (above)"
+		pre_ok="$(ON_DIE=""; j_prereg_check "$img" "$aname")" || die "J6's pre-registration check refused (above)"
 		rec "$kw $pre_ok"
+	fi
+	if [ "$aname" = r4control ]; then
+		# revision 4 (§16.4, §16.6): the owner-D70 amendment verified against R4-rule-16.md before the
+		# issue; r4-read --step J6x runs at the return with its registered reference
+		r4cite="$(r4_amendment_check)" || die "J6x: the owner-D70 amendment does not verify: $r4cite"
+		R4_REF_MIN="$(tok "$r4cite" ref_c2_start_min)"
+		R4_READ_STEP=J6x
+		rec "$kw $(printf '%s\n' "$r4cite" | sed 's/ ref_c2_start_min=[0-9]*/ ref_c2_start_min=registered/') rev=4"
 	fi
 	left="$(capture_left_s)"
 	if [ "$arm" != j3 ]; then
@@ -4737,7 +5080,7 @@ j_detached() {
 	esac
 	if [ "$img" = s1-j1 ]; then
 		JDIAG=j1
-		j6_parse_setup "$arm" "$base"
+		j6_parse_setup "$aname" "$base"
 	else
 		JDIAG="$([ "$arm" = remove ] && echo j4 || echo j2)"
 	fi
@@ -4755,7 +5098,7 @@ cmd_jrun() {
 		cmd_run "$1"
 		return $?
 	fi
-	j_detached "$2" "$1"
+	j_detached "$J_KIND" "$1" "$J_ARM"
 }
 
 # §15.4.5: J3 loads s1-h1 as J4 would, so its memory state matches, and never issues it.
@@ -5208,8 +5551,10 @@ run_return_records() {
 		printf '%s\n' "$verdict" | grep -E '^(S1PC |parse-s1: )' | rec_pipe
 		rec "run parser rc=$rc (0 a verdict, 3 refused for missing item-5 stamps; its record: $(basename "$SD")/parse-s1.txt)"
 		[ "${JDIAG:-}" = j1 ] && j6_after_parse "$com3"    # J6: the exports, canwatch.txt, the stop rows
+		[ -n "${R4_READ_STEP:-}" ] && r4_read_after        # revision 4: J6x and the B2 rerun (§16.6)
 	else
 		rec "run parser NOT run: no COM3 copy"
+		[ -n "${R4_READ_STEP:-}" ] && rec "run r4-read NOT run: no COM3 copy (§16.6 reading n/a)"
 	fi
 
 	# only then the privacy scan, whose redaction could change a body's bytes
@@ -5234,7 +5579,7 @@ run_return_records() {
 
 cmd_run() {
 	local out old up rc wrc pstore_before pstore_after newrec shim reason lsha rcs oops gok gov0 gov4 stuck left
-	local bb com3 SD base tree tree_now attempt com3_off names n f want got rmfiles verdict slots_state_post
+	local bb com3 SD base tree tree_now attempt com3_off names n f want got rmfiles verdict slots_state_post r4done r4na
 	local conf="$S1DIR/s1-linux.conf" pargs conf_gate cstate txg=""
 	local pc_image="$S1DIR/out/l4t/Image" pc_l4t_initrd="$S1DIR/out/l4t/initrd" pc_initrd="$S1DIR/out/initrd.cpio.gz"
 	local pc_conf_sha="" pc_image_sha="" pc_l4t_initrd_sha="" pc_initrd_sha=""
@@ -5261,6 +5606,31 @@ cmd_run() {
 		fi
 		JPREREG="$(j_prereg_check)" || exit 1
 		JGATE="$(j_capture_gate b2repeat)" || die "gate A: ${JGATE#*FAIL: }"
+	fi
+	# revision 4 (§16.4, D70, D79): on the new PIN_STARTUP_S1, B1 and B2 run only after the owner-D70
+	# amendment verifies against R4-rule-16.md; the B2 rerun only after J6x read X-f provisional, and
+	# its reading is r4-read --step B2 at the return
+	R4_LINE=""
+	R4_READ_STEP=""
+	if { [ "$IMG" = s1-h1 ] || [ "$IMG" = s1-m1b-p6 ]; } && r4_params_new "$PARAMS"; then
+		R4_LINE="$(r4_amendment_check)" \
+			|| die "revision 4: $IMG on the new PIN_STARTUP_S1 runs only after the owner-D70 amendment ('$PROG r4-register', §16.4): $R4_LINE"
+		R4_REF_MIN="$(tok "$R4_LINE" ref_c2_start_min)"
+		if [ "$IMG" = s1-h1 ] && [ -z "$JRUN" ]; then
+			R4_J6X_CLASS="$(r4_j6x_class)"
+			[ "$R4_J6X_CLASS" = X-f ] \
+				|| die "revision 4: the B2 rerun follows J6x's clean reading, X-f provisional (§16.5, D79); the newest J6x record gives ${R4_J6X_CLASS#none:}"
+			# §15.7.4, §16.6 precedence 4: one B2 data rerun; a read one is never rerun blind. A recorded
+			# class of exactly n/a is no reading about c2, so it stays rerunnable (owner, 2026-09-16)
+			r4done="$(r4_read_classed B2)" \
+				&& die "revision 4: the B2 rerun has already been read ($r4done): attempt ${r4done% *} recorded class ${r4done#* }; a further B2 run is §15.7.4's blind rerun, and its reading cannot undo a withdrawal (§16.6 precedence 4); the owner decides"
+			# §16.8 RC3: the n/a exception stops at a run that reached 'procnto up' (F70's 2026-09-16 form)
+			r4na="$(r4_na_post_procnto B2)" \
+				&& die "revision 4: attempt $r4na recorded class n/a, and its parse shows the run reached 'procnto up' (tier_L0): §16.8 records such a run as it happened, F70's 2026-09-16 form is that signature (§16.9, 'no retry on the same image; revise'), and the n/a exception covers only a rung that did not get that far; the owner decides"
+			note "b2 rerun: attempts_before=$(r4_rung_attempts B2) (§16.8's one harness-reason retry per rung is the owner's rule, not a gate)"
+			R4_READ_STEP=B2
+		fi
+		R4_LINE="$(printf '%s\n' "$R4_LINE" | sed 's/ ref_c2_start_min=[0-9]*/ ref_c2_start_min=registered/')"
 	fi
 	stuck="${S1_STUCK_S:-600}"
 	[[ "$stuck" =~ ^[0-9]+$ ]] || die "S1_STUCK_S must be a whole number of seconds (0 turns the early stop off)"
@@ -5311,6 +5681,7 @@ cmd_run() {
 		rec "run image=$IMG step=$STEP mode=$MODE attempt=$attempt utc=$UTC kexec_syscall=kexec_load (-c -l ... -i, contingency K1)"
 	fi
 	rec "run record_dir=$(basename "$RECDIR")/$(basename "$SD")"
+	[ -n "$R4_LINE" ] && rec "run $R4_LINE rev=4${R4_READ_STEP:+ j6x_class=$R4_J6X_CLASS r4_read=$R4_READ_STEP} (§16.4)"
 	if [ -n "$JRUN" ]; then
 		rec "run jrun=$JRUN step=$STEP: run's B2 flow with no additions (no snapshot, no trace, no detached sequence); parser run --diag $JDIAG (§15.4.4)"
 		j_stamps | rec_pipe
@@ -5501,7 +5872,7 @@ extract_file() {
 		echo "extract size: under 60,000 B (§3.4, R22)"
 	fi
 	echo "extract lines:"
-	grep -aE '^[[:space:]]*(T234-SHIM|T234 (S1|m1b)|Enabling EL2 host|t234: (WDT0|ram w2|gpu range|canary|-b|all [0-9]+ cpus parked|cpu [0-9]+ el2-host|hvtimer cpu)|BWAIT (guard|run |path hit=)|S1 (CONFIG|MEM|GATE|W2|ASINFO|CANARY|CHECK|STATE|DRYRUN|HOLD|ALLOC|HB|GUESTRAM|BOTH|FAIL_STATE|FAIL|QVM|BEGIN|END)|tcu-cat:|rc=|samples=)' "$t" \
+	grep -aE '^[[:space:]]*(T234-SHIM|T234 (S1|m1b)|Enabling EL2 host|t234: (WDT0|dcache|ram w2|gpu range|canary|-b|all [0-9]+ cpus parked|cpu [0-9]+ el2-host|hvtimer cpu)|BWAIT (guard|run |path hit=)|S1 (CONFIG|MEM|GATE|W2|ASINFO|CANARY|CHECK|STATE|DRYRUN|HOLD|ALLOC|HB|GUESTRAM|BOTH|FAIL_STATE|FAIL|QVM|BEGIN|END)|tcu-cat:|rc=|samples=)' "$t" \
 		| sed 's/^[[:space:]]*//' | mask_figures | sed 's/^/  /'
 	echo "extract stamps (the first line of each label):"
 	awk '$1 == "STAMP" && !($2 in seen) { seen[$2] = 1; print }' "$t" | mask_figures | sed 's/^/  /'
@@ -5550,7 +5921,7 @@ b1_tokens() {
 		'T234 M1b -P6: resetting so the log can be recovered'; do
 		if grep -aqF -- "$tok" "$t"; then echo "B1 com3 present '$tok': ok"; else echo "B1 com3 present '$tok': MISSING"; fails=$(( fails + 1 )); fi
 	done
-	for tok in 't234: ram w2' 't234: gpu range' 't234: canary' 'BAD-LANDING' 'EXC ' 'EL!=2'; do
+	for tok in 't234: dcache' 't234: ram w2' 't234: gpu range' 't234: canary' 'BAD-LANDING' 'EXC ' 'EL!=2'; do
 		if grep -aqF -- "$tok" "$t"; then echo "B1 com3 absent '$tok': PRESENT"; fails=$(( fails + 1 )); else echo "B1 com3 absent '$tok': ok"; fi
 	done
 	ri="$(grep -anF 'T234 M1b -P6: resetting so the log can be recovered' "$t" | head -n 1 | cut -d: -f1)"
@@ -5564,7 +5935,7 @@ b1_tokens() {
 		for tok in 'T234-SHIM EL=2' 'T234 M1b -P6: procnto up'; do
 			if grep -aqF -- "$tok" "$tb"; then echo "B1 blackbox present '$tok': ok"; else echo "B1 blackbox present '$tok': MISSING"; fails=$(( fails + 1 )); fi
 		done
-		for tok in 't234: ram w2' 't234: gpu range' 't234: canary' 'BAD-LANDING' 'EXC ' 'EL!=2'; do
+		for tok in 't234: dcache' 't234: ram w2' 't234: gpu range' 't234: canary' 'BAD-LANDING' 'EXC ' 'EL!=2'; do
 			if grep -aqF -- "$tok" "$tb"; then echo "B1 blackbox absent '$tok': PRESENT"; fails=$(( fails + 1 )); fi
 		done
 		rm -f "$tb"
@@ -5588,19 +5959,28 @@ b1_normalise() {
 }
 
 cmd_b1_compare() {
-	local a b
+	local a b hdr res dn
 	a="$(mktemp)"
 	b="$(mktemp)"
 	b1_normalise "$1" > "$a"
 	b1_normalise "$2" > "$b"
-	echo "b1-compare run=$(basename "$1") sha256=$(sha256sum "$1" | cut -d' ' -f1) reference=$(basename "$2") sha256=$(sha256sum "$2" | cut -d' ' -f1)"
+	hdr="b1-compare run=$(basename "$1") sha256=$(sha256sum "$1" | cut -d' ' -f1) reference=$(basename "$2") sha256=$(sha256sum "$2" | cut -d' ' -f1)"
+	echo "$hdr"
 	if cmp -s "$a" "$b"; then
-		echo "b1-compare identical after masking 0x values and hex words of 8 or more digits"
+		res="b1-compare identical after masking 0x values and hex words of 8 or more digits"
+		echo "$res"
 	else
-		echo "b1-compare DIFFER after masking (first 60 diff lines; the run note judges whether only startup-size-dependent addresses differ):"
+		res="b1-compare DIFFER after masking (first 60 diff lines; the run note judges whether only startup-size-dependent addresses differ):"
+		echo "$res"
 		diff "$b" "$a" | head -n 60 | sed 's/^/  /'
 	fi
 	rm -f "$a" "$b"
+	# §16.5 J6x row (RB7): a black box in a B1 record directory keeps the report beside it, appended,
+	# so J6x's precondition can read that b1-compare reported and against which reference
+	dn="$(basename "$(dirname "$1")")"
+	if [[ "$dn" =~ ^B1(-a[0-9]+)?$ ]]; then
+		printf '%s\n%s\n' "$hdr" "$res" >> "$(dirname "$1")/b1-compare.txt"
+	fi
 }
 
 # ---------------------------------------------------------------- power-cut advice (§2 rule 6a)
@@ -6351,7 +6731,16 @@ j7a_f62_seen() {
 
 # §15.13.7 j7a_precondition, as refusals, from J-waivers.conf and the J rows. Prints one line.
 j7a_precondition() {
-	local r4 r6 q20 d47 c
+	local r4 r6 q20 d47 c d54 lift reading
+	# §16.7 (RB10), D54, D71: J7a's board steps are deferred while D54 is in force. The lift is two-part,
+	# the owner's D54_LIFT and D54_READING; a D54 key other than yes is not a lift form
+	d54="$(j7a_conf D54)"; lift="$(j7a_conf D54_LIFT)"; reading="$(j7a_conf D54_READING)"
+	case "$d54" in
+	yes|"") ;;
+	*) die "J-waivers.conf holds D54=$d54: D54 is lifted only by the owner's two parts, D54_LIFT and D54_READING, never by the D54 key (§16.7)" ;;
+	esac
+	{ [[ "$lift" =~ ^owner-[A-Za-z0-9._-]{1,40}$ ]] && [[ "$reading" =~ ^(restored|amended-[0-9a-f]{7,64})$ ]]; } \
+		|| die "D54 is in force (J7a's board steps deferred, §16.7): J7a needs both D54_LIFT=owner-<decision> and D54_READING=restored|amended-<sha> in J-waivers.conf; they read '${lift:-unset}' and '${reading:-unset}'"
 	j_waiver D30 || die "J7a needs D30 (the owner's UEFI arm): 'D30=yes' is not in J-waivers.conf (§15.13.7)"
 	j_waiver D34_J7A || die "J2's and J6c's rows hold F39: J7a needs the owner's 'D34_J7A=yes' in J-waivers.conf (D39, §15.13.7)"
 	j_waiver D35 || die "J7a needs D35 (§15.13 accepted): 'D35=yes' is not in J-waivers.conf"
@@ -6374,7 +6763,7 @@ j7a_precondition() {
 	c="$(j7a_stops_wide)"
 	[ -z "$c" ] || die "$c"
 	c="$(j7a_counted_runs)"
-	echo "j7a precondition: D30 D34_J7A D35 D38 D45=esp D46 taken; J4=F36; J6c live-writer; q20_branch=$q20; no recorded J7a stop; kexec_runs_before=$(j_kexec_runs) j7a_counted_before=$c (cap $J7A_CAP, outside §15.6's kexec count); J-waivers.conf sha256=$(j_sha256 "$RECDIR/J-waivers.conf")"
+	echo "j7a precondition: D54 lifted by $lift reading=$reading; D30 D34_J7A D35 D38 D45=esp D46 taken; J4=F36; J6c live-writer; q20_branch=$q20; no recorded J7a stop; kexec_runs_before=$(j_kexec_runs) j7a_counted_before=$c (cap $J7A_CAP, outside §15.6's kexec count); J-waivers.conf sha256=$(j_sha256 "$RECDIR/J-waivers.conf")"
 }
 
 # §15.13.10.4 precedence 1 and §15.13.11: the recorded stops that end J7a, from any J7a record: an F57
@@ -7768,6 +8157,17 @@ cmd_redact_selftest() {
 	printf '\033[2J\033[1;1HShell> map -r\r\nfs5: fake mapping\r\n' > "$d/csiscreen"
 	check "a screen with no identifier stays byte-identical" "$(redact < "$d/csiscreen" | od -An -tx1 | tr -d ' \n')" "$(od -An -tx1 < "$d/csiscreen" | tr -d ' \n')"
 
+	# revision 4 (§16.3.4, §16.4, §16.6): the new record lines carry no identifier, so the redaction
+	# leaves them byte-identical (the owner-D70 amendment itself is written unredacted, as J-prereg.log is)
+	printf '%s\n' 't234: dcache w2 base=0x100000000 size=0x8a000000 cleaned' 't234: dcache c1 base=0xbd000000 size=0x1000000 cleaned' \
+		"prereg amendment utc=20260915T000000Z by=owner-D70 commit=$(printf 'a%.0s' $(seq 40)) reason=revision 4 (§16.4) rule and reference" \
+		"prereg r4 rule=R4-rule-16.md sha256=$(printf 'b%.0s' $(seq 64))" \
+		"prereg r4 ref S1R4 ref_c2_start_min=7 refs=B2,J2,J4,J6c inputs=s1-h1-20260914T010000Z-com3.log:$(printf 'c%.0s' $(seq 64))" \
+		'S1PC r4_reading=clean' 'S1PC r4_sub=end=ok,c3=clean,c1=clean' 'S1PC r4_class=X-f-provisional' \
+		'jrun arm=r4control kind=control rev=4 step=J6x image=s1-j1 utc=20260915T000000Z' > "$d/r4lines"
+	redact < "$d/r4lines" > "$d/r4out"
+	check "revision 4's dcache, amendment, r4-read and J6x lines are unchanged by the redaction" "$(cmp -s "$d/r4lines" "$d/r4out" && echo same || diff "$d/r4lines" "$d/r4out" | head -n 2 | tr '\n' ' ')" same
+
 	# §15.13.7 R91: a count-only replay over M5's private P2, P3 and R1 COM3 captures, in place, when
 	# S1_M5_REPLAY_DIR names their directory. Counts only; the captures are never copied or
 	# committed, and the redacted stream goes only to this self-test's own temp directory.
@@ -7965,6 +8365,12 @@ cmd_harness_selftest() {
 	check "extract: ms masked" "$(has "$out" 'ms=4000')" no
 	check "extract: stamp counts masked" "$(has "$out" 'cycles=5')" no
 	check "extract: verify=bad flagged" "$(has "$out" "'verify=bad' x1")" yes
+	# §16.3.4 (RB5): revision 4's two -b-only lines are record lines of the extract, and no negative token
+	printf 't234: dcache w2 base=0x100000000 size=0x8a000000 cleaned\nt234: dcache c1 base=0xbd000000 size=0x1000000 cleaned\n' > "$d/bbdc.log"
+	out="$(extract_file "$d/bbdc.log")"
+	check "extract: both dcache lines are kept, byte-exact (§16.3.4)" \
+		"$(has "$out" '  t234: dcache w2 base=0x100000000 size=0x8a000000 cleaned')/$(has "$out" '  t234: dcache c1 base=0xbd000000 size=0x1000000 cleaned')" "yes/yes"
+	check "extract: the dcache lines raise no negative token" "$(printf '%s\n' "$out" | sed -n '/^extract negative tokens:$/,/^extract negative tokens end$/p' | wc -l)" 2
 
 	# B1 tokens
 	printf 'T234-SHIM EL=2 PC=0000000080080000\nt234: WDT0 CR=0x0\nT234 M1b -P6: procnto up\nT234 M1b -P6: resetting so the log can be recovered\nESC to enter Setup.\n' > "$d/b1c.log"
@@ -7973,6 +8379,15 @@ cmd_harness_selftest() {
 	printf 't234: ram w2 base=0x100000000 size=0x8a000000\n' >> "$d/b1b.log"
 	check "B1: a window-2 line fails" "$(has "$(b1_tokens "$d/b1c.log" "$d/b1b.log" MAINSWRST same)" 'NOT MET')" yes
 	check "B1: another reset reason fails" "$(has "$(b1_tokens "$d/b1c.log" "" BCCPLEXWDT same)" 'NOT MET')" yes
+	# §16.3.4, F72: a dcache line in the option-off path fails B1 by token, on COM3 and in the black box
+	printf 'T234-SHIM EL=2 PC=0000000080080000\nT234 M1b -P6: procnto up\n' > "$d/b1b2.log"
+	check "B1: the clean black box with the clean COM3 still meets" "$(has "$(b1_tokens "$d/b1c.log" "$d/b1b2.log" MAINSWRST same)" 'B1 RESULT tokens met')" yes
+	{ cat "$d/b1c.log"; printf 't234: dcache w2 base=0x100000000 size=0x8a000000 cleaned\n'; } > "$d/b1cd.log"
+	out="$(b1_tokens "$d/b1cd.log" "$d/b1b2.log" MAINSWRST same)"
+	check "B1: a dcache line on COM3 fails as a token (F72)" "$(has "$out" "B1 com3 absent 't234: dcache': PRESENT")/$(has "$out" 'NOT MET (1)')" "yes/yes"
+	printf 't234: dcache c1 base=0xbd000000 size=0x1000000 cleaned\n' >> "$d/b1b2.log"
+	out="$(b1_tokens "$d/b1c.log" "$d/b1b2.log" MAINSWRST same)"
+	check "B1: a dcache line in the black box fails as a token (F72)" "$(has "$out" "B1 blackbox absent 't234: dcache': PRESENT")/$(has "$out" 'NOT MET (1)')" "yes/yes"
 
 	# b1-compare masks addresses
 	printf 'startup at 0x80082000 size 00a1b2c3d4\nprocnto up\n' > "$d/r1.log"
@@ -8786,7 +9201,7 @@ cmd_harness_selftest() {
 	com3_marker_seen "$jr2/stray-marker.log" 0 "s1wq: begin arm=control final=kexec result=0"
 	check "com3_marker_seen: a marker after stray bytes is seen" "$?" 0
 	check "j_wq_lines: a marker quoted mid-line is still not a marker" "$(printf 'systemd[1]: echo s1wq: begin arm=x\n' | j_wq_lines | wc -l)" 0
-	check "jrun's locals start empty, so an s1-j1 run survives set -u before its deferred prereg (J6c)" "$(grep -c '^[[:space:]]*local arm="\$1" img="\$2" kw=jrun .* pre_ok="" ' "$HERE/$PROG")" 1
+	check "jrun's locals start empty, so an s1-j1 run survives set -u before its deferred prereg (J6c)" "$(grep -c '^[[:space:]]*local arm="\$1" img="\$2" aname="\${3:-\$1}" kw=jrun .* pre_ok="" ' "$HERE/$PROG")" 1
 	check "j3's return read passes XHCI_PATH to b_pci_state (the F41-xhci gate defect)" "$(grep -c '^[[:space:]]*out="$(board 120 b_identity b_pstore b_slots "XHCI_PATH=' "$HERE/$PROG")" 1
 	check "precondition: J2b after F32 is refused" "$(wqpre b2repeat)" 1
 	check "precondition: J4 without J3 met is refused" "$(wqpre remove)" 1
@@ -9035,7 +9450,7 @@ cmd_harness_selftest() {
 	check "j6 wq: WQ_FUNCS at a commit is a sha256, or '-' when git cannot show it" \
 		"$(j6_wq_sha_at HEAD | grep -cE '^([0-9a-f]{64}|-)$')/$(j6_wq_sha_at '')" "1/-"
 	check "jrun: J6's stage is appended after gate A and before the board is first read" \
-		"$(awk '/gate="\$\(j_capture_gate "\$arm"/ && !g { g = NR } /^\t\tj6_prereg_append "\$arm"$/ && !a { a = NR } a && !b && /out="\$\(board 300 b_sha b_pstore/ { b = NR } END { print (g && a > g && b > a) ? "ordered" : "not" }' "$HERE/$PROG")" ordered
+		"$(awk '/gate="\$\(j_capture_gate "\$arm"/ && !g { g = NR } /^\t\tj6_prereg_append "\$aname"$/ && !a { a = NR } a && !b && /out="\$\(board 300 b_sha b_pstore/ { b = NR } END { print (g && a > g && b > a) ? "ordered" : "not" }' "$HERE/$PROG")" ordered
 	cp "$d/prereg6.bak" "$jr6/J-prereg.log"
 
 	# capture life and the start margin for J6's longer host run: s1-j1.params' return bound
@@ -9116,6 +9531,337 @@ cmd_harness_selftest() {
 	done
 	check "run_return_records passes J6's arguments to the parser only for --diag j1" \
 		"$(grep -cE '^[[:space:]]*\[ "\$\{JDIAG:-\}" = j1 \] && pargs\+=\("\$\{J6_PARGS\[@\]\}"\)' "$HERE/$PROG")/$(grep -cE '^[[:space:]]*\[ "\$\{JDIAG:-\}" = j1 \] && j6_after_parse "\$com3"' "$HERE/$PROG")" "1/1"
+
+	# ---- revision 4 (§16.4, §16.5.1, §16.6; D70), all synthetic: its own record directory with a copy of
+	# the J2 pre-registration above, four synthetic controls, a synthetic generator whose PIN_STARTUP_S1
+	# stands for the new pin, s1-j1 params on it, and a stub for python and the parser. The tree is
+	# stubbed clean in each case.
+	local jr7 jr7a kd7 gen7 pin7 zero7 s7 u7 r4ok r4in2 r4in1 pre7 jr9 jr9a kd8 kd8o
+	jr7="$d/jrec7"; mkdir -p "$jr7"; jr7a="$(cd "$jr7" && pwd)"
+	cp "$jr2/J-prereg.log" "$jr2/J-set.conf" "$jr2/J-decisions.conf" "$jr7/"
+	kd7="$d/kimg7"; mkdir -p "$kd7"
+	pin7="$(printf 'synthetic startup r4' | sha256sum | cut -d' ' -f1)"
+	zero7="$(printf '%064d' 0)"
+	gen7="$d/gen7.sh"
+	printf 'PIN_MEMCANARY_W=%s\nJ1_HOLD_MIB=%s\nJ1_HOLD_MARGIN_MIB=256\nPIN_STARTUP_S1=%s\n' "$pin6" "$h6" "$pin7" > "$gen7"
+	cp "$kd6/s1-j1.kimg" "$kd7/"
+	{ grep -v '^startup_sha256=' "$kd6/s1-j1.params"; printf 'startup_sha256=%s\n' "$pin7"; } > "$kd7/s1-j1.params"
+	j7s() { ( RECDIR="$jr7a"; S1_KIMG_DIR="$kd7"; J6_GENERATOR="$gen7"; J6_TCG_RECORDS="$d/tcg6"; j_tree_clean() { return 0; }; git_paths_clean() { return 0; }; j6_wq_sha_at() { j6_wq_sha; }; J_DEC_LOADED=0; j_read_decisions; "$@" ) 2>&1; }
+	printf '%s\n' '#!/bin/bash' 'printf "%s\n" "$@" > "$FAKEPY_ARGS"' \
+		'case "$2" in r4-ref) [ -z "${FAKE_S1R4:-}" ] || printf "parse-s1: noise\n%s\n" "$FAKE_S1R4" ;; r4-read) printf "%b\n" "${FAKE_R4READ:-}" ;; esac' \
+		'exit "${FAKE_RC:-0}"' > "$d/fakepy7.sh"
+	chmod +x "$d/fakepy7.sh"
+
+	check "r4: the new pin is read from the generator, never written here" "$( J6_GENERATOR="$gen7"; r4_pin )/$( J6_GENERATOR="$gen6"; r4_pin )" "$pin7/"
+	check "r4: this file holds no PIN_STARTUP_S1 value" "$(grep -cE '^[[:space:]]*PIN_STARTUP_S1=' "$HERE/$PROG")" 0
+
+	# the r4control arm as one normalisation (§16.5.1, RB3)
+	out="$( jrun_args s1-j1 r4control; printf '%s/%s' "$J_ARM" "$J_KIND" )"
+	check "r4control: jrun_args normalises it once: name r4control, kind control" "$out" "r4control/control"
+	out="$( jrun_args s1-j1 remove; printf '%s/%s' "$J_ARM" "$J_KIND" )"
+	check "r4control: another arm keeps its own kind" "$out" "remove/remove"
+	out="$(bash "$0" jrun s1-h1 r4control 2>&1)"; rcx=$?
+	check "r4control: jrun s1-h1 r4control is refused (s1-j1 only)" "$rcx/$(has "$out" 'runs with s1-j1 only')" "1/yes"
+	out="$(ORIN_HOST= bash "$0" jrun s1-j1 r4control 2>&1)"; rcx=$?
+	check "r4control: jrun s1-j1 r4control passes the argument check (stops at ORIN_HOST here)" "$rcx/$(has "$out" 'ORIN_HOST is not set')/$(has "$out" 'is refused')" "1/yes/no"
+	out="$( RECDIR="$jr7a"; S1_KIMG_DIR="$kd7"; resolve_kimg s1-j1; printf '%s>' "$STEP"; jrun_step r4control s1-j1; j_step_dir "$STEP"; printf '%s/%s/%s' "$STEP" "$MODE" "$(basename "$JSD")" )"
+	check "r4control: resolve_kimg gives J6, the step set after it is J6x, in its own directory" "$out" "J6>J6x/host/J6x"
+	check "r4control: no B* directory was created" "$(ls -1 "$jr7" | grep -c '^B')" 0
+	rmdir "$jr7/J6x"
+	out="$(j7s eval 'jrun_args s1-j1 r4control; j_set_select "$J_KIND"; printf "%s/%s/%s" "$(j_in_this_arm "$J_KIND")" "$(j_kind_needs_d24 "$J_KIND" && echo d24 || echo no-d24)" "$J_SETDESC"')"
+	check "r4control: its kind yields in_this_arm=empty, an empty set, and needs no D24" "$out" "empty/no-d24/empty"
+	out="$(j7s eval 'jrun_args s1-j1 remove; j_set_select "$J_KIND"; printf "%s/%s" "$(j_kind_needs_d24 "$J_KIND" && echo d24 || echo no-d24)" "$(j_in_this_arm "$J_KIND")"')"
+	check "r4control: by contrast the remove kind needs D24 and names a set" "$(printf '%s\n' "$out" | cut -d/ -f1)/$([ "$(printf '%s\n' "$out" | cut -d/ -f2)" != empty ] && echo named)" "d24/named"
+	check "r4control: no site compares a variable with control on a line naming r4control (§16.11)" \
+		"$(grep -cE '"\$[A-Za-z_]+" = control .*r4control|r4control.*"\$[A-Za-z_]+" = control' "$HERE/$PROG")" 0
+	check "r4control: j_detached gives the name only to the step, the precondition, the J6 stage, both checks and --arm" \
+		"$(awk '/^j_detached\(\) \{/,/^}/' "$HERE/$PROG" | grep -cE 'jrun_step "\$aname"|j_precondition "j6\$aname"|j6_prereg_append "\$aname"|j_prereg_check "\$img" "\$aname"|j6_parse_setup "\$aname"')/$(awk '/^j_detached\(\) \{/,/^}/' "$HERE/$PROG" | grep -cE 'j_set_select "\$arm"|j_capture_gate "\$arm"|j_gate_b "\$arm"|WQG_ARM="\$arm"|j_worst_case "\$arm"|j_in_this_arm "\$arm"|j_kind_needs_d24 "\$arm"')" "6/7"
+	check "r4control: gate A's capture life is the control kind's" "$(j_capture_life_min r4control 2100 9)" "$(j_capture_life_min control 2100 9)"
+
+	# the four controls (§16.6): B2 on the old startup, J2, J4 and J6c, each with a raw COM3 copy
+	u7=1
+	for s7 in B2 J2 J4 J6c; do
+		mkdir -p "$jr7/$s7"
+		base7="$jr7/$s7/$([ "$s7" = J6c ] && echo s1-j1 || echo s1-h1)-20260914T0${u7}0000Z"
+		printf 'run image=synthetic\n' > "$base7-board.log"
+		printf 'synthetic %s com3\r\n' "$s7" > "$base7-com3.log"
+		printf 'startup_sha256=%s\n' "$zero7" > "$base7-params.log"
+		u7=$(( u7 + 1 ))
+	done
+	printf 'S1PC j_row=F39\n' > "$jr7/J2/parse-s1.txt"; printf 'S1PC j_row=F36\n' > "$jr7/J4/parse-s1.txt"; printf 'S1PC j_row=F39,live-writer,writer-static\n' > "$jr7/J6c/parse-s1.txt"
+	mkdir -p "$jr7/B2-a2"; printf 'run image=s1-h1\n' > "$jr7/B2-a2/s1-h1-20260914T090000Z-board.log"
+	r4in1="$(basename "$jr7/J2/"*-com3.log):$(j_sha256 "$jr7/J2/"*-com3.log)"
+	r4in2="$(cd "$jr7/B2" && pwd)/$(basename "$jr7/B2/"*-com3.log):$(j_sha256 "$jr7/B2/"*-com3.log)"
+	r4ok="S1R4 ref_c2_start_min=7 refs=B2,J2,J4,J6c inputs=$r4in1,$r4in2"
+	r4reg() { ( need_record_dir() { RECDIR="$jr7a"; }; find_python() { PY_BIN="$d/fakepy7.sh"; }; RECDIR="$jr7a"; S1_KIMG_DIR="$kd7"; J6_GENERATOR="$gen7"; REC=""; ON_DIE=""; j_tree_clean() { return "${R4_DIRTY:-0}"; }; git_paths_clean() { return 0; }; export FAKEPY_ARGS="$d/fakepy7-ref.args" FAKE_S1R4="${FAKE_S1R4:-}" FAKE_RC="${FAKE_RC:-0}"; cmd_r4_register ) 2>&1; }
+
+	# r4-register (§16.4): its refusals, then the amendment
+	cp "$jr7/J-prereg.log" "$d/prereg7-pre.log"
+	check "r4-register: a missing R4-rule-16.md is refused" "$(has "$(FAKE_S1R4="$r4ok" r4reg)" 'no R4-rule-16.md in the record directory')" yes
+	printf 'synthetic revision-4 rule\n' > "$jr7/R4-rule-16.md"
+	check "r4-register: a dirty tree is refused" "$(has "$(R4_DIRTY=1 FAKE_S1R4="$r4ok" r4reg)" 'working tree is dirty')" yes
+	mkdir -p "$jr7/B1-a2"; printf 'x\n' > "$jr7/B1-a2/s1-m1b-p6-20260915T010000Z-board.log"; printf 'startup_sha256=%s\n' "$pin7" > "$jr7/B1-a2/s1-m1b-p6-20260915T010000Z-params.log"
+	check "r4-register: refused once a board step on the new startup ran (before B1, RR3)" "$(has "$(FAKE_S1R4="$r4ok" r4reg)" 'a revision-4 board step already ran (B1-a2)')" yes
+	rm -rf "$jr7/B1-a2"
+	check "r4-register: a parser without an S1R4 line is refused, nothing appended" \
+		"$(has "$(FAKE_S1R4= r4reg)" 'no usable S1R4 line')/$(cmp -s "$jr7/J-prereg.log" "$d/prereg7-pre.log" && echo unchanged)" "yes/unchanged"
+	check "r4-register: a reference of 0 is refused" "$(has "$(FAKE_S1R4="${r4ok/min=7/min=0}" r4reg)" 'no usable S1R4 line')" yes
+	check "r4-register: a parser that fails is refused" "$(has "$(FAKE_RC=1 FAKE_S1R4="$r4ok" r4reg)" 'r4-ref (rc=1)')" yes
+	out="$(FAKE_S1R4="$r4ok" r4reg)"
+	check "r4-register: the amendment verifies, and prints no reference value" \
+		"$(has "$out" 'r4_amendment utc=')/$(has "$out" 'ref_c2_start_min=registered inputs=2')/$(has "$out" 'ref_c2_start_min=7')" "yes/yes/no"
+	check "r4-register: r4-ref ran on the four controls in order (B2's newest attempt with a COM3 copy)" \
+		"$(tr '\n' '|' < "$d/fakepy7-ref.args")" "$PARSER|r4-ref|$jr7a/B2|$jr7a/J2|$jr7a/J4|$jr7a/J6c|"
+	check "r4-register: three lines appended after the J2 pre-registration, in the contract's form" \
+		"$(head -n "$(wc -l < "$d/prereg7-pre.log")" "$jr7/J-prereg.log" | cmp -s - "$d/prereg7-pre.log" && echo kept)/$(tail -n 3 "$jr7/J-prereg.log" | sed -n 1p | grep -cE '^prereg amendment utc=[0-9]{8}T[0-9]{6}Z by=owner-D70 commit=[0-9a-f]{40} reason=revision 4 \(§16\.4\) rule and reference$')/$(tail -n 2 "$jr7/J-prereg.log" | sed -n 1p)/$(tail -n 1 "$jr7/J-prereg.log")" \
+		"kept/1/prereg r4 rule=R4-rule-16.md sha256=$(j_sha256 "$jr7/R4-rule-16.md")/prereg r4 ref $r4ok"
+	check "r4-register: no rule_text line is added (no later J check is re-pointed, RB2)" \
+		"$(grep -c '^prereg rule_text=' "$jr7/J-prereg.log")" "$(grep -c '^prereg rule_text=' "$d/prereg7-pre.log")"
+	check "r4-register: a second registration is refused (written once)" "$(has "$(FAKE_S1R4="$r4ok" r4reg)" 'written once and never rewritten')" yes
+	check "r4-register: the s1-h1 pre-registration check still passes after the amendment" "$(has "$(j7s j_prereg_check)" 'prereg ok sha256=')" yes
+	# §16.4: the owner-D70 amendment registers the rule and the reference, and re-points no later J check
+	mkdir -p "$d/regc"
+	{ printf 'prereg head=%s\n' "$(printf 'a%.0s' $(seq 40))"
+	  printf 'prereg amendment utc=20260915T000000Z by=owner-D70 commit=%s reason=%s\n' "$(printf 'b%.0s' $(seq 40))" "$R4_AMEND_REASON"; } > "$d/regc/J-prereg.log"
+	check "j6_registered_commit skips revision 4's owner-D70 amendment" \
+		"$( RECDIR="$d/regc"; j6_registered_commit )" "$(printf 'a%.0s' $(seq 40))"
+	printf 'prereg amendment utc=20260915T010000Z by=owner-D27 commit=%s reason=a J6 stage\n' "$(printf 'c%.0s' $(seq 40))" >> "$d/regc/J-prereg.log"
+	check "j6_registered_commit still takes another amendment's commit" \
+		"$( RECDIR="$d/regc"; j6_registered_commit )" "$(printf 'c%.0s' $(seq 40))"
+	cp "$jr7/J-prereg.log" "$d/prereg7-r4.log"
+	printf 'synthetic revision-4 rule, edited\n' > "$jr7/R4-rule-16.md"
+	check "r4 amendment: a rule text changed after registration does not verify" "$(has "$(j7s r4_amendment_check)" 'not the registered')" yes
+	printf 'synthetic revision-4 rule\n' > "$jr7/R4-rule-16.md"
+	printf 'tampered\r\n' >> "$jr7/J2/"*-com3.log
+	check "r4 amendment: a control's COM3 copy changed after registration does not verify" "$(has "$(j7s r4_amendment_check)" 'not the registered')" yes
+	printf 'synthetic J2 com3\r\n' > "$jr7/J2/"*-com3.log
+	tail -n 3 "$d/prereg7-r4.log" >> "$jr7/J-prereg.log"
+	check "r4 amendment: two owner-D70 amendments do not verify" "$(has "$(j7s r4_amendment_check)" 'holds 2 owner-D70 amendments')" yes
+	cp "$d/prereg7-r4.log" "$jr7/J-prereg.log"
+	check "r4 amendment: the restored amendment verifies" "$(has "$(j7s r4_amendment_check)" 'ref_c2_start_min=7 inputs=2')" yes
+
+	# J6x's precondition (§16.5.1, RB1): D34_J6X, D27, J2's D34_J6, T-J1, the B1 rerun on the new startup
+	j7pre() { ( RECDIR="$jr7a"; S1_KIMG_DIR="$kd7"; J6_GENERATOR="$gen7"; J6_TCG_RECORDS="$d/tcg6"; j_precondition "$1" ) 2>&1; }
+	printf 'D27=yes\nD34_J6=yes\n' > "$jr7/J-waivers.conf"
+	check "j6x precondition: without D34_J6X it is refused, naming the key" "$(has "$(j7pre j6r4control)" "'D34_J6X=yes'")" yes
+	printf 'D27=yes\nD34_J6=yes\nD34_J6X=yes\n' > "$jr7/J-waivers.conf"
+	check "j6x precondition: under D34_J6X, J6c's F39 is not the stop; no B1 rerun is" "$(has "$(j7pre j6r4control)" 'follows the B1 rerun')/$(has "$(j7pre j6r4control)" 'holds F39 or F49')" "yes/no"
+	check "j6x precondition: D34_J6X does not waive J6c's F39 for the control arm" "$(has "$(j7pre j6control)" "J6c parse row 'F39,live-writer,writer-static' holds F39 or F49")" yes
+	mkdir -p "$jr7/B1"; printf 'B1 RESULT tokens met (§6.6); synthetic\n' > "$jr7/B1/s1-m1b-p6-20260913T010000Z-board.log"; printf 'startup_sha256=%s\n' "$zero7" > "$jr7/B1/s1-m1b-p6-20260913T010000Z-params.log"
+	check "j6x precondition: the original B1 on the old startup is not the rerun" "$(has "$(j7pre j6r4control)" 'follows the B1 rerun')" yes
+	mkdir -p "$jr7/B1-a2"; printf 'B1 RESULT tokens NOT MET (1): synthetic\n' > "$jr7/B1-a2/s1-m1b-p6-20260915T010000Z-board.log"; printf 'startup_sha256=%s\n' "$pin7" > "$jr7/B1-a2/s1-m1b-p6-20260915T010000Z-params.log"
+	check "j6x precondition: a B1 rerun whose tokens did not meet is refused" "$(has "$(j7pre j6r4control)" "does not read 'B1 RESULT tokens met'")" yes
+	printf 'B1 RESULT tokens met (§6.6); synthetic\n' > "$jr7/B1-a2/s1-m1b-p6-20260915T010000Z-board.log"
+	# §16.5 J6x row: b1-compare reported on that attempt's own black box, and D54 still in force
+	check "j6x precondition: without a reported b1-compare it is refused" "$(has "$(j7pre j6r4control)" 'follows a reported b1-compare')" yes
+	bb7="$jr7/B1-a2/s1-m1b-p6-20260915T010000Z-blackbox.log"
+	printf 'T234-SHIM EL=2 synthetic\nT234 M1b -P6: procnto up\n' > "$bb7"
+	printf 'T234-SHIM EL=2 synthetic\nT234 M1b -P6: procnto up\n' > "$d/b1ref7.log"
+	cmd_b1_compare "$bb7" "$d/b1ref7.log" >/dev/null
+	check "b1-compare writes its report into a B1 attempt directory (run, reference, result)" \
+		"$(grep -c '^b1-compare ' "$jr7/B1-a2/b1-compare.txt")/$(has "$(cat "$jr7/B1-a2/b1-compare.txt")" 'identical after masking')" "2/yes"
+	check "b1-compare writes no report beside a black box outside a B1 directory" \
+		"$(cmd_b1_compare "$d/b1ref7.log" "$d/b1ref7.log" >/dev/null; [ -f "$d/b1-compare.txt" ] && echo written || echo none)" none
+	printf 'T234-SHIM EL=2 synthetic, edited after the comparison\n' > "$bb7"
+	check "j6x precondition: a b1-compare of another black box than the attempt's is refused" \
+		"$(has "$(j7pre j6r4control)" 'follows a reported b1-compare')" yes
+	printf 'T234-SHIM EL=2 synthetic\nT234 M1b -P6: procnto up\n' > "$bb7"
+	cmd_b1_compare "$bb7" "$d/b1ref7.log" >/dev/null
+	printf 'D27=yes\nD34_J6=yes\nD34_J6X=yes\nD54_LIFT=owner-D71\n' > "$jr7/J-waivers.conf"
+	check "j6x precondition: a D54 lift key in J-waivers.conf is refused (D54 must still be in force)" \
+		"$(has "$(j7pre j6r4control)" 'runs while D54 is in force')" yes
+	printf 'D27=yes\nD34_J6=yes\nD34_J6X=yes\nD54_READING=restored\n' > "$jr7/J-waivers.conf"
+	check "j6x precondition: a D54_READING alone is refused too" "$(has "$(j7pre j6r4control)" 'runs while D54 is in force')" yes
+	printf 'D27=yes\nD34_J6=yes\nD34_J6X=yes\n' > "$jr7/J-waivers.conf"
+	cp "$jr7/J-prereg.log" "$d/prereg7-hold.log"; cp "$d/prereg7-pre.log" "$jr7/J-prereg.log"
+	check "j6x precondition: without the owner-D70 amendment it is refused" "$(has "$(j7pre j6r4control)" 'J6x needs the owner-D70 amendment')" yes
+	cp "$d/prereg7-hold.log" "$jr7/J-prereg.log"
+	out="$(j7pre j6r4control)"
+	check "j6x precondition: met, with the reason, T-J1 and the kexec count" \
+		"$(has "$out" "j6 precondition: revision 4's watcher J6x (D70): the B1 rerun B1-a2 reads 'B1 RESULT tokens met'")/$(has "$out" "extended to J6 by the owner's D34_J6")/$(has "$out" 't_j1 met attempt1')/$(has "$out" 'kexec_runs_before=0 ')" "yes/yes/yes/yes"
+	printf 'D27=yes\nD34_J6X=yes\n' > "$jr7/J-waivers.conf"
+	check "j6x precondition: J2's F39 still needs D34_J6" "$(has "$(j7pre j6r4control)" "'D34_J6=yes'")" yes
+	printf 'D34_J6=yes\nD34_J6X=yes\n' > "$jr7/J-waivers.conf"
+	check "j6x precondition: D27 is still required" "$(has "$(j7pre j6r4control)" "'D27=yes'")" yes
+	printf 'D27=yes\nD34_J6=yes\nD34_J6X=yes\n' > "$jr7/J-waivers.conf"
+	mv "$d/tcg6/attempt1/parse-s1.txt" "$d/tcg6/attempt1/parse-s1.hold"
+	check "j6x precondition: T-J1 is still required" "$(has "$(j7pre j6r4control)" 'T-J1 has not met')" yes
+	mv "$d/tcg6/attempt1/parse-s1.hold" "$d/tcg6/attempt1/parse-s1.txt"
+	sed -i "s/^startup_sha256=.*/startup_sha256=$zero7/" "$kd7/s1-j1.params"
+	check "j6x precondition: an s1-j1 not on the new startup is refused" "$(has "$(j7pre j6r4control)" 'rebuilt s1-j1 only')" yes
+	sed -i "s/^startup_sha256=.*/startup_sha256=$pin7/" "$kd7/s1-j1.params"
+
+	# J6x's stage (§16.4, §16.5.1): cites the amendment, an amendment by owner-D70, WQ_FUNCS unchanged
+	out="$(S1_J6_FILL_FACTOR=2 j7s j6_prereg_append r4control)"
+	check "j6x prereg: without J6c's stage it is refused (J6x is J6c's matched watcher)" "$(has "$out" "not the one J6c's stage registered")" yes
+	S1_J6_FILL_FACTOR=2 j7s j6_prereg_append control >/dev/null
+	check "j6x prereg: J6c's stage appended for the fixture" "$(grep -c '^prereg j6 arm=control$' "$jr7/J-prereg.log")" 1
+	check "j6x prereg: S1_J6_WQ_CHANGED set is refused" "$(has "$(S1_J6_WQ_CHANGED=yes j7s j6_prereg_append r4control)" 'S1_J6_WQ_CHANGED is set')" yes
+	check "j6x prereg: another owner decision as S1_J6_AMEND_BY is refused" "$(has "$(S1_J6_AMEND_BY=owner-D27 j7s j6_prereg_append r4control)" 'the amendment by owner-D70')" yes
+	check "j6x prereg: a WQ_FUNCS other than the registered commit's is refused, with no override" \
+		"$(has "$(S1_J6_AMEND_BY=owner-D70 j7s eval 'j6_wq_sha_at() { echo 00; }; j6_prereg_append r4control')" 'no override exists')" yes
+	n=$(wc -l < "$jr7/J-prereg.log")
+	j7s j6_prereg_append r4control >/dev/null
+	k="$(tail -n +"$(( n + 1 ))" "$jr7/J-prereg.log")"
+	check "j6x prereg: the stage is J6x's, an amendment by owner-D70, citing the amendment, the arm line last" \
+		"$(has "$k" 'step=J6x image=s1-j1 by=owner-D70')/$(printf '%s\n' "$k" | grep -c '^prereg amendment utc=[0-9TZ]* by=owner-D70 commit=.* reason=J6.s stage for the r4control arm')/$(has "$k" 'prereg j6 r4 r4_amendment utc=')/$(has "$k" 'kind=control rev=4')/$(tail -n 1 "$jr7/J-prereg.log")" \
+		"yes/1/yes/yes/prereg j6 arm=r4control"
+	check "j6x prereg: the stage's amendment is not mistaken for the owner-D70 amendment of revision 4" "$(has "$(j7s r4_amendment_check)" 'ref_c2_start_min=7 inputs=2')" yes
+	out="$(j7s j_prereg_check s1-j1 r4control)"
+	check "j6x prereg check: passes on its own stage, citing the amendment" "$(has "$out" 'prereg ok sha256=')/$(has "$out" 'j6_arm=r4control fill_rate_factor=2')/$(has "$out" 'r4=cited by=owner-D70 kind=control rev=4')" "yes/yes/yes"
+	check "j6x prereg check: J6c's control stage still passes on its own" "$(has "$(j7s j_prereg_check s1-j1 control)" 'prereg ok sha256=')" yes
+	check "j6x prereg check: S1_J6_WQ_CHANGED set is refused" "$(has "$(S1_J6_WQ_CHANGED=yes j7s j_prereg_check s1-j1 r4control)" 'S1_J6_WQ_CHANGED is set')" yes
+	printf 'synthetic revision-4 rule, edited\n' > "$jr7/R4-rule-16.md"
+	check "j6x prereg check: a rule text changed after the stage is refused" "$(has "$(j7s j_prereg_check s1-j1 r4control)" 'does not verify')" yes
+	printf 'synthetic revision-4 rule\n' > "$jr7/R4-rule-16.md"
+	cp "$jr7/J-prereg.log" "$d/prereg7-j6x.log"
+	awk '/^prereg amendment / && index($0, "r4control arm") { sub(/ by=owner-D70 /, " by=owner-D27 ") } { print }' "$d/prereg7-j6x.log" > "$jr7/J-prereg.log"
+	check "j6x prereg check: a stage whose amendment is not owner-D70's is refused" "$(has "$(j7s j_prereg_check s1-j1 r4control)" 'not an amendment by owner-D70')" yes
+	cp "$d/prereg7-j6x.log" "$jr7/J-prereg.log"
+	check "j6x prereg: a second attempt appends nothing" "$(j7s j6_prereg_append r4control >/dev/null; grep -c '^prereg j6 arm=r4control$' "$jr7/J-prereg.log")" 1
+
+	# the kexec count, and J6x's own stop rows
+	mkdir -p "$jr7/J6x"; printf 'run com3_bytes_before_kexec=1\n' > "$jr7/J6x/s1-j1-20260915T050000Z-board.log"
+	check "j_kexec_runs counts J6x (the controls' logs issued none here)" "$( RECDIR="$jr7a"; j_kexec_runs )" 1
+	printf 'S1PC j_row=F49,writer-static\n' > "$jr7/J6x/parse-s1.txt"
+	check "j6x precondition: J6x's own F49 row stops a further J6x" "$(has "$(j7pre j6r4control)" 'the newest J6x parse row')" yes
+	rm -f "$jr7/J6x/parse-s1.txt"
+
+	# r4-read at the return (§16.6): J6x, then B2 with J6x's class
+	out="$(
+		RECDIR="$jr7a"; R_HOSTNAME=synthetic-board; SD="$jr7a/J6x"
+		rec_open "$SD/s1-j1-20260915T050000Z-r4test.log" >/dev/null
+		printf 'S1PC step=J6c\n' > "$SD/parse-s1.txt"
+		export FAKEPY_ARGS="$d/fakepy7-read.args" FAKE_R4READ='parse-s1: noise\nS1PC r4_reading=clean\nS1PC r4_sub=end=ok,c3=clean,c1=clean\nS1PC r4_class=X-f-provisional'
+		PY_BIN="$d/fakepy7.sh"; R4_READ_STEP=J6x; R4_REF_MIN=7
+		r4_read_after >/dev/null 2>&1
+		cat "$REC"
+	)"
+	check "r4-read J6x: the parser's arguments are the contract's" "$(tr '\n' '|' < "$d/fakepy7-read.args")" "$PARSER|r4-read|--step|J6x|--parse|$jr7a/J6x/parse-s1.txt|--ref-c2-start-min|7|"
+	check "r4-read J6x: r4-read.txt holds the three S1PC r4_ lines only" "$(wc -l < "$jr7/J6x/r4-read.txt")/$(grep -c noise "$jr7/J6x/r4-read.txt")" "3/0"
+	check "r4-read J6x: the class is in the board log, and the reference value is not" \
+		"$(has "$out" 'run r4-read --step J6x rc=0 r4_class=X-f-provisional rev=4')/$(has "$out" '=7')" "yes/no"
+	check "r4: B2's --j6x-class reads X-f from J6x's r4-read.txt" "$( RECDIR="$jr7a"; r4_j6x_class )" X-f
+	# §15.7.4, §16.6 precedence 4: a rung already read is never rerun blind
+	check "j6x precondition: a J6x already read by r4-read is not rerun (§15.7.4)" \
+		"$(has "$(j7pre j6r4control)" 'J6x has already been read (J6x X-f-provisional)')" yes
+	check "j6x precondition: the refusal names the attempt and its recorded class" \
+		"$(has "$(j7pre j6r4control)" 'attempt J6x recorded class X-f-provisional')" yes
+	# the record with no class must be the one the glob reaches first, or the skip is not on the path
+	cp "$jr7/J6x/r4-read.txt" "$d/j6x-read.keep"
+	mkdir -p "$jr7/J6x-a2"; cp "$jr7/J6x/r4-read.txt" "$jr7/J6x-a2/r4-read.txt"
+	printf 'S1PC r4_reading=n/a\n' > "$jr7/J6x/r4-read.txt"
+	check "r4_read_classed skips a record with no class and names the next one" "$( RECDIR="$jr7a"; r4_read_classed J6x )" "J6x-a2 X-f-provisional"
+	rm -rf "$jr7/J6x-a2"; cp "$d/j6x-read.keep" "$jr7/J6x/r4-read.txt"
+	# the owner's 2026-09-16 exception: a recorded class of exactly n/a is no reading about c2, so
+	# the rung stays rerunnable; every real class still refuses (§16.6's 'n/a', §16.8's budget)
+	cp "$jr7/J6x/r4-read.txt" "$d/j6x-read.keep"
+	printf 'S1PC r4_reading=n/a\nS1PC r4_sub=%s\nS1PC r4_class=n/a\n' "''" > "$jr7/J6x/r4-read.txt"
+	check "r4_read_classed does not count a recorded class of n/a" \
+		"$( RECDIR="$jr7a"; r4_read_classed J6x; echo "rc=$?" )" "rc=1"
+	check "j6x precondition: a J6x whose recorded class is n/a stays rerunnable (owner, 2026-09-16)" \
+		"$(has "$(j7pre j6r4control)" 'already been read')/$(has "$(j7pre j6r4control)" "revision 4's watcher J6x")" "no/yes"
+	mkdir -p "$jr7/J6x-a2"; printf 'S1PC r4_reading=n/a\nS1PC r4_class=n/a\n' > "$jr7/J6x-a2/r4-read.txt"
+	printf 'run com3_bytes_before_kexec=1\n' > "$jr7/J6x-a2/s1-j1-20260916T050000Z-board.log"
+	check "a second n/a J6x attempt is not refused either, and every attempt is in the printed kexec count (the one-retry budget is §16.8's rule, printed for the owner, never a gate)" \
+		"$(has "$(j7pre j6r4control)" 'already been read')/$(j7pre j6r4control | sed -n 's/.*kexec_runs_before=\([0-9]*\).*/\1/p')" "no/2"
+	rm -rf "$jr7/J6x-a2"; cp "$d/j6x-read.keep" "$jr7/J6x/r4-read.txt"
+	check "a real class still refuses after the n/a exception" \
+		"$(has "$(j7pre j6r4control)" 'J6x has already been read (J6x X-f-provisional)')" yes
+	# U and K-r are real classes too. A reading of n/a with a parse-valid start check classes U
+	# (§16.6), so U is the boundary the exception must not cover
+	printf 'S1PC r4_reading=n/a\nS1PC r4_class=U\n' > "$jr7/J6x/r4-read.txt"
+	check "a recorded class of U refuses a further J6x, naming the attempt and the class" \
+		"$(has "$(j7pre j6r4control)" 'J6x has already been read (J6x U)')/$(has "$(j7pre j6r4control)" 'attempt J6x recorded class U')" "yes/yes"
+	printf 'S1PC r4_reading=unstable\nS1PC r4_class=K-r\n' > "$jr7/J6x/r4-read.txt"
+	check "a recorded class of K-r refuses a further J6x" \
+		"$(has "$(j7pre j6r4control)" 'J6x has already been read (J6x K-r)')" yes
+	# §16.8 RC3: the n/a exception stops at a run that reached procnto up (F70's 2026-09-16 form)
+	cp "$jr7/J6x/parse-s1.txt" "$d/j6x-parse.keep"
+	printf 'S1PC r4_reading=n/a\nS1PC r4_class=n/a\n' > "$jr7/J6x/r4-read.txt"
+	printf 'S1PC step=J6c\nS1PC tier_L0=ok\n' > "$jr7/J6x/parse-s1.txt"
+	check "an n/a J6x whose parse reached procnto up is not rerun (F70's post-procnto form)" \
+		"$(has "$(j7pre j6r4control)" "reached 'procnto up'")/$(has "$(j7pre j6r4control)" 'recorded class n/a')" "yes/yes"
+	printf 'S1PC step=J6c\nS1PC tier_L0=missing filled_c2,procnto_up,guard_after_procnto\n' > "$jr7/J6x/parse-s1.txt"
+	check "an n/a J6x whose parse never reached procnto up stays rerunnable, and the gate prints the rung's attempts" \
+		"$(has "$(j7pre j6r4control)" "reached 'procnto up'")/$(has "$(j7pre j6r4control)" 'J6x attempts_before=1')" "no/yes"
+	printf 'S1PC step=J6c\nS1PC tier_L0=missing guard_after_procnto\n' > "$jr7/J6x/parse-s1.txt"
+	check "guard_after_procnto in the missing list is not read as a missing procnto_up" \
+		"$(has "$(j7pre j6r4control)" "reached 'procnto up'")" yes
+	cp "$d/j6x-parse.keep" "$jr7/J6x/parse-s1.txt"; cp "$d/j6x-read.keep" "$jr7/J6x/r4-read.txt"
+	out="$(
+		RECDIR="$jr7a"; R_HOSTNAME=synthetic-board; SD="$jr7a/B2-a9"; mkdir -p "$SD"
+		rec_open "$SD/s1-h1-20260915T060000Z-r4test.log" >/dev/null
+		printf 'S1PC step=B2\n' > "$SD/parse-s1.txt"
+		export FAKEPY_ARGS="$d/fakepy7-readb.args" FAKE_R4READ='S1PC r4_reading=clean\nS1PC r4_sub=c3=clean,c1=clean\nS1PC r4_class=X-f-final'
+		PY_BIN="$d/fakepy7.sh"; R4_READ_STEP=B2; R4_REF_MIN=7; R4_J6X_CLASS=X-f
+		r4_read_after >/dev/null 2>&1
+		cat "$REC"
+	)"
+	check "r4-read B2: --j6x-class X-f is passed, and its class recorded" \
+		"$(tr '\n' '|' < "$d/fakepy7-readb.args")/$(has "$out" 'r4_class=X-f-final')" "$PARSER|r4-read|--step|B2|--parse|$jr7a/B2-a9/parse-s1.txt|--ref-c2-start-min|7|--j6x-class|X-f|/yes"
+	rm -rf "$jr7/B2-a9"
+	check "run_return_records runs r4-read once, after the parser, only when R4_READ_STEP is set" \
+		"$(grep -cE '^[[:space:]]*\[ -n "\$\{R4_READ_STEP:-\}" \] && r4_read_after' "$HERE/$PROG")" 1
+
+	# cmd_run on the new startup (§16.4, D79): B1 and B2 only after the amendment; B2 only after J6x's X-f
+	kd8="$d/kimg8"; mkdir -p "$kd8"
+	printf 'synthetic h1\n' > "$kd8/s1-h1.kimg"; printf 'synthetic m1b\n' > "$kd8/s1-m1b-p6.kimg"
+	printf 'kimg_sha256=%s\nreturn_bound_s=1200\ncapture_s=4000\nmode=host\nrung=s1-h1\nstartup_sha256=%s\n' "$(j_sha256 "$kd8/s1-h1.kimg")" "$pin7" > "$kd8/s1-h1.params"
+	printf 'kimg_sha256=%s\nreturn_bound_s=1200\ncapture_s=4000\nmode=b1\nrung=s1-m1b-p6\nstartup_sha256=%s\n' "$(j_sha256 "$kd8/s1-m1b-p6.kimg")" "$pin7" > "$kd8/s1-m1b-p6.params"
+	jr9="$d/jrec9"; mkdir -p "$jr9"; jr9a="$(cd "$jr9" && pwd)"
+	r4run() { ( need_record_dir() { RECDIR="$R4RUN_REC"; }; ORIN_HOST=synthetic; S1_KIMG_DIR="${R4RUN_KD:-$kd8}"; J6_GENERATOR="$gen7"; JRUN=""; REC=""; ON_DIE=""; unset S1_COM3_LOG; cmd_run "$1" ) 2>&1; }
+	check "run s1-h1 on the new startup without the amendment is refused" "$(has "$(R4RUN_REC="$jr9a" r4run s1-h1)" 'runs only after the owner-D70 amendment')" yes
+	check "run s1-m1b-p6 (B1) on the new startup without the amendment is refused" "$(has "$(R4RUN_REC="$jr9a" r4run s1-m1b-p6)" 'runs only after the owner-D70 amendment')" yes
+	out="$(R4RUN_REC="$jr7a" r4run s1-m1b-p6)"
+	check "run s1-m1b-p6 with the amendment passes the revision-4 gate (stops at S1_COM3_LOG here)" "$(has "$out" 'S1_COM3_LOG must name')/$(has "$out" 'revision 4:')" "yes/no"
+	out="$(R4RUN_REC="$jr7a" r4run s1-h1)"
+	check "run s1-h1 with the amendment and J6x's X-f passes the revision-4 gate" "$(has "$out" 'S1_COM3_LOG must name')/$(has "$out" 'revision 4:')" "yes/no"
+	mkdir -p "$jr7/B2-a2"; printf 'S1PC r4_reading=unchanged\nS1PC r4_class=X-m\n' > "$jr7/B2-a2/r4-read.txt"
+	check "run s1-h1 after a B2 rerun already read is refused (no second data rerun)" \
+		"$(has "$(R4RUN_REC="$jr7a" r4run s1-h1)" 'the B2 rerun has already been read (B2-a2 X-m)')" yes
+	check "the B2 refusal names the attempt and its recorded class" \
+		"$(has "$(R4RUN_REC="$jr7a" r4run s1-h1)" 'attempt B2-a2 recorded class X-m')" yes
+	printf 'S1PC r4_reading=n/a\n' > "$jr7/B2-a2/r4-read.txt"
+	check "run s1-h1 with a B2 attempt that never reached a class still runs" \
+		"$(has "$(R4RUN_REC="$jr7a" r4run s1-h1)" 'S1_COM3_LOG must name')/$(has "$(R4RUN_REC="$jr7a" r4run s1-h1)" 'already been read')" "yes/no"
+	# the owner's 2026-09-16 exception at the B2 gate: a recorded class of exactly n/a is no reading
+	# about c2 (§16.6), so the rerun is not refused; the one-retry budget (§16.8) bounds it
+	printf 'S1PC r4_reading=n/a\nS1PC r4_class=n/a\n' > "$jr7/B2-a2/r4-read.txt"
+	check "run s1-h1 after a B2 attempt whose recorded class is n/a still runs (owner, 2026-09-16)" \
+		"$(has "$(R4RUN_REC="$jr7a" r4run s1-h1)" 'S1_COM3_LOG must name')/$(has "$(R4RUN_REC="$jr7a" r4run s1-h1)" 'already been read')" "yes/no"
+	mkdir -p "$jr7/B2-a3"; printf 'S1PC r4_reading=n/a\nS1PC r4_class=n/a\n' > "$jr7/B2-a3/r4-read.txt"
+	check "a second n/a B2 attempt is not refused by the harness either (the one-retry budget is §16.8's rule, not a gate)" \
+		"$(has "$(R4RUN_REC="$jr7a" r4run s1-h1)" 'already been read')" no
+	printf 'S1PC r4_reading=drop\nS1PC r4_class=X-p\n' > "$jr7/B2-a3/r4-read.txt"
+	check "a real class in a later B2 attempt still refuses" \
+		"$(has "$(R4RUN_REC="$jr7a" r4run s1-h1)" 'the B2 rerun has already been read (B2-a3 X-p)')" yes
+	rm -rf "$jr7/B2-a3"
+	# the same two boundaries at the B2 gate: U and K-r refuse, and an n/a attempt that reached
+	# procnto up is a recorded run, not a harness-reason retry (§16.8 RC3, F70's 2026-09-16 form)
+	printf 'S1PC r4_reading=n/a\nS1PC r4_class=U\n' > "$jr7/B2-a2/r4-read.txt"
+	check "a recorded class of U refuses the B2 rerun, naming the attempt and the class" \
+		"$(has "$(R4RUN_REC="$jr7a" r4run s1-h1)" 'the B2 rerun has already been read (B2-a2 U)')/$(has "$(R4RUN_REC="$jr7a" r4run s1-h1)" 'attempt B2-a2 recorded class U')" "yes/yes"
+	printf 'S1PC r4_reading=unstable\nS1PC r4_class=K-r\n' > "$jr7/B2-a2/r4-read.txt"
+	check "a recorded class of K-r refuses the B2 rerun" \
+		"$(has "$(R4RUN_REC="$jr7a" r4run s1-h1)" 'the B2 rerun has already been read (B2-a2 K-r)')" yes
+	printf 'S1PC r4_reading=n/a\nS1PC r4_class=n/a\n' > "$jr7/B2-a2/r4-read.txt"
+	printf 'S1PC step=B2\nS1PC tier_L0=ok\n' > "$jr7/B2-a2/parse-s1.txt"
+	check "an n/a B2 attempt whose parse reached procnto up is not rerun (F70's post-procnto form)" \
+		"$(has "$(R4RUN_REC="$jr7a" r4run s1-h1)" "reached 'procnto up'")/$(has "$(R4RUN_REC="$jr7a" r4run s1-h1)" 'recorded class n/a')" "yes/yes"
+	printf 'S1PC step=B2\nS1PC tier_L0=missing procnto_up,guard_after_procnto\n' > "$jr7/B2-a2/parse-s1.txt"
+	check "an n/a B2 attempt whose parse never reached procnto up still runs, and the gate prints the rung's attempts" \
+		"$(has "$(R4RUN_REC="$jr7a" r4run s1-h1)" "reached 'procnto up'")/$(has "$(R4RUN_REC="$jr7a" r4run s1-h1)" 'b2 rerun: attempts_before=')" "no/yes"
+	check "r4_rung_attempts counts the rung's own record and its later attempts (B2 and B2-a2 here; J6x alone)" \
+		"$( RECDIR="$jr7a"; r4_rung_attempts B2 )/$( RECDIR="$jr7a"; r4_rung_attempts J6x )/$( RECDIR="$jr7a"; r4_rung_attempts B9 )" "2/1/0"
+	rm -rf "$jr7/B2-a2"
+	printf 'S1PC r4_reading=drop\nS1PC r4_class=X-p\n' > "$jr7/J6x/r4-read.txt"
+	check "run s1-h1 after J6x's X-p is refused (B2 follows a clean J6x only)" "$(has "$(R4RUN_REC="$jr7a" r4run s1-h1)" "follows J6x's clean reading, X-f provisional (§16.5, D79); the newest J6x record gives X-p")" yes
+	kd8o="$d/kimg8o"; mkdir -p "$kd8o"; cp "$kd8/s1-h1.kimg" "$kd8o/"; sed "s/^startup_sha256=.*/startup_sha256=$zero7/" "$kd8/s1-h1.params" > "$kd8o/s1-h1.params"
+	out="$(R4RUN_KD="$kd8o" R4RUN_REC="$jr9a" r4run s1-h1)"
+	check "run s1-h1 on the old startup is not gated by revision 4" "$(has "$out" 'S1_COM3_LOG must name')/$(has "$out" 'revision 4:')" "yes/no"
+	check "r4-register: the dispatch takes no argument" "$(bash "$0" r4-register extra >/dev/null 2>&1; echo $?)" 2
+	check "r4-register: S1_RECORD_DIR is required" "$(has "$(S1_RECORD_DIR= bash "$0" r4-register 2>&1)" 'S1_RECORD_DIR is not set')" yes
 
 	# J3's gates as rows (§15.4.5), on synthetic records
 	res="$(
@@ -9638,7 +10384,22 @@ cmd_harness_selftest() {
 	printf 'x\n' > "$j7p/J4/s1-h1-20260914T010000Z-board.log"; printf 'S1PC j_row=F36\n' > "$j7p/J4/parse-s1.txt"
 	printf 'x\n' > "$j7p/J6c/s1-j1-20260914T020000Z-board.log"; printf 'S1PC j_row=F39,live-writer,writer-static\n' > "$j7p/J6c/parse-s1.txt"
 	printf 'D30=yes\nD34_J7A=yes\nD35=yes\nD38=yes\nD45=esp\nD46=yes\nQ20_BRANCH=a\n' > "$j7p/J-waivers.conf"
+	# §16.7 (RB10): D54 is in force until both parts of its lift are present
+	check "j7a D54: with D54 unset and no lift, J7a is refused (D54 in force)" "$(has "$( RECDIR="$j7p"; j7a_precondition 2>&1 )" 'D54 is in force')" yes
+	printf 'D54=yes\nD54_LIFT=owner-D71\n' >> "$j7p/J-waivers.conf"
+	check "j7a D54: D54=yes and D54_LIFT alone is refused (two parts)" "$(has "$( RECDIR="$j7p"; j7a_precondition 2>&1 )" 'D54 is in force')" yes
+	printf 'D54_READING=amended-%s\n' "$(printf 'a%.0s' $(seq 40))" >> "$j7p/J-waivers.conf"
+	check "j7a D54: D54=yes with D54_LIFT=owner-<x> and D54_READING=amended-<sha>: the gate passes and is named" \
+		"$(has "$( RECDIR="$j7p"; j7a_precondition 2>&1 )" "D54 lifted by owner-D71 reading=amended-$(printf 'a%.0s' $(seq 40)); D30")" yes
+	printf 'D54_READING=restored-later\n' >> "$j7p/J-waivers.conf"
+	check "j7a D54: a D54_READING other than restored|amended-<sha> is refused" "$(has "$( RECDIR="$j7p"; j7a_precondition 2>&1 )" 'D54 is in force')" yes
+	printf 'D54_READING=restored\nD54_LIFT=D71\n' >> "$j7p/J-waivers.conf"
+	check "j7a D54: a D54_LIFT that does not name an owner decision is refused" "$(has "$( RECDIR="$j7p"; j7a_precondition 2>&1 )" 'D54 is in force')" yes
+	printf 'D54_LIFT=owner-D82\nD54=no\n' >> "$j7p/J-waivers.conf"
+	check "j7a D54: D54=no is not a lift form (refused even with both parts)" "$(has "$( RECDIR="$j7p"; j7a_precondition 2>&1 )" 'never by the D54 key')" yes
+	printf 'D54=yes\n' >> "$j7p/J-waivers.conf"
 	check "j7a precondition: every decision, J4 F36, J6c live-writer and a Q20 branch: accepted" "$(has "$( RECDIR="$j7p"; j7a_precondition 2>&1 )" 'q20_branch=a; no recorded J7a stop; kexec_runs_before=0 j7a_counted_before=0')" yes
+	check "j7a D54: restored with an owner lift passes" "$(has "$( RECDIR="$j7p"; j7a_precondition 2>&1 )" 'D54 lifted by owner-D82 reading=restored;')" yes
 	mkdir -p "$j7p/J7a-1"; printf 'j7a F57: synthetic\n' > "$j7p/J7a-1/s1-j1-20260914T030000Z-board.log"
 	( REC=""; RECDIR="$j7p"; j7a_precondition ) >/dev/null 2>&1
 	check "j7a precondition: a recorded F57 ends J7a (refused)" "$?" 1
@@ -9692,6 +10453,7 @@ j1)          [ $# -eq 1 ] || usage; cmd_j1 ;;
 j3)          [ $# -eq 1 ] || usage; cmd_j3 ;;
 jrun)        [ $# -eq 3 ] || usage; cmd_jrun "$2" "$3" ;;
 wq-status)   { [ $# -eq 2 ] && [ -f "$2" ]; } || usage; cmd_wq_status "$2" ;;
+r4-register) [ $# -eq 1 ] || usage; cmd_r4_register ;;
 kpf-decode)  { [ $# -eq 2 ] || [ $# -eq 3 ]; } || usage; cmd_kpf_decode "${@:2}" ;;
 j7a)
 	case "${2:-}:$#" in

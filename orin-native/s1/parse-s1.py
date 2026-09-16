@@ -499,8 +499,12 @@ def diag_row(diag, checks, complete):
 # Revision 3's J6 watcher (s1-design.md §15.4.8, §15.5 B7): memcanary-w's console lines and its
 # page-bitmap exports, read by run --diag j1 and canwatch. Counts, classes and page bitmaps only:
 # no word value, byte or pointer value leaves the target, so none is read or printed here.
-J1_STEPS = {("board", "host"): {"control": "J6c", "remove": "J6r", "uefi": "J7a"}, ("tcg", "dryrun"): {None: "T-J1"}}
-J1_ARMS = ("control", "remove")
+# r4control is revision 4's watcher run J6x (s1-design.md §16.5.1): control's set and sequence on the harness side
+# (one normalisation there); here only its step name, and the fields r4-read needs, are its own
+R4_ARM = "r4control"
+J1_STEPS = {("board", "host"): {"control": "J6c", "remove": "J6r", "uefi": "J7a", R4_ARM: "J6x"},
+            ("tcg", "dryrun"): {None: "T-J1"}}
+J1_ARMS = ("control", "remove", R4_ARM)
 J1_RUNG = "s1-j1"
 J1_HOLD_MIB = 2896      # make-s1-images.sh's J1_HOLD_MIB, s1-j1's hold size (its constant check compares the two)
 DIAG_CHOICES = tuple(DIAG_STEPS) + ("j1",)
@@ -1295,6 +1299,9 @@ RX = {
     "shim": re.compile(r"T234-SHIM EL=2(?![0-9])"),
     "shim_pc": re.compile(r"\bPC=0000000080080000\b"),
     "wdt0": re.compile(r"t234: WDT0 CR="),
+    # §16.3.4 (D68): site B's two -b-only lines, required in L0 on the revision-4 startup only (r4_startup_pin)
+    "dcache_w2": re.compile(r"t234: dcache w2 base=0x100000000 size=0x8a000000 cleaned(?!\S)"),
+    "dcache_c1": re.compile(r"t234: dcache c1 base=0xbd000000 size=0x1000000 cleaned(?!\S)"),
     "ram_w2": re.compile(r"t234: ram w2 base=0x100000000 size=0x8a000000(?!\S)"),
     "gpu_range": re.compile(r"t234: gpu range base=0x18a000000 size=0xc0000000 not added(?!\S)"),
     "procnto_up": re.compile(r"T234 S1 (\S+) -P4: procnto up(?!\S)"),
@@ -1333,7 +1340,77 @@ CANARY_FILL_RE = {c: re.compile(r"t234: canary " + c + r" base=(0x[0-9a-fA-F]+) 
                   for c in CANARIES}
 NEG_L0 = (("bad_landing", re.compile(r"BAD-LANDING")), ("exc", re.compile(r"EXC ")),
           ("el_not_2", re.compile(r"EL!=2")), ("canary_overlaps", re.compile(r"t234: canary c\d+ overlaps")))
-BB_PREFIXES = ("S1 ", "STAMP ", "BWAIT ", "T234 ", "T234-SHIM", "t234: ")
+BB_PREFIXES = ("S1 ", "STAMP ", "BWAIT ", "T234 ", "T234-SHIM", "t234: ")    # keeps the dcache lines (§16.3.4)
+
+# §16.3.4, §16.4: the dcache anchors are required only for a run whose S1 CONFIG startup_sha256 is the revision-4
+# PIN_STARTUP_S1, read from the generator (never a copy here). The pin every revision-3 record carries is a source
+# fact of make-s1-images.sh at ecc6c3c; while the generator still holds it, no run needs the anchors.
+MAKE_S1_IMAGES = os.path.join(REPO, "orin-native", "startup", "make-s1-images.sh")
+PIN_STARTUP_S1_R3 = "781533054c913773355b85cc0b46dbbe7236998d60a175d618dff8213a11103f"
+PIN_STARTUP_S1_RE = re.compile(r"^PIN_STARTUP_S1=([0-9a-f]{64})[ \t]*$", re.MULTILINE)
+
+
+def r4_startup_pin(path=MAKE_S1_IMAGES):
+    """The generator's PIN_STARTUP_S1 when it is a revision-4 pin, else None (it still holds revision 3's)."""
+    try:
+        text = PM.read_bytes(path).decode("latin-1")
+    except InputError as e:
+        raise InputError(f"PIN_STARTUP_S1 unreadable ({e}) (s1-design.md 16.3.4)")
+    pins = PIN_STARTUP_S1_RE.findall(text)
+    if len(pins) != 1:
+        raise InputError(f"{rel_repo(path)} carries {len(pins)} PIN_STARTUP_S1 lines, not one (s1-design.md 16.3.4)")
+    return None if pins[0] == PIN_STARTUP_S1_R3 else pins[0]
+
+
+def startup_b_flags(line):
+    """The words of the last -b option in an S1 CONFIG startup_line (w2, canary), as a set."""
+    toks = (line or "").split()
+    vals = [toks[k + 1] for k in range(len(toks) - 1) if toks[k] == "-b"]
+    return set(vals[-1].split(",")) if vals else set()
+
+
+def split_checks(cans, start_before, end_after):
+    """({cN_start|cN_end: ok|bad|absent|multiple|unread|unsplit}, part) of the canary checks, split at the run's
+    activity: start is before start_before, end after end_after; unsplit when start_before is None. part(c, k)
+    is the list of matches of check k of canary c."""
+    def part(c, k):
+        return [] if start_before is None else [m for i, m in cans if m.group(1) == c and
+                                                (i < start_before if k == "start" else i > end_after)]
+    checks = {}
+    for c in CANARIES:
+        for k in ("start", "end"):
+            p = part(c, k)
+            v = kvs(p[0], 2).get("verify") if len(p) == 1 else None
+            checks[f"{c}_{k}"] = ("unsplit" if start_before is None else "absent" if not p else
+                                  "multiple" if len(p) > 1 else v if v in ("ok", "bad") else "unread")
+    return checks, part
+
+
+def c2_check_facts(checks, part):
+    """(c2_start_anchor, c2_check_words) from c2's two checks: P2's anchor and the two bad-word counts."""
+    c2kv = {k: (kvs(p[0], 2) if len(p) == 1 else {}) for k in ("start", "end") for p in [part("c2", k)]}
+    fo = c2kv["start"].get("first_off")
+    # none: the start check verified, so no first mismatch exists there (P2 then differs)
+    fo_ok = bool(re.match(r"^0x[0-9a-fA-F]{1,16}$", fo or ""))    # memcanary prints first_off in hex
+    anchor = ("none" if checks["c2_start"] == "ok" else
+              "n/a" if checks["c2_start"] != "bad" or not fo_ok else
+              "first-word" if int(fo, 16) == 0 else "other")
+    words = {k: (0 if checks[f"c2_{k}"] == "ok" else to_int(c2kv[k].get("words"))
+                 if checks[f"c2_{k}"] == "bad" else None) for k in ("start", "end")}
+    return anchor, ("n/a" if None in words.values() else f"start:{words['start']},end:{words['end']}")
+
+
+def c2_start_words_field(checks, part):
+    """The start check's bad-word count alone (s1-design.md §16.6, r4 runs only): '0' when that check
+    verified, the count when it was bad and readable, 'n/a' otherwise. c2_check_words goes n/a
+    whenever the *end* check is absent, multiple or unread, which would lose a readable start count."""
+    if checks["c2_start"] == "ok":
+        return "0"
+    if checks["c2_start"] != "bad":
+        return "n/a"
+    p = part("c2", "start")
+    n = kvs(p[0], 2).get("words") if len(p) == 1 else None
+    return n if n is not None and R4_COUNT_RE.match(n) else "n/a"
 
 
 def split_log(data):
@@ -1615,7 +1692,8 @@ def j7a_resmem_summary(resmem, tree_unparsed=False):
 
 def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_data=None, ref_conf_sha256=None,
                 reset_reason=None, kexec_tree_sha256=None, pc_image=None, pc_initrd=None, diag=None, arm=None,
-                fill_factor=None, hold_mib=None, kpf_paths=(), entry="kexec", loader_sha256=None, dram_off=None):
+                fill_factor=None, hold_mib=None, kpf_paths=(), entry="kexec", loader_sha256=None, dram_off=None,
+                r4_pin=None):
     """The §5.1 tiers and §5.2 items of one run. Returns a dict: lines, blocks, verdict, refused.
 
     entry uefi is J7a (s1-design.md §15.13.7): diag j1, arm uefi, board host mode, one COM3 segment,
@@ -1673,6 +1751,8 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
     teardown_i, _ = R.first(RX["teardown"])
     cfg_i, cfg_m = R.first(RX["config"])
     cfg = kvs(cfg_m, 1) if cfg_m else None
+    # revision 4 (§16): a board run on the revision-4 startup; every revision-3 record reads False here
+    r4 = board and cfg is not None and r4_pin is not None and (cfg.get("startup_sha256") or "").lower() == r4_pin
     guard_i, guard_m = R.first(RX["guard"])
     # §15.5 B7: a watch= line (memcanary-w, J6) is never one of the canary checks, so every rule
     # below that reads cans (B2's six_verify_* included) is unchanged by one.
@@ -1695,10 +1775,24 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
         if i is not None:
             need("L0", any(RX["shim_pc"].search(t) for j, t in recs if i <= j <= i + 3), "shim_pc")
             pos = i
+        l0_at = {}
         for key in ("wdt0", "ram_w2", "gpu_range"):
             j, _ = R.first(RX[key], after=pos)
             need("L0", j is not None, key)
+            l0_at[key] = j
             pos = j if j is not None else pos
+        if r4:
+            # §16.3.4, F73: on the revision-4 startup site B's lines lie, once each, between wdt0 and ram_w2, the c1
+            # line after the w2 line and only when the startup line carries canary; absent or out of order is F73
+            lo, hi = l0_at["wdt0"], l0_at["ram_w2"]
+            dw = [i for i, _ in R.all(RX["dcache_w2"], after=l0_after)]
+            dc = [i for i, _ in R.all(RX["dcache_c1"], after=l0_after)]
+            w2_ok = lo is not None and hi is not None and len(dw) == 1 and lo < dw[0] < hi
+            need("L0", w2_ok, "F73_dcache_w2")
+            if "canary" in startup_b_flags(cfg.get("startup_line")):
+                need("L0", w2_ok and len(dc) == 1 and dw[0] < dc[0] < hi, "F73_dcache_c1")
+            else:
+                need("L0", not dc, "F73_dcache_c1")
         for c, base in CANARIES.items():
             j, m = R.first(CANARY_FILL_RE[c], after=pos)
             need("L0", j is not None and int(m.group(1), 16) == base, "filled_" + c)
@@ -2054,6 +2148,15 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
         put("t3", "pass" if comp_ok(t3_needs) else
             "fail failed=" + ",".join(failed(t3_needs)) + " missing=" + ",".join(miss["t3"] + miss["bb_text"]))
     if mode == "host" and diag is None:
+        if r4:
+            # §16.6: the B2 rerun's r4-read inputs, on the revision-4 startup only (every earlier B2 parse unchanged)
+            r4_checks, r4_part = split_checks(cans, act_i, act_i)
+            for k in CANARY_CHECKS:
+                put(k, r4_checks[k])
+            anchor, words = c2_check_facts(r4_checks, r4_part)
+            put("c2_start_anchor", anchor)
+            put("c2_check_words", words)
+            put("c2_start_words", c2_start_words_field(r4_checks, r4_part))
         put("b2", "pass" if comp_ok(("L0", "L1", "b2", "L7", "canaries_all_ok")) else "fail")
     if refused:
         put("item5", "refused missing=" + ",".join(missing))
@@ -2093,15 +2196,7 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
         # (or after the last watch or hold line when there is none, so F39 stays readable).
         start_before = min(widx + hidx) if widx or hidx else None
         end_after = verify_i if verify_i is not None else (max(widx + hidx) if widx or hidx else None)
-        checks = {}
-        for c in CANARIES:
-            mine = [(i, m) for i, m in cans if m.group(1) == c]
-            for k in ("start", "end"):
-                part = [] if start_before is None else [m for i, m in mine
-                                                        if (i < start_before if k == "start" else i > end_after)]
-                v = verify_of(part[0]) if len(part) == 1 else None
-                checks[f"{c}_{k}"] = ("unsplit" if start_before is None else "absent" if not part else
-                                      "multiple" if len(part) > 1 else v if v in ("ok", "bad") else "unread")
+        checks, check_part = split_checks(cans, start_before, end_after)
         between = 0 if start_before is None else sum(1 for i, _ in cans if start_before <= i <= end_after)
         order = "unread"
         if fill_i is not None and verify_i is not None and all(labs[l]["idx"] for l in WATCH_LABELS):
@@ -2148,26 +2243,22 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
             put("resmem_c2", q(rc2))
             put("resmem_c2_base", rbase)
             # P2 and P6's facts for canwatch's profile (§15.13.10.3), from c2's two checks
-            c2kv = {}
-            for k in ("start", "end"):
-                part = [] if start_before is None else [m for i, m in cans if m.group(1) == "c2" and
-                                                        (i < start_before if k == "start" else i > end_after)]
-                c2kv[k] = kvs(part[0], 2) if len(part) == 1 else {}
-            fo = c2kv["start"].get("first_off")
-            # none: the start check verified, so no first mismatch exists there (P2 then differs)
-            fo_ok = bool(re.match(r"^0x[0-9a-fA-F]{1,16}$", fo or ""))    # memcanary prints first_off in hex
-            put("c2_start_anchor", "none" if checks["c2_start"] == "ok" else
-                "n/a" if checks["c2_start"] != "bad" or not fo_ok else
-                "first-word" if int(fo, 16) == 0 else "other")
-            words = {k: (0 if checks[f"c2_{k}"] == "ok" else to_int(c2kv[k].get("words"))
-                         if checks[f"c2_{k}"] == "bad" else None) for k in ("start", "end")}
-            put("c2_check_words", "n/a" if None in words.values() else f"start:{words['start']},end:{words['end']}")
+            anchor, words = c2_check_facts(checks, check_part)
+            put("c2_start_anchor", anchor)
+            put("c2_check_words", words)
         else:
             shim_i = R.first(RX["shim"])[0]
             issuing = "yes" if R.first(WQ_ISSUING_RE, before=shim_i)[0] is not None else "no"
             reset_marker = "yes" if R.first(WQ_RESET_RE)[0] is not None else "no"
             put("wq_kexec_issuing", issuing)
             put("wq_reset_marker", reset_marker)
+            if arm == R4_ARM:
+                # §16.6: r4-read's inputs under kexec entry, for J6x only (control's and remove's output unchanged)
+                anchor, words = c2_check_facts(checks, check_part)
+                put("c2_start_anchor", anchor)
+                put("c2_check_words", words)
+                put("c2_start_words", c2_start_words_field(checks, check_part))
+                put("c1_watch_bad", "yes" if c1_watch_bad_of(labs) else "no")
         want = [("conf_gate", not miss["conf_gate"]), ("L0", not miss["L0"]), ("L1_records", not l1_records),
                 ("L7", not miss["L7"]), ("item5", not refused and not miss["item5"]), ("rung_j1", rung == J1_RUNG),
                 ("memcanary_w_sha256", bool(HEX64_RE.match(mcw))), ("b2_alloc_line", b2_alloc == "none")]
@@ -2221,14 +2312,7 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
         return res
     if diag is not None:
         # §15.5 A3: B2's records, read without their canary values; never pass, never b2=.
-        checks = {}
-        for c in CANARIES:
-            mine = [(i, m) for i, m in cans if m.group(1) == c]
-            for k in ("start", "end"):
-                part = [m for i, m in mine if act_i is not None and (i < act_i if k == "start" else i > act_i)]
-                v = verify_of(part[0]) if len(part) == 1 else None
-                checks[f"{c}_{k}"] = ("unsplit" if act_i is None else "absent" if not part else
-                                      "multiple" if len(part) > 1 else v if v in ("ok", "bad") else "unread")
+        checks, _ = split_checks(cans, act_i, act_i)
         allocs = [kvs(m, 2) for _, m in R.all(RX["alloc"]) if int(m.group(1)) == B2_ALLOC_MIB]
         ad = allocs[0] if len(allocs) == 1 else {}
         alloc = ("absent" if not allocs else "multiple" if len(allocs) > 1 else "map-fail" if ad.get("map") == "fail"
@@ -2369,7 +2453,7 @@ def cmd_run(a):
                       file=sys.stderr)
                 return 2
             if arm not in (J1_ARMS if entry == "kexec" else (J7A_ARM,)) or len(kpf) > 2:
-                print("parse-s1: usage: --diag j1 needs --arm control|remove, and takes at most two --kpf "
+                print("parse-s1: usage: --diag j1 needs --arm control|remove|r4control, and takes at most two --kpf "
                       "headers (s1-design.md 15.4.8)", file=sys.stderr)
                 return 2
     elif j1_opts:
@@ -2387,7 +2471,8 @@ def cmd_run(a):
                       reset_reason=a.reset_reason, kexec_tree_sha256=a.kexec_tree_sha256, pc_image=pc_image,
                       pc_initrd=pc_initrd, diag=diag, arm=arm, fill_factor=fill_factor, hold_mib=hold_mib,
                       kpf_paths=kpf, entry=entry, loader_sha256=loader_sha256,
-                      dram_off=getattr(a, "dram_off", None) if entry == "uefi" else None)
+                      dram_off=getattr(a, "dram_off", None) if entry == "uefi" else None,
+                      r4_pin=r4_startup_pin() if a.profile == "board" else None)
     j1 = ({"arm": arm, "fill_factor": fill_factor, "hold_mib": hold_mib, "kpf": kpf, "entry": entry}
           if diag == "j1" and a.profile == "board" else None)
     text = run_report(a.log, data, bb_data, a.blackbox, conf_path, conf_bytes, allow_bytes, res, a.profile, a.mode,
@@ -3313,6 +3398,186 @@ def cmd_canwatch(a):
     return 0
 
 
+# ------------------------------------------------------------------ r4-ref, r4-read: revision 4's reading (§16.6)
+
+R4_REFS = ("B2", "J2", "J4", "J6c")         # the four controls, in the order the S1R4 line names them
+R4_STEPS = ("J6x", "B2")
+R4_J6X_CLASSES = ("X-f", "none")
+R4_PROFILE = {"J6x": "board mode=host diag=j1 arm=" + R4_ARM, "B2": "board mode=host"}
+R4_WORDS_RE = re.compile(r"^start:([0-9]{1,20}),end:([0-9]{1,20})$")
+R4_COUNT_RE = re.compile(r"^[0-9]{1,20}$")
+
+
+def r4_c2_start_count(data):
+    """One control's c2 bad-word count at its start check, from its raw COM3 copy (§16.6's L; §15.14.4's j6o-ref).
+
+    The start check is the one c2 check (never a watch= line) before the run's first activity line: B2's
+    allocation, or a J6 watch or hold line. Refused unless exactly one exists, it reads verify=bad and its
+    words= is a count above 0 (a control is a bad run by definition). No other value is read."""
+    recs, _, _, _ = split_log(data)
+    R = Recs(recs)
+    cans = R.all(RX["canary"])
+    acts = [i for i, _ in R.all(RX["alloc"]) + R.all(RX["alloc_hold"])] + \
+        [i for i, m in cans if WATCH_ANY_RE.match(m.group(0))]
+    if not acts:
+        raise Refused("no activity line (S1 ALLOC or a watch) splits the c2 checks")
+    starts = [m for i, m in cans if i < min(acts) and m.group(1) == "c2" and not WATCH_ANY_RE.match(m.group(0))]
+    if len(starts) != 1:
+        raise Refused(f"{len(starts)} c2 start checks, not one")
+    d = kvs(starts[0], 2)
+    n = d.get("words") or ""
+    if d.get("verify") != "bad" or not R4_COUNT_RE.match(n) or int(n) == 0:
+        raise Refused("the c2 start check is not verify=bad with a words= count above 0")
+    return int(n)
+
+
+def r4_ref_inputs(dirs):
+    """[(step, COM3 copy)] in R4_REFS order: from the four control step directories, or from one record
+    directory holding them. Each directory holds exactly one *-com3.log."""
+    if len(dirs) == 1 and all(os.path.isdir(os.path.join(dirs[0], s)) for s in R4_REFS):
+        dirs = [os.path.join(dirs[0], s) for s in R4_REFS]
+    by = {}
+    for d in dirs:
+        step = os.path.basename(os.path.normpath(d))
+        if step not in R4_REFS or step in by or not os.path.isdir(d):
+            raise InputError(f"{rel_repo(d)} is not one of the control directories {','.join(R4_REFS)}, "
+                             "each given once (s1-design.md 16.6)")
+        logs = sorted(n for n in os.listdir(d) if n.endswith("-com3.log"))
+        if len(logs) != 1:
+            raise InputError(f"{rel_repo(d)} holds {len(logs)} -com3.log copies, not one")
+        by[step] = os.path.join(d, logs[0])
+    if set(by) != set(R4_REFS):
+        raise InputError("r4-ref reads the four controls " + ",".join(R4_REFS) + " (s1-design.md 16.6)")
+    return [(s, by[s]) for s in R4_REFS]
+
+
+def r4_ref_line(dirs):
+    """The S1R4 line: L, the controls it came from, and each input's sha256 (the value stays private, D64)."""
+    counts, ins = [], []
+    for step, p in r4_ref_inputs(dirs):
+        data = PM.read_bytes(p)
+        try:
+            counts.append(r4_c2_start_count(data))
+        except Refused as e:
+            raise Refused(f"{step} ({rel_repo(p)}): {e}")
+        ins.append(f"{rel_repo(p)}:{sha256(data)}")
+    return f"S1R4 ref_c2_start_min={min(counts)} refs={','.join(R4_REFS)} inputs={','.join(ins)}"
+
+
+def cmd_r4_ref(a):
+    print(out_line(r4_ref_line(a.dirs)))
+    return 0
+
+
+def r4_read(step, f, ref_min, j6x_class="none"):
+    """(reading, sub-labels, class) of a J6x or B2-rerun parse's fields (s1-design.md §16.6).
+
+    Readings: n/a (no parse-valid c2 start check); unstable (J6x: F34); drop or unchanged (c2 bad at the start
+    check with a count: twice the count below ref_min, or at least it); bad-no-count (bad with no readable count);
+    onset (ok at the start, bad later: the end check, a c2 watch's bad_base, a stable re-read, or under D48 a
+    change with none of those); revert-only (J6x: a revert or osc and nothing bad); clean (J6x: both checks ok,
+    writer-none, bad_base 0; B2: both checks ok). A parse-valid start with nothing that decides also reads n/a,
+    but classes U, not n/a. Classes follow §16.6's table and precedence; the sub-labels are record only.
+    j6x_class is what J6x read: X-f (a provisional X-f exists) or none."""
+    j6x = step == "J6x"
+    cs, ce = f.get("c2_start"), f.get("c2_end")
+    wm = R4_WORDS_RE.match(f.get("c2_check_words") or "")
+    start_n = int(wm.group(1)) if wm else None
+    if start_n is None:
+        # c2_check_words is n/a whenever the end check is absent, multiple or unread; the start
+        # check's own count still decides drop from unchanged (s1-design.md §16.6)
+        sw = f.get("c2_start_words") or ""
+        start_n = int(sw) if R4_COUNT_RE.match(sw) else None
+    rows = set((f.get("j_row") or "").split(",")) if j6x else set()
+    s = sums_of(f.get("c2_sums")) if j6x and f.get("c2_sums") else None
+    s_get = (lambda k: s.get(k, 0)) if s is not None else (lambda k: 0)
+    if cs not in ("ok", "bad"):
+        reading = "n/a"
+    elif j6x and "F34" in rows:
+        reading = "unstable"
+    elif cs == "bad":
+        reading = "bad-no-count" if start_n is None else "drop" if 2 * start_n < ref_min else "unchanged"
+    elif ce == "bad" or s_get("bad_base") > 0 or s_get("stable") > 0:
+        reading = "onset"
+    elif j6x and (s_get("revert") > 0 or s_get("osc") > 0):
+        reading = "revert-only"
+    elif ce == "ok" and (not j6x or ("writer-none" in rows and s is not None and s.get("bad_base") == 0)):
+        reading = "clean"
+    elif j6x and ce == "ok" and (s_get("changed_words") > 0 or s_get("prog") > 0):
+        reading = "onset"
+    else:
+        reading = "n/a"
+
+    c1 = (f.get("c1_start"), f.get("c1_end"))
+    c3 = (f.get("c3_start"), f.get("c3_end"))
+    c1_hit = "bad" in c1 or (j6x and f.get("c1_watch_bad") == "yes")
+    c1_clean = c1 == ("ok", "ok") and (not j6x or f.get("c1_watch_bad") == "no")
+    c3_hit = "bad" in c3
+    c3_clean = c3 == ("ok", "ok")
+    sub = []
+    if ce in ("ok", "bad"):
+        sub.append("end=" + ce)
+    if cs == "bad" and ce == "ok":
+        sub.append("heal-all")
+    if j6x and reading in ("drop", "unchanged") and f.get("c2_start_anchor") in ("first-word", "other"):
+        sub.append("anchor=" + f["c2_start_anchor"])
+    if reading == "unchanged":
+        sub.append("unchanged,low" if start_n < ref_min else "unchanged,high")
+    sub.append("c3=" + ("hit" if c3_hit else "clean" if c3_clean else "unread"))
+    sub.append("c1=" + ("hit" if c1_hit else "clean" if c1_clean else "unread"))
+
+    if j6x:
+        complete = f.get("verdict") == "diagnostic complete"
+        f49 = "F49" in rows
+        sub.append("hold=" + (f.get("hold") or "absent"))
+        if f49:
+            sub.append("F49")
+        if not complete:
+            sub.append("incomplete")
+        if reading == "n/a" and cs not in ("ok", "bad"):
+            cls = "n/a"
+        elif reading == "unstable":
+            cls = "K-r"                         # precedence 3
+        elif not complete or c1_hit or f49 or reading not in ("clean", "drop", "unchanged"):
+            cls = "U"                           # F75, F49, F76 onset, revert-only, bad-no-count, incomplete
+        elif reading == "clean":
+            cls = ("X-c3" if c3_hit else
+                   "X-f-provisional" if c1_clean and c3_clean and f.get("hold") == "ok" else "U")
+        else:
+            cls = "X-p" if reading == "drop" else "X-u"
+    else:
+        prov = j6x_class == "X-f"
+        met = f.get("b2") == "pass" and f.get("verdict") == "pass"
+        sub.append("b2=" + (f.get("b2") or "absent"))
+        if reading == "n/a" and cs not in ("ok", "bad"):
+            cls = "n/a"
+        elif c1_hit or reading == "n/a":
+            cls = "U"                           # F75
+        elif reading == "clean":
+            cls = "X-c3" if c3_hit else "X-f-final" if prov and met and c1_clean and c3_clean else "U"
+        else:
+            cls = "X-m" if prov else "U"        # drop, unchanged, bad-no-count, onset after a provisional X-f
+        if prov and cls != "X-f-final":
+            sub.append("provisional-xf=" + ("withdrawn" if cls in ("X-m", "X-c3") else "not-final"))
+    return reading, sub, cls
+
+
+def cmd_r4_read(a):
+    if a.step == "J6x" and a.j6x_class is not None:
+        print("parse-s1: usage: --j6x-class belongs to --step B2 (what J6x read)", file=sys.stderr)
+        return 2
+    if not R4_COUNT_RE.match(a.ref_c2_start_min or "") or int(a.ref_c2_start_min) == 0:
+        print("parse-s1: usage: --ref-c2-start-min is the registered L, a count above 0", file=sys.stderr)
+        return 2
+    f = parse_fields(PM.read_bytes(a.parse))
+    if f.get("profile") != R4_PROFILE[a.step] or f.get("step") != a.step:
+        raise InputError(f"{rel_repo(a.parse)} is not a {a.step} parse (s1-design.md 16.6)")
+    reading, sub, cls = r4_read(a.step, f, int(a.ref_c2_start_min), a.j6x_class or "none")
+    for ln in (f"r4_reading={reading}", f"r4_sub={q(' '.join(sub))}", f"r4_class={cls}"):
+        print(out_line("S1PC " + ln))
+    return 0
+
+
 # ------------------------------------------------------------------ selftest (synthetic inputs only)
 
 def _u32(*v):
@@ -3432,6 +3697,8 @@ def syn_log(profile, mode, dtb, conf_bytes, cmdline, *, enc="base64", qvmlog=SYN
         L += ["--- raw capture started on COMX at 115200, 2026-09-14T00:00:00Z epoch=1789344000 seconds=3600 ---",
               "", "T234-SHIM EL=2 HCR=0000000000000000 PC=0000000080080000 X0=0000000084000000",
               "t234: WDT0 CR=0x00000000",
+              "t234: dcache w2 base=0x100000000 size=0x8a000000 cleaned",     # §16.3.4 site B (read on a r4 pin)
+              "t234: dcache c1 base=0xbd000000 size=0x1000000 cleaned",
               "t234: ram w2 base=0x100000000 size=0x8a000000",
               "t234: gpu range base=0x18a000000 size=0xc0000000 not added",
               "t234: canary c1 base=0xbd000000 size=0x1000000 filled",
@@ -3809,7 +4076,7 @@ def selftest():
     # ---- run
     def run(profile, mode, lines=None, *, bb="auto", ref=True, reset="MAINSWRST", kexec=SYN_KEXEC, tree=None,
             enc="base64", gate_ok=True, image=None, initrd=None, qvmlog=SYN_QVMLOG, diag=None, arm=None,
-            fill_factor=None, hold_mib=None, kpf_paths=()):
+            fill_factor=None, hold_mib=None, kpf_paths=(), r4_pin=None):
         blob = fdt_build(tree) if tree is not None else dtb
         if lines is None:
             lines = syn_log(profile, mode, blob, conf_bytes, cmdline, enc=enc, qvmlog=qvmlog)
@@ -3820,7 +4087,7 @@ def selftest():
                            reset_reason=reset if profile == "board" else None,
                            kexec_tree_sha256=kexec if profile == "board" else None, pc_image=image,
                            pc_initrd=initrd, diag=diag, arm=arm, fill_factor=fill_factor, hold_mib=hold_mib,
-                           kpf_paths=kpf_paths)
+                           kpf_paths=kpf_paths, r4_pin=r4_pin)
 
     def has(res, text):
         return any(ln.startswith(text) for ln in res["lines"])
@@ -5122,6 +5389,343 @@ def selftest():
             rc = cmd_kshcheck(argparse.Namespace(selftest=False, file=p))
         check(f"kshcheck {label}", rc == want)
 
+    # ---- revision 4 (s1-design.md §16): the dcache anchors (§16.3.4), r4control (§16.5.1), r4-ref and r4-read (§16.6)
+    R4P = "8" * 64      # the synthetic fixture's startup_sha256, standing in for a revision-4 pin
+    live_pin = r4_startup_pin()
+    check("r4 the generator's PIN_STARTUP_S1 reads as one pin, None while it is revision 3's",
+          live_pin is None or (HEX64_RE.match(live_pin) and live_pin != PIN_STARTUP_S1_R3))
+    with tempfile.TemporaryDirectory(prefix="s1pc-r4-") as rd:
+        def pinfile(text):
+            p_ = os.path.join(rd, "make-s1-images.sh")
+            with open(p_, "w", encoding="latin-1", newline="\n") as fh:
+                fh.write(text)
+            return p_
+
+        check("r4 PIN_STARTUP_S1 at revision 3's value: no anchors required",
+              r4_startup_pin(pinfile(f"PIN_SMPCHECK={'d' * 64}\nPIN_STARTUP_S1={PIN_STARTUP_S1_R3}\n")) is None)
+        check("r4 a moved PIN_STARTUP_S1 is the pin", r4_startup_pin(pinfile(f"PIN_STARTUP_S1={'b' * 64}\n")) == "b" * 64)
+        for why, text in (("no PIN_STARTUP_S1 line", f"PIN_STARTUP_M={'c' * 64}\n"),
+                          ("two PIN_STARTUP_S1 lines", f"PIN_STARTUP_S1={'b' * 64}\n" * 2),
+                          ("a short PIN_STARTUP_S1", "PIN_STARTUP_S1=abc\n")):
+            try:
+                r4_startup_pin(pinfile(text))
+                check(f"r4 {why} is an input error", False)
+            except InputError:
+                check(f"r4 {why} is an input error", True)
+        try:
+            r4_startup_pin(os.path.join(rd, "absent.sh"))
+            check("r4 an unreadable generator is an input error", False)
+        except InputError:
+            check("r4 an unreadable generator is an input error", True)
+
+        # the anchors in L0
+        dcw = "t234: dcache w2 base=0x100000000 size=0x8a000000 cleaned"
+        dcc = "t234: dcache c1 base=0xbd000000 size=0x1000000 cleaned"
+        hostl = syn_log("board", "host", dtb, conf_bytes, cmdline)
+        order = [next(k_ for k_, x in enumerate(hostl) if x.startswith(p_)) for p_ in
+                 ("t234: WDT0 ", dcw, dcc, "t234: ram w2 ")]
+        check("r4 the synthetic board fixture carries both dcache lines, in order, between WDT0 and ram w2",
+              order == sorted(order) and len(set(order)) == 4 and dcw in hostl and dcc in hostl)
+        check("r4 the dcache lines match their anchors exactly and carry no negative L0 token",
+              bool(RX["dcache_w2"].search(dcw)) and bool(RX["dcache_c1"].search(dcc)) and
+              not RX["dcache_w2"].search(dcw + "x") and not RX["dcache_c1"].search(dcc.replace("0xbd", "0xbe")) and
+              not any(rx.search(x) for _, rx in NEG_L0 for x in (dcw, dcc)))
+        check("r4 BB_PREFIXES keeps the dcache lines", dcw.startswith(BB_PREFIXES) and dcc.startswith(BB_PREFIXES))
+        check("r4 startup_b_flags reads the -b words", startup_b_flags("s -vvv -b w2,canary -Dtcu") == {"w2", "canary"}
+              and startup_b_flags("s -b w2") == {"w2"} and startup_b_flags("s -vvv -Dtcu") == set())
+        r_new = run("board", "host", r4_pin=R4P)
+        r_old = run("board", "host")
+        check("r4 B2 synthetic on the revision-4 startup passes with both anchors",
+              r_new["verdict"] == "pass" and field(r_new, "tier_L0") == "ok")
+        R4_B2_FIELDS = tuple(k + "=" for k in CANARY_CHECKS) + ("c2_start_anchor=", "c2_check_words=",
+                                                                "c2_start_words=")
+        check("r4 B2 on an older startup prints no rerun field",
+              not any(has(r_old, k) for k in R4_B2_FIELDS) and r_old["verdict"] == "pass")
+        check("r4 B2 on the revision-4 startup: the rerun fields, and otherwise the older parse line for line",
+              field(r_new, "c2_start") == "ok" and field(r_new, "c3_end") == "ok" and
+              field(r_new, "c2_check_words") == "start:0,end:0" and field(r_new, "c2_start_anchor") == "none" and
+              field(r_new, "c2_start_words") == "0" and
+              [ln for ln in r_new["lines"] if not ln.startswith(R4_B2_FIELDS)] == r_old["lines"])
+        swap = [dcc if x == dcw else dcw if x == dcc else x for x in hostl]
+        no_c1_line = edit_lines(hostl, drop=(r"^t234: dcache c1 ",))
+        w2_only = edit_lines(hostl, sub=((r"-b w2,canary", "-b w2"),))
+        shim_first = edit_lines(edit_lines(hostl, drop=(r"^t234: dcache ",)), add_after=((r"^T234-SHIM ", dcw),
+                                                                                             (r"^T234-SHIM ", dcc)))
+        after_ram = edit_lines(edit_lines(hostl, drop=(r"^t234: dcache ",)), add_after=((r"^t234: ram w2 ", dcw),
+                                                                                            (r"^t234: ram w2 ", dcc)))
+        for label, lines_, pin, want in (
+                ("the w2 line absent", edit_lines(hostl, drop=(r"^t234: dcache w2 ",)), R4P,
+                 "missing F73_dcache_w2,F73_dcache_c1"),
+                ("the c1 line absent under canary", no_c1_line, R4P, "missing F73_dcache_c1"),
+                ("the two lines swapped", swap, R4P, "missing F73_dcache_c1"),
+                ("both lines before WDT0", shim_first, R4P, "missing F73_dcache_w2,F73_dcache_c1"),
+                ("both lines after ram w2", after_ram, R4P, "missing F73_dcache_w2,F73_dcache_c1"),
+                ("the w2 line twice", edit_lines(hostl, add_after=((r"^t234: dcache w2 ", dcw),)), R4P,
+                 "missing F73_dcache_w2,F73_dcache_c1"),
+                ("a c1 line under -b w2 alone", w2_only, R4P, "missing F73_dcache_c1"),
+                ("no c1 line under -b w2 alone", edit_lines(w2_only, drop=(r"^t234: dcache c1 ",)), R4P, "ok"),
+                ("no dcache line on revision 3's startup (no pin)", edit_lines(hostl, drop=(r"^t234: dcache ",)), None,
+                 "ok"),
+                ("no dcache line on another startup than the pin", edit_lines(hostl, drop=(r"^t234: dcache ",)),
+                 "b" * 64, "ok")):
+            r = run("board", "host", lines_, r4_pin=pin)
+            check(f"r4 L0 {label}: tier_L0 {want}" + ("" if want == "ok" else ", F73, b2 fail"),
+                  field(r, "tier_L0") == want and (want == "ok") == (field(r, "b2") == "pass"))
+
+        # r4control: step J6x, control's parse line for line but for its three fields; control and remove unchanged
+        R4_J6X_FIELDS = ("c2_start_anchor=", "c2_check_words=", "c2_start_words=", "c1_watch_bad=")
+        jc, jx, jrm = j6(arm="control"), j6(arm=R4_ARM), j6(arm="remove")
+        check("r4control is step J6x with control's rows, and control's parse but for its three fields",
+              jx["step"] == "J6x" and jx["j_row"] == jc["j_row"] and jx["verdict"] == jc["verdict"] and
+              [ln for ln in jx["lines"] if not ln.startswith(R4_J6X_FIELDS + ("step=",))] ==
+              [ln for ln in jc["lines"] if not ln.startswith("step=")] and field(jx, "step") == "J6x" and
+              field(jx, "c2_check_words") == "start:0,end:0" and field(jx, "c2_start_anchor") == "none" and
+              field(jx, "c2_start_words") == "0" and field(jx, "c1_watch_bad") == "no")
+        check("r4 control's and remove's J6 parses carry no r4control field",
+              not any(has(x, k) for x in (jc, jrm) for k in R4_J6X_FIELDS) and J1_STEPS[("board", "host")][R4_ARM] ==
+              "J6x" and R4_ARM in J1_ARMS)
+        jl_bad = sub_nth(syn_j6_log(conf_bytes, cmdline)[0], r"^S1 CANARY c2 verify=ok$",
+                         "S1 CANARY c2 verify=bad first_off=0x0 words=7", 0)
+        rb = run("board", "host", jl_bad, diag="j1", arm=R4_ARM, fill_factor="2", r4_pin=R4P)
+        check("r4control on the revision-4 startup: a bad start check's count and anchor reach the parse",
+              field(rb, "tier_L0") == "ok" and field(rb, "c2_check_words") == "start:7,end:0" and
+              field(rb, "c2_start_words") == "7" and field(rb, "c2_start_anchor") == "first-word" and
+              rb["step"] == "J6x")
+        rd1 = run("board", "host", syn_j6_log(conf_bytes, cmdline, watches={"d": {"classes": {"zero": 16}}})[0],
+                  diag="j1", arm=R4_ARM, fill_factor="2")
+        check("r4control records a c1 watch hit as c1_watch_bad=yes", field(rd1, "c1_watch_bad") == "yes")
+        rmiss = run("board", "host", edit_lines(syn_j6_log(conf_bytes, cmdline)[0], drop=(r"^t234: dcache w2 ",)),
+                    diag="j1", arm=R4_ARM, fill_factor="2", r4_pin=R4P)
+        check("r4control on the revision-4 startup with the w2 line absent: F73 in L0, the parse incomplete",
+              "F73_dcache_w2" in (field(rmiss, "tier_L0") or "") and rmiss["verdict"] == "diagnostic incomplete")
+
+        # r4-read's rules on fields (L = 10 unless named; the band is half of L)
+        SUMS0 = ("bad_base=0 bad=0 changed_words=0 healed=0 osc=0 prog=0 stable=0 revert=0 revert_flip2=0 "
+                 "whole_heal=0 dominant=none")
+
+        def sums(**kw):
+            d_ = dict(t.split("=", 1) for t in SUMS0.split())
+            d_.update((k, str(v)) for k, v in kw.items())
+            return " ".join(f"{k}={v}" for k, v in d_.items())
+
+        def fx(**kw):
+            f_ = {"profile": R4_PROFILE["J6x"], "step": "J6x", "verdict": "diagnostic complete", "c1_start": "ok",
+                  "c1_end": "ok", "c2_start": "ok", "c2_end": "ok", "c3_start": "ok", "c3_end": "ok",
+                  "c2_check_words": "start:0,end:0", "c2_start_words": "0", "c2_start_anchor": "none",
+                  "c1_watch_bad": "no", "hold": "ok", "j_row": "writer-none", "c2_sums": SUMS0}
+            f_.update(kw)
+            return {k: v for k, v in f_.items() if v is not None}
+
+        def bx(**kw):
+            f_ = {"profile": R4_PROFILE["B2"], "step": "B2", "verdict": "pass", "b2": "pass", "c1_start": "ok",
+                  "c1_end": "ok", "c2_start": "ok", "c2_end": "ok", "c3_start": "ok", "c3_end": "ok",
+                  "c2_check_words": "start:0,end:0", "c2_start_words": "0", "c2_start_anchor": "none"}
+            f_.update(kw)
+            return {k: v for k, v in f_.items() if v is not None}
+
+        def bad_start(n, end="bad", anchor="first-word", **kw):
+            return dict(c2_start="bad", c2_end=end, c2_check_words=f"start:{n},end:{n if end == 'bad' else 0}",
+                        c2_start_words=str(n), c2_start_anchor=anchor, **kw)
+
+        live = dict(j_row="live-writer", c2_sums=sums(bad_base=8, bad=8))
+        for label, step, f_, L, jcls, want_r, want_c, want_sub in (
+                ("J6x clean", "J6x", fx(), 10, None, "clean", "X-f-provisional", ("end=ok", "c3=clean", "c1=clean")),
+                ("J6x clean with F39c3", "J6x", fx(c3_start="bad", c3_end="bad", j_row="F39,writer-none"), 10, None,
+                 "clean", "X-c3", ("c3=hit",)),
+                ("J6x clean with c1 bad at a check (F75)", "J6x", fx(c1_end="bad", j_row="F39,writer-none"), 10, None,
+                 "clean", "U", ("c1=hit",)),
+                ("J6x clean with a c1 watch hit (F39c1)", "J6x", fx(c1_watch_bad="yes", j_row="F39,writer-none"), 10,
+                 None, "clean", "U", ("c1=hit",)),
+                ("J6x clean with F49", "J6x", fx(hold="bad", j_row="F49,writer-none"), 10, None, "clean", "U",
+                 ("F49", "hold=bad")),
+                ("J6x clean with the hold timed out", "J6x", fx(hold="timeout"), 10, None, "clean", "U",
+                 ("hold=timeout",)),
+                ("J6x drop just below the band (2x4 < 10)", "J6x", fx(**bad_start(4), **live), 10, None, "drop", "X-p",
+                 ("anchor=first-word", "end=bad")),
+                ("J6x unchanged at the band (2x5 = 10), low", "J6x", fx(**bad_start(5, anchor="other"), **live), 10,
+                 None, "unchanged", "X-u", ("anchor=other", "unchanged,low")),
+                ("J6x drop below an odd band (2x5 < 11)", "J6x", fx(**bad_start(5), **live), 11, None, "drop", "X-p",
+                 ()),
+                ("J6x unchanged at an odd band (2x6 >= 11), low", "J6x", fx(**bad_start(6), **live), 11, None,
+                 "unchanged", "X-u", ("unchanged,low",)),
+                ("J6x unchanged at L itself, not low", "J6x", fx(**bad_start(10), **live), 10, None, "unchanged",
+                 "X-u", ("unchanged,high",)),
+                ("J6x drop with the end check absent, the start count still read", "J6x",
+                 fx(c2_start="bad", c2_end="absent", c2_check_words="n/a", c2_start_words="4",
+                    c2_start_anchor="first-word", verdict="diagnostic incomplete failed=c2_end", j_row="F40",
+                    c2_sums=None), 10, None, "drop", "U", ("incomplete", "anchor=first-word")),
+                ("B2 unchanged with the end check absent, the start count still read", "B2",
+                 bx(c2_start="bad", c2_end="absent", c2_check_words="n/a", c2_start_words="9",
+                    c2_start_anchor="first-word", b2="fail", verdict="fail"), 10, "X-f", "unchanged", "X-m",
+                 ("unchanged,low",)),
+                ("J6x drop with F39c3 still classifies X-p", "J6x",
+                 fx(**bad_start(3), c3_start="bad", j_row="F39,live-writer", c2_sums=sums(bad_base=8)), 10, None,
+                 "drop", "X-p", ("c3=hit",)),
+                ("J6x unchanged with F49 is U", "J6x", fx(**bad_start(9), hold="bad", j_row="F49,live-writer"), 10,
+                 None, "unchanged", "U", ("F49",)),
+                ("J6x unstable (F34) outranks the counts", "J6x", fx(**bad_start(2), j_row="F34"), 10, None,
+                 "unstable", "K-r", ()),
+                ("J6x revert-only", "J6x", fx(j_row="no-row", c2_sums=sums(revert=3, revert_flip2=3)), 10, None,
+                 "revert-only", "U", ()),
+                ("J6x onset at the end check (F76)", "J6x", fx(c2_end="bad", c2_check_words="start:0,end:9",
+                                                             j_row="writer-static"), 10, None, "onset", "U",
+                 ("end=bad",)),
+                ("J6x onset in a watch's bad_base", "J6x", fx(j_row="writer-static", c2_sums=sums(bad_base=4)), 10,
+                 None, "onset", "U", ()),
+                ("J6x onset under D48 (a prog-only change)", "J6x",
+                 fx(j_row="live-writer", c2_sums=sums(changed_words=2, prog=2)), 10, None, "onset", "U", ()),
+                ("J6x bad with no count", "J6x", fx(c2_start="bad", c2_check_words="n/a", c2_start_words="n/a",
+                                                    j_row="live-writer"), 10, None, "bad-no-count", "U", ()),
+                ("J6x heal-all is a sub-label of a drop", "J6x", fx(**bad_start(2, end="ok"), **live), 10, None,
+                 "drop", "X-p", ("heal-all", "end=ok")),
+                ("J6x incomplete with a bad start count is U with its reading", "J6x",
+                 fx(**bad_start(2), verdict="diagnostic incomplete failed=watch_c", j_row="F40", c2_sums=None), 10,
+                 None, "drop", "U", ("incomplete",)),
+                ("J6x incomplete with nothing that decides", "J6x",
+                 fx(c2_end="absent", c2_check_words="n/a", c2_start_words="0",
+                    verdict="diagnostic incomplete failed=c2_end", j_row="F40", c2_sums=None), 10, None, "n/a", "U",
+                 ("incomplete",)),
+                ("J6x no parse-valid c2 check", "J6x", fx(c2_start="absent", c2_check_words="n/a",
+                                                         c2_start_words="n/a", j_row="F40",
+                                                         verdict="diagnostic incomplete failed=c2_start", c2_sums=None),
+                 10, None, "n/a", "n/a", ()),
+                ("B2 clean and MET after a provisional X-f", "B2", bx(), 10, "X-f", "clean", "X-f-final", ("b2=pass",)),
+                ("B2 clean and MET with no provisional X-f", "B2", bx(), 10, "none", "clean", "U", ()),
+                ("B2 clean with c3 bad after X-f (X-c3, withdrawn)", "B2",
+                 bx(c3_start="bad", c3_end="bad", b2="fail", verdict="fail failed=L1,b2,canaries_all_ok"), 10, "X-f",
+                 "clean", "X-c3", ("c3=hit", "provisional-xf=withdrawn")),
+                ("B2 clean with c3 bad, no provisional X-f", "B2", bx(c3_end="bad", b2="fail", verdict="fail"), 10,
+                 "none", "clean", "X-c3", ()),
+                ("B2 drop after X-f (X-m)", "B2", bx(**bad_start(4), b2="fail", verdict="fail"), 10, "X-f", "drop",
+                 "X-m", ("provisional-xf=withdrawn",)),
+                ("B2 unchanged after X-f (X-m)", "B2", bx(**bad_start(5), b2="fail", verdict="fail"), 10, "X-f",
+                 "unchanged", "X-m", ("unchanged,low", "provisional-xf=withdrawn")),
+                ("B2 bad with no count after X-f (X-m)", "B2",
+                 bx(c2_start="bad", c2_check_words="n/a", c2_start_words="n/a", b2="fail", verdict="fail"), 10, "X-f",
+                 "bad-no-count", "X-m", ()),
+                ("B2 onset after X-f (X-m)", "B2", bx(c2_end="bad", c2_check_words="start:0,end:3", b2="fail",
+                                                      verdict="fail"), 10, "X-f", "onset", "X-m", ()),
+                ("B2 drop with no provisional X-f is U", "B2", bx(**bad_start(4), b2="fail", verdict="fail"), 10,
+                 "none", "drop", "U", ()),
+                ("B2 clean with c1 bad after X-f (F75)", "B2", bx(c1_start="bad", b2="fail", verdict="fail"), 10, "X-f",
+                 "clean", "U", ("c1=hit", "provisional-xf=not-final")),
+                ("B2 clean but not MET after X-f", "B2", bx(b2="fail", verdict="fail failed=b2"), 10, "X-f", "clean",
+                 "U", ("b2=fail", "provisional-xf=not-final")),
+                ("B2 with no parse-valid c2 check (an older-startup parse)", "B2",
+                 bx(c2_start=None, c2_end=None, c2_check_words=None, c2_start_words=None, c1_start=None, c1_end=None,
+                    c3_start=None, c3_end=None), 10, "X-f", "n/a", "n/a", ("provisional-xf=not-final",))):
+            got_r, got_sub, got_c = r4_read(step, f_, L, jcls or "none")
+            check(f"r4-read {label}: {want_r}, {want_c} [got {got_r}, {got_c}, {' '.join(got_sub)}]",
+                  got_r == want_r and got_c == want_c and all(x in got_sub for x in want_sub))
+        check("r4-read the drop band is strict: 2x start < L", r4_read("J6x", fx(**bad_start(1), **live), 2)[0] ==
+              "unchanged" and r4_read("J6x", fx(**bad_start(1), **live), 3)[0] == "drop")
+
+        # r4-read end to end on parses the parser wrote
+        def ptext(profile, lines_):
+            return ("\n".join("S1PC " + x for x in ["profile=" + profile] + lines_) + "\n").encode("utf-8")
+
+        def r4cmd(argv):
+            out_, err_ = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(out_), contextlib.redirect_stderr(err_):
+                rc_ = main(argv)
+            return rc_, out_.getvalue().splitlines(), err_.getvalue()
+
+        pj = os.path.join(rd, "j6x-parse-s1.txt")
+        with open(pj, "wb") as fh:
+            fh.write(ptext(R4_PROFILE["J6x"], run("board", "host", syn_j6_log(conf_bytes, cmdline)[0], diag="j1",
+                                                  arm=R4_ARM, fill_factor="2", r4_pin=R4P)["lines"]))
+        pb = os.path.join(rd, "b2-parse-s1.txt")
+        with open(pb, "wb") as fh:
+            fh.write(ptext(R4_PROFILE["B2"], r_new["lines"]))
+        rc, lines_, _ = r4cmd(["r4-read", "--step", "J6x", "--parse", pj, "--ref-c2-start-min", "10"])
+        check("r4-read J6x on a synthetic J6x parse: three lines, clean, X-f-provisional",
+              rc == 0 and len(lines_) == 3 and lines_[0] == "S1PC r4_reading=clean" and
+              lines_[1].startswith("S1PC r4_sub=") and lines_[2] == "S1PC r4_class=X-f-provisional")
+        rc, lines_, _ = r4cmd(["r4-read", "--step", "B2", "--parse", pb, "--ref-c2-start-min", "10",
+                               "--j6x-class", "X-f"])
+        check("r4-read B2 on a synthetic revision-4 B2 parse after X-f: clean, X-f-final",
+              rc == 0 and lines_ == ["S1PC r4_reading=clean", "S1PC r4_sub='end=ok c3=clean c1=clean b2=pass'",
+                                     "S1PC r4_class=X-f-final"])
+        rc, lines_, _ = r4cmd(["r4-read", "--step", "B2", "--parse", pb, "--ref-c2-start-min", "10"])
+        check("r4-read B2 without --j6x-class reads none: U", rc == 0 and lines_[-1] == "S1PC r4_class=U")
+        pold = os.path.join(rd, "b2-old-parse-s1.txt")
+        with open(pold, "wb") as fh:
+            fh.write(ptext(R4_PROFILE["B2"], r_old["lines"]))
+        rc, lines_, _ = r4cmd(["r4-read", "--step", "B2", "--parse", pold, "--ref-c2-start-min", "10",
+                               "--j6x-class", "X-f"])
+        check("r4-read B2 on an older-startup parse: n/a", rc == 0 and lines_[0] == "S1PC r4_reading=n/a" and
+              lines_[-1] == "S1PC r4_class=n/a")
+        for why, argv, want_rc in (
+                ("a B2 parse read as J6x", ["--step", "J6x", "--parse", pb, "--ref-c2-start-min", "10"], 1),
+                ("a J6x parse read as B2", ["--step", "B2", "--parse", pj, "--ref-c2-start-min", "10"], 1),
+                ("--j6x-class with --step J6x", ["--step", "J6x", "--parse", pj, "--ref-c2-start-min", "10",
+                                                 "--j6x-class", "none"], 2),
+                ("L of 0", ["--step", "J6x", "--parse", pj, "--ref-c2-start-min", "0"], 2),
+                ("L not a count", ["--step", "J6x", "--parse", pj, "--ref-c2-start-min", "1e3"], 2)):
+            rc, lines_, _ = r4cmd(["r4-read"] + argv)
+            check(f"r4-read refuses {why} (rc {want_rc}), printing no reading", rc == want_rc and not lines_)
+
+        # r4-ref on four synthetic controls
+        def control_log(step, n):
+            if step == "J6c":
+                base = syn_j6_log(conf_bytes, cmdline)[0]
+            else:
+                base = syn_log("board", "host", dtb, conf_bytes, cmdline)
+            L_ = sub_nth(base, r"^S1 CANARY c2 verify=ok$", f"S1 CANARY c2 verify=bad first_off=0x0 words={n}", 0)
+            return ("\n".join(L_) + "\n").encode("latin-1")
+
+        rec = os.path.join(rd, "rec")
+        counts = {"B2": 30, "J2": 20, "J4": 25, "J6c": 22}
+        shas = {}
+        for st, n in counts.items():
+            os.makedirs(os.path.join(rec, st))
+            data_ = control_log(st, n)
+            shas[st] = sha256(data_)
+            with open(os.path.join(rec, st, f"s1-x-{st}-com3.log"), "wb") as fh:
+                fh.write(data_)
+        want_line = ("S1R4 ref_c2_start_min=20 refs=B2,J2,J4,J6c inputs=" +
+                     ",".join(f"{rel_repo(os.path.join(rec, st, f's1-x-{st}-com3.log'))}:{shas[st]}" for st in R4_REFS))
+        check("r4-ref four control directories: the lowest start count, the refs in order, each input hashed",
+              r4_ref_line([os.path.join(rec, s_) for s_ in ("J6c", "J4", "B2", "J2")]) == want_line)
+        check("r4-ref one record directory reads the same line", r4_ref_line([rec]) == want_line)
+        rc, lines_, _ = r4cmd(["r4-ref", rec])
+        check("r4-ref prints one S1R4 line", rc == 0 and len(lines_) == 1 and
+              lines_[0].startswith("S1R4 ref_c2_start_min=20 refs=B2,J2,J4,J6c inputs="))
+        check("r4-ref the c2 start count is the start check's, not the end check's",
+              r4_c2_start_count(control_log("B2", 30)) == 30 and r4_c2_start_count(control_log("J6c", 22)) == 22)
+        for why, data_ in (
+                ("a control whose c2 start check is ok",
+                 ("\n".join(syn_log("board", "host", dtb, conf_bytes, cmdline)) + "\n").encode("latin-1")),
+                ("a control bad only at the end check",
+                 ("\n".join(sub_nth(syn_log("board", "host", dtb, conf_bytes, cmdline), r"^S1 CANARY c2 verify=ok$",
+                                    "S1 CANARY c2 verify=bad first_off=0x0 words=9", 1)) + "\n").encode("latin-1")),
+                ("a bad start check with no count",
+                 ("\n".join(sub_nth(syn_log("board", "host", dtb, conf_bytes, cmdline), r"^S1 CANARY c2 verify=ok$",
+                                    "S1 CANARY c2 verify=bad first_off=0x0", 0)) + "\n").encode("latin-1")),
+                ("a log with no activity line",
+                 ("\n".join(edit_lines(control_log("B2", 5).decode("latin-1").split("\n"), drop=(r"^S1 ALLOC ",)))
+                  ).encode("latin-1"))):
+            try:
+                r4_c2_start_count(data_)
+                check(f"r4-ref refuses {why}", False)
+            except Refused:
+                check(f"r4-ref refuses {why}", True)
+        with open(os.path.join(rec, "J4", "s1-x-J4-com3.log"), "wb") as fh:
+            fh.write(("\n".join(syn_log("board", "host", dtb, conf_bytes, cmdline)) + "\n").encode("latin-1"))
+        rc, lines_, err = r4cmd(["r4-ref", rec])
+        check("r4-ref a clean control is refused by name, and no line prints", rc == 2 and not lines_ and "J4" in err)
+        with open(os.path.join(rec, "B2", "s1-y-com3.log"), "wb") as fh:
+            fh.write(control_log("B2", 30))
+        for why, dirs_ in (("a directory with two COM3 copies", [rec]),
+                           ("three controls", [os.path.join(rec, s_) for s_ in ("J2", "J4", "J6c")]),
+                           ("a control given twice", [os.path.join(rec, s_) for s_ in ("J2", "J2", "J4", "J6c")]),
+                           ("a directory that is not a control", [rd])):
+            try:
+                r4_ref_inputs(dirs_)
+                check(f"r4-ref {why} is an input error", False)
+            except InputError:
+                check(f"r4-ref {why} is an input error", True)
+
     for name in os.listdir(os.path.join(tdir, "out")):
         os.remove(os.path.join(tdir, "out", name))
     os.rmdir(os.path.join(tdir, "out"))
@@ -5197,6 +5801,15 @@ def main(argv=None):
     k.add_argument("file", nargs="?")
     k.add_argument("--selftest", action="store_true")
 
+    rr = sub.add_parser("r4-ref", help="revision 4's L from the four controls' raw COM3 copies (s1-design.md 16.6)")
+    rr.add_argument("dirs", nargs="+", help="the B2, J2, J4 and J6c step directories, or one record directory")
+
+    rd = sub.add_parser("r4-read", help="revision 4's reading of a J6x or B2-rerun parse (s1-design.md 16.6)")
+    rd.add_argument("--step", choices=R4_STEPS, required=True)
+    rd.add_argument("--parse", required=True, help="the run's parse-s1.txt")
+    rd.add_argument("--ref-c2-start-min", required=True, help="L, as registered in the owner-D70 amendment")
+    rd.add_argument("--j6x-class", choices=R4_J6X_CLASSES, help="--step B2: what J6x read (default none)")
+
     a = ap.parse_args(argv)
     if a.all_selftest:
         return selftest()
@@ -5204,7 +5817,7 @@ def main(argv=None):
         ap.print_usage(sys.stderr)
         return 2
     handlers = {"conf": cmd_conf, "fdt": cmd_fdt, "run": cmd_run, "canwatch": cmd_canwatch, "kshcheck": cmd_kshcheck,
-                "j6c-refs": cmd_j6c_refs, "j7a-across": cmd_j7a_across}
+                "j6c-refs": cmd_j6c_refs, "j7a-across": cmd_j7a_across, "r4-ref": cmd_r4_ref, "r4-read": cmd_r4_read}
     try:
         return handlers[a.cmd](a)
     except Refused as e:

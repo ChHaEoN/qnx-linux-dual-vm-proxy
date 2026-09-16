@@ -431,8 +431,14 @@ Quick summary for context:
   J1 met. J2, the matched control, reproduced that canary (c2) and also hit c3 (F39; the owner waived that stop for
   J3 and J4 only, D34). J3 met after a harness gate defect was re-judged from its records. J4, with the removable DMA
   masters removed, was F36: they are excluded as c2's writer, and J4 says nothing about the GPU, firmware or a
-  QNX-side cause. Class U, not resolved. Next: J6, a read-only watcher image, then the owner's decision on a UEFI-entry
-  arm; s1-design.md §14.9-14.12 and §15; figures unpublished)**; freeze
+  QNX-side cause. Class U, not resolved. ~~Next: J6, a read-only watcher image, then the owner's decision on a UEFI-entry
+  arm;~~ **2026-09-15:** J6c, the watcher, stopped on F39 again; the UEFI-entry arm (J7a) was designed and its board
+  steps deferred (D54). Revision 3 closed as U, with a CPU cache-residue hypothesis leading (HYPOTHESIS, untested); the
+  secondary-CPU offline arm is designed and shelved (D65). Revision 4, accepted by the owner, is a startup cache clean
+  by virtual address before the fill, under the S1 option only; next B1, then a watcher run, then B2, with the owner
+  present. Its startup is built on the PC and pinned; the board images are not yet regenerated, nothing of
+  revision 4 has run on the board, and B2 stays not met on data; s1-design.md §14.9-14.12, §15
+  and §16; figures unpublished)**; freeze
   reference architecture v1; then one measurement campaign on it (the M3 and M4 numbers, the M5 comparison, the twin
   diff), every record stamped with the version. ~~Awaiting the owner's confirmation: the M path ends at M5's functional
   pass, which sets when README PR #1 can merge.~~ **2026-09-11 (owner):** confirmed. The M path ends at M5-F's
@@ -518,8 +524,12 @@ Quick summary for context:
    reaches startup),~~ M5-F (**met 2026-09-13**, under option A, with the deviations in m5-design.md §14; the M path
    has ended), S1-F (a Linux guest without a GPU under native qvm;
    **2026-09-14: paused in writer diagnosis**, after B2 was not met on data
-   at the lowest window-2 canary; next J6, a read-only watcher image, then
-   the owner's decision on a UEFI-entry arm; s1-design.md §15).
+   at the lowest window-2 canary; ~~next J6, a read-only watcher image, then
+   the owner's decision on a UEFI-entry arm; s1-design.md §15~~
+   **2026-09-15:** revision 3 closed as U with a cache-residue hypothesis
+   leading; revision 4 is a startup cache clean before the fill, and next
+   are B1, a watcher run and B2, in that order, not yet run;
+   s1-design.md §16).
    Then settle the freeze gate and write the v1 manifest. Then run the
    single campaign, native leg and both TCG twin legs, every record stamped
    `arch=v1;manifest=<sha>`. Regenerating the guest disk from clean sources
