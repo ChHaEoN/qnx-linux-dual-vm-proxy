@@ -36,7 +36,7 @@ What it shows: a design and a pre-registered reading, reviewed three times (cach
 feasibility against the harness), with the owner's decisions recorded. The exposure register gains a row: the startup
 library's own MMU-off writes in window 1 were made without the same maintenance in every earlier kexec rung.
 
-What it does not show: that the cache-residue hypothesis is right. Revision 4's startup is built on the PC and pinned; the board images are not yet regenerated, and nothing of
+What it does not show: that the cache-residue hypothesis is right. Revision 4's startup is built on the PC and pinned; the board images are regenerated on the new pin, and nothing of
 revision 4 has run on the board. Even a
 clean rerun would not show which CPU cache held the residue, or that the clean removed it rather than the time it took,
 and it would not show DMA quiescence after kexec. An unchanged canary would weaken the hypothesis only as far as the

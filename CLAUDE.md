@@ -436,7 +436,7 @@ Quick summary for context:
   steps deferred (D54). Revision 3 closed as U, with a CPU cache-residue hypothesis leading (HYPOTHESIS, untested); the
   secondary-CPU offline arm is designed and shelved (D65). Revision 4, accepted by the owner, is a startup cache clean
   by virtual address before the fill, under the S1 option only; next B1, then a watcher run, then B2, with the owner
-  present. Its startup is built on the PC and pinned; the board images are not yet regenerated, nothing of
+  present. Its startup is built on the PC and pinned; the board images are regenerated on the new pin, nothing of
   revision 4 has run on the board, and B2 stays not met on data; s1-design.md §14.9-14.12, §15
   and §16; figures unpublished)**; freeze
   reference architecture v1; then one measurement campaign on it (the M3 and M4 numbers, the M5 comparison, the twin
