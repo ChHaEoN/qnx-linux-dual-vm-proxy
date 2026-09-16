@@ -2448,6 +2448,20 @@ r4_pin() { local p; p="$(j6_gen_const PIN_STARTUP_S1)"; [[ "$p" =~ ^[0-9a-f]{64}
 # 0 when the params file $1 carries a startup_sha256 equal to the new PIN_STARTUP_S1.
 r4_params_new() { local p s; p="$(r4_pin)"; [ -f "$1" ] || return 1; s="$(j6_pkey "$1" startup_sha256)"; [ -n "$p" ] && [ "$s" = "$p" ]; }
 
+# §16.4: the warning for a B1 or B2 image staged from an older startup while make-s1-images.sh
+# already holds a new PIN_STARTUP_S1. Such a run skips every revision-4 gate below (r4_params_new
+# is false), yet still lands as that rung's newest attempt, so nothing says the image is stale
+# until a later rung refuses. $1 the params file, $2 the image name. Prints the warning, or
+# nothing when there is no new pin or the image is on it. Never dies.
+r4_stale_pin_warn() {
+	local p s
+	p="$(r4_pin)"
+	[ -n "$p" ] || return 0
+	r4_params_new "$1" && return 0
+	s="$(j6_pkey "$1" startup_sha256)"
+	printf '%s\n' "$2 is staged with startup_sha256=${s:-none}, not make-s1-images.sh's PIN_STARTUP_S1 ${p:0:12}...: a pre-revision-4 image, so §16.4's owner-D70 amendment is not checked for this run, and the run would land as the newest $2 attempt on the old startup (D79). Rebuild with make-s1-images.sh, or the owner decides"
+}
+
 # A record file named in S1R4's inputs, resolved: as given, under RECDIR, or by its name in the four
 # controls' attempt directories. $1 the name. Prints the path, or nothing.
 r4_input_path() {
@@ -4007,7 +4021,10 @@ j6_precondition() {
 			|| die "the newest B1 attempt ($(basename "$(dirname "$b1")")) does not read 'B1 RESULT tokens met': no J6x (§16.5.1)"
 		# §16.5 J6x row: b1-compare reported on that attempt's black box (its record, b1-compare.txt)
 		bc="$(dirname "$b1")/b1-compare.txt"; bbf="${b1%-board.log}-blackbox.log"
-		hdr="$(tr -d '\r' < "$bc" 2>/dev/null | tail -n 2 | sed -n 1p)"
+		# the redirection is opened before '2>/dev/null' applies, so an absent file must be tested
+		# for here: otherwise the shell's own 'No such file or directory' prints above the refusal
+		hdr=""
+		[ -f "$bc" ] && hdr="$(tr -d '\r' < "$bc" | tail -n 2 | sed -n 1p)"
 		{ [ -f "$bbf" ] && [[ "$hdr" == b1-compare\ run=* ]] && [ "$(tok "$hdr" run)" = "$(basename "$bbf")" ] \
 			&& [ "$(printf '%s\n' "$hdr" | sed -n 's/^b1-compare run=[^ ]* sha256=\([0-9a-f]*\) .*/\1/p')" = "$(j_sha256 "$bbf")" ] \
 			&& tr -d '\r' < "$bc" | tail -n 1 | grep -qE '^b1-compare (identical|DIFFER) '; } \
@@ -4795,7 +4812,7 @@ j_detached() {
 	# the trace is carried by J2 and J4 together or by neither (§15.4.6)
 	if [ "$arm" != j3 ]; then
 		[ "$(sed -n 's/^prereg trace=//p' "$RECDIR/J-prereg.log" | tail -n 1)" = "$trace" ] \
-			|| die "J-prereg.log registered trace=$(sed -n 's/^prereg trace=//p' "$RECDIR/J-prereg.log" | tail -n 1), but this arm would run with trace=$trace: J2 and J4 carry the trace together or not at all (§15.4.6)"
+			|| die "J-prereg.log registered trace=$(sed -n 's/^prereg trace=//p' "$RECDIR/J-prereg.log" | tail -n 1), but this arm would run with trace=$trace (D21=$(j_decision D21), newest J1 board log $([ -n "$j1b" ] && basename "$j1b" || echo none)): J2 and J4 carry the trace together or not at all (§15.4.6). A trace=no with no J1 board log is a record directory missing its J1 record, not a decision: check the record is whole before reading this as a refusal about the rung"
 		j2b="$(j_newest_board J2)"
 		if [ "$arm" = remove ] && [ -n "$j2b" ]; then
 			[ "$(sed -n 's/^jrun set in_this_arm=.* trace=\([a-z]*\) .*/\1/p' "$j2b" | tail -n 1)" = "$trace" ] \
@@ -5579,7 +5596,7 @@ run_return_records() {
 
 cmd_run() {
 	local out old up rc wrc pstore_before pstore_after newrec shim reason lsha rcs oops gok gov0 gov4 stuck left
-	local bb com3 SD base tree tree_now attempt com3_off names n f want got rmfiles verdict slots_state_post r4done r4na
+	local bb com3 SD base tree tree_now attempt com3_off names n f want got rmfiles verdict slots_state_post r4done r4na r4warn
 	local conf="$S1DIR/s1-linux.conf" pargs conf_gate cstate txg=""
 	local pc_image="$S1DIR/out/l4t/Image" pc_l4t_initrd="$S1DIR/out/l4t/initrd" pc_initrd="$S1DIR/out/initrd.cpio.gz"
 	local pc_conf_sha="" pc_image_sha="" pc_l4t_initrd_sha="" pc_initrd_sha=""
@@ -5631,13 +5648,20 @@ cmd_run() {
 			R4_READ_STEP=B2
 		fi
 		R4_LINE="$(printf '%s\n' "$R4_LINE" | sed 's/ ref_c2_start_min=[0-9]*/ ref_c2_start_min=registered/')"
+	elif [ "$IMG" = s1-h1 ] || [ "$IMG" = s1-m1b-p6 ]; then
+		# no gate (a pre-revision-4 image is a legitimate replay), but the mis-stage is said here
+		# rather than left to a later rung's refusal
+		r4warn="$(r4_stale_pin_warn "$PARAMS" "$IMG")"
+		[ -n "$r4warn" ] && note "$r4warn"
 	fi
 	stuck="${S1_STUCK_S:-600}"
 	[[ "$stuck" =~ ^[0-9]+$ ]] || die "S1_STUCK_S must be a whole number of seconds (0 turns the early stop off)"
 	KEXEC_MODE="${S1_KEXEC:-s}"
 	case "$KEXEC_MODE" in s|c) ;; *) die "S1_KEXEC must be s, or c for contingency K1" ;; esac
-	if [ -z "${S1_COM3_LOG:-}" ] || [ ! -f "$S1_COM3_LOG" ]; then
-		die "S1_COM3_LOG must name the running capture-com3-raw.ps1 file: COM3 is a mandatory co-record (§6.11)"
+	if [ -z "${S1_COM3_LOG:-}" ]; then
+		die "S1_COM3_LOG must name the running capture-com3-raw.ps1 file: it is unset; COM3 is a mandatory co-record (§6.11)"
+	elif [ ! -f "$S1_COM3_LOG" ]; then
+		die "S1_COM3_LOG must name the running capture-com3-raw.ps1 file: it is set, but names no existing file (a record directory restored or moved under a running capture reads like this); COM3 is a mandatory co-record (§6.11)"
 	fi
 	case "$MODE" in
 	boot|hold|q2)
@@ -9654,6 +9678,8 @@ cmd_harness_selftest() {
 	printf 'B1 RESULT tokens met (§6.6); synthetic\n' > "$jr7/B1-a2/s1-m1b-p6-20260915T010000Z-board.log"
 	# §16.5 J6x row: b1-compare reported on that attempt's own black box, and D54 still in force
 	check "j6x precondition: without a reported b1-compare it is refused" "$(has "$(j7pre j6r4control)" 'follows a reported b1-compare')" yes
+	check "j6x precondition: an absent b1-compare.txt prints no shell error above that refusal" \
+		"$(has "$(j7pre j6r4control)" 'No such file or directory')" no
 	bb7="$jr7/B1-a2/s1-m1b-p6-20260915T010000Z-blackbox.log"
 	printf 'T234-SHIM EL=2 synthetic\nT234 M1b -P6: procnto up\n' > "$bb7"
 	printf 'T234-SHIM EL=2 synthetic\nT234 M1b -P6: procnto up\n' > "$d/b1ref7.log"
@@ -9801,6 +9827,10 @@ cmd_harness_selftest() {
 	check "r4-read B2: --j6x-class X-f is passed, and its class recorded" \
 		"$(tr '\n' '|' < "$d/fakepy7-readb.args")/$(has "$out" 'r4_class=X-f-final')" "$PARSER|r4-read|--step|B2|--parse|$jr7a/B2-a9/parse-s1.txt|--ref-c2-start-min|7|--j6x-class|X-f|/yes"
 	rm -rf "$jr7/B2-a9"
+	# a refusal is only evidence about the rung when the record was whole: the trace mismatch says
+	# what it read, so a half-restored record directory is not mistaken for a rung refusal
+	check "the trace mismatch names its two inputs (D21 and the newest J1 board log)" \
+		"$(grep -c 'would run with trace=\$trace (D21=' "$HERE/$PROG")" 1
 	check "run_return_records runs r4-read once, after the parser, only when R4_READ_STEP is set" \
 		"$(grep -cE '^[[:space:]]*\[ -n "\$\{R4_READ_STEP:-\}" \] && r4_read_after' "$HERE/$PROG")" 1
 
@@ -9810,7 +9840,7 @@ cmd_harness_selftest() {
 	printf 'kimg_sha256=%s\nreturn_bound_s=1200\ncapture_s=4000\nmode=host\nrung=s1-h1\nstartup_sha256=%s\n' "$(j_sha256 "$kd8/s1-h1.kimg")" "$pin7" > "$kd8/s1-h1.params"
 	printf 'kimg_sha256=%s\nreturn_bound_s=1200\ncapture_s=4000\nmode=b1\nrung=s1-m1b-p6\nstartup_sha256=%s\n' "$(j_sha256 "$kd8/s1-m1b-p6.kimg")" "$pin7" > "$kd8/s1-m1b-p6.params"
 	jr9="$d/jrec9"; mkdir -p "$jr9"; jr9a="$(cd "$jr9" && pwd)"
-	r4run() { ( need_record_dir() { RECDIR="$R4RUN_REC"; }; ORIN_HOST=synthetic; S1_KIMG_DIR="${R4RUN_KD:-$kd8}"; J6_GENERATOR="$gen7"; JRUN=""; REC=""; ON_DIE=""; unset S1_COM3_LOG; cmd_run "$1" ) 2>&1; }
+	r4run() { ( need_record_dir() { RECDIR="$R4RUN_REC"; }; ORIN_HOST=synthetic; S1_KIMG_DIR="${R4RUN_KD:-$kd8}"; J6_GENERATOR="$gen7"; JRUN=""; REC=""; ON_DIE=""; if [ -n "${R4RUN_COM3:-}" ]; then S1_COM3_LOG="$R4RUN_COM3"; else unset S1_COM3_LOG; fi; cmd_run "$1" ) 2>&1; }
 	check "run s1-h1 on the new startup without the amendment is refused" "$(has "$(R4RUN_REC="$jr9a" r4run s1-h1)" 'runs only after the owner-D70 amendment')" yes
 	check "run s1-m1b-p6 (B1) on the new startup without the amendment is refused" "$(has "$(R4RUN_REC="$jr9a" r4run s1-m1b-p6)" 'runs only after the owner-D70 amendment')" yes
 	out="$(R4RUN_REC="$jr7a" r4run s1-m1b-p6)"
@@ -9860,6 +9890,13 @@ cmd_harness_selftest() {
 	kd8o="$d/kimg8o"; mkdir -p "$kd8o"; cp "$kd8/s1-h1.kimg" "$kd8o/"; sed "s/^startup_sha256=.*/startup_sha256=$zero7/" "$kd8/s1-h1.params" > "$kd8o/s1-h1.params"
 	out="$(R4RUN_KD="$kd8o" R4RUN_REC="$jr9a" r4run s1-h1)"
 	check "run s1-h1 on the old startup is not gated by revision 4" "$(has "$out" 'S1_COM3_LOG must name')/$(has "$out" 'revision 4:')" "yes/no"
+	# §16.4: not a gate, but the mis-stage is said at the run, not left to a later rung's refusal
+	check "run s1-h1 on the old startup says the image is pre-revision-4, naming the staged sha256" \
+		"$(has "$out" 'a pre-revision-4 image')/$(has "$out" "startup_sha256=$zero7")" "yes/yes"
+	check "r4_stale_pin_warn: an image on the new pin gives no warning" \
+		"$( RECDIR="$jr7a"; J6_GENERATOR="$gen7"; r4_stale_pin_warn "$kd8/s1-h1.params" s1-h1 )" ""
+	check "run says whether S1_COM3_LOG is unset or names a file that is not there" \
+		"$(has "$(R4RUN_REC="$jr7a" r4run s1-m1b-p6)" 'it is unset')/$(has "$(R4RUN_COM3="$d/no-such-capture.log" R4RUN_REC="$jr7a" r4run s1-m1b-p6)" 'names no existing file')" "yes/yes"
 	check "r4-register: the dispatch takes no argument" "$(bash "$0" r4-register extra >/dev/null 2>&1; echo $?)" 2
 	check "r4-register: S1_RECORD_DIR is required" "$(has "$(S1_RECORD_DIR= bash "$0" r4-register 2>&1)" 'S1_RECORD_DIR is not set')" yes
 
