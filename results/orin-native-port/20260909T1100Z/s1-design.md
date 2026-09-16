@@ -3041,7 +3041,7 @@ All share one attempt id `S1_J7A_ID` and one capture per session. The harness ne
 10. `JUMP`, `SHIM`, `WDT0`, `FILLED`, `PROCNTO`, `RECORDS`, `EXPORT`.
 11. `RESET` (`… resetting so the log can be recovered`), `BANNER`, `L4T`.
 
-Negative tokens after `COUNTED`: `M5L-EXC`, `M5L-EBS FAIL`, `BAD-LANDING`, `EXC `, `EL!=2`, `kexec_core: Starting new kernel`, any `s1wq:`.
+Negative tokens after `COUNTED`: `M5L-EXC`, `M5L-EBS FAIL`, `BAD-LANDING`, `EXC `, `EL!=2`, `kexec_core: Starting new kernel`, any `s1wq:`. **2026-09-14 (D49):** `EXC ` counts only at a line's start, after CR, escape sequences, leading blanks and an optional printk time are stripped, and `s1wq:` only with a boundary on both sides; the scan runs from the line after `M5L GO` to, not including, the image's own reset line, or to the segment's end when there is none. An ended `S1 BEGIN`/`S1 END` block's body is not read.
 
 **Exit codes.** 0-5 keep their meanings. **6:** the attempt ended before a counted `go`. **7:** a counted `go` never reached `procnto up`, which is F55, counted.
 
@@ -3095,9 +3095,9 @@ Negative tokens after `COUNTED`: `M5L-EXC`, `M5L-EBS FAIL`, `BAD-LANDING`, `EXC 
     - for both: `crc src=ok`, `crc dst=ok`, `M5L resmem done`, three `preclaim=ok`, `M5L W2 PASS`;
     - `M5L CHECK PASS`, and the go prelude matching the check prelude;
     - **exactly one counted `M5L GO`:** an `M5L GO` not followed by a refusal before `M5L-EBS`; then `M5L-EBS ok`, `M5L-JUMP`, the shim line with `PC=0000000080080000`, then `t234: WDT0`, in order;
-    - zero negative tokens after the counted `M5L GO`. Text before it is unconstrained.
+    - zero negative tokens after the counted `M5L GO`, up to but not including the image's own reset line, or to the segment's end when there is none (D49). Text before the counted GO is unconstrained.
   - **`resmem` summary (private `parse-s1.txt`, class only):** `resmem_c2=none|<node names>` and `resmem_c2_base=yes|no`, from the go visit's lines.
-  - **Unchanged:** L0, L1, L7 (the reset line and a firmware banner after it; `MAINSWRST`; the black box consistent with COM3), the canary checks, watches a-d, the hold, the exports, `memcanary_w_sha256`.
+  - **Unchanged:** L0, L1, L7 (the reset line and a firmware banner after it; `MAINSWRST`; the black box consistent with COM3), the canary checks, watches a-d, the hold, the exports, `memcanary_w_sha256`. **2026-09-14 (D49), settled 2026-09-16:** one exception, under `--entry uefi` only: L0's `EXC ` token is cleaned and anchored as the loader scan's, over L0's own window, so the two scans cannot read one line differently. L0's other tokens are unchanged, and under `--entry kexec` L0 is byte for byte as before.
   - **The row** keeps J6's rules and adds `j7a=clean|bad|bad-partial|bad-unstable|revert-only|F39c1|F39c3|F49|F62|incomplete` by §15.13.10.1-2. It never prints `pass` or `b2=`.
 - **`canwatch … --entry uefi --ref-j6c <J6c dir>`:** `kpf=not-applicable`; the coincidence rows suppressed; and `profile_vs_j6c=same|differs:<items>` plus `kw_sub=anchored|differs|partial` for bad runs only (§15.13.10.3). J6c's `parse-s1.txt`, `canwatch.txt` and c2's watch exports must match the sha256 registered in J7a's stage.
 - **Self-tests:**
@@ -3220,7 +3220,7 @@ Fixed before J7a-1 and registered by hash. No J7a result exists, so the §15.6 a
 | V2 entry | `T234-SHIM EL=2` with `PC=…80080000` and the big-endian DTB magic; `t234: WDT0`; `t234: ram w2`, `gpu range … not added`, three `canary … filled`, as B2 |
 | V3 host | `procnto up` naming `s1-j1`; `S1 W2 reflected=yes`; `S1 ASINFO` equal to J6c's; `memcanary_w_sha256` equal to the pin |
 | V4 watcher | J6c's complete-parse rules (`--diag j1`): six canary checks, watches a-d well formed and in order, the hold's fill and verify lines, exports a-d decoded; `wq_markers=none`; item 5 as §15.13.7 |
-| V5 return | the image's reset; a firmware banner; autoboot with no key; L4T with a new `boot_id`; `reset_reason` `MAINSWRST`; black box consistent with COM3; the key-log allowlist check passes |
+| V5 return | the image's reset; a firmware banner; autoboot with no key; L4T with a new `boot_id`; `reset_reason` `MAINSWRST`; black box consistent with COM3; the key-log allowlist check (**2026-09-14 reading (a):** a failure is F64, flagged, and the key log is not copied; the run's completeness and reading are unaffected) |
 | V6 state | §15.13.8's return state gate. **A failure is F57, an immediate stop, whatever the canaries show** |
 
 A counted run missing V3 or V4 for an image or tool reason is F56: incomplete, counted, with nothing resized at the board (§15.12 C). An F64 alone does not make a run incomplete; it is flagged for the owner.
@@ -3230,10 +3230,10 @@ A counted run missing V3 or V4 for an image or tool reason is F56: incomplete, c
 | State | Holds when |
 |---|---|
 | **clean** | c2 `verify=ok` at both checks; every c2 watch base `bad` 0 and `writer=none`; no revert on c2's watches (§15.12 B7) |
-| **bad** | c2 `verify=bad` at either check, **or** any c2 watch base `bad` above 0, **or** any c2 change event with stable re-reads. A transient write that later healed is still a write |
+| **bad** | c2 `verify=bad` at either check, **or** any c2 watch base `bad` above 0, **or** any c2 change event with stable re-reads. A transient write that later healed is still a write. **2026-09-14 (D48), settled 2026-09-16:** also, in a complete run, a c2 change with no stable re-read, revert or oscillation (both checks `ok`, every base `bad` 0, and some c2 watch reading `writer` other than `none`, which covers `static`, `stopped` and `ongoing`). Such a run is never `bad-unstable`, since F34 needs an oscillation or a revert |
 | **revert-only** | not bad, but a c2 revert or oscillation above 0: a misread with no write shown |
 
-**c2 bad in a counted run that is not complete (one rule, pre-registered).** When c2's `canary … filled` line was printed and a parse-valid canary check prints c2 `verify=bad` before the run fails for any later reason (F49, F56, F62, a cut), the run reads **bad-partial**. It classifies as K-w with sub-label `partial` (§15.13.10.4), unless F34 holds on c2's printed watches (then bad-unstable). Profile items that need missing data print `n/a`. A run with no parse-valid c2 check reads nothing about c2.
+**c2 bad in a counted run that is not complete (one rule, pre-registered).** When c2's `canary … filled` line was printed and a parse-valid canary check prints c2 `verify=bad` before the run fails for any later reason (F49, F56, F62, a cut), the run reads **bad-partial**. It classifies as K-w with sub-label `partial` (§15.13.10.4), unless F34 holds on c2's printed watches (then bad-unstable). Profile items that need missing data print `n/a`. A run with no parse-valid c2 check reads nothing about c2. **2026-09-14 (D51), settled 2026-09-16:** the rule also covers a V1 (loader) failure found after `COUNTED`, such as a prelude mismatch (`m5l_prelude_same=missing`): the run is counted, parses `incomplete`, and c2 bad at a printed check still reads bad-partial. No new F-number is created; the run is recorded by its mismatch.
 
 There is **no map label.** UM4's pre-claim makes every complete run's c2 ConventionalMemory at the claim and ours until the exit. A map that is not free refuses before `go` (F50-F52, F54).
 
@@ -3284,19 +3284,19 @@ Preconditions met (VERIFIED, private record): J4 is F36; J6c's parser row carrie
 
 | Class | Holds when | Sub-labels | Then |
 |---|---|---|---|
-| **K-w** | **any one counted J7a run reads bad or bad-partial** (not bad-unstable) | `anchored\|differs\|partial` (§15.13.10.3); `profile=same\|differs:<items>`; `intermittent` if another complete run was clean; `repeated` if two runs read bad | "Writer unidentified; not the removable masters; present with no Linux in the power cycle." Kill condition 1 stands for the 11c candidate. Only `anchored` adds "the corruption is anchored at the address" (HYPOTHESIS). Revision 4 as §15.6: a new range, J7c's canaries in its B2, J7e for H5. **After `anchored`, J7a stops.** After `differs` or `partial`, J7a-2 runs within the cap, if no immediate stop applies, to test for a repeat; then the owner decides |
+| **K-w** | **any one counted J7a run reads bad or bad-partial** (not bad-unstable) | `anchored\|differs\|partial` (§15.13.10.3); `profile=same\|differs:<items>`; `intermittent` if another complete run was clean; `repeated` if two runs read bad. **2026-09-14 (D52, D53), settled 2026-09-16:** a bad or bad-partial run counts toward K-w whatever its `DRAM_OFF_S` reading, and a DRAM-violating clean run still gives `intermittent`; no tool prints `repeated`, which is applied at the classification memo, where this row's definition and precedence 6's are separated by hand | "Writer unidentified; not the removable masters; present with no Linux in the power cycle." Kill condition 1 stands for the 11c candidate. Only `anchored` adds "the corruption is anchored at the address" (HYPOTHESIS). Revision 4 as §15.6: a new range, J7c's canaries in its B2, J7e for H5. **After `anchored`, J7a stops.** After `differs` or `partial`, J7a-2 runs within the cap, if no immediate stop applies, to test for a repeat; then the owner decides |
 | **K-r(u)** (sub-class of K-r) | a counted run reads bad-unstable | — | "c2's reads are unstable under UEFI entry; under kexec they were stable, with corrupted data." The range is unusable under both entries. Revision 4's B2 gets a read-stability check under both. Outranks K-w for the same run. J7a stops |
-| **E** | **two complete counted J7a runs, both clean;** no F39c1, F49, F55, F57 or F62 in the counted runs; no F50 in any J7a attempt. A refused `check` (F51, F52, F54) or F53 or F61 in an earlier, uncounted attempt the owner chose to retry does not block E | `c3=clean\|hit` | "The writer needs the kexec entry path in this power cycle, in the broad sense: Linux's DMA, or a coprocessor, firmware, PSCI, clock or EMC state that Linux's run, its shutdown or the L4T boot option leaves, or the tree. The cause within that path is not identified." **E does not exclude a writer anchored at window 2's base whose activity depends on kexec-path or L4T-boot state; J7c and J7e keep their value under E.** Not a range verdict. B2 stays NOT MET on data. Owner (D31): a wider quiesce search in revision 4, UEFI entry for S1 under freeze item 3 (with its own B1 and B2 under that entry), or stopping S1-F |
+| **E** | **two complete counted J7a runs, both clean;** no F39c1, F49, F55, F57 or F62 in the counted runs; no F50 in any J7a attempt; **and no counted run whose `DRAM_OFF_S` check read `violated` (D52); a counted run whose check was not read (`unread`) is held out of E as well (settled 2026-09-16: E's premise R87 needs the unpowered wait shown)**. A refused `check` (F51, F52, F54) or F53 or F61 in an earlier, uncounted attempt the owner chose to retry does not block E | `c3=clean\|hit` | "The writer needs the kexec entry path in this power cycle, in the broad sense: Linux's DMA, or a coprocessor, firmware, PSCI, clock or EMC state that Linux's run, its shutdown or the L4T boot option leaves, or the tree. The cause within that path is not identified." **E does not exclude a writer anchored at window 2's base whose activity depends on kexec-path or L4T-boot state; J7c and J7e keep their value under E.** Not a range verdict. B2 stays NOT MET on data. Owner (D31): a wider quiesce search in revision 4, UEFI entry for S1 under freeze item 3 (with its own B1 and B2 under that entry), or stopping S1-F |
 | **K-o** (new) | a `check` refuses with F50 | `where=c1\|c2\|c3\|w2` | "Kill condition 1 stands on the firmware's own map at Shell time; no writer is shown." Recorded as contradicting 11c's `/proc/iomem` reading (plan §8 unknown #6, freeze item 6). Revision 4's range derivation includes a UEFI map read. Needs the owner's acceptance (D41) |
 | **U** | anything else, including: one clean run and no second complete run; a revert-only run with the other clean or missing; F51, F52, F53, F54 or F61 twice for one cause; F55; F56 or F62 with no parse-valid c2 check; F39c1 or F49 with c2 not bad; F65; any immediate stop before a class holds | leads recorded | B2 stays data; S1-F stays stopped; owner (D31) |
 
 **Precedence:**
 1. An immediate stop ends J7a.
 2. A reading made in the stopping run still classifies: c2 bad or bad-partial there still gives K-w, with the exposure item.
-3. K-r(u) outranks K-w for the same run.
+3. K-r(u) outranks K-w for the same run. **Settled 2026-09-16 (D52):** this stays within one run. When different runs give K-w and K-r(u), `j7a-across` prints both lines with `classes=K-r(u),K-w runs=different`, and the combination is read at the desk.
 4. K-o needs no counted run.
 5. A clean run then a bad run gives K-w/intermittent.
-6. A first run reading K-w `anchored` or K-r(u) ends J7a. A first run reading K-w `differs` or `partial` allows J7a-2 (§15.13.11). If J7a-2 then reads bad with P1, P2 and P7 same **as J7a-1**, the label is `differs,repeated` (a UEFI-path lay-down of its own); bad with an anchored profile against J6c gives `anchored`; clean gives `intermittent`.
+6. A first run reading K-w `anchored` or K-r(u) ends J7a. A first run reading K-w `differs` or `partial` allows J7a-2 (§15.13.11). If J7a-2 then reads bad with P1, P2 and P7 same **as J7a-1**, the label is `differs,repeated` (a UEFI-path lay-down of its own); bad with an anchored profile against J6c gives `anchored`; clean gives `intermittent`. **Settled 2026-09-16 (D53):** no tool computes this; `j7a-across` prints `precedence6=read-at-desk tool=none`.
 
 **2026-09-15 (D54): the consequence clauses of the E row's Then and the K-w row's Then are suspended:** K-w's revision-4 range derivation and "Kill condition 1 stands for the 11c candidate"; E's owner options (a wider quiesce search, UEFI entry for S1-F, stopping S1-F). **§15.13.11's stops, including "After `anchored`, J7a stops", and precedence rules 1-6 stay in force.** A J7a result read while suspended records its class and sub-labels; no suspended consequence follows from it until the owner rules. **The lift is two-part:** `D54_LIFT=owner-<decision>` lifts the board-step deferral, and `D54_READING=restored|amended-<sha>` records the owner's ruling on the two Then clauses (restored unchanged, or amended by a dated append whose commit is named). `j7a_precondition` refuses without both. Without the second part, a lift would restore the clauses exactly as the desk analysis showed they route wrongly under HC (§15.14.1). Under revision 4's X-f, any later lift is `amended-<sha>` only (D82); under X-u, D71's branch lifts both parts.
 
@@ -3312,13 +3312,13 @@ Preconditions met (VERIFIED, private record): J4 is F36; J6c's parser row carrie
 - **c3 bad:** F39c3. c3 carried a small static write in two of the four kexec runs, so under D39 it does not stop J7a-2 when E still needs that run. Under E, the class line gains `c3=hit`, and public text uses the `c3=hit` sentence (§15.13.16).
 - **c1 bad:** F39c1 stays an immediate stop with no waiver. c1 was clean in every kexec run, so a hit with no Linux is a new window-1 exposure, and D32's freeze-gate sub-item is updated.
 - **The hold fails (F49):** an immediate stop; the exposure item is raised ("a writer reached held sysram with no Linux in the power cycle", HYPOTHESIS). BootServices descriptors printed in either window are named as a possible UEFI-driver residue (R82). A hold `map=fail` or `watch=fail reason=nomem` is F56, not F49.
-- **Startup or QNX fails before `procnto up` (F55):** counted, no canary reading, J7a ends for the session. It is an entry-path finding for freeze item 3 (`-P4` from firmware state, window 2, a large IFS). It includes `M5L-EBS FAIL`, whose two causes (the exit refused four times, or UM6 refusing a later map) COM3 cannot tell apart. Whether the second `go` is spent on a retry is D42.
+- **Startup or QNX fails before `procnto up` (F55):** counted, no canary reading, J7a ends for the session. It is an entry-path finding for freeze item 3 (`-P4` from firmware state, window 2, a large IFS). It includes `M5L-EBS FAIL`, whose **three** causes COM3 cannot tell apart: the exit refused four times; UM6 refusing a later map; or, **2026-09-14 (D50)**, a first-try `AllocatePool` or `GetMemoryMap` failure before any exit, which reaches the trampoline in `MODE_EBS_FAIL`. Whether the second `go` is spent on a retry is D42.
 - **A WDT-type reset (F62):** `reset_reason` not `MAINSWRST`, after `procnto up` and before the image's reset line. **Counted** (the exit was attempted). c2's reading from printed checks stands under the partial rule. The unchanged image is not retried (D42): the same inherited WDT0 would recur. Before `procnto up`, the same observation is F55.
 
 ##### 15.13.10.6 Dated appends to §15.6's rows (not edits in place)
 
 - **K-w:** "2026-09-14 (D38, §15.13): J7a is bad when one counted J7a run reads c2 bad, or bad at a printed check of an incomplete run, under §15.13.10.1. Sub-labels: anchored, differs, partial, intermittent, repeated. Only `anchored` supports 'anchored at the address'. The J6c live-writer condition rests on an early heal with stable re-reads, so K-w's recorded sentence never says 'live' or 'ongoing' unless J7a's P5 differs."
-- **E:** "2026-09-14 (D38, §15.13): J7a is clean only when two complete counted J7a runs read c2 clean, with no F39c1, F49, F55, F57 or F62 in them and no F50 in any J7a attempt. E means the writer needs the kexec entry path's state in the broad sense, including the L4T boot option, PSCI history and uptime; it does not exclude an anchored writer that this state switches on."
+- **E:** "2026-09-14 (D38, §15.13), with D52's clause of 2026-09-16: J7a is clean only when two complete counted J7a runs read c2 clean, with no F39c1, F49, F55, F57 or F62 in them, no F50 in any J7a attempt, and no counted run whose `DRAM_OFF_S` check read `violated` or was not read. E means the writer needs the kexec entry path's state in the broad sense, including the L4T boot option, PSCI history and uptime; it does not exclude an anchored writer that this state switches on."
 - **K-o and K-r(u):** added as in §15.13.10.4.
 - **U:** adds "one clean J7a run without a second complete run; a revert-only J7a run; F51, F52, F53, F54 or F61 twice for one cause; F55; F56 or F62 with no c2 check; F65".
 - **Immediate stops:** "any power cut" gains "other than a J7a planned cut after READY (X6)".
@@ -3328,7 +3328,7 @@ Preconditions met (VERIFIED, private record): J4 is F36; J6c's parser row carrie
 #### 15.13.11 Budget, order and stops
 
 - **J7a's own cap: at most two counted `go`s in revision 3.** They are outside §15.6's four-kexec count, which stays at three used (D38). `j7a_precondition` refuses a third.
-- **Counted:** a `COUNTED` line (§15.13.7): `M5L-EBS ok`, `M5L-EBS FAIL`, or `M5L GO` followed by 10 s with neither a refusal nor a prompt. F55, F56 and F62 are counted.
+- **Counted:** a `COUNTED` line (§15.13.7): `M5L-EBS ok`, `M5L-EBS FAIL`, or `M5L GO` followed by 10 s with neither a refusal nor a prompt. **2026-09-14 reading (k):** a post-exit token after `M5L GO` with no refusal (`M5L-JUMP`, the shim line or `t234: WDT0`) also counts the go, so a lost `M5L-EBS` line cannot hide a counted run. F55, F56 and F62 are counted.
 - **Not counted** (m5-design §5.3): a missed ESC; no READY or an ANOMALY; a file not found; a capture not running; any `check` refusal; any refusal in `go` before `COUNTED`, including a first-try `w2-final` (F53); SHELL-AFTER-GO (F61); F65; a session stopped before `go`. After an uncounted refusal in `go`, the session does not repeat J7a-go (m5-design D11): it runs C, and a later session may retry. **Two failures for one cause end J7a** (§15.6).
 - **Order in a session:** bench, pre, stage, ctl (refit), J7a-1, return. Then J7a-2 only if J7a-1 was complete and clean, complete and revert-only, complete with F39c3 and c2 clean, or K-w `differs` or `partial` with no immediate stop. Then C.
   - J7a-2 may run in the same session on J7a-1's return boot, or in a later session that repeats pre, stage, ctl and C.
@@ -3357,7 +3357,7 @@ Preconditions met (VERIFIED, private record): J4 is F36; J6c's parser row carrie
 | F52 | `M5L REFUSE fdt reason=w2\|canary` | the firmware tree lies in window 2 or over c1 | M | no `go`; U lead; owner |
 | F53 | a refusal in `go` after `check` passed in the same Shell visit: any `M5L REFUSE` in the go run, including `w2-final` on the first try | the map changed between `check` and the exit | M | SHELL-AFTER-GO (F61); not counted; no repeat in this session (D11); a second occurrence ends J7a |
 | F54 | `M5L REFUSE alloc status=…`, or a canary pre-claim refusal, with `M5L self` over the target or that canary | the firmware placed the larger loader over the target or a canary | M | revise the loader offline (m5-design Q7); T0 again; not a firmware finding |
-| F55 | a counted `go`, no `procnto up` (any of m5-design F17-F24, F26-F28, including `M5L-EBS FAIL` from four refused exits or a later-try UM6 refusal, or a reset whose `reset_reason` is not `MAINSWRST`) | the entry path fails for `s1-j1` under UEFI | S or P (§15.13.9) | counted; no reading; J7a ends for the session; D42; freeze item 3 finding |
+| F55 | a counted `go`, no `procnto up` (any of m5-design F17-F24, F26-F28, including `M5L-EBS FAIL` from four refused exits, a later-try UM6 refusal, or a first-try allocation or map-read failure before any exit (D50), or a reset whose `reset_reason` is not `MAINSWRST`) | the entry path fails for `s1-j1` under UEFI | S or P (§15.13.9) | counted; no reading; J7a ends for the session; D42; freeze item 3 finding |
 | F56 | a counted run past `procnto up` with V3 or V4 missing | image, tool or harness reason | SR | incomplete; counted; nothing resized; c2 by the partial rule |
 | F57 | the return state gate fails (ESP, a variable outside the control set, `nvbootctrl`, `extlinux.conf`, `BOOTAA64.efi`, `bios_version`), or an ESP removal fails to restore S0 | m5-design F31-F33 | M or X | immediate stop; F33 stops all board work |
 | F58 | an autoboot stops in a menu, or menu text appears with no key sent (control boot or after the image's reset) | TX level or a stray key (m5-design C15, F3) | M (`Continue`) | no `go` until one validated L4T boot; fix the wire |
@@ -3447,7 +3447,7 @@ Preconditions met (VERIFIED, private record): J4 is F36; J6c's parser row carrie
 - Run a kexec rung, `jrun`, `capture-com3-raw.ps1` or any J1-J6 command while the TX wire is fitted, or use a J7a capture for any kexec rung.
 - Jumper the adapter's TX to its RX while the RX is on the board.
 - Fit or remove the TX wire while the terminal is stopped. The fit happens with DC power removed.
-- Restore DC power before `DRAM_OFF_S` has passed ahead of a counted `go`.
+- Restore DC power before `DRAM_OFF_S` has passed ahead of a counted `go`. **(D52):** a go made after such a violation still counts by the token rule and never contributes to E; a bad c2 from it still counts toward K-w.
 - Send a key after `go` until L4T answers ssh, except SHELL-AFTER-GO's single arm and `reset`.
 - Open an ssh session to the board between the planned cut and the image's reset.
 - Copy, quote or open the raw capture by hand; write a raw segment file into the record directory; keep an `efibootmgr -v` output or a menu screen unredacted.
@@ -3593,6 +3593,174 @@ Three reviews read the draft: safety (RS), power of the reading (RP), feasibilit
 | RF11 | minor | no raw segment in the record directory, even briefly; record range and hash; self-test | **Applied** (pipe or an outside `mktemp` with an EXIT trap) | §15.13.7 P13, offsets and segments; self-tests |
 
 **Rejected outright:** none. **Rejected in part:** RS1's new token (K2); RS6's route, kept as analysis (K1); RF5's gate-B change (not reached by any J7a phase); RP1's "every USB device except the adapter", adjusted to the board's ports with the wireless card recorded; RF9's suggested placement on the start line.
+
+---
+
+#### 15.13.21 After the build: owner decisions D48-D53 and implementation readings (2026-09-14)
+
+**Appended 2026-09-16, with §15.13.21.3 settled the same day.** The text below is as written on 2026-09-14, after the J7a build and before any J7a board step; it is unchanged except for this note and the answers recorded in §15.13.21.3. **The owner confirmed every one of the six items as the code behaves**, so every reading each entry left open is now taken, marked as such below, and the amendments those entries list are in force. J7a's board steps stay deferred under D54 (§15.14.6). With the six settled, `J7a-rule-15.13.md` is extracted into the record directory (§15.13.21.4) and carries §15.13.10 as amended by D48-D53.
+
+Phase 3b. **In the design since 2026-09-16 (appended as written on 2026-09-14).** It records the six owner decisions made after the J7a build (§15.13.7) and what the PC code now does for each. It separates what the owner decided from the readings the implementation added, and marks each reading for the owner's confirmation. It also lists the design sentences each decision amends. Nothing here ran on the board. No figure appears. VERIFIED (source) means read in the code at this change. VERIFIED (self-test) means a synthetic case in `parse-s1.py --selftest` or `s1-board.sh harness-selftest` checks it.
+
+##### 15.13.21.1 Owner decisions (2026-09-14)
+
+- **D48. A complete run whose c2 shows only progressive change reads bad.**
+  - Decision: when c2's watches show a change with no stable re-read, no revert and no oscillation (prog only, or a change seen only at FINL with `writer=ongoing`), c2 reads **bad**, because it can lead to K-w. The parser no longer prints `j7a=unsettled` or `j7a_class=unsettled`.
+  - Implemented: `j7a_rows` gives that case row `bad`, class K-w. `unsettled` is gone from `J7A_ROWS`, from the class list and from every output. VERIFIED (self-test: a prog-only case and a FINL-only `writer=ongoing` case both read `bad`, K-w).
+  - What the code classes bad, in full. In a complete run both c2 checks read `ok` or `bad`: the completeness list requires it. So the new branch holds exactly when:
+    - both c2 checks read `ok`;
+    - every c2 watch's base `bad` is 0;
+    - no stable re-read, revert or oscillation;
+    - at least one c2 watch's `writer` is not `none`, which leaves `static`, `stopped` or `ongoing`.
+
+    The two cases the owner named are inside this set. `writer=static` or `stopped` with no stable re-read, revert or oscillation is also there. **Reading, taken 2026-09-16 (§15.13.21.3 item 1):** those two writer values fall under D48's general wording ("a change with no stable re-read, no revert and no oscillation"). VERIFIED (source: `j7a_rows`; the completeness list in `analyze_run`).
+  - F34 needs an oscillation or a revert above zero, so this case is never `bad-unstable`. VERIFIED (source: `c2_f34`).
+  - **Amends** §15.13.10.1's table, the **bad** row: "… or, in a complete run, a c2 change with no stable re-read, revert or oscillation (both checks ok, base bad 0, some c2 watch's writer not none) (D48)". It also amends §15.13.7's row list, which never carried `unsettled`, so it needs no change.
+- **D49. The negative-token scan after the counted `M5L GO`: its bound and its `EXC ` anchoring.**
+  - Decision: the §15.13.7 scan for zero negative tokens after the counted `M5L GO` stops at the image's own reset line (`… resetting so the log can be recovered`), as L0's does. `EXC ` matches only at the start of a line, after CR removal, leading blanks and an optional printk time are stripped. Parser and harness apply the same bound and the same anchoring.
+  - Implemented, the same way in both tools (`parse-s1.py j7a_loader`, `s1-board.sh j7a_go_states`):
+    - **Text:** CR, OSC and CSI sequences, a lone ESC and non-printing bytes are removed, then leading and trailing blanks (`j7a_norm` in the parser).
+    - **Start:** the line after the counted `M5L GO`. In the harness a token between `M5L GO` and COUNTED waits: it is printed at COUNTED and dropped at a refusal, which leaves the go uncounted. When the watch never saw `M5L GO`, its scan runs from COUNTED on; the parser then has no counted GO and reads the run incomplete. The parser now reads the scan straight after finding the counted GO, before the go run's own checks, so a run whose go start line is missing is scanned too.
+    - **End:** up to, not including, the first image reset line after that GO (`T234 S1 <image> -P4: resetting …`). A `BWAIT guard deadline` line does not end the scan in either tool, because D49 names only the image's reset line. In the harness it still sets the RESET state for the watch and for advice.
+    - **With no reset line** (a hang, a WDT reset, the loader's own reset after `M5L-EBS FAIL`): the scan runs to the segment's end in the parser and to the end of the COM3 file in the harness. That takes in the firmware text and any return L4T text. Before this change the harness stopped at the firmware banner and the parser read the whole segment, reset line included.
+    - **Lines read:** the parser's record lines. The body of an ended `S1 BEGIN`/`S1 END` block is not read. The body of an unended block is read, from the moment the next `S1 BEGIN` or the end of the text closes it (`split_log`; matched on the line with only CR and edge blanks removed). The harness follows the same rules. While a text export is still arriving, a live watch pass can therefore print a token from its body that a later pass, after `S1 END`, no longer prints; the board log keeps the earlier `j7a NEGATIVE token` record. A base64 body cannot hold any of the tokens.
+    - **Tokens:** `M5L-EXC`, `M5L-EBS FAIL`, `BAD-LANDING`, `EL!=2` and `kexec_core: Starting new kernel` anywhere in the line. `EXC ` only at the line's start, after an optional printk time. `s1wq:` only with a blank, a closing bracket or the line's start before it and a blank or the line's end after it, as the parser's `WQ_MARK_RE`. Before this change the harness matched a bare `s1wq:`, and it read `M5L-EBS FAIL` only on the line that counted the go; it now reads it anywhere in the scan, as the parser does.
+    - VERIFIED (self-test, both tools, on the same token lines):
+      - a mid-line `EXC ` does not count;
+      - a line-start `EXC ` behind blanks and a printk time counts, and so does one behind an OSC sequence and a stray byte;
+      - `EXC ` and `M5L-EXC` after the reset line do not count;
+      - an `M5L-EXC` between `M5L GO` and `M5L-EBS ok` counts; the harness drops it when a refusal follows;
+      - a line-start `EXC ` in an ended text block is not read, but it is read in an unended block, closed either by the next `S1 BEGIN` or by the end of the text;
+      - `xs1wq:` does not count, while `]s1wq: ` does;
+      - after a count by clock, a later `M5L-EBS FAIL` counts;
+      - both files carry the same printk-time pattern, the same `s1wq:` boundaries and the same reset-line bound.
+    - VERIFIED (a desk run on the PC): the parser's `split_log` and `j7a_loader`, run on the harness's sixteen fixture files, find a token exactly where `j7a_go_states` counts one.
+  - **Implementation reading, taken 2026-09-16 (§15.13.21.3 item 2): L0's `EXC ` under `--entry uefi`.** D49 names the post-GO scan, and §15.13.7 says L0 is unchanged under UEFI entry. Left unchanged, L0's bare `EXC ` search would still fail a run on a mid-line `EXC ` that the loader scan ignores. The anchoring would then change no verdict. So under `--entry uefi` only, L0's `EXC ` check uses the same cleaning (`j7a_norm`) and the same anchored pattern, over L0's own window: from the counted GO to L0's reset line. L0's other tokens (`BAD-LANDING`, `EL!=2`, `canary … overlaps`) are unchanged. Under `--entry kexec` L0 is byte for byte as before. VERIFIED (self-test: an `EXC ` behind a CSI sequence at a line's start fails both L0 and the loader scan; a re-parse of B2, J2, J4 and J6c prints the stored `parse-s1.txt` line for line, except the `parser=` and `input_log=` lines, since the stored parses read the raw capture and the kept `-com3.log` is its redacted copy).
+  - **Amends:**
+    - §15.13.7's "Negative tokens after `COUNTED`" line: "… `EXC ` at a line's start after an optional printk time, `s1wq:` with a boundary on both sides; read from the line after `M5L GO` to the image's reset line (D49)".
+    - §15.13.7's check "zero negative tokens after the counted `M5L GO`": "… up to, not including, the image's own reset line, or to the segment's end when there is none; an ended block's body is not read (D49)".
+    - §15.13.7's "**Unchanged:** L0, L1, L7" bullet (the owner accepted the L0 reading on 2026-09-16; applied): "L0, except that under UEFI entry its `EXC ` token is anchored and its lines cleaned as the loader scan's (D49, owner's reading)".
+- **D50. A first-try pre-exit allocation or GetMemoryMap failure stays as implemented.**
+  - Decision: no loader change.
+  - As implemented, under `M5L_J7A`: when the final-map buffer's `AllocatePool` fails, the retry loop never runs. When the first `GetMemoryMap` into it fails, the loop breaks before any `ExitBootServices`. Either way control reaches the trampoline in `MODE_EBS_FAIL`, which prints `M5L-EBS FAIL` after taking the CPU and resets. VERIFIED (source: `m5load.c` step 10 under `M5L_J7A`, and the call after the loop).
+  - Classification: `M5L-EBS FAIL` makes the watch's COUNTED state, so the go is counted. With no `procnto up` after it the run is F55, per §15.13.10.5. COM3 cannot tell this cause from four refused exits or a later-try UM6 refusal. VERIFIED (source: `j7a_go_states`; self-test: `M5L-EBS FAIL` counts once and is a negative token).
+  - **Amends:**
+    - §15.13.3 UM6's retry-discipline bullet;
+    - §15.13.12's F55 observable ("including `M5L-EBS FAIL` from four refused exits, a later-try UM6 refusal, or a first-try allocation or map-read failure before any exit (D50)");
+    - §15.13.10.5's F55 bullet ("whose three causes … COM3 cannot tell apart (D50)").
+- **D51. `prelude_same` stays exact equality.**
+  - Decision: no code change. `prelude_same` requires the go run's `M5L` lines, from its start line to `M5L GO`, to equal the check run's lines up to `M5L CHECK PASS`, line for line. VERIFIED (source: `j7a_loader`).
+  - **Recorded risk (window 2), HYPOTHESIS:** UM5 prints window 2's map descriptors in both runs. Between `check` and `go` the Shell or a firmware driver can change the map: a pool allocation, a freed buffer, or a split or merged descriptor. The go prelude then differs from the check prelude, even when the go run's own UM2-UM5 and UM9 lines all read clean.
+  - What the code does with such a go (VERIFIED, source):
+    - it has passed `M5L GO`, so it is counted when an exit follows (the watch's COUNTED state);
+    - the parse prints `m5l_prelude_same=missing` and verdict `diagnostic incomplete`;
+    - its row comes from `j7a_rows`' incomplete branch: `bad-partial` (or `bad-unstable`) when c2's filled line was printed and a parse-valid check reads c2 bad, else only `incomplete`.
+  - What the design did not say, **settled 2026-09-16 (§15.13.21.3 item 3): the partial rule applies and no new F-number is created.** §15.13.12 has no F-number for a V1 (loader) failure found after COUNTED. F56 is V3 or V4 missing, and F55 needs no `procnto up`. The partial rule of §15.13.10.1 covers a run that fails "for any later reason (F49, F56, F62, a cut)". A prelude mismatch arises before the exit, so it is not plainly a later failure. As implemented, the parser applies the partial rule to it. Read by §15.13.10.4 without that, such a run is U unless c2 reads bad at a printed check. Question: does the partial rule apply to a V1 failure after COUNTED, and which F-number, if any, does it take?
+  - The owner accepts the risk: exact equality keeps T1′ and the go run bound to one map, and a looser compare would need a new rule for which lines may differ.
+- **D52. A counted go whose `DRAM_OFF_S` check failed never contributes to class E.**
+  - Decision: when the unpowered time is below `DRAM_OFF_S`, the run can never contribute to E, even when clean. A bad c2 from such a run still counts toward K-w.
+  - Implemented in `parse-s1.py run`:
+    - `--dram-off possible|violated|unread` is required under `--entry uefi` and refused under kexec.
+    - The parse prints `j7a_dram_off=` and `j7a_e_eligible=yes|no-dram-off-violated|no-dram-off-unread`.
+    - A clean run that is not eligible keeps its row `clean` (the observation) with `j7a_class=U`, never `E-candidate`. A bad or bad-partial run keeps K-w.
+    - VERIFIED (self-test).
+  - Implemented in `parse-s1.py j7a-across` (new): §15.13.10.4's reading across the counted runs, taken from the run directories' `parse-s1.txt` and `canwatch.txt`. It prints with the prefix `S1JX` and writes nothing.
+    - K-r(u) for the runs that read `bad-unstable`.
+    - K-w for the runs that read `bad` or `bad-partial`, whatever their DRAM reading. It lists each bad run's `kw_sub`. It adds `intermittent` when another complete run read clean, and prints `kw_includes_dram_off_not_possible=yes` when such a run is among the bad ones.
+    - When different runs give both K-r(u) and K-w, both lines print, followed by `classes=K-r(u),K-w runs=different`, and the combination is read at the desk. **Reading, taken 2026-09-16 (§15.13.21.3 item 5):** §15.13.10.4 precedence 3 ranks K-r(u) over K-w "for the same run", and stays within one run. A run reads one or the other, so the tool does not extend that ranking across runs. A first run reading K-w `differs` followed by a bad-unstable J7a-2 is exactly this case. VERIFIED (self-test in both tools).
+    - With neither: E only when two complete runs read clean with `j7a_class=E-candidate` and `j7a_e_eligible=yes`. The E line then names the checks it cannot read as desk checks: no F50 in any attempt, no F55, no F57.
+    - Otherwise U, naming each clean run held out of E with its `e_eligible` value.
+    - VERIFIED (self-test: a DRAM-violating clean run and an eligible clean run read U, never E; a bad c2 from a violating run gives K-w).
+  - Implemented in `s1-board.sh`:
+    - `j7a_dram_reading` reads `dram_off=` from the go's `j7a go_counted` line; a missing or other value reads `unread`.
+    - `j7a_return` records `j7a e_eligible=…` for the run and passes `--dram-off` to the parser. After canwatch it records `j7a across …` lines from `j7a-across`, run over every `J7a-<n>` directory that holds a `parse-s1.txt`.
+    - The three harness messages that said the owner would decide how a DRAM-violating go is read now cite D52: the violation line in the go watch, the DEVIATION line on `go_counted`, and the DEVIATION line in `j7a_return`. Each says the go counts by the token rule, never contributes to E, and a bad c2 from it still counts toward K-w.
+    - VERIFIED (self-test).
+  - **Reading, taken 2026-09-16 (§15.13.21.3 item 4): `unread` is held out of E as well.** D52 names a failed check only. `unread` means the check was not read: the watch never saw firmware text after READY, or the `go_counted` line is missing. The code holds such a run out of E, because R87, E's premise, needs the wait met. It prints `j7a_e_eligible=no-dram-off-unread`, and the harness line says the run is held out of E "pending the owner's confirmation (D52 names a failed check)". In a counted go it should not arise: the Shell cannot be entered before firmware text, and the first firmware text after READY sets `possible` or `violated`. HYPOTHESIS (source reading of `j7a_watch_go`). If the owner reads `unread` as eligible, only the `eligible` line in `analyze_run` and the E test in `j7a_across` change.
+  - **Reading, taken 2026-09-16 (§15.13.21.3 item 4): a DRAM-violating clean run still gives K-w `intermittent`.** D52 limits E only. A clean run whose DRAM_OFF_S check failed is still a clean observation, so when another run reads bad, `j7a-across` adds `intermittent`. VERIFIED (self-test: a clean run followed by a bad c2 from a violating run gives `J7a-2:differs,intermittent`).
+  - **Amends:**
+    - §15.13.10.4's E row: "… no F50 in any J7a attempt; **no counted run whose `DRAM_OFF_S` check read violated (D52)**". The proposed line that follows is separate and pending the owner's confirmation: "a counted run whose `DRAM_OFF_S` check was not read (`unread`) is held out of E as well".
+    - §15.13.10.6's dated E append: "… with no F39c1, F49, F55, F57 or F62 in them, no F50 in any J7a attempt, **and no counted run whose `DRAM_OFF_S` check read violated (D52)**".
+    - §15.13.10.4's K-w row: "a bad or bad-partial run counts whatever its `DRAM_OFF_S` reading (D52)".
+    - §15.13.15's `DRAM_OFF_S` item: a counted go after a violation counts by the token rule and never contributes to E.
+- **D53. Precedence 6's `differs,repeated` is a desk reading.**
+  - Decision: the parser does not claim to compute it, and prints a clear marker that it is read at the desk with no tool.
+  - Implemented: every `j7a-across` output ends with `precedence6=read-at-desk tool=none (…)`. The word `repeated` appears nowhere else in its output. `canwatch` compares each run with J6c only, as before. VERIFIED (self-test).
+  - D53 covers precedence 6 only.
+  - **Reading, taken 2026-09-16 (§15.13.21.3 item 6): the K-w table's other `repeated`.** §15.13.10.4's K-w sub-labels include "`repeated` if two runs read bad", and that condition is simpler: a tool could compute it. The tool does not print it. With two bad runs, `j7a-across` prints each run's `kw_sub` against J6c, so the fact that two runs read bad is visible, but no label is printed. The reason is that the design defines `repeated` twice:
+    - the table: any two runs read bad;
+    - precedence 6: J7a-2 reads bad with P1, P2 and P7 the same **as J7a-1**.
+
+    Printing the first would put the word on a pair that precedence 6 may not call repeated. **Settled 2026-09-16:** no tool prints either definition; the label is applied at the classification memo, where the two are separated by hand.
+
+##### 15.13.21.2 Implementation readings (checked against the code, stated as implemented)
+
+- **(a) V5's key-log gate against "an F64 alone does not make a run incomplete".** The parser never reads the key log. `j7a_return` runs `j7a_keylog_check`; on a failure it records F64, does not copy the key log into the J7a directory, and flags the owner. The parse verdict and the run's reading are unchanged. As implemented, the key-log item in V5 is a recorded check, not a completeness gate. VERIFIED (source). Amendment: V5's last item reads "the key-log allowlist check (a failure is F64: flagged, the run's completeness and reading unaffected)".
+- **(b) §15.13.9's advice keys `j7a shim_seen` and `reset_seen` are COM3 states, not board-log lines.** No harness phase writes a `j7a shim_seen` or `j7a reset_seen` line. `j7a_advice` reads the shim and the reset line from COM3 through `j7a_go_states` (`j7a_shim_seen` accepts SHIM or any state that only follows it). The board-log keys advice does read are the poweroff offset, READY, the `go_counted` offset and `go_epoch`, SHELL-AFTER-GO and NO RETURN. VERIFIED (source). Amendment: the §15.13.9 key list names `shim_seen` and `reset_seen` as COM3 states.
+- **(c) The pre-registration's own `utc`/`by` header is excluded from later checks.** `j7a_prereg_append` writes `prereg j7a utc=… by=first-go …` once. On every later go it drops that line, and the commit from the `head=` field, from both sides before comparing. The tree-clean state and every file hash are still compared. VERIFIED (source; self-test "a later go on the same state matches it").
+- **(d) Which stops the harness enforces, and which rest on the operator.**
+  - Enforced across all of J7a, in `j7a_precondition` and `j7a_go_budget_gate`:
+    - the cap of counted gos;
+    - F62, from the harness line or the parser row;
+    - F57 in any J7a stage, ctl, return or clean log;
+    - F30;
+    - F39c1 and F49, from the parser's `j7a_stop`;
+    - K-r(u), from `j7a_class`;
+    - K-w `anchored`, from canwatch's `kw_sub`.
+  - Enforced per session, in `j7a_session_stop_gate`: F55, SHELL-AFTER-GO, and a refusal in `check`.
+  - On the operator and the owner:
+    - F50's J7a-wide end. The harness records "REFUSE in check (F50-F52, F54 by its line)" and stops only that session; it cannot tell F50 from F51 by the refusal line alone.
+    - "Two failures for one cause".
+    - The E desk checks named in D52.
+    - The across-runs combination of K-r(u) and K-w, and precedence 6 (D52, D53).
+  - VERIFIED (source; self-tests for each enforced stop).
+- **(e) `DRAM_OFF_S`'s rule** is now D52 (above).
+- **(f) UM6's pre-exit allocation or GetMemoryMap failure** is now D50 (above).
+- **(g) Precedence 6** is now D53 (above).
+- **(h) §15.13.4's build switches gain `OUT_DIR` and `COMPARE`.** `build-m5-loader.sh` accepts `OUT_DIR=<dir>` (write there instead of `out/` or `out/t0/`) and `COMPARE=<pe>` (the other build's PE, passed to `m5-gate.py --compare` for item 8). VERIFIED (source). Amendment: §15.13.4's switch list names both.
+- **(i) "The first post-cut firmware byte" reads "the first firmware text after READY".** `first_fw_byte_epoch` is taken when `j7a_fw_text_after` first finds MB1, the UEFI banner or the hotkey line after READY's offset. The first byte of any kind is recorded separately, as information only (`first_byte_after_ready_epoch`), because a DC cut can put NUL, 0xFF or other stray bytes on RX. The DRAM_OFF_S check is made against the firmware text. VERIFIED (source; self-test: stray bytes are not firmware text). Amendment: §15.13.7's go row and §15.13.8's `-dram-off.log` say "first firmware text after READY".
+- **(j) `go_epoch` is M5L GO's epoch, with the Enter recorded.** On the `go_counted` line, `go_epoch` is the epoch at which the watch first saw `M5L GO`. If the watch did not see it, the key log's Enter on `M5LOAD.EFI go` is used, else the time of counting. The Enter's epoch (`go_enter_epoch=`) and M5L GO's (`m5l_go_epoch=`) are both recorded. §15.13.6.1's post-GO bounds run from M5L GO. VERIFIED (source). Amendment: §15.13.7 state 9 and §15.13.9 read `go_epoch` as M5L GO's epoch.
+- **(k) COUNTED also holds on a post-exit token after `M5L GO`.** Besides `M5L-EBS ok`, `M5L-EBS FAIL` and the clock rule, `M5L-JUMP`, the shim line or `t234: WDT0` after `M5L GO` with no refusal counts the go, since the exit happened. A lost `M5L-EBS` line then does not hide a counted run. VERIFIED (source; self-test). Amendment: §15.13.7 state 9 and §15.13.11's "Counted" bullet name the post-exit tokens.
+- **(l) UM9's `base=` is meaningful on the c2 line, and a step-5 allocation failure is classified by its first refusal.**
+  - The loader prints `base=yes|no` on every `over=` line (c1, c2, c3, or w2 alone). The parser's `resmem_c2_base` reads `base=` only from lines whose `over=` names c2. VERIFIED (source: `m5load.c` UM9 print; `j7a_resmem_summary`).
+  - Step 5 prints `M5L REFUSE alloc status=…` and goes on printing the overlapping descriptors, so later lines can carry further refusals. The watch's REFUSE state is set at the first `M5L REFUSE` line, and the board log's refusal record is read by that first line (F54 for `alloc`). VERIFIED (source).
+  - Amendment: UM9's line format note says `base=` is read on the c2 line; F54's observable names the first refusal line.
+- **(m) The watch's T1 requires window-2 map lines and `el=2`.** T1 holds only when the check run started with `M5L start mode=check el=2`, and printed at least one `M5L map` line overlapping window 2 before `M5L CHECK PASS`, besides the UM2-UM5 and UM9 lines. Otherwise the watch reads T1-INCOMPLETE, and a go after it is GO-WITHOUT-T1. VERIFIED (source; self-tests for a missing map line and for `el=1`). Amendment: §15.13.6's T1′ definition names both.
+- **(n) The integrator's three corrections.**
+  - **T1′ needs a hex `crc32`.** The watch accepts only `M5L fdt … crc32=<hex>`. `crc32=fail` is T1-INCOMPLETE, matching the parser's hex-only fdt stamp. VERIFIED (source; self-test).
+  - **canwatch's arguments.** `j7a_return` runs `canwatch <segment> --fill-factor <J6's registered factor> --bin-dir <run dir> --out-dir <run dir> --entry uefi --ref-j6c <J6c dir> --run-parse <run dir>/parse-s1.txt`, plus the five `--ref-sha256 NAME=HEX` pairs taken from the J7a stage of `J-prereg.log` only. VERIFIED (source; self-test for the pairs).
+  - **Item 8 SKIP across variants.** `m5-gate.py` compares builds for item 8 only within one variant, and prints item 8 SKIP when the compare build is another variant. `j7a pre` refuses a `gate.txt` holding any FAIL or SKIP item, and item 12 fails when no J7a T0 build was compared within the variant. VERIFIED (source).
+
+##### 15.13.21.3 Owner items raised by this record
+
+**Taken 2026-09-16 (owner): all six as the code behaves.** The questions below are kept as asked; each answer follows it. They were put to the owner on 2026-09-14, interrupted before an answer, and re-asked on 2026-09-16 with the code's behaviour named in each option.
+
+1. D48: do `writer=static` and `writer=stopped`, with no stable re-read, revert or oscillation, also read bad? (The code says yes.) **Taken: yes**, they fall under D48's wording. §15.13.10.1's **bad** row takes the amendment §15.13.21.1 states.
+2. D49: is L0's `EXC ` under UEFI entry anchored and cleaned as the loader scan's? (The code says yes.) **Taken: yes**, under `--entry uefi` only; under kexec L0 is byte for byte as before, and §15.13.7's "Unchanged: L0, L1, L7" bullet takes the amendment §15.13.21.1 states.
+3. D51: does the partial rule apply to a V1 failure found after COUNTED, such as a prelude mismatch, and which F-number, if any, does it take? (The code applies the partial rule.) **Taken: the partial rule applies**, as implemented: such a run is counted, parses `incomplete`, and c2 bad at a printed check still reads bad-partial (K-w). No new F-number is created; the run is recorded by its prelude mismatch (`m5l_prelude_same=missing`).
+4. D52: is an `unread` DRAM_OFF_S check held out of E? (The code says yes.) Does a DRAM-violating clean run still give K-w `intermittent`? (The code says yes.) **Taken: yes to both.** E's premise (R87) needs the unpowered wait shown, so `unread` is held out of E; and a clean observation stays an observation, so it still gives `intermittent` beside a bad run. §15.13.10.4's E row takes the pending line §15.13.21.1 lists.
+5. D52, precedence 3: when different runs give K-w and K-r(u), which class holds? (The code prints both and leaves it to the desk.) **Taken: both lines print and the combination is read at the desk.** Precedence 3 stays limited to one run, as §15.13.10.4 writes it; the tool never extends it across runs.
+6. D53: which definition does the K-w row's `repeated` take, any two bad runs or precedence 6's? (The code prints neither.) **Taken: the tool prints neither**, and the label is applied at the classification memo, where the two definitions are separated by hand. The design's two wordings stand as written; no tool claims either.
+
+##### 15.13.21.4 Record-directory inputs the harness requires, as it reads them
+
+All keys are `KEY=value` lines in `<rec>/J-waivers.conf`; the last line of a key wins; CR is stripped.
+
+- **Before `j7a pre` and every later J7a phase** (`j7a_precondition`):
+  - `D30=yes`, `D34_J7A=yes`, `D35=yes`, `D38=yes`, `D45=esp`, `D46=yes`;
+  - `Q20_BRANCH=a` or `c`. Branch `b` needs `D47=<value>` recorded, and even then the harness refuses, since it carries no `-Wdisable` variant.
+  - It also needs J4's row to hold F36, J6c's row to carry `live-writer`, and no recorded J7a stop.
+- **At `j7a pre`** (PC gates):
+  - `D0A_REFERENCE=<commit>`, resolving to D0a's reference commit;
+  - `T0_RECORD=<name>`, present in the record directory or in the loader's `out/t0/`;
+  - `M5_RECORD=results/orin-native-port/<utc>/m5`, holding `s0-bios.log`, against which `bios_version` is compared.
+- **At the bench, read at the first `j7a go`** (`j7a_prereg_append`):
+  - `D46_PERIPHERALS=<class words, space-separated, lowercase letters, digits and hyphens>`, the peripheral set the owner confirmed at J7a-bench. The first go refuses without it.
+  - The stage also records D36-D46 as they stand (`unset` allowed).
+- **After close, before any kexec rung, `jrun`, `capture-com3-raw.ps1` capture or J1-J6 command** (`j7a_tx_guard`):
+  - every J7a session that took S0 or ran its control boot must have closed (`j7a clean esp_clean=ok RESULT ok`);
+  - once any control boot ran, `TX_UNWIRED_AFTER_J7A=<S1_J7A_ID of the newest session that ran a control boot>`, the owner's statement that J14 pin 3 is unwired. (`S1_J7A_TX_REMOVED=yes` is a separate environment setting, for `j7a clean` only.)
+- **`J7a-rule-15.13.md`** must be at `<rec>/J7a-rule-15.13.md`: the record directory's root, beside `J-waivers.conf` and `J-prereg.log`. The first go refuses without it and registers its sha256 in the J7a stage (as the text of §15.13.6.1, §15.13.10 and §15.13.11). A later go refuses if it has changed. **2026-09-16:** D48-D53 and the six items are settled, and the copy placed there carries §15.13.10 with their amendments, as §15.13.21.1 lists them.
 
 ---
 
