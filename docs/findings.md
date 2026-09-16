@@ -9,6 +9,33 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-16 — S1-F revision 4 built, reviewed and pre-registered on the PC; nothing has run on the board
+
+Revision 4's startup change is implemented, reviewed and committed
+([731c936](https://github.com/ChHaEoN/qnx-linux-dual-vm-proxy/commit/731c936)). Under the S1 option only, the T234
+board startup now cleans by virtual address, before writing them, the ranges that option adds: the second window as a
+whole and the top-of-window-1 canary's range. Two console lines record that each clean ran, and the parser requires
+them on the new pin. With the option off the binary behaves as before, so the B1 rung keeps its meaning. The harness
+gained the watcher arm the ladder needs, a one-data-run-per-rung rule, and the two-part gate that keeps the UEFI-entry
+arm deferred. Three reviews read the change — cache-maintenance correctness, power of the reading, and feasibility
+against the harness — and every finding they raised was applied; the largest was that nothing had stopped a rung being
+rerun until it read well, which now refuses unless the run produced no reading about the canary at all.
+
+The startup was rebuilt twice to the same hash before its pin moved, the symbol gates were re-run, and the board images
+were regenerated on the new pin, with the drift limited to the startup, image and script hashes; every bound and the
+emulated profile were untouched. Before any board step, the reading rule and the reference it compares against were
+registered once in the private pre-registration ledger, bound to the commit, with the four earlier runs' captures
+hashed, so the rule cannot be changed after a result.
+
+What it shows: a remedy the architecture prescribes for a hand-over made this way, implemented, reviewed, and its
+reading settled in advance of the runs that judge it. What it does not show: that the cache-residue reading is right. **Nothing of
+revision 4 has run on the board**, no Linux guest has run on the board, and B2 stays **NOT MET, on data**. The
+confirming runs — B1, a watcher run, then B2 — need the owner at the plug, and even a clean result would not show which
+cache held the residue, nor that the clean rather than the time it takes removed it, nor DMA quiescence after kexec.
+The records stay private and git-ignored, and no figure is published here.
+[s1-design.md](../results/orin-native-port/20260909T1100Z/s1-design.md) §16;
+[the plan's S1-F block](orin-native-port-plan.md#the-revised-ladder).
+
 ## 2026-09-15 — S1-F writer diagnosis: revision 3 closes with a CPU cache-residue hypothesis leading, and revision 4 opens with a startup cache clean (designed, not run)
 
 The J6c watcher run, on the kexec control arm, stopped on F39 again (a small static write at c3). Its watches showed stable
