@@ -9,6 +9,43 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-16 — M4's r0 image rebuilt under the frozen instruments, and the guest-disk rebuild deliberately not done
+
+Two freeze-gate items were taken up while the board was unattended. One is now done on the PC; the other
+was stopped before it started, and the reason is the more useful of the two results.
+
+**r0 rebuilt (freeze-gate item 9).** M4's two functional rungs passed under different instrument versions:
+r1 under the current one, r0 under a parser that is in no commit, with an image predating the frozen
+counter and carrying four of the six fixtures the frozen set now defines. Its as-run parameters had also
+been lost to a generator check that overwrote them. The image is now rebuilt against the frozen
+instruments, in a scratch worktree so the generator could not overwrite the as-run r1 image beside it, with
+every generator gate passing and the divergence from the as-run r0 recorded privately. What this
+discharges is the provenance break. What it does not discharge is anything functional: the frozen counter
+has never run on the board, and the old capture cannot stand in, because the rebuilt image expects records
+the board never printed. One attended board round remains, and the owner has already settled what it
+must show.
+
+**The guest disk was not rebuilt, on purpose (freeze-gate item 8).** The shipped guest disk carries a
+diagnostic variant of its start-up script that no commit generates, so the image v1 would freeze is not
+reproducible from sources — which is why regenerating it was approved. Preparing the work showed the cost
+is larger than the estimate that approval rested on: the two pins are hard-coded across ten committed
+files, three committed board configurations carry the matching stanza as live configuration, a generator
+assertion counts those entries, and the host image has the same contamination as the guest. The decisive
+objection is narrower and stronger. S1-F's revision 4 is pre-registered and has not run: its reading rule,
+its reference and its image hashes are all registered against the current state, and moving those pins
+would leave that rung unable to be rebuilt against the state it was registered under. So the artefacts
+were preserved outside the repository, the analysis was written down, and the rebuild was left for after
+the paused ladder runs. The one question it answered for free: regenerating from committed sources
+necessarily drops the extra shared-memory entry the built images carry, because the staged snippets are
+already clean and the build copies them over.
+
+What this shows: two freeze-gate items advanced without the board, one by doing the work and one by
+establishing that doing it now would damage a pre-registration. What it does not show: that either item is
+closed. Item 9 needs its board round; item 8 needs the owner's decision re-taken against the real cost, and
+should follow the revision-4 ladder rather than precede it. The records are private and git-ignored, and no
+figure is published here.
+[orin-native-port-plan.md](orin-native-port-plan.md#freeze-gate) carries both items' state.
+
 ## 2026-09-16 — S1-F revision 4 built, reviewed and pre-registered on the PC; nothing has run on the board
 
 Revision 4's startup change is implemented, reviewed and committed
