@@ -102,6 +102,8 @@
 # IMAGES (the step each one is, §6.12)
 #   s1-m1b-p6 B1 (no S1 host script; no parser)   s1-h1 B2 (host)
 #   s1-n1 B3 (boot)   s1-n2 B4 (hold)   s1-q2 B5 (q2)   s1-d1 d1 (boot; a diagnostic)
+#   B5 does not run: OD1 (2026-09-16) settled the guest set as Linux only, so pass item 3 is not
+#   applicable. s1-q2 was never built. The q2 mode is kept implemented, not deleted (s1-design 6.10).
 #   s1-j1 J6 (host; the watcher, §15.4.8: stage and p0 as any image, then jrun only, never run)
 #
 # ENVIRONMENT (no host, user, key or path is written into this file)

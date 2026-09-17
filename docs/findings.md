@@ -80,7 +80,25 @@ one — it says nothing about how long the arrangement holds.
 
 What remains: **B4**, the ten-minute run, which is the rung that speaks to duration, and which has not run.
 **B5 does not run at all**: under OD1 the guest set is Linux only, so the two-guest rung's pass item is not
-applicable. The records are private and git-ignored, and no figure is published here.
+applicable.
+
+**2026-09-17, later: B4 met, and S1-F is met.** The ten-minute rung ran the same session and passed. The
+guest held for ten minutes; the hypervisor was alive at every one of the ten heartbeats; all three canaries
+verified after the hold and again after teardown; the guest's kernel, initrd and configuration were
+unchanged at the end; the bootloader slot was unchanged; and the board returned unaided. It is the first
+rung to reach every tier of the ladder.
+
+What B4 does not show, and this matters more than the pass: **nothing under load.** The design says it
+outright — the guest is idle apart from the heartbeat — so this is not a load test, a stress test or
+a soak test. Ten minutes is the longest evidence this project holds and it is still minutes, not hours or
+days. It again does not show that the guest's memory came from the second window. No timing, isolation or
+containment claim follows from it.
+
+With items 1, 2, 4 and 5 held and item 3 not applicable, **S1-F is met (Linux only; item 3 not applicable,
+freeze item 2 = Linux only)** — the design's first branch, because the guest set was settled before this
+record closed, not the provisional wording. Freeze gate items 1 and 6 are satisfied. The freeze still needs
+the attended instrument round and the guest disk regeneration; the licence consultation gates publication,
+not the campaign. The records are private and git-ignored, and no figure is published here.
 [s1-design.md](../results/orin-native-port/20260909T1100Z/s1-design.md) §16;
 [the plan's S1-F block](orin-native-port-plan.md#the-revised-ladder).
 

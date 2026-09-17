@@ -21,7 +21,9 @@
 #   s1-n1      the same                                  B3: boot mode, pass item 2
 #   s1-n2      the same                                  B4: hold mode, pass item 4
 #   s1-d1      the same                                  diagnostic, boot mode with s1-d1.conf; never a pass run
-#   s1-q2      the same                                  B5: q2 mode; refused without --q2-limit (D1, D14)
+#   s1-q2      the same                                  B5: q2 mode; refused without --q2-limit (D1, D14).
+#                                                        NOT RUN: OD1 (2026-09-16) settled Linux only,
+#                                                        so pass item 3 is not applicable. Kept, not deleted.
 #   s1-j1      the same                                  J6 (revision 3, §15.4.8): host mode with memcanary-w
 #                                                        and a large hold in place of B2's allocation; never a pass run
 # With no names the board form does the first five, in that order; s1-q2 and s1-j1

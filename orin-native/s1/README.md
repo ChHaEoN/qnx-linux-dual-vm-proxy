@@ -138,7 +138,7 @@ BSP=<extracted BSP tree> QNX_BASE=<SDP 8.0 install> ./orin-native/startup/make-s
 - **What a build writes:** each image gets `<img>.build`, `.ksh`, `.params`,
   `.ifs` and `.kimg`, plus its check texts. `<img>.params` carries the pins, the
   guard, `return_bound_s` and `capture_s` that `s1-board.sh` reads.
-- **`s1-q2`** is refused without `--q2-limit`. D14's limit is not yet derived.
+- **`s1-q2`** is refused without `--q2-limit`. D14's limit was never derived, and **B5 does not run**: OD1 (2026-09-16) settled the guest set as Linux only, so pass item 3 is not applicable. The image was never built; the `q2` mode is kept implemented as the design record (s1-design §6.10).
 
 ## The TCG rehearsal (T1-T3)
 
@@ -192,7 +192,7 @@ S1_COM3_LOG=<the running capture file> S1_REF_CONF_SHA256=<T2's conf_sha256> \
 ```
 
 - **Images and steps:** `s1-m1b-p6` is B1, `s1-h1` B2, `s1-n1` B3, `s1-n2` B4,
-  `s1-q2` B5 (only if D1 keeps the QNX guest), and `s1-d1` a diagnostic.
+  `s1-q2` B5 (does not run: OD1 settled Linux only), and `s1-d1` a diagnostic.
 - **Exit codes:**
   - 0 done;
   - 1 refused before the board changed;

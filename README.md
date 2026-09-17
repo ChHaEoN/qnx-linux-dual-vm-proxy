@@ -64,13 +64,15 @@ section)
   interference, real-time guarantees, any safety certification, and GPU,
   camera or accelerator paths
   ([known limitations](#known-limitations-honest-framing)).
-- **Next:** S1-F's remaining board rungs — the ones that boot the Linux guest
-  natively, hold it and stamp the run. The rung that claims the second memory
-  window is met on the rebuilt image: a startup change that the architecture
-  prescribes for a hand-over made this way ran, and a rerun, a watcher run and
-  that rung all passed in one attended session. An owner decision is open
-  before the ladder resumes, and what the memory readings mean is not stated
-  until it is settled; then the v1
+- **Next:** the v1 freeze. S1-F is met: on 2026-09-17 the Linux guest booted
+  under the hypervisor on the board, reached a shell that answered the host,
+  and then held for ten minutes with the hypervisor alive and the memory
+  canaries intact. The guest is idle apart from a heartbeat, so nothing here
+  is a load, stress or soak test, and ten minutes is the longest run this
+  project has made. Whether the guest's memory came from the second window is
+  not shown: no host-side view of those addresses exists. Before the freeze,
+  an instrument rung is re-run on the board and the guest disk is regenerated;
+  then the v1
   freeze and one measurement campaign ([roadmap](#roadmap)). If the Linux
   guest is in v1, the campaign includes a CPU-only baseline of a small model in
   it. GPU pass-through is the owner's target, on a research track outside the
@@ -151,10 +153,10 @@ variable. The architecture versions are defined in the
   └─────────────────────────────────────────┬──────────────────────────────────────────┘
                                             │ next: add a Linux guest
   ┌─────────────────────────────────────────v──────────────────────────────────────────┐
-  │ NEXT  S1-F's memory rung met on the rebuilt image; its guest rungs not run         │
+  │ NEXT  S1-F met (Linux only): the guest boots, holds ten minutes, and is stamped    │
   │                                                                                    │
   │ S1-F, the first stage of A5: A4's host, qvm, and a Linux guest without a GPU       │
-  │ so far a shell under TCG on the PC; on the board, the memory rung is met           │
+  │ a shell under TCG on the PC; on the board it boots, holds and is stamped           │
   │                                         │                                          │
   │                                         v freeze                                   │
   │ reference architecture v1, fixed by a manifest; entry path, or both, chosen at     │
@@ -197,7 +199,7 @@ truth; this table is a summary that can lag it.
 | **1** — Cloud twin bring-up: QHV `qvm` hosting a QNX guest under TCG | ✅ done | [qhv-tcg-host-and-guest-boot.log](logs/sample-boot/qhv-tcg-host-and-guest-boot.log) |
 | **2** — Cloud twin IPC + latency | ✅ **closed: architecture A1 history** — real P50/P99/Max exist, but the 100k-iteration target was never reached. The `qvm`/TCG virtio-queue stall that capped it is recoverable, not root-caused, and stays open. The v1 campaign's IPC sample size is set once, at the freeze | [cloud-ipc-latest.csv](results/cloud/cloud-ipc-latest.csv), [qnx-host-client/README.md](ipc-test/qnx-host-client/README.md) |
 | **3** — Hardware twin port (Jetson Orin Nano) | ✅ **closed: architecture A2 history** — heterogeneous QNX↔Linux IPC over a real `br0`/tap bridge ran under **TCG** (2 × 100 000 iterations, 0 errors). KVM boot never worked: the root-caused GICv3 / `KVM_EXIT_ARM_NISV` defect, reproduced on a second ARM vendor and at compile level from QNX's own BSP source (compile-verified, boot-unverified: the `qemu-virt` board source is not shipped), stays open as a separate filing track, outside reference architecture v1 | [orin-ipc-latest.csv](results/hw/orin-ipc-latest.csv), [orin-port.md](docs/orin-port.md), [aws-a1-metal-kvm-nisv-repro.log](logs/sample-boot/aws-a1-metal-kvm-nisv-repro.log) |
-| **3b** — Native QNX on the Orin Nano (no QEMU) | 🟡 **M path complete (2026-09-13); S1-F's memory rung met on the rebuilt image, its guest rungs not run** — the QNX Hypervisor runs natively at EL2 on the Orin (architecture A4): M0 showed `kexec` hands over at EL2, and M1 to M3 brought up QNX, all six cores, the EL2 host and native `qvm` booting the unmodified cloud-leg QNX guest. M4-F showed the trace instrument working on the board, with a partial cross-check and its two rungs under different instrument versions (both freeze-gate items). M5-F entered the one-core M1b host image (no `qvm`, no guest) through a UEFI cold boot in one attended session. Every rung is a functional pass. S1-F (a Linux guest without a GPU) has passed only its emulated half: on 2026-09-14, under TCG on the PC, a stock Linux kernel booted as a `qvm` guest to a shell. On the board its ladder began the same day, and the rung that claims the second memory window did not meet, on data, at the lowest canary in it — a record that stands and is not regenerated. A diagnosis made a CPU cache-maintenance gap at the hand-over the leading hypothesis (HYPOTHESIS, untested), and the startup change that answers it cleans those ranges by virtual address before writing them. On 2026-09-16 that change ran on the board in one attended session: the option-off regression, a read-only watcher run and the memory rung itself all passed, so **that rung is met for the rebuilt image**. What the readings mean is not stated here — an owner decision on that wording is open — and the pass shows neither which cache held the residue, nor whether the operation or the time it takes removed it, nor DMA quiescence after the hand-over. The rungs that boot the Linux guest natively, hold it and stamp it have never run. Figures from M3 on stay unpublished, and the numbers are taken once, in the v1 campaign, after S1-F and the v1 freeze | [ADR-003](docs/adr-003-hardware-timed-qhv.md), [orin-native-port-plan.md](docs/orin-native-port-plan.md), [orin-native/startup/README.md](orin-native/startup/README.md), [results/orin-native-port/](results/orin-native-port/) |
+| **3b** — Native QNX on the Orin Nano (no QEMU) | 🟡 **M path complete (2026-09-13); S1-F met (Linux only), 2026-09-17; the v1 freeze is next** — the QNX Hypervisor runs natively at EL2 on the Orin (architecture A4): M0 showed `kexec` hands over at EL2, and M1 to M3 brought up QNX, all six cores, the EL2 host and native `qvm` booting the unmodified cloud-leg QNX guest. M4-F showed the trace instrument working on the board, with a partial cross-check and its two rungs under different instrument versions (both freeze-gate items). M5-F entered the one-core M1b host image (no `qvm`, no guest) through a UEFI cold boot in one attended session. Every rung is a functional pass. S1-F (a Linux guest without a GPU) has passed only its emulated half: on 2026-09-14, under TCG on the PC, a stock Linux kernel booted as a `qvm` guest to a shell. On the board its ladder began the same day, and the rung that claims the second memory window did not meet, on data, at the lowest canary in it — a record that stands and is not regenerated. A diagnosis made a CPU cache-maintenance gap at the hand-over the leading hypothesis (HYPOTHESIS, untested), and the startup change that answers it cleans those ranges by virtual address before writing them. On 2026-09-16 that change ran on the board in one attended session: the option-off regression, a read-only watcher run and the memory rung itself all passed, so **that rung is met for the rebuilt image**. What the readings mean is not stated here — an owner decision on that wording is open — and the pass shows neither which cache held the residue, nor whether the operation or the time it takes removed it, nor DMA quiescence after the hand-over. On 2026-09-17 the remaining rungs ran and passed: the Linux guest booted natively to a shell that answered the host, and then held for ten minutes with the hypervisor alive at every heartbeat and the canaries intact before and after, so **S1-F is met for a Linux-only guest set**. The guest was idle apart from that heartbeat, so this is not a load, stress or soak test; ten minutes is the longest run made; and whether the guest's RAM came from the second window is not shown, no host-side view of those addresses existing. The two-guest rung does not run, the guest set having been settled as Linux only. Figures from M3 on stay unpublished, and the numbers are taken once, in the v1 campaign, after S1-F and the v1 freeze | [ADR-003](docs/adr-003-hardware-timed-qhv.md), [orin-native-port-plan.md](docs/orin-native-port-plan.md), [orin-native/startup/README.md](orin-native/startup/README.md), [results/orin-native-port/](results/orin-native-port/) |
 | **4** — Twin diff + DRIVE OS comparison | 🟡 **history recorded; re-run inside the v1 campaign** — the plain-leg boot diff (A2), the A1-against-A2 IPC diff and the release-aligned QHV pair (A3) are kept as architecture-version history, all under TCG and none hardware-timed. The twin diff runs again in the v1 campaign, and the verdicts in [drive-os-comparison.md](docs/drive-os-comparison.md) wait for it | [digital-twin-design.md](docs/digital-twin-design.md) §1a, §4, §5 |
 | **5** — FuSa & Cybersecurity overlay | ⬜ not started as a dedicated phase (a Phase-1-gate FuSa + Cyber pass *did* run) | [docs/fusa/](docs/fusa/), [docs/cyber/](docs/cyber/), [docs/tara/](docs/tara/) |
 | **6** — Polish, public README, demo recording | ⬜ not started | — |
@@ -509,8 +511,11 @@ with no device pass-through, and only on a host entered from Linux; the cold boo
 the one-core M1b host image without `qvm` or a guest. No per-exit hypervisor number is judged or
 published. With M5-F the M path is complete. S1-F's board ladder has begun: its memory rung is met on the
 rebuilt image, after an attended session in which an option-off regression, a watcher run and that
-rung all passed; the earlier not-met record for the old startup stands. Next are the S1-F rungs that
-boot the Linux guest natively, hold it and stamp it, then the v1 freeze and one measurement campaign. The two
+rung all passed; the earlier not-met record for the old startup stands. On 2026-09-17 the remaining
+rungs ran: the Linux guest booted natively to a shell that answered the host, then held for ten minutes
+with the hypervisor alive and the canaries intact, so S1-F is met for a Linux-only guest set. The guest
+was idle apart from a heartbeat throughout, so no load, stress or soak claim follows, and whether its
+memory came from the second window is not shown. Next are the v1 freeze and one measurement campaign. The two
 second-cluster cores run a busy loop at a fixed, much lower rate whose cause is still
 open, and the freeze needs it explained or those cores left out of v1. The M0 to M1b
 records and captures are in this repo for now. The M3 to M5 run records and every figure
@@ -597,7 +602,7 @@ Other prereqs:
   - [x] M3 — the QNX Hypervisor boots a QNX guest natively (2026-09-10)
   - [x] M4-F — the trace instrument works on the board (2026-09-11)
   - [x] M5-F — a UEFI cold boot reaches startup; the M path ends (2026-09-13)
-  - [ ] S1-F — a Linux guest without a GPU under native qvm (its TCG half, pass item 1, passed 2026-09-14; on the board the memory rung is met on the rebuilt image, 2026-09-16; the rungs that boot, hold and stamp the guest have not run)
+  - [x] S1-F — a Linux guest without a GPU under native qvm (its TCG half, pass item 1, passed 2026-09-14; on the board the memory rung is met on the rebuilt image, 2026-09-16; the guest booted, held for ten minutes and stamped its run on 2026-09-17, so S1-F is met for a Linux-only guest set. The two-guest rung does not run: the guest set was settled as Linux only. Nothing was run under load)
   - [ ] Freeze reference architecture v1
   - [ ] One measurement campaign on v1
 - [ ] **Phase 4** — Twin diff + DRIVE OS comparison: earlier diffs kept as A1-A3 history; the twin diff and the verdicts come from the v1 campaign ([digital-twin-design.md](docs/digital-twin-design.md))

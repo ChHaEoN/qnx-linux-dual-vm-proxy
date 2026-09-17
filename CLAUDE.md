@@ -458,8 +458,12 @@ Quick summary for context:
   for the first time and reached a shell that answered the host's probe (pass item 2), with the canaries
   verified before and after and the guest's own files unchanged. It does **not** show that the guest's RAM
   came from the second window: no host view of qvm's guest-RAM addresses was found, so that stays unknown.
-  **B4, the ten-minute run, has not run; B5 does not run at all under OD1** (Linux only, so pass item 3 is
-  not applicable); s1-design.md §14.9-14.12, §15
+  **B4, the ten-minute run, also met the same day:** the guest held for ten minutes with the hypervisor
+  alive at every heartbeat and the canaries intact before and after, under a light load (the guest is
+  idle apart from the heartbeat, so this is not a load, stress or soak test). **S1-F is therefore met
+  (Linux only; item 3 not applicable, freeze item 2 = Linux only)**, which satisfies freeze gate item 1.
+  **B5 does not run at all under OD1** (Linux only, so pass item 3 is not applicable), and `s1-q2` was
+  never built; s1-design.md §14.9-14.12, §15
   and §16; figures unpublished)**; freeze
   reference architecture v1; then one measurement campaign on it (the M3 and M4 numbers, the M5 comparison, the twin
   diff), every record stamped with the version. ~~Awaiting the owner's confirmation: the M path ends at M5's functional
@@ -557,8 +561,12 @@ Quick summary for context:
    clean (class X-f-c), discharging D83, and the owner released D77, so
    the pre-registered class sentence is public; the figures still go to
    the 4.6(i) consultation. **2026-09-17: B3 met** — a Linux guest
-   reached a shell under native qvm on the board. Next: B4, the
-   ten-minute run; B5 does not run under OD1**;
+   reached a shell under native qvm on the board, and **B4 met**: it
+   held ten minutes with the hypervisor alive and the canaries intact,
+   under a light load. **S1-F met (Linux only)**, so freeze gate items 1
+   and 6 are satisfied. B5 does not run under OD1. Next: the freeze,
+   which still needs the attended m4-r0 round (item 9) and the guest
+   disk regeneration (item 8)**;
    s1-design.md §16).
    Then settle the freeze gate and write the v1 manifest. Then run the
    single campaign, native leg and both TCG twin legs, every record stamped

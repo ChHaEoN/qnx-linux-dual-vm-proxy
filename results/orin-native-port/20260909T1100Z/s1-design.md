@@ -595,6 +595,8 @@ Mode `hold`: B3 plus the hold, with the `mem` gate at 852. After `shell_ok`, sta
 
 ### 6.10 B5: two guests (`s1-q2`, only if D1)
 
+> **2026-09-17: B5 does not run, and this section is kept as the design record of why.** OD1 (2026-09-16) settled freeze item 2 as **Linux only**: the QNX Hypervisor is the host and the safety functions run as QNX processes inside it, so v1 carries no QNX guest and pass item 3 is not applicable (§5.2's first branch). `s1-q2` was never built and D14's `--q2-limit` was never derived. Nothing below is withdrawn or deleted: the rung was designed, and the decision not to run it is itself the record. The `q2` mode stays implemented in the generator, the host script, the harness and the parser.
+
 Mode `q2`: FreeMem gate (§4.5); Linux to `shell_ok`; then M3's QNX sequence to `banner` and the IPC client's completion; `S1 BOTH alive`; teardown of both; M3's md5 and `cmp` checks plus S1's. **Pass item 3:** completion only.
 
 ### 6.11 Return and records
