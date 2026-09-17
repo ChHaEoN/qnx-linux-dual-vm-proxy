@@ -97,8 +97,9 @@ containment claim follows from it.
 With items 1, 2, 4 and 5 held and item 3 not applicable, **S1-F is met (Linux only; item 3 not applicable,
 freeze item 2 = Linux only)** — the design's first branch, because the guest set was settled before this
 record closed, not the provisional wording. Freeze gate items 1 and 6 are satisfied. The freeze still needs
-the attended instrument round and the guest disk regeneration; the licence consultation gates publication,
-not the campaign. The records are private and git-ignored, and no figure is published here.
+the guest disk regeneration; the attended instrument round ran and passed on 2026-09-17,
+discharging its gate item. The licence consultation gates publication, not the campaign.
+The records are private and git-ignored, and no figure is published here.
 [s1-design.md](../results/orin-native-port/20260909T1100Z/s1-design.md) §16;
 [the plan's S1-F block](orin-native-port-plan.md#the-revised-ladder).
 

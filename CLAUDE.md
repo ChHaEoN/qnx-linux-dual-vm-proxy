@@ -565,8 +565,8 @@ Quick summary for context:
    held ten minutes with the hypervisor alive and the canaries intact,
    under a light load. **S1-F met (Linux only)**, so freeze gate items 1
    and 6 are satisfied. B5 does not run under OD1. Next: the freeze,
-   which still needs the attended m4-r0 round (item 9) and the guest
-   disk regeneration (item 8)**;
+   which still needs the guest disk regeneration (item 8); the attended
+   m4-r0 round (item 9) ran and passed on 2026-09-17**;
    s1-design.md §16).
    Then settle the freeze gate and write the v1 manifest. Then run the
    single campaign, native leg and both TCG twin legs, every record stamped
