@@ -16,10 +16,11 @@
 > QNX Hypervisor natively on the Orin with no QEMU. Its M path is complete,
 > ending at M5-F's functional pass. A Linux guest is being added (S1-F, also a
 > functional rung): under TCG emulation on the PC it has booted to a shell. On
-> the board its ladder has begun and the rung that claims the second memory
-> window is now met, after a startup change and a three-rung rerun; the rungs
-> that boot, hold and stamp the guest itself have not run, so no Linux guest
-> has run on the board. Then reference architecture v1 is frozen,
+> the board S1-F is met: the memory rung passed after a startup change, and on
+> 2026-09-17 the guest booted to a shell that answered the host and then held
+> for ten minutes with the hypervisor alive. It was idle apart from a heartbeat,
+> so nothing there is a load, stress or soak test. Then reference architecture
+> v1 is frozen,
 > and the
 > measurements run once on it. One of them is the
 > **twin diff**: what changes when the host bundle (CPU, OS, TCG backend,
@@ -41,9 +42,12 @@ section)
   Nothing in it is certified. The Linux side is the target shape. None of the
   earlier QEMU legs (A1 to A3) had a Linux partition; their only Linux was the
   Orin's native L4T host beside a QNX guest under TCG (A2). A Linux guest under
-  the hypervisor is planned for reference architecture v1. So far, a stock
-  Linux kernel has booted as a guest of the QNX Hypervisor to a shell only
-  under TCG emulation on the PC, not yet on the board.
+  the hypervisor is in reference architecture v1. A stock Linux kernel has
+  booted as a guest of the QNX Hypervisor to a shell under TCG emulation on
+  the PC and, on 2026-09-17, natively on the board, where it also held for ten
+  minutes. It was idle apart from a heartbeat throughout, so no load, stress
+  or soak claim follows, and whether its memory came from the second window is
+  not shown.
 - **What works now:**
   - The QNX Hypervisor runs natively at EL2 on the Orin, with no QEMU (A4), and
     boots the cloud-leg QNX guest image and disk unchanged
@@ -116,9 +120,9 @@ image, without `qvm` or a guest.
 The diagram reads top to bottom: history, the current native leg, and the
 next steps. S1-F adds a Linux guest without a GPU under native `qvm`. Under
 TCG emulation on the PC a stock Linux kernel booted as a `qvm` guest to a
-shell; on the board its ladder has begun, and the rung that claims the second
-memory window is met on the rebuilt image, with the guest's own rungs still to
-run. Reference architecture v1
+shell; on the board the memory rung is met on the rebuilt image and, on
+2026-09-17, the guest booted and held for ten minutes under a light load, so
+S1-F is met for a Linux-only guest set. Reference architecture v1
 is then frozen: the native host
 with that guest, plus two TCG twin legs that boot v1's guests in a QHV host
 image under QEMU, on the Windows PC and on the Orin. One measurement
@@ -513,13 +517,14 @@ them is a figure:
   touching the firmware's DT/ACPI selection
   ([m5-design.md](results/orin-native-port/20260909T1100Z/m5-design.md) §6.1, §7.4, §14.5).
 
-What this is not, stated plainly: on the board the hypervisor has hosted one QNX guest,
-not yet Linux (a Linux guest has booted to a shell only under TCG emulation on the PC),
-with no device pass-through, and only on a host entered from Linux; the cold boot ran
+What this is not, stated plainly: on the board the hypervisor has hosted a QNX guest and,
+since 2026-09-17, a Linux guest that booted and held for ten minutes while idle apart from
+a heartbeat, with no device pass-through, and only on a host entered from Linux; whether
+the guest's RAM came from the second window is not shown; the cold boot ran
 the one-core M1b host image without `qvm` or a guest. No per-exit hypervisor number is judged or
-published. With M5-F the M path is complete. S1-F's board ladder has begun: its memory rung is met on the
-rebuilt image, after an attended session in which an option-off regression, a watcher run and that
-rung all passed; the earlier not-met record for the old startup stands. On 2026-09-17 the remaining
+published. With M5-F the M path is complete. S1-F's board ladder ran to its end: its memory rung is met
+on the rebuilt image, after an attended session in which an option-off regression, a watcher run and
+that rung all passed; the earlier not-met record for the old startup stands. On 2026-09-17 the remaining
 rungs ran: the Linux guest booted natively to a shell that answered the host, then held for ten minutes
 with the hypervisor alive and the canaries intact, so S1-F is met for a Linux-only guest set. The guest
 was idle apart from a heartbeat throughout, so no load, stress or soak claim follows, and whether its
