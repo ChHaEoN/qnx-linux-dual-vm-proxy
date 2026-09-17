@@ -65,8 +65,22 @@ refused attempt had already appended to the append-only ledger, so nothing was r
 started far larger than that rung needed and had to be stopped by hand to free the exclusive serial port for the
 next rung, so captures are now sized per rung.
 
-What remains: B3-B5, the rungs that boot the Linux guest natively, hold it and stamp it, have never run. D83 is
-discharged, so they may resume. The records are private and git-ignored, and no figure is published here.
+**2026-09-17: B3 met — the first Linux guest on the board.** D83 being discharged, the ladder resumed. The
+rung that boots the guest ran and passed: the same configuration, unchanged from the emulated rehearsal,
+reached a shell under native qvm and answered the host's probe (pass item 2). All three canaries verified
+before and after, on the first rung to run a guest under the revision-4 startup; the guest's kernel, initrd
+and configuration were unchanged at the end; the device-tree checks passed; the black box stayed consistent
+with the serial capture; the bootloader slot was unchanged before and after; and the image reset itself so
+Linux came back on its own.
+
+What B3 does not show, stated because the design requires it to travel with the result: **not** that the
+guest's memory came from the second window. No host-side view of the physical addresses behind the guest's
+RAM was found, so that reading is unknown rather than affirmative. B3 is also a boot rung, not a duration
+one — it says nothing about how long the arrangement holds.
+
+What remains: **B4**, the ten-minute run, which is the rung that speaks to duration, and which has not run.
+**B5 does not run at all**: under OD1 the guest set is Linux only, so the two-guest rung's pass item is not
+applicable. The records are private and git-ignored, and no figure is published here.
 [s1-design.md](../results/orin-native-port/20260909T1100Z/s1-design.md) §16;
 [the plan's S1-F block](orin-native-port-plan.md#the-revised-ladder).
 

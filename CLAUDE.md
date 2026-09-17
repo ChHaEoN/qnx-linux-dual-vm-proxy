@@ -454,7 +454,12 @@ Quick summary for context:
   stays NOT MET, on data, for the old startup (D72). Two process incidents: the watcher run's first attempt refused
   at the pre-registration check on an unset rule-file variable, before any board contact and with nothing appended
   twice; and B1's oversized capture blocked the exclusive serial port, so captures are now sized per rung. S1-F is
-  **not complete** — B3-B5 have never run; s1-design.md §14.9-14.12, §15
+  **not complete**. **2026-09-17: B3 met** — the Linux guest booted under native qvm on the board
+  for the first time and reached a shell that answered the host's probe (pass item 2), with the canaries
+  verified before and after and the guest's own files unchanged. It does **not** show that the guest's RAM
+  came from the second window: no host view of qvm's guest-RAM addresses was found, so that stays unknown.
+  **B4, the ten-minute run, has not run; B5 does not run at all under OD1** (Linux only, so pass item 3 is
+  not applicable); s1-design.md §14.9-14.12, §15
   and §16; figures unpublished)**; freeze
   reference architecture v1; then one measurement campaign on it (the M3 and M4 numbers, the M5 comparison, the twin
   diff), every record stamped with the version. ~~Awaiting the owner's confirmation: the M path ends at M5's functional
@@ -551,7 +556,9 @@ Quick summary for context:
    stays NOT MET, on data. **2026-09-17: a third confirmatory run read
    clean (class X-f-c), discharging D83, and the owner released D77, so
    the pre-registered class sentence is public; the figures still go to
-   the 4.6(i) consultation. Next: B3-B5, which have never run**;
+   the 4.6(i) consultation. **2026-09-17: B3 met** — a Linux guest
+   reached a shell under native qvm on the board. Next: B4, the
+   ten-minute run; B5 does not run under OD1**;
    s1-design.md §16).
    Then settle the freeze gate and write the v1 manifest. Then run the
    single campaign, native leg and both TCG twin legs, every record stamped
