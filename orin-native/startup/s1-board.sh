@@ -2657,6 +2657,75 @@ r4_rung_attempts() {
 	echo "$n"
 }
 
+# D86 (§16.6.1): the owner's key for the third observation. One further run of the B2 rung, keyed,
+# bounded to one, and never granted by editing this gate at the bench.
+R4_CONFIRM_KEY=D86_B2_CONFIRM
+
+# Every record of rung $1 whose r4-read.txt holds a real class, as '<dir> <class>' lines, oldest
+# first. r4_read_classed's rule, unchanged: a record with no r4_class line, and one whose class is
+# exactly n/a, is no reading about c2. Only the D86 gate reads this; it needs the count, not the first.
+r4_readings() {
+	local f c
+	for f in "$RECDIR/$1"/r4-read.txt "$RECDIR/$1"-a[0-9]*/r4-read.txt; do
+		[ -f "$f" ] || continue
+		c="$(tr -d '\r' < "$f" | sed -n 's/^S1PC r4_class=//p' | tail -n 1)"
+		[ -n "$c" ] && [ "$c" != n/a ] && echo "$(basename "$(dirname "$f")") $c"
+	done
+}
+
+# D86's permission is bounded to one run and is spent whatever that run read (§16.6.1 U(3): a
+# confirmatory run that reads nothing leaves one reading on file and must still refuse). So the bound
+# counts uses of the key, not readings: the record directories of rung $1 whose board log records a
+# confirmatory attempt, empty when none has been made.
+r4_confirm_used() {
+	local f
+	# '<rung>-a[0-9]*' already covers a later attempt that was refused-moved ('B2-a3-refused-<utc>');
+	# the third glob covers the one slot it misses, a confirmatory run that took the bare rung slot
+	# (free when an earlier attempt was itself moved away) and was then refused-moved to
+	# 'B2-refused-<utc>'. Without it the key would read unspent and admit a second confirmatory run.
+	for f in "$RECDIR/$1"/*-board.log "$RECDIR/$1"-a[0-9]*/*-board.log "$RECDIR/$1"-refused-*/*-board.log; do
+		[ -f "$f" ] && grep -aq "^run $1 confirmatory=$R4_CONFIRM_KEY " "$f" && basename "$(dirname "$f")"
+	done
+}
+
+# What to do when the B2 rung has already been read. $1 the '<dir> <class>' r4_read_classed gave.
+# Prints the confirmatory run's board-log line and returns 0 only when the owner's key admits this one
+# further run (D86, §16.6.1); otherwise prints the refusal and returns 1. Without the key the refusal
+# is §15.7.4's and §16.6 precedence 4's, word for word as before: a rung is not rerun until it reads
+# well, and that refusal routes to the owner rather than to whoever is at the bench. The key admits
+# nothing but a third observation of a rung that read clean - exactly one reading on file, that
+# reading X-f-final, and no confirmatory run already made - because that is the only case where a
+# further run cannot make a recorded reading better, only add confidence or reveal intermittency.
+# It changes no reading: a recorded reading is never improved, replaced, re-dated or re-labelled by a
+# later run (§16.6.1 precedence 6-8). A clean third run strengthens what stands; a bad or mixed one is
+# recorded as an intermittency finding, blocks B3-B5, and goes to the owner, who alone rules on
+# whether B2's met line for the rebuilt image survives. The J6x arm is not opened by this key.
+r4_confirm_b2() {
+	local rd="$1" n used rs all=""
+	rs="$(r4_readings B2)"; n="$(printf '%s\n' "$rs" | grep -c .)"
+	# r4_read_classed names the rung's first classed record, so a later non-clean reading would
+	# otherwise hide behind an earlier clean one in every refusal this gate prints. When the rung
+	# holds more than one reading the refusal names them all, the newest included (§16.6.1 X-i).
+	[ "$n" -gt 1 ] && all=" (B2's readings on file: $(printf '%s\n' "$rs" | tr '\n' ';' | sed 's/;$//'))"
+	local blind="revision 4: the B2 rerun has already been read ($rd)$all: attempt ${rd% *} recorded class ${rd#* }; a further B2 run is §15.7.4's blind rerun, and its reading cannot undo a withdrawal (§16.6 precedence 4); the owner decides"
+	j_waiver "$R4_CONFIRM_KEY" || { printf '%s\n' "$blind"; return 1; }
+	used="$(r4_confirm_used B2 | tr '\n' ' ')"; used="${used% }"
+	if [ -n "$used" ]; then
+		printf '%s\n' "revision 4: D86's confirmatory run of the B2 rung has already been made ($used): the permission is bounded to one run and is spent whatever that run read (§16.6.1 U(3)); a further B2 run needs a new owner decision, never a second use of $R4_CONFIRM_KEY; the owner decides"
+		return 1
+	fi
+	if [ "$n" != 1 ]; then
+		printf '%s\n' "revision 4: $R4_CONFIRM_KEY admits one third observation of the B2 rung (D86, §16.6.1), and B2 holds $n readings ($(printf '%s\n' "$rs" | tr '\n' ';' | sed 's/;$//')): the key is not a general licence to rerun a read rung; the owner decides"
+		return 1
+	fi
+	if [ "${rd#* }" != X-f-final ]; then
+		printf '%s\n' "revision 4: $R4_CONFIRM_KEY admits one confirmatory run of a B2 rung that read clean (D86, §16.6.1), and the reading on file is $rd, not X-f-final: after any other class a further run is §15.7.4's blind rerun, which this key does not open; the owner decides"
+		return 1
+	fi
+	printf '%s\n' "B2 confirmatory=$R4_CONFIRM_KEY (D86, §16.6.1): a confirmatory run, not a retry; the reading on file ($rd) is never improved, replaced, re-dated or re-labelled by it; a clean third run strengthens what stands, and a bad or mixed one is recorded as an intermittency finding, blocks B3-B5 and goes to the owner; the permission is spent by this run whatever it reads"
+	return 0
+}
+
 # §16.6 at the return (J6x, and the B2 rerun on the new startup): parse-s1.py r4-read on this rung's
 # parse-s1.txt with the registered reference; its S1PC r4_ lines go to <step>/r4-read.txt and the board
 # log. Reads SD, PY_BIN, R4_READ_STEP, R4_REF_MIN and, for B2, R4_J6X_CLASS.
@@ -2680,7 +2749,7 @@ r4_read_after() {
 # rewritten to <ssid> there (a cut hold, an offset, a ladder row, a member value). These are
 # those lines' fixed words; a record's numbers are guarded by refusing an SSID of digits and
 # separators only. Prints the refusal, or nothing when the SSID is usable. $1 the SSID.
-J_READBACK_TEXT="run com3_log= com3_bytes_before_kexec= j3 com3_log= com3_bytes_before_arm= wq_armed armed_epoch= wq_fallback_s= jrun j1 p1 reboot NO RETURN within next=J2b trace=go trace=no-go trace=off RESULT MET wireless-only NOT MET S1PC j_row= set in_this_arm= trace=yes wq.sh wqfb.sh sha256= fallback=wireless set_version= set_rule=max member=wireless member=xhci member=ethernet member=nvme candidates= subsystem=pci subsystem=platform bdf= path=/sys/devices/ driver= module= netdev= root_port= root_port_children= rp_clear=yes mounted_descendant= home_or_kd_under= in_set=yes in_set=no reason=ok note=no-j3-j4 tools systemd_run= setpci=yes none B1 RESULT tokens met S1PC r4_class= X-f-provisional startup_sha256="
+J_READBACK_TEXT="run com3_log= com3_bytes_before_kexec= j3 com3_log= com3_bytes_before_arm= wq_armed armed_epoch= wq_fallback_s= jrun j1 p1 reboot NO RETURN within next=J2b trace=go trace=no-go trace=off RESULT MET wireless-only NOT MET S1PC j_row= set in_this_arm= trace=yes wq.sh wqfb.sh sha256= fallback=wireless set_version= set_rule=max member=wireless member=xhci member=ethernet member=nvme candidates= subsystem=pci subsystem=platform bdf= path=/sys/devices/ driver= module= netdev= root_port= root_port_children= rp_clear=yes mounted_descendant= home_or_kd_under= in_set=yes in_set=no reason=ok note=no-j3-j4 tools systemd_run= setpci=yes none B1 RESULT tokens met S1PC r4_class= X-f-provisional startup_sha256= confirmatory= D86_B2_CONFIRM"
 ssid_refusal() {
 	local s="$1"
 	if [ "${#s}" -lt 3 ]; then echo "S1_REDACT_SSID is unset or under 3 bytes (mandatory for J rungs, §15.5 A4)"; return 0; fi
@@ -5596,7 +5665,7 @@ run_return_records() {
 
 cmd_run() {
 	local out old up rc wrc pstore_before pstore_after newrec shim reason lsha rcs oops gok gov0 gov4 stuck left
-	local bb com3 SD base tree tree_now attempt com3_off names n f want got rmfiles verdict slots_state_post r4done r4na r4warn
+	local bb com3 SD base tree tree_now attempt com3_off names n f want got rmfiles verdict slots_state_post r4done r4na r4warn r4bad R4_CONFIRM
 	local conf="$S1DIR/s1-linux.conf" pargs conf_gate cstate txg=""
 	local pc_image="$S1DIR/out/l4t/Image" pc_l4t_initrd="$S1DIR/out/l4t/initrd" pc_initrd="$S1DIR/out/initrd.cpio.gz"
 	local pc_conf_sha="" pc_image_sha="" pc_l4t_initrd_sha="" pc_initrd_sha=""
@@ -5629,6 +5698,10 @@ cmd_run() {
 	# its reading is r4-read --step B2 at the return
 	R4_LINE=""
 	R4_READ_STEP=""
+	# D86: the record line below expands this on every run, not only the confirmatory one, and the
+	# script runs under 'set -u', so it is initialised here beside the other two. Left unset, every
+	# run that does not take the confirmatory branch would stop at that line (status 127).
+	R4_CONFIRM=""
 	if { [ "$IMG" = s1-h1 ] || [ "$IMG" = s1-m1b-p6 ]; } && r4_params_new "$PARAMS"; then
 		R4_LINE="$(r4_amendment_check)" \
 			|| die "revision 4: $IMG on the new PIN_STARTUP_S1 runs only after the owner-D70 amendment ('$PROG r4-register', §16.4): $R4_LINE"
@@ -5638,9 +5711,13 @@ cmd_run() {
 			[ "$R4_J6X_CLASS" = X-f ] \
 				|| die "revision 4: the B2 rerun follows J6x's clean reading, X-f provisional (§16.5, D79); the newest J6x record gives ${R4_J6X_CLASS#none:}"
 			# §15.7.4, §16.6 precedence 4: one B2 data rerun; a read one is never rerun blind. A recorded
-			# class of exactly n/a is no reading about c2, so it stays rerunnable (owner, 2026-09-16)
-			r4done="$(r4_read_classed B2)" \
-				&& die "revision 4: the B2 rerun has already been read ($r4done): attempt ${r4done% *} recorded class ${r4done#* }; a further B2 run is §15.7.4's blind rerun, and its reading cannot undo a withdrawal (§16.6 precedence 4); the owner decides"
+			# class of exactly n/a is no reading about c2, so it stays rerunnable (owner, 2026-09-16).
+			# D86 (§16.6.1) admits one keyed, bounded confirmatory run after a clean reading, and nothing
+			# else; every other case refuses in the same words as before and routes to the owner
+			if r4done="$(r4_read_classed B2)"; then
+				R4_CONFIRM="$(r4_confirm_b2 "$r4done")" || die "$R4_CONFIRM"
+				note "$R4_CONFIRM"
+			fi
 			# §16.8 RC3: the n/a exception stops at a run that reached 'procnto up' (F70's 2026-09-16 form)
 			r4na="$(r4_na_post_procnto B2)" \
 				&& die "revision 4: attempt $r4na recorded class n/a, and its parse shows the run reached 'procnto up' (tier_L0): §16.8 records such a run as it happened, F70's 2026-09-16 form is that signature (§16.9, 'no retry on the same image; revise'), and the n/a exception covers only a rung that did not get that far; the owner decides"
@@ -5654,6 +5731,19 @@ cmd_run() {
 		r4warn="$(r4_stale_pin_warn "$PARAMS" "$IMG")"
 		[ -n "$r4warn" ] && note "$r4warn"
 	fi
+	# D86 (§16.6.1, the X-i row): a bad or mixed reading of B2 blocks B3-B5. That block is a gate
+	# here, not owner discipline alone, because the confirmatory run makes such a reading reachable
+	# for the first time. B3-B5 run while every B2 reading on file is clean; one that is not stops
+	# them and routes to the owner, who alone rules on whether B2's met line survives. A rung with no
+	# reading about c2 refuses nothing: no B2 record, a record that never reached a parse, and a
+	# recorded class of exactly n/a are all 'no reading' here, as they are at the B2 gate itself.
+	case "$IMG" in
+	s1-n1|s1-n2|s1-q2)
+		r4bad="$(r4_readings B2 | grep -v ' X-f-final$' | tr '\n' ';' | sed 's/;$//')"
+		[ -n "$r4bad" ] \
+			&& die "revision 4: $STEP follows a B2 rung that read clean (D86, §16.6.1 X-i), and B2's readings on file hold $r4bad: a reading of B2 that is not clean is recorded as an intermittency finding and blocks B3-B5 until the owner rules on whether B2's met line for the rebuilt image survives; the owner decides"
+		;;
+	esac
 	stuck="${S1_STUCK_S:-600}"
 	[[ "$stuck" =~ ^[0-9]+$ ]] || die "S1_STUCK_S must be a whole number of seconds (0 turns the early stop off)"
 	KEXEC_MODE="${S1_KEXEC:-s}"
@@ -5706,6 +5796,9 @@ cmd_run() {
 	fi
 	rec "run record_dir=$(basename "$RECDIR")/$(basename "$SD")"
 	[ -n "$R4_LINE" ] && rec "run $R4_LINE rev=4${R4_READ_STEP:+ j6x_class=$R4_J6X_CLASS r4_read=$R4_READ_STEP} (§16.4)"
+	# D86 (§16.6.1): the confirmatory run says so in its own record, and r4_confirm_used reads this
+	# line back to refuse a second use of the key
+	[ -n "${R4_CONFIRM:-}" ] && rec "run $R4_CONFIRM"
 	if [ -n "$JRUN" ]; then
 		rec "run jrun=$JRUN step=$STEP: run's B2 flow with no additions (no snapshot, no trace, no detached sequence); parser run --diag $JDIAG (§15.4.4)"
 		j_stamps | rec_pipe
@@ -8188,7 +8281,8 @@ cmd_redact_selftest() {
 		"prereg r4 rule=R4-rule-16.md sha256=$(printf 'b%.0s' $(seq 64))" \
 		"prereg r4 ref S1R4 ref_c2_start_min=7 refs=B2,J2,J4,J6c inputs=s1-h1-20260914T010000Z-com3.log:$(printf 'c%.0s' $(seq 64))" \
 		'S1PC r4_reading=clean' 'S1PC r4_sub=end=ok,c3=clean,c1=clean' 'S1PC r4_class=X-f-provisional' \
-		'jrun arm=r4control kind=control rev=4 step=J6x image=s1-j1 utc=20260915T000000Z' > "$d/r4lines"
+		'jrun arm=r4control kind=control rev=4 step=J6x image=s1-j1 utc=20260915T000000Z' \
+		'run B2 confirmatory=D86_B2_CONFIRM (D86, §16.6.1): a confirmatory run, not a retry' > "$d/r4lines"
 	redact < "$d/r4lines" > "$d/r4out"
 	check "revision 4's dcache, amendment, r4-read and J6x lines are unchanged by the redaction" "$(cmp -s "$d/r4lines" "$d/r4out" && echo same || diff "$d/r4lines" "$d/r4out" | head -n 2 | tr '\n' ' ')" same
 
@@ -9885,6 +9979,98 @@ cmd_harness_selftest() {
 	check "r4_rung_attempts counts the rung's own record and its later attempts (B2 and B2-a2 here; J6x alone)" \
 		"$( RECDIR="$jr7a"; r4_rung_attempts B2 )/$( RECDIR="$jr7a"; r4_rung_attempts J6x )/$( RECDIR="$jr7a"; r4_rung_attempts B9 )" "2/1/0"
 	rm -rf "$jr7/B2-a2"
+	# D86 (§16.6.1): the third observation. One keyed, bounded confirmatory run of the B2 rung after a
+	# clean reading; the key opens nothing else, and never the J6x arm
+	mkdir -p "$jr7/B2-a2"; printf 'S1PC r4_reading=clean\nS1PC r4_sub=c3=clean,c1=clean\nS1PC r4_class=X-f-final\n' > "$jr7/B2-a2/r4-read.txt"
+	check "D86: without the key, a B2 rung that read X-f-final is refused exactly as before" \
+		"$(has "$(R4RUN_REC="$jr7a" r4run s1-h1)" 'the B2 rerun has already been read (B2-a2 X-f-final)')/$(has "$(R4RUN_REC="$jr7a" r4run s1-h1)" 'the owner decides')" "yes/yes"
+	cp "$jr7/J-waivers.conf" "$d/w7-d86.keep"
+	printf '%s=yes\n' "$R4_CONFIRM_KEY" >> "$jr7/J-waivers.conf"
+	out="$(R4RUN_REC="$jr7a" r4run s1-h1)"
+	check "D86: the key with one clean reading admits the confirmatory run once (it passes this gate and stops at the next)" \
+		"$(has "$out" 'S1_COM3_LOG must name')/$(has "$out" 'already been read')" "yes/no"
+	check "D86: the admission calls it a confirmatory run, not a retry, and names the reading it does not touch" \
+		"$(has "$out" "B2 confirmatory=$R4_CONFIRM_KEY")/$(has "$out" 'never improved, replaced, re-dated or re-labelled')" "yes/yes"
+	check "D86: the admission pre-registers both outcomes before the run, the bad one included" \
+		"$(has "$out" 'clean third run strengthens what stands')/$(has "$out" 'blocks B3-B5 and goes to the owner')" "yes/yes"
+	printf 'S1PC r4_reading=unchanged\nS1PC r4_class=X-m\n' > "$jr7/B2-a2/r4-read.txt"
+	check "D86: the key does not admit a run after a reading that is not X-f-final (X-m)" \
+		"$(has "$(R4RUN_REC="$jr7a" r4run s1-h1)" 'the reading on file is B2-a2 X-m, not X-f-final')" yes
+	printf 'S1PC r4_reading=n/a\nS1PC r4_class=U\n' > "$jr7/B2-a2/r4-read.txt"
+	check "D86: nor after U, the boundary the n/a exception must not cover" \
+		"$(has "$(R4RUN_REC="$jr7a" r4run s1-h1)" 'the reading on file is B2-a2 U, not X-f-final')/$(has "$(R4RUN_REC="$jr7a" r4run s1-h1)" 'the owner decides')" "yes/yes"
+	printf 'S1PC r4_reading=clean\nS1PC r4_class=X-f-final\n' > "$jr7/B2-a2/r4-read.txt"
+	mkdir -p "$jr7/B2-a4"; printf 'S1PC r4_reading=clean\nS1PC r4_class=X-f-final\n' > "$jr7/B2-a4/r4-read.txt"
+	check "D86: the key admits a third observation only, so two readings on file refuse (it is no general licence to rerun a read rung)" \
+		"$(has "$(R4RUN_REC="$jr7a" r4run s1-h1)" 'B2 holds 2 readings (B2-a2 X-f-final;B2-a4 X-f-final)')" yes
+	printf 'S1PC r4_reading=n/a\nS1PC r4_class=n/a\n' > "$jr7/B2-a4/r4-read.txt"
+	check "r4_readings lists the rung's classed records and skips one whose class is n/a (r4_read_classed's rule)" \
+		"$( RECDIR="$jr7a"; r4_readings B2 | tr '\n' ';' )" "B2-a2 X-f-final;"
+	rm -rf "$jr7/B2-a4"
+	mkdir -p "$jr7/B2-a5"; printf 'run B2 confirmatory=%s (D86, §16.6.1): a confirmatory run, not a retry\n' "$R4_CONFIRM_KEY" > "$jr7/B2-a5/s1-h1-20260917T000000Z-board.log"
+	check "D86: a second use of the key is refused, and the permission is spent even though that run left no reading (no r4-read.txt here)" \
+		"$(has "$(R4RUN_REC="$jr7a" r4run s1-h1)" 'has already been made (B2-a5)')/$(has "$(R4RUN_REC="$jr7a" r4run s1-h1)" 'never a second use')" "yes/yes"
+	check "r4_confirm_used reads the confirmatory line back from the run's own board log" \
+		"$( RECDIR="$jr7a"; r4_confirm_used B2 )" B2-a5
+	rm -rf "$jr7/B2-a5"
+	# the key lifts no other refusal: the post-procnto n/a rule and the J6x arm are untouched
+	printf 'S1PC r4_reading=n/a\nS1PC r4_class=n/a\n' > "$jr7/B2-a2/r4-read.txt"
+	printf 'S1PC step=B2\nS1PC tier_L0=ok\n' > "$jr7/B2-a2/parse-s1.txt"
+	check "D86: the key does not lift the post-procnto n/a refusal (§16.8 RC3)" \
+		"$(has "$(R4RUN_REC="$jr7a" r4run s1-h1)" "reached 'procnto up'")" yes
+	rm -rf "$jr7/B2-a2"
+	check "D86: the key does not open the J6x arm (§16.6.1: the third observation is the B2 rung)" \
+		"$(has "$(j7pre j6r4control)" 'J6x has already been read (J6x X-f-provisional)')" yes
+	cp "$d/w7-d86.keep" "$jr7/J-waivers.conf"
+	mkdir -p "$jr7/B2-a2"; printf 'S1PC r4_reading=clean\nS1PC r4_class=X-f-final\n' > "$jr7/B2-a2/r4-read.txt"
+	check "D86: with the key out of J-waivers.conf again, the clean reading refuses as before (keyed, never the default)" \
+		"$(has "$(R4RUN_REC="$jr7a" r4run s1-h1)" 'the B2 rerun has already been read (B2-a2 X-f-final)')" yes
+	rm -rf "$jr7/B2-a2"
+	# D86, the run-scoped variables: the record line expands R4_CONFIRM on every run, not only the
+	# confirmatory one, and the script runs under 'set -u'. The self-test stub stops at the
+	# S1_COM3_LOG gate, which is earlier than that line, so this class of regression is caught here
+	# on the source shape: initialised beside the other two, and expanded with a default.
+	check "D86: R4_CONFIRM is initialised beside R4_LINE and R4_READ_STEP, so no run stops at the record line" \
+		"$(grep -cE '^[[:space:]]*R4_CONFIRM=""$' "$HERE/$PROG")" 1
+	check "D86: the confirmatory record line expands R4_CONFIRM with a default" \
+		"$(grep -cE '^[[:space:]]*\[ -n "\$\{R4_CONFIRM:-\}" \] && rec "run \$R4_CONFIRM"$' "$HERE/$PROG")" 1
+	# D86 §16.6.1's X-i row: a bad or mixed B2 reading blocks B3-B5, as a gate and not owner
+	# discipline alone. B3-B5 have no revision-4 gate of their own, so the block is tested here.
+	for f in n1:boot n2:hold q2:q2; do
+		printf 'synthetic %s\n' "${f%%:*}" > "$kd8/s1-${f%%:*}.kimg"
+		printf 'kimg_sha256=%s\nreturn_bound_s=1200\ncapture_s=4000\nmode=%s\nrung=s1-%s\nstartup_sha256=%s\n' \
+			"$(j_sha256 "$kd8/s1-${f%%:*}.kimg")" "${f##*:}" "${f%%:*}" "$pin7" > "$kd8/s1-${f%%:*}.params"
+	done
+	out="$(R4RUN_REC="$jr7a" r4run s1-n1)"
+	check "D86 X-i: with no B2 reading on file, B3 is not blocked (it stops at the later gate)" \
+		"$(has "$out" 'S1_COM3_LOG must name')/$(has "$out" 'blocks B3-B5')" "yes/no"
+	mkdir -p "$jr7/B2-a2"; printf 'S1PC r4_reading=clean\nS1PC r4_class=X-f-final\n' > "$jr7/B2-a2/r4-read.txt"
+	out="$(R4RUN_REC="$jr7a" r4run s1-n1)"
+	check "D86 X-i: a clean B2 reading does not block B3" \
+		"$(has "$out" 'S1_COM3_LOG must name')/$(has "$out" 'blocks B3-B5')" "yes/no"
+	mkdir -p "$jr7/B2-a3"; printf 'S1PC r4_reading=drop\nS1PC r4_class=X-p\n' > "$jr7/B2-a3/r4-read.txt"
+	check "D86 X-i: a later non-clean B2 reading blocks B3, names the attempt and its class, and routes to the owner" \
+		"$(has "$(R4RUN_REC="$jr7a" r4run s1-n1)" 'B2-a3 X-p')/$(has "$(R4RUN_REC="$jr7a" r4run s1-n1)" 'blocks B3-B5')/$(has "$(R4RUN_REC="$jr7a" r4run s1-n1)" 'the owner decides')" "yes/yes/yes"
+	check "D86 X-i: it blocks B4 and B5 in the same words" \
+		"$(has "$(R4RUN_REC="$jr7a" r4run s1-n2)" 'blocks B3-B5')/$(has "$(R4RUN_REC="$jr7a" r4run s1-q2)" 'blocks B3-B5')" "yes/yes"
+	# the same refusal, at the B2 gate: r4_read_classed names the first classed record, so a later
+	# non-clean reading must not hide behind the earlier clean one (the key is out again here)
+	check "D86: a later non-clean B2 reading cannot hide behind the earlier clean one in the B2 refusal" \
+		"$(has "$(R4RUN_REC="$jr7a" r4run s1-h1)" "(B2's readings on file: B2-a2 X-f-final;B2-a3 X-p)")" yes
+	printf 'S1PC r4_reading=n/a\nS1PC r4_class=n/a\n' > "$jr7/B2-a3/r4-read.txt"
+	check "D86 X-i: a recorded class of exactly n/a is no reading about c2, so it blocks nothing" \
+		"$(has "$(R4RUN_REC="$jr7a" r4run s1-n1)" 'blocks B3-B5')" no
+	check "D86 X-i: the d1 diagnostic and the B1/B2 rungs are not touched by the block" \
+		"$(has "$(R4RUN_REC="$jr7a" r4run s1-m1b-p6)" 'blocks B3-B5')" no
+	rm -rf "$jr7/B2-a3"
+	# the spend marker: a confirmatory attempt refused before the board is moved to '<rung>-refused-',
+	# and the bare rung slot is free whenever an earlier attempt was itself moved away
+	mkdir -p "$jr7/B2-refused-20260917T000000Z"
+	printf 'run B2 confirmatory=%s (D86, §16.6.1): a confirmatory run, not a retry\n' "$R4_CONFIRM_KEY" \
+		> "$jr7/B2-refused-20260917T000000Z/s1-h1-20260917T000000Z-board.log"
+	check "D86: a confirmatory attempt refused into the bare rung slot still spends the key" \
+		"$( RECDIR="$jr7a"; r4_confirm_used B2 )" B2-refused-20260917T000000Z
+	rm -rf "$jr7/B2-refused-20260917T000000Z" "$jr7/B2-a2"
 	printf 'S1PC r4_reading=drop\nS1PC r4_class=X-p\n' > "$jr7/J6x/r4-read.txt"
 	check "run s1-h1 after J6x's X-p is refused (B2 follows a clean J6x only)" "$(has "$(R4RUN_REC="$jr7a" r4run s1-h1)" "follows J6x's clean reading, X-f provisional (§16.5, D79); the newest J6x record gives X-p")" yes
 	kd8o="$d/kimg8o"; mkdir -p "$kd8o"; cp "$kd8/s1-h1.kimg" "$kd8o/"; sed "s/^startup_sha256=.*/startup_sha256=$zero7/" "$kd8/s1-h1.params" > "$kd8o/s1-h1.params"
@@ -9999,6 +10185,10 @@ cmd_harness_selftest() {
 	# the SSID against the lines the harness reads back, and a PowerShell-typed capture path
 	check "ssid: a usable name is not refused" "$(ssid_refusal 'CoffeeShop-WiFi')" ""
 	check "ssid: part of a fixed word the harness reads back (run) is refused" "$(has "$(ssid_refusal run)" 'fixed word')" yes
+	# D86: r4_confirm_used greps the confirmatory line back from the run's own board log, so an SSID
+	# that redaction would rewrite inside that line would un-spend the bounded key
+	check "ssid: a fixed word of the D86 confirmatory line is refused (it would un-spend the key)" \
+		"$(has "$(ssid_refusal confirmatory)" 'fixed word')/$(has "$(ssid_refusal D86_B2_CONFIRM)" 'fixed word')" "yes/yes"
 	check "ssid: digits and separators only are refused" "$(has "$(ssid_refusal 12-345)" 'digits and separators')" yes
 	check "gate A: an SSID that is a control word (MET) is refused" "$(has "$(S1_COM3_LOG="$cap" S1_REDACT_SSID='MET' j_capture_gate control 9)" 'fixed word')" yes
 	g="$(cygpath -w "$cap" 2>/dev/null)"
