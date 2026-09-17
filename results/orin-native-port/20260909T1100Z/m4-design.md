@@ -2239,3 +2239,15 @@ Every check below ran on the PC, with no board contact, and no figure is recorde
 **Verification.** `selftest` passes, with 29 run-level cases now. Re-parsed under I40, the `lin` rehearsal's serial log gives `run_verdict=pass`, so nothing but the rule failed it. The `k512` rehearsal's log and the board's r1 record, neither of which had a warm-up recovery, still give `run_verdict=pass`. Only verdicts were read.
 
 **Also in this change:** `build-m4tcg-image.ps1` now settles `lin`'s E3 before its first log line. `attempt8`'s build log names `e3=status0` in its header line, while its image and params carry `none` (`-E none` in the counter options).
+
+### 14.26 OD1's consequence for M4's campaign role, and the instrument hash (2026-09-17)
+
+**The definition this record opens with is not withdrawn.** §0 defines M4 as "the per-exit hypervisor dwell of the cloud-leg QNX guest under native `qvm` at EL2", keeping "M3's image, guest, configuration and host procedure". That is what M4-F r0 and r1 measured, and `m4-host.ksh.in` makes the dependency structural rather than rhetorical: it copies the guest disk (:190), loopback-mounts it (:198) and checks the guest's md5 before and after (:171, :285). M4 as written **cannot run without the QNX guest and its disk**.
+
+**OD1 (2026-09-16) settled v1's guest set as Linux only**, so v1 carries no QNX guest, while the campaign was specified to take "the M3 and M4 numbers" on v1. The two are incompatible as written. Per the owner's instruction to follow OD1, M4's **campaign** role is redefined: the per-exit dwell is measured with **v1's Linux guest** running under native qvm. The r0 and r1 records keep their A4 label and are not re-run for their own sake.
+
+**Two costs, neither of them free.**
+1. **The sizing chain goes stale.** §2.4 sizes each rung from the record of the one before, and the plan states that a change of guest set stales r0's and r1's sizing, so the campaign runs its own sizing rungs on v1.
+2. **The instrument and the counter were built around the QNX guest run.** `m4count` and the trace window were validated against it; re-pointing them at a Linux guest is new validation work, not a parameter change.
+
+**The frozen-instrument hash moved the same day, after item 9 was discharged.** `ident_hits` was fixed (`grep -c` prints 0 and exits 1 on no match, so a `|| echo 0` fallback produced "0<newline>0", the arithmetic failed, and COM3 copies were kept unredacted), taking `m4-board.sh` from `21710d53f463…41f1fd39309` to `d989fd06d5de…2c511b1797ba`. The change is confined to the privacy path: the parser reads the raw capture, never the redacted copy, and `crit_bb` gates the black box's sha256, not the COM3 copy. The plan's item 9 records the re-freeze and why no re-run is owed.
