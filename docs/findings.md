@@ -9,6 +9,68 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-17 — B5 met: both guests under native qvm on the board, and S1-F is met (QNX plus Linux)
+
+The two-guest rung ran on the board for the first time and passed. It had no precedent: claim R25 — that two
+qvm instances on four cores let the QNX guest's banner and IPC complete — was class UNKNOWN, and nothing in
+this project had ever run two qvm instances, on the board or under emulation. Three same-day steps made it
+runnable: OD9 reversed the guest set to QNX plus Linux, OD7 regenerated the guest and host from clean sources,
+and `s1-q2` was built on those regenerated artefacts with D14's derived `--q2-limit 0x8E000000`.
+
+**What ran.** Under the native QNX Hypervisor at EL2 on four cores, the Linux guest and the cloud-leg QNX
+guest ran together. The QNX guest reached its banner and the IPC pair completed its 15 iterations, the client
+returning success with no sentinel recovery and no bounce — which is not a fix for the A1-era virtio-queue
+stall or an explanation of it; it simply did not occur in these 15 iterations. The verdict line: `S1PC step=B5
+S1PC verdict=pass`, `item3=pass`, `item5=ok`, with `tier_L5=ok`, `tier_L7=ok`,
+`tiers_reached=L0,L1,L2,L3,L4,L5,L7` — L6 is n/a, because this is not a hold rung — `conf_gate=pass`, and
+the image, initrd and configuration hashes matching the PC. All three canaries verified before either guest
+launched and all three again after teardown; `md5_post` was ok for the image, initrd, configuration, guest and
+disk; no failure state was recorded; the bootloader slot read equal to the session's first reading both before
+and after; and the board reset itself, with L4T returning unaided. The image was built on the OD7-regenerated
+guest, and the board's own md5 checks matched the regenerated values — the first board run these pins have
+been through, which also discharges OD9's fourth consequence: this is v1 evidence for item 3, not only an
+answer to R25.
+
+**What follows for the record.** Pass item 3 is met, so the three mutually exclusive wordings resolve to the
+third: **S1-F is met (QNX plus Linux)**. B5 carries items 3 and 5 only — the parser records items 1, 2 and 4
+as `n/a`, and they stay where they were earned, on T1/T2, B3 and B4. That restores freeze gate item 1, which
+OD9 had reopened the same morning, and it withdraws nothing from the 2026-09-14 B2 record or from the writer
+diagnosis, both of which stand exactly as recorded. **No S1-F rung remains.** What the gate still needs is
+written into it rather than run: the manifest itself, item 10's `-smp` field, item 11's two missing size rules,
+item 3's exposure declaration, and item 13's 4.6(i) consultation, which gates publication rather than the
+campaign.
+
+**A defect found while checking the gate that let B5 run, recorded because nothing else records it.** The
+revision-4 precondition at `s1-board.sh:5750` filters B2's readings with `grep -v ' X-f-final$'` and whitelists
+no other class. Its own comment says B3-B5 run "while every B2 reading on file is **clean**", and §16.6.1
+defines **X-f-c** as exactly that: the confirmatory run clean by §16.6's field rules, MET by §6.7. So a reading
+correctly classed X-f-c would survive the filter, make `r4bad` non-empty and **block B3-B5** — the gate is
+narrower than both its own comment and the design it implements. `X-f-c` appears in that file only in a
+comment, in no conditional, and no self-test covers it. B5 ran today only because B2-a3's record says
+`X-f-final`: `--confirmatory` was added to the parser after that reading was taken, and the harness passes the
+flag only when D86's key is spent. Nothing is blocked now — the design notes D86's permission is spent, so
+the flag has no run to read — but the next confirmatory run would hit it. Not fixed here: it is a gate over a
+pre-registered reading rule, and it is the owner's call. Recorded also in the B2-a3 run note.
+
+**What this does not show.** Nothing about duration with two guests: B5 is not a hold rung, tier L6 is n/a,
+and the only ten-minute evidence this project holds is B4's, with one guest. No timing, latency or throughput
+claim: item 3 is completion only, and the IPC figures the capture carries are evaluation output under NC QDL
+v7 4.6(i), unpublished. It still does not show that either guest's RAM came from the second window — no
+host-side view of the physical addresses behind qvm's guest RAM was found, so that stays unknown
+(`guestram=unknown`, Q14), and D14's premise that window 2 absorbs the guest RAM remains a budget convention
+rather than a measurement. The canaries **bracket** the rung rather than cover it: they were read before
+either guest launched and again after teardown, never while both guests were running, so this is intactness
+before and after two-guest operation, not throughout it. And it is no isolation, containment or
+freedom-from-interference claim: two guests ran side by side once, which is one observation and not a series,
+and nothing here measures interference between them. One thing the rung could not pre-check is recorded rather
+than smoothed over: `s1-q2.kimg` is about four times any previous S1 image and larger than anything previously
+kexec'd here, the landing gate was skipped for want of `dyndbg`, and the shim's own check found the landing
+sound — the landing hypothesis held at this size and remains a hypothesis. The run record is private and
+git-ignored, and no figure is published here.
+[s1-design.md](../results/orin-native-port/20260909T1100Z/s1-design.md) §5.2, §16;
+[the plan's S1-F block](orin-native-port-plan.md#the-revised-ladder).
+
+
 ## 2026-09-17 — OD7 executed: the guest and host regenerated from clean sources, and the provenance break is closed
 
 The owner reopened freeze item 2 the same day (OD9, QNX plus Linux), which put the QNX guest back into v1
@@ -49,8 +111,10 @@ asserts the stanza has not returned; the PO-E record check now expects the load 
 configurations edited; the tracked twin-leg manifest carrying its new pair with the old one demoted to a
 commented earlier-pair line, its own convention.
 
-**What this does not close.** Item 8 is discharged; the freeze is not. **B5 has never run**, and the new pins
-have never been through a board run of any kind. M3's and M4's recorded figures were measured against the old
+**What this does not close.** Item 8 is discharged; the freeze is not. ~~**B5 has never run**, and the new pins
+have never been through a board run of any kind.~~ **2026-09-17, later the same day: B5 ran on the board and
+passed, on these very pins — the board's own md5 checks matched the regenerated guest and disk values, so
+the regeneration was checked by the board itself. See this file's B5 entry above.** M3's and M4's recorded figures were measured against the old
 artefacts and stay exactly as recorded — they are A4 history, not v1. The five curated boot logs that name the
 old host pair are **left untouched on purpose**: they record which images were actually booted, and the images
 they name really are gone now. The records are private and git-ignored, and no figure is published here.
@@ -129,10 +193,12 @@ one — it says nothing about how long the arrangement holds.
 What remains: **B4**, the ten-minute run, which is the rung that speaks to duration, and which has not run.
 ~~**B5 does not run at all**: under OD1 the guest set is Linux only, so the two-guest rung's pass item is not
 applicable.~~ **2026-09-17, later (OD9): the guest set was reopened to QNX plus Linux, so B5 is owed after all.**
+**2026-09-17, later still: B5 ran and passed — see this file's 2026-09-17 B5 entry.**
 
 **2026-09-17, later: B4 met, and S1-F was recorded met — a line OD9 withdrew the same day
 (below), when the guest set was reopened to QNX plus Linux, so pass item 3 applies again and B5 is
-owed. B4's own result stands.** The ten-minute rung ran the same session and passed. The
+owed. B4's own result stands.** **2026-09-17, later still: B5 ran and passed, so item 3 is met and S1-F is met
+(QNX plus Linux), on the third wording rather than the first.** The ten-minute rung ran the same session and passed. The
 guest held for ten minutes; the hypervisor was alive at every one of the ten heartbeats; all three canaries
 verified after the hold and again after teardown; the guest's kernel, initrd and configuration were
 unchanged at the end; the bootloader slot was unchanged; and the board returned unaided. It is the first
@@ -148,14 +214,17 @@ With items 1, 2, 4 and 5 held and item 3 not applicable, ~~**S1-F is met (Linux 
 freeze item 2 = Linux only)** — the design's first branch, because the guest set was settled before this
 record closed, not the provisional wording. Freeze gate items 1 and 6 are satisfied.~~
 
-**2026-09-17, later (OD9): that met line is withdrawn, and S1-F is NOT met.** The owner reopened freeze
+**2026-09-17, later (OD9): that met line is withdrawn, and S1-F is NOT met.** **(Superseded the same day,
+below: B5 ran and passed, so S1-F is met — QNX plus Linux.)** The owner reopened freeze
 item 2 and reversed it to QNX plus Linux, so pass item 3 applies again and the two-guest rung (B5) is
 owed. The line was correctly written when it was written — the design's first branch requires item 2
 settled before B4's record closed, and OD1 did settle it then — but its premise no longer holds.
-Items 1, 2, 4 and 5 stand exactly as recorded; item 3 is open; freeze gate item 6 still stands and
-item 1 does not. ~~The freeze still needs
-the guest disk regeneration;~~ **2026-09-17, later: the regeneration ran (OD7, this file's top entry), so item 8
-is discharged too, and what the freeze still needs is B5.** The attended instrument round ran and passed on
+Items 1, 2, 4 and 5 stand exactly as recorded; ~~item 3 is open; freeze gate item 6 still stands and
+item 1 does not.~~ ~~The freeze still needs
+the guest disk regeneration;~~ **2026-09-17, later: the regeneration ran (OD7, the 2026-09-17 "OD7 executed"
+entry), so item 8 is discharged too, and what the freeze still needs is B5.** **2026-09-17, later still: B5
+ran and passed, so item 3 is met, S1-F is met (QNX plus Linux) — s1-design §5.2's third wording — freeze
+gate item 1 is satisfied again, and item 6 still stands, as the struck sentence said. No S1-F rung remains.** The attended instrument round ran and passed on
 2026-09-17, discharging its gate item. The licence consultation gates publication, not the campaign.
 The records are private and git-ignored, and no figure is published here.
 [s1-design.md](../results/orin-native-port/20260909T1100Z/s1-design.md) §16;
@@ -164,7 +233,7 @@ The records are private and git-ignored, and no figure is published here.
 ## 2026-09-16 — M4's r0 image rebuilt under the frozen instruments, and the guest-disk rebuild deliberately not done
 
 > **2026-09-17: the guest-disk rebuild was subsequently done** — the deferral's stated reason, a pre-registration
-> that had not yet run, expired when revision 4's ladder ran on 2026-09-16. See this file's top entry (OD7).
+> that had not yet run, expired when revision 4's ladder ran on 2026-09-16. See the 2026-09-17 "OD7 executed" entry.
 > Nothing below is withdrawn: the cost analysis recorded here is what made the later decision quick to take.
 
 Two freeze-gate items were taken up while the board was unattended. One is now done on the PC; the other
@@ -394,7 +463,7 @@ Three review lenses raised 30 findings, and all were applied. The blocker was th
 canary ranges from procnto, because only `alloc_ram` removes a range from the RAM list the kernel receives.
 
 The owner took all nineteen decisions as recommended:
-- Linux only now; the two-guest rung runs only if v1 keeps the QNX guest. **2026-09-17 (OD9): v1 keeps it; the rung is owed.**
+- Linux only now; the two-guest rung runs only if v1 keeps the QNX guest. **2026-09-17 (OD9): v1 keeps it; the rung is owed.** **2026-09-17, later: it ran and passed.**
 - D10 tightens plan item 4, so the guest's end probe is required, not only a live qvm.
 - D12: the dumped FDT is private evaluation output.
 - D17: any QNX support request goes through the supervising professor first.

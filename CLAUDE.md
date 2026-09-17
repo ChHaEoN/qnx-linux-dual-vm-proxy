@@ -453,8 +453,8 @@ Quick summary for context:
   consultation, and what is not shown is unchanged.** The original 2026-09-14 B2 record is unchanged and
   stays NOT MET, on data, for the old startup (D72). Two process incidents: the watcher run's first attempt refused
   at the pre-registration check on an unset rule-file variable, before any board contact and with nothing appended
-  twice; and B1's oversized capture blocked the exclusive serial port, so captures are now sized per rung. S1-F is
-  **not complete**. **2026-09-17: B3 met** — the Linux guest booted under native qvm on the board
+  twice; and B1's oversized capture blocked the exclusive serial port, so captures are now sized per rung. ~~S1-F is
+  **not complete**~~ **(2026-09-17, later: S1-F is met — QNX plus Linux; see the B5 note below)**. **2026-09-17: B3 met** — the Linux guest booted under native qvm on the board
   for the first time and reached a shell that answered the host's probe (pass item 2), with the canaries
   verified before and after and the guest's own files unchanged. It does **not** show that the guest's RAM
   came from the second window: no host view of qvm's guest-RAM addresses was found, so that stays unknown.
@@ -465,8 +465,28 @@ Quick summary for context:
   **B5 does not run at all under OD1** (Linux only, so pass item 3 is not applicable), and `s1-q2` was
   never built~~ **2026-09-17, later (OD9): the owner reopened freeze item 2 and reversed it to QNX plus
   Linux, so pass item 3 applies again, B5 is owed, and S1-F is NOT met. Items 1, 2, 4 and 5 stand as
-  recorded; item 3 is open. D14's limit is now derived (`--q2-limit 0x8E000000`), but `s1-q2` has still
-  never been built and B5 has never run**; s1-design.md §14.9-14.12, §15
+  recorded; item 3 is open. D14's limit is now derived (`--q2-limit 0x8E000000`)**, ~~but `s1-q2` has still
+  never been built and B5 has never run~~. **2026-09-17, later still: `s1-q2` was built, and B5 ran on the
+  board and passed.** The two-guest rung had never run before — R25 (two qvm instances on four cores let
+  the QNX guest's banner and IPC complete) was class UNKNOWN with no precedent anywhere in this project.
+  Under native qvm at EL2 on four cores the Linux guest and the cloud-leg QNX guest ran together: the QNX
+  guest reached its banner and the IPC pair completed its 15 iterations, the client returning success with
+  no sentinel recovery and no bounce (the A1-era stall is not thereby fixed or explained; it did not occur
+  in these 15 iterations). Parser: `step=B5 verdict=pass item3=pass item5=ok`,
+  `tiers_reached=L0,L1,L2,L3,L4,L5,L7`, `conf_gate=pass`, image, initrd and configuration matching the PC.
+  All three canaries verified before either guest launched and all three again after teardown; `md5_post`
+  ok for every pinned artefact; no failure state; the bootloader slot unchanged; and the board reset itself
+  with L4T returning unaided. It ran on the OD7-regenerated guest, and the board's own md5 checks matched
+  the regenerated values — so OD9's consequence 4 is discharged and this is v1 evidence, not only an
+  answer to R25. **So pass item 3 is met and S1-F is met (QNX plus Linux)** — s1-design.md §5.2's third
+  wording, with items 1, 2 and 4 still standing on T1/T2, B3 and B4, which B5 records `n/a` and does not
+  re-establish — which satisfies freeze gate item 1 again. What B5 does **not** show: nothing about
+  duration with two guests (not a hold rung, tier L6 is n/a; the ten-minute evidence is B4's, with one
+  guest); no timing or latency claim (item 3 is completion only, and the IPC figures are unpublished
+  evaluation output under NC QDL v7 4.6(i)); still not that either guest's RAM came from the second window
+  (`guestram=unknown`, Q14); no mid-run canary check, so the canaries bracket the rung rather than cover it;
+  and no isolation, containment or freedom-from-interference claim — one observation, not a series.
+  s1-design.md §14.9-14.12, §15
   and §16; figures unpublished)**; freeze
   reference architecture v1; then one measurement campaign on it (the M3 and M4 numbers, the M5 comparison, the twin
   diff), every record stamped with the version. ~~Awaiting the owner's confirmation: the M path ends at M5's functional
@@ -569,8 +589,16 @@ Quick summary for context:
    under a light load. ~~**S1-F met (Linux only)**, so freeze gate items 1
    and 6 are satisfied. B5 does not run under OD1.~~ **2026-09-17 (OD9): item 2
    was reopened and reversed to QNX plus Linux, so S1-F is NOT met, gate item 1
-   is open and B5 is owed; item 6 still stands.** Next: the freeze,
-   which needs B5. **Item 8, the guest disk regeneration, ran 2026-09-17
+   is open and B5 is owed; item 6 still stands.** ~~Next: the freeze,
+   which needs B5.~~ **2026-09-17, later still: B5 ran on the board and passed** — `s1-q2`, the
+   two-guest rung, with the Linux guest and the cloud-leg QNX guest together under native qvm at EL2 on
+   four cores; the QNX guest reached its banner and the IPC pair completed, so pass item 3 is met and
+   **S1-F is met (QNX plus Linux)**, satisfying gate item 1 again. It is completion, not duration: not a
+   hold rung (L6 n/a; the ten-minute evidence is B4's, one guest), no timing claim, canaries bracketing the
+   rung rather than checked mid-run, still nothing showing either guest's RAM came from the second window,
+   and no isolation or containment claim. **No S1-F rung remains**; what the freeze still needs is its
+   choices and its manifest.
+   **Item 8, the guest disk regeneration, ran 2026-09-17
    (OD7): guest and host regenerated from clean sources, the as-run configuration
    now equals the committed one, O1 answered by construction, both guest pins
    moved, PIN_CLIENT unchanged**; the attended

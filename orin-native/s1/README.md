@@ -9,6 +9,11 @@ on the PC, then run natively. Nothing in this directory contacts the board; only
 **2026-09-14:** T0 was built and gated on the PC. Nothing has run under QEMU or
 on the board.
 
+**2026-09-17:** the TCG rehearsal and the board rungs have since run. B5, the
+two-guest rung, ran and passed: pass item 3, completion only. What each rung
+does and does not show is in `s1-design.md` §6.10 and §14; the board figures are
+unpublished evaluation output (NC QDL v7 4.6(i)).
+
 Design: [`s1-design.md`](../../results/orin-native-port/20260909T1100Z/s1-design.md)
 (revision 2; the owner took D1-D19 as recommended). The sections these files
 follow:
@@ -138,7 +143,7 @@ BSP=<extracted BSP tree> QNX_BASE=<SDP 8.0 install> ./orin-native/startup/make-s
 - **What a build writes:** each image gets `<img>.build`, `.ksh`, `.params`,
   `.ifs` and `.kimg`, plus its check texts. `<img>.params` carries the pins, the
   guard, `return_bound_s` and `capture_s` that `s1-board.sh` reads.
-- **`s1-q2`** is refused without `--q2-limit`. ~~D14's limit was never derived, and **B5 does not run**: OD1 (2026-09-16) settled the guest set as Linux only, so pass item 3 is not applicable.~~ **2026-09-17 (OD9): the guest set was reopened to QNX plus Linux, so B5 is owed, and D14's limit is derived — `--q2-limit 0x8E000000`, with its arithmetic at the generator's geometry gate.** The image has still never been built and B5 has never run (s1-design §6.10).
+- **`s1-q2`** is refused without `--q2-limit`. ~~D14's limit was never derived, and **B5 does not run**: OD1 (2026-09-16) settled the guest set as Linux only, so pass item 3 is not applicable.~~ **2026-09-17:** the guest set was reopened to QNX plus Linux (OD9), D14's limit was derived — `--q2-limit 0x8E000000`, with its arithmetic at the generator's geometry gate — the image was built on the OD7-regenerated guest, and B5 ran on the board and passed — pass item 3, completion only (s1-design §6.10's append). No duration claim with two guests, no timing or latency claim, guest-RAM window unknown, no isolation claim, and no canary read while both guests ran; the figures stay private until the 4.6(i) consultation.
 
 ## The TCG rehearsal (T1-T3)
 
@@ -192,7 +197,7 @@ S1_COM3_LOG=<the running capture file> S1_REF_CONF_SHA256=<T2's conf_sha256> \
 ```
 
 - **Images and steps:** `s1-m1b-p6` is B1, `s1-h1` B2, `s1-n1` B3, `s1-n2` B4,
-  `s1-q2` B5 (owed under OD9; never built), and `s1-d1` a diagnostic.
+  `s1-q2` B5 (built, and B5 ran and passed 2026-09-17), and `s1-d1` a diagnostic.
 - **Exit codes:**
   - 0 done;
   - 1 refused before the board changed;

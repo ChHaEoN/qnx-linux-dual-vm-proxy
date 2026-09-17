@@ -28,8 +28,10 @@ are explained under [Reading the ids](#reading-the-ids).
   every rung is a functional pass. On 2026-09-17 a stock Linux kernel booted as
   a guest of that hypervisor **on the board**, reached a shell that answered the
   host, and held for ten minutes with the hypervisor alive and memory canaries
-  intact. **S1-F is not complete:** the guest set was reopened on 2026-09-17 to
-  QNX plus Linux, so the two-guest rung (B5) is owed and has never run.
+  intact. Later the same day both guests ran at once for the first time: the
+  QNX guest reached its banner and completed its IPC beside the Linux guest,
+  so **S1-F is met (QNX plus Linux)**. That rung is a boot and a completion,
+  not a hold — the ten minutes is the Linux guest alone.
 
 - **What has been measured.** Every *published* figure comes from the earlier,
   emulated architectures (A1–A3, kept as history), **none hardware-timed**. The
@@ -42,17 +44,20 @@ are explained under [Reading the ids](#reading-the-ids).
 - **What it cannot show.** No certified Type-1 isolation, no quantified freedom
   from interference, no real-time guarantee, no safety certification, no GPU,
   camera or accelerator path. **No vision or AI workload has run on any leg.**
-  The ten-minute run was idle apart from a heartbeat, so it is not a load,
-  stress or soak test, and it is the longest run this project has made. Whether
-  the guest's memory came from the second window is not shown: no host-side
-  view of those addresses exists. See [Known limitations](#known-limitations-honest-framing).
+  The ten-minute run carried **one guest** and was idle apart from a heartbeat,
+  so it is not a load, stress or soak test, and it is still the longest run this
+  project has made; the two-guest rung was a boot, not a hold. Whether the
+  guest's memory came from the second window is not shown: no host-side view of
+  those addresses exists. See [Known limitations](#known-limitations-honest-framing).
 
-- **What is next.** Regenerate the guest disk from clean sources — the last
-  gate item with work left in it — then freeze reference architecture v1 and
-  run one measurement campaign on it, including the **twin diff**: what changes
-  when the host bundle (CPU, OS, TCG backend, QEMU build) changes. GPU
-  pass-through is the owner's target, on a research track outside the current
-  plan; no GPU stage has started.
+- **What is next.** Freeze reference architecture v1, then run one measurement
+  campaign on it, including the **twin diff**: what changes when the host
+  bundle (CPU, OS, TCG backend, QEMU build) changes. **No board rung is
+  outstanding**, but the freeze is not a formality: it still needs the manifest
+  written, the emulated-CPU count for the twin legs settled, two missing
+  sample-size rules, and the licence consultation, which gates publication
+  rather than the campaign. GPU pass-through is the owner's target, on a
+  research track outside the current plan; no GPU stage has started.
 
 This is **not** DRIVE OS and not a certified hypervisor. The QEMU legs were
 software-layer proxies and are now history. The current native leg runs the
@@ -75,7 +80,7 @@ proxy can and cannot demonstrate. This table is the load-bearing part:
 | NVDLA / PVA | Not emulated. Deep-learning and vision accelerators have no QEMU model. |
 | MIPI CSI-2 (camera ingest) | Not emulated. No camera serial-link model in QEMU virt machine. |
 | FSI R52 lockstep | Not emulated. No Cortex-R52 lockstep cluster, no Functional Safety Island. |
-| GPU (Ampere CUDA / vGPU) | No leg passes a GPU to a guest. The cloud host has no NVIDIA GPU at all; the Orin Nano has an Ampere iGPU but it is never exposed to the QNX guest — no in-guest CUDA, no vGPU partitioning. On the native leg the next guest, S1, is Linux without a GPU. GPU pass-through is a later target, studied on a separate unpublished research track; no GPU stage has started. |
+| GPU (Ampere CUDA / vGPU) | No leg passes a GPU to a guest. The cloud host has no NVIDIA GPU at all; the Orin Nano has an Ampere iGPU but it is never exposed to the QNX guest — no in-guest CUDA, no vGPU partitioning. On the native leg the S1 guest that has now run is Linux without a GPU. GPU pass-through is a later target, studied on a separate unpublished research track; no GPU stage has started. |
 | Real-time guarantees | The QEMU legs (A1 to A3, history) were TCG-emulation-bound, not hardware-timed, and the Orin plain leg added observable host-scheduler jitter on top; v1's two TCG twin legs will measure emulated time too. The native leg runs on real cores, but its timings are unpublished and not yet campaign-grade: the CPU frequency is wherever BPMP and Linux left it, the clock is recorded as unverified, and the numbers wait for the v1 campaign. The "Safety VM" framing is POSIX-realtime, not certified RT. |
 | ASIL-D certification | None. SDP 8.0 ≠ QNX OS for Safety (QOS); no safety case, no MISRA-C, no ISO 26262 evidence. |
 | Inter-VM shared memory latency | Cloud leg (A1, history): host↔guest over the `qvm` virtio-console vdev (crosses the EL2/EL1 boundary, but TCG-emulated — the latency measures emulation cost, not transport cost). Orin plain leg (Phase 3, A2, history): QNX↔Linux virtio-net → tap → bridge → tap → virtio-net — also TCG-emulated, since the KVM path is blocked, so it is **not** hardware-timed either. Native leg (A4): host to guest over virtio-console under qvm on real cores; figures unpublished, re-measured in the v1 campaign. No sourced DRIVE OS IPC figure is in the repo yet, so no gap is quantified here. See [ADR-002](docs/phase2-topology-decision.md). |
@@ -109,7 +114,7 @@ root-caused) and the GICv3/NISV KVM defect stay open as separate items.
    entry (1) kexec from L4T (M1b-M4)   ──> qvm ──> QNX guest, unchanged
    entry (2) firmware UEFI Shell, by hand, then our EFI loader (M5-F):
              the one-core M1b host image only, attended, no qvm, no guest
-   S1-F: Linux guest under native qvm ran 2026-09-17; B5 (two guests) owed
+   S1-F met: Linux guest, then B5 ran QNX + Linux together, 2026-09-17
                             │
                             v  freeze
  NEXT  reference architecture v1, fixed by a manifest, then one campaign
@@ -153,7 +158,7 @@ the measured diffs, §1a and §5), [bsp-selection.md](docs/bsp-selection.md)
 | **1** — Cloud twin bring-up: QHV `qvm` + QNX guest under TCG | ✅ done | [boot log](logs/sample-boot/qhv-tcg-host-and-guest-boot.log) |
 | **2** — Cloud twin IPC + latency | ✅ **closed as A1 history** — real P50/P99/Max exist, but the 100k target was never reached; the `qvm`/TCG stall that capped it is recoverable, **not root-caused**, and stays open | [cloud-ipc-latest.csv](results/cloud/cloud-ipc-latest.csv) |
 | **3** — Hardware twin port (Orin Nano) | ✅ **closed as A2 history** — QNX↔Linux IPC over a real `br0`/tap bridge ran under **TCG**, 2 × 100,000 iterations, zero errors, **using a rebuilt IFS with new TCP server code, not the byte-identical Phase-1 image**. KVM boot never worked; the root-caused GICv3/`KVM_EXIT_ARM_NISV` defect (reproduced on a second ARM vendor; compile-verified from QNX's own BSP source, boot-unverified) stays open outside v1 | [orin-ipc-latest.csv](results/hw/orin-ipc-latest.csv), [orin-port.md](docs/orin-port.md) |
-| **3b** — Native QNX on the Orin (no QEMU) | 🟡 **M path complete (2026-09-13); S1-F's Linux rungs passed 2026-09-17, but S1-F is not complete — the guest set was reopened to QNX plus Linux, so the two-guest rung (B5) is owed and has never run** — see [The native port](#the-native-port-phase-3b) | [ADR-003](docs/adr-003-hardware-timed-qhv.md), [the plan](docs/orin-native-port-plan.md) |
+| **3b** — Native QNX on the Orin (no QEMU) | 🟡 **M path complete (2026-09-13); S1-F met (QNX plus Linux) 2026-09-17** — the two-guest rung (B5) ran once and passed: the QNX guest's banner and IPC completed beside the Linux guest. One observation, not a series. What remains is the v1 freeze and the one campaign on it — see [The native port](#the-native-port-phase-3b) | [ADR-003](docs/adr-003-hardware-timed-qhv.md), [the plan](docs/orin-native-port-plan.md) |
 | **4** — Twin diff + DRIVE OS comparison | 🟡 **history recorded; re-run inside the v1 campaign** — all earlier diffs ran under TCG, none hardware-timed; the verdicts in [drive-os-comparison.md](docs/drive-os-comparison.md) wait for it | [digital-twin-design.md](docs/digital-twin-design.md) §1a, §4, §5 |
 | **5** — FuSa & Cybersecurity overlay | ⬜ not started as a dedicated phase (a Phase-1-gate pass did run) | [fusa/](docs/fusa/), [cyber/](docs/cyber/) |
 | **6** — Polish, public README, demo | ⬜ not started | — |
@@ -201,10 +206,11 @@ shown wrong are **struck through in place with a dated note rather than
 deleted**, and [ADR-002](docs/phase2-topology-decision.md) records how Phase 1
 falsified the original KVM cloud topology.
 
-The guest disk in the A3 pair is the RQ-2 diagnostic variant, not one
-regenerated from committed sources. That was settled on 2026-09-16: regenerate
-from clean sources before the freeze. The decision is taken; the work is not
-done, and it is the last gate item with work left in it.
+The guest disk in the A3 pair was the RQ-2 diagnostic variant, not one
+regenerated from committed sources. That was settled on 2026-09-16 and executed
+on 2026-09-17: the host and guest were rebuilt from clean sources, and the
+as-run configuration now equals the committed one. The figures above were
+measured against the older artefacts and stay exactly as recorded.
 
 ---
 
@@ -224,19 +230,24 @@ firmware's UEFI Shell.
 | **M3** | Native `qvm` boots the byte-identical cloud-leg QNX guest to its banner |
 | **M4-F** | The trace instrument works on the board |
 | **M5-F** | A UEFI cold boot reaches startup and procnto, attended, one session |
-| **S1-F** | A Linux guest without a GPU boots and holds ten minutes — its Linux rungs passed 2026-09-17; **not complete**, the two-guest rung (B5) is owed |
+| **S1-F** | A Linux guest without a GPU boots and holds ten minutes on its own; in the two-guest rung (B5) the QNX guest's banner and IPC complete beside it — met (QNX plus Linux) 2026-09-17 |
 
 **What this is not.** On the board the hypervisor has hosted a QNX guest and,
 since 2026-09-17, a Linux guest that booted and held for ten minutes **while
 idle apart from a heartbeat** — not a load, stress or soak test, and the
-longest run this project has made. **Never both guests at once:** the two-guest
-rung (B5) has never run, so the dual partition is designed and its geometry
-derived, not demonstrated. No device pass-through. The host is
-entered from Linux in every timed rung; the cold boot carried only the
-one-core M1b host image, without `qvm` or a guest, times nothing, and has not
-been repeated. Whether the guest's RAM came from the second window is **not
-shown**: no host-side view of those addresses exists. No per-exit hypervisor
-number is judged or published.
+longest run this project has made. That hold carried the **Linux guest alone**.
+**Both guests at once, once:** on 2026-09-17 the two-guest rung (B5) ran for
+the first time and passed — the QNX guest reached its banner and completed
+its IPC beside the running Linux guest, with the memory canaries verified
+before and after. It is a boot and a completion, not a hold: **nothing is
+shown about duration with two guests**, no timing or latency claim follows
+from it (the figures are unpublished under the licence), and one observation
+is not a series — no isolation, containment or freedom-from-interference
+claim. No device pass-through. The host is entered from Linux in every timed
+rung; the cold boot carried only the one-core M1b host image, without `qvm` or
+a guest, times nothing, and has not been repeated. Whether the guest's RAM came
+from the second window is **not shown**: no host-side view of those addresses
+exists. No per-exit hypervisor number is judged or published.
 
 **M4-F is narrower than it sounds.** Its two runs passed under different
 instrument versions, and the PC's cross-check covered only the early part of
@@ -259,8 +270,8 @@ hang needs someone at the board with a way to cut power. `GUEST_EXIT`'s
 
 The two second-cluster cores run a busy loop at a fixed, much lower rate whose
 cause is still open; the freeze needs it explained or those cores left out.
-The M0–M1b records and captures are in this repo; the M3–M5 run records and
-every figure from M3 on stay unpublished until releasing them is cleared —
+The M0–M1b records and captures are in this repo; the M3–M5 and S1 run records
+and every figure from M3 on stay unpublished until releasing them is cleared —
 the code, the plan and the procedure are here.
 
 Detail: [the plan](docs/orin-native-port-plan.md),
@@ -311,10 +322,11 @@ Graviton runtime leg was never built.
 - [x] M4-F — the trace instrument works on the board (2026-09-11; its first
       rung re-run under the frozen instruments and passed, 2026-09-17)
 - [x] M5-F — a UEFI cold boot reaches startup; the M path ends (2026-09-13)
-- [ ] S1-F — a Linux guest without a GPU under native `qvm`: booted, held ten
-      minutes and stamped its run (2026-09-17). **Not complete:** the guest set
-      was reopened to QNX plus Linux on 2026-09-17, so the two-guest rung (B5)
-      is owed and has never run. Nothing ran under load
+- [x] S1-F — a Linux guest without a GPU under native `qvm`: booted, held ten
+      minutes, and on the same day the two-guest rung (B5) ran the QNX guest
+      beside it to banner and IPC completion — **met (QNX plus Linux)**
+      (2026-09-17). Nothing ran under load, and the ten minutes is the Linux
+      guest alone
 - [ ] Freeze reference architecture v1
 - [ ] One measurement campaign on v1
 - [ ] **Phase 7** _(stretch)_ — domain-controller extension, two tracks in
@@ -331,7 +343,7 @@ Graviton runtime leg was never built.
 | [`ipc-test/`](ipc-test/) | C99 IPC: QNX echo servers, host client, Linux client, shmem probes, shared frame code |
 | [`scripts/`](scripts/) | cloud-twin and Orin bring-up, QHV configs, twin sync and diff |
 | [`logs/sample-boot/`](logs/sample-boot/) | curated boot and benchmark logs — the evidence |
-| [`results/`](results/) | benchmark CSVs, GICv3 reports, Phase 3b records (M3–M5 run records unpublished) |
+| [`results/`](results/) | benchmark CSVs, GICv3 reports, Phase 3b records (M3–M5 and S1 run records unpublished) |
 | [`skills/`](skills/) | study artefacts: FMEA, ISO 26262, ISO/SAE 21434, ASPICE, BSP porting, digital twin, Jetson, Tegra virtualisation. **Study artefacts, not certification evidence** |
 | [`agents/`](agents/), [`.claude/agents/`](.claude/agents/) | agent role definitions, long-form and as subagent definitions |
 

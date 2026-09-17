@@ -105,7 +105,9 @@
 #   B5: OD1 (2026-09-16) settled the guest set as Linux only and B5 did not run. OD9 (2026-09-17)
 #   reopened item 2 and reversed it to QNX plus Linux, so pass item 3 applies again and B5 runs.
 #   D14's limit is derived: --q2-limit 0x8E000000 (make-s1-images.sh, the geometry gate).
-#   s1-q2 has still never been built and B5 has never run (s1-design 6.10).
+#   2026-09-17: s1-q2 was built on the OD7-regenerated guest, and B5 ran on the board and
+#   passed -- pass item 3, completion only (not a hold rung, so no duration claim with two
+#   guests; guest-RAM window unknown; no isolation claim; s1-design 6.10's append).
 #   s1-j1 J6 (host; the watcher, §15.4.8: stage and p0 as any image, then jrun only, never run)
 #
 # ENVIRONMENT (no host, user, key or path is written into this file)

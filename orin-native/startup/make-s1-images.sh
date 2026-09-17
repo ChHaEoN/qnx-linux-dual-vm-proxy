@@ -25,7 +25,9 @@
 #                                                        OD9 (2026-09-17) reversed the guest set to QNX
 #                                                        plus Linux, so B5 is owed. D14's limit is
 #                                                        derived: 0x8E000000 (see the geometry gate).
-#                                                        Never built; B5 has never run.
+#                                                        2026-09-17: built on the OD7-regenerated
+#                                                        guest; B5 ran on the board and passed
+#                                                        (pass item 3, completion only).
 #   s1-j1      the same                                  J6 (revision 3, §15.4.8): host mode with memcanary-w
 #                                                        and a large hold in place of B2's allocation; never a pass run
 # With no names the board form does the first five, in that order; s1-q2 and s1-j1
