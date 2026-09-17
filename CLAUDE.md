@@ -444,7 +444,13 @@ Quick summary for context:
   and label, and the timed hold verified, with both cache-clean lines emitted by the real binary for the first time;
   B2 then passed every canary check with the window reflected as registered and the allocation verified, so **B2 is
   MET for the rebuilt image** and the reading is X-f final. The public interpretive sentence and any class sentence
-  wait on the owner's D83 (D77) and are not written anywhere yet. The original 2026-09-14 B2 record is unchanged and
+  waited on the owner's D83 (D77). **2026-09-17: a third, keyed confirmatory run of the same rung read clean as
+  well (D86) — class X-f-c — which discharges D83, and the owner then released D77, so the pre-registered class
+  sentence is now public, verbatim as pre-registered: "The window-2 corruption seen in four runs did not
+  appear in two runs on a startup that cleans those ranges by virtual address before the fill. The reading is
+  a CPU cache residue removed before the fill (HYPOTHESIS: the mechanism and which cache are not shown). B2 is
+  met on the rebuilt image; the original B2 record stands as recorded." The figures still go to the 4.6(i)
+  consultation, and what is not shown is unchanged.** The original 2026-09-14 B2 record is unchanged and
   stays NOT MET, on data, for the old startup (D72). Two process incidents: the watcher run's first attempt refused
   at the pre-registration check on an unset rule-file variable, before any board contact and with nothing appended
   twice; and B1's oversized capture blocked the exclusive serial port, so captures are now sized per rung. S1-F is
@@ -542,8 +548,10 @@ Quick summary for context:
    are B1, a watcher run and B2, in that order, ~~not yet run~~
    **2026-09-16: all three ran and passed, so B2 is MET for the rebuilt
    image and the reading is X-f final; the original 2026-09-14 B2 record
-   stays NOT MET, on data, and the public interpretive sentence waits on
-   the owner's D83. Next: D83, then B3-B5, which have never run**;
+   stays NOT MET, on data. **2026-09-17: a third confirmatory run read
+   clean (class X-f-c), discharging D83, and the owner released D77, so
+   the pre-registered class sentence is public; the figures still go to
+   the 4.6(i) consultation. Next: B3-B5, which have never run**;
    s1-design.md §16).
    Then settle the freeze gate and write the v1 manifest. Then run the
    single campaign, native leg and both TCG twin legs, every record stamped

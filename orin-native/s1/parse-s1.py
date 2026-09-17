@@ -3469,7 +3469,7 @@ def cmd_r4_ref(a):
     return 0
 
 
-def r4_read(step, f, ref_min, j6x_class="none"):
+def r4_read(step, f, ref_min, j6x_class="none", confirmatory=False):
     """(reading, sub-labels, class) of a J6x or B2-rerun parse's fields (s1-design.md §16.6).
 
     Readings: n/a (no parse-valid c2 start check); unstable (J6x: F34); drop or unchanged (c2 bad at the start
@@ -3559,6 +3559,16 @@ def r4_read(step, f, ref_min, j6x_class="none"):
             cls = "X-m" if prov else "U"        # drop, unchanged, bad-no-count, onset after a provisional X-f
         if prov and cls != "X-f-final":
             sub.append("provisional-xf=" + ("withdrawn" if cls in ("X-m", "X-c3") else "not-final"))
+        if confirmatory:
+            # 16.6.1: D86's third observation is the B2 rung, read by the B2-rerun field rules
+            # above unchanged -- only the class name differs. X-i is a parse-valid c2 reading
+            # that is not clean, or a c1/c3 hit; U(3) is no parse-valid c2 check, an incomplete
+            # run or a gate failure, and reads nothing. provisional-xf is dropped: a third
+            # observation never re-labels a recorded reading (16.6.1 precedence 6).
+            cls = ("X-f-c" if cls == "X-f-final" else
+                   "X-i" if cls in ("X-c3", "X-m") or c1_hit else "U(3)")
+            sub = [x for x in sub if not x.startswith("provisional-xf=")]
+            sub.append("confirmatory=D86")
     return reading, sub, cls
 
 
@@ -3566,13 +3576,21 @@ def cmd_r4_read(a):
     if a.step == "J6x" and a.j6x_class is not None:
         print("parse-s1: usage: --j6x-class belongs to --step B2 (what J6x read)", file=sys.stderr)
         return 2
+    if a.confirmatory and a.step != "B2":
+        print("parse-s1: usage: --confirmatory is D86's third observation of the B2 rung "
+              "(s1-design.md 16.6.1); the J6x arm is not opened", file=sys.stderr)
+        return 2
+    if a.confirmatory and a.j6x_class != "X-f":
+        print("parse-s1: usage: --confirmatory needs --j6x-class X-f, the recorded provisional "
+              "reading it confirms (s1-design.md 16.6.1)", file=sys.stderr)
+        return 2
     if not R4_COUNT_RE.match(a.ref_c2_start_min or "") or int(a.ref_c2_start_min) == 0:
         print("parse-s1: usage: --ref-c2-start-min is the registered L, a count above 0", file=sys.stderr)
         return 2
     f = parse_fields(PM.read_bytes(a.parse))
     if f.get("profile") != R4_PROFILE[a.step] or f.get("step") != a.step:
         raise InputError(f"{rel_repo(a.parse)} is not a {a.step} parse (s1-design.md 16.6)")
-    reading, sub, cls = r4_read(a.step, f, int(a.ref_c2_start_min), a.j6x_class or "none")
+    reading, sub, cls = r4_read(a.step, f, int(a.ref_c2_start_min), a.j6x_class or "none", a.confirmatory)
     for ln in (f"r4_reading={reading}", f"r4_sub={q(' '.join(sub))}", f"r4_class={cls}"):
         print(out_line("S1PC " + ln))
     return 0
@@ -5620,6 +5638,27 @@ def selftest():
         check("r4-read the drop band is strict: 2x start < L", r4_read("J6x", fx(**bad_start(1), **live), 2)[0] ==
               "unchanged" and r4_read("J6x", fx(**bad_start(1), **live), 3)[0] == "drop")
 
+        # 16.6.1 (D86): the confirmatory read renames the B2 outcome and changes no field rule
+        for label, f_, want_c in (
+                ("clean and MET is X-f-c", bx(), "X-f-c"),
+                ("a c3 hit is X-i", bx(c3_start="bad", c3_end="bad", b2="fail", verdict="fail"), "X-i"),
+                ("drop is X-i", bx(**bad_start(4), b2="fail", verdict="fail"), "X-i"),
+                ("unchanged is X-i", bx(**bad_start(5), b2="fail", verdict="fail"), "X-i"),
+                ("onset is X-i", bx(c2_end="bad", c2_check_words="start:0,end:3", b2="fail", verdict="fail"),
+                 "X-i"),
+                ("a c1 hit is X-i", bx(c1_start="bad", b2="fail", verdict="fail"), "X-i"),
+                ("clean but not MET reads nothing: U(3)", bx(b2="fail", verdict="fail failed=b2"), "U(3)"),
+                ("no parse-valid c2 check reads nothing: U(3)",
+                 bx(c2_start=None, c2_end=None, c2_check_words=None, c2_start_words=None, c1_start=None,
+                    c1_end=None, c3_start=None, c3_end=None), "U(3)")):
+            got_r, got_sub, got_c = r4_read("B2", f_, 10, "X-f", True)
+            check(f"r4-read confirmatory B2: {label} [got {got_c}, {' '.join(got_sub)}]",
+                  got_c == want_c and "confirmatory=D86" in got_sub and
+                  not [x for x in got_sub if x.startswith("provisional-xf=")])
+        check("r4-read confirmatory reads the same reading as the ordinary B2 rules, only a new class name",
+              r4_read("B2", bx(), 10, "X-f", True)[0] == r4_read("B2", bx(), 10, "X-f")[0] == "clean" and
+              r4_read("B2", bx(), 10, "X-f")[2] == "X-f-final")
+
         # r4-read end to end on parses the parser wrote
         def ptext(profile, lines_):
             return ("\n".join("S1PC " + x for x in ["profile=" + profile] + lines_) + "\n").encode("utf-8")
@@ -5648,6 +5687,11 @@ def selftest():
                                      "S1PC r4_class=X-f-final"])
         rc, lines_, _ = r4cmd(["r4-read", "--step", "B2", "--parse", pb, "--ref-c2-start-min", "10"])
         check("r4-read B2 without --j6x-class reads none: U", rc == 0 and lines_[-1] == "S1PC r4_class=U")
+        rc, lines_, _ = r4cmd(["r4-read", "--step", "B2", "--parse", pb, "--ref-c2-start-min", "10",
+                               "--j6x-class", "X-f", "--confirmatory"])
+        check("r4-read B2 --confirmatory on the synthetic B2 parse: clean, X-f-c, and the sub says so",
+              rc == 0 and lines_[0] == "S1PC r4_reading=clean" and
+              lines_[-1] == "S1PC r4_class=X-f-c" and "confirmatory=D86" in lines_[1])
         pold = os.path.join(rd, "b2-old-parse-s1.txt")
         with open(pold, "wb") as fh:
             fh.write(ptext(R4_PROFILE["B2"], r_old["lines"]))
@@ -5660,6 +5704,10 @@ def selftest():
                 ("a J6x parse read as B2", ["--step", "B2", "--parse", pj, "--ref-c2-start-min", "10"], 1),
                 ("--j6x-class with --step J6x", ["--step", "J6x", "--parse", pj, "--ref-c2-start-min", "10",
                                                  "--j6x-class", "none"], 2),
+                ("--confirmatory with --step J6x", ["--step", "J6x", "--parse", pj, "--ref-c2-start-min", "10",
+                                                    "--confirmatory"], 2),
+                ("--confirmatory without --j6x-class X-f", ["--step", "B2", "--parse", pb,
+                                                            "--ref-c2-start-min", "10", "--confirmatory"], 2),
                 ("L of 0", ["--step", "J6x", "--parse", pj, "--ref-c2-start-min", "0"], 2),
                 ("L not a count", ["--step", "J6x", "--parse", pj, "--ref-c2-start-min", "1e3"], 2)):
             rc, lines_, _ = r4cmd(["r4-read"] + argv)
@@ -5809,6 +5857,9 @@ def main(argv=None):
     rd.add_argument("--parse", required=True, help="the run's parse-s1.txt")
     rd.add_argument("--ref-c2-start-min", required=True, help="L, as registered in the owner-D70 amendment")
     rd.add_argument("--j6x-class", choices=R4_J6X_CLASSES, help="--step B2: what J6x read (default none)")
+    rd.add_argument("--confirmatory", action="store_true",
+                    help="--step B2 with --j6x-class X-f: D86's third observation "
+                         "(s1-design.md 16.6.1); classes X-f-c, X-i or U(3)")
 
     a = ap.parse_args(argv)
     if a.all_selftest:

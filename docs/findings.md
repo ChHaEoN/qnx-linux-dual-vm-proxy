@@ -35,8 +35,20 @@ canary check was ok at both points, the window was reflected in the host's addre
 neither a canary nor the GPU range appeared in sysram, the window-2 allocation filled and verified, and no failure
 state was recorded. That makes the reading X-f final. **The original 2026-09-14 B2 record is unchanged and stays
 NOT MET, on data,** for the old startup; it is never regenerated, and this is a line beside it for the rebuilt
-image. The public interpretive sentence that would say what these readings mean together is deliberately not
-written here: under the owner's D77 it waits on D83.
+image.
+
+**2026-09-17: a third observation was made, and the interpretive sentence is released.** One keyed, bounded
+confirmatory run of the same rung (D86) ran on a fresh boot and read clean — every canary check ok at both
+points, MET, the configuration gate passed, the black box consistent — which is class X-f-c and discharges
+D83. The owner then released D77, so the sentence pre-registered before any of these runs ran is now stated,
+verbatim as pre-registered: **The window-2 corruption seen in four runs did not appear in two runs on a startup
+that cleans those ranges by virtual address before the fill. The reading is a CPU cache residue removed before
+the fill (HYPOTHESIS: the mechanism and which cache are not shown). B2 is met on the rebuilt image; the original
+B2 record stands as recorded.** The third run is reported beside that sentence rather than inside it —
+pre-registered wording that is rewritten once the result is known stops being pre-registered — so, stated
+separately: a third, keyed confirmatory run of the same rung read clean as well, which adds confidence and
+changes nothing about what is not shown. The figures from all of it stay private and go to the 4.6(i)
+consultation.
 
 What this does not show, none of it changed by the pass: which cache held the residue, since the clean reaches
 cluster 1's L3, cores 1-3's caches and the boot cluster's at once; that the VA operation rather than the interval
@@ -53,9 +65,8 @@ refused attempt had already appended to the append-only ledger, so nothing was r
 started far larger than that rung needed and had to be stopped by hand to free the exclusive serial port for the
 next rung, so captures are now sized per rung.
 
-What remains: D83 — whether a further observation is wanted before the ladder resumes — is open and the owner's;
-the public interpretive sentence waits on it; and B3-B5, the rungs that boot the Linux guest natively, hold it and
-stamp it, have never run. The records are private and git-ignored, and no figure is published here.
+What remains: B3-B5, the rungs that boot the Linux guest natively, hold it and stamp it, have never run. D83 is
+discharged, so they may resume. The records are private and git-ignored, and no figure is published here.
 [s1-design.md](../results/orin-native-port/20260909T1100Z/s1-design.md) §16;
 [the plan's S1-F block](orin-native-port-plan.md#the-revised-ladder).
 

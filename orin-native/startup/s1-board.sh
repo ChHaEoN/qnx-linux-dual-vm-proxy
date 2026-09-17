@@ -2729,12 +2729,16 @@ r4_confirm_b2() {
 # §16.6 at the return (J6x, and the B2 rerun on the new startup): parse-s1.py r4-read on this rung's
 # parse-s1.txt with the registered reference; its S1PC r4_ lines go to <step>/r4-read.txt and the board
 # log. Reads SD, PY_BIN, R4_READ_STEP, R4_REF_MIN and, for B2, R4_J6X_CLASS.
+# D86 (§16.6.1): when this B2 run is the keyed confirmatory one, R4_CONFIRM is set by cmd_run and the
+# read is classed X-f-c / X-i / U(3) instead of the ordinary B2 names. Defaulted, because the jrun
+# path reaches run_return_records without cmd_run's locals and set -u would abort the run.
 r4_read_after() {
 	local p="$SD/parse-s1.txt" out rc cls
 	local -a args
 	if [ ! -f "$p" ]; then rec "run r4-read NOT run: no parse-s1.txt (§16.6 reading n/a)"; return 0; fi
 	args=(r4-read --step "$R4_READ_STEP" --parse "$p" --ref-c2-start-min "$R4_REF_MIN")
 	[ "$R4_READ_STEP" = B2 ] && args+=(--j6x-class "${R4_J6X_CLASS:-none}")
+	if [ "$R4_READ_STEP" = B2 ] && [ -n "${R4_CONFIRM:-}" ]; then args+=(--confirmatory); fi
 	out="$(timeout 300 "$PY_BIN" "$PARSER" "${args[@]}" 2>&1)"
 	rc=$?
 	printf '%s\n' "$out" | tr -d '\r' | grep -E '^S1PC r4_(reading|sub|class)=' > "$SD/r4-read.txt"
