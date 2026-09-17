@@ -199,8 +199,9 @@ CANARY_C1_BASE=0xBD000000     # §3.3; a --q2-limit may not reach it
 # 16.01 MiB above the projected end. mkifs padding is not knowable beforehand, and size_check
 # OVER-estimates: on m4 r0 it named an end of 0x8a738d82 against a real 0x8a5e9ccc, 1,372,342 B
 # high (results/orin-native-port/20260916T1500Z/m4/m4-r0-rebuild.log, its size-check and
-# geometry lines). That is the one measured precedent on file; no s1-n1 build log exists to
-# corroborate it. So a limit clearing only the real end can still be refused at step 10, and
+# geometry lines). 2026-09-17: s1-q2's own build is the second measured precedent and agrees --
+# size_check named 0x8d142d87 against a real 0x8cffe804, 1,394,051 B high, within 22 KB of m4's
+# 1,372,342. So a limit clearing only the real end can still be refused at step 10, and
 # 16 MiB covers an order more error than the single precedent shows. It leaves 752 MiB below
 # c1 -- 2.8x the STRICTER reading's non-guest requirement, 3.2x the looser one. The stricter
 # figure is the one that binds, and is the one quoted. A looser limit would be a weaker gate,
