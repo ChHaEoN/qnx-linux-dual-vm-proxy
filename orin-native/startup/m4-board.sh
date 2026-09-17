@@ -201,10 +201,16 @@ ident_hits() {
 	[ -n "$R_KEY" ] && pats+=(-e "$R_KEY")
 	[ -n "$R_KEYBASE" ] && pats+=(-e "$R_KEYBASE")
 	[ -n "$R_HOSTNAME" ] && pats+=(-e "$R_HOSTNAME")
-	addr="$(grep -acE "$IDENT_IP" "$f" 2>/dev/null || echo 0)"
-	mac="$(grep -acE "$IDENT_MAC" "$f" 2>/dev/null || echo 0)"
+	# grep -c prints 0 and exits 1 when nothing matches: "|| echo 0" made that
+	# "0<newline>0", the sum failed, the subshell died before its echo, and a file
+	# with hits in another class was kept raw. Read the count, default it, never
+	# append a fallback (s1-board.sh:511 carries the same fix).
+	addr="$(grep -acE "$IDENT_IP" "$f" 2>/dev/null)"; addr="${addr:-0}"
+	mac="$(grep -acE "$IDENT_MAC" "$f" 2>/dev/null)"; mac="${mac:-0}"
 	name=0
-	[ "${#pats[@]}" -gt 0 ] && name="$(grep -acF "${pats[@]}" "$f" 2>/dev/null || echo 0)"
+	if [ "${#pats[@]}" -gt 0 ]; then
+		name="$(grep -acF "${pats[@]}" "$f" 2>/dev/null)"; name="${name:-0}"
+	fi
 	total=$(( addr + mac + name ))
 	echo "$total addr=$addr mac=$mac name=$name"
 }
@@ -1209,6 +1215,18 @@ cmd_redact_selftest() {
 
 	out="$(ident_hits "$d/in")"
 	check "ident_hits classes" "$(echo "$out" | grep -c 'addr=2 mac=1 name=')" 1
+	# A class with no matches: grep -c prints 0 and exits 1, so a "|| echo 0"
+	# fallback produced "0<newline>0", the sum failed, and the subshell died
+	# before its echo, leaving the copy unredacted. These cases run that branch.
+	printf '/home/fakeuser/x\n' > "$d/nameonly"
+	out="$(ident_hits "$d/nameonly")"
+	# non-empty is the point: the bug printed NOTHING at all
+	check "ident_hits name-only: prints a line" "$([ -n "$out" ] && echo yes || echo no)" yes
+	check "ident_hits name-only: zero classes read 0" \
+		"$(echo "$out" | grep -c '^[1-9][0-9]* addr=0 mac=0 name=[1-9]')" 1
+	printf 'nothing identifying here\n' > "$d/clean"
+	check "ident_hits clean file: all zero, still one line" \
+		"$(ident_hits "$d/clean")" "0 addr=0 mac=0 name=0"
 
 	rm -rf "$d"
 	echo
