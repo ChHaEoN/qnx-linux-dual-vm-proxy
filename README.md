@@ -49,10 +49,12 @@ section)
     boots the cloud-leg QNX guest image and disk unchanged
     ([the native port](#the-native-port-phase-3b--qnx-runs-on-the-board)).
   - The M path (M0 to M5-F) is complete, and every rung is a functional pass.
-    M4-F's two runs passed under different instrument versions, and its PC
-    cross-check covered only part of the trace window (both freeze-gate
-    items). The UEFI cold boot entered only the one-core EL2 host image, in
-    one attended session.
+    M4-F's tracing rung was re-run on the board on 2026-09-17 under the frozen
+    instruments and passed, so its two runs now stand under one parser version
+    — though not under one counter binary, the other run's on-board counter
+    never having been the frozen one. Its PC cross-check still covers only part
+    of the trace window: a limit accepted and recorded, not closed. The UEFI
+    cold boot entered only the one-core EL2 host image, in one attended session.
 - **What has been measured:** every published measurement comes from the
   earlier, emulated architectures (A1 to A3, history), none hardware-timed. Read every
   figure with its caveat, above all that the IPC comparison mixes host,
@@ -70,9 +72,9 @@ section)
   canaries intact. The guest is idle apart from a heartbeat, so nothing here
   is a load, stress or soak test, and ten minutes is the longest run this
   project has made. Whether the guest's memory came from the second window is
-  not shown: no host-side view of those addresses exists. Before the freeze,
-  an instrument rung is re-run on the board and the guest disk is regenerated;
-  then the v1
+  not shown: no host-side view of those addresses exists. The instrument rung
+  was re-run on the board that same day and passed, so only the guest disk is
+  still to be regenerated, and then the v1
   freeze and one measurement campaign ([roadmap](#roadmap)). If the Linux
   guest is in v1, the campaign includes a CPU-only baseline of a small model in
   it. GPU pass-through is the owner's target, on a research track outside the
@@ -309,8 +311,10 @@ on A78AE, so any QEMU-hosted QHV leg needs TCG on both hosts. The native port
 below removes QEMU instead.
 
 The guest disk in this pair is the RQ-2 diagnostic variant, not one
-regenerated from committed sources. Whether to regenerate it is decided at the
-v1 freeze, and both TCG legs run again in the v1 campaign on v1's images.
+regenerated from committed sources. That question was settled on 2026-09-16:
+it is to be regenerated from clean sources before the freeze. The decision is
+taken; the work is not done yet, and it is the last item the freeze is waiting
+on. Both TCG legs then run again in the v1 campaign on v1's images.
 
 **What moving the leg found — a real QEMU-version defect, not a host one.**
 Ubuntu 22.04's stock QEMU 6.2.0 hangs the QHV host on the Orin at its first
@@ -457,7 +461,11 @@ around M3's full run: qvm's hypervisor trace events were emitted and paired, bot
 listings crossed the debug console intact, and the image reset itself. The pass is
 narrower than it sounds. The two runs passed under different instrument versions, and
 the PC's cross-check covered only the early part of the window, because the listing it
-compared was capped. Both are items for the freeze gate.
+compared was capped. Both went to the freeze gate. **2026-09-17:** the first rung was
+re-run on the board under the frozen instruments and passed, which was also the first
+time that counter had run on real silicon. The two rungs now share a parser version,
+but still not a counter binary, the other rung's on-board counter never having been the
+frozen one. The capped cross-check stands as an accepted, recorded limit.
 
 **A cold boot through the firmware.** On 2026-09-13, M5-F entered M1b's unchanged one-core
 EL2 host image with no Linux and no `kexec` in that power cycle. The firmware's built-in
@@ -600,7 +608,8 @@ Other prereqs:
   - [x] M2 — all six cores (2026-09-10)
   - [x] M1b — EL2 host with VHE (2026-09-10)
   - [x] M3 — the QNX Hypervisor boots a QNX guest natively (2026-09-10)
-  - [x] M4-F — the trace instrument works on the board (2026-09-11)
+  - [x] M4-F — the trace instrument works on the board (2026-09-11; its first
+    rung re-run under the frozen instruments and passed, 2026-09-17)
   - [x] M5-F — a UEFI cold boot reaches startup; the M path ends (2026-09-13)
   - [x] S1-F — a Linux guest without a GPU under native qvm (its TCG half, pass item 1, passed 2026-09-14; on the board the memory rung is met on the rebuilt image, 2026-09-16; the guest booted, held for ten minutes and stamped its run on 2026-09-17, so S1-F is met for a Linux-only guest set. The two-guest rung does not run: the guest set was settled as Linux only. Nothing was run under load)
   - [ ] Freeze reference architecture v1
