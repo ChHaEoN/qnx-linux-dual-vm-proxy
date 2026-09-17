@@ -9,6 +9,49 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-17 — the harness self-test's verdict depended on how fast it ran, and four checks drifted
+
+Found while checking whether the X-f-c gate change had broken anything: `s1-board.sh harness-selftest`
+reported `FAIL 1 of 778`. It had broken nothing — the same check fails on pristine HEAD — but the failure
+was not the flake it first looked like. **The self-test's verdict was a function of its own speed.**
+`cmd_harness_selftest` stamps `now=$(date +%s)` once and never again, then writes fixtures as `now - N`,
+while the code under test reads the **live** clock (`com3_class`'s `idle`, and `capture_state` /
+`capture_left_s`). Every fixture is therefore `N + (seconds elapsed since the stamp)` old by the time its
+check runs, so any assertion that must stay **below** a threshold flips once the run is slow enough.
+`ADVICE_NO_SAMPLE=1` rules out the sampling sleep: the drift is pure run speed.
+
+**How it presented.** One failure on a quiet machine (`advice J4 F25w at 400 s`, a 200 s margin reached at
+check #316), three under load, four in a review agent's run — the same defect each time, not different
+ones. Two of them (`j_capture_gate`, 100 s margins) never call `com3_advice` at all; they reach the clock
+through `capture_state`, so a fix aimed at the advice path alone would have left them broken. That scope
+correction came from adversarial review; the first diagnosis had claimed exactly one exposed check, and
+reached for the word "flake" before checking the gate that governs it.
+
+**The fix, test fixtures only.** Six sites take the live clock at creation, and the `wqadv` block re-stamps
+`now` before its calls, because the `armed_epoch` **arguments** are `now`-relative and the
+detached-sequence hold is compared against the live clock. The mtime and the growth epoch at `:8377`/`:8378`
+had to move together: `com3_class` takes `mt = max(mtime, grow)`, so a live mtime beside a frozen grow would
+overtake it and break a test that passes today. Both patterns were already in the file — the j6 capture
+headers use `"$(date +%s)"`, and the j7a block re-stamps `n7` and is drift-immune because of it. No
+production code changed. A test-clock override was rejected deliberately: it would make time fakeable in
+the gates enforcing capture life and uptime, in a harness where `QUIESCE_MAX_UPTIME_S` is not overridable
+(§7.3), which trades a test bug for a safety hole.
+
+**Verified, and the two runs did not carry identical code.** `PASS 778 checks` on both. The near-idle run
+at 1.33 s/check exercised exactly what this entry describes, the seven-site fix including the `wqadv`
+re-stamp. The loaded run at 3.37 s/check — slower than the run that failed four checks, and therefore the
+harder condition — exercised the six-site version, before that re-stamp was added. A re-stamp can only
+make `now` fresher and so cannot introduce drift, but that is an argument, not a measurement: **the exact
+committed bytes have been measured near-idle only.**
+
+**What this does not show.** The other fourteen frozen fixtures are argued safe, not proven so: they assert
+a *class*, read from log content rather than from idle, or they assert `CUT ALLOWED`, which drift only
+makes more true. **One known gap is left unfixed:** `:8362`'s header carries `seconds=6000` off the frozen
+stamp, so a run exceeding roughly 100 minutes would flip a whole block of advice checks to `capture=expired`
+at once. It is recorded rather than repaired, because its margin is not short and widening the patch beyond
+what was agreed is its own risk. Nothing here touches the board, any rung, or any recorded reading.
+
+
 ## 2026-09-17 — B5 met: both guests under native qvm on the board, and S1-F is met (QNX plus Linux)
 
 The two-guest rung ran on the board for the first time and passed. It had no precedent: claim R25 — that two

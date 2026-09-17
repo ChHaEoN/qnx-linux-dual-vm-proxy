@@ -8357,6 +8357,15 @@ cmd_harness_selftest() {
 	# SYNTHETIC captures. Before the kexec: an earlier firmware boot's banner. The
 	# header's deadline is taken from now, so the capture is not expired on a later day;
 	# nobody holds these files open, so ADVICE_CAPTURE_HELD stands in for the capture.
+	# 2026-09-17: 'now' is stamped ONCE here and never re-stamped in this function, but the code
+	# under test reads the LIVE clock (com3_class's idle, and capture_state/capture_left_s against
+	# date +%s). A fixture written 'now - N' is therefore N + (seconds elapsed since this line) old
+	# by the time its check runs, so any assertion that must stay BELOW a threshold flips once the
+	# run is slow enough -- which is why three checks failed here on a loaded machine and one failed
+	# even on an idle one. Fixtures of that shape take the live clock inline instead, as the j6
+	# headers already do and as the j7a block does by re-stamping n7. Frozen 'now' is kept where
+	# drift only makes the assertion safer (a cut already allowed stays allowed), where the check
+	# asserts a class rather than a cut, or where the margin is thousands of seconds.
 	now=$(date +%s)
 	export ADVICE_CAPTURE_HELD=yes
 	printf -- '--- raw capture started on COMX at 115200, 2026-09-14T00:00:00Z epoch=%s seconds=6000 ---\n' "$now" > "$d/c.log"
@@ -8371,11 +8380,13 @@ cmd_harness_selftest() {
 	out="$(ADVICE_SSH=silent com3_advice "$d/c.log" "$off" 0 passed)"
 	check "F25a: image text, no banner after the kexec" "$(has "$out" 'class=F25a')" yes
 	check "F25a: 400 s silent allows a cut" "$(has "$out" 'CUT ALLOWED (F25a)')" yes
-	touch -d "@$(( now - 100 ))" "$d/c.log"
+	touch -d "@$(( $(date +%s) - 100 ))" "$d/c.log"
 	out="$(ADVICE_SSH=silent com3_advice "$d/c.log" "$off" 0 passed)"
 	check "F25a: 100 s silent is not yet" "$(has "$out" 'NO CUT YET (F25a)')" yes
-	touch -d "@$(( now - 400 ))" "$d/c.log"
-	out="$(ADVICE_SSH=silent com3_advice "$d/c.log" "$off" "$(( now - 50 ))" passed)"
+	# the mtime and the growth epoch move together: com3_class takes mt = max(mtime, grow), so a
+	# live mtime beside a frozen grow would overtake it and stop the growth overriding the file time
+	touch -d "@$(( $(date +%s) - 400 ))" "$d/c.log"
+	out="$(ADVICE_SSH=silent com3_advice "$d/c.log" "$off" "$(( $(date +%s) - 50 ))" passed)"
 	check "F25a: a growth seen 50 s ago overrides the file time" "$(has "$out" 'NO CUT YET (F25a)')" yes
 	out="$(ADVICE_SSH=silent com3_advice "$d/c.log" 0 0 passed)"
 	check "offset 0 sees the earlier banner: F25b" "$(has "$out" 'class=F25b')" yes
@@ -8439,7 +8450,7 @@ cmd_harness_selftest() {
 	check "F25b: never a second cut is said" "$(has "$out" 'Never a second cut')" yes
 	out="$(ADVICE_SSH=unchecked com3_advice "$d/b.log" "$off" 0 passed)"
 	check "F25b: ssh unchecked is not a cut" "$(has "$out" 'NO CUT YET (F25b): ssh was not checked')" yes
-	touch -d "@$(( now - 500 ))" "$d/b.log"
+	touch -d "@$(( $(date +%s) - 500 ))" "$d/b.log"
 	out="$(ADVICE_SSH=silent com3_advice "$d/b.log" "$off" 0 passed)"
 	check "F25b: 500 s silent is not yet" "$(has "$out" 'NO CUT YET (F25b)')" yes
 	printf 'Shell> \r\n' >> "$d/b.log"
@@ -8659,10 +8670,10 @@ cmd_harness_selftest() {
 	cp "$cap" "$d/j-cap-out.log"
 	check "j_capture_gate: a capture outside the record dir is refused" "$(has "$(S1_COM3_LOG="$d/j-cap-out.log" j_capture_gate control 9)" 'not inside the git-ignored record directory')" yes
 	check "j_capture_gate: a missing SSID is refused" "$(has "$(S1_COM3_LOG="$cap" S1_REDACT_SSID='' j_capture_gate control 9)" 'S1_REDACT_SSID is unset')" yes
-	printf -- '--- raw capture started on COMX at 115200, 2026-09-14T00:00:00Z epoch=%s seconds=100 ---\n' "$now" > "$jrec/j-cap-short.log"
+	printf -- '--- raw capture started on COMX at 115200, 2026-09-14T00:00:00Z epoch=%s seconds=100 ---\n' "$(date +%s)" > "$jrec/j-cap-short.log"
 	printf 'MB1 version synthetic\r\n' >> "$jrec/j-cap-short.log"
 	check "j_capture_gate: too-short life is refused" "$(has "$(S1_COM3_LOG="$jrec/j-cap-short.log" j_capture_gate control 9)" 'under')" yes
-	printf -- '--- raw capture started on COMX at 115200, 2026-09-14T00:00:00Z epoch=%s seconds=1900 ---\n' "$now" > "$jrec/j-cap-1900.log"
+	printf -- '--- raw capture started on COMX at 115200, 2026-09-14T00:00:00Z epoch=%s seconds=1900 ---\n' "$(date +%s)" > "$jrec/j-cap-1900.log"
 	printf 'MB1 version synthetic\r\n' >> "$jrec/j-cap-1900.log"
 	check "j_capture_gate j1: 1900 s passes the 1800 s floor" "$(has "$(S1_COM3_LOG="$jrec/j-cap-1900.log" j_capture_gate j1)" 'jgate j1 ok')" yes
 	check "j_capture_gate control: 1900 s misses the fallback floor" "$(has "$(S1_COM3_LOG="$jrec/j-cap-1900.log" j_capture_gate control 9)" FAIL)" yes
@@ -9178,9 +9189,15 @@ cmd_harness_selftest() {
 			printf 'wq_armed armed_epoch=%s wq_fallback_s=645\n' "$2"
 			[ "$3" = yes ] && printf 'jrun NO RETURN within 1845 s of the arming\n'
 		} > "$bl"
-		touch -d "@$(( now - $4 ))" "$1"
+		touch -d "@$(( $(date +%s) - $4 ))" "$1"
 		S1_COM3_LOG="$1" S1_RECORD_DIR="" ADVICE_SSH=silent cmd_advice "$bl" 2>/dev/null
 	}
+	# Re-stamped for this block, as the j7a block does with n7. The touch above already takes the
+	# live clock, but the armed_epoch ARGUMENTS below are 'now'-relative, and the detached-sequence
+	# hold (armed + wq_fallback_s + 1200) is compared against the live clock at the advice call. A
+	# frozen 'now' therefore spends that hold's margin as the run slows: measured at 3.4 s/check,
+	# the two hold checks below had burned about 60-70% of their 1445 s before they ran.
+	now=$(date +%s)
 	out="$(wqadv "$cap4" $(( now - 400 )) yes 400)"
 	check "advice J4: markers and 400 s of silence, no jump: NO CUT (the hold)" "$(has "$out" 'NO CUT (detached sequence)')/$(has "$out" 'CUT ALLOWED')" "yes/no"
 	cp "$cap4" "$d/adv-lx.log"; printf '[ 1000.123456] systemd-shutdown[1]: Syncing filesystems and block devices.\r\n' >> "$d/adv-lx.log"
