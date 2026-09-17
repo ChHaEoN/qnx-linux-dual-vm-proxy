@@ -595,7 +595,9 @@ Mode `hold`: B3 plus the hold, with the `mem` gate at 852. After `shell_ok`, sta
 
 ### 6.10 B5: two guests (`s1-q2`, only if D1)
 
-> **2026-09-17: B5 does not run, and this section is kept as the design record of why.** OD1 (2026-09-16) settled freeze item 2 as **Linux only**: the QNX Hypervisor is the host and the safety functions run as QNX processes inside it, so v1 carries no QNX guest and pass item 3 is not applicable (§5.2's first branch). `s1-q2` was never built and D14's `--q2-limit` was never derived. Nothing below is withdrawn or deleted: the rung was designed, and the decision not to run it is itself the record. The `q2` mode stays implemented in the generator, the host script, the harness and the parser.
+> ~~**2026-09-17: B5 does not run, and this section is kept as the design record of why.** OD1 (2026-09-16) settled freeze item 2 as **Linux only**: the QNX Hypervisor is the host and the safety functions run as QNX processes inside it, so v1 carries no QNX guest and pass item 3 is not applicable (§5.2's first branch). `s1-q2` was never built and D14's `--q2-limit` was never derived.~~ Nothing below is withdrawn or deleted: the rung was designed, and the decision not to run it is itself the record. The `q2` mode stays implemented in the generator, the host script, the harness and the parser.
+>
+> **2026-09-17, later (OD9): B5 runs.** The owner reopened freeze item 2 and reversed it to **QNX plus Linux** — a genuine dual partition is preferred where it is feasible, and B2's `S1 ALLOC mib=1536 fill=ok verify=ok` settled feasibility. Pass item 3 is applicable again and this section is live design, not a record of a road not taken. **D14's limit is now derived: `--q2-limit 0x8E000000`**, with the derivation in the generator's geometry gate as §6.1 step 7 requires. What has *not* changed: B5 has never run; R25 (two qvm instances on four cores) is UNKNOWN with no precedent in this project; and under OD7 the guest disk is regenerated at the freeze, so an `s1-q2` built on today's `PIN_DISK` answers R25 but is not v1's image.
 
 Mode `q2`: FreeMem gate (§4.5); Linux to `shell_ok`; then M3's QNX sequence to `banner` and the IPC client's completion; `S1 BOTH alive`; teardown of both; M3's md5 and `cmp` checks plus S1's. **Pass item 3:** completion only.
 
@@ -625,8 +627,10 @@ Mode `q2`: FreeMem gate (§4.5); Linux to `shell_ok`; then M3's QNX sequence to 
 | `s1-m1b-p6` | M1b's | M1b's | 1,200 s (`m3-board.sh:41`) |
 | `s1-h1` | preflight 30, canaries 210, `alloc` 125, hold 60, asinfo and slog 35 | 900 s | 1,200 s |
 | `s1-n1` | preflight 30, canaries 210, md5 130, `qvm-check` 15, `dryrun` 65, export prep 45, needle waits 540, teardown 30, sends 92, slog 20 | 1,800 s | 2,100 s |
-| `s1-n2` | `s1-n1` plus hold 600, probe 2 60, `hold` fill and verify 180 | 2,400 s | 2,700 s |
-| `s1-q2` | `s1-n1` plus M3's QNX window and IPC | 2,400 s | 2,700 s |
+| `s1-n2` | `s1-n1` plus hold 600, probe 2 60, `hold` fill and verify 180 | ~~2,400 s~~ **3,300 s** | ~~2,700 s~~ **3,600 s** |
+| `s1-q2` | `s1-n1` plus M3's QNX window and IPC | ~~2,400 s~~ **3,300 s** | ~~2,700 s~~ **3,600 s** |
+
+> **2026-09-17: both rows above were stale, and the error was in the unsafe direction.** §14.10's amendment raised these bounds twice (`§14.7`'s table at `:1099` and the revised one at `:1367`: `~~3,000 / 3,300~~ 3,300 / 3,600`, capture `~~6,300~~ 6,600`), but this table was never updated in either round — it still carried values older than the first amendment struck out. **B4 ran on the live values**, so the table, not the run, was wrong. Sizing a capture from here would set `return_bound_s` 900 s short and fail Gate A (`capture_left_s >= return_bound_s + 2180`) before the board was touched. The built `.params` govern in any case (`resolve_kimg`), and `:1367` is the table to read.
 
 B1-B5 fit two attended sessions: B0-B2, then B3-B5. A session stops at the first failed gate. Every rung starts under both of the harness's uptime limits, carried over from `m4-board.sh`: 7,200 s for any kexec run (`:51`, `:829`) and 1,800 s when the run includes the quiesce (`:52`, `:833`). Every S1 board rung includes the quiesce, so `s1-board.sh reboot` and a new `boot_id` precede each rung whose L4T uptime is over the second limit. Overriding either limit is forbidden (§7.3).
 
@@ -1142,7 +1146,7 @@ Accepting these bounds, or tightening the table toward §6.12, is an owner decis
 
 Both TCG diagnostics are staged under the pinned names, so the parser's md5 line paths stay valid, and both are stamped `diagnostic=yes`.
 
-**S. `s1-q2` is implemented but not built.** The `--q2-limit` gate (`0x8C000000 < limit ≤ 0xBD000000`), the guest pins, PO-E, the `@Q2@` buildfile and script blocks and M3's sequence all exist. They were exercised only by `--generate-only` and `--tcg` with a stand-in limit, and those outputs were removed. D14's limit is still owed (T0 step 7).
+**S. `s1-q2` is implemented but not built.** The `--q2-limit` gate (`0x8C000000 < limit ≤ 0xBD000000`), the guest pins, PO-E, the `@Q2@` buildfile and script blocks and M3's sequence all exist. They were exercised only by `--generate-only` and `--tcg` with a stand-in limit, and those outputs were removed. ~~D14's limit is still owed (T0 step 7).~~ **2026-09-17 (OD9): D14's limit is derived — `0x8E000000`, admissible against both readings of §6.1 step 7 and clearing the pre-mkifs `size_check` floor (`0x80082fa0` + 217,557,819 = `0x8CFFDADB`) by 16.01 MiB. The image itself is still not built.**
 
 ### 14.4 The TCG builder and launcher
 
@@ -1226,7 +1230,7 @@ No board was contacted, no QEMU was started, nothing was downloaded, and no QNX-
 | T0 4, startup | **PASS**, no rebuild | `PIN_STARTUP_S1` equal; the shared path held the M1b-M4 pin before and after every build; the symbol gate passed (I) |
 | T0 5, generators | **PASS** | `--generate-only` into a scratch root, since removed. Then a full build of `s1-m1b-p6`, `s1-h1`, `s1-n1`, `s1-n2` and `s1-d1` into `orin-native/shim/out/s1`, where every step passed: PO-A, the pins, the constant check, the verbatim ranges, the profile check, `kshcheck` and its self-test with an injected pipe rejected, size, mkifs, `dumpifs`, geometry, the startup arguments read back from the IFS, the payload and host script extracted and re-hashed, the shim wrap, inputs unchanged, and every written file ignored. Each `.params` has `guard_s` and `return_bound_s` |
 | T0 6, tools | **PASS** | `make` found `s1con` and `memcanary` up to date with their pins; both are ignored; `git status` shows no binary. The TCG self-test belongs to T1 (Q) |
-| T0 7, D14's limit | not run | D1's QNX guest and D14 are outstanding (S) |
+| T0 7, D14's limit | ~~not run~~ **derived 2026-09-17 (OD9)** | ~~D1's QNX guest and D14 are outstanding (S)~~ **OD9 keeps the QNX guest; D14 = `0x8E000000`, derivation in the generator's geometry gate. The build itself has not run (S)** |
 | T1's TCG image (`lin`, `dryrun`) | **PASS**, not launched | `BUILD_OK`. The canonical `qhv/host` and `qhv/guest` sums were unchanged before and after. R30 answered for the build: `data.build` names the `Image`, the initrd, the configuration and the guest pair, and mkqnximage succeeded |
 | Final git state | **PASS** | Only the seven part-2 sources are untracked; every build output is ignored; no identifier appears in the sources; no leftover QEMU, mkqnximage or mkifs process |
 

@@ -2242,6 +2242,8 @@ Every check below ran on the PC, with no board contact, and no figure is recorde
 
 ### 14.26 OD1's consequence for M4's campaign role, and the instrument hash (2026-09-17)
 
+> **2026-09-17, later: OD9 reversed OD1.** Freeze item 2 is now **QNX plus Linux**, so v1 carries a QNX guest, and M4's original definition — with `m4-host.ksh.in`'s structural dependency on that guest and its disk — is reachable again. Kept as written: the sizing and instrument-validation costs it records still apply, because the guest set changed either way. Only the conclusion that M4 must be redefined against the Linux guest is superseded. **The instrument-hash half of this section is unaffected.**
+
 **The definition this record opens with is not withdrawn.** §0 defines M4 as "the per-exit hypervisor dwell of the cloud-leg QNX guest under native `qvm` at EL2", keeping "M3's image, guest, configuration and host procedure". That is what M4-F r0 and r1 measured, and `m4-host.ksh.in` makes the dependency structural rather than rhetorical: it copies the guest disk (:190), loopback-mounts it (:198) and checks the guest's md5 before and after (:171, :285). M4 as written **cannot run without the QNX guest and its disk**.
 
 **OD1 (2026-09-16) settled v1's guest set as Linux only**, so v1 carries no QNX guest, while the campaign was specified to take "the M3 and M4 numbers" on v1. The two are incompatible as written. Per the owner's instruction to follow OD1, M4's **campaign** role is redefined: the per-exit dwell is measured with **v1's Linux guest** running under native qvm. The r0 and r1 records keep their A4 label and are not re-run for their own sake.

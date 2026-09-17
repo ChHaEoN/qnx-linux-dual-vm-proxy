@@ -1395,9 +1395,11 @@ What did not change:
 
 ## 13. OD1's consequence for M3's campaign role (2026-09-17)
 
+> **2026-09-17, later: OD9 reversed OD1.** Freeze item 2 is now **QNX plus Linux**, so v1 does carry a QNX guest and M3's original definition is reachable again. This section is kept as written: its reasoning about what a guest-set change costs still holds, because the guest set changed either way, and the sizing caveat stands. Only its conclusion — that M3 must be redefined against the Linux guest — is superseded.
+
 §0 and §1 of this record define M3 against the **cloud-leg QNX guest**: "The host boots the cloud-leg guest IFS ... attached to its unmodified disk image", timed from the qvm launch to that guest's banner. **Nothing above this section is withdrawn.** It is what M3 was, it is what ran on 2026-09-10, and the five timed rounds stand as recorded.
 
-**What changed is the architecture around it.** OD1 (2026-09-16) settled freeze gate item 2 as **Linux only**: the QNX Hypervisor is the host and the safety functions run as QNX processes inside it, so reference architecture v1 carries no QNX guest. The campaign, however, was specified to run "the M3 and M4 numbers" on v1. A number defined against a guest v1 does not have cannot be taken on v1.
+**What changed is the architecture around it.** OD1 (2026-09-16) settled freeze gate item 2 as **Linux only**: the QNX Hypervisor is the host and the safety functions run as QNX processes inside it, so reference architecture v1 carries no QNX guest. The campaign, however, was specified to run "the M3 and M4 numbers" on v1. A number defined against a guest that v1 does not have cannot be taken on v1.
 
 **Redefinition, per the owner's instruction to follow OD1.** M3's campaign measurement is the qvm launch to the **Linux guest's** first console output, on v1's guest set. M3's 2026-09-10 figures keep their A4 label and are not re-run for their own sake.
 

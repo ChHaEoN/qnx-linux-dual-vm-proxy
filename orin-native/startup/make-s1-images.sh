@@ -22,8 +22,10 @@
 #   s1-n2      the same                                  B4: hold mode, pass item 4
 #   s1-d1      the same                                  diagnostic, boot mode with s1-d1.conf; never a pass run
 #   s1-q2      the same                                  B5: q2 mode; refused without --q2-limit (D1, D14).
-#                                                        NOT RUN: OD1 (2026-09-16) settled Linux only,
-#                                                        so pass item 3 is not applicable. Kept, not deleted.
+#                                                        OD9 (2026-09-17) reversed the guest set to QNX
+#                                                        plus Linux, so B5 is owed. D14's limit is
+#                                                        derived: 0x8E000000 (see the geometry gate).
+#                                                        Never built; B5 has never run.
 #   s1-j1      the same                                  J6 (revision 3, §15.4.8): host mode with memcanary-w
 #                                                        and a large hold in place of B2's allocation; never a pass run
 # With no names the board form does the first five, in that order; s1-q2 and s1-j1
@@ -173,6 +175,45 @@ STARTUP_WANT="startup-$BOARD -vvv -P4 -Q enable,el2-host -m992M -Wkeep -A -b w2,
 M1B_STARTUP_WANT="startup-$BOARD -vvv -P6 -Q enable,el2-host -m992M -Wkeep -Dtcu"
 GEOMETRY_CAP=0x8C000000       # m3-design.md:972, s1-design.md §4.4; s1-q2 uses --q2-limit
 CANARY_C1_BASE=0xBD000000     # §3.3; a --q2-limit may not reach it
+
+# D14's limit, derived 2026-09-17 under OD9, as design §6.1 step 7 requires: "compute
+# D14's limit ... write it into the generator's geometry gate with its derivation as a
+# comment; then build s1-q2, which must pass it".
+#
+# The rule: "window 1 keeps the two-guest budget's non-guest share". Window 1 is 992 MiB at
+# 0x80000000; canary c1 takes its top 16 MiB from 0xBD000000, so 976 MiB is usable below c1.
+# §4.5's gate of 1,255 MiB decomposes as 512 (Linux guest) + 512 (QNX guest) + 146.3
+# (/dev/shmem/disk-qvm, 153,432,576 B = 146.32, the copy devb-loopback holds) + 20 (qvm) +
+# 64 (margin) = 1,254.3, which §4.5 rounds up to the 1,255 the gate states.
+# Window 2 carries the 1,024 MiB of guest RAM, so window 1 must keep the NON-guest share:
+#
+#   ceiling, §4.5's terms   146.3 + 20 + 64 = 230.3, + 15.4 kernel/syspage = 246 MiB
+#                            0xBD000000 - 0xF600000  = 0xADA00000
+#   ceiling, step 7 literal  ("§3.3's table with the QNX rows restored") also adds the
+#                            4 MiB daemons row and io-blk's 21.8 = 271.5 -> 272 MiB
+#                            0xBD000000 - 0x11000000 = 0xAC000000   <- the stricter reading
+#   floor                    size_check's pre-mkifs sum (it dies BEFORE mkifs, so this binds,
+#                            not the real geometry): 0x80082fa0 + 217,557,819 = 0x8CFFDADB
+#
+# 0x8E000000 is chosen as a tight cap that satisfies the rule, not as the rule's ceiling:
+# 16.01 MiB above the projected end. mkifs padding is not knowable beforehand, and size_check
+# OVER-estimates: on m4 r0 it named an end of 0x8a738d82 against a real 0x8a5e9ccc, 1,372,342 B
+# high (results/orin-native-port/20260916T1500Z/m4/m4-r0-rebuild.log, its size-check and
+# geometry lines). That is the one measured precedent on file; no s1-n1 build log exists to
+# corroborate it. So a limit clearing only the real end can still be refused at step 10, and
+# 16 MiB covers an order more error than the single precedent shows. It leaves 752 MiB below
+# c1 -- 2.8x the STRICTER reading's non-guest requirement, 3.2x the looser one. The stricter
+# figure is the one that binds, and is the one quoted. A looser limit would be a weaker gate,
+# not a safer one.
+#
+# What this derivation does NOT establish, stated because the numbers look firmer than they
+# are: io-blk's 21.8 MiB is VENDOR_CLAIM with an UNKNOWN basis (total or free RAM) and qvm's
+# own budget is UNKNOWN (m3-design.md:280-300); and D14's premise is not enforced anywhere --
+# under -b w2 qvm may place guest RAM in EITHER window (design §3.3, Q14), so "window 2
+# carries the 1,024 MiB" is a budget convention, not a guarantee. Under OD7 the guest disk is
+# regenerated at the freeze and is not byte-reproducible, so PIN_DISK -- and with it the
+# 146.3 MiB term and the floor above -- moves, and this limit is re-derived when it does.
+Q2_LIMIT_DERIVED=0x8E000000
 W1_MIB=992
 # §5.1's memory gate constants, MiB.
 declare -A MEM_GATE=([tcg:dryrun]=596 [tcg:boot]=596 [tcg:hold]=660 [tcg:q2]=1255
@@ -335,13 +376,17 @@ if [ "$WANT_J1" = 1 ]; then
 	TOOL_NAMES+=(memcanary-w)
 fi
 if [ "$WANT_Q2" = 1 ]; then
-	[ -n "$Q2_LIMIT" ] || die "s1-q2 and the q2 variant are refused without --q2-limit: they wait until D1 keeps the QNX guest and D14's limit, 'window 1 keeps the two-guest budget's non-guest share', is derived (design §6.1 step 7, §4.5)"
+	[ -n "$Q2_LIMIT" ] || die "s1-q2 and the q2 variant are refused without --q2-limit: OD9 (2026-09-17) keeps the QNX guest and D14's limit is derived as $Q2_LIMIT_DERIVED (see its derivation above); pass it explicitly (design §6.1 step 7, §4.5)"
 fi
 if [ -n "$Q2_LIMIT" ]; then
 	[ "$WANT_Q2" = 1 ] || die "--q2-limit is only for s1-q2 or the q2 variant"
 	[[ "$Q2_LIMIT" =~ ^0x[0-9a-fA-F]{8,9}$ ]] || die "--q2-limit '$Q2_LIMIT' is not a hex address such as 0x8f000000"
 	(( Q2_LIMIT > GEOMETRY_CAP && Q2_LIMIT <= CANARY_C1_BASE )) \
 		|| die "--q2-limit $Q2_LIMIT must lie above the Linux-only cap $GEOMETRY_CAP and at or below canary c1's base $CANARY_C1_BASE"
+	# The range above is the code's outer bound; D14's derived value is the one the design
+	# gate asks for, so a different in-range number is refused rather than silently built.
+	(( Q2_LIMIT == Q2_LIMIT_DERIVED )) \
+		|| die "--q2-limit $Q2_LIMIT is not D14's derived limit $Q2_LIMIT_DERIVED; if the inputs moved (OD7 regenerates the guest disk and PIN_DISK with it), re-derive it at the geometry gate and change Q2_LIMIT_DERIVED with its arithmetic"
 fi
 
 # ---- helpers ------------------------------------------------------------------------

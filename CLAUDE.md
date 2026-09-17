@@ -460,10 +460,13 @@ Quick summary for context:
   came from the second window: no host view of qvm's guest-RAM addresses was found, so that stays unknown.
   **B4, the ten-minute run, also met the same day:** the guest held for ten minutes with the hypervisor
   alive at every heartbeat and the canaries intact before and after, under a light load (the guest is
-  idle apart from the heartbeat, so this is not a load, stress or soak test). **S1-F is therefore met
+  idle apart from the heartbeat, so this is not a load, stress or soak test). ~~**S1-F is therefore met
   (Linux only; item 3 not applicable, freeze item 2 = Linux only)**, which satisfies freeze gate item 1.
   **B5 does not run at all under OD1** (Linux only, so pass item 3 is not applicable), and `s1-q2` was
-  never built; s1-design.md §14.9-14.12, §15
+  never built~~ **2026-09-17, later (OD9): the owner reopened freeze item 2 and reversed it to QNX plus
+  Linux, so pass item 3 applies again, B5 is owed, and S1-F is NOT met. Items 1, 2, 4 and 5 stand as
+  recorded; item 3 is open. D14's limit is now derived (`--q2-limit 0x8E000000`), but `s1-q2` has still
+  never been built and B5 has never run**; s1-design.md §14.9-14.12, §15
   and §16; figures unpublished)**; freeze
   reference architecture v1; then one measurement campaign on it (the M3 and M4 numbers, the M5 comparison, the twin
   diff), every record stamped with the version. ~~Awaiting the owner's confirmation: the M path ends at M5's functional
@@ -563,8 +566,10 @@ Quick summary for context:
    the 4.6(i) consultation. **2026-09-17: B3 met** — a Linux guest
    reached a shell under native qvm on the board, and **B4 met**: it
    held ten minutes with the hypervisor alive and the canaries intact,
-   under a light load. **S1-F met (Linux only)**, so freeze gate items 1
-   and 6 are satisfied. B5 does not run under OD1. Next: the freeze,
+   under a light load. ~~**S1-F met (Linux only)**, so freeze gate items 1
+   and 6 are satisfied. B5 does not run under OD1.~~ **2026-09-17 (OD9): item 2
+   was reopened and reversed to QNX plus Linux, so S1-F is NOT met, gate item 1
+   is open and B5 is owed; item 6 still stands.** Next: the freeze,
    which still needs the guest disk regeneration (item 8); the attended
    m4-r0 round (item 9) ran and passed on 2026-09-17**;
    s1-design.md §16).

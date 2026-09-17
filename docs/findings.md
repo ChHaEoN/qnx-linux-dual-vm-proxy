@@ -79,10 +79,12 @@ RAM was found, so that reading is unknown rather than affirmative. B3 is also a 
 one — it says nothing about how long the arrangement holds.
 
 What remains: **B4**, the ten-minute run, which is the rung that speaks to duration, and which has not run.
-**B5 does not run at all**: under OD1 the guest set is Linux only, so the two-guest rung's pass item is not
-applicable.
+~~**B5 does not run at all**: under OD1 the guest set is Linux only, so the two-guest rung's pass item is not
+applicable.~~ **2026-09-17, later (OD9): the guest set was reopened to QNX plus Linux, so B5 is owed after all.**
 
-**2026-09-17, later: B4 met, and S1-F is met.** The ten-minute rung ran the same session and passed. The
+**2026-09-17, later: B4 met, and S1-F was recorded met — a line OD9 withdrew the same day
+(below), when the guest set was reopened to QNX plus Linux, so pass item 3 applies again and B5 is
+owed. B4's own result stands.** The ten-minute rung ran the same session and passed. The
 guest held for ten minutes; the hypervisor was alive at every one of the ten heartbeats; all three canaries
 verified after the hold and again after teardown; the guest's kernel, initrd and configuration were
 unchanged at the end; the bootloader slot was unchanged; and the board returned unaided. It is the first
@@ -94,9 +96,16 @@ a soak test. Ten minutes is the longest evidence this project holds and it is st
 days. It again does not show that the guest's memory came from the second window. No timing, isolation or
 containment claim follows from it.
 
-With items 1, 2, 4 and 5 held and item 3 not applicable, **S1-F is met (Linux only; item 3 not applicable,
+With items 1, 2, 4 and 5 held and item 3 not applicable, ~~**S1-F is met (Linux only; item 3 not applicable,
 freeze item 2 = Linux only)** — the design's first branch, because the guest set was settled before this
-record closed, not the provisional wording. Freeze gate items 1 and 6 are satisfied. The freeze still needs
+record closed, not the provisional wording. Freeze gate items 1 and 6 are satisfied.~~
+
+**2026-09-17, later (OD9): that met line is withdrawn, and S1-F is NOT met.** The owner reopened freeze
+item 2 and reversed it to QNX plus Linux, so pass item 3 applies again and the two-guest rung (B5) is
+owed. The line was correctly written when it was written — the design's first branch requires item 2
+settled before B4's record closed, and OD1 did settle it then — but its premise no longer holds.
+Items 1, 2, 4 and 5 stand exactly as recorded; item 3 is open; freeze gate item 6 still stands and
+item 1 does not. The freeze still needs
 the guest disk regeneration; the attended instrument round ran and passed on 2026-09-17,
 discharging its gate item. The licence consultation gates publication, not the campaign.
 The records are private and git-ignored, and no figure is published here.
@@ -330,7 +339,7 @@ Three review lenses raised 30 findings, and all were applied. The blocker was th
 canary ranges from procnto, because only `alloc_ram` removes a range from the RAM list the kernel receives.
 
 The owner took all nineteen decisions as recommended:
-- Linux only now; the two-guest rung runs only if v1 keeps the QNX guest.
+- Linux only now; the two-guest rung runs only if v1 keeps the QNX guest. **2026-09-17 (OD9): v1 keeps it; the rung is owed.**
 - D10 tightens plan item 4, so the guest's end probe is required, not only a live qvm.
 - D12: the dumped FDT is private evaluation output.
 - D17: any QNX support request goes through the supervising professor first.
