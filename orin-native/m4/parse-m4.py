@@ -1527,8 +1527,8 @@ def trcctl_bad(lines, markers):
 
 
 # I32 (m4-design.md 14.16): the pins D3 §8 item 3 names, as make-m4-images.sh:94-96 holds them.
-PIN_GUEST = "968029316b940f53580228f44e393877e032e251d78f3c752600cae726a7cf4f"
-PIN_DISK = "cf5b06d0b3cb524201c71440fdda42a18d2636d45938acd8ec95cfa21314216b"
+PIN_GUEST = "434647a7cabfe5a1b503fab6c6309894aceccd03d74bb3882ea81caff22a83bd"
+PIN_DISK = "55571618524e6cbc7a691b8109734783b479261a2f97206b71fa75f07ee31477"
 PIN_CLIENT = "52cb4dcad5a3632f88092289ef68668cc1fc604f150f3e2f8b9f31dc82caa7eb"
 IPC_PAYLOAD = 48            # FRAME_PAYLOAD_BYTES, the client's `samples=` line (D3 §8 item 8)
 IPC_WARMUP = 5              # the warm-up the host script passes: `qnx-host-client @ITERS@ /dev/ttyp0 5` (I40)

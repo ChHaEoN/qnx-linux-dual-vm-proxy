@@ -570,7 +570,10 @@ Quick summary for context:
    and 6 are satisfied. B5 does not run under OD1.~~ **2026-09-17 (OD9): item 2
    was reopened and reversed to QNX plus Linux, so S1-F is NOT met, gate item 1
    is open and B5 is owed; item 6 still stands.** Next: the freeze,
-   which still needs the guest disk regeneration (item 8); the attended
+   which needs B5. **Item 8, the guest disk regeneration, ran 2026-09-17
+   (OD7): guest and host regenerated from clean sources, the as-run configuration
+   now equals the committed one, O1 answered by construction, both guest pins
+   moved, PIN_CLIENT unchanged**; the attended
    m4-r0 round (item 9) ran and passed on 2026-09-17**;
    s1-design.md §16).
    Then settle the freeze gate and write the v1 manifest. Then run the

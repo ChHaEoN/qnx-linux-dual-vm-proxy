@@ -498,6 +498,7 @@ That every other host file matches the canonical image is HYPOTHESIS, and it is 
    - `qhv/guest/output/ifs.bin` must hash to `968029316b940f53580228f44e393877e032e251d78f3c752600cae726a7cf4f` (K11).
    - `qhv/guest/output/disk-qvm` must hash to `cf5b06d0b3cb524201c71440fdda42a18d2636d45938acd8ec95cfa21314216b` (m3-design.md §0).
    - Any mismatch stops the script: the baseline is not the one this design assumes.
+   - *(2026-09-17, OD7: the guest pair was regenerated, so both values above are superseded -- ifs.bin `434647a7…a83bd`, disk-qvm `55571618…e31477`. K11's "byte-identical" wording does not survive regeneration. Kept as recorded: they are what this design assumed.)*
 3. **Hashes after.** The same checks run after the build and after every launch. A changed canonical hash stops all further work and is reported to the owner. Nothing is repaired automatically.
 4. **Never run:**
    - `scripts/build-qhv.bat`;

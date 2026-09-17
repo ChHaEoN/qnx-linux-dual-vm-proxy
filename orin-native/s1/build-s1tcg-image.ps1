@@ -104,8 +104,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$GuestIfsPin    = '968029316b940f53580228f44e393877e032e251d78f3c752600cae726a7cf4f'
-$GuestDiskPin   = 'cf5b06d0b3cb524201c71440fdda42a18d2636d45938acd8ec95cfa21314216b'
+$GuestIfsPin    = '434647a7cabfe5a1b503fab6c6309894aceccd03d74bb3882ea81caff22a83bd'
+$GuestDiskPin   = '55571618524e6cbc7a691b8109734783b479261a2f97206b71fa75f07ee31477'
 $ClientPinM3    = '52cb4dcad5a3632f88092289ef68668cc1fc604f150f3e2f8b9f31dc82caa7eb'
 $ImagePin       = 'b844b7cfaafd071a25f1dc91d2ad1d7369008c28ce84b25625efc425825a2120'
 $StockInitrdPin = 'f0cdcc61064ff6e9ac99b1c4ff02468dbe9cf0c0e9404cf429524d741f6883f8'

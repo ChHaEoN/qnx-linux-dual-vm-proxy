@@ -66,8 +66,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$GuestIfsPin  = '968029316b940f53580228f44e393877e032e251d78f3c752600cae726a7cf4f'
-$GuestDiskPin = 'cf5b06d0b3cb524201c71440fdda42a18d2636d45938acd8ec95cfa21314216b'
+$GuestIfsPin  = '434647a7cabfe5a1b503fab6c6309894aceccd03d74bb3882ea81caff22a83bd'
+$GuestDiskPin = '55571618524e6cbc7a691b8109734783b479261a2f97206b71fa75f07ee31477'
 
 $scriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot   = [System.IO.Path]::GetFullPath((Join-Path $scriptDir '..\..')).TrimEnd('\')

@@ -96,8 +96,8 @@ DEFAULT_IMAGES=(m3-r0 m3-r1 m3-r2 m3-d1 m3-d2)
 PIN_STARTUP=90bf724c222b61f9791ad3bcaff60c6516be7180012333be9186a58d06d61896
 PIN_SMPCHECK=f8e2c3078f12ac8ef27f1c482e77bd98d2188293195721d8168892a605c666b0
 PIN_CLIENT=52cb4dcad5a3632f88092289ef68668cc1fc604f150f3e2f8b9f31dc82caa7eb
-PIN_GUEST=968029316b940f53580228f44e393877e032e251d78f3c752600cae726a7cf4f
-PIN_DISK=cf5b06d0b3cb524201c71440fdda42a18d2636d45938acd8ec95cfa21314216b
+PIN_GUEST=434647a7cabfe5a1b503fab6c6309894aceccd03d74bb3882ea81caff22a83bd
+PIN_DISK=55571618524e6cbc7a691b8109734783b479261a2f97206b71fa75f07ee31477
 
 # PO-A: the earlier generators and the board code (design §5.2 step 3).
 PO_A_PATHS=(
@@ -460,18 +460,21 @@ po_e() {
 	awk '
 		/^[^ \t]/ { stanza = ($1 == "vdev") ? $2 : "" }
 		stanza == "virtio-blk" { blk++; next }
+		# 2026-09-17 (OD7): regeneration removed the shmem stanza from g2-m3.conf,
+		# so the expected count is 0, not 4. The branch is kept rather than deleted:
+		# it now asserts the stanza has NOT come back.
 		stanza == "shmem"      { shm++; next }
 		{ print }
 		END {
-			if (blk != 5 || shm != 4) {
-				printf("dropped %d virtio-blk and %d shmem lines, expected 5 and 4\n", blk, shm) > "/dev/stderr"
+			if (blk != 5 || shm != 0) {
+				printf("dropped %d virtio-blk and %d shmem lines, expected 5 and 0\n", blk, shm) > "/dev/stderr"
 				exit 1
 			}
 		}' "$OUT/g2-m3.conf" > "$GATE/noblk-expected.conf" \
-		|| die "PO-E: g2-m3.conf does not carry the expected virtio-blk and shmem stanzas (reason above)"
+		|| die "PO-E: g2-m3.conf does not carry the expected virtio-blk stanza, or a shmem stanza has returned (reason above)"
 	cmp -s "$GATE/noblk-expected.conf" "$OUT/g2-noblk.conf" \
-		|| die "PO-E: stripped g2-noblk.conf is not g2-m3.conf without its five virtio-blk and four shmem lines (compare $GATE/noblk-expected.conf)"
-	echo "   PO-E g2-noblk.conf is g2-m3.conf without the five virtio-blk and four shmem lines: ok"
+		|| die "PO-E: stripped g2-noblk.conf is not g2-m3.conf without its five virtio-blk lines (compare $GATE/noblk-expected.conf)"
+	echo "   PO-E g2-noblk.conf is g2-m3.conf without the five virtio-blk lines, and no shmem stanza remains: ok"
 
 	# Step 7.6, for the record only: against the committed three-vdev text.
 	[ -f "$COMMITTED_POST" ] || die "PO-E: no $COMMITTED_POST"
@@ -482,12 +485,18 @@ po_e() {
 	gt=$(grep -c '^> ' "$GATE/committed-vs-g2-m3.diff" || true)
 	echo "   PO-E for the record: g2-m3.conf against the committed scripts/qhv/post_start.custom text:"
 	sed 's/^/      /' "$GATE/committed-vs-g2-m3.diff"
-	if [ "$lt" = 1 ] && [ "$gt" = 5 ] \
+	# 2026-09-17 (OD7): before regeneration the as-run text carried four shmem
+	# lines the committed snippet did not, so the expected diff was 1 removed and
+	# 5 added. Regeneration made the two texts equal, so the only difference left
+	# is the load-line substitution: 1 removed, 1 added. That the diff is now this
+	# small IS the provenance result -- the configuration is reproducible from the
+	# committed sources.
+	if [ "$lt" = 1 ] && [ "$gt" = 1 ] \
 	   && grep -qx '< load /data/hypervisor/guest/ifs.bin' "$GATE/committed-vs-g2-m3.diff" \
-	   && [ "$(grep -c '^> \(vdev shmem\| loc 0x1c0f0000\| intr gic:43\| allow phase2-rq2-probe\)$' "$GATE/committed-vs-g2-m3.diff" || true)" = 4 ]; then
-		echo "   PO-E record: the load line and the four shmem lines, as the design expects"
+	   && grep -qx '> load /proc/boot/guest-ifs.bin' "$GATE/committed-vs-g2-m3.diff"; then
+		echo "   PO-E record: the load line alone, so g2-m3.conf is the committed text (OD7)"
 	else
-		echo "   PO-E record NOTE: the diff is not just the load line and the four shmem lines ($lt removed, $gt added)"
+		echo "   PO-E record NOTE: the diff is not just the load line ($lt removed, $gt added)"
 	fi
 }
 

@@ -950,7 +950,7 @@ Usage: `BSP=… QNX_BASE=… ./make-m3-images.sh [--generate-only] [image …]`,
    | `out/m1b/m1b-p1.kimg` | `cf0715ef7f0e447228d33655` | m1b-runs.md:46-49 |
    | `out/m1b/m1b-p6.kimg` | `85970fe84cb5ed644e2cced6` | m1b-runs.md:46-49; recomputed today |
    | `out/m2/m2-p6.kimg` | `5cae65e821edcdb9c2355310` | m2-runs.md:28 |
-6. **PO-D: guest pair.**
+6. **PO-D: guest pair.** *(2026-09-17, OD7: the guest and host were regenerated from clean sources, so both hashes below moved -- ifs.bin to `434647a7…a83bd`, disk-qvm to `55571618…e31477`, and the md5 values to `093ef787…` and `2b2fcb13…`. The gate itself is unchanged; the generators carry the new values. The figures below are what M3 ran against and are kept as recorded.)*
    - `sha256(qhv/guest/output/ifs.bin)` = `968029316b940f53580228f44e393877e032e251d78f3c752600cae726a7cf4f`.
    - `sha256(qhv/guest/output/disk-qvm)` = `cf5b06d0b3cb524201c71440fdda42a18d2636d45938acd8ec95cfa21314216b`.
    - Die otherwise. Compute md5 values for baking; today they are `0e3a2e9bcf4ccf99d4f9ce49a35c55d2` and `cca9570326f42115f91e595d02e489d1`.

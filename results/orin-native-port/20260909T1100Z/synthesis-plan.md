@@ -52,7 +52,7 @@ Both feed `docs/digital-twin-design.md` §1a as a **third host bundle** (native 
 - `init_qtime()` = `init_qtime_v8gt(27, 28)` and `qtime->intr = 28` only when the required flags are exactly `ENABLED|EL2_HOST` (VERIFIED synth init_qtime.c:28, init_qtime_v8gt.c:56-60); it also writes `cntv_ctl_el0 = 0` (v8gt.c:66).
 - `gic_v3_initialize()` itself writes `GICD_CTLR = 0` + RWP wait, `ICENABLERn/ICPENDRn = 0xFFFFFFFF` for all SPIs, and per-CPU `GICR ICPENDR0/ICENABLER0` + WAKER handling (VERIFIED synth gic_v3.c:980-1000, 1358-1369, 1496-1502) -> the board pre-quiesce (§5.3) is belt-and-braces; the one thing the library does not do is `ICACTIVER` clearing, which the pre-quiesce adds.
 - The L4T kernel has a live pstore console zone: `printk: console [ramoops-1] enabled` (VERIFIED synth raw/orin-ttys.txt:67-68) and the DT node is `compatible = "ramoops"`, `reg = 0x2725F0000/0x200000`, `no-map` (VERIFIED synth raw/orin-devicetree.txt:177-185). Zone sizes remain UNKNOWN (§4.6).
-- Guest IFS identity for the twin claim: `qhv/guest/output/ifs.bin` = 9,783,916 B, sha256 `968029316b940f53580228f44e393877e032e251d78f3c752600cae726a7cf4f` (VERIFIED synth, `sha256sum` today).
+- Guest IFS identity for the twin claim: `qhv/guest/output/ifs.bin` = 9,783,916 B, sha256 `968029316b940f53580228f44e393877e032e251d78f3c752600cae726a7cf4f` *(2026-09-17, OD7: regenerated; the size is unchanged but the sha256 is now `434647a7…a83bd`)* (VERIFIED synth, `sha256sum` today).
 
 ---
 

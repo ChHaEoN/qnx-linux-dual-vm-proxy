@@ -9,6 +9,54 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-17 — OD7 executed: the guest and host regenerated from clean sources, and the provenance break is closed
+
+The owner reopened freeze item 2 the same day (OD9, QNX plus Linux), which put the QNX guest back into v1
+and made its disk a first-class v1 artefact rather than a conditional one. That turned item 8 from housekeeping
+into something B5 would stand on. The deferral's stated reason had already expired: the entry below stopped the
+rebuild because "S1-F's revision 4 is pre-registered and has not run", and that ladder ran on 2026-09-16, with
+B3 and B4 following on 2026-09-17. The same entry asked for the decision to be "re-taken against the real
+cost" and to "follow the revision-4 ladder rather than precede it". Both conditions were met, the owner re-took
+it, and `scripts/build-qhv.bat` ran its two-stage `mkqnximage` build.
+
+**The result that matters is not a hash.** The as-run configuration now equals the committed
+`scripts/qhv/post_start.custom` **exactly** — checked by expanding both through the generator's own
+`expand_printf` and diffing. The PO-E record comparison, which used to show one line removed and five added,
+now shows **one removed and one added: the load-path substitution alone.** The sentence this log carried since
+2026-09-16 — that the guest disk "carries a diagnostic variant of its start-up script that no commit generates,
+so the image v1 would freeze is not reproducible from sources" — is no longer true.
+
+**Owner decision O1 is answered by construction, not by judgement.** Regeneration necessarily drops the fourth
+`vdev shmem` and its `allow phase2-rq2-probe`, because the staged snippets are already clean and the build copies
+them over. The stanza is gone from the as-run text, so it left `g2-m3.conf` and `g2-m3-diag.conf` too. The image
+still carries `vdev-shmem.so`: nothing gates the carried `.so` set against the configuration's vdevs, and removing
+it would perturb `Q2_NAMES`, `Q2_SDP_FILES`, `s1.build.in` and the q2 `size_check` sum for no functional gain.
+
+**Measured, not assumed.** The guest pair's sizes are unchanged (`ifs.bin` 9,783,916 B, `disk-qvm`
+153,432,576 B); only the bytes moved. `disk-qemu` lost 4,096 B. `qnx-host-client` rebuilt to the **identical**
+hash, so `PIN_CLIENT` did not move and only two pins did. Because the guest sizes held, D14's derived
+`--q2-limit 0x8E000000` survives the regeneration unchanged, with its 16.01 MiB margin intact — that was
+checked rather than hoped, since `disk.layout` derives the disk's size from its partition contents.
+
+**It was made reversible first.** `E:/qhv-preserve` already held two independent copies of the four artefacts
+with manifests, plus complete output trees; each was verified against its pin before anything ran. Reading
+`build-qhv.bat` in full first showed it also rebuilds the ipc-test binaries, so `qnx-host-client` — a third
+pinned artefact, and not covered by that preserve — and the `local/snippets` were preserved the same day.
+
+**The cost, paid:** 21 hash values across 12 code and configuration files; two generator gates changed in
+`make-m3-images.sh` (the noblk derivation now expects **0** shmem lines, not 4, with the branch kept so it
+asserts the stanza has not returned; the PO-E record check now expects the load line alone); three `qhv/`
+configurations edited; the tracked twin-leg manifest carrying its new pair with the old one demoted to a
+commented earlier-pair line, its own convention.
+
+**What this does not close.** Item 8 is discharged; the freeze is not. **B5 has never run**, and the new pins
+have never been through a board run of any kind. M3's and M4's recorded figures were measured against the old
+artefacts and stay exactly as recorded — they are A4 history, not v1. The five curated boot logs that name the
+old host pair are **left untouched on purpose**: they record which images were actually booted, and the images
+they name really are gone now. The records are private and git-ignored, and no figure is published here.
+[orin-native-port-plan.md](orin-native-port-plan.md#freeze-gate) carries item 8's state.
+
+
 ## 2026-09-16 — S1-F's revision-4 ladder ran on the board: B1, the watcher run and B2 all passed, and B2 is met on the rebuilt image
 
 With the owner at the plug, revision 4's three rungs ran in one session, in the pre-registered order, and each met
@@ -105,14 +153,19 @@ item 2 and reversed it to QNX plus Linux, so pass item 3 applies again and the t
 owed. The line was correctly written when it was written — the design's first branch requires item 2
 settled before B4's record closed, and OD1 did settle it then — but its premise no longer holds.
 Items 1, 2, 4 and 5 stand exactly as recorded; item 3 is open; freeze gate item 6 still stands and
-item 1 does not. The freeze still needs
-the guest disk regeneration; the attended instrument round ran and passed on 2026-09-17,
-discharging its gate item. The licence consultation gates publication, not the campaign.
+item 1 does not. ~~The freeze still needs
+the guest disk regeneration;~~ **2026-09-17, later: the regeneration ran (OD7, this file's top entry), so item 8
+is discharged too, and what the freeze still needs is B5.** The attended instrument round ran and passed on
+2026-09-17, discharging its gate item. The licence consultation gates publication, not the campaign.
 The records are private and git-ignored, and no figure is published here.
 [s1-design.md](../results/orin-native-port/20260909T1100Z/s1-design.md) §16;
 [the plan's S1-F block](orin-native-port-plan.md#the-revised-ladder).
 
 ## 2026-09-16 — M4's r0 image rebuilt under the frozen instruments, and the guest-disk rebuild deliberately not done
+
+> **2026-09-17: the guest-disk rebuild was subsequently done** — the deferral's stated reason, a pre-registration
+> that had not yet run, expired when revision 4's ladder ran on 2026-09-16. See this file's top entry (OD7).
+> Nothing below is withdrawn: the cost analysis recorded here is what made the later decision quick to take.
 
 Two freeze-gate items were taken up while the board was unattended. One is now done on the PC; the other
 was stopped before it started, and the reason is the more useful of the two results.
@@ -145,7 +198,9 @@ already clean and the build copies them over.
 What this shows: two freeze-gate items advanced without the board, one by doing the work and one by
 establishing that doing it now would damage a pre-registration. What it does not show: that either item is
 closed. Item 9 needs its board round; item 8 needs the owner's decision re-taken against the real cost, and
-should follow the revision-4 ladder rather than precede it. The records are private and git-ignored, and no
+should follow the revision-4 ladder rather than precede it. **2026-09-17: both happened, in that order.**
+Item 9's attended board round ran and passed; the revision-4 ladder ran on 2026-09-16; the owner then re-took
+item 8's decision against the cost recorded here, and the regeneration ran. The records are private and git-ignored, and no
 figure is published here.
 [orin-native-port-plan.md](orin-native-port-plan.md#freeze-gate) carries both items' state.
 
@@ -818,6 +873,8 @@ boot):
 b2d875057f25a4cbda69966e553629d445cfa44af62cf4c5e121442c9782300a ifs.bin
 95849168b06e3c5d8e744db8bb8fdf39efd01d77f1b60d33060650292d7192a3 disk-qemu
 ```
+
+**2026-09-17 (OD7): that pair no longer exists on disk.** The host and guest were regenerated from clean sources; regeneration is not byte-reproducible, so the values are new (`faa4485e…c74971` and `d3b61572…247b7c`, in [results/qhv-images-SHA256SUMS.txt](../results/qhv-images-SHA256SUMS.txt)). The hashes above are kept because the series described here ran against them. The curated boot logs that name the old pair are left untouched for the same reason: they record what was booted.
 
 **Version × host matrix completed, and the Windows column release-aligned
 (2026-09-09, later the same day).** Two Weilnetz Windows builds were fetched
