@@ -5747,9 +5747,20 @@ cmd_run() {
 	# them and routes to the owner, who alone rules on whether B2's met line survives. A rung with no
 	# reading about c2 refuses nothing: no B2 record, a record that never reached a parse, and a
 	# recorded class of exactly n/a are all 'no reading' here, as they are at the B2 gate itself.
+	# 'Clean' is two classes, not one: X-f-final, and X-f-c, which §16.6.1 defines as the confirmatory
+	# run clean by §16.6's field rules and MET by §6.7, and whose row says B3-B5 may resume. Both are
+	# admitted below. X-f-provisional is not: §16.6.1's precedence has B3 wait for a *final* X-f, so a
+	# provisional reading stops the ladder and routes to the owner like any other non-final one.
+	# 2026-09-17: X-f-c was absent from this filter until today, so a correctly classed confirmatory
+	# reading would have made r4bad non-empty and blocked B3-B5 — the gate was narrower than the line
+	# above it and than the design it implements. Found while checking the gate after B5 ran. B5 was
+	# not affected: B2-a3's record reads X-f-final, because --confirmatory was added to the parser
+	# after that reading was taken. The sibling gate at the D86 key (:2727) stays strict on X-f-final
+	# on purpose — there, an X-f-c on file means a confirmatory run has already been made, and
+	# admitting it would hand out a fourth observation against D86's bound of one.
 	case "$IMG" in
 	s1-n1|s1-n2|s1-q2)
-		r4bad="$(r4_readings B2 | grep -v ' X-f-final$' | tr '\n' ';' | sed 's/;$//')"
+		r4bad="$(r4_readings B2 | grep -vE ' (X-f-final|X-f-c)$' | tr '\n' ';' | sed 's/;$//')"
 		[ -n "$r4bad" ] \
 			&& die "revision 4: $STEP follows a B2 rung that read clean (D86, §16.6.1 X-i), and B2's readings on file hold $r4bad: a reading of B2 that is not clean is recorded as an intermittency finding and blocks B3-B5 until the owner rules on whether B2's met line for the rebuilt image survives; the owner decides"
 		;;
@@ -10058,6 +10069,23 @@ cmd_harness_selftest() {
 	out="$(R4RUN_REC="$jr7a" r4run s1-n1)"
 	check "D86 X-i: a clean B2 reading does not block B3" \
 		"$(has "$out" 'S1_COM3_LOG must name')/$(has "$out" 'blocks B3-B5')" "yes/no"
+	# §16.6.1's X-f-c row: the confirmatory run read clean, and its row says B3-B5 may resume. Tested
+	# in the shape it will really take -- the original reading and the confirmatory one both on file,
+	# neither blocking -- because that pair is what a spent D86 key leaves behind. Until 2026-09-17
+	# the filter whitelisted X-f-final alone and this case blocked; B5 escaped only because B2-a3's
+	# record reads X-f-final. These fixtures land in B2-a3, which the X-p line below overwrites, so
+	# the later check on 'B2-a2 X-f-final;B2-a3 X-p' is untouched.
+	mkdir -p "$jr7/B2-a3"; printf 'S1PC r4_reading=clean\nS1PC r4_class=X-f-c\n' > "$jr7/B2-a3/r4-read.txt"
+	out="$(R4RUN_REC="$jr7a" r4run s1-n1)"
+	check "D86 X-f-c: a confirmatory clean reading beside the original does not block B3" \
+		"$(has "$out" 'S1_COM3_LOG must name')/$(has "$out" 'blocks B3-B5')" "yes/no"
+	check "D86 X-f-c: it does not block B4 or B5 either" \
+		"$(has "$(R4RUN_REC="$jr7a" r4run s1-n2)" 'blocks B3-B5')/$(has "$(R4RUN_REC="$jr7a" r4run s1-q2)" 'blocks B3-B5')" "no/no"
+	# the boundary the widened filter must not cross: 'clean' admits the two final classes, not every
+	# class whose name starts X-f. A provisional reading is not a final one and still routes to the owner.
+	printf 'S1PC r4_reading=clean\nS1PC r4_class=X-f-provisional\n' > "$jr7/B2-a3/r4-read.txt"
+	check "D86 X-i: a provisional X-f is not whitelisted, so it still blocks B3" \
+		"$(has "$(R4RUN_REC="$jr7a" r4run s1-n1)" 'blocks B3-B5')" yes
 	mkdir -p "$jr7/B2-a3"; printf 'S1PC r4_reading=drop\nS1PC r4_class=X-p\n' > "$jr7/B2-a3/r4-read.txt"
 	check "D86 X-i: a later non-clean B2 reading blocks B3, names the attempt and its class, and routes to the owner" \
 		"$(has "$(R4RUN_REC="$jr7a" r4run s1-n1)" 'B2-a3 X-p')/$(has "$(R4RUN_REC="$jr7a" r4run s1-n1)" 'blocks B3-B5')/$(has "$(R4RUN_REC="$jr7a" r4run s1-n1)" 'the owner decides')" "yes/yes/yes"

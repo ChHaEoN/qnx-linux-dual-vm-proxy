@@ -49,8 +49,14 @@ narrower than both its own comment and the design it implements. `X-f-c` appears
 comment, in no conditional, and no self-test covers it. B5 ran today only because B2-a3's record says
 `X-f-final`: `--confirmatory` was added to the parser after that reading was taken, and the harness passes the
 flag only when D86's key is spent. Nothing is blocked now — the design notes D86's permission is spent, so
-the flag has no run to read — but the next confirmatory run would hit it. Not fixed here: it is a gate over a
-pre-registered reading rule, and it is the owner's call. Recorded also in the B2-a3 run note.
+the flag has no run to read — but the next confirmatory run would hit it. ~~Not fixed here: it is a gate over a
+pre-registered reading rule, and it is the owner's call.~~ **Fixed the same day, on the owner's decision.** The
+filter now admits both of §16.6.1's clean classes, and three self-tests cover it: a confirmatory `X-f-c` beside
+the original reading blocks neither B3 nor B4 nor B5, and an `X-f-provisional` still blocks, which pins the
+boundary at the two **final** classes rather than at every name beginning `X-f`. The sibling gate at the D86
+key was deliberately left strict on `X-f-final`: there, an `X-f-c` on file means a confirmatory run has already
+been made, so admitting it would hand out a fourth observation against D86's bound of one. No recorded reading
+moved, no class was re-labelled, and B5's pass is untouched. Recorded also in the B2-a3 run note.
 
 **What this does not show.** Nothing about duration with two guests: B5 is not a hold rung, tier L6 is n/a,
 and the only ten-minute evidence this project holds is B4's, with one guest. No timing, latency or throughput
