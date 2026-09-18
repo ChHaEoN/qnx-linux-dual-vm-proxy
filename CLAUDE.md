@@ -34,7 +34,13 @@ twin diff is re-run once, in the v1 campaign.
 ~~**This is not a real hypervisor.** There is no Type-1 partition isolation,~~
 **2026-09-11:** there is no *certified* Type-1 isolation. The uncertified QNX
 Hypervisor runs emulated in TCG (A1, A3) and natively on the Orin (A4); KVM
-appears only in the blocked GICv3/NISV track. There is also
+~~appears only in the blocked GICv3/NISV track.~~ **2026-09-18:** appears
+only in the GICv3/NISV track, which is no longer blocked for a *plain QNX
+guest*: an IFS with a `startup-qemu-virt` we rebuilt (`-fno-auto-inc-dec`)
+boots under KVM on the Orin, where the SDP's shipped one still hangs. That is
+a functional boot, not a QNX-supported configuration and no timing claim, and
+it does not extend to the QNX Hypervisor, which still needs EL2/nested virt
+that ARM KVM lacks on A78AE. There is also
 no ASIL-D guarantee, no certified RTOS, no GPU partitioning. ~~KVM-on-Linux
 is host-mediated, not certified Type-1.~~ The value is in studying the
 *software layer* — BSP bring-up, IPC patterns, kernel/userspace boundaries,
@@ -61,8 +67,26 @@ the NVIDIA AVOS / DRIVE OS SE role this portfolio targets.
 - `/dev/kvm` is present and initializes (VHE, GICv3) on this hardware, but
   booting the actual QNX IFS under `-enable-kvm` hangs on a real,
   root-caused defect (see Phase status below and `docs/orin-port.md`'s
-  risk register) — **TCG is the working transport today**, KVM is not.
-  Do not assume "KVM enabled on A78AE" means QNX boots under it.
+  risk register) — ~~**TCG is the working transport today**, KVM is not.
+  Do not assume "KVM enabled on A78AE" means QNX boots under it.~~
+  **2026-09-18:** that holds for the SDP's *shipped* `startup-qemu-virt`,
+  which still stops after `FOUND GICv3 ITS` (17 bytes of serial) on the same
+  host and the same launch line — reproduced as a control arm this session.
+  With a `startup-qemu-virt` **we rebuilt** (board source written at
+  `orin-native/startup/qemu-virt/`, startup library built with
+  `-fno-auto-inc-dec`, which removes the writeback MMIO store
+  `str w3,[x0],#4` at GICD+0x420 that reports ISV=0 and so cannot be
+  emulated by KVM), the IFS **does** boot under KVM on this board:
+  `qemu-system-aarch64 -machine virt,gic-version=3 -cpu host -enable-kvm
+  -smp 2 -m 1G -kernel <ifs>` reaches procnto and prints "Startup complete";
+  with virtio blk/net/rng added in the documented slot order it reaches
+  `Process count:22`, brings up `io-sock`, starts sshd, listens on :7000 and
+  prints the guest banner. Logs: `logs/sample-boot/orin-kvm-*.log`. Honest
+  limits: this is **not** a QNX-supported configuration — QNX ships no such
+  binary, the fix lives in a startup we rebuilt; no timing, latency or
+  boot-time claim is made; the measured TCG legs are not re-run or re-timed
+  by it; and it says nothing about the QNX Hypervisor under KVM, which still
+  needs EL2/nested virt that ARM KVM lacks on A78AE.
 
 **Common across both twins:**
 - VM0 — Safety proxy: QNX SDP 8.0, aarch64 `virt` machine, NCEULA (Everywhere)
@@ -208,7 +232,7 @@ Three parallel-friendly handoffs in that flow: step 6 (FuSa-Analysis ∥ Cyber-A
 
 ## What this project does NOT do
 
-- ~~No Type-1 / Type-2 hypervisor (QEMU + KVM is for OS bring-up, not partition isolation)~~ **2026-09-11:** no *certified* Type-1 isolation. The uncertified QNX Hypervisor runs in TCG (A1, A3) and natively on the Orin (A4); KVM appears only in the blocked GICv3/NISV track.
+- ~~No Type-1 / Type-2 hypervisor (QEMU + KVM is for OS bring-up, not partition isolation)~~ **2026-09-11:** no *certified* Type-1 isolation. The uncertified QNX Hypervisor runs in TCG (A1, A3) and natively on the Orin (A4); ~~KVM appears only in the blocked GICv3/NISV track.~~ **2026-09-18:** KVM appears only in the GICv3/NISV track, and that track is no longer blocked for a plain QNX guest — an IFS with a `startup-qemu-virt` we rebuilt (`-fno-auto-inc-dec`) boots under KVM on the Orin (not a QNX-supported configuration; no timing claim). The QNX Hypervisor still cannot run under KVM (EL2/nested virt).
 - No ASIL-B/D safety claim
 - No MISRA-C compliance
 - No GPU virtualization or vGPU partitioning
@@ -309,15 +333,31 @@ Quick summary for context:
   progress, not closed~~ 2026-09-13 (owner): closed as A2 history,
   target not met**: Orin Nano flashed (JetPack 6/L4T R36.4.7)
   and SSH-reachable; the plain `qnx-safety-vm` IFS boots under
-  **TCG** on real hardware. **KVM-accelerated boot is blocked** by a
+  **TCG** on real hardware. **KVM-accelerated boot ~~is~~ was blocked** by a
   real, root-caused defect — a GICv3 distributor bring-up instruction
   takes a `KVM_EXIT_ARM_NISV` Data Abort that neither KVM nor QEMU
   6.2.0 can emulate and QNX's `startup-qemu-virt` has no handler for
-  (see `docs/orin-port.md`'s risk register) — TCG is the accepted
+  (see `docs/orin-port.md`'s risk register) — ~~TCG is the accepted
+  interim transport~~ **2026-09-18: that is true of the SDP's *shipped*
+  `startup-qemu-virt`, which still stops after `FOUND GICv3 ITS` (17 bytes)
+  on the same host and launch line, reproduced as a control arm. An IFS
+  carrying a `startup-qemu-virt` we rebuilt (board source at
+  `orin-native/startup/qemu-virt/`, library built `-fno-auto-inc-dec`) boots
+  under `-enable-kvm` on this board to procnto, and with virtio blk/net/rng
+  attached to the guest banner — two captures byte-identical, and that same
+  arm on the from-source QEMU 11.1.0 byte-identical to the distro 6.2.0 ones
+  (`logs/sample-boot/orin-kvm-*.log`). Not a QNX-supported configuration, and
+  no timing claim. A2 is not re-run or re-timed: TCG is what it measured
+  on.** TCG was the accepted
   interim transport, not a permanent substitute for ~~the hardware-timed
   KVM number this phase still owes~~ a hardware-timed number. **2026-09-11:**
   the hardware-timed route is the native port (Phase 3b, ADR-003), and its
-  numbers come from the v1 campaign. KVM stays a defect-filing track.
+  numbers come from the v1 campaign. ~~KVM stays a defect-filing track.~~ **2026-09-18:** the owner decided
+  **not** to file with QNX/BlackBerry, and the cause was confirmed instead by
+  rebuilding `startup-qemu-virt` with `-fno-auto-inc-dec`, which boots an IFS
+  under KVM on this board where the shipped binary hangs. That is a
+  functional boot only — no timing claim, not a QNX-supported configuration,
+  and nothing about the QNX Hypervisor under KVM.
   **As of 2026-07-29 that defect is
   no longer Tegra-specific:** the identical IFS hangs in the identical
   way (`FOUND GICv3 ITS`, then silence, process alive throughout) on
@@ -341,9 +381,15 @@ Quick summary for context:
   was met: KVM-accelerated boot never worked, and the IPC run used a
   rebuilt IFS. The phase will not be redone. The v1 campaign's TCG twin
   legs and IPC runs are campaign work on v1, not a reopening of this
-  phase. The GICv3/NISV KVM defect stays open as a separate filing
+  phase. ~~The GICv3/NISV KVM defect stays open as a separate filing
   track, outside reference architecture v1, and is no longer tracked
-  under this phase.
+  under this phase.~~ **2026-09-18:** the defect stays outside reference
+  architecture v1 and outside this phase, but it is no longer a *filing*
+  track — the owner decided not to file with QNX/BlackBerry. Its mechanism
+  was confirmed on the board instead: a `startup-qemu-virt` we rebuilt with
+  `-fno-auto-inc-dec` boots an IFS under `-enable-kvm` where the shipped
+  binary stops after `FOUND GICv3 ITS`. Functional boot only; no timing
+  claim; the rebuilt binary is not QNX-supported.
 - Phase 4 — Twin diff + DRIVE OS comparison — **started**:
   `scripts/twin/diff-results.sh` was rewritten to match the CSV schema
   the benchmarks actually produce (the original assumed a shape no
@@ -536,14 +582,32 @@ Quick summary for context:
    **2026-09-13 (owner):** Phase 2 is closed as A1 history, so this is
    no longer Phase-2 work. The run size is a v1 freeze-gate item (sample
    sizes), and the stall stays open outside the phase.
-2. File the GICv3/NISV defect with QNX/BlackBerry — **now the strongest
-   of the three.** As of 2026-09-08 the filing no longer rests on
+2. ~~File the GICv3/NISV defect with QNX/BlackBerry — **now the strongest
+   of the three.**~~ **2026-09-18 (owner decision): not filed, and not to be
+   filed.** The owner decided against reporting this to QNX/BlackBerry. The
+   technical case is kept below for the record, and is now stronger rather
+   than weaker: the cause was confirmed by rebuilding `startup-qemu-virt`
+   from board source written at `orin-native/startup/qemu-virt/` with
+   `-fno-auto-inc-dec`, which boots an IFS under KVM on the Orin where the
+   shipped binary hangs (`logs/sample-boot/orin-kvm-*.log`). Kept as project
+   history and interview material, not as an open action. As of 2026-09-08 the filing no longer rests on
    disassembling their shipped binary: their own BSP source
    (`gic_v3.c`), built with their own flags, emits `str w3,[x0],#4` at
    GICD+0x420, and adding `-fno-auto-inc-dec` takes the file's MMIO
-   writeback-store count from 4 to 0 with identical semantics. Still
+   writeback-store count from 4 to 0 with identical semantics. ~~Still
    boot-unverified — `startup-qemu-virt` cannot be relinked without the
-   `qemu-virt` board source, which the BSP does not ship. The
+   `qemu-virt` board source, which the BSP does not ship.~~
+   **2026-09-18: boot-verified.** The BSP still ships no `qemu-virt` board
+   source, so board source was written at `orin-native/startup/qemu-virt/`
+   and `startup-qemu-virt` relinked against a startup library built with
+   `-fno-auto-inc-dec`. That IFS boots on the Orin under
+   `-machine virt,gic-version=3 -cpu host -enable-kvm -smp 2 -m 1G`,
+   reaching procnto and "Startup complete" (two runs, byte-identical
+   captures; with virtio blk/net/rng attached it also reaches the guest
+   banner, `io-sock` and sshd). The shipped startup, same launch line and
+   session, still stops after `FOUND GICv3 ITS`. Logs:
+   `logs/sample-boot/orin-kvm-*.log`. The rebuilt binary is ours, not a
+   QNX-supported configuration, and no timing claim is attached. The
    cross-vendor `a1.metal` reproduction remains the other half of the
    evidence. The read-only collector `scripts/diagnose-gicv3-nisv.sh` and
    its reviewed report (`results/gicv3-nisv-debug/20260909T101030Z/summary.md`)
@@ -632,10 +696,17 @@ Quick summary for context:
    boot diffs are architecture-version history.
 
 **Decision (2026-07-29):** getting a real KVM/hardware-timed number on
-Orin is **deferred, not abandoned** — it genuinely needs either NVIDIA
+Orin is **deferred, not abandoned** — ~~it genuinely needs either NVIDIA
 DRIVE AGX Orin hardware (gated behind an invitation-only developer
 program, not self-serve) or further paid AWS `c7g.metal` investigation,
-and neither is worth blocking on right now. **Partially actioned since:**
+and neither is worth blocking on right now.~~ **2026-09-18: the KVM half of
+that premise is falsified, the timing half is not.** KVM-accelerated boot no
+longer needs DRIVE AGX hardware or paid metal: an IFS with a
+`startup-qemu-virt` we rebuilt (`-fno-auto-inc-dec`) boots under
+`-enable-kvm` on the Orin Nano already on the desk
+(`logs/sample-boot/orin-kvm-*.log`). **No hardware-timed number was
+measured** — that remains deferred, and nothing here is a timing, latency or
+boot-time result. The rebuilt startup is ours; QNX ships no such binary. **Partially actioned since:**
 `c7g.metal` is still not run — this account's 32-vCPU quota blocks the
 64-vCPU launch outright — but an `a1.metal` fallback was run and
 reproduced the hang on a second vendor's silicon, which is the more

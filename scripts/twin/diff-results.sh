@@ -27,8 +27,11 @@
 # Per docs/digital-twin-design.md §4 (already written, not new guidance):
 # the cloud and HW legs do NOT currently run the same IPC topology —
 # cloud is single-OS QNX<->QNX over a qvm virtio-console vdev under TCG;
-# HW is heterogeneous QNX<->Linux over virtio-net/br0 under TCG (KVM is
-# separately blocked — see docs/orin-port.md's risk register). A raw
+# HW is heterogeneous QNX<->Linux over virtio-net/br0 under TCG (~~KVM is
+# separately blocked — see docs/orin-port.md's risk register~~; 2026-09-18: a
+# startup-qemu-virt we rebuilt with -fno-auto-inc-dec boots that board under
+# -enable-kvm -- the shipped SDP startup still hangs -- but every CSV this
+# script compares was recorded under TCG, so the caveat below is unchanged). A raw
 # latency delta therefore confounds host, acceleration, AND
 # transport+OS-pair — it is "mechanism-alive vs. heterogeneity", not a
 # clean host-only comparison. This script prints the delta (it is still
@@ -121,12 +124,18 @@ cat <<'EOF'
 Per docs/digital-twin-design.md §4, this diff confounds THREE variables
 at once, not one:
   1. host          Graviton3 Neoverse-V1 (cloud)  vs.  Tegra234 A78AE (hw)
-  2. acceleration  TCG (cloud, no /dev/kvm)        vs.  TCG (hw, KVM blocked
-                    by the GICv3/NISV finding in docs/orin-port.md)
+  2. acceleration  TCG (cloud, no /dev/kvm)        vs.  TCG (hw; how these CSVs
+                    were recorded -- 2026-09-18 a startup-qemu-virt we rebuilt
+                    boots that board under -enable-kvm, the shipped one still
+                    hangs; no KVM run of this benchmark exists)
   3. transport+OS  single-OS QNX<->QNX console     vs.  heterogeneous
                     QNX<->Linux virtio-net/br0
-Variable 2 happens to match today (both TCG) only because HW's KVM path
-is separately blocked, not by design. The cloud number is a
+Variable 2 matches here (both TCG) because that is what both CSVs were recorded
+under — ~~only because HW's KVM path is separately blocked, not by design~~
+(2026-09-18: that path is no longer blocked — an IFS with a startup-qemu-virt we
+rebuilt with -fno-auto-inc-dec boots under -enable-kvm, while the shipped SDP
+startup still hangs; no KVM timing exists, so this diff is still TCG-vs-TCG).
+The cloud number is a
 mechanism-alive sanity figure (15 samples, capped by an unresolved
 qvm/TCG virtio-queue stall); the HW number is a real, stable 100k-sample
 run. Read this as "mechanism-alive vs. heterogeneity", not as evidence

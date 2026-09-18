@@ -332,8 +332,15 @@ so they do not drift)
 >
 > **2026-09-11 note on RQ-5 (outcome recorded 2026-07-28 in
 > [orin-port.md](orin-port.md), step 2 and risk register):** on the Nano, vGIC
-> creation with `gic-version=3` works without the DTB patch. The QNX IFS still
-> hangs under KVM on the GICv3/NISV defect, so the Orin leg used TCG.
+> creation with `gic-version=3` works without the DTB patch. ~~The QNX IFS still
+> hangs under KVM on the GICv3/NISV defect, so the Orin leg used TCG.~~
+> **2026-09-18:** the QNX IFS **as shipped** still hangs under KVM on the
+> GICv3/NISV defect, and the Orin leg used TCG. An IFS carrying a
+> `startup-qemu-virt` **we rebuilt** (`-fno-auto-inc-dec`, board source
+> `orin-native/startup/qemu-virt/`) boots under KVM on the Nano to procnto and
+> the guest banner (`logs/sample-boot/orin-kvm-*.log`) — not a QNX-supported
+> configuration, no timing claim, and nothing about QHV under KVM, which still
+> needs nested virt.
 >
 > **RQ-2 REFINED 2026-07-28 — host<->guest (not just guest<->guest) is
 > RESOLVED YES, proven live on the host side; guest side open.** The

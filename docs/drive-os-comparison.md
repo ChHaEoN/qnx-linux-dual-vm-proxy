@@ -32,8 +32,15 @@ Windows PC. It was designed for AWS Graviton, but non-metal Graviton has
 no `/dev/kvm` ([ADR-002](phase2-topology-decision.md);
 [digital-twin-design.md](digital-twin-design.md) §1). The "HW twin"
 column is A2: QEMU **TCG** beside L4T on the Jetson Orin Nano. Its KVM
-boot is blocked by the GICv3/NISV defect ([orin-port.md](orin-port.md)
-risk register). The "Native" column is A4, the QNX Hypervisor running
+boot ~~is blocked~~ **was blocked** by the GICv3/NISV defect ([orin-port.md](orin-port.md)
+risk register). **2026-09-18: for the SDP's shipped `startup-qemu-virt` it still is —
+that day's control boot, same launch line and host, died 17 bytes after `FOUND GICv3
+ITS` — but an IFS carrying a `startup-qemu-virt` rebuilt with `-fno-auto-inc-dec`, from
+board source written in this repo, boots under `-enable-kvm` to procnto and its banner
+([logs/sample-boot/](../logs/sample-boot/)). A boot, not a number: nothing was timed, and
+it is not a QNX-supported configuration. The A2 cells below are not re-run or re-timed,
+and the hypervisor legs are untouched — QHV needs EL2 and ARM KVM does not nest on
+A78AE, so they stay TCG.** The "Native" column is A4, the QNX Hypervisor running
 natively on the Orin, and then v1, which adds a Linux guest. Its cells
 are placeholders until the v1 campaign. The ids are those of the plan's
 [architecture table](orin-native-port-plan.md#architecture-versions).
@@ -41,7 +48,7 @@ Verdicts wait for the v1 measurement campaign.
 
 | Concept | DRIVE OS implementation | Cloud twin (Windows PC, A1) | HW twin (Orin Nano, A2) | Native (Orin, A4 then v1) | Verdict |
 |---|---|---|---|---|---|
-| **VM partitioning** | NVIDIA Type-1 hypervisor on Tegra SoC | SDP 8.0 QHV (`qvm`) hosting **one** QNX guest under QEMU **TCG** (no `/dev/kvm` on cloud; [ADR-002](phase2-topology-decision.md)) | L4T host on A78AE; QEMU **TCG** (QNX) alongside native L4T; KVM boot blocked | _waits for the v1 campaign_ | **Validates** a **real `qvm` Type-1 partition boundary** (EL2↔EL1) on cloud, though TCG-emulated; **cannot** validate certified Type-1 isolation. The HW twin runs TCG, not KVM. |
+| **VM partitioning** | NVIDIA Type-1 hypervisor on Tegra SoC | SDP 8.0 QHV (`qvm`) hosting **one** QNX guest under QEMU **TCG** (no `/dev/kvm` on cloud; [ADR-002](phase2-topology-decision.md)) | L4T host on A78AE; QEMU **TCG** (QNX) alongside native L4T; KVM boot blocked | _waits for the v1 campaign_ | **Validates** a **real `qvm` Type-1 partition boundary** (EL2↔EL1) on cloud, though TCG-emulated; **cannot** validate certified Type-1 isolation. ~~The HW twin runs TCG, not KVM.~~ **The HW twin as measured (A2) ran TCG, not KVM. 2026-09-18: KVM is no longer blocked on that board — an IFS with a `startup-qemu-virt` we rebuilt boots under `-enable-kvm`, while the shipped startup still dies — but no A2 measurement was re-run under it and nothing was timed. QHV still needs EL2, which ARM KVM does not nest on A78AE, so the hypervisor legs stay TCG.** |
 | **Same Tegra silicon family** | Yes (Orin / Thor) | No — as built, an x86_64 Windows PC emulating `-cpu max` (the design host, Graviton, is Neoverse-V1) | Host **yes** — A78AE is the same family as DRIVE Orin's CCPLEX cores. The QNX side runs on QEMU's emulated `-cpu max` under TCG, not on the A78AE cores | _waits for the v1 campaign_ | Under TCG only the L4T host runs on Tegra-family cores; the QNX code does not. |
 | **Dual-OS coexistence** | QNX Safety + Linux Compute on one Tegra | **No Linux on cloud** — QNX host + QNX guest only (heterogeneity moved to Orin per [ADR-002](phase2-topology-decision.md)) | QNX in QEMU + L4T native (host) on one Tegra-family SoC | _waits for the v1 campaign_ | **Validates dual-OS only on the HW twin (Orin)**; the cloud leg validates the partition *mechanism* (QNX↔QNX), not OS heterogeneity. |
 | **Asymmetric workload** | Safety FuSa monitors / Compute DriveWorks | Console client/server (`qnx-host-client`, `qnx-server`); no real RT, no accelerators | A different client/server pair (a QNX TCP server and a native Linux client), the QNX side under TCG; A78AE has hardware RT support but L4T host is not RT-certified | _waits for the v1 campaign_ | **Partial** in both twins. Shape reproduced, substance not. |

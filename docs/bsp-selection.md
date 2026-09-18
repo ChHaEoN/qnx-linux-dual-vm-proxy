@@ -552,7 +552,7 @@ Open empirical questions for Phase 3:
   L1 hypervisor under a new-enough Linux — but that is a *nested*,
   trapped-EL2 number, needs the quota raise and a kernel that ships the
   mode, and would inherit the same startup GICv3 / NISV exposure under
-  KVM that blocks the plain guest today (findings.md 2026-07-29).
+  KVM that ~~blocks the plain guest today~~ **blocked the plain guest as shipped** (findings.md 2026-07-29). **2026-09-18: that exposure is removable — rebuilding the startup library with `-fno-auto-inc-dec` drops the writeback MMIO store, and an IFS carrying such a startup boots under `-enable-kvm` on the Orin Nano ([orin-port.md](orin-port.md) risk register). The SDP's shipped `startup-qemu-virt` still hangs. This says nothing about nested KVM, which remains untried, and no timing number was taken.**
   Citations:
   [AWS price feed, EU (Frankfurt), Linux on-demand (JSON, publication 2026-09-09)](https://b0.p.awsstatic.com/pricing/2.0/meteredUnitMaps/ec2/USD/current/ec2-ondemand-without-sec-sel/EU%20(Frankfurt)/Linux/index.json)
   **[verified 2026-09-09 by download + grep; a1 not present]**;

@@ -30,7 +30,12 @@
 # a workaround. That matters for how the resulting number is read: the Windows
 # side is TCG for the same reason, so for once TCG-on-both is *genuine
 # symmetry* rather than the incidental blockage the plain qnx-safety-vm leg
-# suffers from (docs/orin-port.md's GICv3/KVM_EXIT_ARM_NISV risk-register row).
+# ~~suffers from~~ suffered from until 2026-09-18 (docs/orin-port.md's
+# GICv3/KVM_EXIT_ARM_NISV risk-register row). 2026-09-18: that plain leg boots
+# under KVM with a startup-qemu-virt we rebuilt with -fno-auto-inc-dec (board
+# source orin-native/startup/qemu-virt/); the SDP's shipped startup still hangs.
+# The QHV leg is untouched by that -- it needs EL2/nested virtualisation, which
+# ARM KVM does not provide on A78AE, so TCG here is still a hard requirement.
 # Do not describe this leg as "TCG because KVM is broken" -- it is not.
 #
 # No sudo, no br0, no tap-qnx: this leg does no host networking whatsoever.

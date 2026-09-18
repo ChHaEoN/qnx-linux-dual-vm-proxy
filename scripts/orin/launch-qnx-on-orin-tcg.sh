@@ -16,7 +16,14 @@
 # 2026-07-28 decision to accept TCG as the interim transport. The KVM
 # invocation this mirrors (-cpu host -enable-kvm) is left as a documented,
 # NOT-deleted intent in launch-qnx-on-orin.sh -- swap -accel tcg for
-# -enable-kvm there once/if a QNX-side fix lands.
+# -enable-kvm there ~~once/if a QNX-side fix lands~~.
+# 2026-09-18: a fix now exists, but it is OURS, not QNX's -- board source at
+# orin-native/startup/qemu-virt/ plus the startup library rebuilt with
+# -fno-auto-inc-dec boots this board under -enable-kvm (procnto, "Startup
+# complete", guest banner; logs/sample-boot/orin-kvm-*.log). The SDP's shipped
+# startup-qemu-virt still hangs after "FOUND GICv3 ITS" on the same launch
+# line, so this is NOT a QNX-supported configuration, and no timing has been
+# measured under KVM.
 #
 # rng device: startup.sh's devb-virtio/random hardcode fixed virtio-mmio
 # slot offsets that only line up if -device args appear in exactly the

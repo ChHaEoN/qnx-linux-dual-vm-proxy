@@ -47,7 +47,9 @@
 > between the hypervisor host and its guest across the partition
 > boundary; the heterogeneous QNX-Safety / Linux-Compute split I carry
 > to a Jetson Orin Nano, where Linux (L4T) is the native host and the
-> QNX guest runs under TCG, because a GICv3 defect blocks the KVM boot.
+> QNX guest ~~runs~~ **ran** under TCG, because a GICv3 defect ~~blocks~~ **blocked** the KVM boot.
+
+**2026-09-18:** an IFS whose `startup-qemu-virt` was rebuilt with `-fno-auto-inc-dec`, from board source written in this repo, boots under `-enable-kvm` on the Orin; the SDP's shipped startup, same launch line, still hangs. Say it as a boot, never as a number — nothing was timed — and add that it is not a QNX-supported configuration.
 >
 > I want to be upfront about what each leg does and doesn't show. The
 > cloud leg crosses a *real* `qvm` EL2/EL1 partition boundary — that's
@@ -210,6 +212,8 @@ trend better than the multi-vendor story does.
 > deliverable, and knowing which one you're looking at is the actual
 > skill.
 
+**Superseded 2026-09-18 — a fourth path existed, and it worked. Do not recite the answer above as the current position; see the 2026-09-18 update at the end of this section.**
+
 **Update, 2026-07-29 — this got stronger, not weaker.** Provisioned an
 AWS `a1.metal` instance (Graviton1, Annapurna Labs SoC, Cortex-A72 —
 `c7g.metal`/Graviton3 was the intended cleaner same-generation comparison
@@ -223,6 +227,8 @@ vendor's silicon. If asked "did you validate that beyond the one board":
 > general defect in QNX's board bring-up code, not something specific to
 > one SoC — which changes how I'd prioritize: it's now a stronger case
 > to file with QNX/BlackBerry than a Jetson-specific curiosity would be.
+
+**Decision, 2026-09-18 — decided not to file.** The case for filing was real and is kept above as the reasoning at the time; it was overtaken by having our own fix. With a `startup-qemu-virt` rebuilt in this repo the guest boots under `-enable-kvm` on the Orin, so the project no longer needs the encoding changed by the vendor, and the owner decided not to report it to QNX/BlackBerry. If asked why not file anyway, that is the answer — a judgment call, not an oversight.
 
 **Update, 2026-09-11 — two later steps.** On 2026-09-08 I built QNX's
 own BSP startup-library source (`gic_v3.c`) with their own flags and got
@@ -241,6 +247,11 @@ from L4T, and it booted the cloud-leg QNX guest as a functional pass
 > and boots the same QNX guest the cloud leg uses. That is a functional
 > pass. The timed runs happen once, on a frozen reference architecture,
 > and publishing any evaluation result waits on a licence consultation.
+
+**Update, 2026-09-18 — boot-verified, and not being filed.** The blocker for path 1 was that QNX ships `startup-qemu-virt` as a binary but not its `qemu-virt` board source, so their startup could not be relinked. I wrote that board directory myself (`orin-native/startup/qemu-virt/`) and rebuilt the startup library with `-fno-auto-inc-dec`, which removes the post-indexed store (`str w3,[x0],#4` at GICD+0x420) that reports ISV=0. An IFS containing that startup boots under `-enable-kvm` on the Orin and reaches `Startup complete` and the guest banner; the SDP's shipped startup, same launch line, same host, same session, still dies 17 bytes in after `FOUND GICv3 ITS`. The test arm ran twice with byte-identical captures, and byte-identical again on QEMU 6.2.0 and 11.1.0, so the QEMU version is not a factor. If asked:
+> I stopped waiting on the vendor and rebuilt their board bring-up code from source with one compiler flag, and the guest booted under KVM. Two caveats I'd lead with: **it is not a QNX-supported configuration** — the fix lives in a startup I rebuilt, and QNX ships no such binary — and I took **no timing from it**, so it is a boot, not a number.
+
+What this does not touch: the QNX Hypervisor under KVM (QHV needs EL2/nested virt, which ARM KVM lacks on A78AE — unchanged), the GPU, and any isolation claim. **We decided not to file the defect with QNX/BlackBerry** (owner, 2026-09-18) now that the project has its own working startup. Logs: `logs/sample-boot/orin-kvm-*.log`.
 
 **Why this holds up under follow-up questions:** the finding is
 reproducible (documented across multiple boots, `docs/orin-port.md`'s

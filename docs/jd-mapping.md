@@ -61,7 +61,7 @@ project and should be addressed in interview, not by overclaiming:
 - "5+ years of related work experience in a technical or automotive industry"
   → background-dependent; portfolio supplements but does not substitute
 - "Camera/imaging/video/graphics/compute system" experience
-  → not in scope for this project (no GPU partition; the Orin's GPU is not exercised, and GPU pass-through is research only)
+  → not in scope for this project (no GPU partition; ~~the Orin's GPU is not exercised~~ **2026-09-18: the GPU was exercised once, as a measurement — a sustained FP32 FMA CUDA load on L4T, GR3D 84% mean / 99% peak, run twice with and twice without a QNX guest live beside it under KVM. No cost was measurable at n=2 per arm, and the concurrent arms are nominally faster, which is noise rather than a speedup. QNX still cannot use the GPU, nothing divides or partitions it, and no isolation claim follows** ([results/orin-native-port/20260918T-kvm-gpu/](../results/orin-native-port/20260918T-kvm-gpu/)); GPU pass-through is research only)
 - "Onsite customer support" history
   → behavioral / experiential
 

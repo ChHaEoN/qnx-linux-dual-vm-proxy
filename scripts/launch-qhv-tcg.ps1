@@ -25,7 +25,13 @@
   On the Orin side TCG is a hard requirement -- QHV needs EL2 for its guest,
   i.e. nested virtualisation, which ARM KVM does not offer on A78AE -- so
   TCG-on-both is genuine symmetry here, unlike the plain qnx-safety-vm leg
-  where Orin runs TCG only because KVM boot is blocked (docs/orin-port.md).
+  where Orin ~~runs TCG only because KVM boot is blocked~~ (docs/orin-port.md).
+  2026-09-18: on that plain leg, an IFS carrying a startup-qemu-virt WE rebuilt
+  with -fno-auto-inc-dec (board source orin-native/startup/qemu-virt/) does boot
+  under KVM; the SDP's shipped startup still hangs after "FOUND GICv3 ITS".
+  Nothing changes for THIS script: QHV still needs EL2/nested virtualisation,
+  which ARM KVM does not provide on A78AE, so TCG here remains a hard
+  requirement.
   See docs/findings.md (2026-06-11) and the curated log under logs/sample-boot/.
 
 .EXAMPLE

@@ -17,7 +17,12 @@ the *structural* picture that designs sits on top of.
   target, KVM-accelerated boot on the Orin never worked, and A2's IPC run
   used a rebuilt IFS. Two items stay open outside those phases: the
   `qvm`/TCG stall on A1 is still not root-caused, and the GICv3/NISV KVM
-  defect is a separate filing track.
+  defect is ~~a separate filing track~~ **(2026-09-18: decided against — the
+  owner decided not to report it to QNX/BlackBerry ([findings.md](findings.md)),
+  so this is no longer an open action and only the stall above remains open. The
+  defect is root-caused: an IFS carrying a `startup-qemu-virt` we rebuilt with
+  `-fno-auto-inc-dec` boots under KVM on the Orin, while the shipped binary still
+  hangs — not a QNX-supported configuration, no timing claim. Kept as a record.)**
 - **History since the 2026-09-11 freeze decision:** A3, the same hypervisor
   images in TCG on both hosts. Its twin legs run again only as v1 campaign
   work.
@@ -77,8 +82,17 @@ hosts: an x86_64 builder and an arm64 runtime.
 > AWS non-metal Graviton exposes **no `/dev/kvm`** — so the cloud leg
 > runs under QEMU **TCG** emulation, hosting the SDP 8.0 QHV (`qvm`)
 > and a single QNX guest. KVM acceleration was moved to Phase 3 (Orin), but
-> KVM boot there is blocked by the GICv3/NISV defect
-> ([orin-port.md](orin-port.md) risk register), so that leg runs TCG too.
+> ~~KVM boot there is blocked by the GICv3/NISV defect
+> ([orin-port.md](orin-port.md) risk register), so that leg runs TCG too.~~
+> **2026-09-18:** that leg ran TCG, and KVM boot there is still blocked for the
+> SDP's **shipped** `startup-qemu-virt`, which dies 17 bytes in after
+> `FOUND GICv3 ITS` (control arm, same host and session). An IFS carrying a
+> `startup-qemu-virt` **we rebuilt** from board source written that day
+> (`orin-native/startup/qemu-virt/`, startup library compiled
+> `-fno-auto-inc-dec`) boots under `-enable-kvm` to procnto and the guest banner
+> ([logs/sample-boot/orin-kvm-*.log](../logs/sample-boot/)). Not a QNX-supported
+> configuration — QNX ships no such binary — and no timing claim. QHV under KVM
+> is unaffected: it needs EL2/nested virt, which ARM KVM lacks on A78AE.
 
 Per the 2026-05-07 amendment in [findings.md](findings.md), the
 primary build host is a **local Windows PC** (the same machine that
@@ -190,8 +204,12 @@ not run inside its own QEMU VM on the hardware twin — L4T is already
 the host, so there is no point virtualising another Linux. This is
 slightly closer to DRIVE OS reality (Linux runs on Tegra natively;
 QNX is the partitioned guest), but is **still not** Type-1: the QNX
-guest is hosted by QEMU TCG on L4T (KVM boot is blocked; see
-[orin-port.md](orin-port.md)), which is host-mediated. The IPC run used an
+guest is hosted by QEMU TCG on L4T (~~KVM boot is blocked; see
+[orin-port.md](orin-port.md)~~ **2026-09-18:** KVM boot was blocked, and still is
+for the SDP's **shipped** `startup-qemu-virt`; an IFS with a startup **we
+rebuilt** (`-fno-auto-inc-dec`) boots under KVM on this board
+([logs/sample-boot/orin-kvm-*.log](../logs/sample-boot/)) — not QNX-supported, no
+timing claim), which is host-mediated either way. The IPC run used an
 IFS rebuilt to stage the TCP server ([orin-port.md](orin-port.md) step 4).
 
 ~~**Why this is the right way to use 8 GB:**~~ **2026-09-13: why A2 used the
@@ -339,8 +357,8 @@ BSP / customer-port engineering on arm64 silicon (Orin, Thor). An
 x86_64-only run would be architecturally off-target. Note (per
 [ADR-002](phase2-topology-decision.md)): the cloud runtime *wanted* KVM
 too, but non-metal Graviton has no `/dev/kvm`, so the cloud leg ~~runs~~
-ran (**2026-09-13:** A1, history) under TCG. KVM boot on the Phase-3 Orin twin is blocked too (GICv3/NISV;
-[orin-port.md](orin-port.md)), so that leg also ~~runs~~ ran (**2026-09-13:** A2, history) TCG. The arm64-on-target
+ran (**2026-09-13:** A1, history) under TCG. ~~KVM boot on the Phase-3 Orin twin is blocked too (GICv3/NISV;
+[orin-port.md](orin-port.md)), so that leg also~~ **2026-09-18:** KVM boot on the Phase-3 Orin twin was blocked too (GICv3/NISV; [orin-port.md](orin-port.md)), and still is for the SDP's **shipped** `startup-qemu-virt`; an IFS with a `startup-qemu-virt` **we rebuilt** (`-fno-auto-inc-dec`) boots under KVM on that board ([logs/sample-boot/orin-kvm-*.log](../logs/sample-boot/)) — not a QNX-supported configuration, no timing claim. That leg also ~~runs~~ ran (**2026-09-13:** A2, history) TCG. The arm64-on-target
 argument still holds (the IFS is aarch64 either way).
 
 **The IFS is arch-agnostic from the build host's perspective.**

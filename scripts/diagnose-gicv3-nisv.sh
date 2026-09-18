@@ -1192,10 +1192,10 @@ else
   record "ftrace capture of kvm_guest_fault / kvm_userspace_exit during a KVM boot" "BLOCKED" "needs a Linux/KVM host (Orin or arm64 metal) — not this one"
 fi
 record "TCG control boot of the same IFS on this host" "NOT RUN" "not executed by this script; existing TCG controls are classified above"
-record "KVM re-check with from-source QEMU 11.1.0 (--enable-kvm) on the Orin" "NOT RUN" "never performed; every NISV data point is QEMU 6.2.0 (scripts/orin/build-qemu-on-orin.sh built the binary)"
+record "KVM re-check with from-source QEMU 11.1.0 (--enable-kvm) on the Orin" "PASS" "run 2026-09-18, not by this script: the REBUILT-startup arm booted under 11.1.0 with serial output byte-identical to the two distro-6.2.0 runs, so the QEMU version is not a factor for it (logs/sample-boot/orin-kvm-fix-q1110.log). The SHIPPED startup was never run under 11.1.0 — every shipped-startup NISV data point is still 6.2.0"
 record "KVM variants -smp 1 / gic-version=host / its=off logged with n>=1 each" "NOT RUN" "asserted in docs/orin-port.md without logs or counts; commands printed below"
 record "a1.metal (or c7g.metal) re-run with ftrace to classify that hang as NISV by data" "NOT RUN" "a1.metal log is symptom-only; c7g.metal blocked by the 32-vCPU quota"
-record "Boot of a startup rebuilt with -fno-auto-inc-dec under KVM" "BLOCKED" "startup-qemu-virt cannot be relinked (BSP ships boards/armv8_fm, not boards/qemu-virt)"
+record "Boot of a startup rebuilt with -fno-auto-inc-dec under KVM" "PASS" "done 2026-09-18, not by this script: the BSP still ships boards/armv8_fm and not boards/qemu-virt, so the board source was written in-repo (orin-native/startup/qemu-virt/) and startup-qemu-virt relinked against a library built with the flag. That IFS boots under -enable-kvm on the Orin to procnto and 'Startup complete' (two byte-identical captures); the shipped startup on the same launch line and session still stops after 'FOUND GICv3 ITS'. Ours, not a QNX-supported binary; no timing claim"
 
 # ================================================================ render summary
 section "Writing summary"
@@ -1289,7 +1289,7 @@ emit "" "**Hypotheses (not yet shown by data):**" ""
 emit "- that the faulting IPA is 0x08000420 (GICD_IPRIORITYR<8>) — no HPFAR/IPA was ever captured; the address is derived from static disassembly plus the virt board map"
 emit "- that QEMU actually injected an external Data Abort and the guest is parked at VBAR_EL1+0x200 — inferred from strings in the QEMU binary and the vector slot content; no post-hang PC read"
 emit "- that the a1.metal hang is the same NISV mechanism — same symptom, no ESR/exit-reason data there"
-emit "- that removing the writeback store makes the guest boot under KVM — nothing rebuilt has been booted; startup-qemu-virt cannot be relinked"
+emit "- ~~that removing the writeback store makes the guest boot under KVM — nothing rebuilt has been booted; startup-qemu-virt cannot be relinked~~ 2026-09-18: shown by measurement. With board source written at orin-native/startup/qemu-virt/ and the startup library rebuilt with -fno-auto-inc-dec, the IFS reaches procnto and the guest banner under -enable-kvm on the Orin; the SDP's shipped startup, same launch line and session, still stops after FOUND GICv3 ITS. Our rebuild, not a QNX-supplied fix; no timing was measured"
 emit "- that the '-smp 1 / gic-version=host / its=off' variants hang identically — asserted, no logs or counts"
 emit "" "**What this run added:** decoder + classifier self-tests, log classification, image-hash check, tool inventory. It did not add hardware evidence (see matrix)."
 emit ""
@@ -1304,7 +1304,7 @@ emit "| 4 | Guest memory map / DTB mismatch (GICD base wrong, unmapped IPA) rath
 emit "| 5 | ITS involvement (its=on default, GITS programming) is the trigger | **WEAKENED (unlogged)** | faulting register is GICD not GITS; docs assert its=off hangs identically but no log/count exists |"
 emit "| 6 | vGIC device-creation failure (AGX Orin VmCreateGIC Error(19) family) | **REFUTED on both hosts** | bare vGIC smoke tests clean; guest runs far enough to print ITS discovery |"
 emit "| 7 | Tegra234 / Cortex-A78AE / VHE-specific silicon quirk | **WEAKENED (n=1)** | identical symptom on a1.metal (Annapurna A72, non-VHE host); single run, symptom-only |"
-emit "| 8 | QEMU-version-specific bug (6.2.0) fixed by a newer QEMU on KVM | **UNTESTED, assessed unlikely** | upstream KVM backend injects by design (no decode fallback for KVM); the from-source 11.1.0 --enable-kvm re-check was never run; a1.metal QEMU version unrecorded |"
+emit "| 8 | QEMU-version-specific bug (6.2.0) fixed by a newer QEMU on KVM | **UNLIKELY — partially tested 2026-09-18** | upstream KVM backend injects by design (no decode fallback for KVM). The REBUILT-startup arm was run on both distro 6.2.0 and from-source 11.1.0 and its serial output is byte-identical, so the fix is not version-dependent. This does NOT test the hypothesis for the shipped startup: that control arm ran on 6.2.0 only and was never run under 11.1.0; a1.metal QEMU version still unrecorded |"
 emit ""
 
 emit "## Missing evidence" ""
@@ -1315,7 +1315,7 @@ emit "- command lines, logs and counts for the -smp 1 / gic-version=host / its=o
 emit "- DTB (dumpdtb) and 'info mtree' from the failing KVM invocation; whether QNX startup reads the FDT at all"
 emit "- an ESR/exit-reason capture on a1.metal (or any second host) — currently symptom-only; QEMU version there"
 emit "- KVM re-check with the from-source QEMU 11.1.0 on the Orin; c7g.metal run (quota-blocked)"
-emit "- a bootable startup rebuilt with -fno-auto-inc-dec (needs the qemu-virt board source from QNX); an audit of libstartup.a beyond gic_v3.c"
+emit "- ~~a bootable startup rebuilt with -fno-auto-inc-dec (needs the qemu-virt board source from QNX)~~ 2026-09-18: obtained — board source written in-repo at orin-native/startup/qemu-virt/, not supplied by QNX; the startup rebuilt with -fno-auto-inc-dec booted under -enable-kvm on the Orin. Still missing: an audit of libstartup.a beyond gic_v3.c"
 emit "- guest-side data value at the fault (w3=0xA0A0A0A0 known only from the rebuilt object)"
 [[ -z "${esr_value}" ]]   && emit "- this run: no --esr supplied"
 [[ -z "${hpfar_value}${ipa_value}" ]] && emit "- this run: no --hpfar/--ipa supplied (no IPA comparison possible)"
@@ -1374,7 +1374,7 @@ bash scripts/diagnose-gicv3-nisv.sh --elf <scratch>/startup.* --elf-base 0x40081
 # whole-library sweep for writeback MMIO stores (extends the gic_v3.c-only audit)
 ntoaarch64-objdump -d <sdp>/target/qnx/aarch64le/usr/lib/libstartup.a | grep -E '(str|ldr)[a-z]* +[wx][0-9]+, \[x[0-9]+\], #' | wc -l
 
-### D. QNX / BlackBerry filing — what to attach (no binaries)
+### D. QNX / BlackBerry filing — what to attach (no binaries) — DECIDED AGAINST 2026-09-18 (owner): this defect will not be filed with QNX/BlackBerry. Block kept for the record; do not act on it.
 #  hsr=0x92000045 decode, KVM_EXIT_ARM_NISV, gic_v3.c disassembly excerpt + -fno-auto-inc-dec diff (docs/findings.md 2026-09-08),
 #  a1.metal cross-vendor log, request for boards/qemu-virt source or an SDP dot-release with the flag applied.
 CMDS

@@ -251,7 +251,7 @@ So today's local pair (ifs.bin + disk-qemu) is byte-identical to what hung on a1
 | KVM re-check with from-source QEMU 11.1.0 (--enable-kvm) on the Orin | **NOT RUN** | never performed; every NISV data point is QEMU 6.2.0. The from-source binary was configured with --enable-kvm (scripts/orin/build-qemu-on-orin.sh); kvm accelerator presence in that binary is not yet confirmed (no `-accel help` output recorded) |
 | KVM variants -smp 1 / gic-version=host / its=off logged with n>=1 each | **NOT RUN** | asserted in docs/orin-port.md without logs or counts; commands printed below |
 | a1.metal (or c7g.metal) re-run with ftrace to classify that hang as NISV by data | **NOT RUN** | a1.metal log is symptom-only; c7g.metal blocked by the 32-vCPU quota |
-| Boot of a startup rebuilt with -fno-auto-inc-dec under KVM | **BLOCKED** | startup-qemu-virt cannot be relinked (BSP ships boards/armv8_fm, not boards/qemu-virt) |
+| Boot of a startup rebuilt with -fno-auto-inc-dec under KVM | **BLOCKED** *(as of this 2026-09-09 run)* | ~~startup-qemu-virt cannot be relinked (BSP ships boards/armv8_fm, not boards/qemu-virt)~~ **2026-09-18: superseded.** The BSP still ships no `boards/qemu-virt`, but board source was written at `orin-native/startup/qemu-virt/` and the startup library rebuilt with `-fno-auto-inc-dec`; that IFS boots under `-enable-kvm` on the Orin to procnto and the guest banner, while the shipped startup on the same launch line, host and session still stops after `FOUND GICv3 ITS`. Our rebuild — QNX ships no such binary, and no timing was measured. Logs: logs/sample-boot/orin-kvm-*.log |
 | *(hand)* Static: exactly one `b8004403` (`str w3,[x0],#4`) in the IFS startup blob, at VA 0x40085978 | **PASS** | aligned scan of file range 0x10a0..0x2c0e8 of the sha256-identical ifs.bin; objdump window in raw/static-ifs-probe.txt |
 | *(hand)* Static: SDP `startup-qemu-virt` .text -> IFS mapping is a constant +0x40081800 (`_start`, `gic_v3_initialize`, store, `vbar_default` all consistent) | **PASS** | nm + dumpifs entry + byte comparison; raw/static-ifs-probe.txt |
 | *(hand)* Static: documented VBAR_EL1 0x4008d800 == linked `vbar_default`; all 16 vector slots are `b .` (0x14000000), incl. +0x200 | **PASS** | read from IFS bytes; dynamic 'parked there' still unobserved |
@@ -306,7 +306,7 @@ the data shows ISV=0 or a literal `KVM_EXIT_ARM_NISV`.
    carry `-fno-store-merging`. This session: the **shipped** `startup-qemu-virt` has the same four (2d above).
 8. **`-fno-auto-inc-dec` removes all four at compile level.** Adding it to the BSP's own flags takes the writeback-store count 4 -> 0; the loop
    becomes `add x0,x0,#4 / stur w3,[x0,#-4] / b.ne` (0xb81fc003 — no writeback, expected ISV=1 by the same architectural rule). **Nothing
-   rebuilt has been booted**; `startup-qemu-virt` cannot be relinked because the BSP ships `boards/armv8_fm/` but not `boards/qemu-virt/`.
+   rebuilt has been booted**; ~~`startup-qemu-virt` cannot be relinked because the BSP ships `boards/armv8_fm/` but not `boards/qemu-virt/`~~ **2026-09-18: superseded.** The BSP still ships no `boards/qemu-virt/`, but board source was written at `orin-native/startup/qemu-virt/`, the startup library was rebuilt with `-fno-auto-inc-dec`, and that IFS boots under `-enable-kvm` on the Orin to procnto and the guest banner; the shipped startup, same launch line and session, still stops after `FOUND GICv3 ITS`. Our rebuild only — QNX ships no such binary, and no timing was measured.
 9. **Pre-conditions hold on both hosts.** Orin: `/dev/kvm` usable, dmesg `VHE mode initialized successfully`, bare vGIC smoke test clean,
    `gic-version=2` refused by KVM. a1.metal: vGIC smoke test clean. The AGX-Orin `VmCreateGIC Error(19)` failure does not reproduce on the Nano.
 10. **Asserted without logs or counts** (docs/orin-port.md): the hang is identical at `-smp 1`/`-smp 2`, `gic-version=3`/`host`, with/without `its=off`.
@@ -324,8 +324,7 @@ the data shows ISV=0 or a literal `KVM_EXIT_ARM_NISV`.
 - **H-C. The a1.metal hang is the same NISV mechanism.** Symptom identity only, n=1. Settled by one ftrace-instrumented re-run there
   (or on c7g.metal, quota permitting).
 - **H-D. The traced PC will be 0x40085978.** Static candidate (2a/2b). Settled by the trace `pc=` field.
-- **H-E. Removing the writeback stores makes the guest boot under KVM.** Compile-level proof of the first link only; needs a bootable
-  startup (QNX's `boards/qemu-virt` source or a dot-release) and a KVM boot.
+- **H-E. Removing the writeback stores makes the guest boot under KVM.** ~~Compile-level proof of the first link only; needs a bootable startup (QNX's `boards/qemu-virt` source or a dot-release) and a KVM boot.~~ **2026-09-18: settled by measurement.** Board source written in-repo at `orin-native/startup/qemu-virt/` (not from QNX), startup library rebuilt with `-fno-auto-inc-dec`; that IFS boots under `-enable-kvm` on the Orin to procnto and the guest banner — run twice with byte-identical captures, and identical on QEMU 6.2.0 and 11.1.0 — while the shipped startup on the same launch line and session stops after `FOUND GICv3 ITS`. No timing was measured; not a QNX-supported configuration.
 - **H-F. The `-smp 1` / `gic-version=host` / `its=off` variants hang identically.** Asserted; one logged run each would settle it.
 - **H-G. A newer QEMU on KVM does not help.** Analysis (the KVM backend injects by design; a decode fallback exists only as an HVF RFC);
   the from-source QEMU 11.1.0 on the Orin (configured with `--enable-kvm`; kvm accelerator presence in that binary not yet confirmed) has never been tried against this IFS.
@@ -380,9 +379,7 @@ Genuinely absent from the repo and from this results dir (not merely "not passed
   (32-vCPU quota vs 64 needed).
 - **Logged runs (n>=1 each) of the `-smp 1`, `gic-version=host` and `its=off` variants** — asserted in one sentence.
 - **The QEMU 11.1.0 `--enable-kvm` re-check on the Orin** — binary built 2026-09-09, never run against this IFS; every NISV data point is 6.2.0.
-- **A QNX-side fix and its boot** — a `startup-qemu-virt` built with `-fno-auto-inc-dec` (blocked on `boards/qemu-virt` source or an SDP
-  dot-release), booted under KVM. Also a `libstartup.a`-wide MMIO-writeback audit: this session covered only the gic-named functions of the
-  shipped startup; findings.md covered only `gic_v3.c`.
+- ~~**A QNX-side fix and its boot** — a `startup-qemu-virt` built with `-fno-auto-inc-dec` (blocked on `boards/qemu-virt` source or an SDP dot-release), booted under KVM.~~ **2026-09-18: obtained, and it is not a QNX-side fix** — board source was written at `orin-native/startup/qemu-virt/` and the startup library rebuilt with `-fno-auto-inc-dec`; that IFS boots under `-enable-kvm` on the Orin. QNX ships no such binary, so this is not a supported configuration, and no timing was measured. Still missing: a `libstartup.a`-wide MMIO-writeback audit — this session covered only the gic-named functions of the shipped startup; findings.md covered only `gic_v3.c`.
 - **The live guest data value** (w3 = 0xA0A0A0A0 is known only statically from the `movk`).
 - Run-level gaps of this results dir: `--hpfar/--ipa`, `--dtb`, `--monitor-socket/--qmp-socket` were not supplied (nothing exists to supply);
   `--elf/--guest-pc` was withheld by rule (no recorded PC).
@@ -457,7 +454,7 @@ timeout 150 <qemu-6.2.0>/qemu-system-aarch64 -machine virt,gic-version=3 -accel 
 # C5. wider static audit still open: sweep libstartup.a (not just the shipped startup's gic-named functions)
 ntoaarch64-objdump -d <sdp-root>/target/qnx/aarch64le/usr/lib/libstartup.a | grep -E '^\s+[0-9a-f]+:\s+[0-9a-f]+\s+st[a-z]*\s.*(\[x[0-9]+\], #|\]!)' | grep -v '\[sp' | wc -l
 
-### D. QNX / BlackBerry filing — what to attach (no binaries, no full listings)
+### D. QNX / BlackBerry filing — what to attach (no binaries, no full listings) — DECIDED AGAINST 2026-09-18 (owner): this defect will not be filed with QNX/BlackBerry. Kept for the record; do not act on it. The boards/qemu-virt source request below is moot -- that board source was written in-repo at orin-native/startup/qemu-virt/ on 2026-09-18.
 #  hsr=0x92000045 decode + the literal KVM_EXIT_ARM_NISV; the 9-instruction loop excerpt (2a) with the three-way match
 #  (rebuilt gic_v3.o / shipped startup-qemu-virt / booted IFS at 0x40085978); the -fno-auto-inc-dec 4 -> 0 diff (docs/findings.md 2026-09-08);
 #  the a1.metal cross-vendor log (instance id redacted); request: boards/qemu-virt source, or an SDP dot-release with the flag applied,

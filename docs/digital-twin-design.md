@@ -47,7 +47,7 @@ A short table of what crosses the twin boundary:
 | Wire protocol (sequence + timestamp + payload) | **Yes** | Fixed-width binary frame, ~~version-tagged~~ **2026-09-11:** with no version tag (`ipc-test/common/frame.h`; see §3) |
 | Test harness + benchmark scripts | ~~**Yes**~~ **CSV schema only** | ~~Same `run-bench.sh`;~~ output CSV format is identical. **2026-09-11:** No `run-bench.sh` exists. The legs use different programs and launchers. Only the CSV schema is shared (`results/cloud/header.csv`, `results/hw/header.csv`) |
 | QEMU command line (machine/CPU/mem) | **Mostly** | `-machine virt,gic-version=3 -cpu ... -m 1G` shape is shared; see the accel row for the cloud/Orin split |
-| QEMU acceleration | **TCG on both — for two different reasons** | This row previously read "cloud = tcg; Orin = `-enable-kvm` (KVM works on A78AE)". That is **no longer true and should not be quoted**: Orin's KVM boot is blocked by the GICv3 / `KVM_EXIT_ARM_NISV` defect ([orin-port.md](orin-port.md)), so the plain `qnx-safety-vm` leg runs TCG there *because KVM is broken*. On the **QHV leg** TCG is instead a hard architectural requirement on both sides — QHV needs EL2 for its guest, i.e. nested virtualisation, which ARM KVM does not provide on A78AE. Keep the two apart when reporting: only the QHV leg's TCG-on-both is genuine symmetry |
+| QEMU acceleration | **TCG on both — for two different reasons** | This row previously read "cloud = tcg; Orin = `-enable-kvm` (KVM works on A78AE)". That is **no longer true and should not be quoted**: ~~Orin's KVM boot is blocked by the GICv3 / `KVM_EXIT_ARM_NISV` defect ([orin-port.md](orin-port.md)), so the plain `qnx-safety-vm` leg runs TCG there *because KVM is broken*.~~ **2026-09-18:** the A2 leg ran TCG because the SDP's **shipped** `startup-qemu-virt` hangs under KVM after `FOUND GICv3 ITS` — reproduced as a control that day. An IFS carrying a `startup-qemu-virt` **we rebuilt** (board source `orin-native/startup/qemu-virt/`, startup library compiled `-fno-auto-inc-dec`) boots under `-enable-kvm` to procnto and the guest banner (`logs/sample-boot/orin-kvm-*.log`); not a QNX-supported configuration — QNX ships no such binary — and no timing claim. On the **QHV leg** TCG is instead a hard architectural requirement on both sides — QHV needs EL2 for its guest, i.e. nested virtualisation, which ARM KVM does not provide on A78AE, and nothing measured on 2026-09-18 changes that. Keep the two apart when reporting: only the QHV leg's TCG-on-both is genuine symmetry |
 | IPC transport | **Different by design** | Cloud: host↔guest `qvm` virtio-console (single-OS QNX↔QNX); Orin: QNX↔Linux virtio-net ~~over KVM bridge~~ **2026-09-11:** over the `br0` bridge, under TCG. The legs no longer share an identical topology — see §4 |
 | Linux Compute side | **Different by design** | Cloud: **no Linux guest** (single QNX guest under QHV); HW: L4T native (host OS). See §2/§3. **2026-09-14:** right for A1, stale for v1: S1 plans a Linux guest under native qvm, and v1's TCG twin legs would boot it in their QHV host image ([plan](orin-native-port-plan.md#architecture-versions-and-the-measurement-freeze-decided-2026-09-11), v1 row and campaign item 6) |
 | Host kernel | **Different by design** | This is exactly the variable being studied |
@@ -329,8 +329,15 @@ been corrected below.
   native host, and is the **committed home of the heterogeneous QNX↔Linux
   IPC**. This is closer to "real Tegra Linux runs natively"; QNX is the
   one thing being virtualised. (This sentence originally ended "and KVM actually
-  works on the A78AE" — it does not for the QNX IFS: KVM boot hangs on the
-  GICv3/NISV defect in [orin-port.md](orin-port.md), and the leg runs TCG.)
+  works on the A78AE" — ~~it does not for the QNX IFS: KVM boot hangs on the
+  GICv3/NISV defect in [orin-port.md](orin-port.md), and the leg runs TCG.~~
+  **2026-09-18:** the leg ran TCG, and an IFS with the SDP's **shipped**
+  `startup-qemu-virt` still hangs under KVM on the GICv3/NISV defect (control
+  re-run that day). An IFS with a `startup-qemu-virt` **we rebuilt**
+  (`-fno-auto-inc-dec`, board source `orin-native/startup/qemu-virt/`) boots
+  under KVM on the A78AE to procnto and the guest banner —
+  `logs/sample-boot/orin-kvm-*.log`. Not QNX-supported, no timing claim, and
+  nothing about QHV under KVM, which still needs nested virt.)
   Putting Linux in its own QEMU VM on Orin Nano would burn 2 GB extra
   RAM for no narrative benefit.
 
@@ -439,11 +446,18 @@ just having one canonical artefact.
 > single-OS QNX↔QNX exchange over a `qvm` virtio-console vdev under
 > **TCG**, whereas Orin is a heterogeneous QNX↔Linux exchange over
 > virtio-net bridged under **TCG** (this paragraph originally said "under
-> KVM" — wrong; Orin's KVM boot is blocked, see
-> [orin-port.md](orin-port.md)). The IPC diff therefore confounds at
+> KVM" — wrong; ~~Orin's KVM boot is blocked, see
+> [orin-port.md](orin-port.md)~~ **2026-09-18:** that leg ran under TCG because
+> the **shipped** `startup-qemu-virt` hangs under KVM; an IFS with a startup we
+> rebuilt boots under KVM on the board — `logs/sample-boot/orin-kvm-*.log`, not
+> QNX-supported and not timed — which does not change what this A2 leg
+> measured). The IPC diff therefore confounds at
 > least three variables — host (as built: a local Windows x86_64 PC vs. A78AE;
-> Graviton was the design intent), acceleration (**TCG on both** since the Orin
-> KVM boot is blocked — this line originally said "TCG vs. KVM"), and transport+OS-pair (console/QNX↔QNX vs. virtio-net/QNX↔Linux)
+> Graviton was the design intent), acceleration (**TCG on both** ~~since the Orin
+> KVM boot is blocked~~ **(2026-09-18: since the Orin KVM boot was blocked for the
+> SDP's shipped `startup-qemu-virt`; an IFS with a startup we rebuilt boots under
+> KVM, so the block is specific to that binary — what this diff measured was still
+> TCG on both)** — this line originally said "TCG vs. KVM"), and transport+OS-pair (console/QNX↔QNX vs. virtio-net/QNX↔Linux)
 > — and the methodology must say so explicitly rather than presenting
 > the IPC delta as a host-only effect. The cloud IPC number is
 > TCG-emulation-bound (a *mechanism-alive* sanity figure), so **neither** leg yields a hardware-timed transport number (this originally
