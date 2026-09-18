@@ -1,0 +1,18 @@
+---> Starting slogger2
+---> Starting PCI Services
+---> Starting fsevmgr
+# ---> Starting devb
+xpt_configure:  No virtio interfaces found
+Unable to access /dev/hd0
+---> Mounting file systems
+---> Mounting file systems
+mount: Can't mount /boot (type qnx6) 
+mount: Possible reason: Invalid argument 
+mount: Can't mount /system (type qnx6) 
+mount: Possible reason: Invalid argument 
+mount: Can't mount /data (type qnx6) 
+mount: Possible reason: Invalid argument 
+/proc/boot/mount_fs.sh[54]: /system/bin/cleanup_tmp: cannot execute - No such file or directory
+No system file system, giving up.
+Startup complete
+Unable to start "uname" (2)

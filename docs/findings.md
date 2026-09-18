@@ -9,6 +9,64 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-18 — QNX boots under KVM on the Orin: the GICv3/NISV blockage is cleared at the source
+
+Since 2026-07-28 every KVM boot of the QNX IFS on this board ended identically — `FOUND GICv3 ITS`,
+then seventeen bytes and silence — and on 2026-07-29 the same hang reproduced on a second vendor's
+silicon ([a1.metal](../logs/sample-boot/aws-a1-metal-kvm-nisv-repro.log), Graviton1 / Cortex-A72).
+On 2026-09-08 it was root-caused to a writeback MMIO store (`str w3,[x0],#4`, GICD+0x420) that
+reports no instruction syndrome (ISV=0), which KVM cannot decode, so the guest exits
+`KVM_EXIT_ARM_NISV`. The fix was known and unusable: `-fno-auto-inc-dec` removes that instruction
+form, but relinking `startup-qemu-virt` needs its board source, and **the SDP ships that binary
+without its source**. That is what changed today — we wrote the board.
+
+**What was built.** `orin-native/startup/qemu-virt/`, written against the device tree QEMU actually
+generates rather than copied from `t234-orin-nano`: the PSCI conduit is probed from the tree
+(`method = "hvc"`) instead of forced to SMC, `psci_cpu_id` is left as the library's identity mapping
+(the virt machine's MPIDRs are flat, unlike Tegra's), and RAM comes wholly from `init_raminfo_fdt()`.
+The startup library was rebuilt with `-fno-auto-inc-dec`; non-SP writeback stores in `gic_v3.o` went
+to **0**, counted from 2,295 disassembled lines of our own build — never from a QNX-shipped binary
+(NC QDL v7 4.6(c) stays clean).
+
+**Which startup is actually in the image, on two independent discriminators.** The IFS was built by
+running `mkifs` directly with an overlay repo ahead of `$QNX_TARGET` in `MKFS_PATH`, so the bare name
+`startup-qemu-virt` resolves to ours without touching the SDK. Proof it did: the `_CS_MACHINE` string
+we compiled in appears **once** in our image and **zero** times in the known-good one, with a positive
+control (our startup ELF 1 hit, the SDK's 0); and the startup entry point differs, `40081ab8` vs
+`40081da8`. This mattered — `ifs.build` sets `[+optional]`, so an unresolved file is skipped silently
+and `mkifs` still exits 0. A zero exit proves nothing here; only the contents do.
+
+**The experiment.** One variable, the IFS. Control — the SDP's shipped startup, same launch line, same
+host, same session: 17 bytes, dead after `FOUND GICv3 ITS`, the historic hang reproduced today. Test —
+652 bytes, through to `Startup complete`, run twice with **byte-identical** captures. Repeated on QEMU
+6.2.0 and 11.1.0 with byte-identical output, so the QEMU version is not a factor. With disk, net and
+rng presented in the slot order [`launch-qnx-on-orin-tcg.sh`](../scripts/orin/launch-qnx-on-orin-tcg.sh)
+documents, the guest reaches `Process count:22`, brings up `io-sock`, starts sshd, and its echo server
+listens on :7000 — and prints its own banner:
+
+```
+QNX qnx-safety 8.0.0 2026/02/27-10:59:13EST QEMU_virt_(aarch64),_KVM_guest aarch64le
+```
+
+Captures: [`logs/sample-boot/orin-kvm-*.log`](../logs/sample-boot/) — control, two test runs, the
+11.1.0 arm, the with-disk arm, and the full boot (guest IP redacted at the source).
+
+**What this does not show.** No timing, latency, throughput or boot-time claim of any kind — none was
+measured. Nothing about two guests under KVM. Nothing about the GPU. **Nothing about the QNX
+Hypervisor under KVM**: QHV needs EL2, ARM KVM does not nest on A78AE, and that limitation is
+untouched by this — do not read this entry as making the QHV legs KVM-capable. No isolation or
+freedom-from-interference claim. And this is **not a supported configuration**: the fix lives in a
+startup we rebuilt, and QNX ships no such binary — so it is evidence about a defect, not a product
+capability.
+
+**Not being filed (owner decision, 2026-09-18).** The evidence chain is now as strong as it will get —
+their own BSP source emits the instruction, one flag removes it, and a matched control/test boot pair
+on real silicon separates the two. The owner decided not to report it to QNX/BlackBerry. Earlier
+entries and action items proposing that filing are superseded by this decision, not by new evidence.
+
+---
+
+
 ## 2026-09-17 — the harness self-test's verdict depended on how fast it ran, and four checks drifted
 
 Found while checking whether the X-f-c gate change had broken anything: `s1-board.sh harness-selftest`
