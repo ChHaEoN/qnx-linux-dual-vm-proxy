@@ -1,0 +1,30 @@
+---> Starting slogger2
+---> Starting PCI Services
+---> Starting fsevmgr
+# ---> Starting devb
+Path=0---> Mounting file systems
+ - 
+ target=0 lun=0     Direct-Access(0) - VIRTIO  Rev: 
+---> Mounting file systems
+---> Starting Networking
+---> Starting sshd
+---> Starting misc
+=== Phase 3: static IP for br0/tap-qnx ===
+=== Phase 3: starting qnx-echo-server-net on :7000 ===
+server: echo endpoint listening on <REDACTED-IP>:7000 (frame=64 bytes)
+
+To exit QEMU, type <ctrl>a x
+
+Process count:22
+Startup complete
+QNX qnx-safety 8.0.0 2026/02/27-10:59:13EST QEMU_virt_(aarch64),_KVM_guest aarch64le
+server: client connected from <REDACTED-IP>:53832
+server: client EOF after 3 frames
+server: client connected from <REDACTED-IP>:53842
+server: client EOF after 5 frames
+server: client connected from <REDACTED-IP>:45630
+server: client EOF after 5 frames
+server: client connected from <REDACTED-IP>:43456
+server: client EOF after 3 frames
+server: client connected from <REDACTED-IP>:34344
+server: client EOF after 5 frames

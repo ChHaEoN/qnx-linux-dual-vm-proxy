@@ -16,6 +16,25 @@ QNX liveness: `probe_qnx.py` sends valid 64-byte frames (ipc-test/common/frame.h
 layout) to the guest's echo server via slirp hostfwd 17000->7000 and requires a
 byte-exact echo.
 
+## Artefact provenance — read this before citing the table
+
+The IFS is pinned: `ifs-kvmfix.bin`, sha256 `26170cd7dc74c216…`, verified identical
+on the PC and the board before the runs, and its marker string proves the rebuilt
+`startup-qemu-virt` is the one inside it.
+
+The **guest disk is not pinned, and was never claimed to be.** The runs used
+`disk-qemu` **without `-snapshot`**, so the guest wrote to it: on the board it now
+hashes `f326b792486805c9406c1a0c6ccd6489bf2714aaf708aabc57f96cf06810ce68`, modified
+during today's boots, and that value appears nowhere else in this repo. The PC copy
+is `fd2ee67d…` (matching the a1.metal transfer-time hash), and
+`qnx-safety-vm/output/SHA256SUMS` lists a third, `f3667fe3…`, which the 2026-09-09
+analysis already established as the stale artefact.
+
+None of the figures below depend on the disk's contents: the GPU throughput is
+measured on L4T, and guest liveness is a byte-exact frame echo. But a later reader
+should not infer a pinned disk from a pinned IFS. Future runs of this harness should
+pass `-snapshot` so the disk stops drifting.
+
 ## Results
 
 | arm | QNX guest | mean GFLOP/s | GR3D mean | GR3D peak | rounds |

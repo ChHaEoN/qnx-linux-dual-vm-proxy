@@ -19,3 +19,16 @@ if [ -x /proc/boot/qnx-echo-server-net ]; then
 else
   echo "post_start.custom: /proc/boot/qnx-echo-server-net not staged; skipping"
 fi
+
+# Phase 3b (2026-09-18, docs/findings.md): the Safety end of the cross-partition
+# service. Kept SEPARATE from the echo server above, on its own port, rather than
+# replacing it: the echo endpoint is what the KVM-concurrency liveness probe talks
+# to, and folding the two together would make one experiment's result depend on
+# the other's code. The monitor interprets a claim and answers with a verdict; the
+# echo server still only echoes.
+echo "=== Phase 3b: starting qnx-safety-monitor on :7100 ==="
+if [ -x /proc/boot/qnx-safety-monitor ]; then
+  /proc/boot/qnx-safety-monitor &
+else
+  echo "post_start.custom: /proc/boot/qnx-safety-monitor not staged; skipping"
+fi

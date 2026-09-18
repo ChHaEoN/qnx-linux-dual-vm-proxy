@@ -34,6 +34,7 @@ qnx710/
 ipc-test/qnx-server/qnx-echo-server
 ipc-test/qnx-host-client/qnx-host-client
 ipc-test/qnx-server-net/qnx-echo-server-net
+ipc-test/qnx-safety-monitor/qnx-safety-monitor
 ipc-test/qnx-host-shmem-probe/hyp-shm-probe
 ipc-test/qnx-host-shmem-probe/hyp-shm-roundtrip
 ipc-test/qnx-guest-shmem-probe/gshm-probe
@@ -64,6 +65,11 @@ results/orin-native-port/*/s1/
 # Logs (allow only the curated samples under logs/sample-boot/)
 *.log
 !logs/sample-boot/*.log
+# Curated run records under results/orin-native-port/<utc>/ are evidence, not
+# build noise -- the .out files in those directories are already tracked, and a
+# blanket *.log silently excluded the guest-side captures that findings.md cites
+# (2026-09-18: both the KVM-concurrency and cross-partition-demo consoles).
+!results/orin-native-port/*/*.log
 
 # Python
 __pycache__/

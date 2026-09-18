@@ -9,6 +9,53 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-18 — a service across the partition: L4T infers on the GPU, QNX judges the claim
+
+With QNX booting under KVM and the GPU staying with L4T, the architecture is finally in a state
+where something can be *built on it* rather than about it. This is the first cross-partition
+service: **L4T classifies a real image on the GPU and QNX decides whether to believe it.**
+
+**The two ends.** On L4T, `compute_client` loads a TensorRT engine, reads an actual MNIST PGM from
+`/usr/src/tensorrt/data/mnist/`, runs it on the Ampere GPU, and takes class and confidence from the
+network's own output — never fabricated; if it cannot classify it exits non-zero. It sends class,
+confidence and its own GPU time as a 64-byte frame in the existing
+[`ipc-test/common/frame.h`](../ipc-test/common/frame.h) layout. In the QNX guest,
+[`ipc-test/qnx-safety-monitor/`](../ipc-test/qnx-safety-monitor/) checks the claim against
+plausibility rules and writes a verdict back. Transport is a **real `br0`/`tap-qnx` bridge**, not
+slirp — the guest at a static address, reachable both ways.
+
+**Both arms ran on the board.**
+
+| arm | inference | claim | monitor verdict |
+|---|---|---|---|
+| valid | `3.pgm` → class 3, 100%, 0.124 ms | as measured | **ACCEPT** (`reason=ok`), rc=0 |
+| corrupted | `7.pgm` → class 7, 100%, 0.125 ms | class forced to 42 | **REJECT** (`class-out-of-range`), rc=3 |
+
+The guest's own console corroborates independently:
+`monitor: REJECT seq=1 class=42 conf=100 us=125 reason=class-out-of-range`, with counters moving
+`seen=1 accepted=1 rejected=0` then `seen=1 accepted=0 rejected=1`. The verdict logic was also
+self-tested at its boundaries (10/10: `conf=60` accept vs `59` reject, `100000us` accept vs
+`100001us` reject, and check ordering). Console capture:
+[`results/orin-native-port/20260918T-kvm-gpu/`](../results/orin-native-port/20260918T-kvm-gpu/).
+
+**Two engineering notes worth keeping.** The monitor is started from **inside the IFS**, on a line
+placed after `startup.sh` returns — `post_startup.sh` lives in the system partition, so auto-starting
+it the conventional way would have meant rewriting `disk-qemu`, which published results depend on.
+And this run used `-snapshot`: the disk hash was byte-identical before and after, fixing the silent
+drift the concurrency runs had (recorded in that run's provenance note).
+
+**What this does not show.** The monitor is **not a safety mechanism in any ISO 26262 sense** and no
+ASIL claim attaches to it; its rules are legible plausibility checks, not a validated diagnostic. No
+timing or latency claim — the frame round trip was never measured as a latency, and the inference
+figure is TensorRT's own for one execution, not a benchmark. Nothing here shows isolation,
+containment or freedom from interference: the boundary is KVM, where **Linux owns the QNX guest's
+memory**, which is the inverse of the Type-1 arrangement this project's DRIVE OS comparison is
+against. QNX still cannot touch the GPU. One image per arm, one run each — a demonstration that the
+shape works, not a result about how well.
+
+---
+
+
 ## 2026-09-18 — L4T keeps the GPU at full throughput while QNX runs beside it under KVM
 
 The KVM fix above is only interesting if it buys something. What it buys is the architecture the

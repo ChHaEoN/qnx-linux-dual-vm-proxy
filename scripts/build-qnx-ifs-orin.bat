@@ -1,7 +1,14 @@
 @echo off
 REM ============================================================================
 REM build-qnx-ifs-orin.bat -- rebuild qnx-safety-vm with the Phase-3 (Orin)
-REM TCP echo server staged in, auto-started, with a static vtnet0 IP.
+REM TCP echo server AND the Phase-3b cross-partition safety monitor staged in,
+REM both auto-started, with a static vtnet0 IP.
+REM
+REM The two are staged side by side on purpose, not one replacing the other:
+REM the echo endpoint (:7000) is what the KVM-concurrency liveness probe talks
+REM to, and the safety monitor (:7100) interprets a claim from the Compute side
+REM and answers with a verdict. Folding them together would make one
+REM experiment's result depend on the other's code.
 REM
 REM Run on: the same Windows QNX SDP 8.0 build host as build-qnx-ifs.bat.
 REM
@@ -33,6 +40,7 @@ set "REPO_ROOT_FWD=%REPO_ROOT:\=/%"
 set "IPC_DIR=%REPO_ROOT%\ipc-test"
 set "BUILD_DIR=%REPO_ROOT%\qnx-safety-vm"
 set "SERVER_BIN_FWD=%REPO_ROOT_FWD%/ipc-test/qnx-server-net/qnx-echo-server-net"
+set "MONITOR_BIN_FWD=%REPO_ROOT_FWD%/ipc-test/qnx-safety-monitor/qnx-safety-monitor"
 
 if "%QNX_INSTALL_ROOT%"=="" set "QNX_INSTALL_ROOT=%USERPROFILE%\qnx800"
 if not exist "%QNX_INSTALL_ROOT%\qnxsdp-env.bat" (
@@ -46,7 +54,7 @@ where mkqnximage >nul 2>&1 || (
   exit /b 1
 )
 
-echo [1/4] Building ipc-test binaries (qnx-echo-server-net, plus the Phase-2 pair) ...
+echo [1/4] Building ipc-test binaries (qnx-echo-server-net, qnx-safety-monitor, plus the Phase-2 pair) ...
 pushd "%IPC_DIR%"
 call make || (
   echo ERROR: ipc-test build failed. & popd & exit /b 1
@@ -54,6 +62,9 @@ call make || (
 popd
 if not exist "%SERVER_BIN_FWD:/=\%" (
   echo ERROR: %SERVER_BIN_FWD% not found after ipc-test build. & exit /b 1
+)
+if not exist "%MONITOR_BIN_FWD:/=\%" (
+  echo ERROR: %MONITOR_BIN_FWD% not found after ipc-test build. & exit /b 1
 )
 
 echo [2/4] Staging Phase-3 auto-start snippet + server binary reference ...
@@ -63,6 +74,7 @@ copy /Y "%SCRIPT_DIR%orin\qnx-safety-vm-post_start.custom" "%BUILD_DIR%\local\sn
 )
 (
   echo [perms=555] qnx-echo-server-net=%SERVER_BIN_FWD%
+  echo [perms=555] qnx-safety-monitor=%MONITOR_BIN_FWD%
 ) > "%BUILD_DIR%\local\snippets\ifs_files.custom" || (
   echo ERROR: could not stage ifs_files.custom & exit /b 1
 )
