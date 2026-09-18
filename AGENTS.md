@@ -65,7 +65,7 @@ the NVIDIA AVOS / DRIVE OS SE role this portfolio targets.
   `virtio-console` vdev — crosses the real EL2/EL1 partition boundary, TCG-emulated,
   **no** `br0`/tap (host `io-sock` never comes up because the launch line presents no virtio-net/-rng device — a launch-line omission per ADR-002 RQ-4, not an image property; with the devices presented it does). See [ADR-002](docs/phase2-topology-decision.md).
 - IPC (Phase 3 / Orin leg): heterogeneous QNX↔Linux over host bridge `br0` + tap
-  devices (`tap-qnx` / `tap-linux`) + virtio-net under TCG (KVM boot is blocked; `docs/orin-port.md`) — this bridged path
+  devices (`tap-qnx` / `tap-linux`) + virtio-net under TCG (~~KVM boot is blocked~~ **KVM boot was blocked when this ran; 2026-09-18: blocked for the SDP's shipped `startup-qemu-virt` only — an IFS carrying a `startup-qemu-virt` we rebuilt with `-fno-auto-inc-dec` boots under KVM on the board. This path was not re-run under it and nothing was timed**; `docs/orin-port.md`) — this bridged path
   belongs to Orin, **not** the cloud leg.
 - Reference architecture: NVIDIA DRIVE OS dual-VM partition design (public docs)
 
@@ -262,7 +262,7 @@ Quick summary for context:
 - Phase 3 — Hardware twin (Jetson Orin Nano) — **substantial, not
   closed**: heterogeneous QNX to Linux IPC over a real `br0`/`tap-qnx`
   bridge works — two clean 100,000-iteration runs, zero errors
-  (`results/hw/orin-ipc-latest.csv`). **KVM boot is blocked** by a
+  (`results/hw/orin-ipc-latest.csv`). **KVM boot ~~is~~ was blocked** (**2026-09-18:** for the SDP's shipped `startup-qemu-virt` it still is — it dies after `FOUND GICv3 ITS` on the same launch line — but an IFS carrying a `startup-qemu-virt` we rebuilt with `-fno-auto-inc-dec`, from board source written at `orin-native/startup/qemu-virt/`, boots under `-enable-kvm`. This phase's runs were not re-run or re-timed under KVM, and it is not a QNX-supported configuration) by a
   root-caused GICv3 / `KVM_EXIT_ARM_NISV` defect, since reproduced on
   AWS `a1.metal` (a second ARM vendor), so TCG is the interim
   transport. Honest caveat: that IPC run used a **rebuilt** IFS, not

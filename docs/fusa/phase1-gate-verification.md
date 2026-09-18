@@ -111,6 +111,15 @@ Per the test-before-claim rule, the following are reported honestly to FuSa-Desi
 > written. KVM boot of QNX on the Orin is blocked by the GICv3/NISV defect
 > ([orin-port.md](../orin-port.md) risk register), and the `a1.metal`
 > KVM run hung the same way ([findings.md](../findings.md) 2026-07-29).
+>
+> **2026-09-18 update to that note.** The KVM blockage holds for the SDP's
+> *shipped* `startup-qemu-virt`, which still stops after `FOUND GICv3 ITS`.
+> An IFS carrying a `startup-qemu-virt` rebuilt with `-fno-auto-inc-dec`,
+> from board source written in this repo, boots under `-enable-kvm` on the
+> Orin ([findings.md](../findings.md) 2026-09-18). This **discharges nothing
+> below**: it is a functional boot with no timing, no isolation or
+> freedom-from-interference evidence, and it is not a QNX-supported
+> configuration. The residual risk stays deferred and NOT discharged.
 > Phase 3b runs native `qvm` on the Orin with real EL2 and stage-2
 > translation for one guest ([findings.md](../findings.md) 2026-09-10 M3;
 > [orin-native-port-plan.md](../orin-native-port-plan.md), architecture

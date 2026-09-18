@@ -105,7 +105,9 @@ the NVIDIA AVOS / DRIVE OS SE role this portfolio targets.
 - IPC (Phase 3 / Orin leg): heterogeneous QNX↔Linux over host bridge `br0` + tap
   devices (`tap-qnx` ~~/ `tap-linux`~~) + virtio-net ~~under KVM~~ — this bridged path
   belongs to Orin, **not** the cloud leg. **2026-09-11:** it ran under TCG, because
-  KVM boot is blocked by the GICv3/NISV defect. Only `tap-qnx` exists: the Linux
+  KVM boot ~~is~~ was blocked by the GICv3/NISV defect (**2026-09-18:** blocked for the
+SDP's shipped startup only — a `startup-qemu-virt` we rebuilt boots under KVM; this A2
+path was not re-run under it). Only `tap-qnx` exists: the Linux
   client runs natively on L4T ([orin-port.md](docs/orin-port.md) step 3). It is
   A2 history.
 - Reference architecture: NVIDIA DRIVE OS dual-VM partition design (public docs)
