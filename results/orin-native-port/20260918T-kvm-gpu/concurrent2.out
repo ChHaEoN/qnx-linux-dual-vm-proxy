@@ -1,0 +1,2 @@
+device=Orin cc=8.7 sms=8 tag=concurrent2
+SUMMARY tag=concurrent2 rounds=892 mean_gflops=1558.2 best=1564.0 worst=793.7 seconds=30.0

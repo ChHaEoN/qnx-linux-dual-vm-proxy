@@ -1,0 +1,2 @@
+device=Orin cc=8.7 sms=8 tag=baseline2
+SUMMARY tag=baseline2 rounds=890 mean_gflops=1553.9 best=1564.4 worst=828.8 seconds=30.0

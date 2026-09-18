@@ -9,6 +9,49 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-18 — L4T keeps the GPU at full throughput while QNX runs beside it under KVM
+
+The KVM fix above is only interesting if it buys something. What it buys is the architecture the
+GPU question had been blocking on: **L4T on the metal owning the GPU outright, with QNX as a
+hardware-virtualised guest beside it** — no pass-through, no vGPU, no emulation. QNX never touches
+the GPU; the question is whether putting it there costs the GPU anything.
+
+**Method.** A sustained FP32 FMA load on the iGPU (`orin-native/gpu-concurrency/fma.cu`, 512x256
+threads, 200k iterations per round, 30 s arms, CUDA 12.6 / `sm_87`), with `tegrastats` sampling
+`GR3D_FREQ` alongside so that "the GPU is busy" is measured rather than assumed. Liveness of the QNX
+guest is a **byte-exact echo**, not a process check: `probe_qnx.py` sends valid 64-byte frames in the
+[`ipc-test/common/frame.h`](../ipc-test/common/frame.h) layout through slirp `hostfwd 17000->7000`
+and requires the frame back unchanged. Two arms, twice each.
+
+| arm | QNX guest | mean GFLOP/s | GR3D mean | GR3D peak |
+|---|---|---|---|---|
+| baseline  | none | 1554.6 | 84% | 99% |
+| baseline2 | none | 1553.9 | 84% | 99% |
+| concurrent  | live under KVM | 1557.2 | 84% | 99% |
+| concurrent2 | live under KVM | 1558.2 | 84% | 99% |
+
+**Reading it honestly: the concurrent runs are nominally _faster_.** The two solo runs differ by
+0.7 GFLOP/s; both concurrent runs sit 3-4 GFLOP/s above both of them. A negative cost is not a
+speedup — it is the signature of run-to-run noise, and the correct statement is that **no cost was
+measurable at this sample size**, not that concurrency is free.
+
+Meanwhile the guest answered **21 of 21 frames byte-exact** across five connections — before the
+load, twice at 99% GPU utilisation, and after — at sub-millisecond round trips, and its own serial
+log independently records every one (`client connected from ...`, `client EOF after N frames`), so
+host and guest corroborate each other. Run records:
+[`results/orin-native-port/20260918T-kvm-gpu/`](../results/orin-native-port/20260918T-kvm-gpu/).
+
+**What this does not show.** It is **not** a GPU partitioning, isolation or freedom-from-interference
+result — nothing divides the GPU, and L4T owns it outright. It is **not** a claim that QNX can use
+the GPU; in this architecture it cannot. The probe round trips are a **liveness signal, not a latency
+measurement** (one host, slirp NAT, a handful of frames, no percentiles). It is not a load, stress or
+soak test: 30 s arms, the guest otherwise idle, n=2 per arm, no thermal control (board ~47-48 C). And
+the GPU figure is raw FMA ALU throughput — not GEMM, not inference, and not to be quoted as a TFLOPS
+headline.
+
+---
+
+
 ## 2026-09-18 — QNX boots under KVM on the Orin: the GICv3/NISV blockage is cleared at the source
 
 Since 2026-07-28 every KVM boot of the QNX IFS on this board ended identically — `FOUND GICv3 ITS`,
