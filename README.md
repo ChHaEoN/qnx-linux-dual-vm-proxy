@@ -46,8 +46,12 @@ are explained under [Reading the ids](#reading-the-ids).
   emulated architectures (A1–A3, kept as history), **none hardware-timed**. The
   IPC comparison mixes host, transport, OS pair and QEMU build across two
   architecture versions — read it as "both mechanisms are alive", never as a
-  host-speed result. Figures from M3 onward are unpublished pending the
-  licence consultation, and the numbers that count are taken once, ~~on
+  host-speed result. ~~Figures from M3 onward are unpublished pending the
+  licence consultation~~ **Figures from the M-path and the native-QHV leg (A4)
+  are unpublished pending the licence consultation; the A6 KVM-guest
+  measurements — GPU concurrency, interference, saturation and the native
+  control — are published under [`results/`](results/) (2026-09-19)**, and the
+  numbers that count are taken once, ~~on
   reference architecture v1, after the freeze.~~ **2026-09-18: on A6, once its
   gate is settled.** v1 (the native QNX Hypervisor as host) was superseded
   before it was ever frozen: under it no OS can use the GPU, because Tegra234's
@@ -316,7 +320,9 @@ its open gate questions — A6 runs QNX as a KVM guest, so the host, not a QNX
 startup, decides the core split.**
 The M0–M1b records and captures are in this repo; the M3–M5 and S1 run records
 and every figure from M3 on stay unpublished until releasing them is cleared —
-the code, the plan and the procedure are here.
+the code, the plan and the procedure are here. **2026-09-19: that hold is
+scoped to the M-path and the native-QHV leg (A4). The A6 measurements — QNX as
+a KVM guest beside L4T — are published in full under `results/`.**
 
 Detail: [the plan](docs/orin-native-port-plan.md),
 [orin-native/startup/README.md](orin-native/startup/README.md),
@@ -394,7 +400,7 @@ nothing timed**; the Graviton runtime leg was never built.
 | [`ipc-test/`](ipc-test/) | C99 IPC: QNX echo servers, host client, Linux client, shmem probes, shared frame code |
 | [`scripts/`](scripts/) | cloud-twin and Orin bring-up, QHV configs, twin sync and diff |
 | [`logs/sample-boot/`](logs/sample-boot/) | curated boot and benchmark logs — the evidence |
-| [`results/`](results/) | benchmark CSVs, GICv3 reports, Phase 3b records (M3–M5 and S1 run records unpublished) |
+| [`results/`](results/) | benchmark CSVs, GICv3 reports, Phase 3b records (M3–M5 and S1 run records unpublished; the A6 KVM-guest measurements are published) |
 | [`skills/`](skills/) | study artefacts: FMEA, ISO 26262, ISO/SAE 21434, ASPICE, BSP porting, digital twin, Jetson, Tegra virtualisation. **Study artefacts, not certification evidence** |
 | [`agents/`](agents/), [`.claude/agents/`](.claude/agents/) | agent role definitions, long-form and as subagent definitions |
 

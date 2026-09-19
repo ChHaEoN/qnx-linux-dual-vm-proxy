@@ -112,11 +112,36 @@ arm, and repeated idle arms for drift. It carries one control worth keeping:
 `cpu6_prio` reruns full saturation with the probe at elevated priority, because
 under saturation the probe is itself competing for a core — if the high-priority
 arm returns to idle, the degradation was the probe waiting, not the guest. It came
-back negative (0.285 vs 0.291 p50), which is what makes the p50 shift attributable
-to the guest side.
+back negative (0.285 vs 0.291 p50), ~~which is what makes the p50 shift attributable
+to the guest side.~~ **which excludes probe-side scheduling as the cause — and
+nothing more. 2026-09-19: a native control (below) degraded at least as much, so
+the shift is not attributable to the guest being a guest.**
 
 Findings: CPU saturation moves p50 by **+54%** (disjoint per-arm ranges, replicated),
 the **tail improves** under load (p99 −28%, busy cores never idle), and GPU load
-alone still shows nothing even under a pinned clock.
+alone still shows nothing even under a pinned clock. **2026-09-19: read the first
+with the native control below — the same shift appears in a native process, so it
+is not a virtualisation cost; and the second is a p99-only effect, which does not
+hold at p99.9 or at the maximum.**
 
 Results: `results/orin-native-port/20260919T-saturation/`.
+
+## `run-native-cmp.sh` — is any of it virtualisation?
+
+The saturation finding was recorded with an explicit gap: no native process had
+been measured under the same load, so "the guest degrades under CPU saturation"
+could not be separated from "anything on this board degrades under CPU
+saturation". This closes it by compiling the **same** `monitor.c` natively with
+`gcc` and running the **same** probe against both, arms interleaved over two
+rounds with the governor pinned.
+
+Result: relative to each path's own idle baseline the native process degrades
+**more** (p50 +71.3% / +123.1% against the guest's +44.7% / +68.0%). Two things
+must travel with that number or it misleads: in **absolute** added latency the
+ordering reverses (the guest absorbs 1.8×–2.4× more), and n = 2 rounds agree in
+direction only — the magnitudes range widely.
+
+The two paths are different (loopback against virtio-net + bridge + the guest's
+own stack), so absolute latencies are never compared between them.
+
+Results: `results/orin-native-port/20260919T-native-cmp/`.

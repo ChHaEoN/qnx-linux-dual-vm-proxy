@@ -52,9 +52,12 @@ Pooled, idle (n=12,000) against cpu6 (n=9,000):
 ### 1. CPU saturation interferes, and it replicates
 
 Per-arm p50 ranges are **disjoint**: idle 0.181–0.190, cpu6 0.258–0.291. Every
-loaded arm exceeds every idle arm by at least 38%. The arms were interleaved and
-repeated precisely because an earlier +11% p90 reading had dissolved on repeat;
-this one did not.
+loaded arm exceeds every idle arm by ~~at least 38%~~ **at least 36%**
+(2026-09-19: recomputed — the binding pair is the highest pinned idle arm,
+`pidle` 0.1898 ms, against the lowest pinned loaded arm, `pcpu6` 0.2581 ms,
+which is +36.0%; the disjointness itself is unaffected). The arms were
+interleaved and repeated precisely because an earlier +11% p90 reading had
+dissolved on repeat; this one did not.
 
 ### 2. The tail gets *better* under load
 
@@ -90,6 +93,13 @@ too thin to claim a mechanism, and none is claimed.
 - **Not isolation.** The boundary is KVM, where Linux owns the QNX guest's memory.
 - The degradation is what you would expect from oversubscription (6 busy threads
   plus 2 vCPU threads plus the probe on 6 cores) and is **not** evidence of a
-  virtualisation-specific effect. No comparison against a native process was run.
+  virtualisation-specific effect. ~~No comparison against a native process was
+  run.~~ **2026-09-19: that control was run, and it supports this reading. The
+  same `monitor.c`, built natively on L4T and put under the same load, degraded
+  at least as much as the guest in relative terms in both rounds (native p50
+  +71.3% / +123.1%; guest +44.7% / +68.0%). Read with two qualifiers: in
+  *absolute* added latency the ordering reverses — the guest absorbs 1.8×–2.4×
+  more — and n = 2 rounds agree in direction only.
+  See [`../20260919T-native-cmp/`](../20260919T-native-cmp/).**
 - A probe-priority control arm (`cpu6_prio`, unpinned run) came back negative:
   0.285 vs 0.291 p50, so probe-side scheduling delay does not explain the shift.

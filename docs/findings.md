@@ -9,6 +9,74 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-19 — the missing native control, run: the guest's degradation does not need a virtualisation explanation
+
+The entry below recorded the guest's **+53.9% p50** under six busy threads as what oversubscription
+predicts rather than a virtualisation-specific effect, and listed the gap in one clause: *no
+native-process comparison was run*. This run supplies that control, and the reading holds. What it
+adds is a caution: **which metric you pick decides the ordering**, so both are recorded.
+
+**The same protocol, by construction.** The server is
+[`ipc-test/qnx-safety-monitor/monitor.c`](../ipc-test/qnx-safety-monitor/monitor.c), **unmodified**,
+built twice — cross-compiled into the guest's IFS, and compiled natively on L4T with
+`gcc -O2 -std=gnu99 -Wall -Wextra -I common` → a 13,976-byte aarch64 ELF. Same 64-byte frame, same
+accept/reject logic, same port, same probe. That it compiles at all is the point: `monitor.c` is pure
+POSIX — no `ClockCycles`, `devctl`, `name_attach`, `iofunc`, `dispatch`, `MsgSend`/`MsgReceive` or
+`<sys/neutrino.h>` anywhere in it. One source, two targets, no `#ifdef` fork.
+
+**Conditions.** Guest is QNX under **KVM** via the board's own `launch-demo-guest.sh` verbatim as in
+the entry below; banner confirmed `QEMU_virt_(aarch64),_KVM_guest`, disk (`sha256` prefix
+`f326b792486805c9`) unchanged before and after. Governor **pinned to `performance`** on all six cores
+throughout — the confound found in the entry below — and restored to `schedutil` after. Same
+`cpuload.c`, six threads on six cores. 3000 timed samples per arm, 200 warm-up discarded, 2 ms
+spacing, one held TCP connection, arms **interleaved and repeated** twice. `bad=0` and
+`rejected_by_monitor=0` in all eight arms.
+
+**Relative to each path's own idle baseline** (the only quantity two different network paths make
+comparable — the guest crosses virtio-net, the bridge, the tap and its own `io-sock` and scheduler;
+the native arm is loopback):
+
+| round | path | p50 | p90 | p99 |
+|---|---|---|---|---|
+| r1 | native | **+71.3%** | **+80.7%** | +41.7% |
+| r1 | guest | +44.7% | +33.9% | **−37.7%** |
+| r2 | native | **+123.1%** | **+90.4%** | +34.5% |
+| r2 | guest | +68.0% | +41.6% | **−15.7%** |
+
+**n = 2 rounds; these magnitudes are not estimates.** Native p50 moves +71.3% → +123.1% between
+identical rounds — a spread wider than the native-vs-guest gap itself. Only the *ordering* replicated.
+
+**Finding 1 — the +53.9% does not require a virtualisation-specific explanation.** A plain L4T
+process on the same saturated board, running the same program under the same load, degraded at least
+as much in relative terms. That retires the reading of +53.9% as evidence *for* a virtualisation
+cost. It does **not** show there is none: the comparison is confounded by a ~4× baseline difference
+(guest idle p50 0.171 ms vs native 0.044 ms), the guest arm is the *more* oversubscribed of the two
+(six load threads plus two vCPU threads plus QEMU's I/O thread), and **in absolute added latency the
+ordering reverses** — the guest absorbs 1.8×–2.4× more (p50 +0.076/+0.118 ms against +0.031/+0.057
+ms). The new run also re-measured the guest's own delta and got +44.7% and +68.0%, which bracket the
+pooled +53.9% recorded below rather than reproducing it; that figure stands as recorded, being a
+larger pooled measurement (n=12,000 vs 9,000).
+
+**Finding 2 — at p99 the paths move opposite ways; deeper in the tail they do not.** The guest's p99
+improves under load (−37.7%, −15.7%) while the native p99 worsens (+41.7%, +34.5%), both replicated.
+One quantile out it dissolves: at p99.9 the native arms improve too (−12.5%, −31.5%), so tail
+improvement is **not** guest-specific. At the maximum it inverts — native max improves (−43.8%,
+−74.3%) while the guest's blows out (+286.5%, +130.0%), the two largest samples in the experiment.
+Mechanism **untested**: no C-state residency, wake-up latency or scheduler tracing was recorded.
+
+Records: [`results/orin-native-port/20260919T-native-cmp/`](../results/orin-native-port/20260919T-native-cmp/)
+— eight arm JSONs and the run script.
+
+**What this does not show.** **Not** a measurement of virtualisation overhead and **not** a
+KVM-vs-native performance claim — no leg in this repo has a non-KVM control for this guest, so no
+such figure exists to make. **Not** a partition-isolation, freedom-from-interference or real-time
+result of any kind, certified or otherwise; if anything the opposite, since host CPU load measurably
+moves the guest's round trip. Nothing here is certified and no ISO 26262 or ASIL claim attaches.
+**Not** a load, stress or soak test: each arm is about 7 s of sampling (3,200 frames at 2 ms spacing;
+6.5–7.3 s across the eight). One program, one board, one synthetic load, two rounds — not "any
+process". Says nothing about the GPU: no GPU arm was run here.
+
+
 ## 2026-09-19 — CPU saturation does disturb the guest; the GPU still does not; and the earlier baseline had an uncontrolled variable
 
 The null result below had one busy core out of six, which is not a contended system. Escalating
@@ -40,7 +108,9 @@ the guest.
 
 **Honest reading of the degradation:** it is what oversubscription predicts — six busy threads
 plus two vCPU threads plus the probe on six cores — and is **not** evidence of a
-virtualisation-specific effect; no native-process comparison was run. A probe-priority control
+virtualisation-specific effect; ~~no native-process comparison was run~~ **that control was run
+the same day and supports this reading — a native L4T process under the same load degraded at
+least as much in relative terms; see the entry above**. A probe-priority control
 arm came back negative (0.285 vs 0.291), so probe-side scheduling does not explain it.
 
 Records: [`results/orin-native-port/20260919T-saturation/`](../results/orin-native-port/20260919T-saturation/)
