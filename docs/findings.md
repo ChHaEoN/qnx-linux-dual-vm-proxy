@@ -9,6 +9,61 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-19 — saturating the GPU does not measurably disturb the QNX guest (a null result)
+
+The KVM boot made a question askable that had not been askable before. The 2026-09-18 entry
+measured what QNX costs the GPU; this measures the other direction — **what the GPU costs
+QNX** — which under TCG would only have measured the emulator.
+
+**Method.** One held TCP connection to the guest's `qnx-safety-monitor` on :7100 over the real
+`br0`/`tap-qnx` bridge; each sample sends a valid 64-byte frame carrying a claim the monitor
+accepts, timed with `perf_counter`. 3000 timed samples per arm at 2 ms spacing, after 200
+warm-up samples that are timed and discarded. Arms: **idle**, **gpu** (`fma.cu`, GR3D 99%,
+~1555 GFLOP/s), **cpu** (one core at 100%, GR3D 0%), **idle2**; then the gpu/idle pair repeated
+interleaved.
+
+**The `cpu` arm is not optional.** `fma.cu` drives the GPU from a CPU thread, so "GPU
+saturated" and "system busier" arrive together. Without a CPU-only arm at the same footprint,
+any change could not be attributed to the GPU rather than to contention.
+
+**Result: no measurable interference.** Pooled, idle (n=12,000) against gpu (n=9,000):
+
+| quantile | idle | gpu | delta |
+|---|---|---|---|
+| p50 | 0.298 | 0.293 | **−1.5%** |
+| p99 | 0.646 | 0.619 | **−4.2%** |
+| p99.9 | 0.772 | 0.730 | **−5.3%** |
+| p90 | 0.342 | 0.358 | +4.7% |
+| max | 1.021 | 0.827 | idle is worse |
+
+The GPU arms are **faster at three of four quantiles**, and the worst single sample in the whole
+experiment came from an idle arm. A real interference effect cannot be negative at p99 and
+positive at p90. Per-arm p90 ranges overlap outright (idle 0.333–0.357, gpu 0.326–0.386), and
+the third gpu arm's p90 is lower than every idle arm.
+
+**A hint that dissolved, recorded rather than dropped.** The first run showed gpu p90 at +11%
+over idle. That is why the arms were repeated interleaved — and the repeat killed it. Had the
+run stopped at one pass, that +11% would have looked like a finding.
+
+**Validity.** `bad=0` and `rejected_by_monitor=0` in all eight arms; the guest's own console
+independently logs eight × `seen=3200 accepted=3200 rejected=0`. `idle2` returned to `idle`
+(p50 0.297 vs 0.298), so thermal drift does not confound it (47.8 → 50.2 → 48.7 °C).
+`disk-qemu` was byte-identical before and after all eight arms (`-snapshot`). Records:
+[`results/orin-native-port/20260919T-interference/`](../results/orin-native-port/20260919T-interference/).
+
+**What this does not show.** It is **not** freedom from interference, and no ISO 26262 or ASIL
+claim attaches — one workload, one direction, one load level, one board. Not a QNX real-time
+result: nothing here is a bounded-latency guarantee and the guest is not configured for one.
+Not hypervisor IPC latency — under A6 there is no hypervisor; the figure is a whole-system
+round trip through the Linux stack, virtio-net, the bridge, `io-sock`, the monitor and the
+guest's scheduler. Not isolation: the boundary is KVM, where **Linux owns the QNX guest's
+memory**. The guest had 2 vCPUs of 6 cores and a single busy core leaves four idle, so this says
+nothing about full CPU saturation. n=3000 per arm supports p99; p99.9 is thin and reported as
+indicative only.
+
+---
+
+
 ## 2026-09-19 — the cloud twin's original premise is revivable, and today's run is the proof
 
 A side effect of the cross-vendor check below, and arguably the more consequential half.

@@ -56,3 +56,27 @@ serial log independently records each connection (`client connected from ...`,
   not inference.
 
 Measured results live under `results/orin-native-port/20260918T-kvm-gpu/`.
+
+## The interference question (added 2026-09-19)
+
+The harness above asks whether QNX costs the GPU anything. The reverse question —
+does the GPU work cost the QNX guest anything? — needs three more pieces:
+
+- **`latency_probe.py`** — the same frame protocol as `probe_qnx.py`, but holding
+  one connection and reporting a distribution (p50/p90/p99/max) instead of a
+  liveness yes/no. One connection on purpose: opening a socket per sample would
+  measure TCP setup, not the service.
+- **`cpuload.c`** — **the control that makes the GPU arm interpretable.** `fma.cu`
+  drives the GPU from a CPU thread, so "GPU saturated" and "system busier" arrive
+  together; without a CPU-only arm at the same footprint, a latency change cannot
+  be attributed to the GPU. Build with `gcc -O2 -o cpuload cpuload.c -lpthread -lm`.
+- **`run-interference.sh`** — runs idle → gpu → cpu → idle2. The repeated idle arm
+  is the drift check: the board heats under load, and without it a thermal effect
+  would be indistinguishable from an effect of the load.
+
+A first run showed the GPU arm's p90 about 11% above idle. Repeating the arms
+interleaved dissolved it — across three GPU arms the p90 range (0.326-0.386 ms)
+overlaps the idle range (0.333-0.357 ms) outright. Treat any single-run quantile
+difference here as unproven until the arms are repeated.
+
+Results: `results/orin-native-port/20260919T-interference/`.
