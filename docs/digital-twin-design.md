@@ -27,13 +27,33 @@ substrates:
   Ubuntu 22.04); **as built, this leg runs on the local Windows host.**
   Per [ADR-002](phase2-topology-decision.md) non-metal Graviton has no
   `/dev/kvm`, so the leg runs the SDP 8.0 QHV (`qvm`) + a single QNX
-  guest under QEMU **TCG** — and once KVM was off the table there was
-  nothing left that required the leg to be in the cloud at all. Every
+  guest under QEMU **TCG** — ~~and once KVM was off the table there was
+  nothing left that required the leg to be in the cloud at all.~~
+  **2026-09-19:** that last clause was ADR-002 read too broadly. The limit
+  ADR-002 found is **non-metal**, not **cloud** — its own words are "Any
+  hardware-accelerated partitioner — KVM *or* QHV — needs `*.metal` or real
+  silicon". On a bare-metal `a1.metal` that day `/dev/kvm` was present
+  (`Hyp mode initialized successfully`) and a QNX guest booted under
+  `-enable-kvm` to `Startup complete` and its banner, in a matched pair whose
+  control — the SDP's **shipped** `startup-qemu-virt` — still hung at
+  `FOUND GICv3 ITS`. The guest that booted carries a `startup-qemu-virt`
+  **we rebuilt** (`-fno-auto-inc-dec`), which is not a QNX-supported
+  configuration ([findings.md](findings.md) 2026-09-19,
+  [`logs/sample-boot/aws-a1-metal-kvm-fix-crossvendor.log`](../logs/sample-boot/aws-a1-metal-kvm-fix-crossvendor.log)).
+  So an ARM cloud host running these images under KVM is possible again — on
+  `*.metal` only. **No cloud leg has been built or measured on it:** that was
+  one 60-second boot arm, **no timing of any kind was taken**, and the twin
+  diff has not been re-run (the §5 figures stay architecture-version history).
+  Non-metal Graviton still has no `/dev/kvm` (the t4g.small probe stands),
+  `c7g.metal` — the closer core match — stays quota-blocked at 64 vCPU, and
+  `a1.metal` is Cortex-A72 against the Orin's A78AE, so even a revived pair
+  would differ in a *bundle*, not in one variable (§1a). Every
   QHV boot and IPC number attributed to "cloud" in this repo was
   produced on the Windows box; the Phase-4 boot-time table names it
   honestly as "Local Windows (x86_64, TCG)". AWS's remaining real role
   is the KVM *test bed* (`a1.metal`, see
-  [findings.md](findings.md) 2026-07-29), not the runtime host.
+  [findings.md](findings.md) 2026-07-29 and **2026-09-19**), not the
+  runtime host.
 - **Hardware twin** — Jetson Orin Nano Dev Kit (NVIDIA L4T / JetPack 6
   on Cortex-A78AE × 6, Ampere GPU not exercised)
 
@@ -47,7 +67,7 @@ A short table of what crosses the twin boundary:
 | Wire protocol (sequence + timestamp + payload) | **Yes** | Fixed-width binary frame, ~~version-tagged~~ **2026-09-11:** with no version tag (`ipc-test/common/frame.h`; see §3) |
 | Test harness + benchmark scripts | ~~**Yes**~~ **CSV schema only** | ~~Same `run-bench.sh`;~~ output CSV format is identical. **2026-09-11:** No `run-bench.sh` exists. The legs use different programs and launchers. Only the CSV schema is shared (`results/cloud/header.csv`, `results/hw/header.csv`) |
 | QEMU command line (machine/CPU/mem) | **Mostly** | `-machine virt,gic-version=3 -cpu ... -m 1G` shape is shared; see the accel row for the cloud/Orin split |
-| QEMU acceleration | **TCG on both — for two different reasons** | This row previously read "cloud = tcg; Orin = `-enable-kvm` (KVM works on A78AE)". That is **no longer true and should not be quoted**: ~~Orin's KVM boot is blocked by the GICv3 / `KVM_EXIT_ARM_NISV` defect ([orin-port.md](orin-port.md)), so the plain `qnx-safety-vm` leg runs TCG there *because KVM is broken*.~~ **2026-09-18:** the A2 leg ran TCG because the SDP's **shipped** `startup-qemu-virt` hangs under KVM after `FOUND GICv3 ITS` — reproduced as a control that day. An IFS carrying a `startup-qemu-virt` **we rebuilt** (board source `orin-native/startup/qemu-virt/`, startup library compiled `-fno-auto-inc-dec`) boots under `-enable-kvm` to procnto and the guest banner (`logs/sample-boot/orin-kvm-*.log`); not a QNX-supported configuration — QNX ships no such binary — and no timing claim. On the **QHV leg** TCG is instead a hard architectural requirement on both sides — QHV needs EL2 for its guest, i.e. nested virtualisation, which ARM KVM does not provide on A78AE, and nothing measured on 2026-09-18 changes that. Keep the two apart when reporting: only the QHV leg's TCG-on-both is genuine symmetry |
+| QEMU acceleration | **TCG on both — for two different reasons** | This row previously read "cloud = tcg; Orin = `-enable-kvm` (KVM works on A78AE)". That is **no longer true and should not be quoted**: ~~Orin's KVM boot is blocked by the GICv3 / `KVM_EXIT_ARM_NISV` defect ([orin-port.md](orin-port.md)), so the plain `qnx-safety-vm` leg runs TCG there *because KVM is broken*.~~ **2026-09-18:** the A2 leg ran TCG because the SDP's **shipped** `startup-qemu-virt` hangs under KVM after `FOUND GICv3 ITS` — reproduced as a control that day. An IFS carrying a `startup-qemu-virt` **we rebuilt** (board source `orin-native/startup/qemu-virt/`, startup library compiled `-fno-auto-inc-dec`) boots under `-enable-kvm` to procnto and the guest banner (`logs/sample-boot/orin-kvm-*.log`); not a QNX-supported configuration — QNX ships no such binary — and no timing claim. On the **QHV leg** TCG is instead a hard architectural requirement on both sides — QHV needs EL2 for its guest, i.e. nested virtualisation, which ARM KVM does not provide on A78AE, and nothing measured on 2026-09-18 changes that. Keep the two apart when reporting: only the QHV leg's TCG-on-both is genuine symmetry. **2026-09-19:** the *cloud* side of this row needs the same care. Its reason is **non-metal**, not "cloud": on a bare-metal `a1.metal` that day `/dev/kvm` was present and a QNX guest carrying the same rebuilt `startup-qemu-virt` booted under `-enable-kvm` to `Startup complete` and its banner, against a same-session control on the shipped startup that still hung ([findings.md](findings.md) 2026-09-19, `logs/sample-boot/aws-a1-metal-kvm-fix-crossvendor.log`) — again not a QNX-supported configuration, one 60 s boot arm, **no timing of any kind**, and **no cloud leg built or measured**. Non-metal Graviton still has no `/dev/kvm`. As built this leg runs on the **x86_64** Windows PC, which can never use KVM for an ARM guest, so TCG is required there in principle rather than by any defect and a Windows-vs-Orin pair is TCG-on-both by necessity. The QHV sentence above is unaffected: QHV needs EL2, ARM KVM does not nest on A78AE, and nothing measured on 2026-09-19 changes that |
 | IPC transport | **Different by design** | Cloud: host↔guest `qvm` virtio-console (single-OS QNX↔QNX); Orin: QNX↔Linux virtio-net ~~over KVM bridge~~ **2026-09-11:** over the `br0` bridge, under TCG. The legs no longer share an identical topology — see §4 |
 | Linux Compute side | **Different by design** | Cloud: **no Linux guest** (single QNX guest under QHV); HW: L4T native (host OS). See §2/§3. **2026-09-14:** right for A1, stale for v1: S1 plans a Linux guest under native qvm, and v1's TCG twin legs would boot it in their QHV host image ([plan](orin-native-port-plan.md#architecture-versions-and-the-measurement-freeze-decided-2026-09-11), v1 row and campaign item 6) |
 | Host kernel | **Different by design** | This is exactly the variable being studied |

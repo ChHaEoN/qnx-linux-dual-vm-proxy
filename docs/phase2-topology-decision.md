@@ -19,10 +19,42 @@ a Linux Compute VM — on a Graviton host, doing IPC over a Linux bridge `br0` +
 `tap-qnx`/`tap-linux` + virtio-net. Phase 1 falsified that on two independent
 counts:
 
-1. **No KVM on cloud.** AWS non-metal Graviton exposes no `/dev/kvm` (EL2 is not
-   passed through by Nitro; proven on a t4g.small probe). Any
-   hardware-accelerated partitioner — KVM *or* QHV — needs `*.metal` or real
-   silicon. KVM-on-cloud is dead; KVM acceleration moves to Phase 3 (Orin).
+1. **~~No KVM on cloud.~~ No KVM on *non-metal* cloud.** AWS non-metal Graviton
+   exposes no `/dev/kvm` (EL2 is not passed through by Nitro; proven on a
+   t4g.small probe). Any hardware-accelerated partitioner — KVM *or* QHV —
+   needs `*.metal` or real silicon. ~~KVM-on-cloud is dead;~~ KVM acceleration
+   moves to Phase 3 (Orin).
+
+   > **2026-09-19 correction — scope only; the reasoning above stands and is
+   > not being "fixed".** The sentence "Any hardware-accelerated partitioner —
+   > KVM *or* QHV — needs `*.metal` or real silicon" predicted the result
+   > below and needs no change. Only the flatter clause beside it was drawn too
+   > broadly: the limit was always **non-metal**, never **cloud**. On AWS
+   > `a1.metal` (bare metal, Graviton1, Cortex-A72, eu-central-1) `/dev/kvm` is
+   > present and the host reports `Hyp mode initialized successfully`, and a
+   > QNX guest booted there under KVM. Matched pair, one variable — which IFS
+   > boots: the control arm (the SDP's **shipped** `startup-qemu-virt`) gave 17
+   > bytes of serial and the historic `FOUND GICv3 ITS` hang; the test arm (a
+   > startup **we** rebuilt with `-fno-auto-inc-dec`) gave 1301 bytes through
+   > `Startup complete` and the guest banner. Capture:
+   > [`logs/sample-boot/aws-a1-metal-kvm-fix-crossvendor.log`](../logs/sample-boot/aws-a1-metal-kvm-fix-crossvendor.log),
+   > entry in [findings.md](findings.md) 2026-09-19.
+   >
+   > **What this does NOT change.** Non-metal Graviton still has no `/dev/kvm`
+   > — the t4g.small probe stands, and it is the constraint this ADR actually
+   > decided against. **No cloud leg has been built or measured:** one
+   > 60-second boot arm is not a leg, and no timing, latency or throughput
+   > number was taken on either side; the twin diff has not been re-run. The
+   > cloud leg **as built** ran on the Windows PC under TCG, and A1/A2/A3 stay
+   > architecture-version history — not re-run, not re-timed. The rebuilt
+   > startup is ours, so this is evidence about a defect, **not** a
+   > QNX-supported configuration. `c7g.metal`, the closer match, stays
+   > quota-blocked (64 vCPU against a 32-vCPU account limit). The Windows PC is
+   > x86_64 and can never use KVM for an ARM guest, so any Windows-vs-Orin pair
+   > is TCG-on-both by necessity. And the **QHV** half of the predicting
+   > sentence is untouched: the QNX Hypervisor still cannot run under KVM
+   > anywhere — it needs EL2, which ARM KVM does not nest on A78AE — so the
+   > statements elsewhere that QHV requires TCG remain true.
 
 2. **The as-built cloud leg is a QNX Type-1 hypervisor, not a Linux host.**
    The QHV pull-forward demonstrated `qvm` (the SDP 8.0 QHV host) booting a
@@ -51,7 +83,7 @@ This ADR decides what the cloud-leg IPC study actually *is*.
 
 | Constraint | Source | Consequence for Phase 2 |
 |---|---|---|
-| No `/dev/kvm` on cloud | findings 2026-06-11 | TCG only; no two-guest KVM topology on cloud |
+| ~~No `/dev/kvm` on cloud~~ **No `/dev/kvm` on *non-metal* cloud** | findings 2026-06-11; scope corrected 2026-09-19 | TCG only, and non-metal is where this leg ran; no two-guest KVM topology on cloud. **2026-09-19:** `*.metal` does expose `/dev/kvm`, and a QNX guest booted under KVM on `a1.metal` (§1 item 1) — one boot arm, no leg, no timing; the as-built Phase-2 leg and this decision are unaffected |
 | QHV host is QNX; one QNX guest built | findings 2026-06-11 | Linux-guest path is unproven, not built |
 | Host `io-sock` down | `post_start.custom`, qhv/README | Host-routed TCP/bridge transports presumed dead |
 | Guest vdevs today: pl011 / virtio-console / virtio-blk | `g2.conf` in `post_start.custom`; `vdev.manifest` | A host↔guest channel already exists via virtio-console |
@@ -193,7 +225,11 @@ gated behind RQ-2 and is *not* required for the committed deliverable —
 virtio-console is the guaranteed floor.
 
 **Explicitly rejected for the cloud leg:** any `br0`/tap/host-TCP transport
-(depends on dead `io-sock`); any KVM-dependent topology (no `/dev/kvm` on cloud).
+(depends on dead `io-sock`); any KVM-dependent topology (~~no `/dev/kvm` on
+cloud~~ **no `/dev/kvm` on the non-metal cloud host this leg was to run on** —
+**2026-09-19:** `*.metal` does expose it, §1 item 1. The rejection stands as
+decided: the leg ran on the Windows PC under TCG, nothing is re-run, and no
+KVM-hosted cloud leg has been built or measured).
 
 ### 3.2 Why this verdict (rationale, not restatement)
 

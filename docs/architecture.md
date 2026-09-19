@@ -25,7 +25,12 @@ the *structural* picture that designs sits on top of.
   hangs — not a QNX-supported configuration, no timing claim. Kept as a record.)**
 - **History since the 2026-09-11 freeze decision:** A3, the same hypervisor
   images in TCG on both hosts. Its twin legs run again only as v1 campaign
-  work.
+  work. **2026-09-19:** A3 did use TCG on both hosts, and that record stands —
+  but it was never a universal limit. On the Windows PC (x86_64) TCG is a
+  necessity for an ARM guest, not a defect; on ARM hosts a QNX guest has since
+  booted under KVM, on the Orin (2026-09-18) and on a bare-metal AWS `a1.metal`
+  (2026-09-19). Neither is a built or measured cloud leg, and no timing was
+  taken on either.
 - **Current:** A4, the QNX Hypervisor native on the Orin Nano, with no QEMU.
   The same shim has two entry paths. kexec from L4T carried the shim alone in
   M0 and every host image in M1-M4. Once, attended, our own EFI loader,
@@ -102,6 +107,26 @@ hosts: an x86_64 builder and an arm64 runtime.
 > ([logs/sample-boot/orin-kvm-*.log](../logs/sample-boot/)). Not a QNX-supported
 > configuration — QNX ships no such binary — and no timing claim. QHV under KVM
 > is unaffected: it needs EL2/nested virt, which ARM KVM lacks on A78AE.
+>
+> **2026-09-19 — the limit was always "non-metal", never "cloud".** ADR-002 §1
+> already said so: *"Any hardware-accelerated partitioner — KVM or QHV — needs
+> `*.metal` or real silicon."* The stale part is only the flatter clause beside
+> it, "KVM-on-cloud is dead", as repeated downstream without the qualifier. On a
+> bare-metal AWS `a1.metal` (Graviton1, Cortex-A72) `/dev/kvm` **is** present, and
+> a matched pair ran there, one variable — which IFS boots: the SDP's **shipped**
+> `startup-qemu-virt` hung after `FOUND GICv3 ITS` (17 bytes of serial), while an
+> IFS carrying the startup **we rebuilt** (`-fno-auto-inc-dec`) reached `Startup
+> complete` and the guest banner under `-enable-kvm` (1301 bytes). Capture:
+> [aws-a1-metal-kvm-fix-crossvendor.log](../logs/sample-boot/aws-a1-metal-kvm-fix-crossvendor.log);
+> [findings.md](findings.md) 2026-09-19. **What it does not change:** non-metal
+> Graviton still has no `/dev/kvm` (the t4g.small probe stands), so the paragraph
+> above holds as written for the `c7g.large` this leg was designed on; **no cloud
+> leg has been built or measured** — one 60 s boot arm is not a leg, and no timing
+> of any kind was taken; the cloud leg as built ran on the Windows PC under TCG,
+> and A1-A3 are not re-run or re-timed. `c7g.metal`, the closer match, stays
+> quota-blocked (64 vCPU against a 32-vCPU account limit). The rebuilt startup is
+> **ours** — QNX ships no such binary — so this is not a supported configuration.
+> QHV is unaffected either way, for the EL2/nested-virt reason just above.
 
 Per the 2026-05-07 amendment in [findings.md](findings.md), the
 primary build host is a **local Windows PC** (the same machine that
@@ -114,7 +139,9 @@ Windows PC, and no cloud-leg number came from Graviton
 
 > **As-built per [ADR-002](phase2-topology-decision.md) (Accepted).** The
 > cloud runtime is **not** two co-equal KVM guests over a Linux bridge —
-> that topology is falsified (no `/dev/kvm` on cloud Graviton; no Linux
+> that topology is falsified (no `/dev/kvm` on ~~cloud Graviton~~
+> **non-metal Graviton — 2026-09-19: the limit is non-metal, not cloud; see
+> the note above**; no Linux
 > guest; host `io-sock` down). The cloud leg is the SDP 8.0 **QHV** host
 > `qvm` running a **single QNX guest** under `qemu-system-aarch64 -accel
 > tcg` (TCG, **not** KVM), with **no** `br0`/tap. The Linux Compute side
@@ -126,7 +153,7 @@ Windows PC, and no cloud-leg number came from Graviton
 │ Local Windows PC (x86_64)    │────────▶│ design: Graviton c7g.large      │
 │ • QNX SDP 8.0 Windows native │  ifs    │                                 │
 │ • mkqnximage --type=qemu     │         │ • qemu-system-aarch64 -accel tcg│
-│   --qvm=yes  (QHV host+guest)│         │   (no /dev/kvm on cloud)        │
+│   --qvm=yes  (QHV host+guest)│         │   (no /dev/kvm: non-metal)      │
 │ • produces output\ifs.bin    │         │ • qvm  (QHV host, EL2)          │
 │                              │         │ • NO br0/tap (io-sock down)     │
 │ Build Host (FALLBACK)        │         │                                 │
@@ -367,7 +394,10 @@ BSP / customer-port engineering on arm64 silicon (Orin, Thor). An
 x86_64-only run would be architecturally off-target. Note (per
 [ADR-002](phase2-topology-decision.md)): the cloud runtime *wanted* KVM
 too, but non-metal Graviton has no `/dev/kvm`, so the cloud leg ~~runs~~
-ran (**2026-09-13:** A1, history) under TCG. ~~KVM boot on the Phase-3 Orin twin is blocked too (GICv3/NISV;
+ran (**2026-09-13:** A1, history) under TCG. (**2026-09-19:** that still holds
+for non-metal, which is what this leg was designed on; bare-metal AWS does
+expose `/dev/kvm`, and a QNX guest booted under KVM on `a1.metal` — but no
+cloud leg was built there and nothing was timed. See the cloud-twin note above.) ~~KVM boot on the Phase-3 Orin twin is blocked too (GICv3/NISV;
 [orin-port.md](orin-port.md)), so that leg also~~ **2026-09-18:** KVM boot on the Phase-3 Orin twin was blocked too (GICv3/NISV; [orin-port.md](orin-port.md)), and still is for the SDP's **shipped** `startup-qemu-virt`; an IFS with a `startup-qemu-virt` **we rebuilt** (`-fno-auto-inc-dec`) boots under KVM on that board ([logs/sample-boot/orin-kvm-*.log](../logs/sample-boot/)) — not a QNX-supported configuration, no timing claim. That leg also ~~runs~~ ran (**2026-09-13:** A2, history) TCG. The arm64-on-target
 argument still holds (the IFS is aarch64 either way).
 
@@ -446,7 +476,7 @@ marked planned.
 
 | Aspect | Real DRIVE OS | Cloud twin, A1 (history; designed on AWS Graviton; as built on a Windows PC) | HW twin, A2 (history; Jetson Orin Nano, QEMU on L4T) | Native, A4 as run (v1 planned) |
 |---|---|---|---|---|
-| Partitioner | Type-1 NVIDIA Hypervisor | SDP 8.0 QHV (`qvm`) hosting one QNX guest under QEMU **TCG** (no KVM on cloud; see [ADR-002](phase2-topology-decision.md)) | QEMU TCG on L4T (KVM boot blocked) running QNX alongside native L4T workload | QNX Hypervisor host (procnto at EL2, `qvm`) on the A78AE, no QEMU; uncertified SDP 8.0, not QNX OS for Safety. v1 (planned) adds a Linux guest |
+| Partitioner | Type-1 NVIDIA Hypervisor | SDP 8.0 QHV (`qvm`) hosting one QNX guest under QEMU **TCG** (no KVM on the ~~cloud~~ **non-metal cloud** host; see [ADR-002](phase2-topology-decision.md). **2026-09-19:** bare-metal AWS does expose `/dev/kvm`, and a QNX guest booted under KVM on `a1.metal` — but no cloud leg was built there and no timing was taken) | QEMU TCG on L4T (KVM boot blocked) running QNX alongside native L4T workload | QNX Hypervisor host (procnto at EL2, `qvm`) on the A78AE, no QEMU; uncertified SDP 8.0, not QNX OS for Safety. v1 (planned) adds a Linux guest |
 | Shared SoC | Yes (Tegra Orin / Thor) | No — pure-virt, no shared peripherals | **Same Tegra family** (A78AE, Ampere) but Jetson SKU; no DRIVE-class FuSa peripherals | The Jetson SKU itself, with L4T gone while QNX runs; no DRIVE-class FuSa peripherals |
 | Inter-VM IPC | Shared memory + mailbox | host↔guest over `qvm` virtio-console vdev (TCG-emulated EL2 partition boundary; not hardware-timed) | virtio-net through host bridge (Phase 3; heterogeneous QNX↔Linux) | host↔QNX guest over the `qvm` virtio-console vdev on silicon (M3: completion only, figures unpublished); no shared-memory path shown on this leg; no QNX↔Linux IPC run, and none planned in S1-F |
 | VM-aware scheduling | Yes (partition scheduler) | No — the host OS scheduler schedules everything | No — L4T CFS schedules QEMU thread alongside L4T processes | `qvm` vCPUs run as host threads under procnto; no partition scheduling shown |

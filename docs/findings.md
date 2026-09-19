@@ -9,6 +9,52 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-19 — the cloud twin's original premise is revivable, and today's run is the proof
+
+A side effect of the cross-vendor check below, and arguably the more consequential half.
+
+**What the cloud twin was for.** It was *designed* as AWS Graviton (`c7g.large`, arm64) for one
+reason: a second **ARM** host that could run the same images under **KVM**, so the twin diff would
+differ in the host and nothing else. That died in 2026-06, when ADR-002 found non-metal Graviton
+exposes no `/dev/kvm`, and the leg fell back to the Windows PC under TCG — at which point, as
+[digital-twin-design.md](digital-twin-design.md) §1 puts it, "there was nothing left that required
+the leg to be in the cloud at all."
+
+**ADR-002 was not wrong; it was read too broadly since.** Its own words are *"Any
+hardware-accelerated partitioner — KVM **or** QHV — needs `*.metal` or real silicon."* That
+sentence predicted exactly what happened today. What has been repeated downstream ever since, and
+what is stale, is the flatter clause beside it: "KVM-on-cloud is dead." The limit was always
+**non-metal**, never **cloud**.
+
+**Today's evidence.** The `a1.metal` run below is bare metal: it reported `/dev/kvm` present and
+`Hyp mode initialized successfully`, and our QNX guest booted on it under `-enable-kvm` to
+`Startup complete` and the banner. That is **the first time a QNX guest has run under KVM on an AWS
+host in this project** — it just happened while answering a different question.
+
+**So the original twin becomes possible for the first time:**
+
+| leg | designed | status before today | status now |
+|---|---|---|---|
+| hardware (Orin) | ARM + KVM | blocked by GICv3/NISV | **works** (2026-09-18) |
+| cloud (Graviton) | ARM + KVM | no `/dev/kvm` on non-metal → abandoned | **works on `*.metal`** (2026-09-19) |
+
+**What this is not.** No cloud *leg* has been built: one 60-second boot arm is not a leg, and **no
+timing of any kind was taken on either side**. The twin diff has not been re-run and its earlier
+results stay architecture-version history. `a1.metal` is Graviton1 / **Cortex-A72** against the
+Orin's **Cortex-A78AE**, so even a revived pair differs in a *bundle* (core generation, kernel, OS),
+not in one variable — the honest framing §1a already insists on. `c7g.metal`, the closer match,
+stays quota-blocked at 64 vCPU. Non-metal Graviton still has no `/dev/kvm`. The Windows PC is
+x86_64 and can **never** use KVM for an ARM guest, so any Windows-side pair is TCG-on-both by
+necessity, not by choice. And the QNX Hypervisor still cannot run under KVM anywhere: it needs EL2,
+which ARM KVM does not nest on A78AE.
+
+**Cost, which is now a design input.** A board on a desk is free per run; a bare-metal cloud host is
+~$0.466/h. Reviving the twin means paying per measurement, which is a different discipline from
+anything this project has done so far.
+
+---
+
+
 ## 2026-09-19 — the fix holds on a second vendor's silicon: a matched pair on AWS `a1.metal`
 
 The 2026-07-29 entry below established that the GICv3/NISV hang was **not** Tegra-specific: the

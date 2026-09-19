@@ -16,7 +16,10 @@ partition architecture, running QNX SDP 8.0 (Safety proxy) + Linux aarch64
 
 **2026-09-11:** as built, no working leg uses KVM. The cloud leg is the QNX
 Hypervisor in QEMU TCG on the Windows PC (A1), because non-metal Graviton has
-no `/dev/kvm`. The Orin plain leg ran QEMU TCG beside L4T (A2), because KVM
+no `/dev/kvm` (**2026-09-19:** the limit is *non-metal*, not *cloud* — on a
+bare-metal `a1.metal` `/dev/kvm` is present and a QNX guest boots under KVM;
+see the Tech stack note below. No cloud leg was built and nothing was timed, so
+"no working leg uses KVM" still stands). The Orin plain leg ran QEMU TCG beside L4T (A2), because KVM
 boot hangs. The same hypervisor images boot in TCG on both hosts (A3). Phase 3b
 runs the QNX Hypervisor natively on the Orin (A4). The ids are the rows of the
 plan's architecture table
@@ -62,7 +65,7 @@ the NVIDIA AVOS / DRIVE OS SE role this portfolio targets.
 **Cloud twin (AWS):**
 - Build host (primary): **local Windows PC** — QNX SDP 8.0 ships a Windows-native installer; `mkqnximage --arch=aarch64le` produces the IFS locally and it is scp'd to the runtime host
 - Build host (fallback): t3.medium x86_64 Ubuntu 22.04 — retained for users without a local x86_64 Windows or Linux machine
-- Runtime host (design): c7g.large (Graviton3 Neoverse-V1, Ubuntu 22.04 arm64). **As built, no cloud-leg number was ever produced there** — non-metal Graviton has no `/dev/kvm` (ADR-002), so the QHV host + guest and every cloud-leg measurement run on the local Windows PC under TCG; AWS's remaining role is the `a1.metal` KVM test bed. See `docs/digital-twin-design.md` §1.
+- Runtime host (design): c7g.large (Graviton3 Neoverse-V1, Ubuntu 22.04 arm64). **As built, no cloud-leg number was ever produced there** — non-metal Graviton has no `/dev/kvm` (ADR-002), so the QHV host + guest and every cloud-leg measurement run on the local Windows PC under TCG; AWS's remaining role is the `a1.metal` KVM test bed. See `docs/digital-twin-design.md` §1. **2026-09-19:** that test bed answered the question ADR-002 left open, and the qualifier matters. ADR-002's reasoning was right — its own words are "any hardware-accelerated partitioner — KVM *or* QHV — needs `*.metal` or real silicon", which predicted this result; only the flatter "KVM-on-cloud is dead" clause was stale. On a fresh bare-metal `a1.metal` (Graviton1, Cortex-A72, eu-central-1) `/dev/kvm` is present and the kernel reports "Hyp mode initialized successfully", and a QNX guest boots under `-enable-kvm` — a matched pair, one variable: control = the SDP's shipped `startup-qemu-virt` → 17 bytes, `FOUND GICv3 ITS`, hang; test = a `startup-qemu-virt` **we rebuilt** with `-fno-auto-inc-dec` → 1301 bytes, "Startup complete" + banner ([logs/sample-boot/aws-a1-metal-kvm-fix-crossvendor.log](logs/sample-boot/aws-a1-metal-kvm-fix-crossvendor.log); findings.md 2026-09-19). So the limit was always **non-metal**, never **cloud**. What has *not* changed: non-metal Graviton still has no `/dev/kvm` (the t4g.small probe stands); **no cloud leg has been built and no timing, latency or throughput number was taken on either side** — one 60 s boot arm is not a leg; the twin diff is not re-run and A1/A2/A3 stay history; `c7g.metal` stays quota-blocked (64 vCPU vs a 32-vCPU account limit); the rebuilt startup is **ours**, so this is not a QNX-supported configuration; and the QNX Hypervisor still cannot run under KVM anywhere — it needs EL2, which ARM KVM does not nest.
 - Honest framing: the Windows-host pivot is a **friction/cost optimisation only**. The build host runs only `mkqnximage` and host-side QNX tooling (no guests run on it) and produces a target-aarch64 IFS via cross-compilation; per F1's arch-agnostic-IFS argument, host platform (Windows vs Linux x86_64) affects only build metadata (embedded paths, timestamps), not the ARM code QNX boots, so F5 Q2 (any x86_64-built IFS boots on Graviton) is the only verification needed — there is no separate cross-host build-determinism check. The pivot is also NOT closer to a real DRIVE OS customer build environment than EC2 — DRIVE OS customer builds typically sit on rented or vendor-provided Linux hosts, not local Windows.
 
 **Hardware twin (Orin Nano):**
@@ -97,7 +100,9 @@ the NVIDIA AVOS / DRIVE OS SE role this portfolio targets.
 - VM1 — Compute proxy: Linux aarch64 — **Phase 3 / Orin only** (L4T native). Per
   [ADR-002](docs/phase2-topology-decision.md) there is **no Linux guest on the
   cloud leg** (the cloud Compute-VM premise was falsified — no `/dev/kvm`, host
-  `io-sock` down). **2026-09-14:** that holds for A1 and A2, not for v1. S1-F
+  `io-sock` down; **2026-09-19:** falsified *on non-metal* — bare metal does
+  expose `/dev/kvm`, and a QNX guest booted under KVM on `a1.metal`, but no
+  cloud leg and no Linux guest has ever been built or run there). **2026-09-14:** that holds for A1 and A2, not for v1. S1-F
   plans a Linux guest without a GPU under native qvm on the Orin, and v1's TCG
   twin legs would carry it in their QHV host image, so the Windows PC would run a
   Linux guest too
@@ -302,7 +307,11 @@ Quick summary for context:
 - Phase 1 — Cloud twin bring-up — **done**: QHV host + single QNX
   guest boot under QEMU-TCG, demonstrated on the local Windows build
   host (not AWS — Graviton non-metal has no `/dev/kvm`/EL2, see
-  [ADR-002](docs/phase2-topology-decision.md)). Curated log:
+  [ADR-002](docs/phase2-topology-decision.md)). **2026-09-19:** that still
+  holds for *non-metal*; `a1.metal` does expose `/dev/kvm` and booted a plain
+  QNX guest under KVM there. That is not this leg: the QHV host needs EL2 and
+  still cannot run under KVM anywhere, no cloud leg was built, and nothing was
+  timed. Curated log:
   [logs/sample-boot/qhv-tcg-host-and-guest-boot.log](logs/sample-boot/qhv-tcg-host-and-guest-boot.log).
 - Phase 2 — Cloud twin IPC + latency benchmark — **~~partial,~~ real
   numbers, honestly capped; 2026-09-13 (owner): closed as A1 history,
@@ -719,7 +728,12 @@ boot-time result. The rebuilt startup is ours; QNX ships no such binary. **Parti
 `c7g.metal` is still not run — this account's 32-vCPU quota blocks the
 64-vCPU launch outright — but an `a1.metal` fallback was run and
 reproduced the hang on a second vendor's silicon, which is the more
-valuable half of what that investigation was for. In its place: (a) a second
+valuable half of what that investigation was for. **2026-09-19:** a second
+`a1.metal` run carried the other half — the same matched control/test pair
+there booted a QNX guest under KVM, so bare-metal cloud does expose `/dev/kvm`
+(`logs/sample-boot/aws-a1-metal-kvm-fix-crossvendor.log`). `c7g.metal` is still
+quota-blocked, no cloud leg exists, and **no hardware-timed number was taken** —
+the timing half of this decision remains deferred. In its place: (a) a second
 project track opened in [docs/future-multi-soc.md](docs/future-multi-soc.md)
 ("Phase 7-alt — Single-SoC domain convergence, NVIDIA-primary") that
 matches validating a DENSO PoC where one NVIDIA SoC family hosts *both*
