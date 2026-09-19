@@ -80,3 +80,43 @@ overlaps the idle range (0.333-0.357 ms) outright. Treat any single-run quantile
 difference here as unproven until the arms are repeated.
 
 Results: `results/orin-native-port/20260919T-interference/`.
+
+## Pin the CPU governor, or the measurement is not a comparison
+
+**Read this before running any latency arm on this board.** The governor is
+`schedutil`: an idle system clocks down to 729 MHz and any load pushes all six
+cores to 1344 MHz. So an unloaded baseline is measured on a *slower machine* than
+every loaded arm, and the load looks like it improves latency. Measured directly,
+same idle condition:
+
+| governor | idle p50 | idle p99 |
+|---|---|---|
+| `schedutil` (as found) | 0.319 ms | 0.689 ms |
+| `performance` (pinned) | 0.192 ms | 0.518 ms |
+
+~40% of the "idle" latency was the governor. The 2026-09-19 interference run above
+was taken without this control; its GPU conclusion survived re-testing, but its
+baseline was not like-for-like.
+
+    for c in $(seq 0 5); do echo performance | sudo tee /sys/devices/system/cpu/cpu$c/cpufreq/scaling_governor; done
+    # ... run the arms ...
+    for c in $(seq 0 5); do echo schedutil   | sudo tee /sys/devices/system/cpu/cpu$c/cpufreq/scaling_governor; done
+
+Restore it afterwards and **verify all six cores** — this is a system-wide setting
+on someone else's board.
+
+## `run-saturation.sh` — where interference actually starts
+
+Escalates CPU load (2 → 4 → 6 threads of 6 cores), with a GPU arm, a combined
+arm, and repeated idle arms for drift. It carries one control worth keeping:
+`cpu6_prio` reruns full saturation with the probe at elevated priority, because
+under saturation the probe is itself competing for a core — if the high-priority
+arm returns to idle, the degradation was the probe waiting, not the guest. It came
+back negative (0.285 vs 0.291 p50), which is what makes the p50 shift attributable
+to the guest side.
+
+Findings: CPU saturation moves p50 by **+54%** (disjoint per-arm ranges, replicated),
+the **tail improves** under load (p99 −28%, busy cores never idle), and GPU load
+alone still shows nothing even under a pinned clock.
+
+Results: `results/orin-native-port/20260919T-saturation/`.

@@ -9,6 +9,51 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-19 — CPU saturation does disturb the guest; the GPU still does not; and the earlier baseline had an uncontrolled variable
+
+The null result below had one busy core out of six, which is not a contended system. Escalating
+the CPU load finds the point where the guest's round trip degrades — and, on the way, finds that
+the baseline itself was wrong.
+
+**The confound, found first.** The governor is `schedutil`: idle clocks down to 729 MHz, any load
+pushes all six cores to 1344 MHz. So every *idle* arm had been measured on a slower machine than
+every *loaded* arm. Measured directly, same idle condition: `schedutil` p50 **0.319 ms** against
+`performance` p50 **0.192 ms** — **~40% of the "idle" latency was the governor.** Every arm here
+is run with the governor pinned, and restored to `schedutil` afterwards (verified on all six
+cores). **The entry below was measured without that control**; its GPU conclusion survives
+re-testing (next paragraph), but its idle baseline was not a like-for-like comparison and should
+be read with that in mind.
+
+**CPU saturation interferes, and it replicates.** Pooled idle (n=12,000) against six busy threads
+(n=9,000): **p50 +53.9%** (0.184 → 0.283 ms), **p90 +40.6%**. The per-arm p50 ranges are
+**disjoint** — idle 0.181–0.190, cpu6 0.258–0.291 — and the arms were interleaved and repeated
+precisely because an earlier +11% p90 reading had dissolved on repeat. This one did not.
+
+**But the tail gets better.** p99 **−27.9%** and p99.9 **−36.2%** under saturation. Busy cores
+never enter idle states, so nothing pays a wake-up — the DVFS effect one level down. An
+observation, not a demonstrated mechanism: no C-state residency was measured.
+
+**The GPU still shows nothing**, now under a controlled clock: `pgpu` p50 0.180 vs idle 0.190,
+i.e. faster, within noise. And GPU load *on top of* full CPU load changes nothing further
+(0.275 vs 0.258–0.291). So of the two things the Compute side does, only CPU contention reaches
+the guest.
+
+**Honest reading of the degradation:** it is what oversubscription predicts — six busy threads
+plus two vCPU threads plus the probe on six cores — and is **not** evidence of a
+virtualisation-specific effect; no native-process comparison was run. A probe-priority control
+arm came back negative (0.285 vs 0.291), so probe-side scheduling does not explain it.
+
+Records: [`results/orin-native-port/20260919T-saturation/`](../results/orin-native-port/20260919T-saturation/)
+— 19 arms, `bad=0` and `rejected=0` throughout, the guest's console independently logging 19 ×
+`seen=3200 accepted=3200 rejected=0`, and `disk-qemu` byte-identical across all of it.
+
+**Still not shown:** freedom from interference, and no ISO 26262 or ASIL claim; no QNX real-time
+guarantee; not hypervisor IPC latency (under A6 there is no hypervisor — this is a whole-system
+round trip); not isolation (the boundary is KVM, where Linux owns the QNX guest's memory).
+
+---
+
+
 ## 2026-09-19 — saturating the GPU does not measurably disturb the QNX guest (a null result)
 
 The KVM boot made a question askable that had not been askable before. The 2026-09-18 entry
