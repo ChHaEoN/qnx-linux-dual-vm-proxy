@@ -267,8 +267,11 @@ UNBACKED = [
     ("M3 native qvm boots the cloud-leg guest", "results/orin-native-port/*/m3/ is gitignored"),
     ("~50 GB free disk prerequisite", "environment prerequisite, no artefact"),
     ("3.3 V USB-TTL on J14", "hardware prerequisite, no artefact"),
-    ("cloud-leg stall rate ~1-2%/iteration", "recorded rates are 0.98/2.62/2.30% - README hedges with '~'"),
-    ("'zero errors' on the 100k runs", "English-only in a log header; no machine-readable error field"),
+    ("cloud-leg stall rate, now quoted as 0.98-2.62%",
+     "derivable but not anchored: 3/8/7 recoveries in 305 attempts across three diag300 logs"),
+    ("100k runs: no mismatch or I/O error reported",
+     "the CSV schema carries no error field; the evidence is one sentence in "
+     "orin-tcg-qnx-ipc-client1.log plus sentinel_bounces=0, and that single capture backs both 100k rows"),
 ]
 
 
