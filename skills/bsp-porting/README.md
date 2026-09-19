@@ -33,7 +33,11 @@ and how to know when each stage is actually done.
 
 ## Files
 
-- [`paradigm.md`](paradigm.md) — step-by-step workflow + common pitfalls
+- `paradigm.md` — step-by-step workflow + common pitfalls. **Not written yet**
+  (2026-09-19: this section listed it as if it existed; the directory holds only
+  this README). The workflow it would describe is exercised for real in
+  `orin-native/startup/qemu-virt/` — a board written from scratch against the
+  device tree QEMU generates.
 
 ## Key references (study only)
 

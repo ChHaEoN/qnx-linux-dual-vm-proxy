@@ -22,7 +22,7 @@ plain-markdown knowledge base.
 | [iso-26262/](iso-26262/) | Functional safety lifecycle, ASIL decomposition, parts overview | ISO 26262:2018 Parts 1–12 |
 | [aspice/](aspice/) | Automotive SPICE PAM v3.1 — SWE.1–SWE.6, SUP, MAN | VDA QMC Automotive SPICE PAM v3.1 (2017) |
 | [bsp-porting/](bsp-porting/) | Generic BSP porting workflow: discovery → bring-up → drivers → validation | Linux kernel docs; QNX BSP user's guide; ARM TRM(s) |
-| [qnx-safety/](qnx-safety/) | QNX OS for Safety (QOS) vs SDP — feature & cert delta | BlackBerry QNX product pages (public) |
+| `qnx-safety/` — **not written yet** | QNX OS for Safety (QOS) vs SDP — feature & cert delta | BlackBerry QNX product pages (public) |
 | [digital-twin/](digital-twin/) | MIL/SIL/HIL/PIL progression; twin vs shadow vs model; twin-diff methodology | INCOSE SE Handbook; ISO 23247 |
 | [jetson-platform/](jetson-platform/) | L4T / JetPack 6, SDK Manager, Tegra device-tree, Jetson-vs-DRIVE-Orin honest gap | NVIDIA Jetson docs; L4T release notes |
 | [tegra-virtualization/](tegra-virtualization/) | NVIDIA Hypervisor (public docs); Cortex-A78AE virt extensions; KVM-on-L4T limits | NVIDIA Hypervisor public docs; ARM ARM v8-A virt section |

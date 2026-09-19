@@ -3,7 +3,7 @@
 Read-only board work, 2026-09-09 (orchestrating session; `sudo -n` reads only, no write, no reboot).
 Evidence class: **VERIFIED** — every value below was read off the running board.
 
-Plan [orin-native-port-plan.md](../../docs/orin-native-port-plan.md) ranked this unknown **7 of 13**
+Plan [orin-native-port-plan.md](../../../docs/orin-native-port-plan.md) ranked this unknown **7 of 13**
 ("pstore/ramoops zone layout on this kernel and DRAM retention across warm reset"), with the consequence
 "black box unusable; adapter mandatory". Both halves are now closed, positively.
 

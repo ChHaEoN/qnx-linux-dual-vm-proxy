@@ -19,10 +19,18 @@ Jetson Orin Nano (the project's HW-twin host).
 
 ## Out of scope
 
-- Cuda / cuDNN / TensorRT application development (project does not
-  exercise the GPU)
+- Cuda / cuDNN / TensorRT application development ~~(project does not
+  exercise the GPU)~~ **2026-09-19: the GPU has since been exercised, twice, as
+  measurement rather than as application development** — a sustained CUDA FMA
+  load on L4T (GR3D 84% mean / 99% peak) run with and without a QNX KVM guest
+  beside it, and a real TensorRT mnist inference whose result a QNX guest then
+  judged. Still out of scope as a *development* topic, and QNX itself still
+  cannot touch the GPU ([findings.md](../../docs/findings.md), 2026-09-18).
 - DeepStream / Isaac (NVIDIA application SDKs)
-- Snapdragon Cockpit equivalents — see [skills/qualcomm-cockpit/](../qualcomm-cockpit/) (Phase 7)
+- Snapdragon Cockpit equivalents — `skills/qualcomm-cockpit/` (Phase 7),
+  **not written yet** (2026-09-19: this was a live link to a directory that does
+  not exist; Phase 7 is frozen feasibility, see
+  [future-multi-soc.md](../../docs/future-multi-soc.md))
 
 ## Where this skill is exercised in the repo
 
