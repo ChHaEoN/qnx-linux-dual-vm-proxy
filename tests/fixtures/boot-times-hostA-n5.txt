@@ -1,0 +1,15 @@
+# FIXTURE, not a measurement. Synthetic values chosen so the expected median,
+# mean and span are obvious by inspection and can be asserted by hand.
+#
+# Shaped like logs/sample-boot/*-boot-times-n5.txt, including the comment header
+# that quotes OTHER numbers in prose -- the parser must skip these lines. The
+# "median 99999 ms" below is the trap: a naive number-grab would read it as data.
+#
+# qemu: fixture, no real emulator
+# devices: none
+# NOTE: an unrelated series elsewhere had median 99999 ms; not comparable.
+run 1: 1000 ms
+run 2: 1010 ms
+run 3: 1020 ms
+run 4: 1030 ms
+run 5: 1040 ms

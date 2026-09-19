@@ -1725,7 +1725,7 @@ def find_end_marker(data, name, pos, end):
 def check_block(data, cap, name, ref, search_from, com3_ended):
     """§6.3 steps 1-4 for one block. Returns (status, info)."""
     info = {"range": None, "body": None}
-    cs, ce = cap["cs"], cap["ce"]
+    cs, ce = cap["cs"], cap["ce"]  # noqa: F841  (2026-09-19: `ce` unused; half of a tuple unpack in a board-log parser -- removing it is a behaviour edit, not a lint fix)
     full_end = len(data)
     begin = b"=M4FLT= BEGIN name=" + name.encode("latin-1") + b" rung="
     mb = data.find(begin, max(search_from, cs), full_end)
@@ -2029,7 +2029,7 @@ def cmd_run(a):
     start_marker = params.get("start_marker") or ("m4-l0-start" if rung == "r0" else "m4-ipc-start")
     end_marker = params.get("end_marker") or ("m4-l0-end" if rung == "r0" else "m4-ipc-end")
     is_t = bool(re.search(r"-t[1-5]$", a.run_id))
-    is_q = a.run_id.endswith("-q")
+    is_q = a.run_id.endswith("-q")  # noqa: F841  (2026-09-19: computed beside the used `is_t`; left as recorded run-id classification)
 
     log("parser_sha256", sha256_file(os.path.abspath(__file__)))
     log("input_params", f"{os.path.basename(a.params)} sha256:{sha256_file(a.params)}")

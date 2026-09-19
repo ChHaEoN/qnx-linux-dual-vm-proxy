@@ -105,18 +105,12 @@ fi
 
 echo
 echo "[3/3] Latency deltas (cloud -> hw), nanoseconds:"
-awk -v cp50="${c_p50}" -v hp50="${h_p50}" -v cp99="${c_p99}" -v hp99="${h_p99}" -v cmax="${c_max}" -v hmax="${h_max}" '
-  function row(label, c, h) {
-    d = h - c
-    pct = (c == 0) ? 0 : (d / c) * 100
-    printf "  %-5s  cloud=%-12.0f hw=%-12.0f delta=%-+13.0f (%-+6.1f%%)\n", label, c, h, d, pct
-  }
-  BEGIN {
-    row("P50", cp50, hp50)
-    row("P99", cp99, hp99)
-    row("Max", cmax, hmax)
-  }
-'
+# The delta formula lives in delta.awk, not here: scripts/ci/claims_gate.py
+# re-derives the published numbers from the same file, so the two cannot drift.
+# Output below is byte-for-byte what this script has always printed.
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+awk -v cp50="${c_p50}" -v hp50="${h_p50}" -v cp99="${c_p99}" -v hp99="${h_p99}" \
+    -v cmax="${c_max}" -v hmax="${h_max}" -f "${script_dir}/delta.awk"
 
 cat <<'EOF'
 

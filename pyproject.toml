@@ -1,0 +1,56 @@
+# Python tooling configuration.
+#
+# There is no Python package here: this repo is C, shell and PowerShell with a
+# set of standalone Python tools under orin-native/ and scripts/ci/. This file
+# exists to configure ruff, mypy and pytest, not to declare a distribution.
+
+[tool.ruff]
+# Measured, not guessed: the longest real line in the tracked Python is 148
+# characters (orin-native/s1/parse-s1.py). The default 88 would emit E501 across
+# every measurement parser in the repo.
+line-length = 150
+# The floor is set by a single walrus operator at orin-native/m4/parse-m4.py.
+target-version = "py38"
+extend-exclude = [".claude", "downloads", "qhv"]
+
+[tool.ruff.lint]
+# Chosen by trial run against the real tree (2026-09-19):
+#   default rules -> 199 findings, 131 of them UP031 (%-format rewrites)
+#   E,F,B         ->  53 findings, all genuine
+# These parsers gated real board experiments. A CI that pressures anyone into
+# bulk-rewriting 131 format strings in them is a hazard, not a safety net, so
+# the selection targets defects (undefined names, unused bindings, shadowed
+# builtins, except-without-from) and leaves working style alone.
+select = ["E", "F", "B"]
+ignore = [
+    # Ambiguous single-letter names (l, I, O). 39 occurrences, all in board-log
+    # parsers where `l` is a log line. Renaming them would touch measurement
+    # code for no correctness gain.
+    "E741",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# B904 (raise ... from err): the board parsers deliberately re-raise argument
+# errors as plain messages for operators reading a serial console, where a
+# chained traceback is noise.
+"orin-native/**" = ["B904"]
+
+[tool.mypy]
+# Deliberately NOT strict. The tracked Python carries zero type annotations, so
+# a strict run would emit noise proportional to ~14k unannotated lines and find
+# nothing. This configuration is a regression guard: it catches syntax-level and
+# obvious call errors without demanding annotations that do not exist.
+#
+# No `python_version` here on purpose. The tracked tools target 3.8 (ruff pins
+# that via target-version), but mypy 1.18+ REFUSES python_version below 3.10 --
+# setting it emits "Python 3.8 is not supported" and can fail the run outright
+# on a current mypy. The checker simply uses the interpreter CI runs on.
+ignore_missing_imports = true
+follow_imports = "silent"
+warn_unused_configs = true
+exclude = "(^|/)(\\.claude|downloads|qhv)/"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Fixtures live beside the tests; the repo root is on sys.path via conftest.py.
+addopts = "-q"

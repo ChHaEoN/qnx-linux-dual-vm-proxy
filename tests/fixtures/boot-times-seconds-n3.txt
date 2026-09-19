@@ -1,0 +1,9 @@
+# FIXTURE, not a measurement. Same shape as the others but measured in SECONDS.
+#
+# Exists solely to prove the unit check has teeth: the digits here would look
+# plausible next to a millisecond claim, and a gate that compared only numbers
+# would accept them. parse_boot_times() must report unit "s", and the claims
+# gate must treat "s" against a claim declaring "ms" as a HARD failure.
+run 1: 1000 s
+run 2: 1020 s
+run 3: 1040 s

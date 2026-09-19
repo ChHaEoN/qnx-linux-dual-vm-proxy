@@ -1,0 +1,2 @@
+unix_ts,samples,payload_bytes,p50_ns,p99_ns,max_ns,cycles_per_sec,notes
+1700000000,15,48,1000000,1200000,1200000,1000000000,fixture;has-header-row
