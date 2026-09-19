@@ -1,10 +1,5 @@
 # qnx-linux-dual-vm-proxy
 
-![Phase](https://img.shields.io/badge/Phase-3b%20native%20QHV-blue)
-![Evidence](https://img.shields.io/badge/evidence-committed%20logs%20%2B%20CSVs-brightgreen)
-![License](https://img.shields.io/badge/License-MIT-blue)
-![Arch](https://img.shields.io/badge/arch-aarch64-lightgrey)
-
 A **Digital Twin design** of NVIDIA DRIVE OS dual-VM partitioning — a QNX
 safety side beside a Linux general-purpose side — built on a Jetson Orin Nano
 dev kit and a Windows PC instead of DRIVE hardware. Nothing in it is certified.
@@ -12,6 +7,20 @@ dev kit and a Windows PC instead of DRIVE hardware. Nothing in it is certified.
 [docs/findings.md](docs/findings.md) is the authoritative, dated ground truth;
 everything below is a summary that can lag it. Ids such as A4, M5-F and S1-F
 are explained under [Reading the ids](#reading-the-ids).
+
+<!-- The Phase badge is GENERATED from the Status table by
+     scripts/ci/render_badges.py and checked on every push by
+     .github/workflows/claims-gate.yml. Do not hand-edit it: change the
+     Status table and re-run `python scripts/ci/render_badges.py --write`.
+     It names the phase only. Architecture ids (A1-A6) move independently
+     and belong in the body, where they can be struck through and dated --
+     that is how this badge previously went stale advertising "native QHV"
+     after v1 had been superseded. -->
+![Phase](https://img.shields.io/badge/Phase-3b-blue)
+[![tooling](https://github.com/ChHaEoN/qnx-linux-dual-vm-proxy/actions/workflows/tooling.yml/badge.svg)](https://github.com/ChHaEoN/qnx-linux-dual-vm-proxy/actions/workflows/tooling.yml)
+[![claims-gate](https://github.com/ChHaEoN/qnx-linux-dual-vm-proxy/actions/workflows/claims-gate.yml/badge.svg)](https://github.com/ChHaEoN/qnx-linux-dual-vm-proxy/actions/workflows/claims-gate.yml)
+![License](https://img.shields.io/badge/License-MIT-blue)
+![Arch](https://img.shields.io/badge/arch-aarch64-lightgrey)
 
 ---
 

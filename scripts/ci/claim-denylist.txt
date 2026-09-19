@@ -1,0 +1,43 @@
+# claim-denylist.txt -- claim strings the committed data does not support.
+#
+# Format, one rule per line:
+#     <regex>  <TAB or two+ spaces>  <why this claim is not supported>
+# Blank lines and '#' comments are ignored. Extend this file freely; no Python
+# change is needed to add a rule.
+#
+# HOW A RULE FIRES. scripts/ci/claims_gate.py splits README.md into SENTENCES
+# (not lines -- README wraps prose) and reports a match only when the sentence
+# is an ASSERTION. A sentence carrying a negation ("no", "not", "never",
+# strike-through) or a planned-marking ("design intent", "never built",
+# "superseded") is not a violation.
+#
+# That exemption is load-bearing, not a loophole. This project's honest framing
+# requires sentences like "Nothing in it is certified" and "No certified Type-1
+# isolation" -- a naive substring denylist would fail the build for exactly the
+# text that makes the README truthful. Verified 2026-09-19: all 2 ASIL, all 10
+# "certified" and all 4 "Graviton" sentences in README.md classify as negated or
+# planned, and none as asserted.
+
+# --- acceleration: both measured legs are TCG; no published figure is KVM-timed.
+# The plain "KVM" token is deliberately NOT banned: QNX really does boot under
+# KVM on the Orin (2026-09-18) and A6 runs it that way, so the ban is narrowed
+# to claims that a MEASUREMENT was taken on KVM.
+\b(on|under|via)\s+QEMU/KVM\b	both measured legs ran under TCG; no KVM timing exists
+\b(measured|timed|benchmark\w*|latency|throughput)\b[^.]{0,60}\bunder\s+KVM\b	no KVM-accelerated measurement exists on any leg
+\bKVM[- ]accelerated\b[^.]{0,40}\b(result|number|figure|measurement|benchmark)\b	no KVM-accelerated number was ever taken
+\bhardware[- ]timed\b[^.]{0,40}\b(KVM|result|figure)\b	no leg has produced a hardware-timed figure
+
+# --- Graviton: the cloud runtime leg was never built.
+# Any Graviton sentence must be marked planned/not-built, which the exemption
+# already permits; an unmarked assertion is a violation.
+\bGraviton\b	the Graviton runtime leg was never built; mark it planned or not-built
+
+# --- safety / certification: none of this exists and none of it is claimed.
+\bASIL\b	no ASIL claim is supportable; SDP 8.0 is not QNX OS for Safety
+\bcertifi(ed|cation)\b	nothing here is certified; state the gap instead
+
+# --- superseded figures that must not come back.
+# An unmatched 15-sample vs 100,000-iteration comparison once read as "18%
+# faster". It compared different sample sizes and was withdrawn.
+\b18%\s+faster\b	withdrawn: an unmatched 15-vs-100,000-sample comparison
+\bfreedom from interference\b	not quantified anywhere in this repo

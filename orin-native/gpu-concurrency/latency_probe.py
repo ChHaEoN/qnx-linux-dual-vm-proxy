@@ -51,6 +51,18 @@ def build_frame(seq):
     return hdr + bytes(pay)
 
 
+def percentile(sorted_values, p):
+    """Nearest-rank percentile over an ALREADY SORTED list.
+
+    Lifted out of main() unchanged (2026-09-19) so CI can unit-test it; the
+    arithmetic is byte-for-byte what every published figure from this probe was
+    computed with, and must not be "improved" -- doing so would silently make
+    new runs incomparable with the recorded ones.
+    """
+    k = int(round((p / 100.0) * (len(sorted_values) - 1)))
+    return sorted_values[k]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", required=True)
@@ -115,9 +127,9 @@ def main():
         return 1
 
     rtts.sort()
+
     def pct(p):
-        k = int(round((p / 100.0) * (len(rtts) - 1)))
-        return rtts[k]
+        return percentile(rtts, p)
 
     res = {
         "tag": a.tag,

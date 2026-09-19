@@ -2105,8 +2105,8 @@ def analyze_run(data, *, profile, mode, conf_bytes, conf_info, conf_gate_ok, bb_
                 else "missing")
             put("fdt_crc32", j7a["crc32"] or "absent")
         else:
-            put("kexec_tree_sha256", kexec_tree_sha256.lower() if kexec_tree_sha256 and not
-                "kexec_tree_sha256" in missing else "missing")
+            put("kexec_tree_sha256", kexec_tree_sha256.lower() if kexec_tree_sha256 and
+                "kexec_tree_sha256" not in missing else "missing")
     put("fdt_sha256", fdt_sha or ("none" if mode == "host" else "missing"))
 
     # --- tiers, items, verdict
