@@ -133,7 +133,7 @@ root-caused) and the GICv3/NISV KVM defect ~~stay open as separate items~~ **sta
              the one-core M1b host image only, attended, no qvm, no guest
    S1-F met: Linux guest, then B5 ran QNX + Linux together, 2026-09-17
                             │
-                            v  freeze
+                            v  direction change (owner, 2026-09-18)
  NEXT  A6 (L4T on metal + QNX as KVM guest), gate not yet settled, then one campaign
    A6 legs and twin-diff composition: not yet chosen (gate open)
        [v1 -- native QNX Hypervisor as host -- superseded 2026-09-18, never frozen: no GPU under it
@@ -300,7 +300,11 @@ hang needs someone at the board with a way to cut power. `GUEST_EXIT`'s
 `acpi=off` so the firmware hands over a device tree rather than ACPI tables.
 
 The two second-cluster cores run a busy loop at a fixed, much lower rate whose
-cause is still open; the freeze needs it explained or those cores left out.
+cause is still open; ~~the freeze needs it explained or those cores left out.~~
+**2026-09-18: that was a v1 freeze-gate item (OD3 left cluster 1 out). v1 was
+superseded before it was ever frozen, and whether this matters to A6 is one of
+its open gate questions — A6 runs QNX as a KVM guest, so the host, not a QNX
+startup, decides the core split.**
 The M0–M1b records and captures are in this repo; the M3–M5 and S1 run records
 and every figure from M3 on stay unpublished until releasing them is cleared —
 the code, the plan and the procedure are here.
@@ -396,7 +400,8 @@ Phase 3 plan and the KVM/GICv3 risk register ·
 [orin-native-port-plan.md](docs/orin-native-port-plan.md) — Phase 3b plan,
 claims register, architecture versions, the measurement freeze ·
 [drive-os-comparison.md](docs/drive-os-comparison.md) — verdicts wait for the
-v1 campaign · [future-multi-soc.md](docs/future-multi-soc.md) ·
+~~v1~~ **A6** campaign (2026-09-18: v1 was superseded before it was ever frozen;
+A6's gate is not settled, so what that campaign measures is still open) · [future-multi-soc.md](docs/future-multi-soc.md) ·
 [security-model.md](docs/security-model.md) — STRIDE and licence audit ·
 [fusa/](docs/fusa/), [cyber/](docs/cyber/), [tara/](docs/tara/).
 

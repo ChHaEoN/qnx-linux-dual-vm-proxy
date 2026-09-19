@@ -24,8 +24,9 @@ the *structural* picture that designs sits on top of.
   `-fno-auto-inc-dec` boots under KVM on the Orin, while the shipped binary still
   hangs — not a QNX-supported configuration, no timing claim. Kept as a record.)**
 - **History since the 2026-09-11 freeze decision:** A3, the same hypervisor
-  images in TCG on both hosts. Its twin legs run again only as v1 campaign
-  work. **2026-09-19:** A3 did use TCG on both hosts, and that record stands —
+  images in TCG on both hosts. Its twin legs run again only as ~~v1~~ **A6**
+  campaign work (**2026-09-18:** v1 was superseded before it was ever frozen;
+  whether the TCG twin legs survive at all is one of A6's open gate questions). **2026-09-19:** A3 did use TCG on both hosts, and that record stands —
   but it was never a universal limit. On the Windows PC (x86_64) TCG is a
   necessity for an ARM guest, not a defect; on ARM hosts a QNX guest has since
   booted under KVM, on the Orin (2026-09-18) and on a bare-metal AWS `a1.metal`
@@ -315,12 +316,18 @@ Entry into the A4 host image, two ways
   the QNX guest. 2026-09-18: a rung of A4/A5, not evidence about A6.** No
   unattended or supported boot: kexec needs a running L4T, and the UEFI entry
   needs an operator at the firmware menus. No published timing: its
-  measurements wait for the v1 campaign.
+  measurements wait for the ~~v1~~ **A6** campaign (**2026-09-18:** v1 was
+  superseded before it was ever frozen, and A6's gate is not settled — what it
+  measures is still open. A4 stays valid as its own architecture and is not
+  re-run).
 - **Status:** M0, M1, M2, M1b and M3 are met. **2026-09-13:** M4-F (met
   2026-09-11: the trace instrument works on the board, with the caveats in
   [m4-design.md](../results/orin-native-port/20260909T1100Z/m4-design.md)
   §14.8-14.9) and M5-F (met 2026-09-13) are met too, so the M path has ended.
-  Under the owner's freeze decision its measurements run in the v1 campaign.
+  ~~Under the owner's freeze decision its measurements run in the v1 campaign.~~
+**2026-09-18: v1 was superseded before it was ever frozen. The M rungs are met
+and stay met for A4/A5; they are rungs of the native-hypervisor ladder and are
+not evidence about A6, whose gate is not settled.**
   ~~M3's figures are A4 history and stay~~ Figures from M3 on are A4 history
   and stay unpublished, on the local branch `m3-results-unpublished` or in
   git-ignored run records.
@@ -483,7 +490,7 @@ marked planned.
 | Shared SoC | Yes (Tegra Orin / Thor) | No — pure-virt, no shared peripherals | **Same Tegra family** (A78AE, Ampere) but Jetson SKU; no DRIVE-class FuSa peripherals | The Jetson SKU itself, with L4T gone while QNX runs; no DRIVE-class FuSa peripherals |
 | Inter-VM IPC | Shared memory + mailbox | host↔guest over `qvm` virtio-console vdev (TCG-emulated EL2 partition boundary; not hardware-timed) | virtio-net through host bridge (Phase 3; heterogeneous QNX↔Linux) | host↔QNX guest over the `qvm` virtio-console vdev on silicon (M3: completion only, figures unpublished); no shared-memory path shown on this leg; no QNX↔Linux IPC run, and none planned in S1-F |
 | VM-aware scheduling | Yes (partition scheduler) | No — the host OS scheduler schedules everything | No — L4T CFS schedules QEMU thread alongside L4T processes | `qvm` vCPUs run as host threads under procnto; no partition scheduling shown |
-| Real-time | Certified RT path on Safety guest | Best-effort; jitter from host scheduler is observable | Best-effort; A78AE does have hardware RT support but L4T host doesn't expose certified RT | No real-time property measured or claimed; timing waits for the v1 campaign; the two cluster-1 cores run at a fixed low rate, cause open |
+| Real-time | Certified RT path on Safety guest | Best-effort; jitter from host scheduler is observable | Best-effort; A78AE does have hardware RT support but L4T host doesn't expose certified RT | No real-time property measured or claimed; timing waits for the ~~v1~~ **A6** campaign (**2026-09-18:** v1 was superseded before it was ever frozen; A6's gate is not settled, so what is measured is still open); the two cluster-1 cores run at a fixed low rate, cause open |
 | FSI lockstep | Cortex-R52 lockstep cluster | None | None — Jetson SKU has no FSI exposed to user software | None |
 | Camera / NVDLA / GPU | Real, vGPU-partitioned | None — the emulated `virt` machine has no NVIDIA accelerators | Real Ampere GPU is present but **out of scope** for this project; not exposed to QNX guest | None; QNX drives no accelerator. v1's Linux guest (planned) has no GPU; pass-through is a later stage, research only |
 | Bootloader chain | SecureBoot + measured boot, certified | None | None — JetPack provides UEFI but no chain-of-trust beyond default | None. Entered by kexec from a running L4T (the shim alone in M0, host images in M1-M4), or once, attended, by our own EFI loader from the firmware's UEFI Shell (M5-F: the one-core M1b image only; no qvm or guest); neither is a chain of trust or a supported boot |

@@ -28,6 +28,13 @@
 > below; TCG remains the accepted interim transport, and the
 > *hardware-timed* KVM number stays open and tracked separately.
 >
+> **2026-09-18:** v1 was superseded before it was ever frozen (under a native
+> QNX Hypervisor no OS can use the GPU on Tegra234). The current direction is A6
+> — L4T on the metal with the GPU, QNX as a KVM guest — and its gate is not
+> settled. References to "the v1 campaign" in this file are the record of what
+> was planned, not a current plan. **No hardware-timed number has been measured
+> on any leg**, and the 2026-09-18 KVM work took no timing at all.
+>
 > **2026-09-11:** The KVM number was deferred on 2026-07-29. The route to a
 > hardware-timed number is now the native port (Phase 3b,
 > [ADR-003](adr-003-hardware-timed-qhv.md)), measured in the v1 campaign

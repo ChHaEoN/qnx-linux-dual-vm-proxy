@@ -249,7 +249,12 @@ actually do, and say plainly where the dual-OS story does and does not live.
 > decided).** KVM did not boot the QNX IFS on the Orin. The boot hangs on the
 > GICv3/NISV defect ([orin-port.md](orin-port.md) risk register), and the
 > heterogeneous QNX↔Linux leg ran under TCG instead. The same correction
-> applies to the KVM wording in §1 item 1, Option C and §4. The route to a
+> applies to the KVM wording in §1 item 1, Option C and §4. **2026-09-18:** v1
+> was superseded before it was ever frozen, and A6 (L4T on the metal with the
+> GPU, QNX as a KVM guest) is the current direction with its gate unsettled —
+> so references to "the v1 campaign" in this file are the record of what was
+> planned, not a current plan, and no hardware-timed number exists on any leg.
+> The route to a
 > hardware-timed number is the native port chosen in
 > [ADR-003](adr-003-hardware-timed-qhv.md), measured in the v1 campaign
 > ([orin-native-port-plan.md](orin-native-port-plan.md#architecture-versions-and-the-measurement-freeze-decided-2026-09-11)).

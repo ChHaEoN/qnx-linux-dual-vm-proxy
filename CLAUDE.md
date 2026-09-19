@@ -38,6 +38,14 @@ because no OS can use the GPU under it; A6 is L4T on the metal with the GPU and
 QNX as a KVM guest. A6's gate is not settled, so whether the TCG twin legs
 survive is itself still open).
 
+> **2026-09-18, applies to this whole file.** Every remaining reference below to
+> "the v1 campaign", "the v1 freeze" or "the freeze gate" is **the record of what
+> was planned**, not a current plan. v1 was superseded before it was ever frozen,
+> and those paragraphs are kept, dated and unrewritten because they record real
+> decisions (OD1–OD9) taken at the time. A6 is the current direction and is **not
+> frozen**: what its campaign measures, the sample sizes, and whether the TCG twin
+> legs survive at all are still the owner's to choose.
+
 ~~**This is not a real hypervisor.** There is no Type-1 partition isolation,~~
 **2026-09-11:** there is no *certified* Type-1 isolation. The uncertified QNX
 Hypervisor runs emulated in TCG (A1, A3) and natively on the Orin (A4); KVM
