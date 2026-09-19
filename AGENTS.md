@@ -19,8 +19,12 @@ on both sides unchanged, with only the host changing. As built, the Orin
 IPC leg used a rebuilt IFS, and "host" is a bundle of CPU, OS, TCG backend
 and QEMU build (`docs/digital-twin-design.md` §1a). The **twin diff**
 (what changes when the host bundle changes?) is still the load-bearing
-measurement. It is re-run once on reference architecture v1
-(`docs/orin-native-port-plan.md`, freeze section).
+measurement. It is re-run once on ~~reference architecture v1~~ **A6**
+(`docs/orin-native-port-plan.md`, freeze section). **2026-09-18:** v1 — the
+native QNX Hypervisor as host — was superseded before it was ever frozen,
+because no OS can use the GPU under it; A6 puts L4T on the metal with the GPU
+and runs QNX as a KVM guest. A6's gate is not settled, so whether the TCG twin
+legs survive is itself still open.
 
 **This is not a certified hypervisor stack.** The QNX Hypervisor (`qvm`)
 that the project runs is a Type-1 hypervisor, but it runs uncertified:
@@ -296,5 +300,8 @@ Quick summary for context:
 
 Next actions: see the identically-named list in `CLAUDE.md`'s Phase
 status section. Since the 2026-09-11 owner decision the Phase 3b order
-leads: M4-F, M5-F, S1-F, freeze reference architecture v1, then one
-measurement campaign (`docs/orin-native-port-plan.md`, freeze section).
+leads: M4-F, M5-F, S1-F, ~~freeze reference architecture v1, then one
+measurement campaign~~ **2026-09-18: settle A6's gate, then one campaign on A6**
+(`docs/orin-native-port-plan.md`, freeze section). M4-F, M5-F and S1-F are met
+and stay met **for A4/A5**; they are rungs of the native-hypervisor ladder and
+are not evidence about A6.

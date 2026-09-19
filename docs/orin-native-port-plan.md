@@ -320,6 +320,37 @@ The work now runs in this order:
 3. **Then freeze reference architecture v1,** fixed by the manifest below.
 4. **Then run one measurement campaign on v1:** the M3 and M4 numbers, the M5 comparison and the twin diff. Every record carries the architecture version. **2026-09-17 (OD1):** M3, M4 and the M5 comparison were all specified against the cloud-leg **QNX guest**, which v1 does not carry. Their campaign roles are redefined against v1's Linux guest (§M3/M4 redefinition below); the cost is that r0's and r1's sizing records go stale, so the campaign runs its own sizing rungs on v1.
 
+**2026-09-18 (owner): the architecture changed again, and v1 is superseded before it was ever frozen.**
+QNX now boots under KVM on the board (findings.md, 2026-09-18), which makes a different arrangement
+possible: **A6** — L4T on the metal owning the GPU, with QNX as a hardware-virtualised guest beside it.
+The owner chose it for one reason, and it is not performance: under v1 the native QNX Hypervisor owns
+the machine, and on Tegra234 the iGPU has no SMMU stream while its clock, reset and power go through
+BPMP, for which QNX has no client — so **under v1 no OS can use the GPU at all.** A6 keeps the GPU with
+L4T, and the measured cost of running QNX beside it was not distinguishable from noise.
+
+What this does to the freeze gate. The gate below was written for v1 and stays as the record of v1's
+choices; it is not retargeted item by item. Under A6:
+
+- **Moot, because they are native-QHV and kexec specific:** item 3 (entry path, kexec/UEFI, and its
+  D32/D73/D85 DMA-quiescence sub-item), item 5 (frequency policy / PMCCNTR), item 6 (the second RAM
+  window), and item 4's cluster-1 question. A KVM guest is started by the host, not by kexec, and the
+  memory it sees is the host's to give.
+- **Carried over, unchanged in substance:** item 9 (instruments frozen at their source hashes), item 11
+  (sample sizes), item 12 (stamping and the re-run rule), item 13 (the 4.6(i) licence state).
+- **Reopened, because A6 answers them differently:** item 2 (guest set — A6 has no QNX *host*, so the
+  OD1/OD9 argument does not carry across), item 7 (guest device sets), item 8 (guest disk — A6 runs with
+  `-snapshot`, so the disk is pinned rather than mutated), and item 10 (the TCG twin legs: A6's point is
+  that the native leg is no longer TCG-bound).
+- **Item 1 (rungs) becomes A6's own question.** M0-M5 and S1 were rungs for the native-QHV ladder. They
+  are met and stay met *for A4/A5*; they are not evidence about A6.
+
+**A6's gate is not settled, and this section does not settle it.** What A6 has: a boot (two byte-identical
+captures, plus the same arm on a second QEMU release), a concurrency measurement (four 30 s arms, n=2 per
+side), and one cross-partition service run (two arms, one image each). What it does not have, and what the
+owner still has to choose: what the campaign measures on A6, the sample sizes, and whether the TCG twin
+legs survive at all now that the native leg runs under KVM. Until those are written down, **A6 is the
+current direction, not a frozen reference architecture** — and no record should claim otherwise.
+
 Measurements taken before the freeze become architecture-version history. They are kept, labelled with the architecture they ran on, and not chased.
 
 This section carries no figures. Public figures stay where the inventory below points. Figures from M3 and from dry run 7b stay on the local branch `m3-results-unpublished` (§9).
@@ -341,7 +372,8 @@ Records made before v1 keep the id of the architecture they ran on. None of them
 | A3 | Host-agnostic QHV in TCG. A1's images boot unchanged on Windows and on the Orin. "Host" is a bundle of CPU, OS, TCG backend and QEMU build. Each series records its QEMU build, device set and disk mode in its file. | designed 2026-09-08; boots on the Orin, and the release-aligned pair ran, 2026-09-09; **2026-09-11:** history under the freeze decision; its records are not redone. Its TCG twin-leg method carries into v1's twin legs | The twin compares the hypervisor topology across two host bundles | [digital-twin-design.md](digital-twin-design.md) §1a; [findings.md](findings.md), 2026-09-08 and 2026-09-09 entries |
 | A4 | Native QHV on the Orin (this plan). Entered by kexec from L4T, no QEMU. M1 and M2 run at EL1. M1b runs the VHE host at EL2 on six cores. M3 runs native qvm on four cores with the byte-identical cloud-leg guest and its disk, IPC over virtio-console. L4T is gone while QNX runs. **2026-09-13:** M5-F adds a second, attended entry path beside kexec: the firmware's UEFI Shell launched our loader `M5LOAD.EFI`, which booted the one-core M1b host image to startup and procnto, then the board returned to L4T. One session; it ran no qvm and no guest. The M path has ended. | ADR-003 accepted 2026-09-09; M0 2026-09-09; M1, M2, M1b and M3 2026-09-10; M4-F 2026-09-11; M5-F 2026-09-13 | QEMU is gone; the hypervisor runs on silicon | [ADR-003](adr-003-hardware-timed-qhv.md); M0-M3 below; the M4-F and M5-F blocks below ([m4-design.md](../results/orin-native-port/20260909T1100Z/m4-design.md) §14.8-14.9, [m5-design.md](../results/orin-native-port/20260909T1100Z/m5-design.md) §14); [findings.md](findings.md), 2026-09-10 entries, the 2026-09-11 M4-F entry and the 2026-09-13 M5-F entry |
 | A5 | Owner target. The native QHV host at EL2 plus a Linux guest under qvm: first without a GPU (S1), GPU pass-through later. It descends from ADR-002 Option B. | planned; on 2026-09-11 S1 was placed before the freeze; **2026-09-13:** checklist 11c done. The quiesce frees no RAM window. Candidate second window `0x100000000-0x249ffffff`; K5 is still a HYPOTHESIS, and a QNX boot with it is still owed. The S1-F design is next | Adds a Linux guest, a second RAM window and a new core split | [ADR-002](phase2-topology-decision.md) Option B; the research track, summarised under S1-F below |
-| **v1** | Reference architecture v1: A4's native host with S1's Linux guest, fixed by the manifest below, plus two TCG twin legs that boot v1's guests in a QHV host image under QEMU, as A3 does. **2026-09-13:** the freeze now also chooses between the two entry paths that have passed, kexec and UEFI (attended, one session, the one-core M1b image only; not yet with a qvm host image), or keeps both for M5's comparison (freeze gate item 3) | not frozen | Every measurement from here on is stamped with it | this section |
+| **v1** | Reference architecture v1: A4's native host with S1's Linux guest, fixed by the manifest below, plus two TCG twin legs that boot v1's guests in a QHV host image under QEMU, as A3 does. **2026-09-13:** the freeze now also chooses between the two entry paths that have passed, kexec and UEFI (attended, one session, the one-core M1b image only; not yet with a qvm host image), or keeps both for M5's comparison (freeze gate item 3) | ~~not frozen~~ **never frozen; superseded by decision 2026-09-18 (owner)** | ~~Every measurement from here on is stamped with it~~ **2026-09-18: superseded by A6 before it was ever frozen. The reason is the GPU: v1's host is the native QNX Hypervisor, and on Tegra234 the iGPU has no SMMU stream and its clock/reset/power go through BPMP, for which QNX has no client — so under v1 no OS can use the GPU. A6 keeps the GPU with L4T. v1's own guest-set choice (OD1, Linux only) had already been reopened the same week by OD9, so its settled choices were unstable before this. Kept in full, not rewritten.** | this section |
+| **A6** | **L4T on the metal, QNX as a KVM guest beside it (current direction, owner 2026-09-18).** Linux owns the machine and the GPU natively; QNX SDP 8.0 runs as a hardware-virtualised guest under `-enable-kvm -cpu host` on an IFS carrying a `startup-qemu-virt` **we rebuilt** with `-fno-auto-inc-dec` (board source at `orin-native/startup/qemu-virt/`; the SDP ships the binary without it). No QHV, no pass-through, no vGPU, no emulation. | 2026-09-18 | Inverts the ownership of A4/A5: the hypervisor is gone and Linux, not QNX, owns the machine — so the GPU stays usable, which is why the owner chose it. The isolation story inverts with it: the largest TCB owns the QNX guest's memory. | [findings.md](findings.md) 2026-09-18 (three entries: the KVM boot, the GPU-concurrency measurement, the cross-partition service); `logs/sample-boot/orin-kvm-*.log`; [`results/orin-native-port/20260918T-kvm-gpu/`](../results/orin-native-port/20260918T-kvm-gpu/) |
 
 #### Measurement inventory
 

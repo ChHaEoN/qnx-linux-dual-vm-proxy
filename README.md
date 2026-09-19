@@ -38,8 +38,14 @@ are explained under [Reading the ids](#reading-the-ids).
   IPC comparison mixes host, transport, OS pair and QEMU build across two
   architecture versions — read it as "both mechanisms are alive", never as a
   host-speed result. Figures from M3 onward are unpublished pending the
-  licence consultation, and the numbers that count are taken once, on
-  reference architecture v1, after the freeze.
+  licence consultation, and the numbers that count are taken once, ~~on
+  reference architecture v1, after the freeze.~~ **2026-09-18: on A6, once its
+  gate is settled.** v1 (the native QNX Hypervisor as host) was superseded
+  before it was ever frozen: under it no OS can use the GPU, because Tegra234's
+  iGPU has no SMMU stream and its clock/reset/power go through BPMP, which QNX
+  has no client for. **A6** puts L4T on the metal with the GPU and runs QNX as a
+  KVM guest beside it. A6 is the current direction, **not** a frozen reference
+  architecture — what it measures and at what sample sizes is still open.
 
 - **What it cannot show.** No certified Type-1 isolation, no quantified freedom
   from interference, no real-time guarantee, no safety certification, no GPU,
@@ -50,9 +56,14 @@ are explained under [Reading the ids](#reading-the-ids).
   guest's memory came from the second window is not shown: no host-side view of
   those addresses exists. See [Known limitations](#known-limitations-honest-framing).
 
-- **What is next.** Freeze reference architecture v1, then run one measurement
-  campaign on it, including the **twin diff**: what changes when the host
-  bundle (CPU, OS, TCG backend, QEMU build) changes. **No board rung is
+- **What is next.** ~~Freeze reference architecture v1, then run one measurement
+  campaign on it,~~ **2026-09-18: settle A6's gate, then run one campaign on A6**
+  (L4T on the metal owning the GPU, QNX as a KVM guest beside it — QNX now boots
+  under KVM, which v1's native-hypervisor arrangement could not combine with GPU
+  use). Still including the **twin diff**: what changes when the host
+  bundle (CPU, OS, TCG backend, QEMU build) changes — though whether the TCG twin
+  legs survive at all, now that the native leg runs under KVM, is one of the open
+  choices. **No board rung is
   outstanding**, but the freeze is not a formality: it still needs the manifest
   written, the emulated-CPU count for the twin legs settled, two missing
   sample-size rules, and the licence consultation, which gates publication
@@ -117,7 +128,8 @@ root-caused) and the GICv3/NISV KVM defect ~~stay open as separate items~~ **sta
    S1-F met: Linux guest, then B5 ran QNX + Linux together, 2026-09-17
                             │
                             v  freeze
- NEXT  reference architecture v1, fixed by a manifest, then one campaign
+ NEXT  A6 (L4T on metal + QNX as KVM guest), gate not yet settled, then one campaign
+       [v1 -- native QNX Hypervisor as host -- superseded 2026-09-18, never frozen: no GPU under it]
    native leg (Orin) + TCG twin leg (Windows) + TCG twin leg (Orin)
    twin diff sets the two TCG legs against each other and against native
 

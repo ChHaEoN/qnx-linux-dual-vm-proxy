@@ -32,13 +32,22 @@ the *structural* picture that designs sits on top of.
   launched by hand from the firmware's UEFI Shell, carried only the one-core
   M1b image, with no `qvm` and no guest (M5-F). No `qvm` host image has been
   entered through UEFI. The M path has ended.
-- **Next:** S1, the first stage of A5: a Linux guest without a GPU under
+- **Next:** ~~S1, the first stage of A5: a Linux guest without a GPU under
   native `qvm`. Then the freeze of reference architecture v1, and one
   measurement campaign on it. v1's two TCG twin legs are campaign work on
-  v1, not a reopening of A1-A3.
+  v1, not a reopening of A1-A3.~~ **2026-09-18: settle A6's gate, then one
+  campaign on A6.** QNX now boots under KVM, so the architecture is L4T on the
+  metal owning the GPU with QNX as a hardware-virtualised guest beside it. v1
+  (A4's native QNX Hypervisor host plus S1's Linux guest) is superseded before it
+  was ever frozen, for one reason: under v1 no OS can use the GPU — Tegra234's
+  iGPU has no SMMU stream and its clock/reset/power go through BPMP, for which
+  QNX has no client. A4, A5 and S1 stay valid as their own architectures and are
+  not re-run. A6 is the current direction, not a frozen reference architecture.
 
 The cloud-twin and hardware-twin sections below describe A1 and A2 as built.
-The Phase 3b section describes A4 and the planned v1.
+The Phase 3b section describes A4 and ~~the planned v1~~ **v1 as it was planned
+(2026-09-18: superseded by A6 before it was ever frozen; kept as the record of
+what v1 was)**.
 
 ---
 
@@ -286,7 +295,8 @@ Entry into the A4 host image, two ways
   and stay unpublished, on the local branch `m3-results-unpublished` or in
   git-ignored run records.
 
-**Target: reference architecture v1 (not frozen).** A4's native host plus a
+**~~Target: reference architecture v1 (not frozen).~~ Superseded 2026-09-18 by
+A6; kept here as the record of what v1 was.** A4's native host plus a
 Linux guest without a GPU under `qvm` (S1), plus two TCG twin legs that boot
 v1's guests in a QHV host image under QEMU. Whether the QNX guest stays beside
 the Linux guest is settled at the freeze. GPU pass-through is a later stage,
@@ -409,9 +419,16 @@ this leg (no working host network stack; `io-sock` down).
 **Honest framing:** this demonstrates IPC across a real EL2↔EL1 `qvm`
 boundary, but the cloud leg is **TCG-emulated**, so the latency it
 yields is dominated by TCG emulation cost — it does **not** measure
-hardware-timed hypervisor IPC. Hardware-timed numbers come from the
+hardware-timed hypervisor IPC. ~~Hardware-timed numbers come from the
 native QNX Hypervisor on the Orin (Phase 3b, section above), in the v1
-campaign; the Phase-3 Orin twin under QEMU ~~runs~~ ran (**2026-09-13:** A2, history) TCG as well. The
+campaign;~~ **2026-09-18: A6 removes the hypervisor from that sentence.** Under
+A6 there is no QNX Hypervisor: QNX is a KVM guest of L4T, so any hardware-timed
+IPC number would cross a KVM boundary, not an EL2/EL1 `qvm` one — a different
+thing, and not a substitute for it. **No such number has been measured**; the
+2026-09-18 KVM work is functional only and took no timing at all. The QNX
+Hypervisor still cannot run under KVM (it needs EL2, which ARM KVM does not nest
+on A78AE), so a hardware-timed *hypervisor* number would still require the
+native A4 arrangement; the Phase-3 Orin twin under QEMU ~~runs~~ ran (**2026-09-13:** A2, history) TCG as well. The
 heterogeneous QNX↔Linux IPC (the bridged virtio-net path with `tap`/`br0`)
 ~~is committed to **Phase 3 / Orin**, where it runs natively against L4T~~
 ran on **Phase 3 / Orin** against a native L4T client —

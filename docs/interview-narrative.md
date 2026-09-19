@@ -113,7 +113,9 @@ CCPLEX core family. The "same IFS, same IPC code, only host changes"
 property was the design's load-bearing claim — walk through why it had
 to be restated: the Orin IPC leg used a rebuilt IFS, and "host" is a
 bundle (CPU, OS, TCG backend, QEMU build), so the twin diff compares
-host bundles and is re-run on reference architecture v1.
+host bundles and is re-run on ~~reference architecture v1~~ **A6 (2026-09-18;
+whether the TCG twin legs survive at all is one of A6's open choices, now that
+the native leg runs under KVM rather than a hypervisor)**.
 
 **Section 3 — One concrete BSP-engineering story (1.5 min).** SDP 8.0's
 x86_64-only host requirement forced the hybrid build/runtime
@@ -128,8 +130,11 @@ bound, not a transport cost (per [ADR-002](phase2-topology-decision.md)).
 Orin leg (Phase 3): heterogeneous QNX↔Linux over virtio-net under TCG
 (KVM boot blocked), where the cross-clock time-base normalisation between
 QNX `ClockCycles()` and Linux `clock_gettime(CLOCK_MONOTONIC)` re-enters.
-The hardware-timed number comes from the native QNX Hypervisor in the v1
-campaign. Framed echo protocol; P50/P99/P99.9
+~~The hardware-timed number comes from the native QNX Hypervisor in the v1
+campaign.~~ **2026-09-18:** do not say that any more. The direction changed to
+A6 — L4T on the metal with the GPU, QNX as a KVM guest — so there is no
+hypervisor in the path, and **no hardware-timed IPC number has been measured on
+any leg.** If asked, say that plainly. Framed echo protocol; P50/P99/P99.9
 reporting choice; warm-up exclusion. **Insert real numbers from
 `results/cloud/` and `results/hw/` once Phase 2 / 3 land.**
 

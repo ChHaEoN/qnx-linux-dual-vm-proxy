@@ -29,7 +29,11 @@ measurement. **2026-09-11:** the identical-image invariant holds only for the
 hypervisor leg (A3). There "host" is a bundle of CPU, OS, TCG backend and QEMU
 build, not one variable ([digital-twin-design.md](docs/digital-twin-design.md)
 §1a). The Orin IPC run used a rebuilt IFS and a different server program. The
-twin diff is re-run once, in the v1 campaign.
+twin diff is re-run once, in the ~~v1~~ **A6** campaign (**2026-09-18:** v1 —
+the native QNX Hypervisor as host — was superseded before it was ever frozen,
+because no OS can use the GPU under it; A6 is L4T on the metal with the GPU and
+QNX as a KVM guest. A6's gate is not settled, so whether the TCG twin legs
+survive is itself still open).
 
 ~~**This is not a real hypervisor.** There is no Type-1 partition isolation,~~
 **2026-09-11:** there is no *certified* Type-1 isolation. The uncertified QNX
@@ -694,8 +698,11 @@ Quick summary for context:
    projections~~. **This is the largest remaining gap in the public
    story** — ~~Phase 4's boot-diff half is done; this half is untouched.~~
    **2026-09-11:** correct the doc's stale statements now. The verdicts
-   wait for the v1 campaign, and so does the twin diff; the earlier
-   boot diffs are architecture-version history.
+   wait for the ~~v1~~ **A6** campaign, and so does the twin diff; the earlier
+   boot diffs are architecture-version history. **2026-09-18:** v1 was
+   superseded before it was ever frozen (no OS can use the GPU under a native
+   QNX Hypervisor on Tegra234), and A6's gate is not settled, so what that
+   campaign measures is still open.
 
 **Decision (2026-07-29):** getting a real KVM/hardware-timed number on
 Orin is **deferred, not abandoned** — ~~it genuinely needs either NVIDIA

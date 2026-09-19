@@ -14,7 +14,11 @@ qualitatively suggestive, and which are off-limits.
 > **Status (2026-09-11):** wording corrected; no final verdicts yet.
 > The Verdict column is a provisional, qualitative reading of the
 > earlier legs. Final verdicts wait for the one measurement campaign
-> on reference architecture v1. Measurements taken before v1 are
+> ~~on reference architecture v1~~ **on A6 (2026-09-18: v1 was superseded
+> before it was ever frozen — under its native-hypervisor arrangement no OS can
+> use the GPU; A6 keeps the GPU with L4T and runs QNX as a KVM guest. A6's gate
+> is not settled, so the campaign's content is still open)**. Measurements taken
+> before v1 are
 > architecture-version history
 > ([plan, "Architecture versions and the measurement freeze"](orin-native-port-plan.md#architecture-versions-and-the-measurement-freeze-decided-2026-09-11)).
 > Corrected today: the phase, the cloud host, the KVM wording for the
