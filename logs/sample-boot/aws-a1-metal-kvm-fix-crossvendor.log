@@ -1,0 +1,86 @@
+# Phase 3b / cross-vendor verification of the GICv3-NISV fix
+#
+# Captured 2026-09-19 on AWS EC2 a1.metal, eu-central-1 -- bare-metal Graviton1,
+# Annapurna Labs SoC, 16x Cortex-A72 (MIDR implementer 0x41, part 0xd08),
+# kernel 6.8.0-1063-aws. Instance terminated immediately after this capture.
+# No instance id, account id or address is recorded here, by design: the
+# 2026-07-29 run leaked its instance id into git history and needed a
+# filter-branch to remove it.
+#
+# WHY: on 2026-07-29 the SDP's shipped startup-qemu-virt hung here exactly as it
+# did on the Jetson Orin Nano -- 17 bytes, "FOUND GICv3 ITS", then silence. That
+# established the defect was not Tegra-specific. But it was SYMPTOM IDENTITY
+# ONLY, n=1: no ftrace ever confirmed the a1.metal hang was the same NISV fault
+# (results/gicv3-nisv-debug/20260909T101030Z/summary.md, hypothesis H-C).
+#
+# On 2026-09-18 the defect was cleared at the source on the Orin by rebuilding
+# startup-qemu-virt with -fno-auto-inc-dec, from board source written in-repo.
+# This run asks whether that fix also works on a second vendor's silicon.
+#
+# METHOD: the 2026-07-29 launch line, verbatim, changing exactly one thing per
+# arm -- which IFS is booted. Control first: if the shipped startup does not
+# reproduce the hang here today, the test arm proves nothing and the run is void.
+#
+#   sudo timeout 60 QEMU -machine virt,gic-version=3 \
+#     -cpu host -enable-kvm -smp 2 -m 1G \
+#     -drive file=disk-qemu,if=none,id=drv0,format=raw \
+#     -device virtio-blk-device,drive=drv0 -kernel <IFS> -nographic \
+#     -serial file:<log> -display none -no-reboot -monitor none
+#
+# QEMU: QEMU emulator version 6.2.0 (Debian 1:6.2+dfsg-2ubuntu6.31)
+#
+# ARTEFACTS (sha256, verified on this host after transfer):
+#   92868b2f116f17c06d26585b9618682076913d17491bdeb22c4a0392d43dd745  ifs.bin
+#   26170cd7dc74c216181db71c5da0e6b22719d1f3f9f2c1d0c2b9723fd6c9446c  ifs-kvmfix.bin
+#   669345e772d968944d9d9890d89fdb2d8f062506e7e4132c1225597dabb62b2a  disk-qemu
+#   ifs.bin        = the SDP's shipped startup  (CONTROL)
+#   ifs-kvmfix.bin = startup rebuilt with -fno-auto-inc-dec  (TEST)
+#   disk-qemu      = the same disk as the 2026-07-29 run
+#
+# QEMU_EXIT=124 in both arms means the 60s timeout wrapper killed it, not a
+# crash -- the same convention as the 2026-07-29 header.
+#
+################################################################################
+
+### ARM: control  (shipped startup)
+### serial bytes: 17
+### ---- serial output, complete ----
+FOUND GICv3 ITS
+### ---- end ----
+
+### ARM: fix  (rebuilt startup)
+### serial bytes: 1301
+### ---- serial output, complete ----
+---> Starting slogger2
+---> Starting PCI Services
+---> Starting fsevmgr
+# ---> Starting devb
+Path=0 ---> Mounting file systems
+- 
+ target=0 lun=0     Direct-Access(0) - VIRTIO  Rev: 
+---> Mounting file systems
+random: Unable to use devr-virtio.so as an entropy source [entropy.c(173)]
+random: Could not initialize entropy. [random.c(406)]
+Unable to access /dev/random
+---> Starting Networking
+if_up: network stack down: Bad file descriptor
+ifconfig: interface vtnet0 does not exist
+sysctl: unknown oid 'net.inet.icmp.bmcastecho': Address family not supported by protocol family
+sysctl: unknown oid 'qnx.sec.droproot': Address family not supported by protocol family
+setfacl: stat() of /dev/bpf failed: No such file or directory
+main: control_open: Address family not supported by protocol family
+socketpair: Address family not supported by protocol family
+---> Starting sshd
+PRNG is not seeded
+---> Starting misc
+=== Phase 3: static IP for br0/tap-qnx ===
+ifconfig: interface vtnet0 does not exist
+=== Phase 3: starting qnx-echo-server-net on :7000 ===
+server: socket: Address family not supported by protocol family
+
+To exit QEMU, type <ctrl>a x
+
+Process count:17
+Startup complete
+QNX qnx-safety 8.0.0 2026/02/27-10:59:13EST QEMU_virt_(aarch64),_KVM_guest aarch64le
+### ---- end ----

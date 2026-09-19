@@ -9,6 +9,53 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-19 — the fix holds on a second vendor's silicon: a matched pair on AWS `a1.metal`
+
+The 2026-07-29 entry below established that the GICv3/NISV hang was **not** Tegra-specific: the
+same IFS died the same way on AWS `a1.metal` — Graviton1, Annapurna Labs, Cortex-A72, a different
+vendor and core generation. But that was **symptom identity only, n=1**: no trace ever confirmed
+the `a1.metal` hang was the same NISV fault (hypothesis **H-C**). Today asks the other half: does
+the *fix* travel as well as the defect did?
+
+**Method — control first, one variable.** The 2026-07-29 launch line verbatim, on a fresh
+`a1.metal` in eu-central-1, changing exactly one thing per arm: which IFS boots. Same
+`disk-qemu` (`fd2ee67d…`, byte-identical to that run), same QEMU 6.2.0 from the distro, kernel
+`6.8.0-1063-aws` against that run's `-1061`. If the shipped startup did not hang here *today*,
+the test arm would prove nothing and the run would be void.
+
+| arm | IFS | serial | result |
+|---|---|---|---|
+| control | shipped `startup-qemu-virt` (`92868b2f…`) | **17 bytes** | `FOUND GICv3 ITS`, then silence — the historic hang, reproduced |
+| test | rebuilt with `-fno-auto-inc-dec` (`26170cd7…`) | **1301 bytes** | through to `Startup complete` and the guest banner |
+
+`QEMU_EXIT=124` in both arms is the 60 s timeout wrapper, not a crash — the same convention as the
+2026-07-29 header. Capture:
+[`logs/sample-boot/aws-a1-metal-kvm-fix-crossvendor.log`](../logs/sample-boot/aws-a1-metal-kvm-fix-crossvendor.log).
+
+**What this settles.** The defect reproduced on two vendors' silicon, and now the fix does too, each
+with its own same-session control. The cause is in QNX's board bring-up code, not in Tegra234, and
+`-fno-auto-inc-dec` removes it on Cortex-A72 as it does on Cortex-A78AE. Hypothesis 7 in the
+`gicv3-nisv-debug` reports — "Tegra234 / Cortex-A78AE / VHE-specific silicon quirk" — is refuted
+rather than merely weakened.
+
+**What it does not settle.** **H-C is still open as written.** No trace was taken on `a1.metal`, so
+this does not prove the *2026-07-29* hang was NISV by data; what it shows is that today's
+shipped-startup hang and its removal both reproduce here. It is one run per arm. No timing of any
+kind was taken, and the guest's entropy and networking errors in the test arm are the known
+virtio slot-order issue, not part of this result. The rebuilt startup is **ours**; QNX ships no such
+binary, so this remains evidence about a defect, not a supported configuration. And per the
+2026-09-18 decision the defect is **not being filed** with QNX/BlackBerry — this run strengthens a
+record, not a report.
+
+**Cost and hygiene.** One instance, ~1 h, ~$0.5, terminated immediately; `shutdown -h +90` plus
+`--instance-initiated-shutdown-behavior terminate` were set at launch so it would self-terminate
+even if contact were lost. No instance id, account id or address is recorded in the capture or
+here: the 2026-07-29 run leaked its instance id into git history and needed a `filter-branch` to
+clean, so this one redacts at capture time by construction.
+
+---
+
+
 ## 2026-09-18 — a service across the partition: L4T infers on the GPU, QNX judges the claim
 
 With QNX booting under KVM and the GPU staying with L4T, the architecture is finally in a state
@@ -1208,7 +1255,9 @@ the same IFS reaches the banner (control only — TCG never synthesises the
 Data Abort). What the honesty review forced into the open: the **only**
 data-backed NISV in the repo is the Orin ftrace `hsr=0x92000045` (EC=0x24,
 ISV=0, WnR=1, DFSC=0x05); the `a1.metal` run is symptom-only (no exit reason
-was logged there); the 2026-07-28 note claims the traced PC matched the
+was logged there) — **2026-09-19: still symptom-only. A matched control/test
+pair ran there that day and the fix worked, but it took no trace either, so the
+only data-backed NISV in the repo is still the single Orin ftrace**; the 2026-07-28 note claims the traced PC matched the
 static candidate but no numeric `pc=`/`ipa=`/`hxfar=` was ever written down,
 so 0x40085978 stays a candidate; the `-smp 1` / `gic-version=host` /
 `its=off` variants are asserted without a single logged run; and the
@@ -1548,6 +1597,11 @@ other writeback MMIO stores; (b) ask QNX for the `qemu-virt` board source
 ---
 
 ## 2026-07-29 — GICv3/NISV KVM hang reproduced on a second vendor's silicon (AWS `a1.metal`, Graviton1) — no longer Tegra234-specific
+
+> **Answered 2026-09-19.** The fix travels as well as the defect did: on a fresh `a1.metal` the
+> shipped startup reproduced this hang and a startup rebuilt with `-fno-auto-inc-dec` booted to the
+> guest banner, one variable apart. See that day's entry. What is **not** answered: no trace was
+> taken there, so this run stays symptom-only and hypothesis H-C remains open.
 
 Cross-vendor validation of the 2026-07-28 Orin Nano finding (`docs/orin-port.md`
 risk register). Provisioned an AWS EC2 `a1.metal` instance (Graviton1,
