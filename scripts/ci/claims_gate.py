@@ -176,7 +176,12 @@ def build_claims(repo):
 
     # --- KVM control/test serial byte counts ------------------------------
     def control_bytes():
-        return C.file_size(os.path.join(repo, LOGS, "orin-kvm-nisv-control-shipped-startup.log")), "bytes"
+        # Counted on the wire (CRLF), NOT os.path.getsize: git normalises this
+        # capture's line endings on checkout, so a file size answers 17 on
+        # Windows and 16 on Linux for the same commit. See claims_lib.
+        return C.serial_bytes_on_the_wire(
+            os.path.join(repo, LOGS, "orin-kvm-nisv-control-shipped-startup.log")
+        ), "bytes"
 
     def fix_bytes():
         markers = C.serial_byte_markers(os.path.join(repo, LOGS, "aws-a1-metal-kvm-fix-crossvendor.log"))

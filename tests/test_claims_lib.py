@@ -230,6 +230,33 @@ def test_serial_byte_markers(tmp_path):
     assert C.serial_byte_markers(str(p)) == [17, 1301]
 
 
+def test_serial_bytes_are_platform_independent(tmp_path):
+    """A serial-byte count must not depend on the checkout's line endings.
+
+    This is a regression test for a real CI failure (2026-09-19): the gate
+    derived the "17 bytes" control-arm claim from os.path.getsize(), which
+    reads 17 in a CRLF worktree and 16 on a Linux runner for the same commit,
+    because .gitattributes normalises the capture to LF. Both spellings below
+    must produce the same answer.
+    """
+    crlf = tmp_path / "crlf.txt"
+    crlf.write_bytes(b"FOUND GICv3 ITS\r\n")
+    lf = tmp_path / "lf.txt"
+    lf.write_bytes(b"FOUND GICv3 ITS\n")
+
+    assert C.serial_bytes_on_the_wire(str(crlf)) == 17
+    assert C.serial_bytes_on_the_wire(str(lf)) == 17
+    # The naive measure is exactly the trap this replaced.
+    assert C.file_size(str(crlf)) != C.file_size(str(lf))
+
+
+def test_serial_bytes_multi_line_capture(tmp_path):
+    p = tmp_path / "m.txt"
+    p.write_bytes(b"one\ntwo\n")
+    # 3 + 2 + 3 + 2 = 10 on the wire, whatever the checkout produced.
+    assert C.serial_bytes_on_the_wire(str(p)) == 10
+
+
 def test_sentinel_counts(tmp_path):
     p = tmp_path / "s.txt"
     p.write_text("sentinel_recoveries=3 sentinel_bounces=0\n", encoding="utf-8")

@@ -189,7 +189,36 @@ def sentinel_counts(path):
 
 
 def file_size(path):
+    """Raw size on disk.
+
+    DO NOT USE THIS FOR A SERIAL-BYTE CLAIM. It answers differently on Windows
+    and Linux for the same commit, because .gitattributes normalises line
+    endings on checkout. Use serial_bytes_on_the_wire() below. Kept only for
+    callers that genuinely want the on-disk size of a binary-ish artefact.
+    """
     return os.path.getsize(path)
+
+
+def serial_bytes_on_the_wire(path):
+    """Bytes a serial capture represents, counted with CRLF line endings.
+
+    WHY NOT os.path.getsize(). A file size is not admissible evidence for a
+    serial-byte claim in this repo, and CI proved it: .gitattributes declares
+    `* text=auto eol=lf`, so a capture whose bytes left the board as CRLF is
+    normalised to LF in the git object and on any Linux checkout. The control
+    capture is 17 bytes in a Windows worktree and 16 on the runner -- the same
+    commit, two different "measurements". The gate passed locally and failed in
+    CI for exactly that reason (2026-09-19).
+
+    What the claim actually means is what the board emitted: a UART sends CRLF.
+    So the line endings are normalised back to CRLF before counting, which
+    gives the same answer on every platform and matches the `### serial bytes:`
+    markers recorded inside the captures themselves.
+    """
+    with io.open(path, "r", encoding="utf-8", errors="replace", newline="") as fh:
+        text = fh.read()
+    # Collapse whatever the checkout produced, then restore the wire form.
+    return len(text.replace("\r\n", "\n").replace("\n", "\r\n").encode("utf-8"))
 
 
 # --------------------------------------------------------------------------
