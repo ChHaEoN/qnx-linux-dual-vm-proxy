@@ -5,7 +5,7 @@
 > numbers (boot time, cloud `qvm` virtio-console P99 — TCG-bound, not a
 > transport benchmark — EC2 cost) and after Phase 3 with the
 > comparison-doc findings (Orin virtio-net ran under TCG; the
-> hardware-timed route is the native port, measured in the v1 campaign).
+> ~~hardware-timed route is the native port, measured in the v1 campaign~~ **2026-09-18: the direction is A6 — L4T on the metal, QNX as a KVM guest — and no hardware-timed number has been measured on any leg; see §4, lines 133-137**).
 > **Length target:** 2 minutes spoken (~250–280 words).
 > **Audience:** NVIDIA AVOS / DRIVE OS Software Engineer interview.
 >
@@ -83,8 +83,8 @@
 > the same core family as DRIVE Orin's CCPLEX, so the hardware twin
 > validates the cloud-twin work on real Tegra-class silicon. The
 > twin-diff measurement — how latency, jitter, and boot-time change
-> when the host bundle changes (CPU, OS, emulator build), re-run once
-> the reference architecture is frozen — is the part I think tells the most
+> when the host bundle changes (CPU, OS, emulator build), ~~re-run once
+> the reference architecture is frozen~~ **2026-09-18: not re-run; the direction is A6, and whether the TCG twin legs survive at all is one of its open choices (§2)** — is the part I think tells the most
 > honest story about what cloud simulation can and cannot give you
 > versus a real-target bring-up. That maps directly to how DRIVE OS
 > customers actually do bring-up: develop in the cloud, validate on
@@ -252,6 +252,8 @@ from L4T, and it booted the cloud-leg QNX guest as a functional pass
 > and boots the same QNX guest the cloud leg uses. That is a functional
 > pass. The timed runs happen once, on a frozen reference architecture,
 > and publishing any evaluation result waits on a licence consultation.
+
+**Superseded 2026-09-18 — do not recite this answer. Nothing is frozen (A6 is the current direction and its gate is not settled), and no timed run has happened on any leg; see the 2026-09-18 update below.**
 
 **Update, 2026-09-18 — boot-verified, and not being filed.** The blocker for path 1 was that QNX ships `startup-qemu-virt` as a binary but not its `qemu-virt` board source, so their startup could not be relinked. I wrote that board directory myself (`orin-native/startup/qemu-virt/`) and rebuilt the startup library with `-fno-auto-inc-dec`, which removes the post-indexed store (`str w3,[x0],#4` at GICD+0x420) that reports ISV=0. An IFS containing that startup boots under `-enable-kvm` on the Orin and reaches `Startup complete` and the guest banner; the SDP's shipped startup, same launch line, same host, same session, still dies 17 bytes in after `FOUND GICv3 ITS`. The test arm ran twice with byte-identical captures, and byte-identical again on QEMU 6.2.0 and 11.1.0, so the QEMU version is not a factor. If asked:
 > I stopped waiting on the vendor and rebuilt their board bring-up code from source with one compiler flag, and the guest booted under KVM. Two caveats I'd lead with: **it is not a QNX-supported configuration** — the fix lives in a startup I rebuilt, and QNX ships no such binary — and I took **no timing from it**, so it is a boot, not a number.

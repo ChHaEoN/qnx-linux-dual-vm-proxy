@@ -308,8 +308,11 @@ Entry into the A4 host image, two ways
   an operator opened the Shell; not a supported or certified boot; and no
   evidence that the firmware leaves cleaner state than kexec does.
 - **What it does not have:** L4T, ~~so no Linux Compute side;~~ no GPU; no
-  certified isolation. **2026-09-13:** L4T is gone only while QNX runs. There
-  is no Linux side yet: S1's Linux guest is next and has not run. No
+  certified isolation. **2026-09-13:** L4T is gone only while QNX runs. ~~There
+  is no Linux side yet: S1's Linux guest is next and has not run.~~
+  **2026-09-17: S1-F is met (QNX plus Linux) — the Linux guest booted and held
+  for ten minutes under native qvm on the board (B3, B4), and B5 ran it beside
+  the QNX guest. 2026-09-18: a rung of A4/A5, not evidence about A6.** No
   unattended or supported boot: kexec needs a running L4T, and the UEFI entry
   needs an operator at the firmware menus. No published timing: its
   measurements wait for the v1 campaign.

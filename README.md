@@ -49,7 +49,11 @@ are explained under [Reading the ids](#reading-the-ids).
 
 - **What it cannot show.** No certified Type-1 isolation, no quantified freedom
   from interference, no real-time guarantee, no safety certification, no GPU,
-  camera or accelerator path. **No vision or AI workload has run on any leg.**
+  camera or accelerator path. ~~No vision or AI workload has run on any leg.~~
+  **2026-09-18: on A6, L4T ran a real TensorRT MNIST classification on the
+  Ampere GPU as one half of a cross-partition demonstration; the QNX guest only
+  judged the claim and never touched the GPU. One image per arm, one run each —
+  a demonstration that the shape works, not a result about how well.**
   The ten-minute run carried **one guest** and was idle apart from a heartbeat,
   so it is not a load, stress or soak test, and it is still the longest run this
   project has made; the two-guest rung was a boot, not a hold. Whether the
@@ -64,10 +68,12 @@ are explained under [Reading the ids](#reading-the-ids).
   bundle (CPU, OS, TCG backend, QEMU build) changes — though whether the TCG twin
   legs survive at all, now that the native leg runs under KVM, is one of the open
   choices. **No board rung is
-  outstanding**, but the freeze is not a formality: it still needs the manifest
+  outstanding**, but ~~the freeze is not a formality: it still needs the manifest
   written, the emulated-CPU count for the twin legs settled, two missing
-  sample-size rules, and the licence consultation, which gates publication
-  rather than the campaign. GPU pass-through is the owner's target, on a
+  sample-size rules,~~ **2026-09-18: A6's gate is not settled — what the
+  campaign measures, the sample sizes, and whether the TCG twin legs survive at
+  all are still the owner's to choose** — and the licence consultation, which
+  gates publication rather than the campaign. GPU pass-through is the owner's target, on a
   research track outside the current plan; no GPU stage has started.
 
 This is **not** DRIVE OS and not a certified hypervisor. The QEMU legs were
@@ -86,15 +92,15 @@ proxy can and cannot demonstrate. This table is the load-bearing part:
 
 | DRIVE OS feature | Limitation in this project |
 |---|---|
-| NVIDIA Hypervisor (Type-1) | The cloud leg (A1, history) ran the SDP 8.0 QNX Hypervisor (`qvm`) hosting one QNX guest — a *real* EL2/EL1 partition boundary, but TCG-emulated (no `/dev/kvm` on cloud) and **not** certified Type-1; no quantified freedom-from-interference, no mixed-criticality guarantees. The Orin plain leg (A2) was designed for host-mediated KVM, which ~~stays blocked by GICv3/NISV~~ **was blocked by GICv3/NISV when it ran** and is outside reference architecture v1, so it ran under TCG too. **2026-09-18: with a `startup-qemu-virt` rebuilt from board source written in this repo (`orin-native/startup/qemu-virt/`, `-fno-auto-inc-dec`), an IFS boots under `-enable-kvm` on the Orin; the SDP's shipped startup, same launch line, still hangs. A2 is not re-run and nothing was timed, so no KVM figure exists, and this is not a QNX-supported configuration.** The native leg (A4) runs the QNX Hypervisor at EL2 on the Orin's own cores with no QEMU. It is a real hypervisor on silicon, but not certified and not NVIDIA's: Experimental Software on a consumer dev kit, with no quantified freedom from interference. See [ADR-002](docs/phase2-topology-decision.md). |
+| NVIDIA Hypervisor (Type-1) | The cloud leg (A1, history) ran the SDP 8.0 QNX Hypervisor (`qvm`) hosting one QNX guest — a *real* EL2/EL1 partition boundary, but TCG-emulated (~~no `/dev/kvm` on cloud~~ **no `/dev/kvm` on the non-metal cloud host this leg was to run on — 2026-09-19: `*.metal` does expose it; non-metal Graviton still does not**) and **not** certified Type-1; no quantified freedom-from-interference, no mixed-criticality guarantees. The Orin plain leg (A2) was designed for host-mediated KVM, which ~~stays blocked by GICv3/NISV~~ **was blocked by GICv3/NISV when it ran** and is outside reference architecture v1, so it ran under TCG too. **2026-09-18: with a `startup-qemu-virt` rebuilt from board source written in this repo (`orin-native/startup/qemu-virt/`, `-fno-auto-inc-dec`), an IFS boots under `-enable-kvm` on the Orin; the SDP's shipped startup, same launch line, still hangs. A2 is not re-run and nothing was timed, so no KVM figure exists, and this is not a QNX-supported configuration.** The native leg (A4) runs the QNX Hypervisor at EL2 on the Orin's own cores with no QEMU. It is a real hypervisor on silicon, but not certified and not NVIDIA's: Experimental Software on a consumer dev kit, with no quantified freedom from interference. See [ADR-002](docs/phase2-topology-decision.md). |
 | Orin SoC (Tegra234) | The cloud leg's as-built runtime CPU was the local x86_64 Windows host (Graviton3 was the design intent). The Orin plain leg (A2, history) *did* run on Tegra234 silicon, but its QNX guest saw QEMU's generic `virt` machine — no Tegra-specific peripherals, no SoC-internal interconnect. The native leg runs the QNX host directly on Tegra234 through this repo's own startup code (console, interrupt controller, timers, CPU bring-up). It has no storage, network, display, GPU, SMMU or PCIe drivers, and its guest sees qvm's virtual devices, not Tegra peripherals. |
 | NVDLA / PVA | Not emulated. Deep-learning and vision accelerators have no QEMU model. |
 | MIPI CSI-2 (camera ingest) | Not emulated. No camera serial-link model in QEMU virt machine. |
 | FSI R52 lockstep | Not emulated. No Cortex-R52 lockstep cluster, no Functional Safety Island. |
 | GPU (Ampere CUDA / vGPU) | No leg passes a GPU to a guest. The cloud host has no NVIDIA GPU at all; the Orin Nano has an Ampere iGPU but it is never exposed to the QNX guest — no in-guest CUDA, no vGPU partitioning. On the native leg the S1 guest that has now run is Linux without a GPU. GPU pass-through is a later target, studied on a separate unpublished research track; no GPU stage has started. |
-| Real-time guarantees | The QEMU legs (A1 to A3, history) were TCG-emulation-bound, not hardware-timed, and the Orin plain leg added observable host-scheduler jitter on top; v1's two TCG twin legs will measure emulated time too. The native leg runs on real cores, but its timings are unpublished and not yet campaign-grade: the CPU frequency is wherever BPMP and Linux left it, the clock is recorded as unverified, and the numbers wait for the v1 campaign. The "Safety VM" framing is POSIX-realtime, not certified RT. |
+| Real-time guarantees | The QEMU legs (A1 to A3, history) were TCG-emulation-bound, not hardware-timed, and the Orin plain leg added observable host-scheduler jitter on top; ~~v1's two TCG twin legs will measure emulated time too~~ **2026-09-18: whether the TCG twin legs survive at all is an open A6 choice; if they run, they measure emulated time too**. The native leg runs on real cores, but its timings are unpublished and not yet campaign-grade: the CPU frequency is wherever BPMP and Linux left it, the clock is recorded as unverified, and the numbers wait for the ~~v1 campaign~~ **A6 campaign, once its gate is settled**. The "Safety VM" framing is POSIX-realtime, not certified RT. |
 | ASIL-D certification | None. SDP 8.0 ≠ QNX OS for Safety (QOS); no safety case, no MISRA-C, no ISO 26262 evidence. |
-| Inter-VM shared memory latency | Cloud leg (A1, history): host↔guest over the `qvm` virtio-console vdev (crosses the EL2/EL1 boundary, but TCG-emulated — the latency measures emulation cost, not transport cost). Orin plain leg (Phase 3, A2, history): QNX↔Linux virtio-net → tap → bridge → tap → virtio-net — also TCG-emulated, since the KVM path ~~is~~ **was** blocked **when it ran**, so it is **not** hardware-timed either. **2026-09-18: a startup rebuilt in this repo boots under `-enable-kvm` on the Orin, but that run took no timing at all — these A2 numbers stand exactly as recorded, and there is still no hardware-timed IPC figure on any leg.** Native leg (A4): host to guest over virtio-console under qvm on real cores; figures unpublished, re-measured in the v1 campaign. No sourced DRIVE OS IPC figure is in the repo yet, so no gap is quantified here. See [ADR-002](docs/phase2-topology-decision.md). |
+| Inter-VM shared memory latency | Cloud leg (A1, history): host↔guest over the `qvm` virtio-console vdev (crosses the EL2/EL1 boundary, but TCG-emulated — the latency measures emulation cost, not transport cost). Orin plain leg (Phase 3, A2, history): QNX↔Linux virtio-net → tap → bridge → tap → virtio-net — also TCG-emulated, since the KVM path ~~is~~ **was** blocked **when it ran**, so it is **not** hardware-timed either. **2026-09-18: a startup rebuilt in this repo boots under `-enable-kvm` on the Orin, but that run took no timing at all — these A2 numbers stand exactly as recorded, and there is still no hardware-timed IPC figure on any leg.** Native leg (A4): host to guest over virtio-console under qvm on real cores; figures unpublished, re-measured in the ~~v1 campaign~~ **A6 campaign, once its gate is settled (2026-09-18)**. No sourced DRIVE OS IPC figure is in the repo yet, so no gap is quantified here. See [ADR-002](docs/phase2-topology-decision.md). |
 | Certified bootloader chain | No SecureBoot, no measured boot, no chain-of-trust. The native leg's UEFI cold boot (M5-F) is an EFI loader of ours launched by hand from the firmware's Shell: not a supported, certified or unattended boot path. |
 
 These are deliberate. Documenting them precisely is the engineering point.
@@ -129,9 +135,11 @@ root-caused) and the GICv3/NISV KVM defect ~~stay open as separate items~~ **sta
                             │
                             v  freeze
  NEXT  A6 (L4T on metal + QNX as KVM guest), gate not yet settled, then one campaign
-       [v1 -- native QNX Hypervisor as host -- superseded 2026-09-18, never frozen: no GPU under it]
-   native leg (Orin) + TCG twin leg (Windows) + TCG twin leg (Orin)
-   twin diff sets the two TCG legs against each other and against native
+   A6 legs and twin-diff composition: not yet chosen (gate open)
+       [v1 -- native QNX Hypervisor as host -- superseded 2026-09-18, never frozen: no GPU under it
+        v1's planned legs, never run: native leg (Orin) + TCG twin leg (Windows)
+        + TCG twin leg (Orin); its twin diff would have set the two TCG legs
+        against each other and against native -- not run]
 
  Reference (production DRIVE OS, not this repo):
    Type-1 hypervisor, QNX Safety + Linux Compute partitions, vGPU,
@@ -151,7 +159,9 @@ the measured diffs, §1a and §5), [bsp-selection.md](docs/bsp-selection.md)
 
 ### Reading the ids
 
-- **A0–A5, v1** — architecture versions; every record keeps the id it ran on.
+- **A0–A6, v1** — architecture versions; every record keeps the id it ran on.
+  A6 (L4T on the metal, QNX as a KVM guest) is the current direction, not
+  frozen; v1 was superseded before it was ever frozen.
 - **M0–M5** — the native port's milestones. An **-F** suffix (M4-F, M5-F,
   S1-F) marks a *functional* rung, which passes or fails on what appears,
   never on a figure.
@@ -170,8 +180,8 @@ the measured diffs, §1a and §5), [bsp-selection.md](docs/bsp-selection.md)
 | **1** — Cloud twin bring-up: QHV `qvm` + QNX guest under TCG | ✅ done | [boot log](logs/sample-boot/qhv-tcg-host-and-guest-boot.log) |
 | **2** — Cloud twin IPC + latency | ✅ **closed as A1 history** — real P50/P99/Max exist, but the 100k target was never reached; the `qvm`/TCG stall that capped it is recoverable, **not root-caused**, and stays open | [cloud-ipc-latest.csv](results/cloud/cloud-ipc-latest.csv) |
 | **3** — Hardware twin port (Orin Nano) | ✅ **closed as A2 history** — QNX↔Linux IPC over a real `br0`/tap bridge ran under **TCG**, 2 × 100,000 iterations, zero errors, **using a rebuilt IFS with new TCP server code, not the byte-identical Phase-1 image**. KVM boot never worked **with the SDP's shipped `startup-qemu-virt`**; the root-caused GICv3/`KVM_EXIT_ARM_NISV` defect (reproduced on a second ARM vendor; compile-verified from QNX's own BSP source, ~~boot-unverified~~ **boot-verified 2026-09-18**) ~~stays open outside v1~~ **stays open in QNX's shipped binary, outside v1. 2026-09-18: an IFS whose `startup-qemu-virt` we rebuilt with `-fno-auto-inc-dec`, from board source written in this repo (`orin-native/startup/qemu-virt/`, which the SDP does not ship), booted under `-enable-kvm` on the Orin to `Startup complete` and the guest banner; the shipped startup, same launch line, same host, same session, hung after `FOUND GICv3 ITS` as before. The rebuilt arm's captures were byte-identical on QEMU 6.2.0 and 11.1.0. Nothing was timed, and this is not a QNX-supported configuration. The owner decided not to file the defect.** | [orin-ipc-latest.csv](results/hw/orin-ipc-latest.csv), [orin-port.md](docs/orin-port.md), [orin-kvm-*.log](logs/sample-boot/) |
-| **3b** — Native QNX on the Orin (no QEMU) | 🟡 **M path complete (2026-09-13); S1-F met (QNX plus Linux) 2026-09-17** — the two-guest rung (B5) ran once and passed: the QNX guest's banner and IPC completed beside the Linux guest. One observation, not a series. What remains is the v1 freeze and the one campaign on it — see [The native port](#the-native-port-phase-3b) | [ADR-003](docs/adr-003-hardware-timed-qhv.md), [the plan](docs/orin-native-port-plan.md) |
-| **4** — Twin diff + DRIVE OS comparison | 🟡 **history recorded; re-run inside the v1 campaign** — all earlier diffs ran under TCG, none hardware-timed; the verdicts in [drive-os-comparison.md](docs/drive-os-comparison.md) wait for it | [digital-twin-design.md](docs/digital-twin-design.md) §1a, §4, §5 |
+| **3b** — Native QNX on the Orin (no QEMU) | 🟡 **M path complete (2026-09-13); S1-F met (QNX plus Linux) 2026-09-17** — the two-guest rung (B5) ran once and passed: the QNX guest's banner and IPC completed beside the Linux guest. One observation, not a series. ~~What remains is the v1 freeze and the one campaign on it~~ **2026-09-18: what remains is settling A6's gate and the one campaign on A6; v1 was superseded before it was ever frozen** — see [The native port](#the-native-port-phase-3b) | [ADR-003](docs/adr-003-hardware-timed-qhv.md), [the plan](docs/orin-native-port-plan.md) |
+| **4** — Twin diff + DRIVE OS comparison | 🟡 **history recorded; re-run inside the ~~v1~~ A6 campaign, whose composition is open — whether the TCG twin legs survive at all is undecided (2026-09-18)** — all earlier diffs ran under TCG, none hardware-timed; the verdicts in [drive-os-comparison.md](docs/drive-os-comparison.md) wait for it | [digital-twin-design.md](docs/digital-twin-design.md) §1a, §4, §5 |
 | **5** — FuSa & Cybersecurity overlay | ⬜ not started as a dedicated phase (a Phase-1-gate pass did run) | [fusa/](docs/fusa/), [cyber/](docs/cyber/) |
 | **6** — Polish, public README, demo | ⬜ not started | — |
 | **7** _(stretch)_ — Multi-SoC / domain convergence | ⬜ feasibility frozen, not built | [future-multi-soc.md](docs/future-multi-soc.md) |
@@ -180,8 +190,13 @@ the measured diffs, §1a and §5), [bsp-selection.md](docs/bsp-selection.md)
 built*, ran on the **local Windows host under QEMU TCG** — not on the
 Graviton instance the design called for, because non-metal Graviton exposes
 no `/dev/kvm`/EL2 ([ADR-002](docs/phase2-topology-decision.md)). AWS earned
-its keep for one thing: an `a1.metal` instance supplied the cross-vendor
-reproduction of the KVM GICv3 defect.
+its keep for ~~one thing: an `a1.metal` instance supplied the cross-vendor
+reproduction of the KVM GICv3 defect.~~ **two. An `a1.metal` instance supplied
+the cross-vendor reproduction of the defect (2026-07-29), and on 2026-09-19 a
+matched pair there reproduced both the defect (shipped startup, 17 bytes) and
+its removal (rebuilt startup, 1301 bytes, `Startup complete` + banner),
+refuting Hypothesis 7. H-C stays open — no trace was taken there — it is one
+run per arm, and no timing of any kind was taken.**
 
 ---
 
@@ -190,7 +205,9 @@ reproduction of the KVM GICv3 defect.
 Project rule: *never write "it works" without a log, a number, or a diff.*
 Every figure traces to a committed CSV or boot log here. **Every figure below
 ran on an earlier architecture and is kept with that label, not re-run for its
-own sake.** The numbers that count are taken once, on v1, after the freeze.
+own sake.** ~~The numbers that count are taken once, on v1, after the freeze.~~
+**2026-09-18: on A6, once its gate is settled — A6 is the current direction, not
+a frozen reference architecture.**
 
 | What | Result | Read it with |
 |---|---|---|
@@ -324,8 +341,10 @@ Dev Kit (**JetPack 6 / L4T R36.4.7**); for the native port a **3.3 V-logic**
 USB-TTL adapter on the Orin's J14 header (never a 5 V-only one), with its TX
 on **J14 pin 3 only during an M5 session**, while the terminal runs, removed
 afterwards — and a way to cut power remotely, because a hung run needs a
-power cycle. AWS is optional and only repeats the `a1.metal` KVM probe; the
-Graviton runtime leg was never built.
+power cycle. AWS is optional and ~~only repeats the `a1.metal` KVM probe~~
+**repeats the `a1.metal` KVM probe — which on 2026-09-19 reproduced both the
+defect (shipped startup) and its removal (rebuilt startup), one run per arm,
+nothing timed**; the Graviton runtime leg was never built.
 
 ---
 
@@ -341,8 +360,13 @@ Graviton runtime leg was never built.
       beside it to banner and IPC completion — **met (QNX plus Linux)**
       (2026-09-17). Nothing ran under load, and the ten minutes is the Linux
       guest alone
-- [ ] Freeze reference architecture v1
-- [ ] One measurement campaign on v1
+- [ ] ~~Freeze reference architecture v1~~
+- [ ] ~~One measurement campaign on v1~~
+  **2026-09-18: v1 was superseded before it was ever frozen — under a native QNX
+  Hypervisor no OS can use the GPU on Tegra234 (the iGPU has no SMMU stream, and
+  its clock/reset/power go through BPMP, for which QNX has no client). Next:
+  settle A6's gate — what the campaign measures, the sample sizes, and whether
+  the TCG twin legs survive — then one campaign on A6.**
 - [ ] **Phase 7** _(stretch)_ — domain-controller extension, two tracks in
       [future-multi-soc.md](docs/future-multi-soc.md)
 

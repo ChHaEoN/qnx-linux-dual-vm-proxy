@@ -2,7 +2,8 @@
 
 > **Phase 0 study notes** — the porting workflow this project actually
 > follows in Phase 1. Worked examples land in `paradigm.md` and (later)
-> in `docs/findings/phase-1-bringup.md`.
+> in ~~`docs/findings/phase-1-bringup.md`~~ **`logs/sample-boot/` and
+> `docs/findings.md` (2026-09-19: the old path never existed)**.
 
 ---
 
@@ -51,7 +52,10 @@ and how to know when each stage is actually done.
 
 ## Study notes
 
-The paradigm is in `paradigm.md`. This README is the index.
+~~The paradigm is in `paradigm.md`. This README is the index.~~
+**2026-09-19: `paradigm.md` is not written; the directory holds only this
+README. The workflow is exercised for real in
+`orin-native/startup/qemu-virt/` (see Files, above).**
 
 ## Applied to this project
 
@@ -62,5 +66,7 @@ In Phase 1, bring-up follows the four stages literally:
 2. **Bring-up** — UART (PL011) printable from earliest possible point;
    timer (arch generic timer) drives a heartbeat
 3. **Drivers** — virtio-net, virtio-console, virtio-blk
-4. **Validation** — boot logs in `docs/findings/phase-1-bringup.md`,
+4. **Validation** — boot logs in ~~`docs/findings/phase-1-bringup.md`~~
+   **`logs/sample-boot/`, findings in `docs/findings.md` (2026-09-19: the old
+   path never existed)**,
    timing measurements via `dmesg` timestamps and host-side `qemu` traces

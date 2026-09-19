@@ -45,39 +45,46 @@ board source written in this repo, boots under `-enable-kvm` to procnto and its 
 it is not a QNX-supported configuration. The A2 cells below are not re-run or re-timed,
 and the hypervisor legs are untouched — QHV needs EL2 and ARM KVM does not nest on
 A78AE, so they stay TCG.** The "Native" column is A4, the QNX Hypervisor running
-natively on the Orin, and then v1, which adds a Linux guest. Its cells
-are placeholders until the v1 campaign. The ids are those of the plan's
+natively on the Orin, and then ~~v1, which adds a Linux guest. Its cells
+are placeholders until the v1 campaign.~~ **v1, which was to add a Linux guest
+(2026-09-18: v1 was superseded before it was ever frozen; A6's gate is not
+settled, so the campaign's content is still open). Its cells are placeholders
+until the A6 campaign.** The ids are those of the plan's
 [architecture table](orin-native-port-plan.md#architecture-versions).
-Verdicts wait for the v1 measurement campaign.
+Verdicts wait for the ~~v1~~ **A6 (2026-09-18: v1 was superseded before it was
+ever frozen; A6's gate is not settled, so what the campaign measures is still
+open)** measurement campaign.
 
 | Concept | DRIVE OS implementation | Cloud twin (Windows PC, A1) | HW twin (Orin Nano, A2) | Native (Orin, A4 then v1) | Verdict |
 |---|---|---|---|---|---|
-| **VM partitioning** | NVIDIA Type-1 hypervisor on Tegra SoC | SDP 8.0 QHV (`qvm`) hosting **one** QNX guest under QEMU **TCG** (no `/dev/kvm` on cloud; [ADR-002](phase2-topology-decision.md)) | L4T host on A78AE; QEMU **TCG** (QNX) alongside native L4T; KVM boot blocked | _waits for the v1 campaign_ | **Validates** a **real `qvm` Type-1 partition boundary** (EL2↔EL1) on cloud, though TCG-emulated; **cannot** validate certified Type-1 isolation. ~~The HW twin runs TCG, not KVM.~~ **The HW twin as measured (A2) ran TCG, not KVM. 2026-09-18: KVM is no longer blocked on that board — an IFS with a `startup-qemu-virt` we rebuilt boots under `-enable-kvm`, while the shipped startup still dies — but no A2 measurement was re-run under it and nothing was timed. QHV still needs EL2, which ARM KVM does not nest on A78AE, so the hypervisor legs stay TCG.** |
-| **Same Tegra silicon family** | Yes (Orin / Thor) | No — as built, an x86_64 Windows PC emulating `-cpu max` (the design host, Graviton, is Neoverse-V1) | Host **yes** — A78AE is the same family as DRIVE Orin's CCPLEX cores. The QNX side runs on QEMU's emulated `-cpu max` under TCG, not on the A78AE cores | _waits for the v1 campaign_ | Under TCG only the L4T host runs on Tegra-family cores; the QNX code does not. |
-| **Dual-OS coexistence** | QNX Safety + Linux Compute on one Tegra | **No Linux on cloud** — QNX host + QNX guest only (heterogeneity moved to Orin per [ADR-002](phase2-topology-decision.md)) | QNX in QEMU + L4T native (host) on one Tegra-family SoC | _waits for the v1 campaign_ | **Validates dual-OS only on the HW twin (Orin)**; the cloud leg validates the partition *mechanism* (QNX↔QNX), not OS heterogeneity. |
-| **Asymmetric workload** | Safety FuSa monitors / Compute DriveWorks | Console client/server (`qnx-host-client`, `qnx-server`); no real RT, no accelerators | A different client/server pair (a QNX TCP server and a native Linux client), the QNX side under TCG; A78AE has hardware RT support but L4T host is not RT-certified | _waits for the v1 campaign_ | **Partial** in both twins. Shape reproduced, substance not. |
-| **Inter-VM IPC** | Shared memory + mailbox; sub-µs | host↔guest over `qvm` virtio-console vdev (TCG-emulated EL2 boundary; not hardware-timed — [ADR-002](phase2-topology-decision.md)) | virtio-net through `br0` under TCG; heterogeneous QNX↔Linux, with only the Linux client running directly on the silicon | _waits for the v1 campaign_ | The Phase 4 **twin diff** compares **non-identical** IPC paths (console/QNX↔QNX/TCG vs. virtio-net/QNX↔Linux/TCG). It mixes host, transport, OS pair and QEMU build, not host alone. It is architecture-version history; the v1 campaign runs the twin diff again. |
-| **Boot sequencing** | HV brings up Safety → Compute with cross-checks | `qvm` host boots, then starts the QNX guest (`qvm @g2.conf`) — a real HV→guest sequence on cloud ([ADR-002](phase2-topology-decision.md)) | Same — L4T is up first (it's the host) and QNX is launched after | _waits for the v1 campaign_ | **Partial** in both — demonstrates workflow without enforcement primitive. |
-| **Bootloader chain** | SecureBoot → measured boot → HV → guest IPLs | No Linux guest. QEMU loads the QNX Hypervisor host image directly (`-kernel`), and `qvm` loads the guest IFS from its config | JetPack UEFI for L4T host; QEMU loads the QNX IFS directly (`-kernel`) | _waits for the v1 campaign_ | **Cannot** validate certified chain on either twin. |
-| **Real-time guarantees** | Certified RT on Safety partition | QNX RT inside guest; **TCG emulation** dominates timing on cloud (not hardware-timed; [ADR-002](phase2-topology-decision.md)) | QNX RT inside guest, under **TCG**, so this leg is not hardware-timed either ([digital-twin-design.md](digital-twin-design.md)); L4T host scheduler best-effort (A78AE silicon does have RT support) | _waits for the v1 campaign_ | **Cannot** validate end-to-end RT on either twin. |
+| **VM partitioning** | NVIDIA Type-1 hypervisor on Tegra SoC | SDP 8.0 QHV (`qvm`) hosting **one** QNX guest under QEMU **TCG** (no `/dev/kvm` on ~~cloud~~ **non-metal Graviton (2026-09-19: corrected — the limit was always non-metal; bare metal does expose it)**; [ADR-002](phase2-topology-decision.md)) | L4T host on A78AE; QEMU **TCG** (QNX) alongside native L4T; KVM boot blocked | _waits for the A6 campaign (content open)_ | **Validates** a **real `qvm` Type-1 partition boundary** (EL2↔EL1) on cloud, though TCG-emulated; **cannot** validate certified Type-1 isolation. ~~The HW twin runs TCG, not KVM.~~ **The HW twin as measured (A2) ran TCG, not KVM. 2026-09-18: KVM is no longer blocked on that board — an IFS with a `startup-qemu-virt` we rebuilt boots under `-enable-kvm`, while the shipped startup still dies — but no A2 measurement was re-run under it and nothing was timed. QHV still needs EL2, which ARM KVM does not nest on A78AE, so the hypervisor legs stay TCG.** |
+| **Same Tegra silicon family** | Yes (Orin / Thor) | No — as built, an x86_64 Windows PC emulating `-cpu max` (the design host, Graviton, is Neoverse-V1) | Host **yes** — A78AE is the same family as DRIVE Orin's CCPLEX cores. The QNX side runs on QEMU's emulated `-cpu max` under TCG, not on the A78AE cores | _waits for the A6 campaign (content open)_ | Under TCG only the L4T host runs on Tegra-family cores; the QNX code does not. |
+| **Dual-OS coexistence** | QNX Safety + Linux Compute on one Tegra | **No Linux on cloud** — QNX host + QNX guest only (heterogeneity moved to Orin per [ADR-002](phase2-topology-decision.md)) | QNX in QEMU + L4T native (host) on one Tegra-family SoC | _waits for the A6 campaign (content open)_ | **Validates dual-OS only on the HW twin (Orin)**; the cloud leg validates the partition *mechanism* (QNX↔QNX), not OS heterogeneity. |
+| **Asymmetric workload** | Safety FuSa monitors / Compute DriveWorks | Console client/server (`qnx-host-client`, `qnx-server`); no real RT, no accelerators | A different client/server pair (a QNX TCP server and a native Linux client), the QNX side under TCG; A78AE has hardware RT support but L4T host is not RT-certified | _waits for the A6 campaign (content open)_ | **Partial** in both twins. Shape reproduced, substance not. |
+| **Inter-VM IPC** | Shared memory + mailbox; sub-µs | host↔guest over `qvm` virtio-console vdev (TCG-emulated EL2 boundary; not hardware-timed — [ADR-002](phase2-topology-decision.md)) | virtio-net through `br0` under TCG; heterogeneous QNX↔Linux, with only the Linux client running directly on the silicon | _waits for the A6 campaign (content open)_ | The Phase 4 **twin diff** compares **non-identical** IPC paths (console/QNX↔QNX/TCG vs. virtio-net/QNX↔Linux/TCG). It mixes host, transport, OS pair and QEMU build, not host alone. It is architecture-version history; ~~the v1 campaign runs the twin diff again.~~ **2026-09-18: v1 was superseded before it was ever frozen. The twin diff has not been re-run; whether the TCG twin legs survive at all is one of A6's open choices.** |
+| **Boot sequencing** | HV brings up Safety → Compute with cross-checks | `qvm` host boots, then starts the QNX guest (`qvm @g2.conf`) — a real HV→guest sequence on cloud ([ADR-002](phase2-topology-decision.md)) | Same — L4T is up first (it's the host) and QNX is launched after | _waits for the A6 campaign (content open)_ | **Partial** in both — demonstrates workflow without enforcement primitive. |
+| **Bootloader chain** | SecureBoot → measured boot → HV → guest IPLs | No Linux guest. QEMU loads the QNX Hypervisor host image directly (`-kernel`), and `qvm` loads the guest IFS from its config | JetPack UEFI for L4T host; QEMU loads the QNX IFS directly (`-kernel`) | _waits for the A6 campaign (content open)_ | **Cannot** validate certified chain on either twin. |
+| **Real-time guarantees** | Certified RT on Safety partition | QNX RT inside guest; **TCG emulation** dominates timing on cloud (not hardware-timed; [ADR-002](phase2-topology-decision.md)) | QNX RT inside guest, under **TCG**, so this leg is not hardware-timed either ([digital-twin-design.md](digital-twin-design.md)); L4T host scheduler best-effort (A78AE silicon does have RT support) | _waits for the A6 campaign (content open)_ | **Cannot** validate end-to-end RT on either twin. |
 
 ---
 
 ## Quantitative data
 
-> Waits for the v1 campaign. Earlier measurements are listed as
+> Waits for the ~~v1~~ **A6 (2026-09-18: v1 was superseded before it was ever
+> frozen; A6's gate is not settled, so the campaign's content is still open)**
+> campaign. Earlier measurements are listed as
 > history in the plan's
 > [measurement inventory](orin-native-port-plan.md#measurement-inventory).
 > No project figures appear here before then.
 
 | Metric | DRIVE OS reference (public, approximate) | This proxy (measured) |
 |---|---|---|
-| QNX guest boot time | n/a (different SoC) | _waits for the v1 campaign_ |
-| Linux guest boot time | n/a (different SoC) | _waits for the v1 campaign_ |
-| Inter-VM IPC P50 round-trip | < 10 µs (shared mem regime) | _waits for the v1 campaign_ |
-| Inter-VM IPC P99 round-trip | < 50 µs (shared mem regime) | _waits for the v1 campaign_ |
-| Inter-VM IPC P99.9 round-trip | _bounded by RT guarantees_ | _waits for the v1 campaign_ |
-| Sustained throughput (1 KB msg) | _hardware-bound_ | _waits for the v1 campaign_ |
+| QNX guest boot time | n/a (different SoC) | _waits for the A6 campaign (content open)_ |
+| Linux guest boot time | n/a (different SoC) | _waits for the A6 campaign (content open)_ |
+| Inter-VM IPC P50 round-trip | < 10 µs (shared mem regime) | _waits for the A6 campaign (content open)_ |
+| Inter-VM IPC P99 round-trip | < 50 µs (shared mem regime) | _waits for the A6 campaign (content open)_ |
+| Inter-VM IPC P99.9 round-trip | _bounded by RT guarantees_ | _waits for the A6 campaign (content open)_ |
+| Sustained throughput (1 KB msg) | _hardware-bound_ | _waits for the A6 campaign (content open)_ |
 
 The "DRIVE OS reference" column is for orientation only; figures
 come from public NVIDIA materials, not from the project itself.

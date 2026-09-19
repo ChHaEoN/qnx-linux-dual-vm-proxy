@@ -349,6 +349,15 @@ risk, carried as assumptions of use to Phase 3 (Orin, real EL2/KVM/SMMU):
 > A4). That plan does no SMMU work (its §7 item 3). When FFI or timing
 > closure evidence will exist is UNKNOWN. TSR-TIM-001's prohibition stays
 > in force.
+>
+> **2026-09-18 update to that note.** The blockage holds for the SDP's
+> *shipped* `startup-qemu-virt`, which still stops after `FOUND GICv3 ITS`.
+> An IFS carrying a `startup-qemu-virt` rebuilt with `-fno-auto-inc-dec`,
+> from board source written in this repo, boots under `-enable-kvm` on the
+> Orin ([findings.md](../findings.md) 2026-09-18). This **discharges nothing
+> below**: no timing, no isolation or freedom-from-interference evidence,
+> and it is not a QNX-supported configuration. TSR-TIM-001's prohibition
+> stays in force.
 
 | Item | Safety Goal | Disposition | Where it closes |
 |---|---|---|---|

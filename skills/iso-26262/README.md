@@ -75,6 +75,6 @@ are independent — Part 9 is the gatekeeper.
 
 ## Applied to this project
 
-The Phase 3 comparison doc (`docs/nvidia-drive-os-comparison.md`) cites Part 6
+The Phase ~~3~~ **4** comparison doc (`docs/~~nvidia-~~drive-os-comparison.md`) cites Part 6
 (SW lifecycle) when describing the gap between this software proxy and a
 DRIVE OS Safety partition. No claims of compliance are made or implied.

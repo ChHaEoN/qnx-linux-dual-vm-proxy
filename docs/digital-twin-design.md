@@ -9,6 +9,10 @@ two sides stay in sync, and how the twin diff is measured.
 > re-scope. Sections 4–6 (twin-diff methodology specifics, results
 > interpretation, narrative tie-back) wait for Phase 2 / Phase 4
 > measurement so the prose can be backed by numbers.~~
+> **2026-09-18:** v1 was superseded before it was ever frozen; A6 (L4T on the
+> metal, QNX as a KVM guest beside it) is the current direction and its gate is
+> not settled. References to "the v1 campaign" below are the record of what was
+> planned, not a current plan.
 > **2026-09-11:** §1a and §5 now hold measured results. Under the owner's
 > freeze decision those measurements are architecture-version history. The
 > twin diff runs once, in the v1 campaign
@@ -124,7 +128,9 @@ So the same two images can be copied to the Orin and booted there unchanged:
 
 **2026-09-11:** The QEMU row was later aligned to one release. Both hosts ran
 QEMU 11.1.0, in different builds that the times files stamp. That pair is A3
-history under the freeze decision. The TCG legs run again in the v1 campaign.
+history under the freeze decision. ~~The TCG legs run again in the v1 campaign.~~
+**2026-09-18: v1 is superseded; whether the TCG twin legs survive at all is one
+of A6's open choices, now that the native leg runs under KVM.**
 
 > **This table originally omitted the QEMU version row, and that omission
 > broke the leg's whole premise on first contact with the hardware
@@ -316,8 +322,11 @@ virtualisation cost. ~~No configuration in this repo produces a hardware-timed
 QHV number — that needs nested virt, which the hardware does not offer.~~
 **2026-09-11:** That holds for every QEMU configuration. The native port (A4,
 Phase 3b) runs qvm at EL2 on the Orin itself, with no nesting. M3 there is a
-functional pass. The hardware-timed measurement runs in the v1 campaign
-([orin-native-port-plan.md](orin-native-port-plan.md#architecture-versions-and-the-measurement-freeze-decided-2026-09-11)). The
+functional pass. ~~The hardware-timed measurement runs in the v1 campaign
+([orin-native-port-plan.md](orin-native-port-plan.md#architecture-versions-and-the-measurement-freeze-decided-2026-09-11)).~~
+**2026-09-18: v1 is superseded. A4 and A5 stay valid as their own architectures
+and are not re-run; A6 has no QNX Hypervisor leg, and no hardware-timed number
+has been measured anywhere.** The
 comparison is honest about *what changes when the host changes*; it is not a
 performance claim about QHV.
 
@@ -368,8 +377,12 @@ dual-OS story. ~~A dual-guest Linux-under-QHV cloud topology (ADR-002
 Option B) is a research-gated **Phase 2.5** stretch only, not a claim
 made today.~~ **2026-09-11:** The cloud dual-guest topology is still unbuilt
 and is not a claim. Its idea moved to the native leg: a Linux guest without a
-GPU under native qvm on the Orin is now S1-F, planned before the v1 freeze. No
-S1 run is recorded in this repo.
+GPU under native qvm on the Orin is now S1-F, planned before the v1 freeze. ~~No
+S1 run is recorded in this repo.~~ **2026-09-17: S1-F is met (QNX plus Linux) —
+B3 booted the Linux guest under native qvm on the board, B4 held it ten minutes,
+and B5 ran it beside the QNX guest; records under `results/orin-native-port/`,
+figures unpublished. 2026-09-18: it is a rung of the native-hypervisor ladder
+(A4/A5) and is not evidence about A6.**
 
 The HW twin therefore can **claim**:
 - Real Tegra-family silicon (A78AE matches DRIVE Orin's CCPLEX core family)
@@ -453,9 +466,13 @@ just having one canonical artefact.
 > HW); the metrics chosen (boot time, P50 / P99 / P99.9 IPC RTT,
 > jitter envelope, throughput at 1 KB / 4 KB / 16 KB messages); the
 > reporting format; how to interpret a delta._~~
-> **2026-09-11:** The owner's freeze decision defines the twin diff. It runs
+> **2026-09-11:** The owner's freeze decision defines the twin diff. ~~It runs
 > once, in the v1 campaign: the two TCG legs against each other (two host
-> bundles, §1a), and each TCG leg against the native leg. A table compares only
+> bundles, §1a), and each TCG leg against the native leg.~~ **2026-09-18: v1 was
+> superseded before it was ever frozen (A6). What the campaign measures on A6,
+> the sample sizes, and whether the TCG twin legs survive at all are open owner
+> choices. The twin diff has not been re-run; A1/A2/A3 remain
+> architecture-version history.** A table compares only
 > records with the same `arch=` stamp
 > ([orin-native-port-plan.md](orin-native-port-plan.md#the-campaign)).
 
@@ -516,7 +533,11 @@ and [`results/hw/orin-ipc-latest.csv`](../results/hw/orin-ipc-latest.csv):
 Per §4's constraint, this is not a host-only comparison — it confounds
 host, acceleration (matching only incidentally: HW's KVM path is
 separately blocked by the GICv3/NISV finding in
-[orin-port.md](orin-port.md), not by design), and transport+OS-pair. Two
+[orin-port.md](orin-port.md) **(2026-09-18: blocked for the SDP's shipped
+`startup-qemu-virt`; an IFS carrying a startup we rebuilt with
+`-fno-auto-inc-dec` boots under KVM on the board — not a QNX-supported
+configuration, and no timing was taken — which does not change what this A2
+measurement confounded)**, not by design), and transport+OS-pair. Two
 observations are honestly supportable from this data:
 
 - **Stability, not raw speed, is the striking difference.** The cloud

@@ -176,7 +176,7 @@ speedup — it is the signature of run-to-run noise, and the correct statement i
 measurable at this sample size**, not that concurrency is free.
 
 Meanwhile the guest answered **21 of 21 frames byte-exact** across five connections — before the
-load, twice at 99% GPU utilisation, and after — at sub-millisecond round trips, and its own serial
+load, twice at 99% GPU utilisation, and after — at mean round trips of 0.62–1.55 ms, and its own serial
 log independently records every one (`client connected from ...`, `client EOF after N frames`), so
 host and guest corroborate each other. Run records:
 [`results/orin-native-port/20260918T-kvm-gpu/`](../results/orin-native-port/20260918T-kvm-gpu/).

@@ -41,9 +41,11 @@ survive is itself still open).
 ~~**This is not a real hypervisor.** There is no Type-1 partition isolation,~~
 **2026-09-11:** there is no *certified* Type-1 isolation. The uncertified QNX
 Hypervisor runs emulated in TCG (A1, A3) and natively on the Orin (A4); KVM
-~~appears only in the blocked GICv3/NISV track.~~ **2026-09-18:** appears
-only in the GICv3/NISV track, which is no longer blocked for a *plain QNX
-guest*: an IFS with a `startup-qemu-virt` we rebuilt (`-fno-auto-inc-dec`)
+~~appears only in the blocked GICv3/NISV track.~~ **2026-09-18:** ~~appears
+only in the GICv3/NISV track~~ **now carries the current direction, A6 (L4T on
+the metal with the GPU, QNX as a KVM guest; owner 2026-09-18, not frozen —
+A6's gate is not settled), as well as the GICv3/NISV track**, which is no
+longer blocked for a *plain QNX guest*: an IFS with a `startup-qemu-virt` we rebuilt (`-fno-auto-inc-dec`)
 boots under KVM on the Orin, where the SDP's shipped one still hangs. That is
 a functional boot, not a QNX-supported configuration and no timing claim, and
 it does not extend to the QNX Hypervisor, which still needs EL2/nested virt
@@ -243,7 +245,7 @@ Three parallel-friendly handoffs in that flow: step 6 (FuSa-Analysis ∥ Cyber-A
 
 ## What this project does NOT do
 
-- ~~No Type-1 / Type-2 hypervisor (QEMU + KVM is for OS bring-up, not partition isolation)~~ **2026-09-11:** no *certified* Type-1 isolation. The uncertified QNX Hypervisor runs in TCG (A1, A3) and natively on the Orin (A4); ~~KVM appears only in the blocked GICv3/NISV track.~~ **2026-09-18:** KVM appears only in the GICv3/NISV track, and that track is no longer blocked for a plain QNX guest — an IFS with a `startup-qemu-virt` we rebuilt (`-fno-auto-inc-dec`) boots under KVM on the Orin (not a QNX-supported configuration; no timing claim). The QNX Hypervisor still cannot run under KVM (EL2/nested virt).
+- ~~No Type-1 / Type-2 hypervisor (QEMU + KVM is for OS bring-up, not partition isolation)~~ **2026-09-11:** no *certified* Type-1 isolation. The uncertified QNX Hypervisor runs in TCG (A1, A3) and natively on the Orin (A4); ~~KVM appears only in the blocked GICv3/NISV track.~~ **2026-09-18:** KVM ~~appears only in the GICv3/NISV track~~ **now carries the current direction, A6 (L4T on the metal with the GPU, QNX as a KVM guest; owner 2026-09-18, not frozen — A6's gate is not settled), as well as the GICv3/NISV track**, and that track is no longer blocked for a plain QNX guest — an IFS with a `startup-qemu-virt` we rebuilt (`-fno-auto-inc-dec`) boots under KVM on the Orin (not a QNX-supported configuration; no timing claim). The QNX Hypervisor still cannot run under KVM (EL2/nested virt).
 - No ASIL-B/D safety claim
 - No MISRA-C compliance
 - No GPU virtualization or vGPU partitioning
@@ -454,8 +456,10 @@ Quick summary for context:
   [windows-qhv-tcg-q111-rng-snapshot-segments-boot-times-n5.txt](logs/sample-boot/windows-qhv-tcg-q111-rng-snapshot-segments-boot-times-n5.txt)).
   Under the
   2026-09-11 measurement-freeze decision it is architecture-version
-  history (A3), and the TCG twin legs run again once, on the frozen
-  reference architecture v1. TCG here is a hard requirement (QHV needs EL2 →
+  history (A3), and ~~the TCG twin legs run again once, on the frozen
+  reference architecture v1.~~ **2026-09-18: v1 was superseded before it was
+  ever frozen; the direction is A6, whose gate is not settled — whether the
+  TCG twin legs run again at all is one of the open choices.** TCG here is a hard requirement (QHV needs EL2 →
   nested virt, which ARM KVM lacks on A78AE), not the GICv3 blockage —
   do not conflate them.
 - Phase 3b — **Native QNX on the Orin Nano — M3 met 2026-09-10: the QNX Hypervisor host booted the cloud-leg QNX
@@ -548,9 +552,11 @@ Quick summary for context:
   (`guestram=unknown`, Q14); no mid-run canary check, so the canaries bracket the rung rather than cover it;
   and no isolation, containment or freedom-from-interference claim — one observation, not a series.
   s1-design.md §14.9-14.12, §15
-  and §16; figures unpublished)**; freeze
+  and §16; figures unpublished)**; ~~freeze
   reference architecture v1; then one measurement campaign on it (the M3 and M4 numbers, the M5 comparison, the twin
-  diff), every record stamped with the version. ~~Awaiting the owner's confirmation: the M path ends at M5's functional
+  diff), every record stamped with the version.~~ **2026-09-18: superseded — v1 was never frozen; the direction is A6
+  (L4T on the metal with the GPU, QNX as a KVM guest), and A6's gate is not settled — what the campaign measures, the
+  sample sizes and whether the TCG twin legs survive are all still open.** ~~Awaiting the owner's confirmation: the M path ends at M5's functional
   pass, which sets when README PR #1 can merge.~~ **2026-09-11 (owner):** confirmed. The M path ends at M5-F's
   functional pass, and README PR #1 can merge then; ~~whether a failed M5-F also ends it is still open~~
   **2026-09-13:** M5-F passed, so that question no longer arises. The owner also
@@ -683,9 +689,12 @@ Quick summary for context:
    moved, PIN_CLIENT unchanged**; the attended
    m4-r0 round (item 9) ran and passed on 2026-09-17**;
    s1-design.md §16).
-   Then settle the freeze gate and write the v1 manifest. Then run the
+   ~~Then settle the freeze gate and write the v1 manifest. Then run the
    single campaign, native leg and both TCG twin legs, every record stamped
-   `arch=v1;manifest=<sha>`. Regenerating the guest disk from clean sources
+   `arch=v1;manifest=<sha>`.~~ **2026-09-18: the target is A6, not v1 — v1 was
+   superseded before it was ever frozen. A6's gate is not settled: what the
+   campaign measures, the sample sizes, and whether the TCG twin legs survive
+   are the owner's to choose (`docs/orin-native-port-plan.md` §freeze).** Regenerating the guest disk from clean sources
    is now a freeze-gate item, not a separate later step. The owner
    decisions the freeze needs, and the PR #1 merge timing (~~assumption~~
    **confirmed by the owner 2026-09-11**), are in

@@ -48,8 +48,13 @@ Solo spread: 0.7 GFLOP/s across the two baselines. Both concurrent runs sit
 ~3-4 GFLOP/s ABOVE both solo runs, i.e. the concurrency "cost" is negative,
 which is only interpretable as run-to-run noise.
 
-QNX liveness during the runs: 16/16 frames byte-exact (3 before load, 5 during,
-5 during, 3 after), sub-millisecond, mean RTT 0.62-1.55 ms. The guest's own
+QNX liveness during the runs: ~~16/16 frames byte-exact (3 before load, 5 during,
+5 during, 3 after), sub-millisecond,~~ **2026-09-19 correction: 21/21 frames
+byte-exact across five connections (3 + 5 + 5 + 3 + 5), per the capture at
+`guest-kvm.redacted.log:21-30`. The 16/16 figure was a mid-experiment count,
+written before the second concurrent run's probe; it undercounted. "Sub-millisecond"
+was also wrong — the range below is the measurement, and 1.55 ms is not
+sub-millisecond.** Mean RTT 0.62-1.55 ms. The guest's own
 serial log independently corroborates every connection:
 
     server: client connected from <redacted>:53832
