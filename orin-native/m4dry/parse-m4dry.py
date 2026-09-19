@@ -1509,7 +1509,7 @@ def main(argv=None):
         clk_summary, clk_ext, clk_res_ms, cps = clock(rec, launch, emit)
     except Exception as e:
         errors.append(f"clock:{e!r}")
-        clk_summary, clk_ext, clk_res_ms, cps = {}, "unavailable", "unknown", None
+        clk_summary, clk_ext, clk_res_ms, cps = {}, "unavailable", "unknown", None  # noqa: F841  (2026-09-19: one slot of a multi-assign fallback; kept for shape)
 
     # Step 7.
     fallback = "partial(no-extraction)"

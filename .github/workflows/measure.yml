@@ -1,0 +1,98 @@
+name: measure
+
+# The real measurement run. Manual only, self-hosted only, never required.
+#
+# WHY IT IS NOT AUTOMATIC AND NEVER REQUIRED FOR A PR:
+#
+#   * A measurement here needs the actual hardware -- the Jetson Orin Nano with
+#     /dev/kvm, a QNX SDP 8.0 install, the bridge and the guest image. None of
+#     that exists on a GitHub-hosted runner, and the QNX Everywhere licence is
+#     non-commercial, so QNX may not be installed on one.
+#
+#   * Timing on shared public hardware would be meaningless for a TCG-emulated
+#     target, and a meaningless number that looks official is worse than none.
+#
+#   * Measurement on this project has a physical cost: the CPU governor must be
+#     pinned (schedutil makes an idle baseline ~40% slower than a loaded arm and
+#     inverts the result), the board heats, and a hung guest can need a power
+#     pull. That is not something a push event should trigger.
+#
+# IF NO SELF-HOSTED RUNNER IS REGISTERED, this workflow simply never runs: it is
+# workflow_dispatch-only, so nothing queues it, and it is not a required check
+# on any branch. An unregistered runner label cannot fail a pull request.
+
+on:
+  workflow_dispatch:
+    inputs:
+      samples:
+        description: 'Timed samples per arm'
+        required: false
+        default: '3000'
+      arms:
+        description: 'Comma-separated arms to run (e.g. idle,cpu6)'
+        required: false
+        default: 'idle,cpu6'
+      confirm:
+        description: 'Type RUN to confirm the board is attended and free'
+        required: true
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    # Both labels required: a generic self-hosted runner is not enough, the job
+    # needs the board itself.
+    runs-on: [self-hosted, orin]
+    # Never let a measurement job wedge a runner.
+    timeout-minutes: 45
+    steps:
+      - name: Refuse unless explicitly confirmed
+        if: ${{ inputs.confirm != 'RUN' }}
+        run: |
+          echo "::error::confirm input must be RUN; the board must be attended and free"
+          exit 1
+
+      - uses: actions/checkout@v4
+
+      - name: Preconditions
+        # Fail early and loudly rather than produce a number from a machine in
+        # the wrong state. Each check corresponds to a way a run has actually
+        # been invalidated on this project before.
+        run: |
+          set -euo pipefail
+          test -e /dev/kvm || { echo "::error::/dev/kvm absent"; exit 1; }
+          echo "governor (must be pinned to performance before any arm):"
+          for c in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+            printf '  %s = %s\n' "$c" "$(cat "$c")"
+          done
+          echo "NOTE: an unpinned schedutil governor makes an idle baseline ~40%"
+          echo "      slower than a loaded arm and inverts the comparison."
+
+      - name: Run the arms
+        env:
+          SAMPLES: ${{ inputs.samples }}
+          ARMS: ${{ inputs.arms }}
+        run: |
+          echo "This step is intentionally a placeholder."
+          echo "The measurement harness lives in orin-native/gpu-concurrency/"
+          echo "and is driven by its own run-*.sh scripts, which need the board's"
+          echo "bridge, guest image and an attended console. Wiring them to a"
+          echo "runner is a separate change from adding CI, and is not part of"
+          echo "this PR: adding it here would mean changing measurement"
+          echo "methodology, which this PR does not do."
+          echo "samples=${SAMPLES} arms=${ARMS}"
+
+      - name: Restore the board
+        if: always()
+        # The governor is a system-wide setting on someone's desk, not a job
+        # resource. Restore it whatever happened above.
+        run: |
+          for c in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+            echo schedutil | sudo tee "$c" > /dev/null || true
+          done
+          echo "governor restored:"
+          for c in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+            printf '  %s = %s\n' "$c" "$(cat "$c")"
+          done

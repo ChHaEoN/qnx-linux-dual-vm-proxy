@@ -1,0 +1,9 @@
+# FIXTURE, not a measurement. Synthetic counterpart to boot-times-hostA-n5.txt.
+#
+# median = 1275 ms against host A's 1020 ms, so the expected delta is exactly
+# +25.0% and the expected ratio exactly 1.25x -- both hand-checkable.
+run 1: 1255 ms
+run 2: 1265 ms
+run 3: 1275 ms
+run 4: 1285 ms
+run 5: 1295 ms

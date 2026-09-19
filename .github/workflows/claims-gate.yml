@@ -1,0 +1,73 @@
+name: claims-gate
+
+# Re-derive every number README.md quotes from the committed raw data, and fail
+# if the document and the data disagree.
+#
+# WHY THIS IS THE ONE THAT MATTERS. This project's rule is "never write 'it
+# works' without a log, a number, or a diff". That rule catches a number that
+# was never measured. It does not catch a number that was true when written and
+# drifted afterwards -- a figure edited in prose, a data file appended to, a
+# claim carried past the run it came from. Two published figures in this repo
+# were already found wrong that way, by hand. This job makes that class of
+# error fail the build.
+#
+# NO MEASUREMENT HAPPENS HERE, and that is deliberate. A GitHub-hosted runner
+# is shared, virtualised x86_64 hardware; both of this project's measured legs
+# are TCG emulation where simulation cost dominates. Any timing taken here would
+# be meaningless and dangerous -- it would look like a result. This job only
+# RECOMPUTES arithmetic over data measured elsewhere, on known hardware. It
+# never gates on an absolute number.
+#
+# NO QNX. Nothing here builds, links or boots anything QNX; the licence forbids
+# it on public runners and no QNX artefact exists in this repo.
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  claims:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Re-derive every README figure from committed data
+        # The gate prints a claimed-vs-recomputed table to this log on every
+        # run, pass or fail, so a human reviewer can read the check itself and
+        # not merely its exit status.
+        #
+        # It reuses the project's own measurement toolchain rather than a CI
+        # copy: the IPC deltas come from scripts/twin/delta.awk, the same file
+        # scripts/twin/diff-results.sh uses to print the published report.
+        run: python scripts/ci/claims_gate.py --repo .
+
+      - name: Phase badge must match the status table
+        # The badge and the table were two hand-maintained copies of one fact
+        # and they drifted -- the badge once announced a phase the table had
+        # long passed, and later an architecture that had been superseded.
+        # The table is the single source of truth; this check makes divergence
+        # a build failure instead of a stale image.
+        run: python scripts/ci/render_badges.py --check
+
+      - name: Summarise for the PR page
+        if: always()
+        run: |
+          {
+            echo '## Claims gate'
+            echo
+            echo 'Every figure README.md quotes is recomputed from the committed'
+            echo 'raw data in `logs/` and `results/`. Full claimed-vs-recomputed'
+            echo 'table is in the job log above.'
+            echo
+            echo 'This gate checks arithmetic over data measured elsewhere.'
+            echo 'It never measures anything itself and never gates on an'
+            echo 'absolute number -- a shared public runner cannot produce a'
+            echo 'meaningful timing for a TCG-emulated target.'
+          } >> "$GITHUB_STEP_SUMMARY"

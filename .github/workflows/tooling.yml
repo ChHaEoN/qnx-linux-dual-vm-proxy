@@ -1,0 +1,66 @@
+name: tooling
+
+# Lint, type-check and unit-test the Python in this repo.
+#
+# SCOPE NOTE. This job targets orin-native/ and scripts/ci/, which is where all
+# the Python actually is. scripts/ and ipc-test/ contain none -- scripts/ is
+# bash/PowerShell/batch and ipc-test/ is C -- so pointing a linter at them would
+# produce a green check over an empty file set, which is worse than no check.
+#
+# NO QNX ANYWHERE. QNX SDP 8.0 is non-commercial-licensed; no QNX binary, IFS or
+# header may enter this repo or run on a GitHub-hosted runner. Nothing in this
+# job builds, links or boots anything QNX. It runs on stock ubuntu-latest with
+# no hardware attached.
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # The tracked tools target 3.8 (a single walrus operator sets the
+          # floor); CI runs a current interpreter to catch deprecations early.
+          python-version: '3.12'
+
+      - name: Install tooling
+        # Pinned so a new ruff release cannot turn a green PR red without a
+        # commit. The repo's own code has no third-party dependencies at all.
+        run: python -m pip install --disable-pip-version-check ruff==0.16.8 pytest==9.1.1 mypy==1.18.2
+
+      - name: ruff
+        # Configuration lives in pyproject.toml: line-length 150 and E,F,B,
+        # both chosen from a trial run against the real tree rather than
+        # guessed. See the comments there for why the default rule set was
+        # rejected.
+        run: ruff check --output-format=github orin-native scripts/ci tests
+
+      - name: mypy
+        # Deliberately non-strict: the tracked Python carries zero annotations,
+        # so a strict run would emit noise proportional to ~14k lines. This is a
+        # regression guard against syntax-level and obvious call errors.
+        run: mypy scripts/ci tests
+
+      - name: pytest
+        run: pytest -q
+
+      - name: No QNX artefact may enter CI or fixtures
+        # A licence check, enforced rather than promised. If a QNX-derived
+        # binary is ever added under .github/ or tests/, this fails the build.
+        run: |
+          set -euo pipefail
+          if find .github tests -type f \
+               \( -name '*.ifs' -o -name '*.bin' -o -name '*.sym' -o -name '*.kimg' \
+                  -o -name '*.so' -o -name '*.a' -o -name '*.o' \) | grep . ; then
+            echo "::error::a binary artefact was found under .github/ or tests/"
+            exit 1
+          fi
+          echo "ok: no binary or QNX-derived artefact under .github/ or tests/"
