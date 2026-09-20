@@ -13,6 +13,12 @@ two sides stay in sync, and how the twin diff is measured.
 > metal, QNX as a KVM guest beside it) is the current direction and its gate is
 > not settled. References to "the v1 campaign" below are the record of what was
 > planned, not a current plan.
+> **2026-09-20:** §1b is new and is the one section to read first if the
+> question is "can a twin be built on the cloud". It can: the byte-identical
+> IFS `26170cd7…` booted under KVM on the Orin and on AWS `a1.metal`, same
+> launch line, so the identical-image invariant holds there for the first time
+> in this project. **It is a design and has not been measured** — both sides
+> are boot arms and no timing was taken on either.
 > **2026-09-11:** §1a and §5 now hold measured results. Under the owner's
 > freeze decision those measurements are architecture-version history. The
 > twin diff runs once, in the v1 campaign
@@ -329,6 +335,99 @@ and are not re-run; A6 has no QNX Hypervisor leg, and no hardware-timed number
 has been measured anywhere.** The
 comparison is honest about *what changes when the host changes*; it is not a
 performance claim about QHV.
+
+---
+
+## 1b. The KVM leg — the first pair where the identical-image invariant holds
+
+Written 2026-09-20. **Nothing in this section has been measured.** It is a
+design, and it is marked as one throughout. The two boots it rests on are real;
+no timing of any kind was taken on either.
+
+### Why this section exists
+
+Every twin leg before this one failed the same way, in the row §1's table calls
+"**Leg-dependent — was silently broken**": the two sides did not boot the same
+image. The A2/Phase-3 Orin IPC run used a **rebuilt** IFS with new TCP server
+code staged in, so the twin's load-bearing invariant did not hold for the
+measurement that most depended on it. The QHV leg (§1a) did hold it, but only
+by making both sides TCG on a host bundle that differed in ISA as well — an
+x86_64 Windows PC against Tegra A78AE.
+
+On 2026-09-18 and 2026-09-19 that changed, without anyone setting out to build
+a twin:
+
+| | Jetson Orin Nano | AWS `a1.metal` |
+|---|---|---|
+| IFS | `ifs-kvmfix.bin`, sha256 `26170cd7dc74c216…` | `ifs-kvmfix.bin`, sha256 `26170cd7dc74c216…` |
+| QEMU machine | `-machine virt,gic-version=3` | `-machine virt,gic-version=3` |
+| CPU / accel | `-cpu host -enable-kvm` | `-cpu host -enable-kvm` |
+| Size | `-smp 2 -m 1G` | `-smp 2 -m 1G` |
+| QEMU | distro 6.2.0 | distro 6.2.0 |
+| Reached | `Startup complete`, then the guest banner | `Startup complete`, then the guest banner |
+| Host silicon | Cortex-**A78AE**, Tegra234 | Cortex-**A72**, Graviton1 |
+
+Same bytes, same launch line, KVM on both sides, and only the host silicon
+differs. Provenance: `results/orin-native-port/20260918T-kvm-gpu/results.md`
+pins the Orin side's IFS by that hash; `logs/sample-boot/aws-a1-metal-kvm-fix-crossvendor.log`
+records the same hash on the AWS side. This is the first cloud↔board pair in
+the project where the invariant is an observed fact rather than an intention.
+
+What unlocked it was the GICv3/NISV fix, not a change of plan. Until a
+`startup-qemu-virt` rebuilt with `-fno-auto-inc-dec` existed, no QNX guest
+booted under KVM anywhere, so the cloud side of any KVM pair had nothing to
+run. ADR-002's constraint was **non-metal**, and `*.metal` was never tested
+until 2026-09-19.
+
+### What the measurement would be
+
+**Boot to `Startup complete`, with no disk attached, n=5 per host.**
+
+No disk is the deliberate part. The guest disk is the one artefact in this
+configuration that is **not pinned and is known to drift**: the 2026-09-18
+record states plainly that its runs used `disk-qemu` without `-snapshot`, so the
+guest wrote to it, and the board's copy now hashes `f326b792…` against the PC's
+`fd2ee67d…`. Dropping the disk removes that confound completely rather than
+managing it, and both hosts have already been observed reaching
+`Startup complete` on the IFS alone. The cost is scope: this measures IFS load,
+startup and procnto init under KVM, and says nothing about the filesystem,
+networking or IPC.
+
+### What must be pinned or stamped, or the number is void
+
+1. **CPU governor.** On the Orin, pin `performance` on all six cores. This is
+   not optional: measured directly on this board, `schedutil` idle p50 was
+   0.319 ms against `performance` 0.192 ms, so **~40% of an unpinned "idle"
+   figure is the governor**. Whatever `a1.metal` exposes must be recorded the
+   same way, and if it cannot be pinned, that is a stated limit, not a footnote.
+2. **QEMU build**, not just release. §1a already establishes that "host" is a
+   bundle; two builds of 6.2.0 are not interchangeable without saying so.
+3. **Host kernel.** L4T against `6.8.0-aws`. This is part of the bundle and
+   cannot be removed, only declared.
+4. **The rebuilt startup is ours.** It is not a QNX-supported configuration.
+   Because it is the same binary on both sides the comparison is symmetric and
+   still valid, but every figure taken here carries that sentence.
+
+### What such a number could and could not support
+
+It **could** support: a host-to-host comparison of QNX guest bring-up under KVM
+where the image really is identical — the thing §1a could only approximate.
+
+It could **not** support: any statement about the QNX Hypervisor, which cannot
+run under KVM at all (it needs EL2, and ARM KVM does not nest on A78AE); any
+hardware-timed *hypervisor* number, which stays deferred; any claim about A6's
+GPU half, since `a1.metal` has no GPU; and any single-variable reading, because
+A72 against A78AE is a five-year micro-architectural gap inside a host bundle
+that also differs in kernel. `c7g.metal` (Neoverse-V1) would be the closer core
+match and stays quota-blocked at 64 vCPU against a 32-vCPU account limit.
+
+### Status
+
+Not run. The Orin leg needs the board powered on and its governor pinned; the
+AWS leg needs an `a1.metal` instance (about $0.41/hr, no quota increase needed).
+Neither has been scheduled, and A6's gate — what its campaign measures and at
+what sample size — is not settled, so this section is a candidate for that
+campaign and not a commitment to it.
 
 ---
 
