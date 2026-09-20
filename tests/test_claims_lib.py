@@ -269,3 +269,54 @@ def test_read_is_utf8_regardless_of_platform_default(tmp_path):
     p = tmp_path / "u.txt"
     p.write_bytes("✅ done \U0001f7e1 in progress\n".encode("utf-8"))
     assert "✅" in C._read(str(p))
+
+# --------------------------------------------------------------------------
+# GitHub metadata -- the gate's one network call, and its degradation
+# --------------------------------------------------------------------------
+
+
+def test_repo_slug_from_env_wins(monkeypatch):
+    monkeypatch.setenv("GITHUB_REPOSITORY", "owner/name")
+    assert C.repo_slug_from_git(".") == "owner/name"
+
+
+def test_repo_slug_from_git_remote(repo_root, monkeypatch):
+    monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+    slug = C.repo_slug_from_git(repo_root)
+    assert slug is not None
+    assert slug.count("/") == 1
+    owner, name = slug.split("/")
+    assert owner and name
+    assert not name.endswith(".git")
+
+
+def test_repo_slug_returns_none_outside_a_repo(tmp_path, monkeypatch):
+    monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+    assert C.repo_slug_from_git(str(tmp_path)) is None
+
+
+def test_github_description_degrades_instead_of_raising():
+    """The description check must never be able to fail the gate.
+
+    Network down, rate limited, bad slug -- all return (None, reason) so the
+    caller prints "skipped". The gate's real work is offline arithmetic.
+    """
+    desc, why = C.github_description("this-owner-does-not-exist/nor-does-this", timeout=5)
+    assert desc is None
+    assert why
+
+
+def test_denylist_catches_a_bad_description():
+    """The exact 2026-09-20 case: the repo description asserted a cloud leg on
+    AWS Graviton that README says in three places was never built."""
+    rules = C.load_denylist("scripts/ci/claim-denylist.txt")
+    bad = ("Digital Twin design of NVIDIA DRIVE OS dual-VM partitioning - QNX SDP 8.0 "
+           "+ Linux on AWS Graviton (cloud twin) and Jetson Orin Nano (hardware twin).")
+    hits = C.scan_denylist(bad, rules)
+    assert any("Graviton" in pattern for pattern, _why, _s in hits)
+
+    good = ("Digital Twin design of NVIDIA DRIVE OS dual-VM partitioning: QNX SDP 8.0 "
+            "beside Linux on a Jetson Orin Nano. The QNX Hypervisor runs natively at "
+            "EL2 on the board's own Cortex-A78AE cores, hosting a QNX guest and a "
+            "stock Linux guest. Nothing is certified; every limit is documented.")
+    assert C.scan_denylist(good, rules) == []

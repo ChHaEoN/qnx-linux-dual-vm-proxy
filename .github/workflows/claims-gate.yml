@@ -39,6 +39,12 @@ jobs:
           python-version: '3.12'
 
       - name: Re-derive every README figure from committed data
+        env:
+          # Lets the gate read the repo's GitHub description without hitting the
+          # unauthenticated rate limit. The description check is WARN ONLY: it
+          # cannot be fixed by a commit, so it never fails the build, and if the
+          # API is unreachable the gate reports it as skipped and carries on.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         # The gate prints a claimed-vs-recomputed table to this log on every
         # run, pass or fail, so a human reviewer can read the check itself and
         # not merely its exit status.

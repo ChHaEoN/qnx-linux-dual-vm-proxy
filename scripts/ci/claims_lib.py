@@ -310,3 +310,54 @@ def _read(path):
     """
     with io.open(path, "r", encoding="utf-8") as fh:
         return fh.read()
+
+def github_description(repo_slug, timeout=10):
+    """The repo's GitHub description, or None plus a reason.
+
+    THIS IS THE GATE'S ONE NETWORK CALL, and it is deliberately best-effort.
+    A repo description is the most-exposed sentence about a project -- GitHub
+    search, the owner's profile, and every link preview -- and it is the one
+    surface this gate structurally could not see, because it is GitHub
+    metadata rather than a file in the tree. On 2026-09-20 it was asserting a
+    cloud leg on AWS Graviton that README says in three places was never
+    built.
+
+    Failure here must never fail the gate: no network, no token, rate limit or
+    a schema change all return (None, reason). The caller reports it as
+    skipped. The gate's real work is offline arithmetic and must stay that way.
+    """
+    import json as _json
+    import urllib.request
+    import urllib.error
+    url = "https://api.github.com/repos/" + repo_slug
+    req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json",
+                                               "User-Agent": "claims-gate"})
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if token:
+        req.add_header("Authorization", "Bearer " + token)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as fh:
+            data = _json.loads(fh.read().decode("utf-8"))
+    except Exception as exc:
+        return None, "%s: %s" % (type(exc).__name__, exc)
+    return (data.get("description") or ""), None
+
+
+def repo_slug_from_git(repo_dir):
+    """owner/name, from GITHUB_REPOSITORY or the origin remote."""
+    env = os.environ.get("GITHUB_REPOSITORY")
+    if env:
+        return env
+    import subprocess
+    try:
+        out = subprocess.check_output(["git", "-C", repo_dir, "remote", "get-url", "origin"],
+                                      stderr=subprocess.DEVNULL).decode("utf-8").strip()
+    except Exception:
+        return None
+    out = out.rstrip("/")
+    if out.endswith(".git"):
+        out = out[:-4]
+    parts = out.replace(":", "/").split("/")
+    if len(parts) >= 2:
+        return parts[-2] + "/" + parts[-1]
+    return None

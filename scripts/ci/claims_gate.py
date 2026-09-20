@@ -365,6 +365,38 @@ def main():
     else:
         print("  ok -- no asserted violation (mentions inside denials or planned-markings are exempt by design)")
 
+    # --- the repo's GitHub description -------------------------------------
+    # WARN ONLY, deliberately. This is the most-exposed sentence about the
+    # project and the one surface the gate structurally could not see -- it is
+    # GitHub metadata, not a file. But it cannot be fixed by a commit: you
+    # change it in repo settings. Failing a pull request over it would block
+    # code on a settings change, so it is reported and never added to failures.
+    print()
+    print("-" * 100)
+    print("REPO DESCRIPTION -- highest-exposure text, checked against the same denylist")
+    print("-" * 100)
+    slug = C.repo_slug_from_git(repo)
+    if not slug:
+        print("  skipped: could not determine owner/name")
+    else:
+        desc, why = C.github_description(slug)
+        if desc is None:
+            print("  skipped (%s): %s" % (slug, why))
+        elif not desc.strip():
+            print("  WARN %s has no description set" % slug)
+        else:
+            print("  %s" % slug)
+            print("    %s" % desc)
+            dhits = C.scan_denylist(desc, rules)
+            if dhits:
+                for pattern, why_banned, sentence in dhits:
+                    print("  WARN /%s/ -- %s" % (pattern, why_banned))
+                    print("       %s" % sentence[:160])
+                print("  ^ not a failure, but fix it in repo settings: it is what GitHub")
+                print("    search, your profile and every link preview show.")
+            else:
+                print("  ok -- no asserted violation")
+
     # --- what this gate did NOT check --------------------------------------
     print()
     print("-" * 100)
