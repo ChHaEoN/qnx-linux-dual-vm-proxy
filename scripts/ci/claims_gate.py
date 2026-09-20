@@ -393,11 +393,11 @@ def main():
         found = []
         for rel in files:
             text = C.strip_superseded(C._read(os.path.join(repo, rel)))
-            for pattern, why, sentence in C.scan_denylist(text, rules):
-                found.append((rel, pattern, why, " ".join(sentence.split())))
+            for _pattern, why, sentence in C.scan_denylist(text, rules):
+                found.append((rel, why, " ".join(sentence.split())))
         print("  %-9s %3d files, %d asserted hit(s)%s"
               % (label, len(files), len(found), "" if hard else "   [warn only]"))
-        for rel, pattern, why, sentence in found:
+        for rel, why, sentence in found:
             print("  %s %s -- %s" % ("FAIL" if hard else "WARN", rel, why))
             print("       %s" % sentence[:150])
             if hard:
