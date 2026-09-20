@@ -144,8 +144,8 @@ primary build host is a **local Windows PC** (the same machine that
 serves as the dev driver). The EC2 t3.medium x86_64 Ubuntu instance
 is retained as an **explicit fallback** for users without a local
 x86_64 Windows or Linux box. The runtime host was designed to stay on
-Graviton. As built, the QHV host and its guest run under TCG on the same
-Windows PC, and no cloud-leg number came from Graviton
+Graviton but never ran there: as built, the QHV host and its guest run under
+TCG on the same Windows PC, and no cloud-leg number came from Graviton
 ([digital-twin-design.md](digital-twin-design.md) §1).
 
 > **As-built per [ADR-002](phase2-topology-decision.md) (Accepted).** The

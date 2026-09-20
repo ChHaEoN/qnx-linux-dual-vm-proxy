@@ -42,11 +42,17 @@ are explained under [Reading the ids](#reading-the-ids).
   so **S1-F is met (QNX plus Linux)**. That rung is a boot and a completion,
   not a hold — the ten minutes is the Linux guest alone.
 
-- **What has been measured.** Every *published* figure comes from the earlier,
-  emulated architectures (A1–A3, kept as history), **none hardware-timed**. The
-  IPC comparison mixes host, transport, OS pair and QEMU build across two
-  architecture versions — read it as "both mechanisms are alive", never as a
-  host-speed result. ~~Figures from M3 onward are unpublished pending the
+- **What has been measured.** Two groups, and the distinction matters. The
+  **IPC figures** come from the earlier, emulated architectures (A1–A3, kept as
+  history) and are TCG throughout; that comparison mixes host, transport, OS
+  pair and QEMU build across two architecture versions — read it as "both
+  mechanisms are alive", never as a host-speed result. The **A6 figures** are
+  measured on real silicon with QNX as a KVM guest: GPU concurrency,
+  interference and saturation (2026-09-19) and a two-host boot comparison
+  against AWS `a1.metal` on a byte-identical image (2026-09-20). **No
+  hardware-timed *hypervisor* number exists in either group** — the QNX
+  Hypervisor needs EL2, ARM KVM does not nest on A78AE, and its native A4
+  figures are unpublished. ~~Figures from M3 onward are unpublished pending the
   licence consultation~~ **Figures from the M-path and the native-QHV leg (A4)
   are unpublished pending the licence consultation; the A6 KVM-guest
   measurements — GPU concurrency, interference, saturation and the native
@@ -113,7 +119,7 @@ proxy can and cannot demonstrate. This table is the load-bearing part:
 | GPU (Ampere CUDA / vGPU) | No leg passes a GPU to a guest. The cloud host has no NVIDIA GPU at all; the Orin Nano has an Ampere iGPU but it is never exposed to the QNX guest — no in-guest CUDA, no vGPU partitioning. On the native leg the S1 guest that has now run is Linux without a GPU. GPU pass-through is a later target, studied on a separate unpublished research track; no GPU stage has started. |
 | Real-time guarantees | The QEMU legs (A1 to A3, history) were TCG-emulation-bound, not hardware-timed, and the Orin plain leg added observable host-scheduler jitter on top; ~~v1's two TCG twin legs will measure emulated time too~~ **2026-09-18: whether the TCG twin legs survive at all is an open A6 choice; if they run, they measure emulated time too**. The native leg runs on real cores, but its timings are unpublished and not yet campaign-grade: the CPU frequency is wherever BPMP and Linux left it, the clock is recorded as unverified, and the numbers wait for the ~~v1 campaign~~ **A6 campaign, once its gate is settled**. The "Safety VM" framing is POSIX-realtime, not certified RT. |
 | ASIL-D certification | None. SDP 8.0 ≠ QNX OS for Safety (QOS); no safety case, no MISRA-C, no ISO 26262 evidence. |
-| Inter-VM shared memory latency | Cloud leg (A1, history): host↔guest over the `qvm` virtio-console vdev (crosses the EL2/EL1 boundary, but TCG-emulated — the latency measures emulation cost, not transport cost). Orin plain leg (Phase 3, A2, history): QNX↔Linux virtio-net → tap → bridge → tap → virtio-net — also TCG-emulated, since the KVM path ~~is~~ **was** blocked **when it ran**, so it is **not** hardware-timed either. **2026-09-18: a startup rebuilt in this repo boots under `-enable-kvm` on the Orin, but that run took no timing at all — these A2 numbers stand exactly as recorded, and there is still no hardware-timed IPC figure on any leg.** Native leg (A4): host to guest over virtio-console under qvm on real cores; figures unpublished, re-measured in the ~~v1 campaign~~ **A6 campaign, once its gate is settled (2026-09-18)**. No sourced DRIVE OS IPC figure is in the repo yet, so no gap is quantified here. See [ADR-002](docs/phase2-topology-decision.md). |
+| Inter-VM shared memory latency | Cloud leg (A1, history): host↔guest over the `qvm` virtio-console vdev (crosses the EL2/EL1 boundary, but TCG-emulated — the latency measures emulation cost, not transport cost). Orin plain leg (Phase 3, A2, history): QNX↔Linux virtio-net → tap → bridge → tap → virtio-net — also TCG-emulated, since the KVM path ~~is~~ **was** blocked **when it ran**, so it is **not** hardware-timed either. **2026-09-18: a startup rebuilt in this repo boots under `-enable-kvm` on the Orin, but that run took no timing at all — these A2 numbers stand exactly as recorded. 2026-09-19/20: KVM-guest figures do now exist (interference and saturation on the board; a two-host boot comparison against AWS `a1.metal`), but none of them is an IPC figure and none is a *hypervisor* figure — there is still no hardware-timed hypervisor number on any leg, and no IPC measurement under KVM at all.** Native leg (A4): host to guest over virtio-console under qvm on real cores; figures unpublished, re-measured in the ~~v1 campaign~~ **A6 campaign, once its gate is settled (2026-09-18)**. No sourced DRIVE OS IPC figure is in the repo yet, so no gap is quantified here. See [ADR-002](docs/phase2-topology-decision.md). |
 | Certified bootloader chain | No SecureBoot, no measured boot, no chain-of-trust. The native leg's UEFI cold boot (M5-F) is an EFI loader of ours launched by hand from the firmware's Shell: not a supported, certified or unattended boot path. |
 
 These are deliberate. Documenting them precisely is the engineering point.

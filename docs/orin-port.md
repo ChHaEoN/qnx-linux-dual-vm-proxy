@@ -181,8 +181,10 @@ piggyback that the old EC2-build-host path provided. See the
 
 ## Research sweep B (2026-09-09) — native QNX on the Orin Nano (Tegra234): verdict and citations
 
-> Input to **ADR-003** (where a hardware-timed *hypervisor* number could
-> come from). Research-agent output: findings and citations, **not a
+> Input to **ADR-003**, which asked where a hardware-timed *hypervisor*
+> number could come from — and none exists to this day, because the QNX
+> Hypervisor needs EL2, ARM KVM does not nest on A78AE, and the native A4
+> figures are unpublished. Research-agent output: findings and citations, **not a
 > decision** — the Architect arbitrates. Evidence tags: **[local]** =
 > inspected in the SDP 8.0.4 install on this machine or built with its
 > toolchain this session; **[vendor]** = primary NVIDIA / QNX / upstream

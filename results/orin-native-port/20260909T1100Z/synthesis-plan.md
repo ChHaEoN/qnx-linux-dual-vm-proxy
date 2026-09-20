@@ -11,7 +11,7 @@ Redaction: `<user>`, `<orin-ip>`, `<orin-key>` throughout. No QNX binary was dis
 
 ## 1. Goal and non-goals
 
-**Goal.** Boot QNX SDP 8.0 natively on the Jetson Orin Nano Developer Kit (Tegra234, 6x Cortex-A78AE, L4T R36.4.7 / UEFI 36.4.4), reach the QNX Hypervisor 8.0 host at real EL2 (`-Q enable,el2-host`, VHE), boot the **byte-identical** cloud-leg QNX guest under it, and produce the first hardware-timed QHV numbers on this silicon:
+**Goal.** (**2026-09-20: the hardware-timed QHV numbers this goal ends with were never produced. M0-M5 and S1-F met functionally; the figures are unpublished, and v1 — the campaign that was to publish them — was superseded before it was ever frozen.**) Boot QNX SDP 8.0 natively on the Jetson Orin Nano Developer Kit (Tegra234, 6x Cortex-A78AE, L4T R36.4.7 / UEFI 36.4.4), reach the QNX Hypervisor 8.0 host at real EL2 (`-Q enable,el2-host`, VHE), boot the **byte-identical** cloud-leg QNX guest under it, and produce the first hardware-timed QHV numbers on this silicon:
 
 - M3: host-clock `qvm` launch -> guest banner (comparable to the twin legs' `qvm_launched -> guest_banner` segment);
 - M4: per-exit hypervisor dwell (qvm Class-10 Guest Exit -> next Guest Entry) P50/P99/max in the `scripts/twin/diff-results.sh` CSV schema.

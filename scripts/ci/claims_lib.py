@@ -242,18 +242,42 @@ PLANNED_RE = re.compile(
 _SENT_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 
 
+_BLOCK_SPLIT_RE = re.compile(
+    r"\n\s*\n"          # paragraph break
+    r"|\n(?=\s*#{1,6}\s)"   # a heading starts a block
+    r"|\n(?=\s*\|)"         # a table row is its own statement
+    r"|\n(?=\s*[-*+]\s)"    # a bullet is its own statement
+    r"|\n(?=\s*\d+\.\s)"  # a numbered item likewise
+)
+
+
 def split_sentences(markdown_text):
-    """Reflow markdown to sentences.
+    """Reflow markdown to sentences, without merging across block boundaries.
 
     LINE-BASED MATCHING IS WRONG HERE and this function exists to prevent it.
     README wraps prose, so "Not a reproduction of DRIVE OS, and not a" ends one
     line and "certified hypervisor." begins the next. A line-based denylist
     flags that second line as an asserted certification claim -- failing the
     build for one of the most honest sentences in the document. Collapsing
-    whitespace first puts the negation and the keyword in the same span.
+    whitespace puts the negation and the keyword in the same span.
+
+    BLOCK BOUNDARIES ARE THE OTHER HALF, and collapsing them was a bug. A
+    heading carries no full stop, so joining everything with spaces glued each
+    heading to the paragraph under it and to the table above it, producing
+    "sentences" spanning three blocks. Three warnings on 2026-09-20 were that
+    and nothing else: the claim landed in one block and its correction in the
+    next, and no sentence ever contained both. Paragraphs, headings, table rows
+    and list items are separate statements and are split here as such; wrapped
+    prose inside one block is still joined, which is the original point.
     """
-    flat = re.sub(r"\s+", " ", markdown_text)
-    return [s.strip() for s in _SENT_SPLIT_RE.split(flat) if s.strip()]
+    blocks = _BLOCK_SPLIT_RE.split(markdown_text)
+    out = []
+    for block in blocks:
+        flat = re.sub(r"\s+", " ", block).strip()
+        if not flat:
+            continue
+        out.extend(s.strip() for s in _SENT_SPLIT_RE.split(flat) if s.strip())
+    return out
 
 
 def classify_sentence(sentence):
@@ -284,14 +308,40 @@ def load_denylist(path):
     return rules
 
 
-def scan_denylist(markdown_text, rules):
+def load_exemptions(path):
+    """Sentences a rule may not fire on, each written down with its reason.
+
+    Format: a line beginning with '!' in the denylist file, then the regex, then
+    the justification. An exemption is a claim about the TEXT -- "this wording is
+    already correct" -- so it has to be auditable, which is why it lives beside
+    the rules with its prose attached instead of being a silent special case in
+    Python. Adding one is a judgement a reviewer can check and reject.
+    """
+    out = []
+    for raw in _read(path).splitlines():
+        line = raw.strip()
+        if not line.startswith("!"):
+            continue
+        parts = re.split(r"\t|\s{2,}", line[1:].strip(), maxsplit=1)
+        out.append((parts[0].strip(), parts[1].strip() if len(parts) > 1 else ""))
+    return out
+
+
+def scan_denylist(markdown_text, rules, exemptions=()):
     """Return [(pattern, why, sentence)] for ASSERTED matches only.
 
     A mention inside a denial or a planned-marking is not a violation; this repo
     documents what it does NOT demonstrate, and that prose must stay legal.
+
+    `exemptions` (from load_exemptions) skips sentences whose wording has been
+    inspected and found already correct -- an out-of-scope list, a quoted study,
+    a self-correction. Each is written down with its reason in the denylist file,
+    so a reader can check the judgement instead of trusting it.
     """
     hits = []
     for sentence in split_sentences(markdown_text):
+        if any(re.search(rx, sentence, re.I) for rx, _why in (exemptions or ())):
+            continue
         for pattern, why in rules:
             if re.search(pattern, sentence, re.I) and classify_sentence(sentence) == "asserted":
                 hits.append((pattern, why, sentence))
@@ -301,14 +351,52 @@ def scan_denylist(markdown_text, rules):
 STRIKETHROUGH = re.compile(r"~~.*?~~", re.S)
 
 
+LINK_TARGET = re.compile(r"(\[[^\]]*\])\([^)]*\)")
+BARE_URL = re.compile(r"https?://\S+")
+
+
+FILENAME_TOKEN = re.compile(
+    r"[\w./\\-]+\.(?:md|py|sh|bat|ps1|c|h|json|csv|txt|log|build|bin|yml|yaml)"
+    r"(?::\d+(?:[-,]\d+)*)?"
+)
+
+
+def strip_filenames(text):
+    """A path is not a prose claim, even inside backticks.
+
+    `docs/adr-003-hardware-timed-qhv.md:8-9` appears in run records as a
+    citation. Scanning it fired the hardware-timed rule five times across
+    results/ on 2026-09-20, in tables whose job was to cite where a claim came
+    from. strip_link_targets only caught the markdown-link form; this catches
+    the bare and backticked forms too.
+    """
+    return FILENAME_TOKEN.sub(" ", text)
+
+
+def strip_link_targets(text):
+    """Keep link TEXT, drop link TARGETS and bare URLs, before scanning.
+
+    A filename is not a claim. `adr-003-hardware-timed-qhv.md` appears in this
+    repo purely as a link target, and scanning it fired the hardware-timed rule
+    in four documents that were each saying the opposite of what the rule
+    accused them of. What a reader acts on is the sentence, not the href.
+    """
+    text = LINK_TARGET.sub(lambda m: m.group(1), text)
+    return strip_filenames(BARE_URL.sub(" ", text))
+
+
 def strip_superseded(text):
     """Drop ~~struck-through~~ spans before scanning.
 
     This repo marks superseded prose with ~~ ~~ and keeps it deliberately, so a
     scanner that read it as live text would report the project's own honest
     record as a violation. Text outside the markers is untouched.
+
+    Link targets and bare URLs go too, via strip_link_targets: a filename is not
+    a claim, and `adr-003-hardware-timed-qhv.md` as an href was firing the
+    hardware-timed rule in four documents that said the opposite.
     """
-    return STRIKETHROUGH.sub(" ", text)
+    return strip_link_targets(STRIKETHROUGH.sub(" ", text))
 
 
 def prose_files(repo, patterns, exclude=()):

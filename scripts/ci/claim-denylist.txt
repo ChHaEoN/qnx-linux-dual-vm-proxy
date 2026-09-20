@@ -2,12 +2,13 @@
 #
 # Format, one rule per line:
 #     <regex>  <TAB or two+ spaces>  <why this claim is not supported>
-# Blank lines and '#' comments are ignored. Extend this file freely; no Python
-# change is needed to add a rule.
+# A line beginning with '!' is an EXEMPTION instead: a sentence no rule may fire
+# on, with the reason it was inspected and cleared. Blank lines and '#' comments
+# are ignored. Extend this file freely; no Python change is needed.
 #
-# HOW A RULE FIRES. scripts/ci/claims_gate.py splits README.md into SENTENCES
-# (not lines -- README wraps prose) and reports a match only when the sentence
-# is an ASSERTION. A sentence carrying a negation ("no", "not", "never",
+# HOW A RULE FIRES. scripts/ci/claims_gate.py splits prose into SENTENCES (not
+# lines -- the docs wrap) and reports a match only when the sentence is an
+# ASSERTION. A sentence carrying a negation ("no", "not", "never",
 # strike-through) or a planned-marking ("design intent", "never built",
 # "superseded") is not a violation.
 #
@@ -17,30 +18,51 @@
 # text that makes the README truthful. Verified 2026-09-19: all 2 ASIL, all 10
 # "certified" and all 4 "Graviton" sentences in README.md classify as negated or
 # planned, and none as asserted.
+#
+# A RULE CAN OUTLIVE ITS PREMISE, and then it bans the evidence instead of the
+# lie. That has now happened twice in this file -- see the acceleration and
+# Graviton sections. When a rule is narrowed, the reason is written down here
+# with its date, and both directions are pinned in tests/test_prose_gate.py.
 
-# --- acceleration: both measured legs are TCG; no published figure is KVM-timed.
-# The plain "KVM" token is deliberately NOT banned: QNX really does boot under
-# KVM on the Orin (2026-09-18) and A6 runs it that way, so the ban is narrowed
-# to claims that a MEASUREMENT was taken on KVM.
-\b(on|under|via)\s+QEMU/KVM\b	both measured legs ran under TCG; no KVM timing exists
-\b(measured|timed|benchmark\w*|latency|throughput)\b[^.]{0,60}\bunder\s+KVM\b	no KVM-accelerated measurement exists on any leg
-\bKVM[- ]accelerated\b[^.]{0,40}\b(result|number|figure|measurement|benchmark)\b	no KVM-accelerated number was ever taken
-\bhardware[- ]timed\b[^.]{0,40}\b(KVM|result|figure)\b	no leg has produced a hardware-timed figure
+# --- acceleration. REWRITTEN 2026-09-20; the reason matters more than the rules.
+# The three rules that used to live here banned any claim that a measurement was
+# taken under KVM. They were correct when written, because no QNX guest had ever
+# run under KVM anywhere, so every such sentence was false by construction.
+# That premise died twice:
+#   2026-09-19  guest latency measured with QNX as a KVM guest, governor pinned
+#   2026-09-20  boot timing under KVM on two hosts, byte-identical image
+# Keeping the blanket ban would have made the project's own measurements
+# unpublishable. What is STILL universally false is narrower and is what these
+# rules now protect:
+#   * a hardware-timed HYPERVISOR number. The QNX Hypervisor cannot run under
+#     KVM at all -- it needs EL2 and ARM KVM does not nest on A78AE -- and its
+#     native (A4) figures are unpublished. Nothing has ever timed QHV on silicon.
+#   * that the PUBLISHED A1-A3 legs were KVM-accelerated. Every one ran TCG.
+\bhardware[- ]timed\b[^.]{0,60}\b(hypervisor|QHV|qvm)\b	no hardware-timed hypervisor number exists anywhere; QHV needs EL2 and ARM KVM does not nest on A78AE
+\b(A1|A2|A3|cloud leg|Orin plain leg)\b[^.]{0,70}\b(under|on|with)\s+KVM\b	the published A1-A3 legs all ran under TCG, not KVM
+\bKVM[- ]accelerated\b[^.]{0,40}\b(A1|A2|A3|cloud|twin diff|IPC)\b	no KVM-accelerated figure exists for those legs; they are TCG
 
-# --- Graviton: the cloud runtime leg was never built and produced no figure.
-# NARROWED 2026-09-20. The old rule was a bare \bGraviton\b, written when
-# every Graviton sentence in this repo was false. That stopped being true on
-# 2026-09-19, when a QNX guest booted under KVM on a1.metal: there is now a
-# TRUE, assertable Graviton fact -- the shipped startup's hang, and its fix,
-# both reproduce on Cortex-A72. Banning the word banned the evidence with it.
-# What must stay banned is a Graviton *leg* or a Graviton *number*, so the rule
-# now requires one of those words in the same sentence, in either order.
-# Pinned both ways in tests/test_claims_gate_bites.py: it still blocks
-# "benchmarked ... on AWS Graviton", "Boot time on Graviton was 29 s" and "the
-# Graviton runtime host recorded the cloud numbers", and it allows "the hang
-# reproduces on AWS Graviton alike" (the defect evidence).
-\bGraviton\b[^.]{0,80}\b(leg|twin|runtime host|benchmark\w*|measur\w*|latenc\w*|throughput|boot[- ]time|figure|number)\b	no Graviton leg was ever built and no Graviton figure was ever taken
-\b(leg|twin|runtime host|benchmark\w*|measur\w*|latenc\w*|throughput|boot[- ]time|figure|number)\b[^.]{0,80}\bGraviton\b	no Graviton leg was ever built and no Graviton figure was ever taken
+# --- the cloud LEG. Still never built, and that is separate from the boot arms.
+# AWS has been used four times (a t4g.small /dev/kvm probe, an a1.metal hang
+# reproduction, an a1.metal control/test pair, and the 2026-09-20 twin boot
+# measurement), so "nothing ran on AWS" is false. What does not exist is a cloud
+# LEG in this project's sense: a QHV host plus guest running the IPC benchmark.
+
+# Keyed on the HOST token, never on the word "cloud": "cloud leg" is this
+# project's NAME for architecture A1, which ran on the local Windows PC, so
+# banning "cloud" near "IPC" would ban the project's own vocabulary.
+\b(Graviton|AWS|EC2|a1\.metal|c7g|t4g)\b[^.]{0,80}\b(IPC|latenc\w*|throughput|p50|p99|benchmark\w*)\b	no IPC, latency or throughput figure was ever taken on a cloud host; the only cloud measurement is boot timing (2026-09-20)
+\b(IPC|latenc\w*|throughput|p50|p99|benchmark\w*)\b[^.]{0,80}\b(Graviton|AWS|EC2|a1\.metal|c7g|t4g)\b	no IPC, latency or throughput figure was ever taken on a cloud host; the only cloud measurement is boot timing (2026-09-20)
+
+# --- Graviton as a LEG or a RUNTIME HOST. Narrowed twice.
+# 2026-09-20 (first): the rule was a bare \bGraviton\b, from when every Graviton
+# sentence here was false. It began banning the cross-vendor defect evidence.
+# 2026-09-20 (second): "figure|number|boot-time" came out of the rule too,
+# because a1.metal IS Graviton1 and it produced real boot timings that day. What
+# stays banned is the STRUCTURAL claim -- a Graviton leg, twin or runtime host --
+# because the c7g.large runtime host was designed and never built.
+\bGraviton\b[^.]{0,80}\b(leg|twin|runtime host)\b	the Graviton runtime host was designed and never built; no leg ran there
+\b(leg|twin|runtime host)\b[^.]{0,80}\bGraviton\b	the Graviton runtime host was designed and never built; no leg ran there
 
 # --- safety / certification: none of this exists and none of it is claimed.
 \bASIL\b	no ASIL claim is supportable; SDP 8.0 is not QNX OS for Safety
@@ -51,3 +73,63 @@
 # faster". It compared different sample sizes and was withdrawn.
 \b18%\s+faster\b	withdrawn: an unmatched 15-vs-100,000-sample comparison
 \bfreedom from interference\b	not quantified anywhere in this repo
+
+# ===========================================================================
+# EXEMPTIONS -- sentences inspected on 2026-09-20 and found already correct.
+# Each is a judgement about wording, recorded so a reviewer can reject it.
+# An exemption is NOT a way to keep a false sentence; it says the sentence is
+# true and the rule is over-broad on this phrasing.
+# ===========================================================================
+
+# docs/orin-native-port-plan.md:829 -- an OUT-OF-SCOPE list. "Anything about
+# NVIDIA DRIVE OS ... ASIL, or certified BSPs" tells a researcher what NOT to
+# work on. The rule reads it as an ASIL claim; it is the opposite of one.
+!Anything about NVIDIA DRIVE OS	an explicit out-of-scope list, not a claim
+
+# docs/findings.md 2026-06-11 -- a quoted HARA study result, already scoped to
+# "the study's notional vehicle integration". skills/ are study artefacts and
+# say so; the notional qualifier is in the same sentence.
+!under the study's notional vehicle integration	a quoted study rating, already marked notional
+
+# docs/bsp-selection.md:47 -- states the correct conclusion in its own words:
+# the Graviton runtime host and its KVM line are DESIGN-TIME ONLY.
+!design-time only	the sentence already says the host was design-time only
+
+# docs/findings.md:1713 -- this IS the self-correction. It records that every
+# figure attributed to "cloud" was produced on the local Windows host.
+!attributed to "cloud" was produced on the \*\*local Windows host\*\*	the sentence is the correction itself
+
+# docs/jd-mapping.md -- already carries the qualifier inline: "(designed for AWS
+# Graviton; as built, QEMU TCG on a local Windows PC)".
+!designed for AWS Graviton; as built, QEMU TCG	already qualified inline as designed-not-built
+
+# docs/architecture.md -- an ASCII diagram of NVIDIA's REFERENCE architecture,
+# the thing this project is compared against. "Safety guest: QNX OS for Safety
+# (QOS)" describes DRIVE OS, not this repo, and the whole point of the diagram
+# is the contrast.
+!Safety guest: QNX OS for Safety	a diagram of NVIDIA's reference architecture, not a claim about this repo
+
+# docs/phase2-topology-decision.md -- a two-column "what this IS / what it is
+# NOT" table. The matched text is the NOT column, listing certified Type-1
+# isolation and ASIL-D as things explicitly not demonstrated.
+!Certified Type-1 isolation, ASIL-D, or quantified freedom-from-interf	the "not demonstrated" column of a contrast table
+
+# docs/bsp-selection.md -- an ASCII diagram of the DESIGNED topology. The
+# paragraph above it and the block quote below both say the Graviton runtime
+# host is design-time only and never ran.
+!Graviton runtime host \(c7g.large\)	a labelled design diagram; the surrounding text says it never ran
+
+# docs/findings.md 2026-07-28 -- the sentence is immediately followed by a dated
+# note saying "cloud leg" is the name of architecture A1 and that every figure
+# in the entry came from the local Windows PC.
+!first real measured numbers to exist anywhere in this	followed in the same paragraph by the 2026-09-20 naming note
+
+# docs/phase2-topology-decision.md -- the sentence states the assumption THIS
+# ADR exists to falsify ("The original Phase-2 plan ... assumed the cloud leg
+# was two co-equal QEMU/KVM guests"). Everything after it is the refutation.
+!The original Phase-2 plan	the assumption this ADR was written to falsify
+
+# results/.../m4-dryrun-design.md -- an out-of-scope list, same class as the
+# plan's: "Out of scope: the KVM/GICv3 NISV track, a supported QHV platform,
+# NVIDIA DRIVE OS, and any ASIL or isolation property."
+!\*\*Out of scope:\*\* the KVM/GICv3 NISV track	an explicit out-of-scope list, not a claim

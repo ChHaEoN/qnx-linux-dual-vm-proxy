@@ -2363,7 +2363,10 @@ Resolved the qvm/TCG console-wiring spike blocking Phase 2
 ([`../ipc-test/qnx-host-client/README.md`](../ipc-test/qnx-host-client/README.md))
 and captured the **first real measured numbers to exist anywhere in this
 repo** for the cloud-leg IPC benchmark — with one real limitation still
-open. Chain of findings, established via a live interactive host shell
+open. (**2026-09-20 note on the name:** "cloud leg" is this project's label
+for architecture A1, not a statement about where it ran. Every figure in this
+entry was produced on the local Windows PC under QEMU TCG. No IPC, latency or
+throughput number has ever been taken on a cloud host.) Chain of findings, established via a live interactive host shell
 (TCP-forwarded `qvm` console, driven while the QHV host was actually
 running, rather than guessed from docs): (1) **host-side wiring** —
 `vdev virtio-console` needs `hostdev /dev/ptyp0` or `qvm` fails to arm it
@@ -2534,8 +2537,14 @@ bootloader / dual-VM partition story that is this portfolio's strongest DRIVE OS
 SE differentiator), the project adopts a **hybrid**: **Track A** keeps the
 existing QEMU-guest / self-built-IFS path (dual-VM partition proxy on Graviton +
 Orin hardware twin) for the BSP, bootloader, partition-isolation and twin-diff
-narrative; **Track B** adds the QNX-on-Graviton AMI as a low-friction *single*
-QNX target for the application layer — native IPC / resource-manager / scheduling
+narrative — **2026-09-20: Track A's Graviton half never happened.** ADR-002
+falsified it in 2026-06 (non-metal Graviton exposes no `/dev/kvm`), the
+dual-VM-over-bridge topology was never built on any cloud host, and every
+figure labelled "cloud" came from the local Windows PC. Track A as executed is
+Windows-PC TCG plus the Orin. **Track B never happened at all:** no QNX-on-Graviton AMI was ever
+launched, no application-layer work ran on one, and no IPC, latency or throughput figure has ever
+been taken on any cloud host. As planned on 2026-06-10, **Track B** was to add the QNX-on-Graviton
+AMI as a low-friction *single* QNX target for the application layer — native IPC / resource-manager / scheduling
 demos, cross-compile→S3→run pipeline, GitHub-Actions CI/CD, and a standalone
 `docs/virtual-target-analysis.md` writeup. Architectural caveat recorded: the AMI
 makes QNX the OS, so the **dual-VM partition model stays on Track A only**; Track B

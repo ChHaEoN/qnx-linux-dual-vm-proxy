@@ -63,7 +63,9 @@ successfully`. The capture stands.
 
 **Goal.** Boot QNX SDP 8.0 natively on the Jetson Orin Nano Dev Kit (Tegra234, 6× Cortex-A78AE, L4T R36.4.7 /
 UEFI 36.4.4), reach the QNX Hypervisor 8.0 host at real EL2 (`-Q enable,el2-host`, VHE), boot the
-**byte-identical** cloud-leg QNX guest under it, and produce the first hardware-timed QHV numbers on this
+**byte-identical** cloud-leg QNX guest under it, and — **this part was never delivered and is withdrawn
+(2026-09-20); no hardware-timed hypervisor number exists anywhere in this project** — produce the first
+hardware-timed QHV numbers on this
 silicon: **M3** host-clock `qvm` launch → guest banner, and **M4** per-exit hypervisor dwell P50/P99/max in
 the [`scripts/twin/diff-results.sh`](../scripts/twin/diff-results.sh) CSV schema. Both feed
 [`digital-twin-design.md` §1a](digital-twin-design.md) as a **third host bundle** (native Orin / no QEMU /
@@ -71,6 +73,11 @@ VHE) — explicitly *not* a one-variable diff (§7). **2026-09-11 (owner decisio
 what the M path delivers. M3 stands, and M4 and M5 finish as functional passes. S1 then adds a Linux guest. The M3
 and M4 numbers come from one campaign on the frozen reference architecture v1, and they still feed §1a as a third
 bundle ([§6](#architecture-versions-and-the-measurement-freeze-decided-2026-09-11)).
+**2026-09-20:** the Goal's promise of "the first hardware-timed QHV numbers on this silicon" was **not kept and
+is now withdrawn.** M3, M4 and M5 met functionally and S1-F met, but no QHV figure was ever published, and v1 --
+the campaign that was to publish them -- was superseded before it was ever frozen (under a native QNX Hypervisor
+no OS can use the GPU on Tegra234). **No hardware-timed hypervisor number exists anywhere in this project**, and
+A6, the current direction, has no QNX Hypervisor leg at all: QHV needs EL2 and ARM KVM does not nest on A78AE.
 
 **Non-goals.** No storage, network, USB, display, GPU, SMMU or PCIe drivers; ~~no Linux guest on the native
 leg~~ **(2026-09-11: S1 adds one, without a GPU; §6)**; ~~no cold-boot number unless the optional M5 UEFI
@@ -367,7 +374,7 @@ Records made before v1 keep the id of the architecture they ran on. None of them
 
 | id | architecture | dates | what changed | sources |
 |---|---|---|---|---|
-| A0 | Original design. Cloud: two co-equal QEMU/KVM guests, QNX Safety and Linux Compute, on a Graviton host, with IPC over `br0`/tap virtio-net. Hardware twin: a QEMU/KVM QNX guest beside L4T. Never built. | Apr-May 2026; falsified by 2026-06-11 (non-metal Graviton has no `/dev/kvm`) | The starting design | [ADR-002](phase2-topology-decision.md) §1; [findings.md](findings.md), "Apr 2026 — Phase 0 BSP research" |
+| A0 | Original design. Cloud: two co-equal QEMU/KVM guests, QNX Safety and Linux Compute, on a Graviton host, with IPC over `br0`/tap virtio-net — **never built; falsified by [ADR-002](phase2-topology-decision.md) in 2026-06, because non-metal Graviton exposes no `/dev/kvm`.** Hardware twin: a QEMU/KVM QNX guest beside L4T. Never built. | Apr-May 2026; falsified by 2026-06-11 (non-metal Graviton has no `/dev/kvm`) | The starting design | [ADR-002](phase2-topology-decision.md) §1; [findings.md](findings.md), "Apr 2026 — Phase 0 BSP research" |
 | A0′ | Track B: the QNX OS AMI on Graviton, one QNX with no guests. Never built. | decided 2026-06-10 | A second runtime track beside A0 | [findings.md](findings.md), 2026-06-10 two-track decision |
 | A1 | Cloud leg per ADR-002. The Windows PC runs QEMU-TCG with `virtualization=on`. Inside it the QHV host runs one QNX guest, with IPC over the qvm virtio-console pty pair. No Linux guest, no `br0`. | first boot and acceptance 2026-06-11; **2026-09-13 (owner):** closed as history; not redone | No KVM and no Linux guest; the hypervisor runs inside the emulation | [ADR-002](phase2-topology-decision.md) §3; [findings.md](findings.md), 2026-06-11 QHV milestone; [digital-twin-design.md](digital-twin-design.md) §1 |
 | A2 | Orin plain leg. L4T is the host and plays Compute. The distro QEMU under TCG runs the plain `qnx-safety-vm` IFS, rebuilt with a TCP server. IPC path: virtio-net, `tap-qnx`, `br0`, a native Linux client. The plain IFS was also timed under TCG on Windows. The same leg under KVM hangs on the GICv3/NISV defect. | 2026-07-28/29; **2026-09-13 (owner):** closed as history; not redone | Heterogeneous QNX↔Linux IPC moves to the hardware twin, under TCG | [findings.md](findings.md), 2026-07-28 and 2026-07-29 entries; [orin-port.md](orin-port.md) risk register |

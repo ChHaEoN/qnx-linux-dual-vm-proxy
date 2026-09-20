@@ -355,8 +355,14 @@ def main():
     print("DENYLIST -- asserted claim strings the data does not support")
     print("-" * 100)
     rules = C.load_denylist(os.path.join(repo, a.denylist))
-    hits = C.scan_denylist(readme, rules)
-    print("  %d rules loaded from %s" % (len(rules), a.denylist))
+    # Exemptions are sentences inspected and found already correct -- an
+    # out-of-scope list, a quoted study, a self-correction. Each is written down
+    # with its reason in the same file as the rules, so the judgement is
+    # reviewable rather than a silent special case.
+    exempt = C.load_exemptions(os.path.join(repo, a.denylist))
+    hits = C.scan_denylist(readme, rules, exempt)
+    print("  %d rules and %d exemption(s) loaded from %s"
+          % (len(rules), len(exempt), a.denylist))
     if hits:
         for pattern, why, sentence in hits:
             print("  FAIL /%s/ -- %s" % (pattern, why))
@@ -381,19 +387,26 @@ def main():
     # read it as live text would report the honest record as a violation.
     print()
     print("-" * 100)
-    print("PROSE BEYOND README -- scripts/ is instructions (hard fail), docs/ is history (warn)")
+    print("PROSE BEYOND README -- scripts/ is instructions (hard fail); docs/ and results/ warn")
     print("-" * 100)
     # gitignored, local-only: CI never sees them, so a local run must not either
     skip = ("interview-narrative.md", "cv-architecture-brief.md")
     for label, globs, hard in (
             ("scripts/", ["scripts/**/*.sh", "scripts/**/*.bat",
                           "scripts/**/*.ps1", "scripts/**/*.md"], True),
-            ("docs/", ["docs/*.md"], False)):
+            ("docs/", ["docs/*.md"], False),
+            # results/ was the last unscanned prose surface. A run record that
+            # misstates what was measured is as misleading as a doc that does,
+            # and results/cloud/ is the standing example: a directory named
+            # "cloud" whose one CSV was recorded on a Windows PC. Warn, not
+            # fail -- these are dated records, and correcting one is an edit to
+            # history that wants a human deciding it.
+            ("results/", ["results/**/*.md"], False)):
         files = C.prose_files(repo, globs, exclude=skip)
         found = []
         for rel in files:
             text = C.strip_superseded(C._read(os.path.join(repo, rel)))
-            for _pattern, why, sentence in C.scan_denylist(text, rules):
+            for _pattern, why, sentence in C.scan_denylist(text, rules, exempt):
                 found.append((rel, why, " ".join(sentence.split())))
         print("  %-9s %3d files, %d asserted hit(s)%s"
               % (label, len(files), len(found), "" if hard else "   [warn only]"))
@@ -428,7 +441,7 @@ def main():
         else:
             print("  %s" % slug)
             print("    %s" % desc)
-            dhits = C.scan_denylist(desc, rules)
+            dhits = C.scan_denylist(desc, rules, exempt)
             if dhits:
                 for pattern, why_banned, sentence in dhits:
                     print("  WARN /%s/ -- %s" % (pattern, why_banned))

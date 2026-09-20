@@ -45,10 +45,12 @@ MUST_BLOCK = [
     "Latency was measured on Graviton and on the Orin.",
     "Graviton gives us the cloud leg of the twin.",
     "We benchmarked the QNX guest on AWS Graviton.",
-    "Boot time on Graviton was 29 s.",
     "Graviton produced a p50 figure of 2.0 ms.",
     "The Graviton runtime host recorded the cloud numbers.",
     "We measured throughput on Graviton.",
+    "IPC latency on a1.metal was 2.0 ms.",
+    "We took a hardware-timed hypervisor number on the board.",
+    "The A1 cloud leg ran under KVM.",
 ]
 
 # True statements, all backed by logs/sample-boot/aws-a1-metal-kvm-*.log. These
@@ -58,15 +60,32 @@ MUST_ALLOW = [
     "The one QNX ships hangs under KVM, on Orin and on AWS Graviton alike.",
     "The same hang reproduces on AWS Graviton1 silicon, a different vendor.",
     "A QNX guest booted under KVM on AWS Graviton bare metal.",
+    # Moved here from MUST_BLOCK on 2026-09-20, and the move is the point: on
+    # that day a1.metal -- which IS Graviton1 -- produced real boot timings
+    # (median 4519.0 ms to the guest banner, n=5). A boot-time claim about
+    # Graviton stopped being false by construction, so the rule had to stop
+    # banning it. A wrong VALUE is not this file's job; the anchor machinery in
+    # claims_gate.py re-derives README's numbers from the committed data.
+    "Boot time on Graviton was 4519 ms.",
+    # Measurements under KVM exist since 2026-09-19 (guest latency) and
+    # 2026-09-20 (boot timing). The blanket "no KVM measurement" ban was
+    # removed for exactly this reason.
+    "Boot timing under KVM was measured on both hosts.",
+    "Guest latency was measured with QNX as a KVM guest.",
+    # "cloud leg" is the project's NAME for architecture A1, which ran on the
+    # local Windows PC. The rules key on host tokens, never on this word.
+    "The cloud-leg IPC benchmark produced its first real numbers.",
 ]
 
 
 def _rules(repo_root):
-    return C.load_denylist(os.path.join(repo_root, DENYLIST))
+    """Rules AND exemptions -- the gate never uses one without the other."""
+    path = os.path.join(repo_root, DENYLIST)
+    return C.load_denylist(path), C.load_exemptions(path)
 
 
 def _fires(sentence, rules):
-    return bool(C.scan_denylist(sentence, rules))
+    return bool(C.scan_denylist(sentence, rules[0], rules[1]))
 
 
 # --------------------------------------------------------------------------
@@ -88,7 +107,8 @@ def test_the_cross_vendor_defect_evidence_is_allowed(repo_root):
 def test_narrowing_did_not_widen_the_readme_surface(repo_root):
     """README must stay clean under the new rules, as it was under the old one."""
     readme = C._read(os.path.join(repo_root, "README.md"))
-    assert C.scan_denylist(readme, _rules(repo_root)) == []
+    rules, exempt = _rules(repo_root)
+    assert C.scan_denylist(readme, rules, exempt) == []
 
 
 # --------------------------------------------------------------------------
@@ -104,7 +124,7 @@ def test_struck_through_text_is_not_scanned(repo_root):
     rules = _rules(repo_root)
     live = "Latency was measured on Graviton and on the Orin."
     assert _fires(live, rules)
-    assert C.scan_denylist(C.strip_superseded("~~%s~~" % live), rules) == []
+    assert C.scan_denylist(C.strip_superseded("~~%s~~" % live), *rules) == []
     # text outside the markers survives untouched
     assert "keep" in C.strip_superseded("keep ~~drop~~ keep")
     assert "drop" not in C.strip_superseded("keep ~~drop~~ keep")
@@ -135,12 +155,12 @@ def test_scripts_tree_is_currently_clean(repo_root):
     surface could be made a hard failure. If this list ever grows again, the
     fix is the sentence, not this test.
     """
-    rules = _rules(repo_root)
+    rules, exempt = _rules(repo_root)
     globs = ["scripts/**/*.sh", "scripts/**/*.bat", "scripts/**/*.ps1", "scripts/**/*.md"]
     hits = []
     for rel in C.prose_files(repo_root, globs):
         text = C.strip_superseded(C._read(os.path.join(repo_root, rel)))
-        for _pattern, why, sentence in C.scan_denylist(text, rules):
+        for _pattern, why, sentence in C.scan_denylist(text, rules, exempt):
             hits.append("%s: %s (%s)" % (rel, " ".join(sentence.split())[:90], why))
     assert hits == [], "asserted claims the data does not support:\n  " + "\n  ".join(hits)
 
@@ -155,7 +175,7 @@ def test_a_false_sentence_in_a_script_fails_the_gate(repo_root):
     staged = os.path.join(repo_root, STAGED_SCRIPT)
     with io.open(staged, "w", encoding="utf-8", newline="\n") as fh:
         fh.write("#!/usr/bin/env bash\n"
-                 "# Boot time on Graviton was 29 s.\n"
+                 "# The Graviton runtime host carried the cloud leg.\n"
                  "exit 0\n")
     try:
         env = dict(os.environ, PYTHONIOENCODING="utf-8")
@@ -187,3 +207,64 @@ def test_docs_are_reported_but_never_fail_the_build(repo_root):
     assert "PROSE BEYOND README" in out
     assert "[warn only]" in out
     assert proc.returncode == 0, "the committed tree must pass:\n" + out
+
+
+# --------------------------------------------------------------------------
+# the scanner fixes of 2026-09-20
+
+
+def test_link_targets_are_not_scanned(repo_root):
+    """A filename is not a claim.
+
+    `adr-003-hardware-timed-qhv.md` exists only as an href, and scanning it
+    fired the hardware-timed rule in four documents that each said the opposite
+    of what the rule accused them of.
+    """
+    rules = _rules(repo_root)
+    s = "See [ADR-003](adr-003-hardware-timed-qhv.md) for where it could come from."
+    assert C.scan_denylist(C.strip_superseded(s), *rules) == []
+    assert "ADR-003" in C.strip_superseded(s), "link TEXT must survive"
+    assert "certified" not in C.strip_superseded("see https://x.example/a-certified-thing")
+
+
+def test_sentences_do_not_merge_across_block_boundaries(repo_root):
+    """A heading carries no full stop, so joining blocks glued three together.
+
+    Three warnings on 2026-09-20 were that and nothing else: the claim sat in
+    one block and its correction in the next, and no sentence held both.
+    """
+    md = "## A heading with no full stop\n\nWrapped prose that runs\non to here.\n\n| a | b |\n- bullet\n"
+    sents = C.split_sentences(md)
+    assert "## A heading with no full stop" in sents
+    assert "Wrapped prose that runs on to here." in sents, "wrapped prose must still join"
+    assert "| a | b |" in sents
+    assert "- bullet" in sents
+
+
+def test_every_exemption_is_justified_and_used(repo_root):
+    """An exemption without a reason is a silent special case.
+
+    It is also dead weight if nothing matches it any more -- a stale exemption
+    would quietly re-open whatever it was written to allow.
+    """
+    path = os.path.join(repo_root, DENYLIST)
+    exemptions = C.load_exemptions(path)
+    assert exemptions, "the file should carry exemptions"
+    unjustified = [rx for rx, why in exemptions if not why.strip()]
+    assert not unjustified, "exemption with no stated reason: %r" % unjustified
+
+    # Match against the NORMALISED sentences the scanner actually sees, not the
+    # raw bytes: the diagram line is "Safety guest:   QNX OS for Safety" with
+    # padding spaces, and findings.md wraps "**local Windows host**" across two
+    # lines. Checking raw text reports live exemptions as stale.
+    sentences = []
+    scanned = ["docs/*.md", "README.md", "scripts/**/*.md", "scripts/**/*.sh",
+               "scripts/**/*.bat", "scripts/**/*.ps1", "results/**/*.md"]
+    for rel in C.prose_files(repo_root, scanned,
+                             exclude=("interview-narrative.md", "cv-architecture-brief.md")):
+        text = C.strip_superseded(C._read(os.path.join(repo_root, rel)))
+        sentences.extend(C.split_sentences(text))
+    corpus = chr(10).join(sentences)
+    import re as _re
+    unused = [rx for rx, _why in exemptions if not _re.search(rx, corpus, _re.I)]
+    assert not unused, "exemption no longer matches anything, so it is stale: %r" % unused

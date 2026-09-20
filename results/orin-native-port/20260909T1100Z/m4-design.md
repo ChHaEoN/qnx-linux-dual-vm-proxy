@@ -20,7 +20,7 @@ Phase 3b. Architect pass, revision 2, 2026-09-11. Two reviews of revision 1 rais
 
 ## 0. Summary
 
-M4 produces the plan's second hardware-timed QHV number (plan:57-63): the per-exit hypervisor dwell of the cloud-leg QNX guest under native `qvm` at EL2 (`-P4 -Q enable,el2-host`), as P50, P99 and max, in the `diff-results.sh` CSV schema (plan:416-421). It keeps M3's image, guest, configuration and host procedure (D3 §3), and adds a kernel trace around the IPC run, an on-target counter, and a transfer of a capped listing over the TCU to COM3.
+M4 produces the plan's second hardware-timed QHV number (plan:57-63) — **not delivered; withdrawn 2026-09-20. M4 met functionally on 2026-09-11, no QHV figure was ever published, and no hardware-timed hypervisor number exists anywhere in this project** — the per-exit hypervisor dwell of the cloud-leg QNX guest under native `qvm` at EL2 (`-P4 -Q enable,el2-host`), as P50, P99 and max, in the `diff-results.sh` CSV schema (plan:416-421). It keeps M3's image, guest, configuration and host procedure (D3 §3), and adds a kernel trace around the IPC run, an on-target counter, and a transfer of a capped listing over the TCU to COM3.
 
 **What changes against the plan's M4 text (plan:392-426), and why:**
 1. **The listing carries THREAD events, and a C counter classifies on the target.** A pair's class (clean, preempted, blocked, migrated) needs THREAD events, which 7b's `QVM *:` filter dropped (m4dry/m4dry-host.ksh.in:101). The board image has no gawk and no pipes (startup/m3-host.ksh.in:11; DD:1374-1384), so the counter is C (`tools/m4count.c`, new). The listing goes out verbatim at r1 so the PC can check the counter independently, and in a compact per-pair form at r2 once r1 shows the two agree (§5, D2, D3).
