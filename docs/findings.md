@@ -25,31 +25,51 @@ sha256 `26170cd7…` was the image on the Orin Nano **and** on two separately la
 no disk) and QEMU 6.2.0 from the **same Debian package build**, `1:6.2+dfsg-2ubuntu6.31`,
 on both sides.
 
-**The proposed metric is 92% artefact.** Boot to `Startup complete` puts the hosts 3.6%
-apart — median 5412.27 ms (Orin) against 5225.89 ms (`a1.metal`), n=5 each. A line trace
-shows why that is not a host comparison:
+**Three fixed waits were hiding inside one number.** Each was found by timestamping every
+serial line, and each agrees across the two hosts to about a millisecond:
 
-| host | wait between `xpt_configure` and `Unable to access /dev/hd0` |
-|---|---|
-| Orin Nano, Cortex-A78AE | **5001.3 ms** |
-| AWS `a1.metal`, Cortex-A72 | **5000.3 ms** |
+| wait | Orin (A78AE) | `a1.metal` (A72) | cause |
+|---|---|---|---|
+| `waitfor /dev/hd0` | **5001.3 ms** | **5000.3 ms** | no disk; the stock `startup.sh` passes no timeout argument, so it takes QNX's 5 s default |
+| `waitfor /dev/random` | **5006.1 ms** | — | no `virtio-rng` presented; entropy never initialises |
+| network bring-up | **4218.8 ms** | **4219.4 ms** | `Starting Networking` → `Startup complete`, full device set |
 
-With no disk attached QNX's boot script waits five seconds for `/dev/hd0` and gives up,
-and that wait is **one millisecond apart on two vendors' silicon five years of
-micro-architecture apart**. A second pair of traces the same session read 5001.0 and
-5000.7 ms. Publishing "+3.6%" as a host comparison would have been misleading.
+A software timeout does not care how fast the CPU is, which is exactly why it makes two
+different machines look alike. The first configuration was **92% artefact**, and attaching
+only the disk made it *worse* — 24.7 s, because the boot then got far enough to hit the
+entropy wait. All three had to be removed before the comparison said anything.
 
-**What is left once it is removed.** The Orin takes about twice as long to get the guest
-talking: **2.06×** by trace (463.1 ms against 224.4 ms), **2.18×** by time-to-first-serial-byte
-(362.01 ms against 166.09 ms, n=5). That is **not** a per-core claim — the interval covers
-QEMU start, KVM setup, a 9.77 MB IFS load and early guest startup, across hosts that
-differ in clock (Orin pinned at 1344 MHz under the 25 W profile; Graviton1's A72 is
-firmware-clocked), kernel and memory subsystem. A host *bundle* difference in §1a's sense.
+**The measurement, once they are gone.** Disk plus `-snapshot`, and virtio net and rng in
+the slot order this image's `startup.sh` requires (blk, net, rng — QEMU assigns
+virtio-mmio slots in command-line order and the image binds absolute addresses). Medians
+of n=5 timed boots per host:
 
-**Kept because it was not expected:** `a1.metal` repeated to within 1.3 ms over five runs
-and **0.4 ms across two separately launched instances** (medians 5225.89, 5225.49), while
-the Orin's spread is 13× wider at 14.42 ms — on a pinned governor. Unexplained; no
-scheduler or interrupt tracing was done.
+| segment | Orin A78AE | `a1.metal` A72 | ratio |
+|---|---|---|---|
+| QEMU exec → first serial byte | **410.7 ms** | **167.8 ms** | **2.45×** |
+| first byte → mounting file systems | 57.1 ms | 60.1 ms | 0.95× |
+| mounting → starting networking | 65.8 ms | 66.0 ms | 1.00× |
+| networking → `Startup complete` | 4218.8 ms | 4219.4 ms | 1.00× |
+| **total: exec → guest banner** | **4747.0 ms** | **4519.0 ms** | **1.05×** |
+
+**One segment separates the hosts and it is the first one.** Everything after the guest
+starts talking is equal within noise or is a constant. The total, 1.05×, understates the
+real difference by more than a factor of two — it is the number a careless run would have
+published. The 2.45× is **not** a per-core claim: it covers QEMU start, KVM setup, a
+9.77 MB IFS load and early guest startup, across hosts differing in clock (Orin pinned at
+1344 MHz under the 25 W profile; Graviton1's A72 is firmware-clocked), kernel and memory
+subsystem — a host *bundle* difference in §1a's sense.
+
+**Kept because it was not expected:** `a1.metal` is **16× more repeatable** (n=5 spread
+2.16 ms against the Orin's 35.51 ms), and in the diskless control two *separately
+launched* instances agreed to 0.4 ms on the median. The Orin's spread is wider despite a
+pinned governor. Unexplained; no tracing was done, and the Orin runs a full L4T desktop
+against a fresh minimal AWS image.
+
+**`-snapshot` is not optional.** The 2026-09-18 record states its runs used this disk
+without it, so the guest wrote to the backing file and the board's copy drifted from the
+PC's. With it the before/after hash is identical on every run on both hosts, verified
+here.
 
 **Method.** Timing is taken by
 [`scripts/twin/time-kvm-boot.py`](../scripts/twin/time-kvm-boot.py) **on the host being

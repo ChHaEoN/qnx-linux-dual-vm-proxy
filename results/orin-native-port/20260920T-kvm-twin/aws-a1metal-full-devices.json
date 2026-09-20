@@ -1,0 +1,324 @@
+{
+  "stamp": {
+    "label": "aws-a1metal-kvm-twin-full",
+    "utc": "2026-09-20T09:55:33Z",
+    "host": "<aws-a1metal-host>",
+    "machine": "aarch64",
+    "kernel": "6.8.0-1063-aws",
+    "qemu": "QEMU emulator version 6.2.0 (Debian 1:6.2+dfsg-2ubuntu6.31)",
+    "ifs": "ifs-kvmfix.bin",
+    "ifs_sha256": "26170cd7dc74c216181db71c5da0e6b22719d1f3f9f2c1d0c2b9723fd6c9446c",
+    "launch": "-machine virt,gic-version=3 -cpu host -enable-kvm -smp 2 -m 1G -drive file=<disk>,if=none,id=drv0,format=raw -device virtio-blk-device,drive=drv0 -snapshot -netdev user,id=n0 -device virtio-net-device,netdev=n0,mac=52:54:00:11:11:11 -object rng-random,filename=/dev/urandom,id=rng0 -device virtio-rng-device,rng=rng0 -kernel <ifs> -nographic",
+    "disk": "disk-qemu",
+    "disk_sha256": "f326b792486805c9406c1a0c6ccd6489bf2714aaf708aabc57f96cf06810ce68",
+    "snapshot": true,
+    "devices": "blk,net,rng",
+    "cpu_before": [
+      {
+        "cpu": "cpu0",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu1",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu10",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu11",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu12",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu13",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu14",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu15",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu2",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu3",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu4",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu5",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu6",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu7",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu8",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu9",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      }
+    ],
+    "cpu_after": [
+      {
+        "cpu": "cpu0",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu1",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu10",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu11",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu12",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu13",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu14",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu15",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu2",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu3",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu4",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu5",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu6",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu7",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu8",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu9",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      }
+    ]
+  },
+  "runs": [
+    {
+      "ok": true,
+      "ms_to_startup_complete": 4514.96,
+      "ms_to_first_byte": 168.87,
+      "serial_bytes": 595,
+      "serial_tail": "ho endpoint listening on <ip>:7000 (frame=64 bytes)\r\n\r\nTo exit QEMU, type <ctrl>a x\r\n\r\nProcess count:22\r\nStartup complete\r\nQNX qnx-safety 8.0.0 2026/02/27-10:59:13EST QEMU_virt_(aarch64),_KVM_guest",
+      "marks_ms": {
+        "fsevmgr": 185.12,
+        "mount_fs": 229.02,
+        "networking": 294.63,
+        "sshd": 4430.69,
+        "startup_end": 4514.96,
+        "banner": 4520.55
+      },
+      "index": 0,
+      "warmup": true
+    },
+    {
+      "ok": true,
+      "ms_to_startup_complete": 4512.73,
+      "ms_to_first_byte": 168.5,
+      "serial_bytes": 595,
+      "serial_tail": "ho endpoint listening on <ip>:7000 (frame=64 bytes)\r\n\r\nTo exit QEMU, type <ctrl>a x\r\n\r\nProcess count:22\r\nStartup complete\r\nQNX qnx-safety 8.0.0 2026/02/27-10:59:13EST QEMU_virt_(aarch64),_KVM_guest",
+      "marks_ms": {
+        "fsevmgr": 184.96,
+        "mount_fs": 228.57,
+        "networking": 294.6,
+        "sshd": 4428.95,
+        "startup_end": 4512.73,
+        "banner": 4518.39
+      },
+      "index": 1,
+      "warmup": false
+    },
+    {
+      "ok": true,
+      "ms_to_startup_complete": 4513.39,
+      "ms_to_first_byte": 167.78,
+      "serial_bytes": 595,
+      "serial_tail": "ho endpoint listening on <ip>:7000 (frame=64 bytes)\r\n\r\nTo exit QEMU, type <ctrl>a x\r\n\r\nProcess count:22\r\nStartup complete\r\nQNX qnx-safety 8.0.0 2026/02/27-10:59:13EST QEMU_virt_(aarch64),_KVM_guest",
+      "marks_ms": {
+        "fsevmgr": 184.0,
+        "mount_fs": 228.07,
+        "networking": 293.99,
+        "sshd": 4428.39,
+        "startup_end": 4513.39,
+        "banner": 4518.98
+      },
+      "index": 2,
+      "warmup": false
+    },
+    {
+      "ok": true,
+      "ms_to_startup_complete": 4514.49,
+      "ms_to_first_byte": 166.99,
+      "serial_bytes": 595,
+      "serial_tail": "ho endpoint listening on <ip>:7000 (frame=64 bytes)\r\n\r\nTo exit QEMU, type <ctrl>a x\r\n\r\nProcess count:22\r\nStartup complete\r\nQNX qnx-safety 8.0.0 2026/02/27-10:59:13EST QEMU_virt_(aarch64),_KVM_guest",
+      "marks_ms": {
+        "fsevmgr": 183.15,
+        "mount_fs": 227.24,
+        "networking": 293.6,
+        "sshd": 4429.1,
+        "startup_end": 4514.49,
+        "banner": 4520.26
+      },
+      "index": 3,
+      "warmup": false
+    },
+    {
+      "ok": true,
+      "ms_to_startup_complete": 4512.33,
+      "ms_to_first_byte": 167.3,
+      "serial_bytes": 595,
+      "serial_tail": "ho endpoint listening on <ip>:7000 (frame=64 bytes)\r\n\r\nTo exit QEMU, type <ctrl>a x\r\n\r\nProcess count:22\r\nStartup complete\r\nQNX qnx-safety 8.0.0 2026/02/27-10:59:13EST QEMU_virt_(aarch64),_KVM_guest",
+      "marks_ms": {
+        "fsevmgr": 183.43,
+        "mount_fs": 227.0,
+        "networking": 293.23,
+        "sshd": 4429.69,
+        "startup_end": 4512.33,
+        "banner": 4517.91
+      },
+      "index": 4,
+      "warmup": false
+    },
+    {
+      "ok": true,
+      "ms_to_startup_complete": 4513.9,
+      "ms_to_first_byte": 168.16,
+      "serial_bytes": 595,
+      "serial_tail": "ho endpoint listening on <ip>:7000 (frame=64 bytes)\r\n\r\nTo exit QEMU, type <ctrl>a x\r\n\r\nProcess count:22\r\nStartup complete\r\nQNX qnx-safety 8.0.0 2026/02/27-10:59:13EST QEMU_virt_(aarch64),_KVM_guest",
+      "marks_ms": {
+        "fsevmgr": 184.4,
+        "mount_fs": 228.25,
+        "networking": 293.98,
+        "sshd": 4428.88,
+        "startup_end": 4513.9,
+        "banner": 4519.47
+      },
+      "index": 5,
+      "warmup": false
+    }
+  ],
+  "summary": {
+    "n_ok": 5,
+    "n_attempted": 5,
+    "min_ms": 4512.33,
+    "median_ms": 4513.39,
+    "max_ms": 4514.49
+  }
+}

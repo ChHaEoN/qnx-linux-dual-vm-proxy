@@ -1,0 +1,204 @@
+{
+  "stamp": {
+    "label": "orin-kvm-twin-full",
+    "utc": "2026-09-20T09:51:21Z",
+    "host": "<orin-board>",
+    "machine": "aarch64",
+    "kernel": "5.15.148-tegra",
+    "qemu": "QEMU emulator version 6.2.0 (Debian 1:6.2+dfsg-2ubuntu6.31)",
+    "ifs": "ifs-kvmfix.bin",
+    "ifs_sha256": "26170cd7dc74c216181db71c5da0e6b22719d1f3f9f2c1d0c2b9723fd6c9446c",
+    "launch": "-machine virt,gic-version=3 -cpu host -enable-kvm -smp 2 -m 1G -drive file=<disk>,if=none,id=drv0,format=raw -device virtio-blk-device,drive=drv0 -snapshot -netdev user,id=n0 -device virtio-net-device,netdev=n0,mac=52:54:00:11:11:11 -object rng-random,filename=/dev/urandom,id=rng0 -device virtio-rng-device,rng=rng0 -kernel <ifs> -nographic",
+    "disk": "disk-qemu",
+    "disk_sha256": "f326b792486805c9406c1a0c6ccd6489bf2714aaf708aabc57f96cf06810ce68",
+    "snapshot": true,
+    "devices": "blk,net,rng",
+    "cpu_before": [
+      {
+        "cpu": "cpu0",
+        "governor": "performance",
+        "cur_khz": "1344000",
+        "max_khz": "1344000"
+      },
+      {
+        "cpu": "cpu1",
+        "governor": "performance",
+        "cur_khz": "1344000",
+        "max_khz": "1344000"
+      },
+      {
+        "cpu": "cpu2",
+        "governor": "performance",
+        "cur_khz": "1344000",
+        "max_khz": "1344000"
+      },
+      {
+        "cpu": "cpu3",
+        "governor": "performance",
+        "cur_khz": "1344000",
+        "max_khz": "1344000"
+      },
+      {
+        "cpu": "cpu4",
+        "governor": "performance",
+        "cur_khz": "1344000",
+        "max_khz": "1344000"
+      },
+      {
+        "cpu": "cpu5",
+        "governor": "performance",
+        "cur_khz": "1344000",
+        "max_khz": "1344000"
+      }
+    ],
+    "cpu_after": [
+      {
+        "cpu": "cpu0",
+        "governor": "performance",
+        "cur_khz": "1344000",
+        "max_khz": "1344000"
+      },
+      {
+        "cpu": "cpu1",
+        "governor": "performance",
+        "cur_khz": "1344000",
+        "max_khz": "1344000"
+      },
+      {
+        "cpu": "cpu2",
+        "governor": "performance",
+        "cur_khz": "1344000",
+        "max_khz": "1344000"
+      },
+      {
+        "cpu": "cpu3",
+        "governor": "performance",
+        "cur_khz": "1344000",
+        "max_khz": "1344000"
+      },
+      {
+        "cpu": "cpu4",
+        "governor": "performance",
+        "cur_khz": "1344000",
+        "max_khz": "1344000"
+      },
+      {
+        "cpu": "cpu5",
+        "governor": "performance",
+        "cur_khz": "1344000",
+        "max_khz": "1344000"
+      }
+    ]
+  },
+  "runs": [
+    {
+      "ok": true,
+      "ms_to_startup_complete": 4698.96,
+      "ms_to_first_byte": 363.87,
+      "serial_bytes": 595,
+      "serial_tail": "ho endpoint listening on <ip>:7000 (frame=64 bytes)\r\n\r\nTo exit QEMU, type <ctrl>a x\r\n\r\nProcess count:22\r\nStartup complete\r\nQNX qnx-safety 8.0.0 2026/02/27-10:59:13EST QEMU_virt_(aarch64),_KVM_guest",
+      "marks_ms": {
+        "fsevmgr": 377.72,
+        "mount_fs": 417.21,
+        "networking": 486.1,
+        "sshd": 4629.34,
+        "startup_end": 4698.96,
+        "banner": 4702.23
+      },
+      "index": 0,
+      "warmup": true
+    },
+    {
+      "ok": true,
+      "ms_to_startup_complete": 4760.42,
+      "ms_to_first_byte": 414.65,
+      "serial_bytes": 595,
+      "serial_tail": "ho endpoint listening on <ip>:7000 (frame=64 bytes)\r\n\r\nTo exit QEMU, type <ctrl>a x\r\n\r\nProcess count:22\r\nStartup complete\r\nQNX qnx-safety 8.0.0 2026/02/27-10:59:13EST QEMU_virt_(aarch64),_KVM_guest",
+      "marks_ms": {
+        "fsevmgr": 429.5,
+        "mount_fs": 471.26,
+        "networking": 540.69,
+        "sshd": 4676.88,
+        "startup_end": 4760.42,
+        "banner": 4764.36
+      },
+      "index": 1,
+      "warmup": false
+    },
+    {
+      "ok": true,
+      "ms_to_startup_complete": 4736.27,
+      "ms_to_first_byte": 412.56,
+      "serial_bytes": 595,
+      "serial_tail": "ho endpoint listening on <ip>:7000 (frame=64 bytes)\r\n\r\nTo exit QEMU, type <ctrl>a x\r\n\r\nProcess count:22\r\nStartup complete\r\nQNX qnx-safety 8.0.0 2026/02/27-10:59:13EST QEMU_virt_(aarch64),_KVM_guest",
+      "marks_ms": {
+        "fsevmgr": 428.05,
+        "mount_fs": 469.61,
+        "networking": 528.5,
+        "sshd": 4654.12,
+        "startup_end": 4736.27,
+        "banner": 4740.19
+      },
+      "index": 2,
+      "warmup": false
+    },
+    {
+      "ok": true,
+      "ms_to_startup_complete": 4743.32,
+      "ms_to_first_byte": 397.59,
+      "serial_bytes": 595,
+      "serial_tail": "ho endpoint listening on <ip>:7000 (frame=64 bytes)\r\n\r\nTo exit QEMU, type <ctrl>a x\r\n\r\nProcess count:22\r\nStartup complete\r\nQNX qnx-safety 8.0.0 2026/02/27-10:59:13EST QEMU_virt_(aarch64),_KVM_guest",
+      "marks_ms": {
+        "fsevmgr": 412.03,
+        "mount_fs": 454.79,
+        "networking": 520.29,
+        "sshd": 4660.25,
+        "startup_end": 4743.32,
+        "banner": 4747.04
+      },
+      "index": 3,
+      "warmup": false
+    },
+    {
+      "ok": true,
+      "ms_to_startup_complete": 4755.44,
+      "ms_to_first_byte": 410.73,
+      "serial_bytes": 595,
+      "serial_tail": "ho endpoint listening on <ip>:7000 (frame=64 bytes)\r\n\r\nTo exit QEMU, type <ctrl>a x\r\n\r\nProcess count:22\r\nStartup complete\r\nQNX qnx-safety 8.0.0 2026/02/27-10:59:13EST QEMU_virt_(aarch64),_KVM_guest",
+      "marks_ms": {
+        "fsevmgr": 425.56,
+        "mount_fs": 468.47,
+        "networking": 536.63,
+        "sshd": 4670.67,
+        "startup_end": 4755.44,
+        "banner": 4759.02
+      },
+      "index": 4,
+      "warmup": false
+    },
+    {
+      "ok": true,
+      "ms_to_startup_complete": 4724.91,
+      "ms_to_first_byte": 390.33,
+      "serial_bytes": 595,
+      "serial_tail": "ho endpoint listening on <ip>:7000 (frame=64 bytes)\r\n\r\nTo exit QEMU, type <ctrl>a x\r\n\r\nProcess count:22\r\nStartup complete\r\nQNX qnx-safety 8.0.0 2026/02/27-10:59:13EST QEMU_virt_(aarch64),_KVM_guest",
+      "marks_ms": {
+        "fsevmgr": 405.21,
+        "mount_fs": 444.55,
+        "networking": 510.36,
+        "sshd": 4639.51,
+        "startup_end": 4724.91,
+        "banner": 4728.67
+      },
+      "index": 5,
+      "warmup": false
+    }
+  ],
+  "summary": {
+    "n_ok": 5,
+    "n_attempted": 5,
+    "min_ms": 4724.91,
+    "median_ms": 4743.32,
+    "max_ms": 4760.42
+  }
+}

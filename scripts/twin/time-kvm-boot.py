@@ -4,12 +4,20 @@
 Runs on the host being measured, so the clock is the host's own monotonic clock
 and nothing crosses a network before the timestamp is taken.
 
-WHY NO DISK. The guest disk is the one artefact in this configuration that is
-not pinned and is known to drift: the 2026-09-18 record states its runs used
-`disk-qemu` without `-snapshot`, so the guest wrote to it, and the board's copy
-diverged from the PC's. Booting the IFS alone removes that confound outright
-instead of managing it. The cost is scope -- this measures IFS load, startup and
-procnto init under KVM, and says nothing about filesystems, networking or IPC.
+THE DISK, AND WHY --snapshot IS NOT OPTIONAL. The guest disk drifts: the
+2026-09-18 record states its runs used `disk-qemu` WITHOUT `-snapshot`, so the
+guest wrote to it and the board's copy diverged from the PC's. Passing --disk
+here always adds `-snapshot`, which sends guest writes to a temporary overlay
+and leaves the backing file untouched, so the same bytes are measured on every
+run and on every host. The hash is recorded in the stamp; check it matches on
+both sides before comparing anything.
+
+Without --disk the boot still completes, but `waitfor /dev/hd0` in the stock
+mkqnximage startup.sh has no timeout argument and so takes QNX's 5 s default
+EVERY time. Measured 2026-09-20: that wait is 5001.3 ms on a Cortex-A78AE and
+5000.3 ms on a Cortex-A72 -- a software timeout does not care how fast the CPU
+is, which is exactly why it swamps the metric. A diskless run is therefore
+about 92% artefact and is kept only as the control for that finding.
 
 WHAT THIS IS NOT. Not a hypervisor number: the QNX Hypervisor cannot run under
 KVM at all (it needs EL2, and ARM KVM does not nest on A78AE). The startup
@@ -30,6 +38,19 @@ import sys
 import time
 
 MARK = b"Startup complete"
+
+# Segment boundaries. A single end-to-end number is easy to dilute: the
+# 2026-09-20 run found three separate fixed waits hiding inside one, each of
+# which made the two hosts look closer than they are. Recording the boundaries
+# lets a reader see WHICH segment differs instead of trusting one total.
+MARKS = [
+    ("fsevmgr",     b"---> Starting fsevmgr"),
+    ("mount_fs",    b"---> Mounting file systems"),
+    ("networking",  b"---> Starting Networking"),
+    ("sshd",        b"---> Starting sshd"),
+    ("startup_end", b"Startup complete"),
+    ("banner",      b"QEMU_virt_(aarch64),_KVM_guest"),
+]
 
 
 def _read_cpu_state():
@@ -70,16 +91,34 @@ def _qemu_version(qemu):
         return "unknown (%s)" % exc
 
 
-def one_run(qemu, ifs, smp, mem, timeout_s):
+def one_run(qemu, ifs, smp, mem, timeout_s, disk=None, full_devices=False):
     """One boot. Returns timings in ms and the captured serial bytes."""
     cmd = [qemu,
            "-machine", "virt,gic-version=3",
            "-cpu", "host",
            "-enable-kvm",
            "-smp", str(smp),
-           "-m", mem,
-           "-kernel", ifs,
-           "-nographic"]
+           "-m", mem]
+    if disk:
+        # -snapshot is welded to --disk on purpose; see the module docstring.
+        cmd += ["-drive", "file=%s,if=none,id=drv0,format=raw" % disk,
+                "-device", "virtio-blk-device,drive=drv0",
+                "-snapshot"]
+    if full_devices:
+        # ORDER IS LOad-BEARING. QEMU's virt machine hands its fixed virtio-mmio
+        # slots to -device args strictly in command-line order, and this image's
+        # startup.sh binds absolute addresses: devb-virtio at smem=0xa003e00
+        # (slot 1) and devr-virtio.so at mem=0xa003a00 (slot 3). blk, then net,
+        # then rng. Presenting them in any other order, or omitting one, leaves
+        # the rng slot empty, entropy never initialises, and io-sock refuses to
+        # start -- which looks exactly like a virtio-net bug (findings.md
+        # 2026-07-28). SLIRP rather than tap, and a fixed MAC, so the device set
+        # is identical on every host instead of depending on a local bridge.
+        cmd += ["-netdev", "user,id=n0",
+                "-device", "virtio-net-device,netdev=n0,mac=52:54:00:11:11:11",
+                "-object", "rng-random,filename=/dev/urandom,id=rng0",
+                "-device", "virtio-rng-device,rng=rng0"]
+    cmd += ["-kernel", ifs, "-nographic"]
     t0 = time.monotonic()
     proc = subprocess.Popen(cmd,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -88,6 +127,7 @@ def one_run(qemu, ifs, smp, mem, timeout_s):
     buf = b""
     first_byte = None
     mark = None
+    seen = {}
     try:
         while True:
             left = timeout_s - (time.monotonic() - t0)
@@ -99,11 +139,16 @@ def one_run(qemu, ifs, smp, mem, timeout_s):
             chunk = proc.stdout.read(4096)
             if not chunk:
                 break
+            now = time.monotonic() - t0
             if first_byte is None:
-                first_byte = time.monotonic() - t0
+                first_byte = now
             buf += chunk
-            if MARK in buf:
-                mark = time.monotonic() - t0
+            for name, needle in MARKS:
+                if name not in seen and needle in buf:
+                    seen[name] = now
+            if MARK in buf and mark is None:
+                mark = now
+            if "banner" in seen:
                 break
     finally:
         try:
@@ -122,6 +167,7 @@ def one_run(qemu, ifs, smp, mem, timeout_s):
         "ms_to_first_byte": ms(first_byte),
         "serial_bytes": len(buf),
         "serial_tail": buf[-200:].decode("utf-8", "replace"),
+        "marks_ms": {name: ms(seen.get(name)) for name, _ in MARKS},
     }
 
 
@@ -135,6 +181,11 @@ def main():
     ap.add_argument("--smp", type=int, default=2)
     ap.add_argument("--mem", default="1G")
     ap.add_argument("--timeout", type=float, default=30.0)
+    ap.add_argument("--disk", default=None,
+                    help="raw guest disk; ALWAYS paired with -snapshot")
+    ap.add_argument("--full-devices", action="store_true",
+                    help="also present virtio net and rng in the slot order "
+                         "this image's startup.sh requires (blk, net, rng)")
     ap.add_argument("--json", default=None)
     ap.add_argument("--label", default="")
     a = ap.parse_args()
@@ -147,6 +198,17 @@ def main():
     with open(ifs, "rb") as fh:
         digest = hashlib.sha256(fh.read()).hexdigest()
 
+    disk = os.path.expanduser(a.disk) if a.disk else None
+    disk_digest = None
+    if disk:
+        if not os.path.exists(disk):
+            sys.exit("no such disk: %s" % disk)
+        h = hashlib.sha256()
+        with open(disk, "rb") as fh:
+            for block in iter(lambda: fh.read(1 << 20), b""):
+                h.update(block)
+        disk_digest = h.hexdigest()
+
     stamp = {
         "label": a.label,
         "utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -156,28 +218,43 @@ def main():
         "qemu": _qemu_version(a.qemu),
         "ifs": os.path.basename(ifs),
         "ifs_sha256": digest,
-        "launch": "-machine virt,gic-version=3 -cpu host -enable-kvm -smp %d -m %s -kernel <ifs> -nographic"
-                  % (a.smp, a.mem),
-        "disk": "none (deliberate -- the guest disk is unpinned and drifts)",
+        "launch": ("-machine virt,gic-version=3 -cpu host -enable-kvm -smp %d -m %s%s"
+                   " -kernel <ifs> -nographic"
+                   % (a.smp, a.mem,
+                      ((" -drive file=<disk>,if=none,id=drv0,format=raw"
+                        " -device virtio-blk-device,drive=drv0 -snapshot") if disk else "")
+                      + ((" -netdev user,id=n0 -device virtio-net-device,netdev=n0,"
+                          "mac=52:54:00:11:11:11 -object rng-random,"
+                          "filename=/dev/urandom,id=rng0 -device virtio-rng-device,rng=rng0")
+                         if a.full_devices else ""))),
+        "disk": os.path.basename(disk) if disk else "none",
+        "disk_sha256": disk_digest,
+        "snapshot": bool(disk),
+        "devices": ("blk,net,rng" if (disk and a.full_devices)
+                    else "blk" if disk else "none"),
         "cpu_before": _read_cpu_state(),
     }
     print("host   : %s  %s  %s" % (stamp["host"], stamp["machine"], stamp["kernel"]))
     print("qemu   : %s" % stamp["qemu"])
     print("ifs    : %s  sha256 %s" % (stamp["ifs"], digest[:32]))
+    print("devices: %s" % stamp["devices"])
+    print("disk   : %s%s" % (stamp["disk"],
+                             ("  sha256 %s  (-snapshot)" % disk_digest[:32]) if disk_digest else ""))
     govs = sorted({c.get("governor") for c in stamp["cpu_before"]})
     print("governor: %s" % ", ".join(g or "?" for g in govs))
     print("")
 
     runs = []
     for i in range(a.warmup + a.runs):
-        r = one_run(a.qemu, ifs, a.smp, a.mem, a.timeout)
+        r = one_run(a.qemu, ifs, a.smp, a.mem, a.timeout, disk, a.full_devices)
         r["index"] = i
         r["warmup"] = i < a.warmup
         runs.append(r)
         tag = "warmup" if r["warmup"] else "timed "
-        print("  %s %d: ok=%-5s to_startup=%-9s first_byte=%-8s bytes=%d"
-              % (tag, i, r["ok"], r["ms_to_startup_complete"],
-                 r["ms_to_first_byte"], r["serial_bytes"]))
+        seg = "  ".join("%s=%s" % (k, r["marks_ms"].get(k))
+                        for k in ("mount_fs", "networking", "startup_end", "banner"))
+        print("  %s %d: ok=%-5s first_byte=%-8s %s  bytes=%d"
+              % (tag, i, r["ok"], r["ms_to_first_byte"], seg, r["serial_bytes"]))
         if not r["ok"]:
             print("       tail: %r" % r["serial_tail"][-120:])
 

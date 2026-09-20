@@ -1,0 +1,21 @@
+LAUNCH: -machine virt,gic-version=3 -cpu host -enable-kvm -smp 2 -m 1G -drive file=/home/<user>/disk-qemu,if=none,id=drv0,format=raw -device virtio-blk-device,drive=drv0 -snapshot -netdev user,id=n0 -device virtio-net-device,netdev=n0,mac=52:54:00:11:11:11 -object rng-random,filename=/dev/urandom,id=rng0 -device virtio-rng-device,rng=rng0 -kernel /home/<user>/ifs-kvmfix.bin -nographic
+    178.1 ms  (+   178.1)  ---> Starting slogger2
+    186.2 ms  (+     8.1)  ---> Starting PCI Services
+    193.7 ms  (+     7.6)  ---> Starting fsevmgr
+    199.3 ms  (+     5.6)  # ---> Starting devb
+    237.3 ms  (+    37.9)  Path=0 ---> Mounting file systems
+    237.5 ms  (+     0.2)  - 
+    239.1 ms  (+     1.7)   target=0 lun=0     Direct-Access(0) - VIRTIO  Rev: 
+    242.3 ms  (+     3.2)  ---> Mounting file systems
+    303.5 ms  (+    61.2)  ---> Starting Networking
+   4439.1 ms  (+  4135.6)  ---> Starting sshd <=== GAP
+   4476.5 ms  (+    37.4)  ---> Starting misc
+   4491.0 ms  (+    14.5)  === Phase 3: static IP for br0/tap-qnx ===
+   4498.2 ms  (+     7.2)  === Phase 3: starting qnx-echo-server-net on :7000 ===
+   4504.4 ms  (+     6.2)  server: echo endpoint listening on <ip>:7000 (frame=64 bytes)
+   4510.7 ms  (+     6.3)  
+   4511.6 ms  (+     0.9)  To exit QEMU, type <ctrl>a x
+   4511.7 ms  (+     0.1)  
+   4523.0 ms  (+    11.3)  Process count:22
+   4524.1 ms  (+     1.1)  Startup complete
+   4530.2 ms  (+     6.1)  QNX qnx-safety 8.0.0 2026/02/27-10:59:13EST QEMU_virt_(aarch64),_KVM_guest aarch64le

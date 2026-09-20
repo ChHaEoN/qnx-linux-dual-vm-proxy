@@ -431,25 +431,45 @@ and on two separately launched `a1.metal` instances, the same launch line, and
 QEMU 6.2.0 from the *same* Debian package build (`1:6.2+dfsg-2ubuntu6.31`) on
 both sides.
 
-**The metric proposed above is a poor one, and that is the finding.** Boot to
-`Startup complete` puts the hosts 3.6% apart (median 5412.27 ms against
-5225.89 ms, n=5), but a line trace shows **5001.3 ms of it on the Orin and
-5000.3 ms on `a1.metal` is one fixed timeout** — with no disk attached, QNX's
-boot script waits five seconds for `/dev/hd0` and gives up. One millisecond
-apart across two vendors' silicon. Quoting "+3.6%" as a host comparison would
-have been misleading; 92% of it is the timeout.
+**The metric proposed above is a poor one, and that is the finding.** Three
+separate fixed waits were hiding inside the end-to-end number, and each one
+agrees across the two hosts to about a millisecond:
 
-Removing the measured wait leaves the host-sensitive part: **2.06×** by trace,
-**2.18×** by time-to-first-serial-byte (362.01 ms against 166.09 ms, n=5). The
-Orin is about twice as slow to get the guest talking. That interval covers QEMU
-start, KVM setup, a 9.77 MB IFS load and early guest startup, across hosts that
-differ in clock, kernel and memory subsystem — a bundle difference in §1a's
-sense, not a per-core claim.
+| wait | Orin (A78AE) | `a1.metal` (A72) |
+|---|---|---|
+| `waitfor /dev/hd0`, no disk attached | 5001.3 ms | 5000.3 ms |
+| `waitfor /dev/random`, no virtio-rng | 5006.1 ms | — |
+| network bring-up, full device set | 4218.8 ms | 4219.4 ms |
 
-One more observation kept because it was not expected: `a1.metal` repeated to
-within 1.3 ms over five runs and **0.4 ms across two separate instances**, while
-the Orin's spread is 13× wider at 14.42 ms on a pinned governor. Unexplained; no
-scheduler or interrupt tracing was done.
+A software timeout does not care how fast the CPU is, so any metric containing
+one makes two different machines look alike. The first configuration measured
+here was 92% artefact; attaching only the disk made it **worse** (24.7 s,
+because the boot then got far enough to hit the entropy wait).
+
+With the disk, `-snapshot`, and virtio net and rng presented in the order this
+image's `startup.sh` requires, the boot is clean and the segments separate:
+
+| segment | Orin A78AE | `a1.metal` A72 | ratio |
+|---|---|---|---|
+| QEMU exec → first serial byte | **410.7 ms** | **167.8 ms** | **2.45×** |
+| first byte → mounting file systems | 57.1 ms | 60.1 ms | 0.95× |
+| mounting → starting networking | 65.8 ms | 66.0 ms | 1.00× |
+| networking → `Startup complete` | 4218.8 ms | 4219.4 ms | 1.00× |
+| total: exec → guest banner | 4747.0 ms | 4519.0 ms | **1.05×** |
+
+**One segment separates the hosts, and it is the first one.** Everything after
+the guest starts talking is equal within noise or is a constant. Quoting the
+total, 1.05×, as a host comparison would understate the real difference by more
+than a factor of two. The 2.45× covers QEMU start, KVM setup, a 9.77 MB IFS load
+and early guest startup, across hosts that differ in clock, kernel and memory
+subsystem — a bundle difference in §1a's sense, not a per-core claim.
+
+One more observation kept because it was not expected: `a1.metal` is **16×
+more repeatable** (n=5 spread 2.16 ms against the Orin's 35.51 ms on the full
+device set), and two *separately launched* instances agreed to 0.4 ms on the
+median. The Orin's spread is wider despite a pinned governor. Unexplained; no
+scheduler or interrupt tracing was done, and the Orin runs a full L4T desktop
+while the AWS host is a fresh minimal image.
 
 The governor was pinned to `performance` on the Orin and restored afterwards.
 `a1.metal` exposes no `cpufreq` and no `cpuidle` at all, so the AWS side could
