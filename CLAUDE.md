@@ -721,7 +721,7 @@ Quick summary for context:
    route in the ADR stays the documented cheaper alternative, not rejected.
 5. Write `docs/drive-os-comparison.md`'s dimension-by-dimension
    verdicts ~~now that Phase 2/3/4 have real numbers to cite instead of
-   projections~~. **This is the largest remaining gap in the public
+   projections~~. **2026-09-20: written.** Six Partial, two Cannot, no Validates; the quantitative table carries the A6 figures, with the Inter-VM IPC rows left deliberately empty because this project's host↔guest number does not measure that quantity and, per OD10, no hypervisor-path figure will ever exist. ~~This is the largest remaining gap in the public
    story** — ~~Phase 4's boot-diff half is done; this half is untouched.~~
    **2026-09-11:** correct the doc's stale statements now. The verdicts
    wait for the ~~v1~~ **A6** campaign, and so does the twin diff; the earlier
