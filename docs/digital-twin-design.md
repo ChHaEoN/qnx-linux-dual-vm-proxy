@@ -135,7 +135,7 @@ So the same two images can be copied to the Orin and booted there unchanged:
 **2026-09-11:** The QEMU row was later aligned to one release. Both hosts ran
 QEMU 11.1.0, in different builds that the times files stamp. That pair is A3
 history under the freeze decision. ~~The TCG legs run again in the v1 campaign.~~
-**2026-09-18: v1 is superseded; whether the TCG twin legs survive at all is one
+**2026-09-20 (owner): the TCG twin legs are withdrawn. A6 measures under KVM only, which means the QNX Hypervisor has no measurable leg anywhere — QHV needs EL2 and ARM KVM does not nest on A78AE, so TCG was its only emulated route. §1a stays as the record of what was measured, and is not re-run. 2026-09-18: v1 is superseded; whether the TCG twin legs survived was one
 of A6's open choices, now that the native leg runs under KVM.**
 
 > **This table originally omitted the QEMU version row, and that omission

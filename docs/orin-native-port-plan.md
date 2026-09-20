@@ -356,9 +356,28 @@ choices; it is not retargeted item by item. Under A6:
 **A6's gate is not settled, and this section does not settle it.** What A6 has: a boot (two byte-identical
 captures, plus the same arm on a second QEMU release), a concurrency measurement (four 30 s arms, n=2 per
 side), and one cross-partition service run (two arms, one image each). What it does not have, and what the
-owner still has to choose: what the campaign measures on A6, the sample sizes, and whether the TCG twin
-legs survive at all now that the native leg runs under KVM. Until those are written down, **A6 is the
-current direction, not a frozen reference architecture** — and no record should claim otherwise.
+owner still has to choose: what the campaign measures on A6 and the sample sizes.
+
+**2026-09-20 (owner decision, OD10): the TCG twin legs do not survive. A6 measures under KVM only.**
+The two TCG twin legs that v1 planned are withdrawn and will not be run. A1, A2 and A3 stay exactly as
+recorded, as history; nothing about them is rewritten or re-timed.
+
+**The consequence, stated rather than left to be discovered.** The QNX Hypervisor cannot run under KVM at
+all — it needs EL2, and ARM KVM does not nest on A78AE — so TCG was the only route by which QHV could ever
+have been measured under emulation. A4's native figures are unpublished under NC QDL v7 4.6(i) and A4 is
+superseded; A6 has no QHV layer by construction. **With this decision there will never be a QNX Hypervisor
+number in this project.** The hypervisor result is, permanently, a set of functional passes — M0-M5 and
+S1-F — with no timing attached. That is a defensible position, and it is now a stated one.
+
+**What A6 measures instead**, all with QNX as a KVM guest on real silicon, and all already run:
+GPU concurrency (2026-09-18); interference and saturation, as a 64-byte frame round trip from L4T to the
+guest's `qnx-safety-monitor` over a real `br0`/`tap-qnx` bridge (2026-09-19); a native L4T control for that
+same program (2026-09-19); and a two-host boot comparison against AWS `a1.metal` on a byte-identical image
+([§1b](digital-twin-design.md), 2026-09-20). What remains open is the sample sizes and whether anything
+further is added.
+
+Until those are written down, **A6 is the current direction, not a frozen reference architecture** — and no
+record should claim otherwise.
 
 Measurements taken before the freeze become architecture-version history. They are kept, labelled with the architecture they ran on, and not chased.
 

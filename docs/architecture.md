@@ -26,7 +26,7 @@ the *structural* picture that designs sits on top of.
 - **History since the 2026-09-11 freeze decision:** A3, the same hypervisor
   images in TCG on both hosts. Its twin legs run again only as ~~v1~~ **A6**
   campaign work (**2026-09-18:** v1 was superseded before it was ever frozen;
-  whether the TCG twin legs survive at all is one of A6's open gate questions). **2026-09-19:** A3 did use TCG on both hosts, and that record stands —
+  **2026-09-20 (owner): the TCG twin legs do not survive; A6 measures under KVM only, so no QNX Hypervisor number will ever be measured — QHV cannot run under KVM**). **2026-09-19:** A3 did use TCG on both hosts, and that record stands —
   but it was never a universal limit. On the Windows PC (x86_64) TCG is a
   necessity for an ARM guest, not a defect; on ARM hosts a QNX guest has since
   booted under KVM, on the Orin (2026-09-18) and on a bare-metal AWS `a1.metal`
