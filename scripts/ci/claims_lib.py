@@ -19,6 +19,7 @@ One trap encoded here on purpose: `cycles_per_sec` in the IPC CSVs is a
 hardcoded 1000000000 placeholder on the hw leg (its own notes field says
 "clock_gettime-ns-not-cycles"). It is NEVER a cycles->time conversion factor.
 """
+import difflib
 import glob
 import io
 import os
@@ -306,6 +307,57 @@ def load_denylist(path):
         why = parts[1].strip() if len(parts) > 1 else ""
         rules.append((pattern, why))
     return rules
+
+
+PINNED_BLOCK = re.compile(r"```text\n(.*?)```", re.S)
+
+# A figure is a number with a UNIT. Version strings -- "SDP 8.0", "R36.4.7" --
+# carry no unit and are not claims about measurement, so they must not trip the
+# check. Anything here has to be re-derivable from committed data.
+FIGURE = re.compile(
+    r"(\d+(?:\.\d+)?)\s*(ms|us|\u00b5s|ns|s|%|x|\u00d7|MB|GB|KB|MHz|GHz)\b",
+    re.I,
+)
+
+
+def read_pinned_description(path):
+    """The authoritative About text, from the fenced block in its own file.
+
+    A fenced block rather than the whole file, so the file can explain itself --
+    why the pin exists, how to change it -- without that prose becoming part of
+    the description.
+    """
+    body = _read(path)
+    m = PINNED_BLOCK.search(body)
+    if not m:
+        raise ValueError("%s has no ```text fenced block" % path)
+    return m.group(1).strip()
+
+
+def describe_drift(pinned, live, slug="live"):
+    """[] when the two match, else unified-diff lines showing how they differ.
+
+    Pure on purpose. The interesting case -- live has drifted from the pin -- is
+    the one a test must be able to construct, and it cannot if the comparison is
+    welded to a network call. The gate calls this; the tests call it directly.
+    """
+    if pinned is None or live is None:
+        return []
+    a, b = pinned.strip(), live.strip()
+    if a == b:
+        return []
+    return list(difflib.unified_diff(
+        [a], [b], fromfile="docs/repo-description.md", tofile=slug, lineterm=""))
+
+
+def extract_figures(text):
+    """[(value, unit)] for every number-with-unit in the text.
+
+    The description is not exempt from the rule the README lives under: a
+    number in it is a claim, and a claim has to be re-derivable from committed
+    data. Versions are excluded by construction -- they have no unit.
+    """
+    return [(m.group(1), m.group(2)) for m in FIGURE.finditer(text)]
 
 
 def load_exemptions(path):

@@ -104,6 +104,41 @@ interference. Documenting that gap precisely is the engineering point.
 
 ---
 
+## What is machine-checked
+
+The rule this project works to is "never write *it works* without a log, a
+number, or a diff". That catches a figure that was never measured. It does not
+catch one that was true when written and drifted afterwards, which is how two
+published figures here were already found wrong — by hand. CI closes that class.
+
+| surface | check | on failure |
+|---|---|---|
+| Every figure `README.md` quotes | re-derived from the committed raw data in `logs/` and `results/`, through the project's own `scripts/twin/delta.awk` rather than a CI copy | **build fails** |
+| Units, separately from values | a claim quoting "33 ms" against a source measured in seconds is wrong even when the digits match | **build fails** |
+| Asserted claims the data does not support | a reviewable [denylist](scripts/ci/claim-denylist.txt) with a stated reason per rule, matched per *sentence* so that denials and planned-markings stay legal | **build fails** |
+| `scripts/**` prose | the same denylist. These files are instructions: a false sentence in one is executed, not merely read | **build fails** |
+| The Phase badge | derived from the Status table below, which is the single source of truth | **build fails** |
+| The GitHub **About** field | pinned in [`docs/repo-description.md`](docs/repo-description.md), given the same denylist and the same figure verification, and compared against the live value on push and weekly | **build fails on drift** |
+| `docs/**` and `results/**` prose | the same denylist | reported, never fails — these carry the project's superseded record on purpose |
+
+**What it does not do.** It never measures anything and never gates on an
+absolute number: a shared public runner is virtualised x86_64 hardware and any
+timing taken there would look like a result without being one. It recomputes
+arithmetic over data measured elsewhere, on known hardware. Nothing QNX is
+built, linked or booted in CI.
+
+**The About field is the interesting one**, because it was the surface nothing
+could see — it is repository metadata, not a file — and it drifted for exactly
+that reason, describing an AWS Graviton cloud twin long after this README and
+`docs/findings.md` recorded that no cloud leg was ever built. Note that the
+check is a sentence classifier, not a substring scan: the current description
+says the shipped QNX startup "hangs under KVM, on this board and on AWS
+Graviton alike", which is the project's cross-vendor defect evidence and must
+pass, while a claim of a Graviton *leg* must fail. A substring deny on
+"Graviton" cannot tell those apart.
+
+---
+
 ## Known limitations (honest framing)
 
 The whole point of the project is to be precise about what a software-layer

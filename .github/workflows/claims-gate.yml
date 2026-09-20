@@ -24,6 +24,11 @@ name: claims-gate
 on:
   push:
   pull_request:
+  # The repository description lives in GitHub settings, not in the tree, so it
+  # can drift without any commit touching it. A weekly run catches that.
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -38,13 +43,12 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Re-derive every README figure from committed data
-        env:
-          # Lets the gate read the repo's GitHub description without hitting the
-          # unauthenticated rate limit. The description check is WARN ONLY: it
-          # cannot be fixed by a commit, so it never fails the build, and if the
-          # API is unreachable the gate reports it as skipped and carries on.
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # PULL REQUESTS: hermetic. No network, so a PR can only fail on its own
+      # diff -- never on a repository-settings change the contributor did not
+      # make and cannot fix. The pinned description in docs/repo-description.md
+      # still gets the full denylist and figure verification here.
+      - name: Re-derive every README figure from committed data (hermetic)
+        if: github.event_name == 'pull_request'
         # The gate prints a claimed-vs-recomputed table to this log on every
         # run, pass or fail, so a human reviewer can read the check itself and
         # not merely its exit status.
@@ -52,6 +56,20 @@ jobs:
         # It reuses the project's own measurement toolchain rather than a CI
         # copy: the IPC deltas come from scripts/twin/delta.awk, the same file
         # scripts/twin/diff-results.sh uses to print the published report.
+        run: python scripts/ci/claims_gate.py --repo . --no-network
+
+      # PUSH, SCHEDULE, MANUAL: additionally compare the live GitHub "About"
+      # field against the pin and FAIL on drift. This is the failure class the
+      # gate could not see before -- the description described an AWS Graviton
+      # cloud twin for weeks while README and findings.md said no cloud leg was
+      # ever built, and nothing was looking at it.
+      - name: Re-derive every README figure, and check the live description
+        if: github.event_name != 'pull_request'
+        env:
+          # Without this the API call is unauthenticated and hits the shared
+          # rate limit. If it fails anyway the gate prints SKIPPED and says in
+          # so many words that this is NOT a pass.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/ci/claims_gate.py --repo .
 
       - name: Phase badge must match the status table
@@ -76,4 +94,13 @@ jobs:
             echo 'It never measures anything itself and never gates on an'
             echo 'absolute number -- a shared public runner cannot produce a'
             echo 'meaningful timing for a TCG-emulated target.'
+            echo
+            echo '### Repository description'
+            echo
+            echo 'The GitHub "About" field is pinned in `docs/repo-description.md`'
+            echo 'and gets the same denylist and the same figure verification as'
+            echo 'README. On push and on the weekly run the live value is compared'
+            echo 'against the pin and drift fails the build; pull requests run'
+            echo 'hermetically so they cannot fail on a settings change. If the'
+            echo 'API is unreachable the job prints SKIPPED, which is not a pass.'
           } >> "$GITHUB_STEP_SUMMARY"

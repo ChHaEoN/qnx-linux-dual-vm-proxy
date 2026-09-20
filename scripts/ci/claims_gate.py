@@ -280,6 +280,11 @@ def main():
     ap.add_argument("--repo", default=".")
     ap.add_argument("--readme", default="README.md")
     ap.add_argument("--denylist", default=os.path.join("scripts", "ci", "claim-denylist.txt"))
+    ap.add_argument("--description", default=os.path.join("docs", "repo-description.md"),
+                    help="the pinned About text (a ```text fenced block)")
+    ap.add_argument("--no-network", action="store_true",
+                    help="skip the live GitHub comparison. Pull requests run with this: a PR "
+                         "must never fail for a repository-settings change it did not make.")
     a = ap.parse_args()
 
     repo = os.path.abspath(a.repo)
@@ -296,6 +301,7 @@ def main():
     print("-" * 100)
 
     unit_rows = []
+    derived = []
     for claim in build_claims(repo):
         # 1. What does README actually say, right now?
         try:
@@ -339,6 +345,10 @@ def main():
             print("%-6s   %s" % ("", claim.note))
         unit_rows.append((claim.cid, claimed_unit or claim.expect_unit, claim.source_unit,
                           readme_unit_ok and source_unit_ok))
+        # Every value this gate successfully re-derived, with its unit. The
+        # repository description is checked against this set: a number there is
+        # a claim, exactly as in README, and must come from committed data.
+        derived.append((round(recomputed, claim.decimals), claim.expect_unit))
 
     # --- unit summary ------------------------------------------------------
     print()
@@ -419,37 +429,94 @@ def main():
             print("  ^ not failures: docs/ keeps superseded prose on purpose. This is the")
             print("    migration backlog -- text a reader would still take as current.")
 
-    # --- the repo's GitHub description -------------------------------------
-    # WARN ONLY, deliberately. This is the most-exposed sentence about the
-    # project and the one surface the gate structurally could not see -- it is
-    # GitHub metadata, not a file. But it cannot be fixed by a commit: you
-    # change it in repo settings. Failing a pull request over it would block
-    # code on a settings change, so it is reported and never added to failures.
+    # --- the repository description ----------------------------------------
+    # This was the one surface the gate structurally could not see, because it
+    # is GitHub metadata rather than a file -- and it drifted for exactly that
+    # reason, describing an AWS Graviton cloud twin for weeks after README and
+    # findings.md had recorded that no cloud leg was ever built.
+    #
+    # The fix is a PIN: docs/repo-description.md holds the authoritative text,
+    # gets the same denylist and the same figure verification as README, and is
+    # compared against the live value. The pinned file is a hard failure because
+    # it is committed and a commit can fix it. The live comparison is a hard
+    # failure too, but only where it can be acted on -- see --no-network.
+    #
+    # Matching is the same SENTENCE-level classifier used everywhere else, not a
+    # substring scan. A substring deny on "Graviton" would fail the current,
+    # correct description, whose Graviton clause is the project's cross-vendor
+    # defect evidence ("the one QNX ships hangs under KVM ... on AWS Graviton
+    # alike"). The distinction between that and a Graviton *leg* is the whole
+    # point, and only a classifier can express it.
     print()
     print("-" * 100)
-    print("REPO DESCRIPTION -- highest-exposure text, checked against the same denylist")
+    print("REPO DESCRIPTION -- the highest-exposure text, pinned and verified")
     print("-" * 100)
-    slug = C.repo_slug_from_git(repo)
-    if not slug:
-        print("  skipped: could not determine owner/name")
-    else:
-        desc, why = C.github_description(slug)
-        if desc is None:
-            print("  skipped (%s): %s" % (slug, why))
-        elif not desc.strip():
-            print("  WARN %s has no description set" % slug)
+    desc_path = os.path.join(repo, a.description)
+    pinned = None
+    try:
+        pinned = C.read_pinned_description(desc_path)
+        print("  pinned : %s" % a.description)
+        print("           %s" % pinned)
+    except (IOError, OSError, ValueError) as exc:
+        print("  FAIL   cannot read the pinned description: %s" % exc)
+        failures.append("repo-description: %s" % exc)
+
+    if pinned is not None:
+        # (a) the same denylist, on the pinned text
+        phits = C.scan_denylist(pinned, rules, exempt)
+        if phits:
+            for pattern, why_banned, sentence in phits:
+                print("  FAIL   /%s/ -- %s" % (pattern, why_banned))
+                print("         %s" % sentence[:160])
+                failures.append("repo-description denylist: %s" % sentence[:90])
         else:
-            print("  %s" % slug)
-            print("    %s" % desc)
-            dhits = C.scan_denylist(desc, rules, exempt)
-            if dhits:
-                for pattern, why_banned, sentence in dhits:
-                    print("  WARN /%s/ -- %s" % (pattern, why_banned))
-                    print("       %s" % sentence[:160])
-                print("  ^ not a failure, but fix it in repo settings: it is what GitHub")
-                print("    search, your profile and every link preview show.")
+            print("  ok     no asserted violation in the pinned text")
+
+        # (b) a number in the description is a claim, exactly as in README
+        figs = C.extract_figures(pinned)
+        if not figs:
+            print("  ok     no figures in the description to verify")
+        else:
+            for value, unit in figs:
+                match = any(C.close_enough(value, dv, 2) and unit.lower() == (du or "").lower()
+                            for dv, du in derived)
+                if match:
+                    print("  ok     figure %s %s is re-derivable from committed data" % (value, unit))
+                else:
+                    print("  FAIL   figure %s %s in the description cannot be re-derived" % (value, unit))
+                    failures.append("repo-description figure %s %s not re-derivable" % (value, unit))
+
+    # (c) live vs pinned
+    if a.no_network:
+        print("  SKIPPED live comparison (--no-network): pull requests do not fail on a")
+        print("          settings change they did not make. Push and the weekly run do check it.")
+    else:
+        slug = C.repo_slug_from_git(repo)
+        if not slug:
+            print("  SKIPPED live comparison: could not determine owner/name from git")
+        else:
+            live, why = C.github_description(slug)
+            if live is None:
+                # Degrade honestly. An unreachable API is not a pass.
+                print("  SKIPPED live comparison (%s): %s" % (slug, why))
+                print("          This is NOT a pass. The pinned text was checked; the live value was not.")
+            elif pinned is None:
+                print("  SKIPPED live comparison: nothing pinned to compare against")
             else:
-                print("  ok -- no asserted violation")
+                drift = C.describe_drift(pinned, live, "live (%s)" % slug)
+                if not drift:
+                    print("  ok     live description matches the pin (%s)" % slug)
+                else:
+                    print("  FAIL   live description has drifted from the pin")
+                    for line in drift:
+                        print("         %s" % line)
+                    print("         Fix it in repository settings, or update the pin and commit.")
+                    failures.append("repo-description: live value has drifted from the pin")
+                # the live value gets the denylist too, not just the pin
+                for pattern, why_banned, sentence in C.scan_denylist(live, rules, exempt):
+                    print("  FAIL   live /%s/ -- %s" % (pattern, why_banned))
+                    print("         %s" % sentence[:160])
+                    failures.append("live description denylist: %s" % sentence[:90])
 
     # --- what this gate did NOT check --------------------------------------
     print()
