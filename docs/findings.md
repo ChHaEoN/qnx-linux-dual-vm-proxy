@@ -9,6 +9,73 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-20 — the cloud twin, measured at last: the identical image runs on both hosts, and the obvious metric is 92% a timeout
+
+[digital-twin-design.md §1b](digital-twin-design.md) argued that the twin became
+buildable on the cloud the moment a QNX guest could boot under KVM, and proposed timing
+the boot to `Startup complete` on both hosts. Both legs ran today. The design held and
+the metric did not.
+
+**The invariant held, for the first time.** §1's own table marks the IFS row
+"Leg-dependent — was silently broken": the A2 Orin IPC run used a *rebuilt* IFS, so the
+twin's load-bearing invariant failed on the measurement that most depended on it. Today
+sha256 `26170cd7…` was the image on the Orin Nano **and** on two separately launched AWS
+`a1.metal` instances, with the same launch line
+(`-machine virt,gic-version=3 -cpu host -enable-kvm -smp 2 -m 1G -kernel <ifs> -nographic`,
+no disk) and QEMU 6.2.0 from the **same Debian package build**, `1:6.2+dfsg-2ubuntu6.31`,
+on both sides.
+
+**The proposed metric is 92% artefact.** Boot to `Startup complete` puts the hosts 3.6%
+apart — median 5412.27 ms (Orin) against 5225.89 ms (`a1.metal`), n=5 each. A line trace
+shows why that is not a host comparison:
+
+| host | wait between `xpt_configure` and `Unable to access /dev/hd0` |
+|---|---|
+| Orin Nano, Cortex-A78AE | **5001.3 ms** |
+| AWS `a1.metal`, Cortex-A72 | **5000.3 ms** |
+
+With no disk attached QNX's boot script waits five seconds for `/dev/hd0` and gives up,
+and that wait is **one millisecond apart on two vendors' silicon five years of
+micro-architecture apart**. A second pair of traces the same session read 5001.0 and
+5000.7 ms. Publishing "+3.6%" as a host comparison would have been misleading.
+
+**What is left once it is removed.** The Orin takes about twice as long to get the guest
+talking: **2.06×** by trace (463.1 ms against 224.4 ms), **2.18×** by time-to-first-serial-byte
+(362.01 ms against 166.09 ms, n=5). That is **not** a per-core claim — the interval covers
+QEMU start, KVM setup, a 9.77 MB IFS load and early guest startup, across hosts that
+differ in clock (Orin pinned at 1344 MHz under the 25 W profile; Graviton1's A72 is
+firmware-clocked), kernel and memory subsystem. A host *bundle* difference in §1a's sense.
+
+**Kept because it was not expected:** `a1.metal` repeated to within 1.3 ms over five runs
+and **0.4 ms across two separately launched instances** (medians 5225.89, 5225.49), while
+the Orin's spread is 13× wider at 14.42 ms — on a pinned governor. Unexplained; no
+scheduler or interrupt tracing was done.
+
+**Method.** Timing is taken by
+[`scripts/twin/time-kvm-boot.py`](../scripts/twin/time-kvm-boot.py) **on the host being
+measured**, from its own monotonic clock, so nothing crosses a network before the
+timestamp. One discarded warm-up then five timed boots per arm. The Orin's governor was
+pinned to `performance` and restored to `schedutil`, recorded in each record's
+`cpu_before`/`cpu_after`. `a1.metal` exposes no `cpufreq` and no `cpuidle` at all, so that
+side could not be pinned — a stated limit, not a controlled variable. Both instances were
+launched self-terminating, terminated right after capture, and verified to leave no
+running instance and no orphaned volume; host names, instance ids, account ids and IPs are
+redacted in every committed file, at capture time.
+
+Records: [`results/orin-native-port/20260920T-kvm-twin/`](../results/orin-native-port/20260920T-kvm-twin/results.md).
+
+**What this does not show.** Nothing about the QNX Hypervisor, which cannot run under KVM
+at all — it needs EL2, and ARM KVM does not nest on A78AE; **no hardware-timed hypervisor
+number exists and this is not one**. Not a QNX-supported configuration: the
+`startup-qemu-virt` in this IFS was rebuilt in this repo with `-fno-auto-inc-dec`, and the
+SDP's shipped one still hangs under KVM on both hosts. Nothing about filesystems,
+networking or IPC — no disk was attached, deliberately, because the guest disk is the one
+artefact known to drift. Nothing about A6's GPU half (`a1.metal` has no GPU). Not a
+single-variable comparison. And n=5 per arm is small: the AWS side replicates across two
+instances, the Orin side has no second board and cannot.
+
+---
+
 ## 2026-09-19 — the missing native control, run: the guest's degradation does not need a virtualisation explanation
 
 The entry below recorded the guest's **+53.9% p50** under six busy threads as what oversubscription
