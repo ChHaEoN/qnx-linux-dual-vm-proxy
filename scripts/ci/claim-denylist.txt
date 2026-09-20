@@ -133,3 +133,11 @@
 # plan's: "Out of scope: the KVM/GICv3 NISV track, a supported QHV platform,
 # NVIDIA DRIVE OS, and any ASIL or isolation property."
 !\*\*Out of scope:\*\* the KVM/GICv3 NISV track	an explicit out-of-scope list, not a claim
+
+# docs/drive-os-comparison.md -- the second column of every row is "what DRIVE
+# OS does". Describing NVIDIA's certified Type-1 hypervisor and its certified RT
+# partition is the whole point of a comparison document; the verdict cell in the
+# same row says this project has neither. Keyed to the two reference phrases so
+# it cannot exempt a claim about this project.
+!Type-1 hypervisor on a Tegra SoC, safety-certified	the DRIVE OS reference column, not a claim about this repo
+!Certified RT on the Safety partition	the DRIVE OS reference column, not a claim about this repo

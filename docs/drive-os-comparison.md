@@ -1,103 +1,115 @@
 # DRIVE OS comparison — what this proxy validates vs. reality
 
-This document is the deliverable for **Phase 4**. It is the most
-load-bearing artifact in the repo for the interview narrative: it
-catalogues, dimension by dimension, what this proxy's legs, emulated
-and native, can *actually* validate against the DRIVE OS reference
-architecture and where the hard boundaries are.
+This document is the deliverable for **Phase 4**. It catalogues, dimension by
+dimension, what this project's legs can *actually* validate against the public
+DRIVE OS reference architecture, and where the hard boundaries are.
 
-It is intentionally not a sales pitch for the project. The goal is
-calibration: a reader (or interviewer) should leave with a clear
-sense of which of the project's claims are real, which are
-qualitatively suggestive, and which are off-limits.
+It is deliberately not a sales pitch. The goal is calibration: a reader should
+leave knowing which claims here are real, which are qualitatively suggestive,
+and which are off-limits.
 
-> **Status (2026-09-11):** wording corrected; no final verdicts yet.
-> The Verdict column is a provisional, qualitative reading of the
-> earlier legs. Final verdicts wait for the one measurement campaign
-> ~~on reference architecture v1~~ **on A6 (2026-09-18: v1 was superseded
-> before it was ever frozen — under its native-hypervisor arrangement no OS can
-> use the GPU; A6 keeps the GPU with L4T and runs QNX as a KVM guest. A6's gate
-> is not settled, so the campaign's content is still open)**. Measurements taken
-> before v1 are
-> architecture-version history
-> ([plan, "Architecture versions and the measurement freeze"](orin-native-port-plan.md#architecture-versions-and-the-measurement-freeze-decided-2026-09-11)).
-> Corrected today: the phase, the cloud host, the KVM wording for the
-> HW twin, the silicon-family, workload, IPC, bootloader and real-time
-> rows, and the placeholder cells. A native column was added as a
-> placeholder.
+> **Status (2026-09-20): the verdicts are written.** They waited on a
+> measurement campaign; owner decision **OD10** settled that campaign's shape
+> (A6 measures under KVM only, the TCG twin legs are withdrawn) and every A6
+> measurement has now run. What remains open is sample sizes, which changes no
+> verdict below. Earlier wording and its corrections are in
+> [`findings.md`](findings.md); this file states the current reading and does
+> not accumulate strike-throughs.
+
+## The short version
+
+**No dimension earns "Validates". Six are Partial and two are Cannot.**
+
+That is the honest result and it is worth stating before the table rather than
+leaving a reader to count. The project reproduces the *shape* of most of the
+DRIVE OS arrangement and the *substance* of none of it — because substance
+here means certification, bounded latency, a root of trust, and a Type-1
+hypervisor that owns the machine, and this project has none of those. Two
+dimensions are structurally out of reach on any host it will ever have.
+
+The most consequential single fact: **there will never be a QNX Hypervisor
+number in this project.** QHV needs EL2 and ARM KVM does not nest on A78AE, so
+it cannot run under KVM; OD10 withdrew the TCG legs that were its only emulated
+route; and the native A4 figures are unpublished under NC QDL v7 4.6(i). The
+hypervisor result is permanently a set of **functional passes with no timing**.
 
 ---
 
-## Concept-by-concept comparison (cloud twin and HW twin)
+## Concept-by-concept comparison
 
-The "Cloud twin" column is architecture A1: the SDP 8.0 QNX Hypervisor
-(`qvm`) hosting a single QNX guest inside QEMU **TCG** on the local
-Windows PC. It was designed for AWS Graviton, but non-metal Graviton has
-no `/dev/kvm` ([ADR-002](phase2-topology-decision.md);
-[digital-twin-design.md](digital-twin-design.md) §1). The "HW twin"
-column is A2: QEMU **TCG** beside L4T on the Jetson Orin Nano. Its KVM
-boot ~~is blocked~~ **was blocked** by the GICv3/NISV defect ([orin-port.md](orin-port.md)
-risk register). **2026-09-18: for the SDP's shipped `startup-qemu-virt` it still is —
-that day's control boot, same launch line and host, died 17 bytes after `FOUND GICv3
-ITS` — but an IFS carrying a `startup-qemu-virt` rebuilt with `-fno-auto-inc-dec`, from
-board source written in this repo, boots under `-enable-kvm` to procnto and its banner
-([logs/sample-boot/](../logs/sample-boot/)). A boot, not a number: nothing was timed, and
-it is not a QNX-supported configuration. The A2 cells below are not re-run or re-timed,
-and the hypervisor legs are untouched — QHV needs EL2 and ARM KVM does not nest on
-A78AE, so they stay TCG.** The "Native" column is A4, the QNX Hypervisor running
-natively on the Orin, and then ~~v1, which adds a Linux guest. Its cells
-are placeholders until the v1 campaign.~~ **v1, which was to add a Linux guest
-(2026-09-18: v1 was superseded before it was ever frozen; A6's gate is not
-settled, so the campaign's content is still open). Its cells are placeholders
-until the A6 campaign.** The ids are those of the plan's
-[architecture table](orin-native-port-plan.md#architecture-versions).
-Verdicts wait for the ~~v1~~ **A6 (2026-09-18: v1 was superseded before it was
-ever frozen; A6's gate is not settled, so what the campaign measures is still
-open)** measurement campaign.
+Columns are the project's architecture ids, from the plan's
+[architecture table](orin-native-port-plan.md#architecture-versions):
 
-| Concept | DRIVE OS implementation | Cloud twin (Windows PC, A1) | HW twin (Orin Nano, A2) | Native (Orin, A4 then v1) | Verdict |
-|---|---|---|---|---|---|
-| **VM partitioning** | NVIDIA Type-1 hypervisor on Tegra SoC | SDP 8.0 QHV (`qvm`) hosting **one** QNX guest under QEMU **TCG** (no `/dev/kvm` on ~~cloud~~ **non-metal Graviton (2026-09-19: corrected — the limit was always non-metal; bare metal does expose it)**; [ADR-002](phase2-topology-decision.md)) | L4T host on A78AE; QEMU **TCG** (QNX) alongside native L4T; KVM boot blocked | _waits for the A6 campaign (content open)_ | **Validates** a **real `qvm` Type-1 partition boundary** (EL2↔EL1) on cloud, though TCG-emulated; **cannot** validate certified Type-1 isolation. ~~The HW twin runs TCG, not KVM.~~ **The HW twin as measured (A2) ran TCG, not KVM. 2026-09-18: KVM is no longer blocked on that board — an IFS with a `startup-qemu-virt` we rebuilt boots under `-enable-kvm`, while the shipped startup still dies — but no A2 measurement was re-run under it and nothing was timed. QHV still needs EL2, which ARM KVM does not nest on A78AE, so the hypervisor legs stay TCG.** |
-| **Same Tegra silicon family** | Yes (Orin / Thor) | No — as built, an x86_64 Windows PC emulating `-cpu max` (the design host, Graviton, is Neoverse-V1) | Host **yes** — A78AE is the same family as DRIVE Orin's CCPLEX cores. The QNX side runs on QEMU's emulated `-cpu max` under TCG, not on the A78AE cores | _waits for the A6 campaign (content open)_ | Under TCG only the L4T host runs on Tegra-family cores; the QNX code does not. |
-| **Dual-OS coexistence** | QNX Safety + Linux Compute on one Tegra | **No Linux on cloud** — QNX host + QNX guest only (heterogeneity moved to Orin per [ADR-002](phase2-topology-decision.md)) | QNX in QEMU + L4T native (host) on one Tegra-family SoC | _waits for the A6 campaign (content open)_ | **Validates dual-OS only on the HW twin (Orin)**; the cloud leg validates the partition *mechanism* (QNX↔QNX), not OS heterogeneity. |
-| **Asymmetric workload** | Safety FuSa monitors / Compute DriveWorks | Console client/server (`qnx-host-client`, `qnx-server`); no real RT, no accelerators | A different client/server pair (a QNX TCP server and a native Linux client), the QNX side under TCG; A78AE has hardware RT support but L4T host is not RT-certified | _waits for the A6 campaign (content open)_ | **Partial** in both twins. Shape reproduced, substance not. |
-| **Inter-VM IPC** | Shared memory + mailbox; sub-µs | host↔guest over `qvm` virtio-console vdev (TCG-emulated EL2 boundary; not hardware-timed — [ADR-002](phase2-topology-decision.md)) | virtio-net through `br0` under TCG; heterogeneous QNX↔Linux, with only the Linux client running directly on the silicon | _waits for the A6 campaign (content open)_ | The Phase 4 **twin diff** compares **non-identical** IPC paths (console/QNX↔QNX/TCG vs. virtio-net/QNX↔Linux/TCG). It mixes host, transport, OS pair and QEMU build, not host alone. It is architecture-version history; ~~the v1 campaign runs the twin diff again.~~ **2026-09-18: v1 was superseded before it was ever frozen. The twin diff has not been re-run; whether the TCG twin legs survive at all is one of A6's open choices.** |
-| **Boot sequencing** | HV brings up Safety → Compute with cross-checks | `qvm` host boots, then starts the QNX guest (`qvm @g2.conf`) — a real HV→guest sequence on cloud ([ADR-002](phase2-topology-decision.md)) | Same — L4T is up first (it's the host) and QNX is launched after | _waits for the A6 campaign (content open)_ | **Partial** in both — demonstrates workflow without enforcement primitive. |
-| **Bootloader chain** | SecureBoot → measured boot → HV → guest IPLs | No Linux guest. QEMU loads the QNX Hypervisor host image directly (`-kernel`), and `qvm` loads the guest IFS from its config | JetPack UEFI for L4T host; QEMU loads the QNX IFS directly (`-kernel`) | _waits for the A6 campaign (content open)_ | **Cannot** validate certified chain on either twin. |
-| **Real-time guarantees** | Certified RT on Safety partition | QNX RT inside guest; **TCG emulation** dominates timing on cloud (not hardware-timed; [ADR-002](phase2-topology-decision.md)) | QNX RT inside guest, under **TCG**, so this leg is not hardware-timed either ([digital-twin-design.md](digital-twin-design.md)); L4T host scheduler best-effort (A78AE silicon does have RT support) | _waits for the A6 campaign (content open)_ | **Cannot** validate end-to-end RT on either twin. |
+- **A1** — cloud leg: SDP 8.0 QHV (`qvm`) hosting one QNX guest under QEMU
+  **TCG**. Designed for AWS Graviton; as built it ran on the owner's local
+  x86_64 Windows PC, because non-metal Graviton exposes no `/dev/kvm`
+  ([ADR-002](phase2-topology-decision.md)). History.
+- **A2** — Orin plain leg: QEMU **TCG** beside L4T, QNX↔Linux IPC over
+  `br0`/`tap-qnx`. History. Its IPC run used a *rebuilt* IFS.
+- **A4** — the QNX Hypervisor running **natively at EL2** on the Orin's own
+  A78AE cores, no QEMU. M0–M5 met functionally; figures unpublished. Superseded
+  as a direction on 2026-09-18 because no OS can use the GPU under it. The
+  two-guest run (a Linux guest and the QNX guest under one `qvm`) is **S1-F/B5**,
+  which the plan assigns to **A5**, not A4.
+- **A6** — **current**: L4T on the metal owning the GPU, QNX as a **KVM guest**
+  beside it.
+
+| Concept | DRIVE OS | A6 — current (QNX as a KVM guest on the Orin) | Verdict |
+|---|---|---|---|
+| **VM partitioning** | Type-1 hypervisor on a Tegra SoC, safety-certified | QNX as a KVM guest (`-cpu host -enable-kvm`, 2 of 6 vCPU) beside L4T: a real hardware EL2/EL1 boundary, but **Linux is the supervisor and owns the guest's memory**. No Type-1 layer; QHV cannot run under KVM. | **Partial** — a real Type-1 `qvm` did run at EL2 on A78AE (A4 functional passes; two guests at A5/S1-F, one observation), but it is **uncertified** — SDP 8.0 is not QNX OS for Safety — **no isolation, containment or freedom-from-interference result exists**, and no QHV number exists or ever will (OD10). |
+| **Same Tegra silicon family** | Yes (Orin / Thor) | Both partitions on Tegra234: L4T on the metal with the real Ampere iGPU, QNX on 2 of 6 A78AE cores under `-cpu host` — no emulated CPU. The guest still sees QEMU's generic `virt` machine. | **Partial** — the QNX code finally runs on Tegra234's own cores, but on a 6-core Jetson SKU (not DRIVE Orin's 12, and nothing here touches Thor), behind `virt`: no Tegra peripheral, no BPMP, no SMMU, no GPU. **Not a QNX-supported configuration** — every A6 arm boots a `startup-qemu-virt` rebuilt in this repo; the shipped one still hangs. |
+| **Dual-OS coexistence** | QNX Safety + Linux Compute on one Tegra, as peers under the HV | L4T on the metal with the GPU (sustained FMA at ~99% GR3D) and QNX as a KVM guest on the same A78AE cores; cross-partition service over a real `br0`/`tap-qnx` bridge and over DDS. | **Partial** — the two OSes do coexist on one Tegra234 and exchange work, but **they are never peers**: on the only measured leg Linux is the host and owns the QNX guest's memory, so there is no Linux Compute *partition*. The leg where they are peers (A5/S1-F) has no GPU and unpublished figures. **No leg has both.** |
+| **Asymmetric workload** | Safety FuSa monitors / Compute DriveWorks | L4T holds the iGPU (a TensorRT inference and a synthetic FMA load) while the QNX guest only judges claims — ACCEPT/REJECT over TCP and over DDS. | **Partial** — asymmetric *in kind*, but the rules are legible plausibility checks whose thresholds `monitor.c` itself says were chosen for the demo and **not derived from any hazard analysis**; no ASIL, no RT bound, no DriveWorks-class load. **The privilege is inverted**: Compute owns Safety's memory, and QNX can touch no accelerator on Tegra234 at all. |
+| **Inter-VM IPC** | Shared memory + mailbox, sub-µs | First hardware-timed cross-partition round trip: a 64-byte frame from L4T to the guest's monitor over a real bridge under KVM, **p50 0.172 ms, p99 0.461 ms** (n=3000/arm, governor pinned, 2026-09-19). | **Partial** — a real cross-partition round trip is timed on silicon at last, but it is **TCP over virtio-net, not shared memory**, and it is **host↔guest, not VM↔VM**: there is no hypervisor in the path and Linux owns the other side. It is not the quantity DRIVE OS's figure names. No shared-memory or mailbox figure exists at any architecture, and per OD10 none ever will. |
+| **Boot sequencing** | HV brings up Safety → Compute with cross-checks | L4T boots first — it is the host — then QNX starts as a KVM guest launched by a shell command from L4T userspace. Bring-up segment-timed, n=5, on two hosts. | **Partial** — a real ordered two-partition bring-up exists, but **the order is inverted** (Compute must be fully up first, because it is the host), nothing enforces it, and there are **no cross-checks, no health gate and no fail-to-safe**. Nothing about *sequencing* was timed: the clock starts at QEMU exec, so the Compute side's own boot is never measured. |
+| **Bootloader chain** | SecureBoot → measured boot → HV → guest IPLs | JetPack UEFI with Secure Boot **off** → L4T → QEMU `-kernel` loads the IFS directly. No guest IPL and no HV stage. New in A6: the project owns the startup board stage. | **Cannot** — no root of trust at any stage on any leg: nothing signed, nothing measured, no fuse- or TPM-anchored anchor. A6 has *fewer* stages than DRIVE OS, not more. (The second host in the 2026-09-20 comparison, AWS `a1.metal`, has no JetPack UEFI and no L4T at all — a different pre-QEMU chain entirely.) |
+| **Real-time guarantees** | Certified RT on the Safety partition | First hardware-timed QNX latency: idle **p50 0.184 ms, p99 0.475 ms** (governor pinned). Host CPU load moves p50 **+53.9%**; the largest samples run ~10–12× the median. | **Cannot** — no bound, no WCET argument, no deadline, and the guest is **never configured for real time** (`monitor.c` is pure POSIX at default priority, so QNX's priority scheme and FIFO scheduling are untouched by every figure here). Its vCPU threads are scheduled by a general-purpose Linux kernel, and the saturation run measures **interference reaching the Safety partition**, not freedom from it. |
 
 ---
 
 ## Quantitative data
 
-> Waits for the ~~v1~~ **A6 (2026-09-18: v1 was superseded before it was ever
-> frozen; A6's gate is not settled, so the campaign's content is still open)**
-> campaign. Earlier measurements are listed as
-> history in the plan's
-> [measurement inventory](orin-native-port-plan.md#measurement-inventory).
-> No project figures appear here before then.
+The reference column is for orientation only and comes from public NVIDIA
+material, not from this project.
 
-| Metric | DRIVE OS reference (public, approximate) | This proxy (measured) |
+**Read the IPC rows carefully.** DRIVE OS's inter-VM figure is a VM↔VM round
+trip across a Type-1 hypervisor over shared memory. This project has no such
+figure and, per OD10, never will — so those rows stay empty rather than being
+filled with a number that measures something else. The figure this project does
+have is a *host↔guest* round trip over TCP and virtio-net, and it is reported
+on its own row against no reference.
+
+| Metric | DRIVE OS reference (public, approximate) | This project (measured) |
 |---|---|---|
-| QNX guest boot time | n/a (different SoC) | _waits for the A6 campaign (content open)_ |
-| Linux guest boot time | n/a (different SoC) | _waits for the A6 campaign (content open)_ |
-| Inter-VM IPC P50 round-trip | < 10 µs (shared mem regime) | _waits for the A6 campaign (content open)_ |
-| Inter-VM IPC P99 round-trip | < 50 µs (shared mem regime) | _waits for the A6 campaign (content open)_ |
-| Inter-VM IPC P99.9 round-trip | _bounded by RT guarantees_ | _waits for the A6 campaign (content open)_ |
-| Sustained throughput (1 KB msg) | _hardware-bound_ | _waits for the A6 campaign (content open)_ |
-
-The "DRIVE OS reference" column is for orientation only; figures
-come from public NVIDIA materials, not from the project itself.
+| QNX guest boot time, to guest banner | n/a — different SoC | **4747.0 ms** (Orin Nano) / **4519.0 ms** (AWS `a1.metal`), median of n=5, under KVM, byte-identical IFS, 2026-09-20. **~89% of each is a fixed software timeout**, not host-dependent work; see [the run record](../results/orin-native-port/20260920T-kvm-twin/results.md). |
+| Linux guest boot time | n/a — different SoC | Booted under native `qvm` (S1-F, rungs B3/B4, 2026-09-17) and held ten minutes. **Figures unpublished** under NC QDL v7 4.6(i). |
+| Inter-VM IPC P50 (VM↔VM, shared memory) | < 10 µs | **none, and none will exist.** The one shared-memory path (`qvm vdev shmem`, A1) was functional-only, TCG-only and never timed; its notify half was deliberately skipped. OD10 removed the last route to a hypervisor-path figure. |
+| Inter-VM IPC P99 (VM↔VM, shared memory) | < 50 µs | none — as above |
+| Inter-VM IPC P99.9 (VM↔VM, shared memory) | bounded by RT guarantees | none — as above |
+| **Host↔guest round trip under KVM** (this project's own quantity; **no DRIVE OS counterpart**) | — | **p50 0.172 ms, p99 0.461 ms, p99.9 0.598 ms**, n=3000 per arm × 2 arms, governor pinned, 2026-09-19. 64-byte frame, L4T → QNX guest monitor over `br0`/`tap-qnx`/virtio-net. A **whole-system** round trip — Linux stack, bridge, guest `io-sock`, guest scheduler — not a QNX-attributable latency. |
+| The same program, natively on L4T (control) | — | **p50 0.045 ms, p99 0.081 ms**, same board, same unmodified `monitor.c`, loopback. The difference is transport *and* partition together, not the partition alone. |
+| Sustained throughput (1 KB message) | hardware-bound | **never measured**, on any leg. |
 
 ---
 
 ## How to read this document
 
-- **"Validates"** means the proxy reproduces the engineering shape of
-  the concept faithfully enough to be a useful study target.
-- **"Partial"** means structural similarity exists but the substance
-  (numbers, certifications, hardware behaviour) does not.
-- **"Cannot"** means the concept is structurally outside what this
-  proxy can do on any of its hosts, full stop.
-  These rows are the most important ones for the interview narrative
-  because they define the gap honestly.
+- **"Validates"** — the proxy reproduces the engineering shape of the concept
+  faithfully enough to be a useful study target. **No dimension currently earns
+  this.**
+- **"Partial"** — structural similarity exists but the substance (numbers,
+  certifications, hardware behaviour) does not.
+- **"Cannot"** — structurally outside what this proxy can do on any host, full
+  stop. These rows matter most: they define the gap honestly.
+
+Two closing cautions, because they apply to every row above.
+
+**A functional pass is not a result.** M0–M5 and S1-F are real and were hard,
+but they show that something *ran*, not how it performed. Where a row rests on
+one, it says so.
+
+**The measured numbers are bundles.** The two-host boot comparison differs in
+CPU generation, kernel and clock at once; the guest-vs-native latency pair
+differs in transport as well as partition. Neither isolates a single variable,
+and [`digital-twin-design.md`](digital-twin-design.md) §1a explains why no
+comparison in this project ever could.
