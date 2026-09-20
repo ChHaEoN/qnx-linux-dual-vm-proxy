@@ -268,3 +268,49 @@ def test_every_exemption_is_justified_and_used(repo_root):
     import re as _re
     unused = [rx for rx, _why in exemptions if not _re.search(rx, corpus, _re.I)]
     assert not unused, "exemption no longer matches anything, so it is stale: %r" % unused
+
+
+# --------------------------------------------------------------------------
+# overwrite-only files
+
+
+def test_claude_md_carries_no_strike_throughs(repo_root):
+    """CLAUDE.md states current state, and the rule is enforced, not requested.
+
+    It earned the rule. Phase status had grown to 464 of 768 lines carrying 42
+    struck segments, so answering "what is true now" cost a full read of the
+    file and failed silently when one line was missed. docs/findings.md is
+    append-only and keeps that history properly; git keeps the rest.
+    """
+    text = C._read(os.path.join(repo_root, "CLAUDE.md"))
+    # Inline code is excluded: the file documents this very rule and has to be
+    # able to name the marker. One stray marker is a failure -- counting spans
+    # and halving them reported zero for an unbalanced one, which is the
+    # likeliest typo of all.
+    assert C.count_strike_markers(text) == 0, (
+        "CLAUDE.md is overwrite-only: delete the old sentence, do not strike it")
+    assert "`~~`" in text, (
+        "the rule should still be documented in the file it governs")
+
+
+def test_a_strike_through_in_claude_md_fails_the_gate(repo_root):
+    """The bite test. A rule nothing enforces is only a preference."""
+    target = os.path.join(repo_root, "CLAUDE.md")
+    original = C._read(target)
+    try:
+        with io.open(target, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(original + "\n~~struck~~ **2026-01-01: replaced**\n")
+        env = dict(os.environ, PYTHONIOENCODING="utf-8")
+        proc = subprocess.run(
+            [sys.executable, os.path.join(repo_root, GATE), "--repo", repo_root,
+             "--no-network"],
+            cwd=repo_root, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL, env=env,
+        )
+        out = proc.stdout.decode("utf-8", "replace")
+        assert proc.returncode != 0, (
+            "a strike-through in CLAUDE.md did not fail the gate:\n" + out)
+        assert "strike marker" in out
+    finally:
+        with io.open(target, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(original)

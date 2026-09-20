@@ -51,9 +51,11 @@ substrates:
   configuration ([findings.md](findings.md) 2026-09-19,
   [`logs/sample-boot/aws-a1-metal-kvm-fix-crossvendor.log`](../logs/sample-boot/aws-a1-metal-kvm-fix-crossvendor.log)).
   So an ARM cloud host running these images under KVM is possible again — on
-  `*.metal` only. **No cloud leg has been built or measured on it:** that was
-  one 60-second boot arm, **no timing of any kind was taken**, and the twin
-  diff has not been re-run (the §5 figures stay architecture-version history).
+  `*.metal` only. **2026-09-20: `a1.metal` has now been measured** — it was the
+  second host in the boot comparison of §1b, n=5 timed boots on a byte-identical
+  image. What still does not exist is a cloud *leg* in this project's sense: no
+  QHV host plus guest, and **no IPC, latency or throughput figure has ever been
+  taken on any cloud host**. The §5 figures stay architecture-version history.
   Non-metal Graviton still has no `/dev/kvm` (the t4g.small probe stands),
   `c7g.metal` — the closer core match — stays quota-blocked at 64 vCPU, and
   `a1.metal` is Cortex-A72 against the Orin's A78AE, so even a revived pair

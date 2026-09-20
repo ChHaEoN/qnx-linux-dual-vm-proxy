@@ -334,8 +334,9 @@ Quick summary for context:
   Qualcomm-Cockpit-class proxy alongside the NVIDIA one) and a newer
   NVIDIA-primary single-SoC convergence track.
 
-Next actions: see the identically-named list in `CLAUDE.md`'s Phase
-status section. Since the 2026-09-11 owner decision the Phase 3b order
+Next actions: `CLAUDE.md`'s Phase status section carries what is open
+(2026-09-20: it no longer holds a long "Next actions" list — phase state lives
+in `README.md`'s Status table, and dated detail in `docs/findings.md`). Since the 2026-09-11 owner decision the Phase 3b order
 leads: M4-F, M5-F, S1-F, ~~freeze reference architecture v1, then one
 measurement campaign~~ **2026-09-18: settle A6's gate, then one campaign on A6**
 (`docs/orin-native-port-plan.md`, freeze section). M4-F, M5-F and S1-F are met

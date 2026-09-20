@@ -40,6 +40,13 @@ import claims_lib as C  # noqa: E402
 LOGS = "logs/sample-boot"
 DELTA_AWK = os.path.join("scripts", "twin", "delta.awk")
 
+# Current-state files: they say what is true now, and nothing else. Adding a
+# file here is a commitment to rewrite it rather than annotate it. README.md and
+# docs/architecture.md are deliberately NOT here yet -- they still carry earlier
+# strike-throughs, and listing them before they are cleaned would only produce a
+# red build nobody can act on.
+OVERWRITE_ONLY = ("CLAUDE.md",)
+
 
 class ClaimNotFound(Exception):
     """README no longer contains the sentence a claim was anchored to."""
@@ -428,6 +435,37 @@ def main():
         if found and not hard:
             print("  ^ not failures: docs/ keeps superseded prose on purpose. This is the")
             print("    migration backlog -- text a reader would still take as current.")
+
+    # --- overwrite-only files ----------------------------------------------
+    # Some files are the RECORD and some are the CURRENT STATE, and the two want
+    # opposite disciplines. docs/findings.md is append-only: dated, never
+    # rewritten, and its strike-throughs are the project's honest history.
+    # A briefing is the opposite. When a current-state file accumulates
+    # "~~old claim~~ **2026-xx-xx: new claim**", answering "what is true now"
+    # costs a full read of the file and fails silently when one line is missed.
+    # That is not hypothetical: it is how docs/architecture.md came to say
+    # "Current: A4" nine lines above a paragraph saying A6 is current, and how
+    # CLAUDE.md's Phase status grew to 464 lines carrying 42 struck segments.
+    #
+    # Files listed here state the current truth and nothing else. History for
+    # them lives in git and in docs/findings.md.
+    print()
+    print("-" * 100)
+    print("OVERWRITE-ONLY FILES -- current state, no accumulated strike-throughs")
+    print("-" * 100)
+    for rel in OVERWRITE_ONLY:
+        full = os.path.join(repo, rel)
+        if not os.path.exists(full):
+            print("  skipped %s (not present)" % rel)
+            continue
+        n = C.count_strike_markers(C._read(full))
+        if n:
+            print("  FAIL   %-28s %d strike marker(s)" % (rel, n))
+            print("         This file states current state. Delete the old sentence and write")
+            print("         the new one; git and docs/findings.md keep the history.")
+            failures.append("%s: %d strike-through segment(s) in an overwrite-only file" % (rel, n))
+        else:
+            print("  ok     %-28s no strike markers outside inline code" % rel)
 
     # --- the repository description ----------------------------------------
     # This was the one surface the gate structurally could not see, because it

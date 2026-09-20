@@ -229,7 +229,10 @@ def serial_bytes_on_the_wire(path):
 
 # Negation or strike-through: the sentence denies the claim rather than making it.
 NEGATION_RE = re.compile(
-    r"\b(no|not|none|never|nothing|without|neither|nor|cannot|can't|lacks?)\b"
+    # "nowhere" and "nobody" were missing until 2026-09-20, when an ADR note
+    # reading "the answer turned out to be nowhere" classified as an ASSERTION
+    # of the very thing it was denying.
+    r"\b(no|not|none|never|nothing|nowhere|nobody|without|neither|nor|cannot|can't|lacks?)\b"
     r"|~~|≠|non-metal|non-commercial",
     re.I,
 )
@@ -435,6 +438,25 @@ def strip_link_targets(text):
     """
     text = LINK_TARGET.sub(lambda m: m.group(1), text)
     return strip_filenames(BARE_URL.sub(" ", text))
+
+
+INLINE_CODE = re.compile(r"`[^`\n]*`")
+
+
+def count_strike_markers(text):
+    """How many '~~' markers survive outside inline code.
+
+    Two traps, both found on 2026-09-20 by the test that uses this:
+
+    1. Counting markers and halving them reports ZERO for a single stray '~~',
+       so an unbalanced marker -- the likeliest typo -- slipped through
+       silently. Markers are counted, not spans, and one is a failure.
+    2. A file that DOCUMENTS the no-strike-through rule has to be able to name
+       the marker. CLAUDE.md says "fails the build if `~~` appears here", in
+       backticks. Inline code is removed before counting, so the rule can
+       describe itself without breaking itself.
+    """
+    return INLINE_CODE.sub(" ", text).count("~~")
 
 
 def strip_superseded(text):

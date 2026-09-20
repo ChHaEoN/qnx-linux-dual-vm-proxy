@@ -1,3 +1,14 @@
+> **2026-09-20 — this ADR has been overtaken, and its question is now closed
+> negatively.** It asked where a hardware-timed QHV number could come from — and
+> the answer turned out to be nowhere. It accepted option (B), the native port. The native port ran and met M0-M5
+> functionally, but its figures are unpublished under NC QDL v7 4.6(i), the
+> direction moved to A6 on 2026-09-18 (no OS can use the GPU under a native QNX
+> Hypervisor on Tegra234), and **OD10 (2026-09-20) withdrew the TCG legs that
+> were QHV's only other route**. QHV cannot run under KVM — it needs EL2 and
+> ARM KVM does not nest on A78AE. **No hardware-timed hypervisor number exists,
+> and none will.** The decision below is kept as the record of what was decided
+> and why.
+
 # ADR-003 — 硬體計時的 QNX Hypervisor 數字能從哪裡來？
 
 **Status: Accepted (2026-09-09) — 選項 (B)，Orin Nano 原生移植。** 擁有者於 2026-09-09 選定 (B)；
