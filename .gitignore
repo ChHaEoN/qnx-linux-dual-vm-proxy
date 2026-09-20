@@ -50,6 +50,9 @@ ipc-test/qnx-dds-monitor/qnx-dds-monitor
 # and others). Exposure is small (forks=0, stars=1, watchers=0) and the content
 # is interview prose, not a credential -- the risk is perception, not secrecy.
 docs/interview-narrative.md
+# Same rule, same reason: architecture brief written for CV prep (2026-09-20).
+# This one has never been committed, so it leaves no history behind it.
+docs/cv-architecture-brief.md
 # idlc-generated sources: regenerated at build time from av.idl, and they carry
 # no licence header of their own, so they are not committed.
 ipc-test/qnx-dds-monitor/av.c

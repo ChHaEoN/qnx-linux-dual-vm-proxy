@@ -96,10 +96,16 @@ be read with that in mind.
 (n=9,000): **p50 +53.9%** (0.184 → 0.283 ms), **p90 +40.6%**. The per-arm p50 ranges are
 **disjoint** — idle 0.181–0.190, cpu6 0.258–0.291 — and the arms were interleaved and repeated
 precisely because an earlier +11% p90 reading had dissolved on repeat. This one did not.
+**Narrowed 2026-09-19 (top entry):** a plain L4T process on the same saturated board, same program,
+degraded at least as much relatively (+71.3%, +123.1% p50), so these figures are **not** evidence of
+a virtualisation cost. They stand as measured; only the reading narrows.
 
 **But the tail gets better.** p99 **−27.9%** and p99.9 **−36.2%** under saturation. Busy cores
 never enter idle states, so nothing pays a wake-up — the DVFS effect one level down. An
 observation, not a demonstrated mechanism: no C-state residency was measured.
+**Narrowed 2026-09-19 (top entry):** p99-specific, and not a guest property — the native control's
+p99.9 improves too (−12.5%, −31.5%), and the guest's *maximum* moves the other way (+286.5%,
++130.0%). "The tail gets better" holds at p99 only.
 
 **The GPU still shows nothing**, now under a controlled clock: `pgpu` p50 0.180 vs idle 0.190,
 i.e. faster, within noise. And GPU load *on top of* full CPU load changes nothing further

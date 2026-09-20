@@ -8,7 +8,7 @@ The twin design is described in detail in
 [digital-twin-design.md](digital-twin-design.md); this file covers
 the *structural* picture that designs sits on top of.
 
-**Current state (2026-09-13).** The ids below are the rows of the plan's
+**Current state (2026-09-20).** The ids below are the rows of the plan's
 [architecture table](orin-native-port-plan.md#architecture-versions).
 - **History, closed (2026-09-13, owner):** A1, the cloud leg (the QNX
   Hypervisor in QEMU TCG on the Windows PC), and A2, the Orin plain leg (QNX
@@ -32,12 +32,22 @@ the *structural* picture that designs sits on top of.
   booted under KVM, on the Orin (2026-09-18) and on a bare-metal AWS `a1.metal`
   (2026-09-19). Neither is a built or measured cloud leg, and no timing was
   taken on either.
-- **Current:** A4, the QNX Hypervisor native on the Orin Nano, with no QEMU.
+- **Current direction: A6** — L4T on the metal, owning the machine and the
+GPU, with QNX as a **KVM guest** beside it. Not frozen: its gate is not
+settled (what the campaign measures, the sample sizes, and whether the TCG
+twin legs survive are all still open). This is the row to name when asked
+"what is the architecture now".
+- **A4 — achieved, and superseded as a *direction* (2026-09-18):** the QNX
+Hypervisor native on the Orin Nano, with no QEMU.
   The same shim has two entry paths. kexec from L4T carried the shim alone in
   M0 and every host image in M1-M4. Once, attended, our own EFI loader,
   launched by hand from the firmware's UEFI Shell, carried only the one-core
   M1b image, with no `qvm` and no guest (M5-F). No `qvm` host image has been
   entered through UEFI. The M path has ended.
+**A4 is not withdrawn and not re-run — it works, and M0-M5 plus S1-F are real
+passes. But it is no longer the direction**, because under it no OS can use
+the GPU (see Next). Do not describe A4 as "the current architecture"; describe
+it as what was built and why the direction then moved.
 - **Next:** ~~S1, the first stage of A5: a Linux guest without a GPU under
   native `qvm`. Then the freeze of reference architecture v1, and one
   measurement campaign on it. v1's two TCG twin legs are campaign work on
