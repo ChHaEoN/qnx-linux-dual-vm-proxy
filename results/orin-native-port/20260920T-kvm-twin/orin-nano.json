@@ -1,0 +1,153 @@
+{
+  "stamp": {
+    "label": "orin-kvm-twin",
+    "utc": "2026-09-20T09:24:07Z",
+    "host": "<orin-board>",
+    "machine": "aarch64",
+    "kernel": "5.15.148-tegra",
+    "qemu": "QEMU emulator version 6.2.0 (Debian 1:6.2+dfsg-2ubuntu6.31)",
+    "ifs": "ifs-kvmfix.bin",
+    "ifs_sha256": "26170cd7dc74c216181db71c5da0e6b22719d1f3f9f2c1d0c2b9723fd6c9446c",
+    "launch": "-machine virt,gic-version=3 -cpu host -enable-kvm -smp 2 -m 1G -kernel <ifs> -nographic",
+    "disk": "none (deliberate -- the guest disk is unpinned and drifts)",
+    "cpu_before": [
+      {
+        "cpu": "cpu0",
+        "governor": "performance",
+        "cur_khz": "1344000",
+        "max_khz": "1344000"
+      },
+      {
+        "cpu": "cpu1",
+        "governor": "performance",
+        "cur_khz": "1344000",
+        "max_khz": "1344000"
+      },
+      {
+        "cpu": "cpu2",
+        "governor": "performance",
+        "cur_khz": "1344000",
+        "max_khz": "1344000"
+      },
+      {
+        "cpu": "cpu3",
+        "governor": "performance",
+        "cur_khz": "1344000",
+        "max_khz": "1344000"
+      },
+      {
+        "cpu": "cpu4",
+        "governor": "performance",
+        "cur_khz": "1344000",
+        "max_khz": "1344000"
+      },
+      {
+        "cpu": "cpu5",
+        "governor": "performance",
+        "cur_khz": "1344000",
+        "max_khz": "1344000"
+      }
+    ],
+    "cpu_after": [
+      {
+        "cpu": "cpu0",
+        "governor": "performance",
+        "cur_khz": "1344000",
+        "max_khz": "1344000"
+      },
+      {
+        "cpu": "cpu1",
+        "governor": "performance",
+        "cur_khz": "1344000",
+        "max_khz": "1344000"
+      },
+      {
+        "cpu": "cpu2",
+        "governor": "performance",
+        "cur_khz": "1344000",
+        "max_khz": "1344000"
+      },
+      {
+        "cpu": "cpu3",
+        "governor": "performance",
+        "cur_khz": "1344000",
+        "max_khz": "1344000"
+      },
+      {
+        "cpu": "cpu4",
+        "governor": "performance",
+        "cur_khz": "1344000",
+        "max_khz": "1344000"
+      },
+      {
+        "cpu": "cpu5",
+        "governor": "performance",
+        "cur_khz": "1344000",
+        "max_khz": "1344000"
+      }
+    ]
+  },
+  "runs": [
+    {
+      "ok": true,
+      "ms_to_startup_complete": 5448.38,
+      "ms_to_first_byte": 398.17,
+      "serial_bytes": 621,
+      "serial_tail": " qnx6) \r\nmount: Possible reason: Invalid argument \r\n/proc/boot/mount_fs.sh[54]: /system/bin/cleanup_tmp: cannot execute - No such file or directory\r\nNo system file system, giving up.\r\nStartup complete",
+      "index": 0,
+      "warmup": true
+    },
+    {
+      "ok": true,
+      "ms_to_startup_complete": 5408.84,
+      "ms_to_first_byte": 366.39,
+      "serial_bytes": 621,
+      "serial_tail": " qnx6) \r\nmount: Possible reason: Invalid argument \r\n/proc/boot/mount_fs.sh[54]: /system/bin/cleanup_tmp: cannot execute - No such file or directory\r\nNo system file system, giving up.\r\nStartup complete",
+      "index": 1,
+      "warmup": false
+    },
+    {
+      "ok": true,
+      "ms_to_startup_complete": 5409.0,
+      "ms_to_first_byte": 358.37,
+      "serial_bytes": 621,
+      "serial_tail": " qnx6) \r\nmount: Possible reason: Invalid argument \r\n/proc/boot/mount_fs.sh[54]: /system/bin/cleanup_tmp: cannot execute - No such file or directory\r\nNo system file system, giving up.\r\nStartup complete",
+      "index": 2,
+      "warmup": false
+    },
+    {
+      "ok": true,
+      "ms_to_startup_complete": 5417.66,
+      "ms_to_first_byte": 362.01,
+      "serial_bytes": 621,
+      "serial_tail": " qnx6) \r\nmount: Possible reason: Invalid argument \r\n/proc/boot/mount_fs.sh[54]: /system/bin/cleanup_tmp: cannot execute - No such file or directory\r\nNo system file system, giving up.\r\nStartup complete",
+      "index": 3,
+      "warmup": false
+    },
+    {
+      "ok": true,
+      "ms_to_startup_complete": 5423.26,
+      "ms_to_first_byte": 370.68,
+      "serial_bytes": 623,
+      "serial_tail": "nx6) \r\nmount: Possible reason: Invalid argument \r\n/proc/boot/mount_fs.sh[54]: /system/bin/cleanup_tmp: cannot execute - No such file or directory\r\nNo system file system, giving up.\r\nStartup complete\r\n",
+      "index": 4,
+      "warmup": false
+    },
+    {
+      "ok": true,
+      "ms_to_startup_complete": 5412.27,
+      "ms_to_first_byte": 360.87,
+      "serial_bytes": 621,
+      "serial_tail": " qnx6) \r\nmount: Possible reason: Invalid argument \r\n/proc/boot/mount_fs.sh[54]: /system/bin/cleanup_tmp: cannot execute - No such file or directory\r\nNo system file system, giving up.\r\nStartup complete",
+      "index": 5,
+      "warmup": false
+    }
+  ],
+  "summary": {
+    "n_ok": 5,
+    "n_attempted": 5,
+    "min_ms": 5408.84,
+    "median_ms": 5412.27,
+    "max_ms": 5423.26
+  }
+}

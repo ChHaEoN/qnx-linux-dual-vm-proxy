@@ -1,0 +1,18 @@
+    165.9 ms  (+  165.9)  ---> Starting slogger2
+    174.0 ms  (+    8.1)  ---> Starting PCI Services
+    181.7 ms  (+    7.6)  ---> Starting fsevmgr
+    187.4 ms  (+    5.7)  # ---> Starting devb
+    194.3 ms  (+    7.0)  xpt_configure:  No virtio interfaces found
+   5194.7 ms  (+ 5000.3)  Unable to access /dev/hd0
+   5195.7 ms  (+    1.1)  ---> Mounting file systems
+   5200.3 ms  (+    4.6)  ---> Mounting file systems
+   5204.9 ms  (+    4.5)  mount: Can't mount /boot (type qnx6) 
+   5206.6 ms  (+    1.7)  mount: Possible reason: Invalid argument 
+   5211.4 ms  (+    4.8)  mount: Can't mount /system (type qnx6) 
+   5213.1 ms  (+    1.7)  mount: Possible reason: Invalid argument 
+   5217.5 ms  (+    4.4)  mount: Can't mount /data (type qnx6) 
+   5219.2 ms  (+    1.7)  mount: Possible reason: Invalid argument 
+   5222.5 ms  (+    3.2)  /proc/boot/mount_fs.sh[54]: /system/bin/cleanup_tmp: cannot execute - No such file or directory
+   5223.9 ms  (+    1.4)  No system file system, giving up.
+   5224.7 ms  (+    0.8)  Startup complete
+   5225.9 ms  (+    1.2)  Unable to start "uname" (2)

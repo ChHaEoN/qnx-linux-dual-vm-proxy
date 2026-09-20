@@ -1,0 +1,273 @@
+{
+  "stamp": {
+    "label": "aws-a1metal-kvm-twin-instance2",
+    "utc": "2026-09-20T09:35:16Z",
+    "host": "<aws-a1metal-host>",
+    "machine": "aarch64",
+    "kernel": "6.8.0-1063-aws",
+    "qemu": "QEMU emulator version 6.2.0 (Debian 1:6.2+dfsg-2ubuntu6.31)",
+    "ifs": "ifs-kvmfix.bin",
+    "ifs_sha256": "26170cd7dc74c216181db71c5da0e6b22719d1f3f9f2c1d0c2b9723fd6c9446c",
+    "launch": "-machine virt,gic-version=3 -cpu host -enable-kvm -smp 2 -m 1G -kernel <ifs> -nographic",
+    "disk": "none (deliberate -- the guest disk is unpinned and drifts)",
+    "cpu_before": [
+      {
+        "cpu": "cpu0",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu1",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu10",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu11",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu12",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu13",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu14",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu15",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu2",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu3",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu4",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu5",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu6",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu7",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu8",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu9",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      }
+    ],
+    "cpu_after": [
+      {
+        "cpu": "cpu0",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu1",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu10",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu11",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu12",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu13",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu14",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu15",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu2",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu3",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu4",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu5",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu6",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu7",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu8",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      },
+      {
+        "cpu": "cpu9",
+        "governor": null,
+        "cur_khz": null,
+        "max_khz": null
+      }
+    ]
+  },
+  "runs": [
+    {
+      "ok": true,
+      "ms_to_startup_complete": 5224.89,
+      "ms_to_first_byte": 165.23,
+      "serial_bytes": 621,
+      "serial_tail": " qnx6) \r\nmount: Possible reason: Invalid argument \r\n/proc/boot/mount_fs.sh[54]: /system/bin/cleanup_tmp: cannot execute - No such file or directory\r\nNo system file system, giving up.\r\nStartup complete",
+      "index": 0,
+      "warmup": true
+    },
+    {
+      "ok": true,
+      "ms_to_startup_complete": 5225.15,
+      "ms_to_first_byte": 165.27,
+      "serial_bytes": 621,
+      "serial_tail": " qnx6) \r\nmount: Possible reason: Invalid argument \r\n/proc/boot/mount_fs.sh[54]: /system/bin/cleanup_tmp: cannot execute - No such file or directory\r\nNo system file system, giving up.\r\nStartup complete",
+      "index": 1,
+      "warmup": false
+    },
+    {
+      "ok": true,
+      "ms_to_startup_complete": 5225.49,
+      "ms_to_first_byte": 165.72,
+      "serial_bytes": 621,
+      "serial_tail": " qnx6) \r\nmount: Possible reason: Invalid argument \r\n/proc/boot/mount_fs.sh[54]: /system/bin/cleanup_tmp: cannot execute - No such file or directory\r\nNo system file system, giving up.\r\nStartup complete",
+      "index": 2,
+      "warmup": false
+    },
+    {
+      "ok": true,
+      "ms_to_startup_complete": 5225.29,
+      "ms_to_first_byte": 165.51,
+      "serial_bytes": 621,
+      "serial_tail": " qnx6) \r\nmount: Possible reason: Invalid argument \r\n/proc/boot/mount_fs.sh[54]: /system/bin/cleanup_tmp: cannot execute - No such file or directory\r\nNo system file system, giving up.\r\nStartup complete",
+      "index": 3,
+      "warmup": false
+    },
+    {
+      "ok": true,
+      "ms_to_startup_complete": 5226.12,
+      "ms_to_first_byte": 166.21,
+      "serial_bytes": 621,
+      "serial_tail": " qnx6) \r\nmount: Possible reason: Invalid argument \r\n/proc/boot/mount_fs.sh[54]: /system/bin/cleanup_tmp: cannot execute - No such file or directory\r\nNo system file system, giving up.\r\nStartup complete",
+      "index": 4,
+      "warmup": false
+    },
+    {
+      "ok": true,
+      "ms_to_startup_complete": 5226.42,
+      "ms_to_first_byte": 166.35,
+      "serial_bytes": 621,
+      "serial_tail": " qnx6) \r\nmount: Possible reason: Invalid argument \r\n/proc/boot/mount_fs.sh[54]: /system/bin/cleanup_tmp: cannot execute - No such file or directory\r\nNo system file system, giving up.\r\nStartup complete",
+      "index": 5,
+      "warmup": false
+    }
+  ],
+  "summary": {
+    "n_ok": 5,
+    "n_attempted": 5,
+    "min_ms": 5225.15,
+    "median_ms": 5225.49,
+    "max_ms": 5226.42
+  }
+}

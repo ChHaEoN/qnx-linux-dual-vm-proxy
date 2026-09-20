@@ -421,13 +421,44 @@ A72 against A78AE is a five-year micro-architectural gap inside a host bundle
 that also differs in kernel. `c7g.metal` (Neoverse-V1) would be the closer core
 match and stays quota-blocked at 64 vCPU against a 32-vCPU account limit.
 
-### Status
+### Status: run 2026-09-20, and the proposed metric was mostly an artefact
 
-Not run. The Orin leg needs the board powered on and its governor pinned; the
-AWS leg needs an `a1.metal` instance (about $0.41/hr, no quota increase needed).
-Neither has been scheduled, and A6's gate — what its campaign measures and at
-what sample size — is not settled, so this section is a candidate for that
-campaign and not a commitment to it.
+Both legs ran. Record:
+[`results/orin-native-port/20260920T-kvm-twin/`](../results/orin-native-port/20260920T-kvm-twin/results.md).
+
+The identical-image invariant held in practice: sha256 `26170cd7…` on the Orin
+and on two separately launched `a1.metal` instances, the same launch line, and
+QEMU 6.2.0 from the *same* Debian package build (`1:6.2+dfsg-2ubuntu6.31`) on
+both sides.
+
+**The metric proposed above is a poor one, and that is the finding.** Boot to
+`Startup complete` puts the hosts 3.6% apart (median 5412.27 ms against
+5225.89 ms, n=5), but a line trace shows **5001.3 ms of it on the Orin and
+5000.3 ms on `a1.metal` is one fixed timeout** — with no disk attached, QNX's
+boot script waits five seconds for `/dev/hd0` and gives up. One millisecond
+apart across two vendors' silicon. Quoting "+3.6%" as a host comparison would
+have been misleading; 92% of it is the timeout.
+
+Removing the measured wait leaves the host-sensitive part: **2.06×** by trace,
+**2.18×** by time-to-first-serial-byte (362.01 ms against 166.09 ms, n=5). The
+Orin is about twice as slow to get the guest talking. That interval covers QEMU
+start, KVM setup, a 9.77 MB IFS load and early guest startup, across hosts that
+differ in clock, kernel and memory subsystem — a bundle difference in §1a's
+sense, not a per-core claim.
+
+One more observation kept because it was not expected: `a1.metal` repeated to
+within 1.3 ms over five runs and **0.4 ms across two separate instances**, while
+the Orin's spread is 13× wider at 14.42 ms on a pinned governor. Unexplained; no
+scheduler or interrupt tracing was done.
+
+The governor was pinned to `performance` on the Orin and restored afterwards.
+`a1.metal` exposes no `cpufreq` and no `cpuidle` at all, so the AWS side could
+not be pinned — a stated limit, exactly as this section required.
+
+Still true after the run: nothing here is a hypervisor number, the rebuilt
+startup is ours and not a QNX-supported configuration, no disk means nothing is
+shown about filesystems, networking or IPC, and A6's gate remains unsettled, so
+this is a candidate for that campaign rather than part of it.
 
 ---
 
