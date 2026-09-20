@@ -1,0 +1,194 @@
+# NOT PORTABLE -- committed as the exact input that produced the working image.
+#
+# The four [perms=...] lines near the end carry ABSOLUTE, host-specific paths
+# (E:/Project/...). That matches the existing convention: mkqnximage's
+# local/snippets/ifs_files.custom is host-specific and regenerated every run.
+# Adjust them for your checkout before reuse.
+#
+# The two launch lines after /proc/boot/startup.sh are the load-bearing part:
+# they are what starts the monitors. mkqnximage REGENERATES ifs.build from
+# templates and discards them, which is why this file is kept here.
+###############################################################################
+#
+# IFS Build file
+#
+###############################################################################
+
+[search=${MKFS_PATH}]
+
+[+dupignore]
+[+optional]
+
+
+[uid=0 gid=0 dperms=0555 perms=0555]
+
+[image=0x40080000]
+[virtual=aarch64le,raw ] boot = {
+    startup-qemu-virt
+    # Setting PATH and LD_LIBRARY_PATH here allows them to be set both for
+    # procnto as well as programs run from the IFS startup script.
+    PATH=/proc/boot:/system/bin
+    LD_LIBRARY_PATH=/proc/boot:/system/lib:/system/lib/dll
+    [+keeplinked uid=0 gid=0 perms=0700 ] CONFIG_PATH=/proc/boot:/system/etc procnto-smp-instr -mr -d 0777 -u 0777
+}
+
+[+script] startup-script = {
+    # As various programs expect some binaries in fixed location, create procmgr symlinks to them.
+    # We can't specify these paths for the files themselves since if we build a non-union system,
+    # the actual paths would be things like /ifs/bin/sh
+    procmgr_symlink /proc/boot/ksh /bin/ksh
+    procmgr_symlink /proc/boot/ksh /bin/sh
+    procmgr_symlink /system/bin/cp /bin/cp
+    procmgr_symlink /system/bin/rm /bin/rm
+    procmgr_symlink /data/var/tmp /tmp
+    procmgr_symlink /system/bin/ssh /usr/bin/ssh
+    procmgr_symlink /proc/boot/ldqnx-64.so.2 /usr/lib/ldqnx-64.so.2
+
+    # **FIXME**
+    # Processes should usually use _CS_CONFIG_PATH to locate configuration files.  But for now
+    # create symlinks for some locations that can't move.
+    procmgr_symlink /system/etc/terminfo /usr/share/terminfo
+    procmgr_symlink /data/var/etc /etc
+    procmgr_symlink /data/var /var
+    procmgr_symlink /system/etc/profile /etc/profile
+
+    TERM=qansi
+    HOME=/data/home/root
+    #50.builtin
+    setconf TIMEZONE UTC0
+    mount -uo noexec /dev/shmem
+    # ARM Motherboard Express uATX features a PrimeCell PL031 RTC as per:
+    # - http://infocenter.arm.com/help/topic/com.arm.doc.dui0447j/Caccaigc.html
+    # - http://infocenter.arm.com/help/topic/com.arm.doc.dui0447j/ch04s02s02.html
+    rtc -b 0x9010000 primecell
+# local/snippets/ifs_start.custom
+# Commands executed from ifs start-up script prior to invoking main start-up script or slm
+    #~30.builtin
+    /proc/boot/startup.sh
+
+# Phase 3b: Safety-side cross-partition monitors. Placed AFTER startup.sh
+# returns, because startup.sh is what brings up io-sock and the static vtnet0
+# address -- binding a socket before that would fail. Kept in the IFS on
+# purpose: post_startup.sh lives in the system partition, and editing it would
+# mean rewriting disk-qemu, which published results depend on.
+/proc/boot/qnx-safety-monitor &
+# Phase 3b (2026-09-20): the same judgement carried over DDS. CYCLONEDDS_URI is
+# required -- Cyclone's default picks ONE interface by priority and chose the
+# wireless one on this host, so the participant would never find the Compute
+# side and would report no error.
+CYCLONEDDS_URI=file:///proc/boot/cyclonedds-qnx.xml /proc/boot/qnx-dds-monitor &
+    #~80.builtin
+
+    display_msg "Startup complete"
+    uname -a
+
+    reopen /dev/ser1
+}
+
+startup.sh=output/build/startup.sh
+mount_fs.sh=output/build/mount_fs.sh
+
+#############################################
+### Toybox
+#############################################
+toybox=usr/bin/toybox
+[type=link] cat=toybox
+[type=link] chmod=toybox
+[type=link] dd=toybox
+[type=link] echo=toybox
+[type=link] ln=toybox
+[type=link] ls=toybox
+[type=link] rm=toybox
+[type=link] grep=toybox
+
+#############################################
+### Utilities
+#############################################
+bin/on
+# waitfor and ability are same binary as on
+[type=link] waitfor=on
+[type=link] ability=on
+sbin/rtc
+bin/setfacl
+bin/ksh
+bin/pidin
+# Allow sh to be found in PATH
+[type=link] sh=ksh
+bin/mount
+bin/umount
+usr/bin/getconf
+# getconf and setconf are same binary
+[type=link] setconf=getconf
+sbin/devc-serpl011
+bin/slog2info
+
+
+#############################################
+### Services
+#############################################
+sbin/devb-virtio
+bin/slogger2
+sbin/fsevmgr
+
+
+
+#############################################
+### Miscellaneous
+#############################################
+# Capture the build information
+
+[perms=0444] build/options=local/options
+[perms=0444] build/options.inc=output/inc/options.inc
+[perms=0444] build/ifs.build=output/build/ifs.build
+[perms=0444] build/system.build=output/build/system.build
+[perms=0444] build/data.build=output/build/data.build
+
+[perms=0444] build.date = output/build/build.date
+
+#############################################
+### Customization
+#############################################
+
+[-autolink]
+
+lib/libc.so.6
+usr/lib/ldqnx-64.so.2
+lib/libgcc_s.so.1
+lib/libm.so.3
+lib/libcam.so.2
+lib/dll/io-blk.so
+lib/dll/cam-disk.so
+lib/dll/fs-qnx6.so
+lib/dll/fs-dos.so
+lib/libslog2.so.1
+[type=link] libslog2.so=libslog2.so.1
+usr/lib/libcrypto.so.3
+lib/libsocket.so.4
+[type=link] libsocket.so=libsocket.so.4
+usr/lib/libz.so.2
+lib/libslog2shim.so.1
+lib/libsecpol.so.1
+lib/libpci.so.3.0
+lib/libjson.so.1
+lib/libslog2parse.so.1
+lib/libjail.so.1
+lib/libfsnotify.so.1
+
+
+usr/lib/libqcrypto.so.1.0
+lib/dll/qcrypto-openssl-3.so
+lib/libqh.so.1
+lib/libregex.so.1
+
+[uid=0 gid=0 perms=0444] qcrypto.conf={
+openssl-3 tags=*
+}
+[perms=555] qnx-echo-server-net=E:/Project/qnx-linux-dual-vm-proxy/ipc-test/qnx-server-net/qnx-echo-server-net
+[perms=555] qnx-safety-monitor=E:/Project/qnx-linux-dual-vm-proxy/ipc-test/qnx-safety-monitor/qnx-safety-monitor
+[perms=555] qnx-dds-monitor=E:/Project/qnx-linux-dual-vm-proxy/ipc-test/qnx-dds-monitor/qnx-dds-monitor
+[perms=444] cyclonedds-qnx.xml=E:/Project/qnx-linux-dual-vm-proxy/ipc-test/qnx-dds-monitor/cyclonedds-qnx.xml
+#############################################
+### QTD
+#############################################
+qtd_public_key.pem=local/misc_files/qtd_public_key.pem
+fs-qtd.so=lib/dll/fs-qtd.so

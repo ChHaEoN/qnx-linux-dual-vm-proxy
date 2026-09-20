@@ -757,7 +757,8 @@ matches validating a DENSO PoC where one NVIDIA SoC family hosts *both*
 ADAS (this project's existing QNX Safety + Linux Compute work) *and*
 IVI/Cockpit as sibling partitions — MVP is a lightweight Linux IVI VM
 first, Android Automotive as a de-risked stretch after; (b) the
-GICv3/NISV finding itself is written up as interview material in
-[docs/interview-narrative.md](docs/interview-narrative.md)'s new Q&A
-section — it is a strong debugging story on its own, not just a
-blocker.
+GICv3/NISV finding itself is written up as interview material in a
+local-only narrative document (**2026-09-20, owner: kept on the build
+machine and no longer tracked in this public repo, like
+`docs/jd-mapping.md`'s subject matter**) — it is a strong debugging
+story on its own, not just a blocker.

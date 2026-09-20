@@ -1,0 +1,30 @@
+diff --git a/src/ddsrt/CMakeLists.txt b/src/ddsrt/CMakeLists.txt
+index 2a9c5d2..dc385c8 100644
+--- a/src/ddsrt/CMakeLists.txt
++++ b/src/ddsrt/CMakeLists.txt
+@@ -352,10 +352,23 @@ else()
+         "${source_dir}/src/rusage/posix/rusage.c"
+         "${source_dir}/src/time/darwin/time.c")
+     elseif(CMAKE_SYSTEM MATCHES "QNX")
+-      set(DDSRT_HAVE_NETSTAT TRUE)
++      # netstat/qnx/netstat.c does not build on SDP 8.0: it includes
++      # <sys/dcmd_io-net.h>, <net/ifdrvcom.h> and <hw/nicinfo.h> and uses
++      # nic_stats_t / DRVCOM_STATS / devctl(SIOCGDRVCOM). Those are io-pkt-era
++      # driver interfaces; none of the three headers exists anywhere in the
++      # SDP 8.0 tree (8.0 replaced io-pkt with io-sock), so the file is a hard
++      # compile error on every QNX 8.0 build.
++      #
++      # DDSRT_HAVE_NETSTAT is declared with #cmakedefine, so leaving it unset
++      # is the sanctioned "not available" path -- the only consumers are
++      # ddsc/tests/netstat.c and xtests/symbol_export.c, nothing in the core.
++      # Keep it TRUE for SDP 7.x, where the headers do exist.
++      if(CMAKE_SYSTEM_VERSION VERSION_LESS 8.0)
++        set(DDSRT_HAVE_NETSTAT TRUE)
++        list(APPEND sources "${source_dir}/src/netstat/qnx/netstat.c")
++      endif()
+       set(DDSRT_HAVE_RUSAGE TRUE)
+       list(APPEND sources
+-        "${source_dir}/src/netstat/qnx/netstat.c"
+         "${source_dir}/src/rusage/posix/rusage.c"
+         "${source_dir}/src/time/posix/time.c")
+     else()

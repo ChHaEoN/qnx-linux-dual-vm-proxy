@@ -1,0 +1,14 @@
+module av {
+  @final struct Claim {
+    @key unsigned long long seq;
+    unsigned long long tstamp;
+    octet cls;
+    octet conf;
+    unsigned long inference_us;
+  };
+  @final struct Verdict {
+    @key unsigned long long seq;
+    octet accepted;
+    octet reason;
+  };
+};

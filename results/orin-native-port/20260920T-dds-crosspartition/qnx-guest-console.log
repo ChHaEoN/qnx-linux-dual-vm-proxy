@@ -1,0 +1,44 @@
+---> Starting slogger2
+---> Starting PCI Services
+---> Starting fsevmgr
+# ---> Starting devb
+Path=0 ---> Mounting file systems
+- 
+ target=0 lun=0     Direct-Access(0) - VIRTIO  Rev: 
+---> Mounting file systems
+---> Starting Networking
+---> Starting sshd
+---> Starting misc
+=== Phase 3: static IP for br0/tap-qnx ===
+=== Phase 3: starting qnx-echo-server-net on :7000 ===
+server: echo endpoint listening on 0.0.0.0:7000 (frame=64 bytes)
+
+To exit QEMU, type <ctrl>a x
+
+Process count:22
+Startup complete
+monitor: safety monitor listening on :7100 (frame=64 bytes, conf_min=60%)
+QNX qnx-safety 8.0.0 2026/02/27-10:59:13EST QEMU_virt_(aarch64),_KVM_guest aarch64le
+qnx-dds-monitor: waiting for claims
+server: client connected from 192.168.100.1:47774
+server: read: No such process
+server: client session ended with an error; awaiting next client
+monitor: frame read failed: No such process
+monitor: client done: seen=0 accepted=0 rejected=0
+claim seq=1 cls=3 conf=95 us=124 -> ACCEPT (reason=0)
+claim seq=2 cls=3 conf=95 us=124 -> ACCEPT (reason=0)
+claim seq=3 cls=3 conf=95 us=124 -> ACCEPT (reason=0)
+claim seq=4 cls=3 conf=95 us=124 -> ACCEPT (reason=0)
+claim seq=5 cls=3 conf=95 us=124 -> ACCEPT (reason=0)
+claim seq=100 cls=42 conf=95 us=124 -> REJECT (reason=1)
+claim seq=101 cls=3 conf=10 us=124 -> REJECT (reason=3)
+claim seq=102 cls=3 conf=200 us=124 -> REJECT (reason=2)
+claim seq=103 cls=3 conf=95 us=999999 -> REJECT (reason=4)
+claim seq=104 cls=3 conf=95 us=124 -> ACCEPT (reason=0)
+claim seq=1 cls=3 conf=95 us=124 -> ACCEPT (reason=0)
+claim seq=2 cls=3 conf=95 us=124 -> ACCEPT (reason=0)
+claim seq=3 cls=3 conf=95 us=124 -> ACCEPT (reason=0)
+claim seq=4 cls=3 conf=95 us=124 -> ACCEPT (reason=0)
+claim seq=5 cls=3 conf=95 us=124 -> ACCEPT (reason=0)
+monitor: frame read failed: No such process
+monitor: client done: seen=0 accepted=0 rejected=0

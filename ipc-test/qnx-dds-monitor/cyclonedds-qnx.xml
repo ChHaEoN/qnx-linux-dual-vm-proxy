@@ -1,0 +1,18 @@
+<!-- QNX guest (Safety) side. Mirror image of the L4T config: bind to the
+     guest's own virtio-net interface, unicast back to the bridge address. -->
+<CycloneDDS xmlns="https://cdds.io/config">
+  <Domain id="any">
+    <General>
+      <Interfaces>
+        <NetworkInterface name="vtnet0" multicast="false"/>
+      </Interfaces>
+      <AllowMulticast>false</AllowMulticast>
+    </General>
+    <Discovery>
+      <ParticipantIndex>0</ParticipantIndex>
+      <Peers>
+        <Peer Address="192.168.100.1"/>
+      </Peers>
+    </Discovery>
+  </Domain>
+</CycloneDDS>

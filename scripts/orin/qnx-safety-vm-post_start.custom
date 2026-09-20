@@ -32,3 +32,24 @@ if [ -x /proc/boot/qnx-safety-monitor ]; then
 else
   echo "post_start.custom: /proc/boot/qnx-safety-monitor not staged; skipping"
 fi
+
+# Phase 3b (2026-09-20): the same Safety-side judgement, carried over DDS
+# instead of a raw TCP frame. Kept alongside the two above rather than
+# replacing either -- the echo endpoint and the frame monitor are what existing
+# recorded results talk to, and removing them would invalidate those paths.
+#
+# It needs a Cyclone DDS configuration, because the default picks ONE interface
+# by priority and would not choose the bridge. CYCLONEDDS_URI points at the
+# config staged beside it; without it the participant would come up on the
+# wrong interface and simply never discover the Compute side.
+echo "=== Phase 3b: starting qnx-dds-monitor (DDS over br0) ==="
+if [ -x /proc/boot/qnx-dds-monitor ]; then
+  if [ -r /proc/boot/cyclonedds-qnx.xml ]; then
+    CYCLONEDDS_URI=file:///proc/boot/cyclonedds-qnx.xml /proc/boot/qnx-dds-monitor &
+  else
+    echo "post_start.custom: cyclonedds-qnx.xml not staged; starting with defaults"
+    /proc/boot/qnx-dds-monitor &
+  fi
+else
+  echo "post_start.custom: /proc/boot/qnx-dds-monitor not staged; skipping"
+fi

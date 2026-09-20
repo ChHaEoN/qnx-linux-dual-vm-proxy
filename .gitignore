@@ -35,6 +35,17 @@ ipc-test/qnx-server/qnx-echo-server
 ipc-test/qnx-host-client/qnx-host-client
 ipc-test/qnx-server-net/qnx-echo-server-net
 ipc-test/qnx-safety-monitor/qnx-safety-monitor
+ipc-test/qnx-dds-monitor/qnx-dds-monitor
+
+# Interview / application material: local only, never published (owner,
+# 2026-09-20). docs/jd-mapping.md is the sibling case -- CLAUDE.md already
+# forbids surfacing it in README. Note this hides the file from the tip only:
+# it is present in earlier commits of this public repo.
+docs/interview-narrative.md
+# idlc-generated sources: regenerated at build time from av.idl, and they carry
+# no licence header of their own, so they are not committed.
+ipc-test/qnx-dds-monitor/av.c
+ipc-test/qnx-dds-monitor/av.h
 ipc-test/qnx-host-shmem-probe/hyp-shm-probe
 ipc-test/qnx-host-shmem-probe/hyp-shm-roundtrip
 ipc-test/qnx-guest-shmem-probe/gshm-probe

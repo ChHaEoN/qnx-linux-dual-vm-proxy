@@ -41,6 +41,16 @@ set "IPC_DIR=%REPO_ROOT%\ipc-test"
 set "BUILD_DIR=%REPO_ROOT%\qnx-safety-vm"
 set "SERVER_BIN_FWD=%REPO_ROOT_FWD%/ipc-test/qnx-server-net/qnx-echo-server-net"
 set "MONITOR_BIN_FWD=%REPO_ROOT_FWD%/ipc-test/qnx-safety-monitor/qnx-safety-monitor"
+REM Phase 3b (2026-09-20): the DDS-based cross-partition monitor. Unlike the two
+REM above it is NOT built by ipc-test's make -- it links against a Cyclone DDS
+REM static library cross-built separately (see the middleware notes), so it is
+REM staged only if it is already present. A missing binary is not an error here.
+set "DDSMON_BIN_FWD=%REPO_ROOT_FWD%/ipc-test/qnx-dds-monitor/qnx-dds-monitor"
+REM The DDS monitor cannot use Cyclone's default interface selection: with br0
+REM present it picks the wireless interface and then never discovers the
+REM Compute side, with no error. The config is staged beside the binary and
+REM post_start.custom points CYCLONEDDS_URI at it.
+set "DDSCFG_FWD=%REPO_ROOT_FWD%/ipc-test/qnx-dds-monitor/cyclonedds-qnx.xml"
 
 if "%QNX_INSTALL_ROOT%"=="" set "QNX_INSTALL_ROOT=%USERPROFILE%\qnx800"
 if not exist "%QNX_INSTALL_ROOT%\qnxsdp-env.bat" (
@@ -78,6 +88,44 @@ copy /Y "%SCRIPT_DIR%orin\qnx-safety-vm-post_start.custom" "%BUILD_DIR%\local\sn
 ) > "%BUILD_DIR%\local\snippets\ifs_files.custom" || (
   echo ERROR: could not stage ifs_files.custom & exit /b 1
 )
+REM Append the DDS monitor only when it has been cross-built. Staging a missing
+REM path would be silently skipped by mkifs anyway ([+optional] semantics make
+REM a zero exit code prove nothing), so the presence check is explicit.
+if exist "%DDSMON_BIN_FWD:/=\%" (
+  REM No space before >>: cmd writes everything between the text and the
+  REM redirect into the file, which would append a trailing space to the path.
+  echo [perms=555] qnx-dds-monitor=%DDSMON_BIN_FWD%>>"%BUILD_DIR%\local\snippets\ifs_files.custom"
+  echo [perms=444] cyclonedds-qnx.xml=%DDSCFG_FWD%>>"%BUILD_DIR%\local\snippets\ifs_files.custom"
+  echo   staged qnx-dds-monitor + cyclonedds-qnx.xml
+) else (
+  echo   NOTE: %DDSMON_BIN_FWD% absent -- building without the DDS monitor.
+)
+
+REM ---------------------------------------------------------------------------
+REM KNOWN LIMITATION, read before trusting a rebuild from this script.
+REM
+REM Two things this script CANNOT do, both verified on 2026-09-20:
+REM
+REM 1. AUTO-START. The staged binaries land at /proc/boot/, but nothing starts
+REM    them. post_start.custom lives in the system partition on disk-qemu, and
+REM    the pinned disk this project boots contains no reference to either
+REM    monitor. The working image starts them from a line inserted into the
+REM    [+script] startup-script block of output/build/ifs.build, AFTER
+REM    /proc/boot/startup.sh -- startup.sh is what brings up io-sock and the
+REM    static vtnet0 address, so binding a socket before it fails. The
+REM    local/snippets/ifs_start.custom hook is spliced in BEFORE startup.sh and
+REM    therefore cannot host those lines. mkqnximage regenerates ifs.build from
+REM    templates on every run, so that hand-inserted line is LOST each time.
+REM
+REM 2. THE STARTUP BINARY. mkqnximage takes startup-qemu-virt from the SDP --
+REM    the shipped one, which hangs under KVM after 17 bytes ("FOUND GICv3
+REM    ITS"). A KVM-bootable image needs our rebuilt startup first on
+REM    MKFS_PATH.
+REM
+REM For a KVM-bootable image with the monitors started, use the IFS-only route
+REM in ipc-test/qnx-dds-monitor/rebuild-ifs-with-dds.sh instead, which also
+REM avoids regenerating disk-qemu.
+REM ---------------------------------------------------------------------------
 
 echo [3/4] Rebuilding qnx-safety-vm via build-qnx-ifs.bat ...
 call "%SCRIPT_DIR%build-qnx-ifs.bat" || (
