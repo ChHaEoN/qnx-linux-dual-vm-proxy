@@ -760,5 +760,9 @@ first, Android Automotive as a de-risked stretch after; (b) the
 GICv3/NISV finding itself is written up as interview material in a
 local-only narrative document (**2026-09-20, owner: kept on the build
 machine and no longer tracked in this public repo, like
-`docs/jd-mapping.md`'s subject matter**) — it is a strong debugging
+`docs/jd-mapping.md`'s subject matter. It remains in 10 earlier commits,
+and the owner reviewed that and decided against rewriting history —
+the file entered at the repo's first commit, so a rewrite would change
+all 222 SHAs and invalidate 62 commit references across `docs/`. Settled;
+do not re-raise**) — it is a strong debugging
 story on its own, not just a blocker.

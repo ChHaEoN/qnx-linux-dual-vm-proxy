@@ -39,8 +39,16 @@ ipc-test/qnx-dds-monitor/qnx-dds-monitor
 
 # Interview / application material: local only, never published (owner,
 # 2026-09-20). docs/jd-mapping.md is the sibling case -- CLAUDE.md already
-# forbids surfacing it in README. Note this hides the file from the tip only:
-# it is present in earlier commits of this public repo.
+# forbids surfacing it in README.
+#
+# This hides the file from the tip only: it is present in 10 earlier commits of
+# this public repo. The owner reviewed that on 2026-09-20 and decided NOT to
+# rewrite history -- do not re-raise it. The reasoning, so it does not have to
+# be re-derived: the earliest commit carrying the file is the repo's FIRST one,
+# so a rewrite changes all 222 commit SHAs and breaks 62 commit references
+# across docs/ (findings.md 23, orin-native-port-plan.md 17, orin-port.md 11,
+# and others). Exposure is small (forks=0, stars=1, watchers=0) and the content
+# is interview prose, not a credential -- the risk is perception, not secrecy.
 docs/interview-narrative.md
 # idlc-generated sources: regenerated at build time from av.idl, and they carry
 # no licence header of their own, so they are not committed.
