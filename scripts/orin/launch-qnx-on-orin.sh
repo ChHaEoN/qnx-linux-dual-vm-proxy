@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 #
 # Phase 3
-# launch-qnx-on-orin.sh — start the QNX guest under QEMU/KVM on Orin Nano L4T.
+# launch-qnx-on-orin.sh — start the QNX guest under QEMU on Orin Nano L4T.
+# Defaults to TCG: -enable-kvm boots only with a startup-qemu-virt we rebuilt
+# (-fno-auto-inc-dec), never with the SDP's shipped one, and took no timing.
 #
 # Run on:  Orin Nano L4T, after:
 #   1. ./bootstrap-orin-l4t.sh                (and re-login for kvm group)
@@ -13,7 +15,7 @@
 #
 # This script intentionally mirrors scripts/launch-qnx-vm.sh almost
 # byte-for-byte. The QEMU args are identical; the only thing that
-# differs is the host (Orin Nano L4T instead of Graviton + Ubuntu).
+# differs is the host (Orin Nano L4T; the Graviton runtime host was never built).
 # That is the load-bearing twin claim — same IFS, same QEMU args,
 # different host.
 

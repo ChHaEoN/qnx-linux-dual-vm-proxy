@@ -2,7 +2,14 @@
 #
 # launch-qnx-vm.sh — start the QNX Safety-proxy VM on the runtime host
 #
-# Run on: arm64 runtime host (Graviton), after:
+# !! NEVER BUILT: there is no Graviton runtime host and there never was. !!
+# Non-metal Graviton exposes no /dev/kvm (ADR-002: docs/phase2-topology-decision.md),
+# so this KVM launch line has no host to run on, and no cloud-leg figure was ever
+# taken on AWS. Kept as the record of a falsified design. The as-built path is
+# scripts/qhv/ (QEMU TCG on the local Windows PC); the bridged QNX<->Linux
+# topology exists only on the Orin, via scripts/orin/.
+#
+# Run on: arm64 runtime host — see NEVER BUILT above, after:
 #   1. ./bootstrap-runtime-host.sh                 (and re-login for kvm group)
 #   2. sudo ./setup-bridge.sh                      (br0 + tap-qnx exist)
 #   3. scp output/ifs.bin, output/disk-qemu.vmdk AND output/disk-qemu

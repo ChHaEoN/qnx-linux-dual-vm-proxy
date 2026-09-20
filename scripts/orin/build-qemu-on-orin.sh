@@ -108,8 +108,10 @@ mkdir -p "${build}"
 cd "${build}"
 # aarch64-softmmu only: this is the sole target either twin leg boots, and
 # building every target would multiply the compile time on this board for no
-# benefit. --enable-kvm is kept because the qnx-safety-vm leg still owes a
-# hardware-timed KVM number if the GICv3/NISV defect is ever resolved.
+# benefit. --enable-kvm is kept because it works on this board as of 2026-09-18
+# with a startup-qemu-virt we rebuilt (-fno-auto-inc-dec); the SDP's shipped one
+# still hangs. That was a boot, not a timing run: no KVM figure was taken for the
+# qnx-safety-vm leg, and its published A2 numbers are TCG.
 "${src}/configure" \
   --target-list=aarch64-softmmu \
   --prefix="${prefix}" \

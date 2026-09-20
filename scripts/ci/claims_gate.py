@@ -365,6 +365,47 @@ def main():
     else:
         print("  ok -- no asserted violation (mentions inside denials or planned-markings are exempt by design)")
 
+    # --- prose beyond README ------------------------------------------------
+    # README was never the only text a reader acts on, and scripts/ is the worse
+    # surface, because those files are INSTRUCTIONS. Three of them told the
+    # reader to provision a Graviton runtime host and then probe for /dev/kvm on
+    # an instance type that has none; one printed a false host attribution
+    # directly beneath the published deltas. A false sentence in a script is
+    # executed, not merely read, so scripts/ is a hard failure.
+    #
+    # docs/ is WARN ONLY. It carries the project's superseded record on purpose,
+    # so its backlog is a migration to make, not a build to break.
+    #
+    # Struck-out text is removed before scanning, everywhere: this repo marks
+    # superseded prose with tildes and keeps it deliberately, and a scanner that
+    # read it as live text would report the honest record as a violation.
+    print()
+    print("-" * 100)
+    print("PROSE BEYOND README -- scripts/ is instructions (hard fail), docs/ is history (warn)")
+    print("-" * 100)
+    # gitignored, local-only: CI never sees them, so a local run must not either
+    skip = ("interview-narrative.md", "cv-architecture-brief.md")
+    for label, globs, hard in (
+            ("scripts/", ["scripts/**/*.sh", "scripts/**/*.bat",
+                          "scripts/**/*.ps1", "scripts/**/*.md"], True),
+            ("docs/", ["docs/*.md"], False)):
+        files = C.prose_files(repo, globs, exclude=skip)
+        found = []
+        for rel in files:
+            text = C.strip_superseded(C._read(os.path.join(repo, rel)))
+            for pattern, why, sentence in C.scan_denylist(text, rules):
+                found.append((rel, pattern, why, " ".join(sentence.split())))
+        print("  %-9s %3d files, %d asserted hit(s)%s"
+              % (label, len(files), len(found), "" if hard else "   [warn only]"))
+        for rel, pattern, why, sentence in found:
+            print("  %s %s -- %s" % ("FAIL" if hard else "WARN", rel, why))
+            print("       %s" % sentence[:150])
+            if hard:
+                failures.append("%s: %s" % (rel, sentence[:90]))
+        if found and not hard:
+            print("  ^ not failures: docs/ keeps superseded prose on purpose. This is the")
+            print("    migration backlog -- text a reader would still take as current.")
+
     # --- the repo's GitHub description -------------------------------------
     # WARN ONLY, deliberately. This is the most-exposed sentence about the
     # project and the one surface the gate structurally could not see -- it is

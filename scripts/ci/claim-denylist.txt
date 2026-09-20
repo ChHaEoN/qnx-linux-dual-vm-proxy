@@ -27,10 +27,20 @@
 \bKVM[- ]accelerated\b[^.]{0,40}\b(result|number|figure|measurement|benchmark)\b	no KVM-accelerated number was ever taken
 \bhardware[- ]timed\b[^.]{0,40}\b(KVM|result|figure)\b	no leg has produced a hardware-timed figure
 
-# --- Graviton: the cloud runtime leg was never built.
-# Any Graviton sentence must be marked planned/not-built, which the exemption
-# already permits; an unmarked assertion is a violation.
-\bGraviton\b	the Graviton runtime leg was never built; mark it planned or not-built
+# --- Graviton: the cloud runtime leg was never built and produced no figure.
+# NARROWED 2026-09-20. The old rule was a bare \bGraviton\b, written when
+# every Graviton sentence in this repo was false. That stopped being true on
+# 2026-09-19, when a QNX guest booted under KVM on a1.metal: there is now a
+# TRUE, assertable Graviton fact -- the shipped startup's hang, and its fix,
+# both reproduce on Cortex-A72. Banning the word banned the evidence with it.
+# What must stay banned is a Graviton *leg* or a Graviton *number*, so the rule
+# now requires one of those words in the same sentence, in either order.
+# Pinned both ways in tests/test_claims_gate_bites.py: it still blocks
+# "benchmarked ... on AWS Graviton", "Boot time on Graviton was 29 s" and "the
+# Graviton runtime host recorded the cloud numbers", and it allows "the hang
+# reproduces on AWS Graviton alike" (the defect evidence).
+\bGraviton\b[^.]{0,80}\b(leg|twin|runtime host|benchmark\w*|measur\w*|latenc\w*|throughput|boot[- ]time|figure|number)\b	no Graviton leg was ever built and no Graviton figure was ever taken
+\b(leg|twin|runtime host|benchmark\w*|measur\w*|latenc\w*|throughput|boot[- ]time|figure|number)\b[^.]{0,80}\bGraviton\b	no Graviton leg was ever built and no Graviton figure was ever taken
 
 # --- safety / certification: none of this exists and none of it is claimed.
 \bASIL\b	no ASIL claim is supportable; SDP 8.0 is not QNX OS for Safety

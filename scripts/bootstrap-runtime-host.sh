@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 #
-# bootstrap-runtime-host.sh — prepare a Graviton EC2 instance to run QEMU+KVM
+# bootstrap-runtime-host.sh — prepare an EC2 instance to run QEMU+KVM.
+#
+# !! THIS HOST WAS NEVER BUILT AND THIS PATH CANNOT WORK AS WRITTEN. !!
+# The c7g.large below is NON-METAL Graviton, which exposes no /dev/kvm at all
+# (Nitro does not pass EL2 through; proven on a t4g.small probe). The
+# "-enable-kvm" promise two lines down cannot be kept on this instance type,
+# and no cloud-leg figure was ever taken on AWS. See ADR-002 in
+# docs/phase2-topology-decision.md. Only *.metal instances expose /dev/kvm.
+# The as-built cloud leg runs under QEMU TCG on the local Windows PC; the live
+# bring-up path is scripts/qhv/. Kept as the record of a falsified design, and
+# as a starting point for a *.metal host.
 #
 # Target instance: c7g.large, arm64 (Graviton3), Ubuntu 22.04 LTS, >= 30 GB EBS
 # Run as: a sudo-capable user (the default `ubuntu` user works)
@@ -41,7 +51,10 @@ if [[ -e /dev/kvm ]]; then
   echo "  /dev/kvm exists"
   ls -l /dev/kvm
 else
-  echo "  /dev/kvm NOT FOUND — confirm the instance type supports KVM (c7g.* should)" >&2
+  echo "  /dev/kvm NOT FOUND — this is EXPECTED on c7g.* and on every other" >&2
+  echo "  non-metal Graviton: Nitro does not pass EL2 through, so no /dev/kvm" >&2
+  echo "  appears. Proven on a t4g.small probe; see ADR-002 in" >&2
+  echo "  docs/phase2-topology-decision.md. Only *.metal instances expose it." >&2
 fi
 
 echo "  Adding ${USER} to the kvm group (takes effect after logout/login) ..."

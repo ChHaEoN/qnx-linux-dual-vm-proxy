@@ -17,7 +17,7 @@ REM name at the raw extent disk-qemu; BOTH must be scp'd together or QEMU
 REM on the runtime host cannot open the disk.
 REM
 REM These artifacts are gitignored. Do not commit them -- the QNX NCEULA
-REM forbids redistributing QNX-derived binaries. scp them to the Graviton
+REM forbids redistributing QNX-derived binaries. scp them to the
 REM runtime host and discard the local copy when done.
 REM
 REM Reproducibility: this is a thin wrapper around mkqnximage, the same
@@ -115,7 +115,10 @@ popd
 
 echo.
 echo Next: scp ALL THREE files (ifs.bin, disk-qemu.vmdk, disk-qemu) to the
-echo Graviton runtime host, then run launch-qnx-vm.sh there. The .vmdk is just
+echo runtime host, then run launch-qnx-vm.sh there. NOTE: the Graviton runtime
+echo host was never built -- non-metal Graviton has no /dev/kvm (ADR-002), and
+echo no cloud-leg figure was ever taken on AWS. The as-built path runs these
+echo images locally under QEMU TCG via scripts\qhv\. The .vmdk is just
 echo a descriptor -- the raw extent disk-qemu must travel with it. Do NOT commit
 echo them to git (they are gitignored, but double-check).
 

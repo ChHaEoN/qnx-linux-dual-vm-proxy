@@ -19,6 +19,7 @@ One trap encoded here on purpose: `cycles_per_sec` in the IPC CSVs is a
 hardcoded 1000000000 placeholder on the hw leg (its own notes field says
 "clock_gettime-ns-not-cycles"). It is NEVER a cycles->time conversion factor.
 """
+import glob
 import io
 import os
 import re
@@ -295,6 +296,33 @@ def scan_denylist(markdown_text, rules):
             if re.search(pattern, sentence, re.I) and classify_sentence(sentence) == "asserted":
                 hits.append((pattern, why, sentence))
     return hits
+
+
+STRIKETHROUGH = re.compile(r"~~.*?~~", re.S)
+
+
+def strip_superseded(text):
+    """Drop ~~struck-through~~ spans before scanning.
+
+    This repo marks superseded prose with ~~ ~~ and keeps it deliberately, so a
+    scanner that read it as live text would report the project's own honest
+    record as a violation. Text outside the markers is untouched.
+    """
+    return STRIKETHROUGH.sub(" ", text)
+
+
+def prose_files(repo, patterns, exclude=()):
+    """Sorted repo-relative paths matching any glob, minus `exclude` basenames.
+
+    `exclude` exists so a gitignored local-only file cannot make a developer's
+    run disagree with CI's: CI never sees those files, so neither may we.
+    """
+    out = set()
+    for pat in patterns:
+        for path in glob.glob(os.path.join(repo, pat), recursive=True):
+            if os.path.isfile(path) and os.path.basename(path) not in exclude:
+                out.add(os.path.relpath(path, repo).replace(os.sep, "/"))
+    return sorted(out)
 
 
 # --------------------------------------------------------------------------

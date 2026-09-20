@@ -117,18 +117,22 @@ cat <<'EOF'
 *** NOT a host-only comparison — read before quoting these numbers ***
 Per docs/digital-twin-design.md §4, this diff confounds THREE variables
 at once, not one:
-  1. host          Graviton3 Neoverse-V1 (cloud)  vs.  Tegra234 A78AE (hw)
-  2. acceleration  TCG (cloud, no /dev/kvm)        vs.  TCG (hw; how these CSVs
-                    were recorded -- 2026-09-18 a startup-qemu-virt we rebuilt
-                    boots that board under -enable-kvm, the shipped one still
-                    hangs; no KVM run of this benchmark exists)
+  1. host + ISA    x86_64 Windows PC, QEMU TCG   vs.  Tegra234 A78AE, aarch64
+                    ^ what the "cloud" CSV was ACTUALLY recorded on. The ISA
+                    differs too, not just the micro-architecture. Graviton3
+                    Neoverse-V1 was this leg's DESIGN intent and never ran:
+                    non-metal Graviton exposes no /dev/kvm (ADR-002), and no
+                    cloud-leg figure was ever taken on AWS.
+  2. acceleration  TCG            vs.  TCG   <- this one MATCHES
+                    Both CSVs were recorded under TCG, so acceleration is not a
+                    confound here. It is not matched by design: the hw board's
+                    KVM path works as of 2026-09-18 (an IFS with a
+                    startup-qemu-virt we rebuilt with -fno-auto-inc-dec boots
+                    under -enable-kvm; the shipped SDP startup still hangs), but
+                    no KVM run of this benchmark exists and no KVM timing was
+                    ever taken, so this diff stays TCG-vs-TCG.
   3. transport+OS  single-OS QNX<->QNX console     vs.  heterogeneous
                     QNX<->Linux virtio-net/br0
-Variable 2 matches here (both TCG) because that is what both CSVs were recorded
-under — ~~only because HW's KVM path is separately blocked, not by design~~
-(2026-09-18: that path is no longer blocked — an IFS with a startup-qemu-virt we
-rebuilt with -fno-auto-inc-dec boots under -enable-kvm, while the shipped SDP
-startup still hangs; no KVM timing exists, so this diff is still TCG-vs-TCG).
 The cloud number is a
 mechanism-alive sanity figure (15 samples, capped by an unresolved
 qvm/TCG virtio-queue stall); the HW number is a real, stable 100k-sample

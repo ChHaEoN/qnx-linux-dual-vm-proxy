@@ -2,7 +2,11 @@
 #
 # Phase 3
 # bootstrap-orin-l4t.sh — prepare a Jetson Orin Nano running L4T (JetPack 6)
-#                        to host the QNX guest under QEMU/KVM.
+#                        to host the QNX guest under QEMU.
+#
+# Acceleration: TCG is what the measured A2 leg ran under. -enable-kvm boots on
+# this board only with a startup-qemu-virt we rebuilt (-fno-auto-inc-dec); the
+# SDP's shipped one hangs after 17 bytes. No KVM timing was ever taken.
 #
 # Run on:  Jetson Orin Nano Dev Kit, after JetPack 6.x is flashed and the
 #          Ubuntu first-run wizard is complete.

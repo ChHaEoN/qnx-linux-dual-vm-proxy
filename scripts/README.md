@@ -1,8 +1,9 @@
 # Scripts — workflow
 
 This folder holds the bring-up scripts. They are split between the
-**build host** (x86_64) and the **runtime host** (arm64 Graviton)
-because QNX SDP 8.0 does not have an arm64 host toolchain — see
+**build host** (x86_64) and the **runtime host** (arm64 Graviton —
+*designed, never built; see the banner below*) because QNX SDP 8.0
+does not have an arm64 host toolchain — see
 [../docs/bsp-selection.md](../docs/bsp-selection.md) for the full
 rationale.
 
@@ -13,8 +14,9 @@ installer). The previous EC2 t3.medium walkthrough is retained as
 an explicit fallback further down this page. Honest framing: the
 Windows-host pivot removes ssh / X11 / browser-flow friction and EC2
 billing for the build side, but it does **not** demonstrate
-cross-host build determinism (Phase 1 will verify Windows-built vs.
-EC2-built IFS equivalence) and it is **not** closer to a real DRIVE
+cross-host build determinism (that check was **withdrawn** on
+2026-05-07 — see the F5 note in ../docs/bsp-selection.md — and none is
+planned) and it is **not** closer to a real DRIVE
 OS customer build environment than EC2.
 
 > **Cost discipline:** the runtime host (`c7g.large`) bills around
@@ -24,6 +26,18 @@ OS customer build environment than EC2.
 > actively using it; data egress for the IFS scp is negligible.
 > There is no automated teardown — when you finish a session, run
 > `aws ec2 stop-instances` (or terminate) yourself.
+
+> ### The AWS runtime host was never built — read this before step 4
+>
+> Steps 4–7 below provision a Graviton runtime host and launch two VMs over
+> a bridge under KVM. **That topology was falsified and never ran.** Non-metal
+> Graviton (including `c7g.large`) exposes no `/dev/kvm` at all, so there is no
+> host for it — see [ADR-002](../docs/phase2-topology-decision.md). **No
+> cloud-leg figure was ever taken on AWS**; every QHV boot and IPC number
+> labelled "cloud" in this repo was produced on the local Windows PC under
+> QEMU TCG. The live path is [`qhv/`](qhv/): a QHV host plus a single QNX
+> guest, no KVM, no bridge, no Linux guest. Steps 4–7 are kept as the record
+> of the design that was tested and rejected.
 
 > **License:** the user must obtain their own QNX Everywhere license
 > from <https://qnx.com/getqnx> and install QNX SDP 8.0 themselves.
@@ -91,9 +105,12 @@ scp qnx-safety-vm\output\disk-qemu.vmdk    ubuntu@<runtime-host>:~/output/
 scp qnx-safety-vm\output\disk-qemu         ubuntu@<runtime-host>:~/output/
 ```
 
-Then continue with **steps 4–7 of the fallback path below** (provision
-runtime, set up bridge, launch VMs) — those steps are runtime-host
-side and identical regardless of where the IFS was built.
+**Do not continue with steps 4–7 below.** They describe the
+dual-VM-over-bridge topology on a Graviton runtime host, which
+[ADR-002](../docs/phase2-topology-decision.md) falsified and which was never
+built. The as-built path is [`qhv/`](qhv/), run on this same Windows PC under
+QEMU TCG: a QHV host plus a single QNX guest — no KVM, no bridge, no Linux
+guest.
 
 ---
 
@@ -143,7 +160,7 @@ will scp to the runtime host. **Do not commit them.** (`disk-qemu.vmdk`
 is only a descriptor pointing at the raw extent `disk-qemu` — both must
 travel together; see the split-VMDK note in the primary path above.)
 
-### 4. Provision the runtime host (arm64 Graviton)
+### 4. Provision the runtime host (arm64 Graviton) — NEVER BUILT
 
 Launch a `c7g.large` Ubuntu 22.04 arm64 instance with at least 30 GB
 EBS in a region that offers Graviton (e.g. `us-east-1`, `eu-central-1`).
@@ -153,9 +170,10 @@ SSH in and run:
 ./bootstrap-runtime-host.sh
 ```
 
-This installs `qemu-system-arm`, bridge tooling, and verifies that
-`/dev/kvm` is exposed. You may need to log out and back in for
-`kvm` group membership to take effect.
+This installs `qemu-system-arm` and bridge tooling, then probes for
+`/dev/kvm`. **That probe fails on `c7g.large`** — non-metal Graviton
+exposes none; only `*.metal` instances do. You may need to log out and
+back in for `kvm` group membership to take effect.
 
 ### 5. scp the IFS to the runtime host
 
