@@ -429,7 +429,7 @@ Deliberately absent from git, per the QNX licence: the `qnx-safety-vm/` and
 ## Author
 
 Hao Chen — Research Engineer at DENSO Automotive Deutschland GmbH.
-Personal project; no DENSO IP.
+Personal project, built on my own time and hardware.
 
 ---
 
