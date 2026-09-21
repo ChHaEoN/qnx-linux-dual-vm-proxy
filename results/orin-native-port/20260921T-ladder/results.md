@@ -35,8 +35,12 @@ it now detects and records the governor rather than silently skipping it on a
 host that has no cpufreq, verifies the core map and the QEMU affinity readback,
 requires exactly one guest process, asserts every arm produced k rounds, and
 writes a `stamp.json`. It also gained an opt-in arm C. **None of that was in
-effect for this run**, which is why the section below exists. Current version:
-sha256 `ed5669819c623e8e4ae49e39a6a8663b0aca6900891a558d2a9e0d1fd88a81d1`.
+effect for this run**, which is why the section below exists. The revision
+that then ran the a1.metal ladder is sha256
+`ed5669819c623e8e4ae49e39a6a8663b0aca6900891a558d2a9e0d1fd88a81d1` (commit
+`002bc7a`); later revisions are in `git log` for the file, not restated here,
+because a "current version" line in a dated record goes false the next time
+the script changes -- which this one did the same day.
 
 ---
 

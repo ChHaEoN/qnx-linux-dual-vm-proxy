@@ -10,6 +10,12 @@ Host: `a1.metal`, Graviton1 / Annapurna, 16× Cortex-A72, Ubuntu 22.04
 QNX guest under `-enable-kvm` on `br0`/`tap-qnx`. Full configuration in
 [`raw/stamp.json`](raw/stamp.json).
 
+Script **as run**: `orin-native/gpu-concurrency/run-ladder.sh`, sha256
+`ed5669819c623e8e4ae49e39a6a8663b0aca6900891a558d2a9e0d1fd88a81d1`, commit
+`002bc7a`. The stamp format of that revision did not yet record the script's
+own hash, so it is recorded here instead. The script was revised afterwards,
+the same day, after an adversarial review -- see `git log` for the file.
+
 ## Results
 
 | arm | path | Orin (A78AE) | a1.metal (A72) |

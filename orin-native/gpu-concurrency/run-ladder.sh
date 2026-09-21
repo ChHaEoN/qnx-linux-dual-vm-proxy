@@ -12,13 +12,10 @@
 #   C  null       client -> guest, echo server      guest path, no judging
 #   D  guest      client -> guest, safety monitor   the published path
 #
-# ARM C IS OPT-IN AND COSTS NOTHING EXTRA. Without it, D-B is reported as "the
+# ARM C IS OPT-IN (ARM_C_PORT=7000). Without it, D-B is reported as "the
 # crossing" when it is really the crossing PLUS the monitor's own read, verdict
-# and write inside the guest. The guest image already runs a verbatim echo
-# server on :7000 alongside the monitor on :7100, so arm C is one more probe
-# target, not one more program. Set ARM_C_PORT=7000 to include it. It is opt-in
-# rather than default because not every image starts that server, and an arm
-# that silently disappears is worse than one that is absent by choice.
+# and write inside the guest. On a1.metal on 2026-09-21, C and D landed 0.04 us
+# apart: the monitor's own work is not measurable against the transport.
 #
 # B USES A NETWORK NAMESPACE ON PURPOSE. Sending to br0's own address
 # (192.168.100.1) does NOT cross the bridge: Linux routes a local address via
@@ -26,20 +23,23 @@
 # same thing as A while looking like it measured the bridge. A veth peer inside
 # a namespace is on the far side of br0, so the traffic is really bridged.
 #
-# WHY k, NOT n. Measured on the Orin (results/.../20260921T-ladder): within one
-# run of 3000 samples the median is pinned to +/-0.2%, but between two runs of
-# the same arm it moves 13.3%. Run-to-run variation is ~69x the sampling noise
-# at p50. So n is 1000 and the budget goes to k rounds, interleaved -- every
-# round runs the whole arm set back to back, so drift hits all arms equally
-# instead of only the ones that ran late. Owner decision OD11, 2026-09-21.
+# WHY k, NOT n (OD11). Within one run of 3000 samples the median is pinned to
+# +/-0.2%, but between two runs of the same arm it moves 13.3%. So n is 1000 and
+# the budget goes to k interleaved rounds. These arms carry no load, so unlike
+# run-interference.sh and run-saturation.sh they need no counterbalancing.
 #
-# THIS SCRIPT WRITES A RUN STAMP, and that is not decoration. The first ladder
-# run produced 36 arm files and no configuration record at all: no governor
-# observation, no QEMU version, no launch line, no image hashes, no confirmation
-# the pinning was applied. Its own results.md has to say it cannot be exactly
-# reproduced. A second host compared against a partially specified first host is
-# a weak comparison, so the stamp is a precondition for comparing, not a nicety.
+# A LEFTOVER SERVER IS REFUSED. Arm A reaches 127.0.0.1:7100 by address, so an
+# old monitor-native still running from an earlier session would answer it --
+# the new one would fail to bind, and the reachability check would pass against
+# the wrong process. Found by review, pre-existing; now checked before start.
+#
+# The shared controls live in lib-measure.sh, one copy for all three scripts.
 set -u
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[ -r "$here/lib-measure.sh" ] || { echo "FATAL: lib-measure.sh not found beside $0" >&2; exit 1; }
+. "$here/lib-measure.sh"
+[ "${MEASURE_LIB_LOADED:-}" = 1 ] || { echo "FATAL: lib-measure.sh did not load" >&2; exit 1; }
+[ $# -eq 0 ] || die "positional arguments are not read (set N=, K= in the environment); got: $*"
 
 N="${N:-1000}"
 K="${K:-12}"
@@ -50,80 +50,36 @@ ARM_C_PORT="${ARM_C_PORT:-}"
 GUEST="${GUEST:-192.168.100.10}"
 NS="ladder"
 NS_IP="192.168.100.20"
-OUT="${OUT:-$HOME/ladder-out}"
+PROBE="$HOME/interference/latency_probe.py"
+MON="$HOME/ladder/monitor-native"
 
-CORE_MON="${CORE_MON:-3}"     # native monitor, host side and namespace side
-CORE_PROBE="${CORE_PROBE:-4}" # the instrument, off the measured cores
+CORE_MON="${CORE_MON:-3}"        # native monitor, host side and namespace side
+CORE_PROBE="${CORE_PROBE:-4}"    # the instrument, off the measured cores
 QEMU_CORES="${QEMU_CORES:-0-2}"  # guest vCPUs + QEMU I/O thread
 
-say() { echo "[$(date -u +%H:%M:%S)] $*"; }
-die() { echo "FATAL: $*" >&2; exit 1; }
-mkdir -p "$OUT"
-
-# ---------------------------------------------------------------- teardown
 cleanup() {
 	say "cleanup"
 	for p in $(pgrep -f "[m]onitor-nativ" 2>/dev/null); do kill "$p" 2>/dev/null; done
 	sudo ip netns pids "$NS" 2>/dev/null | while read -r p; do sudo kill "$p" 2>/dev/null; done
 	sudo ip netns del "$NS" 2>/dev/null
 	sudo ip link del veth-l 2>/dev/null
-	if [ "${GOV_STATE:-}" = "pinned" ] && [ -n "${PRE_GOV:-}" ]; then
-		for c in /sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_governor; do
-			echo "$PRE_GOV" | sudo tee "$c" >/dev/null
-		done
-		say "governor restored: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor)"
-	fi
+	m_governor_restore
 }
+
+# ---------------------------------------------------------------- preflight
+# Checked BEFORE the trap is set, so a refusal here cannot kill a server this
+# run did not start.
+pgrep -f "[m]onitor-nativ" >/dev/null \
+	&& die "a monitor-native is already running; it would answer arm A in place of this run's. Stop it first."
+[ -x "$MON" ] || die "$MON missing -- run build-monitor-native.sh on this host"
+[ -r "$PROBE" ] || die "missing: $PROBE"
 trap cleanup EXIT
 
-# ---------------------------------------------------------------- cores
-# The literal core numbers were written for a 6-core board. They are checked
-# rather than trusted: on a host with fewer cores taskset would fail per-call
-# and the run would continue unpinned, which is the same silent-invalidation
-# failure the governor block used to have.
-NCPU="$(nproc)"
-for c in "$CORE_MON" "$CORE_PROBE"; do
-	[ "$c" -lt "$NCPU" ] || die "core $c requested but this host has $NCPU (0-$((NCPU-1)))"
-done
-QC_HI="${QEMU_CORES##*-}"
-[ "$QC_HI" -lt "$NCPU" ] || die "QEMU_CORES=$QEMU_CORES exceeds $NCPU cores"
+m_prepare_out "${OUT:-}" "$HOME/ladder-out"
+m_check_cores "$QEMU_CORES" "$CORE_MON" "$CORE_PROBE"
 say "cores: $NCPU total; qemu=$QEMU_CORES monitor=$CORE_MON probe=$CORE_PROBE"
-
-# ---------------------------------------------------------------- governor
-# DETECT, RECORD, OR FAIL -- never skip silently. An arm measured with the
-# governor pinned against an arm measured without it is not a comparison, and
-# on bare-metal EC2 there is no cpufreq sysfs at all, so the old unconditional
-# `cat` left PRE_GOV empty, pinned nothing, and said nothing.
-GOV_STATE="unknown"
-PRE_GOV=""
-if [ -r /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor ]; then
-	PRE_GOV="$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor)"
-	for c in /sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_governor; do
-		echo performance | sudo tee "$c" >/dev/null
-	done
-	now="$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor)"
-	[ "$now" = "performance" ] || die "governor is present but would not pin (still '$now')"
-	GOV_STATE="pinned"
-	say "governor: $PRE_GOV -> performance (will restore)"
-else
-	GOV_STATE="absent"
-	say "governor: NO cpufreq on this host -- nothing to pin, recorded as absent"
-fi
-CPUIDLE="absent"
-[ -d /sys/devices/system/cpu/cpu0/cpuidle ] && CPUIDLE="present"
-
-# ---------------------------------------------------------------- the guest
-# Exactly one, or the pgrep picked an arbitrary process and the pinning went to
-# the wrong one.
-QPIDS="$(pgrep -f "[q]emu-system-aarch64" || true)"
-QN="$(printf '%s\n' "$QPIDS" | grep -c . || true)"
-[ "$QN" -eq 1 ] || die "expected exactly 1 qemu-system-aarch64, found $QN -- start the guest with launch-qnx-kvm-bridged.sh"
-QPID="$QPIDS"
-for t in $(ls "/proc/$QPID/task"); do sudo taskset -pc "$QEMU_CORES" "$t" >/dev/null 2>&1; done
-QTHREADS="$(ls "/proc/$QPID/task" | wc -l)"
-QAFF="$(taskset -pc "$QPID" 2>/dev/null | sed 's/.*: //')"
-[ -n "$QAFF" ] || die "could not read qemu affinity back -- pinning unverified"
-say "qemu pid=$QPID pinned to $QEMU_CORES (readback '$QAFF', $QTHREADS threads)"
+m_governor_pin
+m_pin_qemu "$QEMU_CORES"
 
 # ---------------------------------------------------------------- arm B setup
 sudo ip netns del "$NS" 2>/dev/null
@@ -137,81 +93,43 @@ sudo ip netns exec "$NS" ip link set veth-ns up
 sudo ip netns exec "$NS" ip link set lo up
 say "netns $NS up at $NS_IP behind br0"
 
-# one native monitor on the host (serves arm A via 127.0.0.1; INADDR_ANY),
-# one inside the namespace (serves arm B). Same binary, same source as the
-# guest's -- one source, two targets, no #ifdef fork.
-MON="$HOME/ladder/monitor-native"
-[ -x "$MON" ] || die "$MON missing -- run build-monitor-native.sh on this host"
+# one native monitor on the host (arm A, INADDR_ANY), one in the namespace
+# (arm B). Same source as the guest's -- one source, two targets, no #ifdef.
 taskset -c "$CORE_MON" "$MON" "$PORT" > "$OUT/monitor-host.log" 2>&1 &
+MON_HOST=$!
 sudo ip netns exec "$NS" taskset -c "$CORE_MON" "$MON" "$PORT" \
 	> "$OUT/monitor-ns.log" 2>&1 &
 sleep 2
+kill -0 "$MON_HOST" 2>/dev/null || die "host monitor-native exited -- see $OUT/monitor-host.log (port in use?)"
 
 # ---------------------------------------------------------------- arm set
 ARMS=("A-loopback 127.0.0.1 $PORT" "B-bridge $NS_IP $PORT")
 [ -n "$ARM_C_PORT" ] && ARMS+=("C-null $GUEST $ARM_C_PORT")
 ARMS+=("D-guest $GUEST $PORT")
-
+TAGS=(); ARMJSON=""; sep=""
 for a in "${ARMS[@]}"; do
 	set -- $a
-	if timeout 3 bash -c "echo > /dev/tcp/$2/$3" 2>/dev/null; then
-		say "reachable: $1 ($2:$3)"
-	else
-		die "UNREACHABLE: $1 ($2:$3)"
-	fi
+	m_reachable "$2" "$3" "$1"
+	TAGS+=("$1"); ARMJSON="$ARMJSON$sep\"$1\""; sep=", "
 done
 
-# ---------------------------------------------------------------- the stamp
-STAMP="$OUT/stamp.json"
-{
-	printf '{\n'
-	printf '  "utc": "%s",\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-	printf '  "machine": "%s",\n' "$(uname -m)"
-	printf '  "kernel": "%s",\n' "$(uname -r)"
-	printf '  "ncpu": %s,\n' "$NCPU"
-	printf '  "governor_state": "%s",\n' "$GOV_STATE"
-	printf '  "governor_before": "%s",\n' "$PRE_GOV"
-	printf '  "cpuidle": "%s",\n' "$CPUIDLE"
-	printf '  "qemu_version": "%s",\n' "$(qemu-system-aarch64 --version 2>/dev/null | head -1)"
-	printf '  "qemu_cmdline": "%s",\n' "$(tr '\0' ' ' < "/proc/$QPID/cmdline" | sed 's/"/\\"/g')"
-	printf '  "qemu_threads": %s,\n' "$QTHREADS"
-	printf '  "qemu_affinity": "%s",\n' "$QAFF"
-	printf '  "pin": {"qemu": "%s", "monitor": %s, "probe": %s},\n' "$QEMU_CORES" "$CORE_MON" "$CORE_PROBE"
-	printf '  "monitor_native_sha256": "%s",\n' "$(sha256sum "$MON" | cut -d' ' -f1)"
-	printf '  "n": %s, "k": %s, "warmup": %s, "interval_ms": %s,\n' "$N" "$K" "$WARMUP" "$INTERVAL_MS"
-	printf '  "arms": ['
-	sep=""
-	for a in "${ARMS[@]}"; do set -- $a; printf '%s"%s"' "$sep" "$1"; sep=", "; done
-	printf ']\n}\n'
-} > "$STAMP"
-say "stamp written: $STAMP"
+m_write_stamp "$OUT/stamp.json" \
+	'"experiment": "ladder"' \
+	"\"pin\": {\"qemu\": \"$QEMU_CORES\", \"monitor\": $CORE_MON, \"probe\": $CORE_PROBE}" \
+	"\"monitor_native_sha256\": \"$(_sha "$MON")\"" \
+	"\"arms\": [$ARMJSON]"
 
 # ---------------------------------------------------------------- the run
-say "k=$K rounds, n=$N, warmup=$WARMUP, interval=${INTERVAL_MS}ms, ${#ARMS[@]} arms, interleaved"
+say "k=$K rounds, n=$N, warmup=$WARMUP, interval=${INTERVAL_MS}ms, ${#ARMS[@]} arms, interleaved -> $OUT"
 for r in $(seq 1 "$K"); do
 	for a in "${ARMS[@]}"; do
 		set -- $a
-		tag="$1_r$r"
-		taskset -c "$CORE_PROBE" python3 "$HOME/interference/latency_probe.py" \
-			--host "$2" --port "$3" --n "$N" --warmup "$WARMUP" \
-			--interval-ms "$INTERVAL_MS" --tag "$tag" --out "$OUT/lat-$tag.json" \
-			>> "$OUT/probe.log" 2>&1 || echo "  ARM FAILED: $tag" >&2
+		m_probe "$OUT" "$1_r$r" "$2" "$3"
 	done
 	say "round $r/$K done"
 done
 
-# ---------------------------------------------------------------- completeness
-# A missing arm file shifts the median instead of failing: the arms differ by
-# up to 6.4% between rounds, so k-1 files still produce a plausible number.
-bad=0
-for a in "${ARMS[@]}"; do
-	set -- $a
-	got="$(ls "$OUT"/lat-"$1"_r*.json 2>/dev/null | wc -l)"
-	if [ "$got" -ne "$K" ]; then
-		echo "INCOMPLETE: arm $1 has $got/$K rounds" >&2
-		bad=1
-	fi
-done
-[ "$bad" -eq 0 ] || die "the run is incomplete -- do not publish a median from it"
-
-say "wrote $(ls "$OUT"/lat-*.json | wc -l) arm files and a stamp to $OUT"
+m_governor_recheck
+m_stamp_after "$OUT/stamp.json"
+m_require_complete "$OUT" "${TAGS[@]}"
+m_summary "$OUT" "${TAGS[0]}" "${TAGS[@]}"

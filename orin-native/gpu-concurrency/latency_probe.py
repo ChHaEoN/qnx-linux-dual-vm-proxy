@@ -63,6 +63,24 @@ def percentile(sorted_values, p):
     return sorted_values[k]
 
 
+EXIT_DESYNC = 3
+
+
+def _abort(a, why, at, bad, rejected):
+    """Stop the arm on a desynchronised stream, loudly, and write nothing.
+
+    Writing no --out file is deliberate: a partial file with n below the
+    requested count is the shape a truncated arm used to take, and a partial
+    file can be mistaken for a complete one by anything that only counts files.
+    A missing file cannot. The exit code is distinct so a caller can tell
+    "the stream broke" from "could not connect" (2) or "nothing survived" (1).
+    """
+    print("FATAL desync tag=%s at sample %d of %d: %s  (bad=%d rejected=%d)"
+          % (a.tag, at, a.warmup + a.n, why, bad, rejected))
+    print("      the arm is aborted and no result file is written")
+    return EXIT_DESYNC
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", required=True)
@@ -104,14 +122,23 @@ def main():
                     break
                 got += chunk
         except OSError as e:
-            bad += 1
-            print("  sample %d: %s" % (i, e))
-            continue
+            # A timeout here leaves the late reply IN FLIGHT on this socket.
+            # Carrying on would read that reply as the next frame's, fail the
+            # sequence check, and stay one frame out of phase for the rest of
+            # the arm -- every later sample "bad", and the stall itself never
+            # entering the timings, so `max` would silently omit the worst
+            # event it exists to report. A desynchronised stream cannot be
+            # measured on. The arm aborts and writes no result file.
+            return _abort(a, "sample %d: %s" % (i, e), i, bad + 1, rejected)
         t1 = time.perf_counter()
 
         if len(got) != FRAME_TOTAL or got[:8] != frame[:8]:
-            bad += 1
-            continue
+            # Short read or wrong sequence: the same desynchronisation, found
+            # by the framing check instead of the timeout. Same response.
+            return _abort(a, "sample %d: framing lost (got %d of %d bytes, seq %s)"
+                          % (i, len(got), FRAME_TOTAL,
+                             "match" if got[:8] == frame[:8] else "MISMATCH"),
+                          i, bad + 1, rejected)
         if got[FRAME_HEADER + P_VERDICT] != 0:
             rejected += 1          # monitor disagreed: a fault, not a timing sample
             continue
