@@ -27,108 +27,66 @@ are explained under [Reading the ids](#reading-the-ids).
 ## At a glance
 
 - **What it is.** A study of the *software layer* under DRIVE OS-style
-  partitioning: BSP bring-up, hypervisor host and guest, IPC patterns, and
-  host→target portability. Not a reproduction of DRIVE OS, and not a certified
-  hypervisor.
+  partitioning: BSP bring-up, hypervisor host and guest, IPC, host→target
+  portability. Not a reproduction of DRIVE OS, and not a certified hypervisor.
 
 - **What runs now (A6).** L4T on the metal owning the Ampere GPU, with QNX SDP
-  8.0 running as a **KVM guest** beside it on the Orin's own Cortex-A78AE cores.
-  The guest boots only with a `startup-qemu-virt` rebuilt in this repo — the one
-  QNX ships hangs under KVM after 17 bytes of serial — so this is **not a
-  QNX-supported configuration**. A6 is the current direction, **not** a frozen
-  reference architecture.
+  8.0 as a **KVM guest** beside it on the Orin's own Cortex-A78AE cores. The
+  guest boots only with a `startup-qemu-virt` rebuilt in this repo — the one
+  QNX ships hangs under KVM — so it is **not a QNX-supported configuration**.
 
-- **What was achieved and then superseded (A4, A5).** The QNX Hypervisor
-  (`qvm`) ran **natively at EL2 on the board's own cores, with no QEMU**, booting
-  the cloud-leg QNX guest image and disk unchanged. M0–M5 are complete, every
-  rung a functional pass, and on 2026-09-17 a stock Linux kernel booted as a
-  guest of that hypervisor and held ten minutes; later the same day both guests
-  ran at once, so **S1-F is met (QNX plus Linux)**. That rung is a boot and a
-  completion, not a hold — the ten minutes is the Linux guest alone. It is not
-  withdrawn and not re-run: **under it no OS can use the GPU**, because
-  Tegra234's iGPU has no SMMU stream ID and its clock, reset and power go
-  through BPMP, for which QNX has no client driver. That is why the direction
-  moved to A6.
+- **What was achieved and superseded (A4, A5).** The QNX Hypervisor ran
+  natively at EL2 with no QEMU, hosting a QNX guest and a stock Linux kernel.
+  Every rung is a functional pass and none is timed. It is not withdrawn: it
+  stopped being the direction because **under it no OS can use the GPU**.
 
-- **What has been measured.** The **IPC figures** from the earlier emulated
-  architectures (A1–A3, history) are TCG throughout, and that comparison mixes
-  host, transport, OS pair and QEMU build — read it as "both mechanisms are
-  alive", never as a host-speed result. The **A6 figures** are on real silicon
-  with QNX as a KVM guest: GPU concurrency, interference, saturation and a
-  native L4T control (2026-09-19); a two-host boot comparison against AWS
-  `a1.metal` on a byte-identical image (2026-09-20); and an attribution ladder
-  (2026-09-21) that splits the 182 µs cross-partition round trip into a 53 µs
-  instrument floor, 3 µs of bridge and **126 µs of guest crossing**. All are
-  published under [`results/`](results/). A4 and A5 figures are unpublished
-  pending the licence consultation.
+- **What has been measured.** A1–A3 IPC figures are TCG throughout — read them
+  as "both mechanisms are alive", never as a host-speed result. A6 figures are
+  on real silicon with QNX as a KVM guest: GPU concurrency, interference and
+  saturation, a two-host boot comparison against AWS `a1.metal`, and an
+  attribution ladder that splits the 182 µs cross-partition round trip into
+  53 µs of instrument, 3 µs of bridge and **126 µs of guest crossing**.
 
-- **What it cannot show.** No certified Type-1 isolation, no quantified freedom
-  from interference, no real-time guarantee, no safety certification, no GPU,
-  camera or accelerator path for QNX. **No hardware-timed *hypervisor* number
-  exists and none ever will** — the QNX Hypervisor needs EL2, ARM KVM does not
-  nest on A78AE, and the 2026-09-20 owner decision withdrew the TCG legs that
-  were its only emulated route, so the hypervisor result is permanently a set of
-  functional passes with no timing. On A6, L4T ran a real TensorRT MNIST
-  classification on the GPU as one half of a cross-partition demonstration and
-  the QNX guest only judged the claim — one image per arm, one run each, a
-  demonstration that the shape works, not a result about how well. The
-  ten-minute run carried **one guest** and was idle apart from a heartbeat, so
-  it is not a load, stress or soak test. Whether a guest's memory came from the
-  second window is not shown. See
-  [Known limitations](#known-limitations-honest-framing).
+- **What it cannot show.** No certified Type-1 isolation, no freedom from
+  interference, no real-time guarantee, no safety certification, no accelerator
+  path for QNX. **No hardware-timed *hypervisor* number exists or ever will**:
+  QHV needs EL2, ARM KVM does not nest on A78AE, and the TCG legs that were its
+  only emulated route were withdrawn on 2026-09-20. See
+  [Known limitations](#known-limitations-honest-framing) and
+  [drive-os-comparison.md](docs/drive-os-comparison.md), whose verdicts are six
+  Partial, two Cannot and no Validates.
 
-- **What is next.** Settle A6's gate — which is now down to **sample sizes**,
-  since the 2026-09-20 decision fixed the rest: the TCG twin legs are withdrawn
-  and A6 measures under KVM only. A measurement design is proposed in
-  [`docs/measurement-design.md`](docs/measurement-design.md) and partly run: its
-  finding is that sample size was the wrong knob, because run-to-run variation
-  on this board is ~69× the sampling noise at p50, so the budget belongs in
-  repetitions. No board rung is outstanding. The licence consultation gates
-  publication rather than the work. GPU pass-through is the owner's target, on a
-  research track outside the current plan; no GPU stage has started.
-
-This is **not** DRIVE OS and not a certified hypervisor. The QEMU-TCG legs were
-software-layer proxies and are now history. QNX has run on the Orin's own
-Cortex-A78AE cores — the same core family as DRIVE Orin — both as a native EL2
-hypervisor and, now, as a KVM guest beside Linux, but as Experimental Software
-on a consumer dev kit, with no vendor support path, no certification, and no
-quantified freedom from interference. Documenting that gap precisely is the
-engineering point.
+- **What is next.** Settle A6's gate — now down to sample sizes. A design is in
+  [measurement-design.md](docs/measurement-design.md); its finding is that
+  sample size was the wrong knob, because run-to-run variation on this board is
+  ~69× the sampling noise at p50.
 
 ---
 
 ## What is machine-checked
 
-The rule this project works to is "never write *it works* without a log, a
-number, or a diff". That catches a figure that was never measured. It does not
-catch one that was true when written and drifted afterwards, which is how two
-published figures here were already found wrong — by hand. CI closes that class.
+"Never write *it works* without a log, a number, or a diff" catches a figure
+that was never measured. It does not catch one that was true when written and
+drifted — two published figures here were already found wrong that way, by
+hand. CI closes that class.
 
-| surface | check | on failure |
-|---|---|---|
-| Every figure `README.md` quotes | re-derived from the committed raw data in `logs/` and `results/`, through the project's own `scripts/twin/delta.awk` rather than a CI copy | **build fails** |
-| Units, separately from values | a claim quoting "33 ms" against a source measured in seconds is wrong even when the digits match | **build fails** |
-| Asserted claims the data does not support | a reviewable [denylist](scripts/ci/claim-denylist.txt) with a stated reason per rule, matched per *sentence* so that denials and planned-markings stay legal | **build fails** |
-| `scripts/**` prose | the same denylist. These files are instructions: a false sentence in one is executed, not merely read | **build fails** |
-| The Phase badge | derived from the Status table below, which is the single source of truth | **build fails** |
-| The GitHub **About** field | pinned in [`docs/repo-description.md`](docs/repo-description.md), given the same denylist and the same figure verification, and compared against the live value on push and weekly | **build fails on drift** |
-| `docs/**` and `results/**` prose | the same denylist | reported, never fails — these carry the project's superseded record on purpose |
+**Fails the build:** every figure this README quotes, re-derived from the
+committed data in `logs/` and `results/` through the project's own
+`scripts/twin/delta.awk`; units, separately from values; asserted claims the
+data does not support, against a reviewable
+[denylist](scripts/ci/claim-denylist.txt) matched per sentence so denials stay
+legal; the same denylist over `scripts/**`, whose files are instructions a
+reader executes; a strike-through in this file, which states current state and
+is rewritten rather than annotated; the Phase badge against the Status table;
+and the GitHub "About" field against its pin in
+[docs/repo-description.md](docs/repo-description.md).
 
-**What it does not do.** It never measures anything and never gates on an
-absolute number: a shared public runner is virtualised x86_64 hardware and any
-timing taken there would look like a result without being one. It recomputes
-arithmetic over data measured elsewhere, on known hardware. Nothing QNX is
-built, linked or booted in CI.
+**Reported, never fails:** the same denylist over `docs/**` and `results/**`,
+which carry the project's superseded record on purpose.
 
-**The About field is the interesting one**, because it was the surface nothing
-could see — it is repository metadata, not a file — and it drifted for exactly
-that reason, describing an AWS Graviton cloud twin long after this README and
-`docs/findings.md` recorded that no cloud leg was ever built. Note that the
-check is a sentence classifier, not a substring scan: the current description
-says the shipped QNX startup "hangs under KVM, on this board and on AWS
-Graviton alike", which is the project's cross-vendor defect evidence and must
-pass, while a claim of a Graviton *leg* must fail. A substring deny on
-"Graviton" cannot tell those apart.
+**Never done:** CI measures nothing and gates on no absolute number. A shared
+public runner cannot produce a meaningful timing for this target. Nothing QNX
+is built, linked or booted there.
 
 ---
 
@@ -156,71 +114,38 @@ These are deliberate. Documenting them precisely is the engineering point.
 
 ## Architecture
 
-Every QNX image is built on an x86_64 host (SDP 8.0 has Windows and Linux
-x86_64 host tools; no arm64, no macOS). The architecture has been replaced
-several times, and **every record keeps the id of the version it ran on**.
-Three QEMU versions are closed as history and will not be redone. Closed does
-not mean their targets were met: A1 never reached its 100k-iteration target,
-and KVM boot on the Orin never worked **with the SDP's shipped `startup-qemu-virt`**. The `qvm`/TCG stall (still not
-root-caused) and the GICv3/NISV KVM defect stay open as separate items. The
-stall is unchanged. The defect is open in QNX's **shipped** binary only: an IFS
-whose startup this repo rebuilt with `-fno-auto-inc-dec` boots under
-`-enable-kvm` on the Orin, while the shipped startup on the same launch line
-hangs the same way. No timing was taken, it is not a QNX-supported
-configuration, and the owner decided not to file it.
+Every QNX image is built on an x86_64 host; SDP 8.0 ships Windows and Linux
+x86_64 host tools and no arm64 or macOS ones. The architecture has been
+replaced several times and **every record keeps the id of the version it ran
+on**. Closed does not mean a target was met: A1 never reached its
+100k-iteration target, and KVM boot on the Orin never worked with the SDP's
+shipped `startup-qemu-virt`.
 
 ```
- HISTORY (closed, kept as architecture-version history, not redone)
-   A1  cloud leg      Windows PC, QEMU TCG: QHV qvm + one QNX guest
-                      closed; the TCG virtio-queue stall stays open
-   A2  Orin plain leg L4T host, QEMU TCG: QNX guest, br0/tap IPC to a
-                      native Linux client; closed; KVM boot blocked
-   A3  same images    A1's images unchanged, in TCG on both hosts; closed
-                            │
-                            v  Phase 3b: QEMU gone, hypervisor on silicon
- CURRENT  A4: native on the Jetson Orin Nano, no QEMU
-   QNX Hypervisor host at EL2 (VHE) on the Orin's own cores
-   entry (1) kexec from L4T (M1b-M4)   ──> qvm ──> QNX guest, unchanged
-   entry (2) firmware UEFI Shell, by hand, then our EFI loader (M5-F):
-             the one-core M1b host image only, attended, no qvm, no guest
-   S1-F met: Linux guest, then B5 ran QNX + Linux together, 2026-09-17
-                            │
-                            v  direction change (owner, 2026-09-18)
- NEXT  A6 (L4T on metal + QNX as KVM guest), gate not yet settled, then one campaign
-   A6 legs and twin-diff composition: not yet chosen (gate open)
-       [v1 -- native QNX Hypervisor as host -- superseded 2026-09-18, never frozen: no GPU under it
-        v1's planned legs, never run: native leg (Orin) + TCG twin leg (Windows)
-        + TCG twin leg (Orin); its twin diff would have set the two TCG legs
-        against each other and against native -- not run]
+ HISTORY (closed, not redone)
+   A1  cloud leg       Windows PC, QEMU TCG: QHV qvm + one QNX guest
+   A2  Orin plain leg  L4T host, QEMU TCG: QNX guest, br0/tap IPC
+   A3  same images     A1's images unchanged, TCG on both hosts
+   A4  native          QNX Hypervisor at EL2 on the Orin's own cores, no QEMU
+   A5  A4 + Linux      a Linux guest under qvm (S1-F), and both guests at once
 
- Reference (production DRIVE OS, not this repo):
-   Type-1 hypervisor, QNX Safety + Linux Compute partitions, vGPU,
-   ASIL-D Safety guest, certified IPC.
- This repo is a Digital Twin DESIGN of that architecture, not a reproduction.
+ CURRENT  A6: L4T on the metal owning the GPU, QNX as a KVM guest beside it
+   Linux is the supervisor and owns the guest's memory. There is no Type-1
+   layer: QHV needs EL2, and ARM KVM does not nest on A78AE.
 ```
 
-Every twin pair compares **whole bundles** (CPU, OS, TCG backend, QEMU
-build), never a single variable.
+A4 and A5 are real and are not withdrawn — they are simply no longer the
+direction, because **under a native QNX Hypervisor no OS can use the GPU** on
+Tegra234: the iGPU has no SMMU stream ID, and its clock, reset and power go
+through BPMP, for which QNX has no client driver.
 
-Detail: [architecture.md](docs/architecture.md) (twin-by-twin walkthrough),
-[digital-twin-design.md](docs/digital-twin-design.md) (twin methodology and
-the measured diffs, §1a and §5), [bsp-selection.md](docs/bsp-selection.md)
-(why the build/runtime split exists), and
-[the plan](docs/orin-native-port-plan.md#architecture-versions-and-the-measurement-freeze-decided-2026-09-11)
-(architecture versions and the measurement freeze).
+Two items stay open on their own: the `qvm`/TCG virtio-queue stall, never
+root-caused and only survivable; and the GICv3/NISV defect, which is open in
+QNX's **shipped** binary only and which the owner decided not to file.
 
-### Reading the ids
-
-- **A0–A6, v1** — architecture versions; every record keeps the id it ran on.
-  A6 (L4T on the metal, QNX as a KVM guest) is the current direction, not
-  frozen; v1 was superseded before it was ever frozen.
-- **M0–M5** — the native port's milestones. An **-F** suffix (M4-F, M5-F,
-  S1-F) marks a *functional* rung, which passes or fails on what appears,
-  never on a figure.
-- **S0–S5** — stages of the GPU pass-through research track; S1 is a Linux
-  guest without a GPU, and S2–S5 stay outside the plan.
-- **N** and **I** — owner decisions and implementation notes, local to
-  [m4-design.md](results/orin-native-port/20260909T1100Z/m4-design.md).
+Detail: [architecture.md](docs/architecture.md) ·
+[digital-twin-design.md](docs/digital-twin-design.md) ·
+[drive-os-comparison.md](docs/drive-os-comparison.md).
 
 ---
 
@@ -296,75 +221,31 @@ measured against the older artefacts and stay exactly as recorded.
 
 ## The native port (Phase 3b)
 
-QNX runs on the Orin's own cores with no QEMU. The host is entered by `kexec`
-from L4T — a shim carrying an arm64 `Image` header hands over at EL2 — or,
-on one attended session, by our own EFI loader launched by hand from the
-firmware's UEFI Shell.
+QNX ran on the Orin's own cores with no QEMU, entered by `kexec` from L4T — a
+shim carrying an arm64 `Image` header hands over at EL2 — or, on one attended
+session, by our own EFI loader from the firmware's UEFI Shell.
 
 | Rung | What it showed |
 |---|---|
-| **M0** | `kexec` hands over at EL2; the shim's own vectors report state |
+| **M0** | `kexec` hands over at EL2 |
 | **M1** | QNX boots natively; stock `pidin` reports Release 8.0.0 on a Cortex-A78ae |
 | **M2** | All six cores enter at EL2 through PSCI `CPU_ON` and pass a pinned load |
 | **M1b** | The VHE host runs at EL2 with E2H/TGE on every core |
 | **M3** | Native `qvm` boots the byte-identical cloud-leg QNX guest to its banner |
 | **M4-F** | The trace instrument works on the board |
-| **M5-F** | A UEFI cold boot reaches startup and procnto, attended, one session |
-| **S1-F** | A Linux guest without a GPU boots and holds ten minutes on its own; in the two-guest rung (B5) the QNX guest's banner and IPC complete beside it — met (QNX plus Linux) 2026-09-17 |
+| **M5-F** | A UEFI cold boot reaches startup and procnto — attended, one session |
+| **S1-F** | A Linux guest boots and holds ten minutes; in the two-guest rung (B5) the QNX guest's banner and IPC complete beside it — met (QNX plus Linux) |
 
-**What this is not.** On the board the hypervisor has hosted a QNX guest and,
-since 2026-09-17, a Linux guest that booted and held for ten minutes **while
-idle apart from a heartbeat** — not a load, stress or soak test, and the
-longest run this project has made. That hold carried the **Linux guest alone**.
-**Both guests at once, once:** on 2026-09-17 the two-guest rung (B5) ran for
-the first time and passed — the QNX guest reached its banner and completed
-its IPC beside the running Linux guest, with the memory canaries verified
-before and after. It is a boot and a completion, not a hold: **nothing is
-shown about duration with two guests**, no timing or latency claim follows
-from it (the figures are unpublished under the licence), and one observation
-is not a series — no isolation, containment or freedom-from-interference
-claim. No device pass-through. The host is entered from Linux in every timed
-rung; the cold boot carried only the one-core M1b host image, without `qvm` or
-a guest, times nothing, and has not been repeated. Whether the guest's RAM came
-from the second window is **not shown**: no host-side view of those addresses
-exists. No per-exit hypervisor number is judged or published.
+**Every rung is a functional pass, and none of them is timed.** The ten-minute
+hold carried the **Linux guest alone** and was idle apart from a heartbeat —
+not a load, stress or soak test. The two-guest rung ran **once**: a boot and a
+completion, not a hold, and nothing is shown about duration with two guests.
+Whether a guest's memory came from the intended second window is not shown.
+Figures from these rungs are unpublished under NC QDL v7 4.6(i), and **no
+hardware-timed hypervisor number exists or ever will.**
 
-**M4-F is narrower than it sounds.** Its two runs passed under different
-instrument versions, and the PC's cross-check covered only the early part of
-the window because the listing it compared was capped. On 2026-09-17 the first
-rung was re-run on the board under the frozen instruments and passed — the
-first time that counter had run on real silicon — so the two rungs now share
-a *parser* version, **but still not a counter binary**. The capped cross-check
-stands as an accepted, recorded limit.
-
-**The native port is not a way around the GICv3/NISV defect.** That defect
-blocked KVM-accelerated boot at the time, and was then tracked for filing. The
-native port removes QEMU instead of working around it.
-
-**2026-09-18:** the defect no longer blocks boot for an IFS whose `startup-qemu-virt` we rebuilt with `-fno-auto-inc-dec`, from board source written in this repo (`orin-native/startup/qemu-virt/`) — that IFS boots under `-enable-kvm` on the Orin and reaches `Startup complete` and the guest banner, while the SDP's shipped startup, same launch line and host, still stops after `FOUND GICv3 ITS`. The rebuilt arm's captures were byte-identical on QEMU 6.2.0 and 11.1.0. Nothing was timed, and this changes nothing about the native port. It says **nothing about the QNX Hypervisor under KVM**, which stays blocked for a separate reason: QHV needs EL2/nested virt, which ARM KVM lacks on A78AE. The filing track is closed by decision, not by the fix: the owner decided on 2026-09-18 not to file with QNX/BlackBerry.
-
-Three things this port cost that are worth naming: a pre-flight review stopped
-M1 before it ran, because the startup library drops to EL1 where its own
-vectors are **silent infinite loops** and no watchdog fires after `kexec` — a
-hang needs someone at the board with a way to cut power. `GUEST_EXIT`'s
-`status` field has no documented aarch64 meaning. And the UEFI path needed
-`acpi=off` so the firmware hands over a device tree rather than ACPI tables.
-
-The two second-cluster cores run a busy loop at a fixed, much lower rate whose
-cause is still open. OD3 (2026-09-16) settled what to do about it: cluster 1 is
-left out, `-P4` goes in the manifest, and no explanation is owed. **2026-09-18: v1 was
-superseded before it was ever frozen, and whether this matters to A6 is one of
-its open gate questions — A6 runs QNX as a KVM guest, so the host, not a QNX
-startup, decides the core split.**
-The M0–M1b records and captures are in this repo; the M3–M5 and S1 run records
-and every figure from M3 on stay unpublished until releasing them is cleared —
-the code, the plan and the procedure are here. **2026-09-19: that hold is
-scoped to the M-path and the native-QHV leg (A4). The A6 measurements — QNX as
-a KVM guest beside L4T — are published in full under `results/`.**
-
-Detail: [the plan](docs/orin-native-port-plan.md),
-[orin-native/startup/README.md](orin-native/startup/README.md),
-[results/orin-native-port/](results/orin-native-port/).
+Procedures, claims register and every owner decision: [the
+plan](docs/orin-native-port-plan.md).
 
 ---
 
@@ -372,59 +253,38 @@ Detail: [the plan](docs/orin-native-port-plan.md),
 
 Walkthrough: [scripts/README.md](scripts/README.md). Which scripts apply
 depends on the leg, per [ADR-002](docs/phase2-topology-decision.md):
-
-| Leg | Entry points |
-|---|---|
-| Cloud / x86 (A1, history) | `scripts/build-qhv.bat` → `scripts/launch-qhv-tcg.ps1`; configs in [`scripts/qhv/`](scripts/qhv/) |
-| Orin plain leg (A2, history) | [`scripts/orin/`](scripts/orin/): `bootstrap-orin-l4t.sh` → `setup-bridge-orin.sh` → `launch-qnx-on-orin-tcg.sh` |
-| Native (A4, current) | [`orin-native/`](orin-native/): shim, board directory, image builders, guest configs, M4/M5 tooling; procedures in [the plan](docs/orin-native-port-plan.md) |
-| QHV leg on the Orin (A3, history) | `scripts/twin/sync-qhv.sh` → `scripts/orin/build-qemu-on-orin.sh` (**QEMU ≥ 9.0 required**: the distro 6.2.0 hangs on the EL2 timer defect) → `launch-qhv-on-orin-tcg.sh` |
-| Twin diff | [`scripts/twin/diff-results.sh`](scripts/twin/diff-results.sh) |
+`scripts/qhv/` for A1, `scripts/orin/` for A2 and A6, `orin-native/` for the
+native port, `scripts/twin/` for the diff.
 
 ⚠️ `scripts/setup-bridge.sh` and `scripts/launch-linux-vm.sh` belong to the
-**Orin / heterogeneous** path, **not** the cloud leg — the cloud
-dual-VM-over-a-bridge topology they were written for was falsified by ADR-002
-and is kept only for that lineage.
+**Orin** path, not the cloud leg: the cloud dual-VM-over-a-bridge topology they
+were written for was falsified by ADR-002 and is kept only for that lineage.
 
 **Hard prerequisite:** you must obtain your own QNX Everywhere licence (free
 for personal use) and install QNX SDP 8.0 yourself. This repo does not — and
 per the licence, cannot — ship any QNX SDK component or QNX-derived binary.
-The governing text's clause 4.6(i) bars releasing evaluation results without
-prior written approval, which is why M3 and later figures are not here.
+Clause 4.6(i) of the governing text bars releasing evaluation results without
+consulting the supervising academic, which is why the A4 and A5 figures are
+unpublished.
 
-Other prerequisites: an x86_64 **Windows** (primary) or Linux (fallback)
-build host, ~50 GB free for the SDP install and IFS output; a Jetson Orin Nano
-Dev Kit (**JetPack 6 / L4T R36.4.7**); for the native port a **3.3 V-logic**
-USB-TTL adapter on the Orin's J14 header (never a 5 V-only one), with its TX
-on **J14 pin 3 only during an M5 session**, while the terminal runs, removed
-afterwards — and a way to cut power remotely, because a hung run needs a
-power cycle. AWS is optional: an `a1.metal` instance reproduces the KVM defect
-and its removal (2026-09-19, one run per arm, nothing timed) and served as the
-second host in the 2026-09-20 boot comparison. The Graviton runtime leg was
-never built.
+Board work needs a 3.3 V USB-TTL adapter on the Orin's J14 header (never a
+5 V-only one) and a way to cut power remotely: the CCPLEX watchdog does not
+fire after `kexec`, so a hung run needs a physical power cycle.
 
 ---
 
 ## Roadmap
 
-- [x] M0–M3 — the kexec shim, QNX natively, all six cores, the EL2 host, and
-      the QNX Hypervisor booting a QNX guest natively (2026-09-09 → 09-10)
-- [x] M4-F — the trace instrument works on the board (2026-09-11; its first
-      rung re-run under the frozen instruments and passed, 2026-09-17)
-- [x] M5-F — a UEFI cold boot reaches startup; the M path ends (2026-09-13)
-- [x] S1-F — a Linux guest without a GPU under native `qvm`: booted, held ten
-      minutes, and on the same day the two-guest rung (B5) ran the QNX guest
-      beside it to banner and IPC completion — **met (QNX plus Linux)**
-      (2026-09-17). Nothing ran under load, and the ten minutes is the Linux
-      guest alone
-- [ ] Settle A6's gate — down to sample sizes since the 2026-09-20 decision
-      withdrew the TCG twin legs
-- [ ] One measurement campaign on A6
-  **v1 was superseded before it was ever frozen — under a native QNX
-  Hypervisor no OS can use the GPU on Tegra234 (the iGPU has no SMMU stream, and
-  its clock/reset/power go through BPMP, for which QNX has no client). Next:
-  settle A6's gate — what the campaign measures, the sample sizes, and whether
-  the TCG twin legs survive — then one campaign on A6.**
+- [x] **M0–M5** — the kexec shim, QNX natively on six cores, the EL2 host, a
+      QNX guest under native `qvm`, the trace instrument, and a UEFI cold boot
+      (2026-09-09 → 09-13)
+- [x] **S1-F** — a Linux guest under native `qvm`, and both guests at once
+      (2026-09-17)
+- [x] **Phase 4** — the twin diff and the DRIVE OS verdicts: six Partial, two
+      Cannot, no Validates (2026-09-20)
+- [ ] **Settle A6's gate** — down to sample sizes; a design is proposed in
+      [measurement-design.md](docs/measurement-design.md)
+- [ ] **One measurement campaign on A6**
 - [ ] **Phase 7** _(stretch)_ — domain-controller extension, two tracks in
       [future-multi-soc.md](docs/future-multi-soc.md)
 
@@ -434,34 +294,21 @@ never built.
 
 | Path | What |
 |---|---|
-| [`docs/`](docs/) | narrative, decisions, findings — see the index below |
-| [`orin-native/`](orin-native/) | Phase 3b native-port source (our own code only): shim, board directory, tools, guest configs, M4/M5 tooling |
-| [`ipc-test/`](ipc-test/) | C99 IPC: QNX echo servers, host client, Linux client, shmem probes, shared frame code |
-| [`scripts/`](scripts/) | cloud-twin and Orin bring-up, QHV configs, twin sync and diff |
+| [`docs/`](docs/) | narrative, decisions, findings |
+| [`orin-native/`](orin-native/) | native-port source: shim, board directory, tools, guest configs |
+| [`ipc-test/`](ipc-test/) | C99 IPC: QNX servers, host and Linux clients, shmem probes, the shared frame |
+| [`scripts/`](scripts/) | bring-up, QHV configs, twin sync and diff, the CI claims gate |
 | [`logs/sample-boot/`](logs/sample-boot/) | curated boot and benchmark logs — the evidence |
-| [`results/`](results/) | benchmark CSVs, GICv3 reports, Phase 3b records (M3–M5 and S1 run records unpublished; the A6 KVM-guest measurements are published) |
-| [`skills/`](skills/) | study artefacts: FMEA, ISO 26262, ISO/SAE 21434, ASPICE, BSP porting, digital twin, Jetson, Tegra virtualisation. **Study artefacts, not certification evidence** |
+| [`results/`](results/) | benchmark CSVs, GICv3 reports, run records (A4/A5 unpublished; A6 published) |
+| [`skills/`](skills/) | **study artefacts, not certification evidence** |
 
-**docs/ index.** [findings.md](docs/findings.md) — append-only, dated, the
-ground truth · [architecture.md](docs/architecture.md) ·
-[digital-twin-design.md](docs/digital-twin-design.md) — twin methodology and
-the measured diffs (§5) · [bsp-selection.md](docs/bsp-selection.md) ·
-[phase2-topology-decision.md](docs/phase2-topology-decision.md) — ADR-002,
-falsified the cloud dual-VM topology · [orin-port.md](docs/orin-port.md) —
-Phase 3 plan and the KVM/GICv3 risk register ·
-[adr-003-hardware-timed-qhv.md](docs/adr-003-hardware-timed-qhv.md) ·
-[orin-native-port-plan.md](docs/orin-native-port-plan.md) — Phase 3b plan,
-claims register, architecture versions, the measurement freeze ·
-[drive-os-comparison.md](docs/drive-os-comparison.md) — the verdicts, written
-2026-09-20: six Partial, two Cannot, no Validates ·
-[measurement-design.md](docs/measurement-design.md) — how the numbers are
-produced · [future-multi-soc.md](docs/future-multi-soc.md) ·
-[security-model.md](docs/security-model.md) — STRIDE and licence audit ·
-[fusa/](docs/fusa/), [cyber/](docs/cyber/), [tara/](docs/tara/).
-
-Deliberately absent from git, per the QNX licence: the `qnx-safety-vm/` and
-`qhv/` build trees, `ifs.bin`, disk images, and every compiled QNX binary.
-`.gitignore` is written to make such a commit hard.
+**Start here:** [findings.md](docs/findings.md) is append-only, dated, and the
+ground truth when anything else disagrees with it.
+[drive-os-comparison.md](docs/drive-os-comparison.md) is the calibration — what
+this validates against DRIVE OS and what it cannot.
+[orin-native-port-plan.md](docs/orin-native-port-plan.md) holds the milestone
+ladder and every owner decision. The rest of `docs/` is indexed from those
+three.
 
 ---
 
