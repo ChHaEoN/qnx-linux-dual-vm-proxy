@@ -448,3 +448,82 @@ def test_gpu_arm_refuses_when_the_gpu_is_idle(tmp_path):
     r = _run(tmp_path, 'm_require_gpu_busy 50; echo "SHOULD NOT REACH"')
     assert r.returncode != 0 and "SHOULD NOT REACH" not in r.stdout
     assert "GR3D is 7%" in r.stderr
+
+
+# ============================================================ CPU idle states
+
+# The Orin's real cpuidle table, read on 2026-09-21: WFI at 1 us, c7 at 5000 us.
+ORIN_IDLE = [("WFI", 1), ("c7", 5000)]
+
+
+def _cpuidle(tmp_path, ncpu=6, states=ORIN_IDLE):
+    for c in range(ncpu):
+        for i, (name, lat) in enumerate(states):
+            d = tmp_path / "cpu" / ("cpu%d" % c) / "cpuidle" / ("state%d" % i)
+            d.mkdir(parents=True, exist_ok=True)
+            (d / "name").write_text(name + "\n")
+            (d / "latency").write_text("%d\n" % lat)
+            (d / "disable").write_text("0\n")
+
+
+def _run_idle(tmp_path, snippet, sudo='exec "$@"', states=ORIN_IDLE, ncpu=6):
+    """Like _run, but with a cpuidle tree built before the snippet runs."""
+    sudo_bin = _stub_sudo(tmp_path, sudo)
+    if states:
+        _cpuidle(tmp_path, ncpu, states)
+    else:
+        (tmp_path / "cpu" / "cpu0").mkdir(parents=True, exist_ok=True)
+    env = dict(os.environ)
+    env["SYSFS_CPU"] = _posix(tmp_path / "cpu")
+    env["PATH"] = _posix(sudo_bin) + os.pathsep + env.get("PATH", "")
+    script = 'set -u\n. "%s"\n%s\n' % (_posix(LIB), snippet)
+    return subprocess.run([BASH, "-c", script], env=env, capture_output=True, text=True)
+
+
+def _disabled(tmp_path, cpu, state):
+    return (tmp_path / "cpu" / ("cpu%d" % cpu) / "cpuidle" / ("state%d" % state) / "disable").read_text().strip()
+
+
+def test_idle_states_default_is_recorded_as_found_and_untouched(tmp_path):
+    """The default is the realistic system -- recorded in detail, not controlled.
+
+    'cpuidle: present' alone is how c7 went unnoticed through a whole campaign.
+    """
+    r = _run_idle(tmp_path, 'CSTATE=""; m_cstate_apply; echo "S=$CSTATE_STATE E=$CSTATE_EXPOSED"')
+    assert r.returncode == 0, r.stderr
+    assert "S=as-found" in r.stdout
+    assert "c7:5000us:on" in r.stdout and "WFI:1us:on" in r.stdout
+    assert all(_disabled(tmp_path, c, 1) == "0" for c in range(6))
+
+
+def test_shallow_disables_only_the_deep_states_and_verifies(tmp_path):
+    r = _run_idle(tmp_path, 'CSTATE=shallow; m_cstate_apply; echo "S=$CSTATE_STATE"')
+    assert r.returncode == 0, r.stderr
+    assert "S=shallow" in r.stdout
+    for c in range(6):
+        assert _disabled(tmp_path, c, 1) == "1", "c7 still enabled on cpu%d" % c
+        assert _disabled(tmp_path, c, 0) == "0", "WFI was disabled on cpu%d" % c
+
+
+def test_shallow_restore_puts_back_exactly_what_was_there(tmp_path):
+    r = _run_idle(tmp_path, "CSTATE=shallow; m_cstate_apply; m_cstate_restore")
+    assert r.returncode == 0, r.stderr
+    assert all(_disabled(tmp_path, c, s) == "0" for c in range(6) for s in (0, 1))
+
+
+def test_shallow_that_will_not_disable_refuses_the_run(tmp_path):
+    r = _run_idle(tmp_path, 'CSTATE=shallow; m_cstate_apply; echo "SHOULD NOT REACH"', sudo="cat >/dev/null")
+    assert r.returncode != 0 and "SHOULD NOT REACH" not in r.stdout
+    assert "would not disable" in r.stderr
+
+
+def test_no_cpuidle_is_recorded_as_absent(tmp_path):
+    """The a1.metal case."""
+    r = _run_idle(tmp_path, 'CSTATE=shallow; m_cstate_apply; echo "S=$CSTATE_STATE"', states=None)
+    assert r.returncode == 0, r.stderr
+    assert "S=absent" in r.stdout
+
+
+def test_unknown_policy_refuses(tmp_path):
+    r = _run_idle(tmp_path, 'CSTATE=deep; m_cstate_apply; echo "SHOULD NOT REACH"')
+    assert r.returncode != 0 and "not a policy" in r.stderr

@@ -86,7 +86,7 @@ declare -A SPEC=(
 	[cpu6_prio]="6 0 1" [gpu_cpu6]="6 1 0"
 )
 
-cleanup() { say "cleanup"; m_load_stop; m_governor_restore; }
+cleanup() { say "cleanup"; m_load_stop; m_cstate_restore; m_governor_restore; }
 trap cleanup EXIT
 
 run_arm() {   # $1 tag  $2 round
@@ -122,6 +122,7 @@ m_check_cores "$QEMU_CORES" "$CORE_PROBE"
 sudo -n chrt -f 50 true 2>/dev/null \
 	|| die "real-time priority unavailable (sudo -n chrt -f 50); cpu6_prio would not be a priority control"
 m_governor_pin
+m_cstate_apply
 m_pin_qemu "$QEMU_CORES"
 m_reachable "$GUEST" "$PORT" "guest monitor"
 

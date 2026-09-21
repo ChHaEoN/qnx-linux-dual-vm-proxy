@@ -62,7 +62,7 @@ LOADED=(gpu cpu)
 # Generous ceiling only: the load is stopped as soon as the probe finishes.
 SECS=$(( (N + WARMUP) * INTERVAL_MS / 1000 + 15 ))
 
-cleanup() { say "cleanup"; m_load_stop; m_governor_restore; }
+cleanup() { say "cleanup"; m_load_stop; m_cstate_restore; m_governor_restore; }
 trap cleanup EXIT
 
 run_arm() {   # $1 tag  $2 round
@@ -94,6 +94,7 @@ m_require_balanced_k "$K" "${#LOADED[@]}"
 m_prepare_out "${OUT:-}" "$HOME/interference-out"
 m_check_cores "$QEMU_CORES" "$CORE_PROBE"
 m_governor_pin
+m_cstate_apply
 m_pin_qemu "$QEMU_CORES"
 m_reachable "$GUEST" "$PORT" "guest monitor"
 

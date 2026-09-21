@@ -137,6 +137,82 @@ m_governor_restore() {
 	GOV_ORIG=()
 }
 
+# ------------------------------------------------------------- CPU idle states
+# FOUND IN THE FIRST ORIN CAMPAIGN, 2026-09-21. The governor pin controls
+# FREQUENCY. It never touched IDLE STATES, and the Orin exposes one that matters:
+# state1 "c7", exit latency 5000 us, enabled. An unloaded arm lets cores fall into
+# c7 between 2 ms-spaced frames and pay the wake-up on some of them; a loaded arm
+# keeps them busy and never does. So the "idle" reference was not "the same
+# machine, unloaded" -- it was "the machine, free to sleep". The saturation run
+# then showed p99 about 196 us LOWER under full load than idle, which is the
+# shape that confound predicts. The stamp said only "cpuidle": "present", which
+# is how it went unnoticed; it now records every state a run was exposed to.
+#
+# Two policies, and both are legitimate measurements of different things:
+#   CSTATE=""        (default) leave idle states as found -- the realistic,
+#                    power-managed system. Recorded, not controlled.
+#   CSTATE=shallow   disable every state whose exit latency exceeds
+#                    CSTATE_MAX_US (default 10) -- isolates load contention.
+# The difference between the two IS the idle-state effect, which is how the c7
+# hypothesis gets tested rather than argued from distribution shapes.
+CSTATE="${CSTATE:-}"
+CSTATE_MAX_US="${CSTATE_MAX_US:-10}"
+CSTATE_STATE="unknown"; CSTATE_EXPOSED=""; CSTATE_DISABLED=""
+declare -A CSTATE_ORIG=()
+
+_cstate_list() {   # one line per distinct state on cpu0: "name latency_us enabled|disabled"
+	local s out=""
+	for s in "$SYSFS_CPU"/cpu0/cpuidle/state[0-9]*; do
+		[ -r "$s/latency" ] || continue
+		out="$out $(cat "$s/name"):$(cat "$s/latency")us:$([ "$(cat "$s/disable")" = 0 ] && echo on || echo off)"
+	done
+	echo "${out# }"
+}
+
+m_cstate_apply() {
+	local s d lat now
+	if [ ! -d "$SYSFS_CPU/cpu0/cpuidle" ]; then
+		CSTATE_STATE="absent"
+		say "idle states: NO cpuidle on this host -- nothing to control, recorded as absent"
+		return 0
+	fi
+	case "$CSTATE" in
+		"")
+			CSTATE_STATE="as-found"
+			CSTATE_EXPOSED="$(_cstate_list)"
+			say "idle states: left AS FOUND (realistic, power-managed): $CSTATE_EXPOSED"
+			;;
+		shallow)
+			for d in "$SYSFS_CPU"/cpu[0-9]*/cpuidle/state[0-9]*/disable; do
+				s="${d%/disable}"
+				lat="$(cat "$s/latency")"
+				[ "$lat" -gt "$CSTATE_MAX_US" ] || continue
+				CSTATE_ORIG["$d"]="$(cat "$d")"
+				echo 1 | sudo tee "$d" >/dev/null
+				now="$(cat "$d")"
+				[ "$now" = 1 ] || die "idle state $s would not disable (still '$now')"
+			done
+			CSTATE_STATE="shallow"
+			CSTATE_EXPOSED="$(_cstate_list)"
+			CSTATE_DISABLED="${#CSTATE_ORIG[@]} state(s) with exit latency > ${CSTATE_MAX_US} us"
+			say "idle states: SHALLOW -- disabled $CSTATE_DISABLED; now $CSTATE_EXPOSED (will restore)"
+			;;
+		*) die "CSTATE='$CSTATE' is not a policy; use empty (as found) or 'shallow'" ;;
+	esac
+}
+
+m_cstate_restore() {
+	local d now bad=0
+	[ "${#CSTATE_ORIG[@]}" -gt 0 ] || return 0
+	for d in "${!CSTATE_ORIG[@]}"; do
+		echo "${CSTATE_ORIG[$d]}" | sudo tee "$d" >/dev/null
+		now="$(cat "$d" 2>/dev/null)"
+		[ "$now" = "${CSTATE_ORIG[$d]}" ] || { echo "WARNING: $d restored to '$now', expected '${CSTATE_ORIG[$d]}'" >&2; bad=1; }
+	done
+	[ "$bad" -eq 0 ] && say "idle states restored and verified (${#CSTATE_ORIG[@]} state(s))"
+	CSTATE_ORIG=()
+}
+
 # ------------------------------------------------------------- cores
 m_check_cores() {   # $@ = core numbers or ranges like 0-2
 	NCPU="$(nproc)"
@@ -302,6 +378,9 @@ m_write_stamp() {
 		printf '  "governor_before": "%s",\n' "$PRE_GOV"
 		printf '  "cur_freq_khz_before": "%s",\n' "$FREQ_BEFORE"
 		printf '  "cpuidle": "%s",\n' "$([ -d "$SYSFS_CPU/cpu0/cpuidle" ] && echo present || echo absent)"
+		printf '  "cstate_policy": "%s",\n' "$CSTATE_STATE"
+		printf '  "cstate_exposed": "%s",\n' "$CSTATE_EXPOSED"
+		printf '  "cstate_disabled": "%s",\n' "$CSTATE_DISABLED"
 		printf '  "qemu_exe": "%s",\n' "$QEXE"
 		printf '  "qemu_version": "%s",\n' "$QVER"
 		if [ -n "$QPID" ] && [ -r "/proc/$QPID/cmdline" ]; then

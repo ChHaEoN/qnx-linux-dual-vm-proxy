@@ -64,6 +64,7 @@ cleanup() {
 	sudo ip netns pids "$NS" 2>/dev/null | while read -r p; do sudo kill "$p" 2>/dev/null; done
 	sudo ip netns del "$NS" 2>/dev/null
 	sudo ip link del veth-l 2>/dev/null
+	m_cstate_restore
 	m_governor_restore
 }
 
@@ -80,6 +81,7 @@ m_prepare_out "${OUT:-}" "$HOME/ladder-out"
 m_check_cores "$QEMU_CORES" "$CORE_MON" "$CORE_PROBE"
 say "cores: $NCPU total; qemu=$QEMU_CORES monitor=$CORE_MON probe=$CORE_PROBE"
 m_governor_pin
+m_cstate_apply
 m_pin_qemu "$QEMU_CORES"
 
 # ---------------------------------------------------------------- arm B setup
