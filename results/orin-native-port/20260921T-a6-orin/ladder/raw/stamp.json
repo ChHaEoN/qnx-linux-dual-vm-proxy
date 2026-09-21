@@ -1,0 +1,41 @@
+{
+  "utc": "2026-09-21T12:00:38Z",
+  "script": "run-ladder.sh",
+  "script_sha256": "4f9297cdb64015c79229fd5fb20710bed45c4b92b85d7bbe8a0f193560535399",
+  "lib_sha256": "62931898b04f78dffb9c627a957b56358f85c4a83e954872dd23d588650cd7b5",
+  "probe_sha256": "4cde109ed15b4391fe374d5f402b14eb0cd30eef46a208ebd3c524e266ca2b71",
+  "python3": "/usr/bin/python3",
+  "python3_under_sudo": "/usr/bin/python3",
+  "machine": "aarch64",
+  "kernel": "5.15.148-tegra",
+  "ncpu": 6,
+  "sysfs_cpu": "/sys/devices/system/cpu",
+  "governor_state": "pinned",
+  "governor_before": "schedutil",
+  "cur_freq_khz_before": "1344000 1344000 1344000 1267200 1344000 1344000",
+  "cpuidle": "present",
+  "qemu_exe": "/usr/bin/qemu-system-aarch64",
+  "qemu_version": "QEMU emulator version 6.2.0 (Debian 1:6.2+dfsg-2ubuntu6.31)",
+  "qemu_cmdline": "qemu-system-aarch64 -machine virt,gic-version=3 -cpu host -enable-kvm -smp 2 -m 1G -drive file=/home/<user>/output/disk-qemu,if=none,id=drv0,format=raw -device virtio-blk-device,drive=drv0 -snapshot -netdev tap,id=n0,ifname=tap-qnx,script=no,downscript=no -device virtio-net-device,netdev=n0,mac=52:54:00:11:11:11 -object rng-random,filename=/dev/urandom,id=rng0 -device virtio-rng-device,rng=rng0 -kernel /home/<user>/output/ifs-demo2.bin -nographic ",
+  "qemu_threads": 4,
+  "qemu_affinity": "0-2",
+  "experiment": "ladder",
+  "pin": {
+    "qemu": "0-2",
+    "monitor": 3,
+    "probe": 4
+  },
+  "monitor_native_sha256": "32e07681bcb6061c2671bd4c6acd321a750357a6b0096fa4f4cd663c0e29017e",
+  "arms": [
+    "A-loopback",
+    "B-bridge",
+    "C-null",
+    "D-guest"
+  ],
+  "n": 1000,
+  "k": 12,
+  "warmup": 200,
+  "interval_ms": 2,
+  "governor_after": "performance",
+  "cur_freq_khz_after": "1344000 1344000 1344000 1344000 1344000 1344000"
+}

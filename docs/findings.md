@@ -9,6 +9,54 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-21 — the first A6 campaign on the Orin, and a deep idle state it had to be re-run for
+
+The adopted tooling ran on the board for the first time: the ladder with all four arms,
+interference at k=12 and saturation at k=20, on the image, disk and QEMU build that had
+run on `a1.metal` the same day. Record:
+[results.md](../results/orin-native-port/20260921T-a6-orin/results.md). Every figure
+there is paired within rounds, and was independently re-derived from the raw files by a
+separate analysis whose adversarial challenge downgraded several first readings.
+
+**A deep CPU idle state confounded the whole first set, and changing it proved so.** The
+governor pin controls frequency; it never touched idle states, and the Orin exposes
+`c7` (declared exit latency 5000 us) enabled. Unloaded guest arms carried a slow mode
+-- the distribution shifted +292 us, ~11% of samples -- that loaded arms did not, so
+saturation's p99 looked 196 us *better* than idle's in 20 of 20 rounds. Re-run with c7
+disabled: the slow mode fell to 0.00% in every unloaded arm of every experiment, idle
+p99 more than halved (~505 -> ~230 us), and **the saturation tail reversed sign** --
++68 to +94 us worse than idle, 18 of 20 rounds, as load physically should. The median
+moved ~2%. So the published 182/178 us round trip carries ~2% of c7 at the median and
+roughly doubles in the tail because of it. Not shown: which core pays the wake (core 0
+is a hypothesis), or why the cost is ~0.29 ms against a declared 5 ms.
+
+**Arm C now exists on the Orin.** The monitor's own work is +0.7 us [-3.5, +6.8] with c7
+on and +1.4 us [-0.8, +4.4] with it off -- indistinguishable from zero on this board,
+measured here rather than inferred from a1.metal. The bridge is +3.2 us, paired, on
+both hosts.
+
+**Load placement, not load count, decided the cost.** cpu6 rose +70-74 us in 20 of 20
+rounds in both conditions, but the unpinned threads made cpu2 -> cpu4 -> cpu6 a
+placement lottery: cpu4 with two of QEMU's three cores loaded cost +158 to +177 us,
+*more than cpu6*. **GPU load speeds the fast path by 4-5 us in 12 of 12 rounds**, and
+it survives disabling c7, so it is not idle-state avoidance; the memory clock is the
+remaining hypothesis, untested because EMC was not recorded. fma's host thread turned
+out to use no CPU (every core <=1% during all gpu arms), which falsified two design
+statements -- that the interference cpu arm is fma's footprint twin, and that gpu_cpu6
+runs seven busy threads. Both are corrected in the tooling.
+
+**Four bugs the first real run found, all failing closed** -- the argv[0]/pgrep
+self-match, a freshness check reading a rewritten stamp, "GR3D" matching its own digit,
+and the redactor turning a latency sample into `0.<account>`. Committed separately with
+mutation-tested fixes. The as-run library and scripts are committed before their comment
+corrections, so every hash in a stamp names a file git holds; the one earlier ladder
+library that no commit held was reconstructed byte-for-byte from two that do.
+
+**Gaps it left, closed next:** whether SCHED_FIFO actually took effect in cpu6_prio (it
+was established only by procedure), EMC and GPU clocks, and load-thread placement.
+
+---
+
 ## 2026-09-21 — OD11: A6's gate closes on k, not n
 
 The owner adopted [measurement-design.md](measurement-design.md) as written, which settles
