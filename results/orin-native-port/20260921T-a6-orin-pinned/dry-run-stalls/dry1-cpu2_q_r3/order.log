@@ -1,0 +1,3 @@
+round 1 order: idle cpu2_q cpu2_nq gpu_cpu6 cpu3_q cpu6_prio cpu6 idle2
+round 2 order: idle cpu2_nq cpu3_q cpu2_q cpu6 gpu_cpu6 cpu6_prio idle2
+round 3 order: idle cpu3_q cpu6 cpu2_nq cpu6_prio cpu2_q gpu_cpu6 idle2

@@ -1,0 +1,37 @@
+[15:59:27] cpuload built from /home/<user>/qlv/orin-native/gpu-concurrency/cpuload.c (9a1ca8f5c2ee)
+[15:59:27] governor: schedutil -> performance on every core (will restore)
+[15:59:27] idle states: SHALLOW -- disabled 6 state(s) with exit latency > 10 us; now WFI:1us:on c7:5000us:off (will restore)
+[15:59:27] qemu pid=14449 pinned to 0-2 (readback '0-2', 4 threads) exe=/usr/bin/qemu-system-aarch64
+[15:59:29] window sampler verified: 4 clock and 3 tegrastats sample(s) in 1.6 s
+[15:59:29] reachable: guest monitor (192.168.100.10:7100)
+[15:59:29] stamp written and parsed: /home/<user>/saturation-out/20260921T154814Z-pinned/stamp.json
+[15:59:29] k=12 rounds, n=1000, warmup=200, interval=2ms, Williams-counterbalanced -> /home/<user>/saturation-out/20260921T154814Z-pinned
+[16:01:03] round 1/12 done
+[16:02:36] round 2/12 done
+[16:04:10] round 3/12 done
+[16:05:43] round 4/12 done
+[16:07:17] round 5/12 done
+[16:08:50] round 6/12 done
+[16:10:24] round 7/12 done
+[16:11:57] round 8/12 done
+[16:13:31] round 9/12 done
+[16:15:04] round 10/12 done
+[16:16:38] round 11/12 done
+[16:18:12] round 12/12 done
+[16:18:12] governor: still performance on every core at the end
+[16:18:12] complete: 8 arm(s) x 12 round(s), each round a clean result or a recorded stall, every file this run's
+[16:18:12] summary
+  arm           k     p50 ms: median [band]  paired vs idle: med [band]  max ms: min/med/max of k
+  idle         12    0.176 [ 0.173- 0.178]               (reference)  0.325 / 0.553 / 6.970
+  cpu2_q       12    0.339 [ 0.328- 0.346]    +0.164 [+0.153,+0.170]  0.509 / 0.918 / 1.661
+  cpu2_nq      12    0.178 [ 0.177- 0.180]    +0.002 [+0.000,+0.007]  0.341 / 0.573 / 5.775
+  cpu3_q       12    0.233 [ 0.231- 0.288]    +0.058 [+0.055,+0.112]  0.320 / 0.466 / 10.873
+  cpu6         12    0.253 [ 0.249- 0.306]    +0.077 [+0.072,+0.132]  0.383 / 2.382 / 3.055
+  cpu6_prio    12    0.254 [ 0.249- 0.308]    +0.078 [+0.074,+0.135]  0.348 / 0.542 / 3.578
+  gpu_cpu6     12    0.244 [ 0.241- 0.248]    +0.069 [+0.065,+0.074]  0.344 / 1.022 / 4.271
+  idle2        12    0.176 [ 0.174- 0.178]    +0.000 [-0.001,+0.003]  0.314 / 0.379 / 1.721
+  headline = median of the k run-medians. 'paired' = median over rounds of (arm - idle) in the SAME round.
+  'max' is the largest OBSERVED value in each round, never a bound.
+[16:18:12] cleanup
+[16:18:12] idle states restored and verified (6 state(s))
+[16:18:12] governor restored and verified on 6 core(s)

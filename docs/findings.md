@@ -9,6 +9,54 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-21 — pinned loads: QEMU's cores carry the cost, two of three is the worst placement, and the probe's own wait is not it
+
+The three gaps the first campaign left are closed and the campaign re-run with them
+closed: the probe reports its own scheduling, every window is traced (root tegrastats,
+both EMC readings, the GPU clock), and load threads are pinned and read back, so arms are
+named by placement. Record:
+[results.md](../results/orin-native-port/20260921T-a6-orin-pinned/results.md). All 156
+windows complete, c7 disabled, tooling as committed in `a3f20ac`. An independent check of
+the record's first draft re-derived every number from the raw files and confirmed 27 of 30
+objections -- among them the same sign slip on cpu6_prio - cpu6 that the first record had,
+and two readings stated more strongly than a 500 ms trace allows. The record is the
+corrected version.
+
+**Loading QEMU's cores costs; loading cores 3 and 5 barely does.** One busy thread costs
++20.0 us more on core 0 than on core 5 (12/12); two threads +161 us more on cores 0,1
+than on 3,5 (12/12). Every `_q` arm includes core 0, so "QEMU's cores" is not separated
+from "core 0" by this design. **Two of QEMU's three cores is the worst placement
+measured** -- +164 us over idle, more than all three (+58) or all six (+77), 12/12. The
+free core 2 takes on about QEMU's whole idle footprint (17-23% per window) but is never
+saturated; microsecond contention on it is neither shown nor excluded. Why this placement
+is worst is open. A second, ~50 us higher level persists even with the loads pinned --
+QEMU's threads are pinned only as a set -- and sets the bands of the full-load contrasts.
+
+**The priority control became informative, within limits.** With SCHED_FIFO 50 verified
+in all 12 cpu6_prio files, cpu6_prio - cpu6 is +0.9 us [-51, +51]: the probe's run-queue
+wait adds nothing detectable. That does not locate cpu6's +77 us; most of it is already
+present in cpu3_q, where the probe's core is unloaded. **GPU load lowers latency again**
+(-9.4 us under full CPU load, 12/12; -3.0 us alone, 11/12), and the EMC-clock explanation
+is out for this run: EMC sat at 2133 MHz in every window. The mechanism is open. The first
+record's section 4 was corrected against its raw files the same day.
+
+**Stalls.** None in the campaign; two dry runs each hit one (cpu2_q, cpu6), where the
+guest stopped answering for over 10 s; in the second, recorded, it answered again about
+1 s after the load stopped. The first is why a stall is now recorded as an outcome rather
+than stopping the run (owner decision). Rate and mechanism unmeasured.
+
+**What the tooling review caught on the way**, besides the design gaps: a sampler that
+could not be stopped on the board (sudo 1.9.9 ignores a signal from its own process
+group -- invisible to stub-based tests), tegrastats' EMC field existing only as root, and
+a probe that would have filed a dropped connection as a stall. Two adversarial reviews
+(30 findings, 25 confirmed), mutation checks on every new guard, two board dry runs.
+
+**Next (owner decision, 2026-09-21): other IPC paths** -- UDP first, then shared memory
+over ivshmem. A SOME/IP arm is proposed with vsomeip; AUTOSAR's CAPI is on hold because
+its licence allows information-only use without modification.
+
+---
+
 ## 2026-09-21 — the first A6 campaign on the Orin, and a deep idle state it had to be re-run for
 
 The adopted tooling ran on the board for the first time: the ladder with all four arms,

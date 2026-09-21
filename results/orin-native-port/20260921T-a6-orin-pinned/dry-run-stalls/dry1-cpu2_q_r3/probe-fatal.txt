@@ -1,0 +1,2 @@
+FATAL desync tag=cpu2_q_r3 at sample 391 of 1200: sample 391: timed out  (bad=1 rejected=0)
+      the arm is aborted and no result file is written

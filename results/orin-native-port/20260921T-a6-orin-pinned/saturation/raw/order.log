@@ -1,0 +1,12 @@
+round 1 order: idle cpu2_q cpu2_nq gpu_cpu6 cpu3_q cpu6_prio cpu6 idle2
+round 2 order: idle cpu2_nq cpu3_q cpu2_q cpu6 gpu_cpu6 cpu6_prio idle2
+round 3 order: idle cpu3_q cpu6 cpu2_nq cpu6_prio cpu2_q gpu_cpu6 idle2
+round 4 order: idle cpu6 cpu6_prio cpu3_q gpu_cpu6 cpu2_nq cpu2_q idle2
+round 5 order: idle cpu6_prio gpu_cpu6 cpu6 cpu2_q cpu3_q cpu2_nq idle2
+round 6 order: idle gpu_cpu6 cpu2_q cpu6_prio cpu2_nq cpu6 cpu3_q idle2
+round 7 order: idle cpu2_q cpu2_nq gpu_cpu6 cpu3_q cpu6_prio cpu6 idle2
+round 8 order: idle cpu2_nq cpu3_q cpu2_q cpu6 gpu_cpu6 cpu6_prio idle2
+round 9 order: idle cpu3_q cpu6 cpu2_nq cpu6_prio cpu2_q gpu_cpu6 idle2
+round 10 order: idle cpu6 cpu6_prio cpu3_q gpu_cpu6 cpu2_nq cpu2_q idle2
+round 11 order: idle cpu6_prio gpu_cpu6 cpu6 cpu2_q cpu3_q cpu2_nq idle2
+round 12 order: idle gpu_cpu6 cpu2_q cpu6_prio cpu2_nq cpu6 cpu3_q idle2

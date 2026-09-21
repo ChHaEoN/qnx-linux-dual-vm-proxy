@@ -1,0 +1,2 @@
+cpuload: 1 thread(s) for 27 s (no GPU, no memory streaming), PINNED
+cpuload: thread 0 pinned to core 0 (verified)

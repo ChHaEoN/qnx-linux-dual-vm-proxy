@@ -1,0 +1,2 @@
+cpu6_r6 stalled after 11657 ms: FATAL desync tag=cpu6_r6 at sample 507 of 1200: sample 507: timed out  (bad=1 rejected=0)
+cpu6_r6 recovery: RECOVERED after 0.99 s (attempts=1)

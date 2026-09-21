@@ -1,0 +1,180 @@
+RESULT {"tag": "idle_r1", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15497999265789986, "p50_ms": 0.17449998995289207, "p90_ms": 0.19146001432090998, "p99_ms": 0.23382999643217772, "p999_ms": 0.36954499955754727, "max_ms": 0.4544429975794628, "mean_ms": 0.17757843060826417, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=idle_r1      n=1000  min=0.155 p50=0.174 p90=0.191 p99=0.234 p99.9=0.370 max=0.454  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-idle_r1.json (1000 samples)
+RESULT {"tag": "gpu_r1", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1519719953648746, "p50_ms": 0.16694799705874175, "p90_ms": 0.18080500012729317, "p99_ms": 0.20730099640786648, "p999_ms": 0.2809669967973605, "max_ms": 0.45850800233893096, "mean_ms": 0.1692989919683896, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=gpu_r1       n=1000  min=0.152 p50=0.167 p90=0.181 p99=0.207 p99.9=0.281 max=0.459  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-gpu_r1.json (1000 samples)
+RESULT {"tag": "cpu_q_r1", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1740520092425868, "p50_ms": 0.1940849906532094, "p90_ms": 0.22765400353819132, "p99_ms": 0.25987799745053053, "p999_ms": 0.2938630059361458, "max_ms": 0.3112069971393794, "mean_ms": 0.1999258578143781, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=cpu_q_r1     n=1000  min=0.174 p50=0.194 p90=0.228 p99=0.260 p99.9=0.294 max=0.311  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-cpu_q_r1.json (1000 samples)
+RESULT {"tag": "cpu_nq_r1", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15718799841124564, "p50_ms": 0.17699699674267322, "p90_ms": 0.19312500080559403, "p99_ms": 0.2629819937283173, "p999_ms": 0.29597600223496556, "max_ms": 0.3125509974779561, "mean_ms": 0.18013964117562864, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=cpu_nq_r1    n=1000  min=0.157 p50=0.177 p90=0.193 p99=0.263 p99.9=0.296 max=0.313  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-cpu_nq_r1.json (1000 samples)
+RESULT {"tag": "idle2_r1", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15690000145696104, "p50_ms": 0.17488400044385344, "p90_ms": 0.1897329930216074, "p99_ms": 0.2633340045576915, "p999_ms": 0.35469699651002884, "max_ms": 0.3692250029416755, "mean_ms": 0.1787694994127378, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=idle2_r1     n=1000  min=0.157 p50=0.175 p90=0.190 p99=0.263 p99.9=0.355 max=0.369  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-idle2_r1.json (1000 samples)
+RESULT {"tag": "idle_r2", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15981199976522475, "p50_ms": 0.1762289903126657, "p90_ms": 0.18973300757352263, "p99_ms": 0.24858300457708538, "p999_ms": 0.3509840025799349, "max_ms": 0.41040999349206686, "mean_ms": 0.17918215204554144, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=idle_r2      n=1000  min=0.160 p50=0.176 p90=0.190 p99=0.249 p99.9=0.351 max=0.410  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-idle_r2.json (1000 samples)
+RESULT {"tag": "cpu_q_r2", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.17837299674283713, "p50_ms": 0.19638900994323194, "p90_ms": 0.2261500048916787, "p99_ms": 0.26986301236320287, "p999_ms": 0.3323279961477965, "max_ms": 0.6944490014575422, "mean_ms": 0.20257838716497645, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=cpu_q_r2     n=1000  min=0.178 p50=0.196 p90=0.226 p99=0.270 p99.9=0.332 max=0.694  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-cpu_q_r2.json (1000 samples)
+RESULT {"tag": "cpu_nq_r2", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1605159923201427, "p50_ms": 0.1774440024746582, "p90_ms": 0.1896370085887611, "p99_ms": 0.21859700791537762, "p999_ms": 0.3062799951294437, "max_ms": 0.33293600426986814, "mean_ms": 0.17954770896176342, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=cpu_nq_r2    n=1000  min=0.161 p50=0.177 p90=0.190 p99=0.219 p99.9=0.306 max=0.333  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-cpu_nq_r2.json (1000 samples)
+RESULT {"tag": "gpu_r2", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15469100617337972, "p50_ms": 0.17197200213558972, "p90_ms": 0.19177999638486654, "p99_ms": 0.2485189907019958, "p999_ms": 0.32893700699787587, "max_ms": 0.3759459941647947, "mean_ms": 0.17600293175200932, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=gpu_r2       n=1000  min=0.155 p50=0.172 p90=0.192 p99=0.249 p99.9=0.329 max=0.376  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-gpu_r2.json (1000 samples)
+RESULT {"tag": "idle2_r2", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15888400957919657, "p50_ms": 0.17632500384934247, "p90_ms": 0.1898929913295433, "p99_ms": 0.24781400861684233, "p999_ms": 0.30394400528166443, "max_ms": 0.7491069991374388, "mean_ms": 0.17951452413399238, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=idle2_r2     n=1000  min=0.159 p50=0.176 p90=0.190 p99=0.248 p99.9=0.304 max=0.749  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-idle2_r2.json (1000 samples)
+RESULT {"tag": "idle_r3", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1584999990882352, "p50_ms": 0.17661300080362707, "p90_ms": 0.19110800349153578, "p99_ms": 0.2359100035391748, "p999_ms": 0.385706007364206, "max_ms": 0.8754139998927712, "mean_ms": 0.18012100989290047, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=idle_r3      n=1000  min=0.158 p50=0.177 p90=0.191 p99=0.236 p99.9=0.386 max=0.875  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-idle_r3.json (1000 samples)
+RESULT {"tag": "cpu_nq_r3", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1594600034877658, "p50_ms": 0.17549199401400983, "p90_ms": 0.18746098794508725, "p99_ms": 0.22880600590724498, "p999_ms": 0.3062160103581846, "max_ms": 0.3222480008844286, "mean_ms": 0.17752235813532025, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=cpu_nq_r3    n=1000  min=0.159 p50=0.175 p90=0.187 p99=0.229 p99.9=0.306 max=0.322  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-cpu_nq_r3.json (1000 samples)
+RESULT {"tag": "gpu_r3", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15546000213362277, "p50_ms": 0.18029200145974755, "p90_ms": 0.32512799953110516, "p99_ms": 1.1263000051258132, "p999_ms": 2.055314995232038, "max_ms": 2.393116010352969, "mean_ms": 0.23244539479492232, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=gpu_r3       n=1000  min=0.155 p50=0.180 p90=0.325 p99=1.126 p99.9=2.055 max=2.393  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-gpu_r3.json (1000 samples)
+RESULT {"tag": "cpu_q_r3", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.17690000822767615, "p50_ms": 0.195365006220527, "p90_ms": 0.22755800455342978, "p99_ms": 0.26877500931732357, "p999_ms": 0.71880200994201, "max_ms": 0.7235380035126582, "mean_ms": 0.20253961997514125, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=cpu_q_r3     n=1000  min=0.177 p50=0.195 p90=0.228 p99=0.269 p99.9=0.719 max=0.724  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-cpu_q_r3.json (1000 samples)
+RESULT {"tag": "idle2_r3", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15808400348760188, "p50_ms": 0.17590800416655838, "p90_ms": 0.18938101129606366, "p99_ms": 0.22771699877921492, "p999_ms": 0.3100549947703257, "max_ms": 0.3676570049719885, "mean_ms": 0.1781404658977408, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=idle2_r3     n=1000  min=0.158 p50=0.176 p90=0.189 p99=0.228 p99.9=0.310 max=0.368  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-idle2_r3.json (1000 samples)
+RESULT {"tag": "idle_r4", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15497999265789986, "p50_ms": 0.17568400653544813, "p90_ms": 0.19155700283590704, "p99_ms": 0.2576060069259256, "p999_ms": 0.37658499786630273, "max_ms": 0.9411759965587407, "mean_ms": 0.17992356519971509, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=idle_r4      n=1000  min=0.155 p50=0.176 p90=0.192 p99=0.258 p99.9=0.377 max=0.941  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-idle_r4.json (1000 samples)
+RESULT {"tag": "cpu_nq_r4", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15606799570377916, "p50_ms": 0.1763889886206016, "p90_ms": 0.19670900655910373, "p99_ms": 0.31136799952946603, "p999_ms": 0.5085570010123774, "max_ms": 3.40878899442032, "mean_ms": 0.18597477715229616, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=cpu_nq_r4    n=1000  min=0.156 p50=0.176 p90=0.197 p99=0.311 p99.9=0.509 max=3.409  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-cpu_nq_r4.json (1000 samples)
+RESULT {"tag": "cpu_q_r4", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.17568499606568366, "p50_ms": 0.1944050018209964, "p90_ms": 0.23219799913931638, "p99_ms": 0.29171899950597435, "p999_ms": 0.35978500091005117, "max_ms": 0.4133219918003306, "mean_ms": 0.2019021337328013, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=cpu_q_r4     n=1000  min=0.176 p50=0.194 p90=0.232 p99=0.292 p99.9=0.360 max=0.413  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-cpu_q_r4.json (1000 samples)
+RESULT {"tag": "gpu_r4", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1532199967186898, "p50_ms": 0.17446800484322011, "p90_ms": 0.20512599439825863, "p99_ms": 0.2652550028869882, "p999_ms": 0.3107590018771589, "max_ms": 0.3325850120745599, "mean_ms": 0.18030262422689702, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=gpu_r4       n=1000  min=0.153 p50=0.174 p90=0.205 p99=0.265 p99.9=0.311 max=0.333  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-gpu_r4.json (1000 samples)
+RESULT {"tag": "idle2_r4", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15677200281061232, "p50_ms": 0.1763559994287789, "p90_ms": 0.1898929913295433, "p99_ms": 0.24829499307088554, "p999_ms": 0.3035909903701395, "max_ms": 0.327209010720253, "mean_ms": 0.17860496796492953, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=idle2_r4     n=1000  min=0.157 p50=0.176 p90=0.190 p99=0.248 p99.9=0.304 max=0.327  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-idle2_r4.json (1000 samples)
+RESULT {"tag": "idle_r5", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15811600314918905, "p50_ms": 0.1756209967425093, "p90_ms": 0.18998900486622006, "p99_ms": 0.2307579998159781, "p999_ms": 0.30323999817483127, "max_ms": 0.3502489998936653, "mean_ms": 0.17855670127028134, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=idle_r5      n=1000  min=0.158 p50=0.176 p90=0.190 p99=0.231 p99.9=0.303 max=0.350  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-idle_r5.json (1000 samples)
+RESULT {"tag": "gpu_r5", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15478799468837678, "p50_ms": 0.1729320065351203, "p90_ms": 0.19117299234494567, "p99_ms": 0.23472600150853395, "p999_ms": 0.3406809992156923, "max_ms": 0.8568219927838072, "mean_ms": 0.1770113104430493, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=gpu_r5       n=1000  min=0.155 p50=0.173 p90=0.191 p99=0.235 p99.9=0.341 max=0.857  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-gpu_r5.json (1000 samples)
+RESULT {"tag": "cpu_nq_r5", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1595250068930909, "p50_ms": 0.1767089997883886, "p90_ms": 0.18989300588145852, "p99_ms": 0.25242200354114175, "p999_ms": 0.31661600223742425, "max_ms": 0.33716099278535694, "mean_ms": 0.1793023017962696, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=cpu_nq_r5    n=1000  min=0.160 p50=0.177 p90=0.190 p99=0.252 p99.9=0.317 max=0.337  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-cpu_nq_r5.json (1000 samples)
+RESULT {"tag": "cpu_q_r5", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.17942900012712926, "p50_ms": 0.20755700825247914, "p90_ms": 0.2389820001553744, "p99_ms": 0.27152699476573616, "p999_ms": 0.3053199907299131, "max_ms": 0.32045599073171616, "mean_ms": 0.212285488130874, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=cpu_q_r5     n=1000  min=0.179 p50=0.208 p90=0.239 p99=0.272 p99.9=0.305 max=0.320  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-cpu_q_r5.json (1000 samples)
+RESULT {"tag": "idle2_r5", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15629200788680464, "p50_ms": 0.17459600348956883, "p90_ms": 0.18819600518327206, "p99_ms": 0.2447740116622299, "p999_ms": 0.28707900492008775, "max_ms": 0.31383200257550925, "mean_ms": 0.1773219128808705, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=idle2_r5     n=1000  min=0.156 p50=0.175 p90=0.188 p99=0.245 p99.9=0.287 max=0.314  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-idle2_r5.json (1000 samples)
+RESULT {"tag": "idle_r6", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15667499974370003, "p50_ms": 0.17331600247416645, "p90_ms": 0.18669299606699497, "p99_ms": 0.22845400962978601, "p999_ms": 0.27111099916510284, "max_ms": 0.37280899414326996, "mean_ms": 0.1754813388834009, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=idle_r6      n=1000  min=0.157 p50=0.173 p90=0.187 p99=0.228 p99.9=0.271 max=0.373  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-idle_r6.json (1000 samples)
+RESULT {"tag": "cpu_q_r6", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.17952399502974004, "p50_ms": 0.19770099606830627, "p90_ms": 0.23149399203248322, "p99_ms": 0.27930299984291196, "p999_ms": 0.30532000528182834, "max_ms": 3.957957000238821, "mean_ms": 0.20743905784911476, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=cpu_q_r6     n=1000  min=0.180 p50=0.198 p90=0.231 p99=0.279 p99.9=0.305 max=3.958  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-cpu_q_r6.json (1000 samples)
+RESULT {"tag": "gpu_r6", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15552400145679712, "p50_ms": 0.1727719936752692, "p90_ms": 0.19338099809829146, "p99_ms": 0.2487110032234341, "p999_ms": 0.29735101270489395, "max_ms": 0.31799200223758817, "mean_ms": 0.17736903906916268, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=gpu_r6       n=1000  min=0.156 p50=0.173 p90=0.193 p99=0.249 p99.9=0.297 max=0.318  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-gpu_r6.json (1000 samples)
+RESULT {"tag": "cpu_nq_r6", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15846799942664802, "p50_ms": 0.17504498828202486, "p90_ms": 0.1903730008052662, "p99_ms": 0.24845499137882143, "p999_ms": 0.3437209961703047, "max_ms": 0.43002699385397136, "mean_ms": 0.1784607509180205, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=cpu_nq_r6    n=1000  min=0.158 p50=0.175 p90=0.190 p99=0.248 p99.9=0.344 max=0.430  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-cpu_nq_r6.json (1000 samples)
+RESULT {"tag": "idle2_r6", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15978000010363758, "p50_ms": 0.17616400145925581, "p90_ms": 0.19088499539066106, "p99_ms": 0.2598790015326813, "p999_ms": 0.31693599885329604, "max_ms": 0.34333700023125857, "mean_ms": 0.17947423200530466, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=idle2_r6     n=1000  min=0.160 p50=0.176 p90=0.191 p99=0.260 p99.9=0.317 max=0.343  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-idle2_r6.json (1000 samples)
+RESULT {"tag": "idle_r7", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.160035997396335, "p50_ms": 0.17779599875211716, "p90_ms": 0.19181300012860447, "p99_ms": 0.23955799406394362, "p999_ms": 0.2772230072878301, "max_ms": 0.30733599851373583, "mean_ms": 0.17999474285170436, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=idle_r7      n=1000  min=0.160 p50=0.178 p90=0.192 p99=0.240 p99.9=0.277 max=0.307  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-idle_r7.json (1000 samples)
+RESULT {"tag": "gpu_r7", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15286800044123083, "p50_ms": 0.17267599469050765, "p90_ms": 0.1931570004671812, "p99_ms": 0.24045399914029986, "p999_ms": 0.29677600832656026, "max_ms": 0.36493700463324785, "mean_ms": 0.17651383578777313, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=gpu_r7       n=1000  min=0.153 p50=0.173 p90=0.193 p99=0.240 p99.9=0.297 max=0.365  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-gpu_r7.json (1000 samples)
+RESULT {"tag": "cpu_q_r7", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1759089936967939, "p50_ms": 0.19536499166861176, "p90_ms": 0.22784499742556363, "p99_ms": 0.26663100288715214, "p999_ms": 0.3950500104110688, "max_ms": 1.9553460006136447, "mean_ms": 0.2035479377809679, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=cpu_q_r7     n=1000  min=0.176 p50=0.195 p90=0.228 p99=0.267 p99.9=0.395 max=1.955  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-cpu_q_r7.json (1000 samples)
+RESULT {"tag": "cpu_nq_r7", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15670800348743796, "p50_ms": 0.17603598826099187, "p90_ms": 0.19027700182050467, "p99_ms": 0.24573400150984526, "p999_ms": 0.34877700090873986, "max_ms": 0.46289199963212013, "mean_ms": 0.17917100485647097, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=cpu_nq_r7    n=1000  min=0.157 p50=0.176 p90=0.190 p99=0.246 p99.9=0.349 max=0.463  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-cpu_nq_r7.json (1000 samples)
+RESULT {"tag": "idle2_r7", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1570919994264841, "p50_ms": 0.17744500655680895, "p90_ms": 0.18982899200636894, "p99_ms": 0.21539699810091406, "p999_ms": 0.28167199343442917, "max_ms": 0.36650500260293484, "mean_ms": 0.17926007708592806, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=idle2_r7     n=1000  min=0.157 p50=0.177 p90=0.190 p99=0.215 p99.9=0.282 max=0.367  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-idle2_r7.json (1000 samples)
+RESULT {"tag": "idle_r8", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15779599198140204, "p50_ms": 0.17667599604465067, "p90_ms": 0.1905329991132021, "p99_ms": 0.22832500690128654, "p999_ms": 0.2727429964579642, "max_ms": 0.30912700458429754, "mean_ms": 0.1790301001019543, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=idle_r8      n=1000  min=0.158 p50=0.177 p90=0.191 p99=0.228 p99.9=0.273 max=0.309  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-idle_r8.json (1000 samples)
+RESULT {"tag": "cpu_q_r8", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.17718799063004553, "p50_ms": 0.20858099742326885, "p90_ms": 0.24141400353983045, "p99_ms": 0.2921679988503456, "p999_ms": 0.4086820117663592, "max_ms": 1.2683849927270785, "mean_ms": 0.21541204617824405, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=cpu_q_r8     n=1000  min=0.177 p50=0.209 p90=0.241 p99=0.292 p99.9=0.409 max=1.268  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-cpu_q_r8.json (1000 samples)
+RESULT {"tag": "cpu_nq_r8", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1568040024721995, "p50_ms": 0.18646899843588471, "p90_ms": 0.4227310128044337, "p99_ms": 1.358114997856319, "p999_ms": 3.229651993024163, "max_ms": 3.9019249961711466, "mean_ms": 0.275895354730892, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=cpu_nq_r8    n=1000  min=0.157 p50=0.186 p90=0.423 p99=1.358 p99.9=3.230 max=3.902  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-cpu_nq_r8.json (1000 samples)
+RESULT {"tag": "gpu_r8", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15398800314869732, "p50_ms": 0.17254799604415894, "p90_ms": 0.19107700791209936, "p99_ms": 0.24003800353966653, "p999_ms": 0.297448001219891, "max_ms": 0.3955629945266992, "mean_ms": 0.17614231583138462, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=gpu_r8       n=1000  min=0.154 p50=0.173 p90=0.191 p99=0.240 p99.9=0.297 max=0.396  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-gpu_r8.json (1000 samples)
+RESULT {"tag": "idle2_r8", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15872399671934545, "p50_ms": 0.17674000991974026, "p90_ms": 0.18915699911303818, "p99_ms": 0.23226199846249074, "p999_ms": 0.3292879991931841, "max_ms": 0.33572000393178314, "mean_ms": 0.17892192768340465, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=idle2_r8     n=1000  min=0.159 p50=0.177 p90=0.189 p99=0.232 p99.9=0.329 max=0.336  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-idle2_r8.json (1000 samples)
+RESULT {"tag": "idle_r9", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1586599973961711, "p50_ms": 0.17587699403520674, "p90_ms": 0.18893300148192793, "p99_ms": 0.23837499611545354, "p999_ms": 0.3027280035894364, "max_ms": 0.3189529961673543, "mean_ms": 0.17792166593426373, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=idle_r9      n=1000  min=0.159 p50=0.176 p90=0.189 p99=0.238 p99.9=0.303 max=0.319  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-idle_r9.json (1000 samples)
+RESULT {"tag": "cpu_nq_r9", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15562000044155866, "p50_ms": 0.17597299301996827, "p90_ms": 0.19136499031446874, "p99_ms": 0.24979899171739817, "p999_ms": 0.3088079974986613, "max_ms": 0.36596199788618833, "mean_ms": 0.17914872194523923, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=cpu_nq_r9    n=1000  min=0.156 p50=0.176 p90=0.191 p99=0.250 p99.9=0.309 max=0.366  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-cpu_nq_r9.json (1000 samples)
+RESULT {"tag": "gpu_r9", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15315599739551544, "p50_ms": 0.17408399435225874, "p90_ms": 0.20170101197436452, "p99_ms": 0.24429398763459176, "p999_ms": 0.29184699815232307, "max_ms": 0.37802600127179176, "mean_ms": 0.17877636521006934, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=gpu_r9       n=1000  min=0.153 p50=0.174 p90=0.202 p99=0.244 p99.9=0.292 max=0.378  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-gpu_r9.json (1000 samples)
+RESULT {"tag": "cpu_q_r9", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.17661298625171185, "p50_ms": 0.20736499573104084, "p90_ms": 0.24048599880188704, "p99_ms": 0.2940549893537536, "p999_ms": 1.5259920037351549, "max_ms": 2.2329859930323437, "mean_ms": 0.21638408179569524, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=cpu_q_r9     n=1000  min=0.177 p50=0.207 p90=0.240 p99=0.294 p99.9=1.526 max=2.233  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-cpu_q_r9.json (1000 samples)
+RESULT {"tag": "idle2_r9", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15744399570394307, "p50_ms": 0.17619699065107852, "p90_ms": 0.19043700012844056, "p99_ms": 0.24784699780866504, "p999_ms": 0.28650301101151854, "max_ms": 0.29943200934212655, "mean_ms": 0.17895447474438697, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=idle2_r9     n=1000  min=0.157 p50=0.176 p90=0.190 p99=0.248 p99.9=0.287 max=0.299  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-idle2_r9.json (1000 samples)
+RESULT {"tag": "idle_r10", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1558439980726689, "p50_ms": 0.17651700181886554, "p90_ms": 0.1906609977595508, "p99_ms": 0.25482301134616137, "p999_ms": 0.32605700835119933, "max_ms": 0.42333899182267487, "mean_ms": 0.17949885674170218, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=idle_r10     n=1000  min=0.156 p50=0.177 p90=0.191 p99=0.255 p99.9=0.326 max=0.423  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-idle_r10.json (1000 samples)
+RESULT {"tag": "cpu_nq_r10", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.16080400382634252, "p50_ms": 0.1765810011420399, "p90_ms": 0.19046799570787698, "p99_ms": 0.2679430035641417, "p999_ms": 0.3143759968224913, "max_ms": 0.3191119903931394, "mean_ms": 0.17989619080617558, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=cpu_nq_r10   n=1000  min=0.161 p50=0.177 p90=0.190 p99=0.268 p99.9=0.314 max=0.319  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-cpu_nq_r10.json (1000 samples)
+RESULT {"tag": "cpu_q_r10", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1749479997670278, "p50_ms": 0.1984370028367266, "p90_ms": 0.23808599507901818, "p99_ms": 0.28205600392539054, "p999_ms": 0.7497470069210976, "max_ms": 0.9725689888000488, "mean_ms": 0.20669243732118048, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=cpu_q_r10    n=1000  min=0.175 p50=0.198 p90=0.238 p99=0.282 p99.9=0.750 max=0.973  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-cpu_q_r10.json (1000 samples)
+RESULT {"tag": "gpu_r10", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15453201194759458, "p50_ms": 0.17478899098932743, "p90_ms": 0.19606899877544492, "p99_ms": 0.26599099510349333, "p999_ms": 0.3451930097071454, "max_ms": 0.3612569998949766, "mean_ms": 0.17953531917009968, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=gpu_r10      n=1000  min=0.155 p50=0.175 p90=0.196 p99=0.266 p99.9=0.345 max=0.361  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-gpu_r10.json (1000 samples)
+RESULT {"tag": "idle2_r10", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1582120021339506, "p50_ms": 0.17792500148061663, "p90_ms": 0.19398900622036308, "p99_ms": 0.24611900153104216, "p999_ms": 0.30455201340373605, "max_ms": 0.3910189989255741, "mean_ms": 0.1811947461537784, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=idle2_r10    n=1000  min=0.158 p50=0.178 p90=0.194 p99=0.246 p99.9=0.305 max=0.391  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-idle2_r10.json (1000 samples)
+RESULT {"tag": "idle_r11", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15690000145696104, "p50_ms": 0.17600500723347068, "p90_ms": 0.191908999113366, "p99_ms": 0.2576389961177483, "p999_ms": 0.3250640002079308, "max_ms": 0.33411999174859375, "mean_ms": 0.1791080138355028, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=idle_r11     n=1000  min=0.157 p50=0.176 p90=0.192 p99=0.258 p99.9=0.325 max=0.334  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-idle_r11.json (1000 samples)
+RESULT {"tag": "gpu_r11", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1538279902888462, "p50_ms": 0.17222799942828715, "p90_ms": 0.1886770041892305, "p99_ms": 0.2685510116862133, "p999_ms": 0.369672998203896, "max_ms": 0.4007150128018111, "mean_ms": 0.1759047633240698, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=gpu_r11      n=1000  min=0.154 p50=0.172 p90=0.189 p99=0.269 p99.9=0.370 max=0.401  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-gpu_r11.json (1000 samples)
+RESULT {"tag": "cpu_nq_r11", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15779600653331727, "p50_ms": 0.17597200348973274, "p90_ms": 0.19514100858941674, "p99_ms": 0.2867279981728643, "p999_ms": 0.40586700197309256, "max_ms": 0.5749590054620057, "mean_ms": 0.18140779536042828, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=cpu_nq_r11   n=1000  min=0.158 p50=0.176 p90=0.195 p99=0.287 p99.9=0.406 max=0.575  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-cpu_nq_r11.json (1000 samples)
+RESULT {"tag": "cpu_q_r11", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1773490075720474, "p50_ms": 0.19466099911369383, "p90_ms": 0.22650200116913766, "p99_ms": 0.2874630008591339, "p999_ms": 0.3686499985633418, "max_ms": 0.37984900700394064, "mean_ms": 0.20119691533909645, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=cpu_q_r11    n=1000  min=0.177 p50=0.195 p90=0.227 p99=0.287 p99.9=0.369 max=0.380  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-cpu_q_r11.json (1000 samples)
+RESULT {"tag": "idle2_r11", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15773199265822768, "p50_ms": 0.17450099403504282, "p90_ms": 0.1911089930217713, "p99_ms": 0.28605600527953357, "p999_ms": 0.47041199286468327, "max_ms": 1.1357410112395883, "mean_ms": 0.18024867166241165, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=idle2_r11    n=1000  min=0.158 p50=0.175 p90=0.191 p99=0.286 p99.9=0.470 max=1.136  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-idle2_r11.json (1000 samples)
+RESULT {"tag": "idle_r12", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15683600213378668, "p50_ms": 0.17533201025798917, "p90_ms": 0.18979699234478176, "p99_ms": 0.2519429981475696, "p999_ms": 0.37431399687193334, "max_ms": 0.9406330063939095, "mean_ms": 0.17895482006133534, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=idle_r12     n=1000  min=0.157 p50=0.175 p90=0.190 p99=0.252 p99.9=0.374 max=0.941  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-idle_r12.json (1000 samples)
+RESULT {"tag": "cpu_q_r12", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1759409933583811, "p50_ms": 0.19334899843670428, "p90_ms": 0.2230139944003895, "p99_ms": 0.26394300220999867, "p999_ms": 0.9689849975984544, "max_ms": 1.0390030074631795, "mean_ms": 0.20066819386556745, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=cpu_q_r12    n=1000  min=0.176 p50=0.193 p90=0.223 p99=0.264 p99.9=0.969 max=1.039  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-cpu_q_r12.json (1000 samples)
+RESULT {"tag": "gpu_r12", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1541480014566332, "p50_ms": 0.17197300621774048, "p90_ms": 0.19968498963862658, "p99_ms": 0.24250200658570975, "p999_ms": 0.31712900090496987, "max_ms": 0.9013679955387488, "mean_ms": 0.17757679111673497, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=gpu_r12      n=1000  min=0.154 p50=0.172 p90=0.200 p99=0.243 p99.9=0.317 max=0.901  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-gpu_r12.json (1000 samples)
+RESULT {"tag": "cpu_nq_r12", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15574799908790737, "p50_ms": 0.17322000348940492, "p90_ms": 0.19008498929906636, "p99_ms": 0.2597190032247454, "p999_ms": 0.28659899544436485, "max_ms": 0.30000800325069577, "mean_ms": 0.1768454272969393, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=cpu_nq_r12   n=1000  min=0.156 p50=0.173 p90=0.190 p99=0.260 p99.9=0.287 max=0.300  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-cpu_nq_r12.json (1000 samples)
+RESULT {"tag": "idle2_r12", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1580520038260147, "p50_ms": 0.17584400484338403, "p90_ms": 0.1927090052049607, "p99_ms": 0.24416600354015827, "p999_ms": 0.5121409922139719, "max_ms": 0.7018739997874945, "mean_ms": 0.17947201582137495, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=idle2_r12    n=1000  min=0.158 p50=0.176 p90=0.193 p99=0.244 p99.9=0.512 max=0.702  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T154814Z-pinned/lat-idle2_r12.json (1000 samples)

@@ -1,0 +1,105 @@
+{
+  "utc": "2026-09-21T15:32:20Z",
+  "script": "run-saturation.sh",
+  "script_sha256": "beb2b8bdff2575745f07b418c10e348d3f8152172b820e2667d42691e11dc356",
+  "lib_sha256": "b0fb3e8f19e19010e4f0dd25daa5bf04d88dd813f456c430445955caadb5b6b3",
+  "probe_sha256": "11c8d14231f7bcf8e09752db0a440c69f7c5d5efb7a4669f7626db15da374288",
+  "python3": "/usr/bin/python3",
+  "python3_under_sudo": "/usr/bin/python3",
+  "machine": "aarch64",
+  "kernel": "5.15.148-tegra",
+  "ncpu": 6,
+  "sysfs_cpu": "/sys/devices/system/cpu",
+  "governor_state": "pinned",
+  "governor_before": "schedutil",
+  "cur_freq_khz_before": "1190400 1190400 1344000 1344000 729600 729600",
+  "cpuidle": "present",
+  "cstate_policy": "shallow",
+  "cstate_exposed": "WFI:1us:on c7:5000us:off",
+  "cstate_disabled": "6 state(s) with exit latency > 10 us",
+  "qemu_exe": "/usr/bin/qemu-system-aarch64",
+  "qemu_version": "QEMU emulator version 6.2.0 (Debian 1:6.2+dfsg-2ubuntu6.31)",
+  "qemu_cmdline": "qemu-system-aarch64 -machine virt,gic-version=3 -cpu host -enable-kvm -smp 2 -m 1G -drive file=/home/<user>/output/disk-qemu,if=none,id=drv0,format=raw -device virtio-blk-device,drive=drv0 -snapshot -netdev tap,id=n0,ifname=tap-qnx,script=no,downscript=no -device virtio-net-device,netdev=n0,mac=52:54:00:11:11:11 -object rng-random,filename=/dev/urandom,id=rng0 -device virtio-rng-device,rng=rng0 -kernel /home/<user>/output/ifs-demo2.bin -nographic ",
+  "qemu_threads": 4,
+  "qemu_affinity": "0-2",
+  "sample_window": 1,
+  "sampler_paths": {
+    "emc_bpmp": "/sys/kernel/debug/bpmp/debug/clk/emc/rate",
+    "emc_ccf": "/sys/kernel/debug/clk/emc/clk_rate",
+    "gpu_devfreq": "/sys/class/devfreq/17000000.gpu/cur_freq"
+  },
+  "fifo_arms": "cpu6_prio",
+  "stall_policy": "record",
+  "probe_timeout_s": 10,
+  "recover_max_s": 120,
+  "experiment": "saturation",
+  "pin": {
+    "qemu": "0-2",
+    "probe": 4,
+    "loads": "cpuload pinned per thread and read back; fma unpinned (host thread measured <=1% CPU)"
+  },
+  "load_placement": {
+    "cpu2_q": [
+      0,
+      1
+    ],
+    "cpu2_nq": [
+      3,
+      5
+    ],
+    "cpu3_q": [
+      0,
+      1,
+      2
+    ],
+    "cpu6": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "cpu6_prio": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "gpu_cpu6": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+    ]
+  },
+  "fma_sha256": "ef0188d7109993877e9dda8310f685237017ae12bd2fee64a031490a52acb227",
+  "cpuload_sha256": "718b52478856ac8fe663cee3d1206897deaff6018716a6148ce24d7f3ac46074",
+  "cpuload_c_sha256": "9a1ca8f5c2ee39b8657380a7822243930b1cb8c6589b7417271c09e0c0d63db4",
+  "gpu_min_busy_pct": 50,
+  "probe_priority": "SCHED_FIFO 50 in cpu6_prio only; reported by the probe itself in every arm file and checked by the gate",
+  "load_policy": "started, verified alive after 3 s and at probe end, stopped at probe end; ceiling 27s",
+  "order": "Williams over the six loaded arms (period 6); idle first and idle2 last every round",
+  "gpu_footprint": "fma host thread measured at <=1% CPU (it blocks in cudaDeviceSynchronize); gpu_cpu6 vs cpu6 is close to matched",
+  "sampler": "root tegrastats (per-core CPU, EMC_FREQ, GR3D) + EMC rate (bpmp and ccf debugfs) + GPU devfreq, every 500 ms nominal across each probe window; at least half that rate required per window",
+  "arms": [
+    "idle",
+    "cpu2_q",
+    "cpu2_nq",
+    "cpu3_q",
+    "cpu6",
+    "cpu6_prio",
+    "gpu_cpu6",
+    "idle2"
+  ],
+  "n": 1000,
+  "k": 6,
+  "warmup": 200,
+  "interval_ms": 2,
+  "governor_after": "performance",
+  "cur_freq_khz_after": "1344000 1344000 1344000 1344000 1344000 1344000"
+}
