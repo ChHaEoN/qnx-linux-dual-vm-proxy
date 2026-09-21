@@ -57,6 +57,12 @@ docs/cv-architecture-brief.md
 # history is not being rewritten -- see the note above. Its basename is also in
 # claims_lib.LOCAL_ONLY so the prose scan skips it locally as CI does.
 docs/jd-mapping.md
+# Phase-0 session-resume prompt, unpublished 2026-09-21. It was an INSTRUCTION
+# to a reader -- "read CLAUDE.md", "test subagent_type: research", "5 commits
+# so far" against 248 -- naming three things the repo no longer has. A dated
+# record that mentions a removed file is correct; an instruction to use one is a
+# trap. Its one substantive line, the honest-framing rule, is now in README.
+docs/onboarding-prompt.md
 # idlc-generated sources: regenerated at build time from av.idl, and they carry
 # no licence header of their own, so they are not committed.
 ipc-test/qnx-dds-monitor/av.c
@@ -143,7 +149,8 @@ orin-native/tools/memcanary-w
 
 # The agent roster: removed from the public repo 2026-09-21 (owner). It described
 # a 14-role automotive-SDV team process that the work largely did not follow --
-# 11 of 257 commits mention an agent, and the real work used ad-hoc task
+# 22 of 248 commits mention an agent (git log --grep=agent -i), and the real
+# work used ad-hoc task
 # delegation. A document asserting an organisational structure the repo cannot
 # evidence is the same class of problem the claims gate exists to catch.
 # Both trees stay on disk so the subagent definitions keep working locally.

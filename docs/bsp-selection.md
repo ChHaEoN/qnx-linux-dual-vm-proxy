@@ -96,7 +96,7 @@ needed.
 **Allowed (per the QNX Everywhere NCEULA):**
 - Personal projects and self-education
 - Extending hardware support / writing BSPs
-- Demonstrating to others (including interview demos)
+- Demonstrating to others
 - Publishing build scripts, Makefiles, configuration files
 - Publishing screenshots and boot logs
 
@@ -608,8 +608,8 @@ Open empirical questions for Phase 3:
 
 ## Rationale
 
-**Why hybrid hosts instead of an x86_64-only setup:** the role this
-portfolio targets is BSP / customer-port engineering on **arm64**
+**Why hybrid hosts instead of an x86_64-only setup:** the engineering
+this project studies is BSP / customer-port work on **arm64**
 silicon (Orin, Thor). Running the runtime side on Graviton arm64 +
 KVM is what gives the project narrative authenticity; an x86_64-only
 QEMU TCG run would be slower and architecturally off-target. The

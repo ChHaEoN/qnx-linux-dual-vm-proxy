@@ -831,6 +831,6 @@ finding from this pair of legs.
 ## 6. Narrative tie-back
 
 > _Section deferred to Phase 6. Will distill the twin-diff findings
-> into the interview narrative's 2-min and 10-min versions, with
+> into short and long write-ups, with
 > citations to the measured numbers in `results/cloud/` and
 > `results/hw/`._

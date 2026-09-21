@@ -492,4 +492,4 @@ Phase 4's twin diff meaningful.
 If we get there, the project's narrative becomes meaningfully
 stronger: the cloud twin is a fast iteration sandbox, and the
 hardware twin proves it ports to silicon. That is the customer-port
-story DRIVE OS SE work actually consists of.
+story DRIVE OS platform integration actually consists of.

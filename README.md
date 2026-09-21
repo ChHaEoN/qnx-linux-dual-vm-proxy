@@ -13,9 +13,10 @@ are explained under [Reading the ids](#reading-the-ids).
      .github/workflows/claims-gate.yml. Do not hand-edit it: change the
      Status table and re-run `python scripts/ci/render_badges.py --write`.
      It names the phase only. Architecture ids (A1-A6) move independently
-     and belong in the body, where they can be struck through and dated --
-     that is how this badge previously went stale advertising "native QHV"
-     after v1 had been superseded. -->
+     and belong in the body, which is OVERWRITE-ONLY: replace the sentence,
+     never annotate it -- the gate fails this file on a strike-through. That
+     separation is why the badge once went stale advertising "native QHV"
+     after that architecture had been superseded. -->
 ![Phase](https://img.shields.io/badge/Phase-3b-blue)
 [![tooling](https://github.com/ChHaEoN/qnx-linux-dual-vm-proxy/actions/workflows/tooling.yml/badge.svg)](https://github.com/ChHaEoN/qnx-linux-dual-vm-proxy/actions/workflows/tooling.yml)
 [![claims-gate](https://github.com/ChHaEoN/qnx-linux-dual-vm-proxy/actions/workflows/claims-gate.yml/badge.svg)](https://github.com/ChHaEoN/qnx-linux-dual-vm-proxy/actions/workflows/claims-gate.yml)
@@ -93,7 +94,14 @@ is built, linked or booted there.
 ## Known limitations (honest framing)
 
 The whole point of the project is to be precise about what a software-layer
-proxy can and cannot demonstrate. This table is the load-bearing part:
+proxy can and cannot demonstrate.
+
+**The honest-framing rule**, which documents here cite by name: every claim
+is paired with what it does *not* demonstrate, and nothing is called working
+without a log, a number or a diff behind it. Where a limit is known but not
+quantified, it is named as unquantified rather than left out.
+
+This table is the load-bearing part:
 
 | DRIVE OS feature | Limitation in this project |
 |---|---|
@@ -327,8 +335,10 @@ ground truth when anything else disagrees with it.
 [drive-os-comparison.md](docs/drive-os-comparison.md) is the calibration — what
 this validates against DRIVE OS and what it cannot.
 [orin-native-port-plan.md](docs/orin-native-port-plan.md) holds the milestone
-ladder and every owner decision. The rest of `docs/` is indexed from those
-three.
+ladder and every owner decision. The Phase-1 gate material sits apart from
+those three, under [`docs/fusa/`](docs/fusa/), [`docs/cyber/`](docs/cyber/)
+and [`docs/tara/`](docs/tara/) — study-level work products, not certification
+evidence.
 
 ---
 

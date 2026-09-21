@@ -252,7 +252,16 @@ NEGATION_RE = re.compile(
 # Explicitly marked as planned / intended / not built.
 PLANNED_RE = re.compile(
     r"\b(planned|design intent|intended|never built|not built|would have|aspiration|"
-    r"stretch|not run|design called for|superseded)\b",
+    r"stretch|not run|design called for|superseded|"
+    # Added 2026-09-21, when the prose scan widened from docs/* to docs/**. The
+    # FuSa and TARA gate documents correct themselves with a dated ADDENDUM
+    # TABLE ("partially falsified", fmea:307, tara:634) rather than inline
+    # ~~strike-through~~, so strip_superseded cannot see the correction and
+    # every original-assumption sentence read as a live claim. These words mark
+    # a sentence as not asserting present fact: "the TARA assumed a Graviton
+    # host" records an assumption, and an ASIL column labelled "illustrative"
+    # disclaims itself in the same breath.
+    r"assumed|assumption|illus\w*|notional|falsified|hypothes[ie]s|hypothetical)\b",
     re.I,
 )
 

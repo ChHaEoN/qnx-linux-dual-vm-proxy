@@ -9,6 +9,81 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-21 — seven paths out of a public repo, and the three things a link-checker could not see
+
+The owner unpublished the AI-facing material: `CLAUDE.md`, `AGENTS.md`, `agents/`,
+`.claude/agents/`, `.codex/`, `skills/`, `docs/jd-mapping.md` and
+`docs/onboarding-prompt.md`. All stay on the build machine, gitignored. Untracking
+hides a file from the tip only — every one remains in earlier commits, and the
+2026-09-20 decision not to rewrite history stands.
+
+**Two things were preserved rather than deleted, and both had to be found first.**
+`skills/fmea/examples/phase1-cloud-bringup-fmea.md` was not study notes: two tracked
+FuSa gate documents name it as their *input artefact*. It moved to `docs/fusa/`, beside
+its consumers, and five relative paths inside it were rebased. `docs/onboarding-prompt.md`
+held one substantive line — the honest-framing rule — which is now stated in README's
+"Known limitations" section, because `docs/fusa/phase1-cloud-bringup-fmea.md` and
+`docs/phase2-topology-decision.md` both cite that rule by name and, once `CLAUDE.md`
+went private, nothing public stated it. An audit of `docs/jd-mapping.md` found no
+equivalent: every fact it carried is recorded more fully elsewhere, each checked and
+then adversarially re-checked.
+
+**CI was right and the gate was wrong.** README said the denylist runs over `docs/**`;
+`claims_gate.py` read `docs/*.md`. Seven tracked files under `docs/fusa/`, `docs/cyber/`,
+`docs/tara/` and `docs/middleware/` had never been scanned — including the FMEA that had
+just been moved there. Widening the glob to match README surfaced 13 hits, and the split
+is the interesting part. The FuSa and TARA documents correct themselves with a dated
+*addendum table* ("partially falsified", fmea:307, tara:634) rather than inline
+`~~strike-through~~`, so `strip_superseded` cannot see the correction and every original
+assumption sentence read as a live claim. Adding the hedges those documents actually use
+— `assumed`, `illus*`, `notional`, `falsified`, `hypothes[ie]s` — to `PLANNED_RE` took it
+to 9. Those 9 stand as warnings, not fixes: 6 are ISO 26262 vocabulary in a study
+worksheet's own column headers, and **3 are genuinely stale sentences** naming the
+never-built AWS Graviton runtime host in `docs/fusa/phase1-cloud-bringup-fmea.md` and
+`docs/tara/phase1-cloud-tara.md`. Correcting a Phase-1 gate document is the owner's call,
+so they are recorded here and left.
+
+**Two latent traps, both of the CI-passes/local-fails shape.** First: the denylist
+exemption `designed for AWS Graviton; as built, QEMU TCG` was sustained by
+`docs/jd-mapping.md` alone, so `test_every_exemption_is_justified_and_used` would have
+gone green locally — the file is still on disk — and failed only in Actions. Second, and
+worse: the local-only skip list was hardcoded in three places, and only the gate's copy
+was load-bearing. The two test copies could drift without failing anything, which means
+the next exemption keyed to a local-only file would have reproduced this exact failure
+after the lesson had supposedly been learned. Collapsed to `claims_lib.LOCAL_ONLY`, one
+constant, three call sites. Verified both directions: with `docs/jd-mapping.md` on disk
+and with it moved away, the gate reports the same file count and pytest passes — local
+and CI now agree by construction rather than by luck.
+
+**A third bug fell out of the widened scan.** The gate had no output-encoding guard, only
+an input one, so printing a sentence containing `≥` crashed it with `UnicodeEncodeError`
+on the owner's cp950 console while working in Actions. `sys.stdout.reconfigure(errors=
+"replace")`.
+
+**Job- and role-targeting phrasing removed**, per the owner's decision: 7 sentences across
+`bsp-selection.md`, `future-multi-soc.md`, `orin-port.md`, `security-model.md` and
+`digital-twin-design.md`. Two of them were dangling references to the now-unpublished
+`docs/interview-narrative.md`. Eleven further candidates were rejected on review — the
+`.gitignore` comments that explain *why* the material was removed must keep naming it, and
+"a public portfolio has zero appetite for license risk" states the reason for a rule.
+Removing those would have made the repo less honest, not less promotional. Dated entries in
+this file that mention removed files are left alone: a record that names a removed file is
+correct, an *instruction* to use one is a trap — which is why `docs/onboarding-prompt.md`
+went and the ADR-002 §4 follow-up list stayed.
+
+**Also:** `docs/architecture.md` rewritten overwrite-only, 511 lines to 189, 52 strike
+markers to 0, with its three diagrams generated from computed widths after two were found
+1–2 columns out; the two merged remote branches that still carried `docs/jd-mapping.md`
+(`readme/phase4-qhv-leg`, `ci/claims-gate`, both 0 commits ahead of `main`) deleted, so
+`main` is the only remote branch; `AGENTS.md` collapsed from a 284-line hand-maintained
+copy of `CLAUDE.md` — 20 strike markers, a JD section, a `skills/` tree that no longer
+exists — to a pointer; and `.gitignore`'s "11 of 257 commits mention an agent" corrected
+to a figure that can actually be re-derived (22 of 248, `git log --grep=agent -i`).
+
+No measurement was taken today and no claim about the hardware changed.
+
+---
+
 ## 2026-09-20 — the cloud twin, measured at last: the identical image runs on both hosts, and the obvious metric is 92% a timeout
 
 [digital-twin-design.md §1b](digital-twin-design.md) argued that the twin became

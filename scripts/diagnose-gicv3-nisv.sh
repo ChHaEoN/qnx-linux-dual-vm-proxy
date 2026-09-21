@@ -500,7 +500,7 @@ grep_counts=()
 : > "${work}/grep-all"
 if have git && git -C "${repo_root}" rev-parse HEAD >/dev/null 2>&1; then
   for t in "${grep_terms[@]}"; do
-    c="$({ git -C "${repo_root}" grep -n -I -F -e "${t}" -- docs scripts logs README.md CLAUDE.md AGENTS.md ipc-test skills 2>/dev/null || true; } | tee -a "${work}/grep-all" | wc -l | tr -d ' ')"
+    c="$({ git -C "${repo_root}" grep -n -I -F -e "${t}" -- docs scripts logs README.md ipc-test orin-native 2>/dev/null || true; } | tee -a "${work}/grep-all" | wc -l | tr -d ' ')"
     grep_counts+=("${t}|${c}")
   done
   sort -u "${work}/grep-all" | write_raw repo-evidence-grep
@@ -1225,7 +1225,7 @@ emit "- hash recorded for the hung KVM boots (a1.metal log header): ${recorded_i
 emit ""
 
 emit "## Evidence found" ""
-emit "Key-term hits in docs/, scripts/, logs/, README/CLAUDE/AGENTS (raw/repo-evidence-grep.txt):" ""
+emit "Key-term hits in docs/, scripts/, logs/, ipc-test/, orin-native/ and README (raw/repo-evidence-grep.txt):" ""
 emit "| term | matching lines |" "|---|---|"
 for c in ${grep_counts[@]+"${grep_counts[@]}"}; do emit "| \`${c%%|*}\` | ${c##*|} |"; done
 emit "" "Boot-log classification (${log_dir#"${repo_root}"/}${boot_logs[0]:+ + --boot-log}); hang signature = 'FOUND GICv3 ITS' with no later '** CPU n PE is not awake':" ""

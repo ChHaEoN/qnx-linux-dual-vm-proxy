@@ -24,7 +24,7 @@ two SoCs talk over automotive Ethernet (often TSN) or, on newer
 platforms, PCIe.
 
 A QNX/Linux dual-VM project that stays on a single SoC misses half
-of the customer-facing surface area an AVOS / DRIVE OS SE actually
+of the customer-facing surface area that real AVOS / DRIVE OS integration work actually
 encounters. Phase 7 layers a **second SoC proxy** onto the existing
 cloud twin so the project can exercise inter-SoC IPC, AUTOSAR
 Adaptive / SOME/IP-SD framing, and the integration shape that real
@@ -86,9 +86,7 @@ DRIVE AGX SDK Developer Program, not self-serve for an individual — or
 same Graviton3 family as the existing cloud leg) to determine whether
 the KVM/GICv3-NISV hang found on Orin (`docs/orin-port.md`'s risk
 register) is Tegra234-specific or a general real-hardware/KVM
-limitation. This is a resourcing decision, not an abandonment — see
-`docs/interview-narrative.md`'s new Q&A section for how to talk about
-this finding on its own terms.
+limitation. This is a resourcing decision, not an abandonment.
 
 > **2026-09-11: superseded.** The `a1.metal` run on 2026-07-29 reproduced
 > the hang on a second vendor's silicon ([findings.md](findings.md)), and

@@ -153,8 +153,8 @@ The Cybersecurity Agent runs this audit at every Phase boundary.
 ## 6. ISO/SAE 21434 framing (study-level)
 
 The project's threat model and supply-chain hygiene map onto 21434
-work-product categories like this — for *study* and interview
-discussion, **not** as compliance evidence:
+work-product categories like this — for *study*, **not** as
+compliance evidence:
 
 | 21434 work product | This project's analogue |
 |---|---|

@@ -429,7 +429,11 @@ def main():
     for label, globs, hard in (
             ("scripts/", ["scripts/**/*.sh", "scripts/**/*.bat",
                           "scripts/**/*.ps1", "scripts/**/*.md"], True),
-            ("docs/", ["docs/*.md"], False),
+            # docs/**, not docs/*: the FuSa, Cyber and TARA gate material under
+            # docs/fusa|cyber|tara and docs/middleware are published prose making
+            # claims, and were never scanned until 2026-09-21. README said "docs/**"
+            # while the gate read "docs/*" -- the README was the accurate one.
+            ("docs/", ["docs/**/*.md"], False),
             # results/ was the last unscanned prose surface. A run record that
             # misstates what was measured is as misleading as a doc that does,
             # and results/cloud/ is the standing example: a directory named
@@ -596,4 +600,16 @@ def main():
 
 
 if __name__ == "__main__":
+    # The scanned prose carries characters the owner's console encoding cannot
+    # represent (cp950 chokes on U+2265 in the FuSa worksheets). Without this,
+    # the gate CRASHES locally on text it prints fine in Actions, which is the
+    # CI-passes/local-fails shape claims_lib._read already warns about, only on
+    # the output side. errors="replace" keeps the console's own encoding and
+    # substitutes the few glyphs it cannot draw, rather than reconfiguring to
+    # UTF-8 and printing mojibake.
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(errors="replace")  # type: ignore[union-attr]
+        except (AttributeError, ValueError):  # pragma: no cover - old/odd streams
+            pass
     sys.exit(main())
