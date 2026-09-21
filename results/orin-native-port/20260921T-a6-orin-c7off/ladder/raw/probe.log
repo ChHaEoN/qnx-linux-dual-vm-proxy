@@ -1,0 +1,144 @@
+RESULT {"tag": "A-loopback_r1", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.046465997002087533, "p50_ms": 0.05261000478640199, "p90_ms": 0.05545699968934059, "p99_ms": 0.06304099224507809, "p999_ms": 0.08416200580541044, "max_ms": 0.12285199773032218, "mean_ms": 0.05296024424023926}
+  tag=A-loopback_r1 n=1000  min=0.046 p50=0.053 p90=0.055 p99=0.063 p99.9=0.084 max=0.123  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-A-loopback_r1.json (1000 samples)
+RESULT {"tag": "B-bridge_r1", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.04844900104217231, "p50_ms": 0.054849995649419725, "p90_ms": 0.05760100611951202, "p99_ms": 0.0711699976818636, "p999_ms": 0.08537800749763846, "max_ms": 0.09069099905900657, "mean_ms": 0.05523968800844159}
+  tag=B-bridge_r1  n=1000  min=0.048 p50=0.055 p90=0.058 p99=0.071 p99.9=0.085 max=0.091  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-B-bridge_r1.json (1000 samples)
+RESULT {"tag": "C-null_r1", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1577969960635528, "p50_ms": 0.1742770109558478, "p90_ms": 0.1861489872680977, "p99_ms": 0.22592699679080397, "p999_ms": 0.2896090009016916, "max_ms": 0.323080996167846, "mean_ms": 0.17615123325958848}
+  tag=C-null_r1    n=1000  min=0.158 p50=0.174 p90=0.186 p99=0.226 p99.9=0.290 max=0.323  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-C-null_r1.json (1000 samples)
+RESULT {"tag": "D-guest_r1", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1559080119477585, "p50_ms": 0.1742449967423454, "p90_ms": 0.1854779984569177, "p99_ms": 0.20752500859089196, "p999_ms": 0.2579909923952073, "max_ms": 0.3260890080127865, "mean_ms": 0.1755844802246429}
+  tag=D-guest_r1   n=1000  min=0.156 p50=0.174 p90=0.185 p99=0.208 p99.9=0.258 max=0.326  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-D-guest_r1.json (1000 samples)
+RESULT {"tag": "A-loopback_r2", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.04652999632526189, "p50_ms": 0.05225799395702779, "p90_ms": 0.05596899427473545, "p99_ms": 0.07747400377411395, "p999_ms": 0.09136300650425255, "max_ms": 0.2417979994788766, "mean_ms": 0.05310393484251108}
+  tag=A-loopback_r2 n=1000  min=0.047 p50=0.052 p90=0.056 p99=0.077 p99.9=0.091 max=0.242  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-A-loopback_r2.json (1000 samples)
+RESULT {"tag": "B-bridge_r2", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.04921700747217983, "p50_ms": 0.05542600410990417, "p90_ms": 0.05900999531149864, "p99_ms": 0.08157000411301851, "p999_ms": 0.16304399468936026, "max_ms": 0.20883799879811704, "mean_ms": 0.05642708808591124}
+  tag=B-bridge_r2  n=1000  min=0.049 p50=0.055 p90=0.059 p99=0.082 p99.9=0.163 max=0.209  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-B-bridge_r2.json (1000 samples)
+RESULT {"tag": "C-null_r2", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15472499944735318, "p50_ms": 0.17325300723314285, "p90_ms": 0.18579699099063873, "p99_ms": 0.2069809997919947, "p999_ms": 0.24045399914029986, "max_ms": 1.72715300868731, "mean_ms": 0.17617042201163713}
+  tag=C-null_r2    n=1000  min=0.155 p50=0.173 p90=0.186 p99=0.207 p99.9=0.240 max=1.727  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-C-null_r2.json (1000 samples)
+RESULT {"tag": "D-guest_r2", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1553960028104484, "p50_ms": 0.17296499572694302, "p90_ms": 0.1849649997893721, "p99_ms": 0.209189995075576, "p999_ms": 0.2297669998370111, "max_ms": 0.2471109910402447, "mean_ms": 0.17479423468466848}
+  tag=D-guest_r2   n=1000  min=0.155 p50=0.173 p90=0.185 p99=0.209 p99.9=0.230 max=0.247  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-D-guest_r2.json (1000 samples)
+RESULT {"tag": "A-loopback_r3", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.04604899731930345, "p50_ms": 0.052386007155291736, "p90_ms": 0.05641800817102194, "p99_ms": 0.07683399599045515, "p999_ms": 0.15597300080116838, "max_ms": 6.140429002698511, "mean_ms": 0.05931728184805252}
+  tag=A-loopback_r3 n=1000  min=0.046 p50=0.052 p90=0.056 p99=0.077 p99.9=0.156 max=6.140  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-A-loopback_r3.json (1000 samples)
+RESULT {"tag": "B-bridge_r3", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.048608999350108206, "p50_ms": 0.05565000174101442, "p90_ms": 0.059873011196032166, "p99_ms": 0.08125099702738225, "p999_ms": 0.099073993624188, "max_ms": 0.1503400126239285, "mean_ms": 0.056633895030245185}
+  tag=B-bridge_r3  n=1000  min=0.049 p50=0.056 p90=0.060 p99=0.081 p99.9=0.099 max=0.150  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-B-bridge_r3.json (1000 samples)
+RESULT {"tag": "C-null_r3", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15552400145679712, "p50_ms": 0.17251700046472251, "p90_ms": 0.18733300385065377, "p99_ms": 0.2172539971070364, "p999_ms": 0.26960799004882574, "max_ms": 0.276392005616799, "mean_ms": 0.17462304905347992}
+  tag=C-null_r3    n=1000  min=0.156 p50=0.173 p90=0.187 p99=0.217 p99.9=0.270 max=0.276  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-C-null_r3.json (1000 samples)
+RESULT {"tag": "D-guest_r3", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15619699843227863, "p50_ms": 0.1745970075717196, "p90_ms": 0.18806899606715888, "p99_ms": 0.2328709961147979, "p999_ms": 0.3058969887206331, "max_ms": 0.3863789897877723, "mean_ms": 0.17665973815019242}
+  tag=D-guest_r3   n=1000  min=0.156 p50=0.175 p90=0.188 p99=0.233 p99.9=0.306 max=0.386  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-D-guest_r3.json (1000 samples)
+RESULT {"tag": "A-loopback_r4", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.045761000365018845, "p50_ms": 0.05241698818281293, "p90_ms": 0.05561800207942724, "p99_ms": 0.07622600242029876, "p999_ms": 0.16035600856412202, "max_ms": 0.21994199778418988, "mean_ms": 0.05333839502418414}
+  tag=A-loopback_r4 n=1000  min=0.046 p50=0.052 p90=0.056 p99=0.076 p99.9=0.160 max=0.220  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-A-loopback_r4.json (1000 samples)
+RESULT {"tag": "B-bridge_r4", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.04976100171916187, "p50_ms": 0.05552101356443018, "p90_ms": 0.058976991567760706, "p99_ms": 0.08035398786887527, "p999_ms": 0.16278799739666283, "max_ms": 0.27351199241820723, "mean_ms": 0.05647285806480795}
+  tag=B-bridge_r4  n=1000  min=0.050 p50=0.056 p90=0.059 p99=0.080 p99.9=0.163 max=0.274  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-B-bridge_r4.json (1000 samples)
+RESULT {"tag": "C-null_r4", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15888400957919657, "p50_ms": 0.17530100012663752, "p90_ms": 0.18765300046652555, "p99_ms": 0.2144699974451214, "p999_ms": 0.40954699215944856, "max_ms": 0.48078100371640176, "mean_ms": 0.17751504491025116}
+  tag=C-null_r4    n=1000  min=0.159 p50=0.175 p90=0.188 p99=0.214 p99.9=0.410 max=0.481  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-C-null_r4.json (1000 samples)
+RESULT {"tag": "D-guest_r4", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15789300960022956, "p50_ms": 0.1762610045261681, "p90_ms": 0.18829299369826913, "p99_ms": 0.21562199981417507, "p999_ms": 0.2542470028856769, "max_ms": 0.2615120029076934, "mean_ms": 0.1777724137646146}
+  tag=D-guest_r4   n=1000  min=0.158 p50=0.176 p90=0.188 p99=0.216 p99.9=0.254 max=0.262  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-D-guest_r4.json (1000 samples)
+RESULT {"tag": "A-loopback_r5", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.04652999632526189, "p50_ms": 0.05257799057289958, "p90_ms": 0.056065997341647744, "p99_ms": 0.07654599903617054, "p999_ms": 0.10409900278318673, "max_ms": 1.748497990774922, "mean_ms": 0.05492189375218004}
+  tag=A-loopback_r5 n=1000  min=0.047 p50=0.053 p90=0.056 p99=0.077 p99.9=0.104 max=1.748  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-A-loopback_r5.json (1000 samples)
+RESULT {"tag": "B-bridge_r5", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.04886600072495639, "p50_ms": 0.05622500611934811, "p90_ms": 0.06000100984238088, "p99_ms": 0.08547501056455076, "p999_ms": 0.15686800179537386, "max_ms": 0.2506629971321672, "mean_ms": 0.057469301085802726}
+  tag=B-bridge_r5  n=1000  min=0.049 p50=0.056 p90=0.060 p99=0.085 p99.9=0.157 max=0.251  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-B-bridge_r5.json (1000 samples)
+RESULT {"tag": "C-null_r5", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1553960028104484, "p50_ms": 0.17504498828202486, "p90_ms": 0.1875890011433512, "p99_ms": 0.2103099977830425, "p999_ms": 0.2396869967924431, "max_ms": 0.2652239927556366, "mean_ms": 0.17618947607115842}
+  tag=C-null_r5    n=1000  min=0.155 p50=0.175 p90=0.188 p99=0.210 p99.9=0.240 max=0.265  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-C-null_r5.json (1000 samples)
+RESULT {"tag": "D-guest_r5", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15501199231948704, "p50_ms": 0.17459699301980436, "p90_ms": 0.1857659954112023, "p99_ms": 0.20755799778271466, "p999_ms": 0.2691919944481924, "max_ms": 0.4486199904931709, "mean_ms": 0.17605499630735721}
+  tag=D-guest_r5   n=1000  min=0.155 p50=0.175 p90=0.186 p99=0.208 p99.9=0.269 max=0.449  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-D-guest_r5.json (1000 samples)
+RESULT {"tag": "A-loopback_r6", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.04444899968802929, "p50_ms": 0.05206500645726919, "p90_ms": 0.055616997997276485, "p99_ms": 0.07404999632854015, "p999_ms": 0.08845100819598883, "max_ms": 0.20096499065402895, "mean_ms": 0.05287281317578163}
+  tag=A-loopback_r6 n=1000  min=0.044 p50=0.052 p90=0.056 p99=0.074 p99.9=0.088 max=0.201  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-A-loopback_r6.json (1000 samples)
+RESULT {"tag": "B-bridge_r6", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.04899399937130511, "p50_ms": 0.05600199801847339, "p90_ms": 0.059650003095157444, "p99_ms": 0.07846699736546725, "p999_ms": 0.15757299843244255, "max_ms": 0.18919000285677612, "mean_ms": 0.05696644089766778}
+  tag=B-bridge_r6  n=1000  min=0.049 p50=0.056 p90=0.060 p99=0.078 p99.9=0.158 max=0.189  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-B-bridge_r6.json (1000 samples)
+RESULT {"tag": "C-null_r6", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15219600754790008, "p50_ms": 0.1731249940348789, "p90_ms": 0.18518899742048234, "p99_ms": 0.2005179994739592, "p999_ms": 0.22026199440006167, "max_ms": 0.26362400967627764, "mean_ms": 0.1742975958477473}
+  tag=C-null_r6    n=1000  min=0.152 p50=0.173 p90=0.185 p99=0.201 p99.9=0.220 max=0.264  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-C-null_r6.json (1000 samples)
+RESULT {"tag": "D-guest_r6", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15891599468886852, "p50_ms": 0.1748850045260042, "p90_ms": 0.18550899403635412, "p99_ms": 0.21606999507639557, "p999_ms": 0.24778299848549068, "max_ms": 0.2605190093163401, "mean_ms": 0.175886719225673}
+  tag=D-guest_r6   n=1000  min=0.159 p50=0.175 p90=0.186 p99=0.216 p99.9=0.248 max=0.261  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-D-guest_r6.json (1000 samples)
+RESULT {"tag": "A-loopback_r7", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.0447369966423139, "p50_ms": 0.05225799395702779, "p90_ms": 0.05561800207942724, "p99_ms": 0.06560099427588284, "p999_ms": 0.08470600005239248, "max_ms": 0.09085099736694247, "mean_ms": 0.05274558287055697}
+  tag=A-loopback_r7 n=1000  min=0.045 p50=0.052 p90=0.056 p99=0.066 p99.9=0.085 max=0.091  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-A-loopback_r7.json (1000 samples)
+RESULT {"tag": "B-bridge_r7", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.049377005780115724, "p50_ms": 0.05644999328069389, "p90_ms": 0.05958598922006786, "p99_ms": 0.07766600174363703, "p999_ms": 0.10041800851467997, "max_ms": 1.6861270123627037, "mean_ms": 0.05854384718986694}
+  tag=B-bridge_r7  n=1000  min=0.049 p50=0.056 p90=0.060 p99=0.078 p99.9=0.100 max=1.686  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-B-bridge_r7.json (1000 samples)
+RESULT {"tag": "C-null_r7", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15549299132544547, "p50_ms": 0.1716840051813051, "p90_ms": 0.18410099437460303, "p99_ms": 0.2234940038761124, "p999_ms": 0.30989700462669134, "max_ms": 0.3430179931456223, "mean_ms": 0.17389099404681474}
+  tag=C-null_r7    n=1000  min=0.155 p50=0.172 p90=0.184 p99=0.223 p99.9=0.310 max=0.343  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-C-null_r7.json (1000 samples)
+RESULT {"tag": "D-guest_r7", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1591729960637167, "p50_ms": 0.17610099166631699, "p90_ms": 0.18867698963731527, "p99_ms": 0.2120380086125806, "p999_ms": 0.2751440042629838, "max_ms": 0.28435999411158264, "mean_ms": 0.1781047520635184}
+  tag=D-guest_r7   n=1000  min=0.159 p50=0.176 p90=0.189 p99=0.212 p99.9=0.275 max=0.284  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-D-guest_r7.json (1000 samples)
+RESULT {"tag": "A-loopback_r8", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.04681700374931097, "p50_ms": 0.05277000309433788, "p90_ms": 0.05635399429593235, "p99_ms": 0.06915400444995612, "p999_ms": 0.11459499364718795, "max_ms": 0.3708260046551004, "mean_ms": 0.05367749495781027}
+  tag=A-loopback_r8 n=1000  min=0.047 p50=0.053 p90=0.056 p99=0.069 p99.9=0.115 max=0.371  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-A-loopback_r8.json (1000 samples)
+RESULT {"tag": "B-bridge_r8", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.05011301254853606, "p50_ms": 0.05590599903371185, "p90_ms": 0.058913996326737106, "p99_ms": 0.07443400681950152, "p999_ms": 0.10217899398412555, "max_ms": 0.23152600624598563, "mean_ms": 0.05666232509247493}
+  tag=B-bridge_r8  n=1000  min=0.050 p50=0.056 p90=0.059 p99=0.074 p99.9=0.102 max=0.232  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-B-bridge_r8.json (1000 samples)
+RESULT {"tag": "C-null_r8", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15674000314902514, "p50_ms": 0.1744049950502813, "p90_ms": 0.18688499403651804, "p99_ms": 0.23015000624582171, "p999_ms": 1.1276480072410777, "max_ms": 6.922658998519182, "mean_ms": 0.18427885002165567}
+  tag=C-null_r8    n=1000  min=0.157 p50=0.174 p90=0.187 p99=0.230 p99.9=1.128 max=6.923  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-C-null_r8.json (1000 samples)
+RESULT {"tag": "D-guest_r8", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1557810028316453, "p50_ms": 0.1735729892970994, "p90_ms": 0.18730200827121735, "p99_ms": 0.23747900559101254, "p999_ms": 0.3047759964829311, "max_ms": 0.3257060016039759, "mean_ms": 0.17601955225109123}
+  tag=D-guest_r8   n=1000  min=0.156 p50=0.174 p90=0.187 p99=0.237 p99.9=0.305 max=0.326  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-D-guest_r8.json (1000 samples)
+RESULT {"tag": "A-loopback_r9", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.04608099698089063, "p50_ms": 0.052257004426792264, "p90_ms": 0.05590499495156109, "p99_ms": 0.07840199396014214, "p999_ms": 0.10432300041429698, "max_ms": 0.2605519985081628, "mean_ms": 0.05324080496211536}
+  tag=A-loopback_r9 n=1000  min=0.046 p50=0.052 p90=0.056 p99=0.078 p99.9=0.104 max=0.261  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-A-loopback_r9.json (1000 samples)
+RESULT {"tag": "B-bridge_r9", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.04835300205741078, "p50_ms": 0.055778000387363136, "p90_ms": 0.058721998357214034, "p99_ms": 0.07011399429757148, "p999_ms": 0.2052220079349354, "max_ms": 1.6795359988464043, "mean_ms": 0.057831221900414675}
+  tag=B-bridge_r9  n=1000  min=0.048 p50=0.056 p90=0.059 p99=0.070 p99.9=0.205 max=1.680  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-B-bridge_r9.json (1000 samples)
+RESULT {"tag": "C-null_r9", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15341199468821287, "p50_ms": 0.17235599807463586, "p90_ms": 0.18461399304214865, "p99_ms": 0.216325992369093, "p999_ms": 0.26045599952340126, "max_ms": 0.47729400102980435, "mean_ms": 0.174492273668875}
+  tag=C-null_r9    n=1000  min=0.153 p50=0.172 p90=0.185 p99=0.216 p99.9=0.260 max=0.477  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-C-null_r9.json (1000 samples)
+RESULT {"tag": "D-guest_r9", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1575089991092682, "p50_ms": 0.17485300486441702, "p90_ms": 0.18621400522533804, "p99_ms": 0.22515800083056092, "p999_ms": 0.5436640058178455, "max_ms": 1.1266869987593964, "mean_ms": 0.1776028505701106}
+  tag=D-guest_r9   n=1000  min=0.158 p50=0.175 p90=0.186 p99=0.225 p99.9=0.544 max=1.127  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-D-guest_r9.json (1000 samples)
+RESULT {"tag": "A-loopback_r10", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.04579400410875678, "p50_ms": 0.05241698818281293, "p90_ms": 0.05545798921957612, "p99_ms": 0.06748999294359237, "p999_ms": 0.09971500548999757, "max_ms": 0.16051701095420867, "mean_ms": 0.05289520423684735}
+  tag=A-loopback_r10 n=1000  min=0.046 p50=0.052 p90=0.055 p99=0.067 p99.9=0.100 max=0.161  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-A-loopback_r10.json (1000 samples)
+RESULT {"tag": "B-bridge_r10", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.050304995966143906, "p50_ms": 0.056289994972757995, "p90_ms": 0.05964899901300669, "p99_ms": 0.07693099905736744, "p999_ms": 0.08790599531494081, "max_ms": 0.2769349957816303, "mean_ms": 0.05711271002655849}
+  tag=B-bridge_r10 n=1000  min=0.050 p50=0.056 p90=0.060 p99=0.077 p99.9=0.088 max=0.277  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-B-bridge_r10.json (1000 samples)
+RESULT {"tag": "C-null_r10", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1565489947097376, "p50_ms": 0.17440500960219651, "p90_ms": 0.18685299437493086, "p99_ms": 0.22176699712872505, "p999_ms": 0.2776720066322014, "max_ms": 1.7508650053059682, "mean_ms": 0.177827618070296}
+  tag=C-null_r10   n=1000  min=0.157 p50=0.174 p90=0.187 p99=0.222 p99.9=0.278 max=1.751  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-C-null_r10.json (1000 samples)
+RESULT {"tag": "D-guest_r10", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15798899403307587, "p50_ms": 0.17661300080362707, "p90_ms": 0.18909299978986382, "p99_ms": 0.21946300694253296, "p999_ms": 0.3023449971806258, "max_ms": 0.5761119973612949, "mean_ms": 0.17869101391988806}
+  tag=D-guest_r10  n=1000  min=0.158 p50=0.177 p90=0.189 p99=0.219 p99.9=0.302 max=0.576  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-D-guest_r10.json (1000 samples)
+RESULT {"tag": "A-loopback_r11", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.04563300171867013, "p50_ms": 0.05228900408837944, "p90_ms": 0.05548899935092777, "p99_ms": 0.07219400140456855, "p999_ms": 0.12118701124563813, "max_ms": 0.30967200291343033, "mean_ms": 0.05306232506700326}
+  tag=A-loopback_r11 n=1000  min=0.046 p50=0.052 p90=0.055 p99=0.072 p99.9=0.121 max=0.310  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-A-loopback_r11.json (1000 samples)
+RESULT {"tag": "B-bridge_r11", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.050305010518059134, "p50_ms": 0.0561929919058457, "p90_ms": 0.05897799564991146, "p99_ms": 0.06569799734279513, "p999_ms": 0.08921799599193037, "max_ms": 0.098082993645221, "mean_ms": 0.05638833928969689}
+  tag=B-bridge_r11 n=1000  min=0.050 p50=0.056 p90=0.059 p99=0.066 p99.9=0.089 max=0.098  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-B-bridge_r11.json (1000 samples)
+RESULT {"tag": "C-null_r11", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15574799908790737, "p50_ms": 0.17373300215695053, "p90_ms": 0.18723700486589223, "p99_ms": 0.23507900186814368, "p999_ms": 0.3556259907782078, "max_ms": 0.36116200499236584, "mean_ms": 0.17683207710797433}
+  tag=C-null_r11   n=1000  min=0.156 p50=0.174 p90=0.187 p99=0.235 p99.9=0.356 max=0.361  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-C-null_r11.json (1000 samples)
+RESULT {"tag": "D-guest_r11", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15926899504847825, "p50_ms": 0.1757809950504452, "p90_ms": 0.18829399778041989, "p99_ms": 0.21507800556719303, "p999_ms": 0.32656898838467896, "max_ms": 0.33223300124518573, "mean_ms": 0.1776728077675216}
+  tag=D-guest_r11  n=1000  min=0.159 p50=0.176 p90=0.188 p99=0.215 p99.9=0.327 max=0.332  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-D-guest_r11.json (1000 samples)
+RESULT {"tag": "A-loopback_r12", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.04691298818215728, "p50_ms": 0.053217008826322854, "p90_ms": 0.05676900036633015, "p99_ms": 0.07590599125251174, "p999_ms": 0.11270699906162918, "max_ms": 0.36580199957825243, "mean_ms": 0.05427211878122762}
+  tag=A-loopback_r12 n=1000  min=0.047 p50=0.053 p90=0.057 p99=0.076 p99.9=0.113 max=0.366  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-A-loopback_r12.json (1000 samples)
+RESULT {"tag": "B-bridge_r12", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.048672998673282564, "p50_ms": 0.057249999372288585, "p90_ms": 0.06080199091229588, "p99_ms": 0.07212998752947897, "p999_ms": 0.09104199125431478, "max_ms": 0.09149100515060127, "mean_ms": 0.05780829720606562}
+  tag=B-bridge_r12 n=1000  min=0.049 p50=0.057 p90=0.061 p99=0.072 p99.9=0.091 max=0.091  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-B-bridge_r12.json (1000 samples)
+RESULT {"tag": "C-null_r12", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15866001194808632, "p50_ms": 0.17491700418759137, "p90_ms": 0.18630900012794882, "p99_ms": 0.2215100103057921, "p999_ms": 0.2907919988501817, "max_ms": 0.2939929981948808, "mean_ms": 0.17679532487818506}
+  tag=C-null_r12   n=1000  min=0.159 p50=0.175 p90=0.186 p99=0.222 p99.9=0.291 max=0.294  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-C-null_r12.json (1000 samples)
+RESULT {"tag": "D-guest_r12", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15731700113974512, "p50_ms": 0.1745650079101324, "p90_ms": 0.18662901129573584, "p99_ms": 0.21882200962863863, "p999_ms": 0.29412000731099397, "max_ms": 0.3301210090285167, "mean_ms": 0.1765008710208349}
+  tag=D-guest_r12  n=1000  min=0.157 p50=0.175 p90=0.187 p99=0.219 p99.9=0.294 max=0.330  bad=0 rej=0
+  wrote /home/<user>/ladder-out/20260921T125844Z/lat-D-guest_r12.json (1000 samples)

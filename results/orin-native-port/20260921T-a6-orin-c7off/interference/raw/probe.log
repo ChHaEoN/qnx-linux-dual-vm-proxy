@@ -1,0 +1,144 @@
+RESULT {"tag": "idle_r1", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15565200010314584, "p50_ms": 0.1734449906507507, "p90_ms": 0.18736500351224095, "p99_ms": 0.23341500491369516, "p999_ms": 0.28096800087951124, "max_ms": 0.30141600291244686, "mean_ms": 0.17592988282558508}
+  tag=idle_r1      n=1000  min=0.156 p50=0.173 p90=0.187 p99=0.233 p99.9=0.281 max=0.301  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-idle_r1.json (1000 samples)
+RESULT {"tag": "gpu_r1", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15338099910877645, "p50_ms": 0.17312500858679414, "p90_ms": 0.19085299572907388, "p99_ms": 0.25047099916264415, "p999_ms": 0.30570500530302525, "max_ms": 0.36804300907533616, "mean_ms": 0.17685682784940582}
+  tag=gpu_r1       n=1000  min=0.153 p50=0.173 p90=0.191 p99=0.250 p99.9=0.306 max=0.368  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-gpu_r1.json (1000 samples)
+RESULT {"tag": "cpu_r1", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15843599976506084, "p50_ms": 0.1753329997882247, "p90_ms": 0.1892849977593869, "p99_ms": 0.2402300015091896, "p999_ms": 0.3463460016064346, "max_ms": 0.36221800837665796, "mean_ms": 0.17818056023679674}
+  tag=cpu_r1       n=1000  min=0.158 p50=0.175 p90=0.189 p99=0.240 p99.9=0.346 max=0.362  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-cpu_r1.json (1000 samples)
+RESULT {"tag": "idle2_r1", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15360399265773594, "p50_ms": 0.1748209906509146, "p90_ms": 0.1880369964055717, "p99_ms": 0.22128599812276661, "p999_ms": 0.3235289914300665, "max_ms": 0.4119469958823174, "mean_ms": 0.17709661585104186}
+  tag=idle2_r1     n=1000  min=0.154 p50=0.175 p90=0.188 p99=0.221 p99.9=0.324 max=0.412  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-idle2_r1.json (1000 samples)
+RESULT {"tag": "idle_r2", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1576040085637942, "p50_ms": 0.1773490075720474, "p90_ms": 0.19072499708272517, "p99_ms": 0.22487100795842707, "p999_ms": 0.3233049937989563, "max_ms": 0.4145720013184473, "mean_ms": 0.1794513429631479}
+  tag=idle_r2      n=1000  min=0.158 p50=0.177 p90=0.191 p99=0.225 p99.9=0.323 max=0.415  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-idle_r2.json (1000 samples)
+RESULT {"tag": "cpu_r2", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.17683699843473732, "p50_ms": 0.1950779987964779, "p90_ms": 0.22595800692215562, "p99_ms": 0.2657349978107959, "p999_ms": 0.38112999754957855, "max_ms": 0.45738900371361524, "mean_ms": 0.20107264525722712}
+  tag=cpu_r2       n=1000  min=0.177 p50=0.195 p90=0.226 p99=0.266 p99.9=0.381 max=0.457  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-cpu_r2.json (1000 samples)
+RESULT {"tag": "gpu_r2", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15376500959973782, "p50_ms": 0.17142800788860768, "p90_ms": 0.18896600522566587, "p99_ms": 0.23008600692264736, "p999_ms": 0.2663430059328675, "max_ms": 0.572176999412477, "mean_ms": 0.17508622286550235}
+  tag=gpu_r2       n=1000  min=0.154 p50=0.171 p90=0.189 p99=0.230 p99.9=0.266 max=0.572  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-gpu_r2.json (1000 samples)
+RESULT {"tag": "idle2_r2", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15840400010347366, "p50_ms": 0.17459699301980436, "p90_ms": 0.1865980011643842, "p99_ms": 0.20787799439858645, "p999_ms": 0.2686789957806468, "max_ms": 0.27165601204615086, "mean_ms": 0.17626716812083032}
+  tag=idle2_r2     n=1000  min=0.158 p50=0.175 p90=0.187 p99=0.208 p99.9=0.269 max=0.272  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-idle2_r2.json (1000 samples)
+RESULT {"tag": "idle_r3", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15616400924045593, "p50_ms": 0.17536499944981188, "p90_ms": 0.18733300385065377, "p99_ms": 0.207973993383348, "p999_ms": 0.2508549951016903, "max_ms": 0.25466299848631024, "mean_ms": 0.17673253304383252}
+  tag=idle_r3      n=1000  min=0.156 p50=0.175 p90=0.187 p99=0.208 p99.9=0.251 max=0.255  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-idle_r3.json (1000 samples)
+RESULT {"tag": "gpu_r3", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15571700350847095, "p50_ms": 0.1725490001263097, "p90_ms": 0.19136499031446874, "p99_ms": 0.2254470018669963, "p999_ms": 0.2566479961387813, "max_ms": 0.28068000392522663, "mean_ms": 0.1758813912892947}
+  tag=gpu_r3       n=1000  min=0.156 p50=0.173 p90=0.191 p99=0.225 p99.9=0.257 max=0.281  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-gpu_r3.json (1000 samples)
+RESULT {"tag": "cpu_r3", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15456399705726653, "p50_ms": 0.17293299606535584, "p90_ms": 0.1853809953900054, "p99_ms": 0.21440599812194705, "p999_ms": 0.24951099476311356, "max_ms": 0.2690639958018437, "mean_ms": 0.17454261376406066}
+  tag=cpu_r3       n=1000  min=0.155 p50=0.173 p90=0.185 p99=0.214 p99.9=0.250 max=0.269  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-cpu_r3.json (1000 samples)
+RESULT {"tag": "idle2_r3", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1570610038470477, "p50_ms": 0.17574899538885802, "p90_ms": 0.18915800319518894, "p99_ms": 0.2356549957767129, "p999_ms": 0.346953995176591, "max_ms": 0.39002699486445636, "mean_ms": 0.17818942996382248}
+  tag=idle2_r3     n=1000  min=0.157 p50=0.176 p90=0.189 p99=0.236 p99.9=0.347 max=0.390  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-idle2_r3.json (1000 samples)
+RESULT {"tag": "idle_r4", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1577640068717301, "p50_ms": 0.17334899166598916, "p90_ms": 0.18618200556375086, "p99_ms": 0.23200700525194407, "p999_ms": 0.26077599613927305, "max_ms": 0.26119100220967084, "mean_ms": 0.17566199672000948}
+  tag=idle_r4      n=1000  min=0.158 p50=0.173 p90=0.186 p99=0.232 p99.9=0.261 max=0.261  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-idle_r4.json (1000 samples)
+RESULT {"tag": "cpu_r4", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1531570014776662, "p50_ms": 0.17443699471186846, "p90_ms": 0.18822900892701, "p99_ms": 0.23328700626734644, "p999_ms": 0.330793991452083, "max_ms": 0.3436580009292811, "mean_ms": 0.17698731673590373}
+  tag=cpu_r4       n=1000  min=0.153 p50=0.174 p90=0.188 p99=0.233 p99.9=0.331 max=0.344  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-cpu_r4.json (1000 samples)
+RESULT {"tag": "gpu_r4", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.155588990310207, "p50_ms": 0.1706930052023381, "p90_ms": 0.18381299742031842, "p99_ms": 0.21661400387529284, "p999_ms": 0.29568800528068095, "max_ms": 0.3316890069982037, "mean_ms": 0.17285666191310156}
+  tag=gpu_r4       n=1000  min=0.156 p50=0.171 p90=0.184 p99=0.217 p99.9=0.296 max=0.332  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-gpu_r4.json (1000 samples)
+RESULT {"tag": "idle2_r4", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15590799739584327, "p50_ms": 0.17523700080346316, "p90_ms": 0.1894449960673228, "p99_ms": 0.22925400116946548, "p999_ms": 0.29738400189671665, "max_ms": 0.3653860039776191, "mean_ms": 0.17757318395888433}
+  tag=idle2_r4     n=1000  min=0.156 p50=0.175 p90=0.189 p99=0.229 p99.9=0.297 max=0.365  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-idle2_r4.json (1000 samples)
+RESULT {"tag": "idle_r5", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15882099978625774, "p50_ms": 0.17552499775774777, "p90_ms": 0.18864599405787885, "p99_ms": 0.21834200015291572, "p999_ms": 0.3205530083505437, "max_ms": 0.7785819907439873, "mean_ms": 0.17790613375836983}
+  tag=idle_r5      n=1000  min=0.159 p50=0.176 p90=0.189 p99=0.218 p99.9=0.321 max=0.779  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-idle_r5.json (1000 samples)
+RESULT {"tag": "gpu_r5", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15069299843162298, "p50_ms": 0.1711410004645586, "p90_ms": 0.18867800827138126, "p99_ms": 0.2428230072837323, "p999_ms": 0.28682399715762585, "max_ms": 0.3035609988728538, "mean_ms": 0.1742495279031573}
+  tag=gpu_r5       n=1000  min=0.151 p50=0.171 p90=0.189 p99=0.243 p99.9=0.287 max=0.304  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-gpu_r5.json (1000 samples)
+RESULT {"tag": "cpu_r5", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15513999096583575, "p50_ms": 0.17366900283377618, "p90_ms": 0.1866609964054078, "p99_ms": 0.22458301100414246, "p999_ms": 0.32794600701890886, "max_ms": 0.4139319935347885, "mean_ms": 0.1757067429862218}
+  tag=cpu_r5       n=1000  min=0.155 p50=0.174 p90=0.187 p99=0.225 p99.9=0.328 max=0.414  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-cpu_r5.json (1000 samples)
+RESULT {"tag": "idle2_r5", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15494799299631268, "p50_ms": 0.17520500114187598, "p90_ms": 0.18720499065238982, "p99_ms": 0.21495099645107985, "p999_ms": 0.24455100356135517, "max_ms": 0.2629200025694445, "mean_ms": 0.1765266031579813}
+  tag=idle2_r5     n=1000  min=0.155 p50=0.175 p90=0.187 p99=0.215 p99.9=0.245 max=0.263  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-idle2_r5.json (1000 samples)
+RESULT {"tag": "idle_r6", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1585970021551475, "p50_ms": 0.17498100351076573, "p90_ms": 0.18893300148192793, "p99_ms": 0.22608600556850433, "p999_ms": 0.26432800223119557, "max_ms": 0.39549899520352483, "mean_ms": 0.1774596939503681}
+  tag=idle_r6      n=1000  min=0.159 p50=0.175 p90=0.189 p99=0.226 p99.9=0.264 max=0.395  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-idle_r6.json (1000 samples)
+RESULT {"tag": "cpu_r6", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.17766898963600397, "p50_ms": 0.1967739954125136, "p90_ms": 0.23002299712970853, "p99_ms": 0.26083899138029665, "p999_ms": 0.3146959934383631, "max_ms": 0.5975850071990862, "mean_ms": 0.20287883581477217}
+  tag=cpu_r6       n=1000  min=0.178 p50=0.197 p90=0.230 p99=0.261 p99.9=0.315 max=0.598  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-cpu_r6.json (1000 samples)
+RESULT {"tag": "gpu_r6", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15245299437083304, "p50_ms": 0.1700529974186793, "p90_ms": 0.18851699132937938, "p99_ms": 0.22986299882177263, "p999_ms": 0.2764240052783862, "max_ms": 0.32039299549069256, "mean_ms": 0.17373816318286117}
+  tag=gpu_r6       n=1000  min=0.152 p50=0.170 p90=0.189 p99=0.230 p99.9=0.276 max=0.320  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-gpu_r6.json (1000 samples)
+RESULT {"tag": "idle2_r6", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15661299403291196, "p50_ms": 0.1742449967423454, "p90_ms": 0.18611700215842575, "p99_ms": 0.22423100017476827, "p999_ms": 0.3153690049657598, "max_ms": 0.31869699887465686, "mean_ms": 0.17608191395993344}
+  tag=idle2_r6     n=1000  min=0.157 p50=0.174 p90=0.186 p99=0.224 p99.9=0.315 max=0.319  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-idle2_r6.json (1000 samples)
+RESULT {"tag": "idle_r7", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15558900486212224, "p50_ms": 0.17600500723347068, "p90_ms": 0.18829299369826913, "p99_ms": 0.21693400049116462, "p999_ms": 0.27060000866185874, "max_ms": 0.3073050029342994, "mean_ms": 0.17781788583670277}
+  tag=idle_r7      n=1000  min=0.156 p50=0.176 p90=0.188 p99=0.217 p99.9=0.271 max=0.307  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-idle_r7.json (1000 samples)
+RESULT {"tag": "gpu_r7", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15200499910861254, "p50_ms": 0.1675240055192262, "p90_ms": 0.17946099978871644, "p99_ms": 0.2113980008289218, "p999_ms": 0.2843280090019107, "max_ms": 0.302025000564754, "mean_ms": 0.16947432795132045}
+  tag=gpu_r7       n=1000  min=0.152 p50=0.168 p90=0.179 p99=0.211 p99.9=0.284 max=0.302  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-gpu_r7.json (1000 samples)
+RESULT {"tag": "cpu_r7", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.17258099978789687, "p50_ms": 0.19478899776004255, "p90_ms": 0.22714199440088123, "p99_ms": 0.2547910116845742, "p999_ms": 0.36663500941358507, "max_ms": 1.1367999977665022, "mean_ms": 0.201142079939018}
+  tag=cpu_r7       n=1000  min=0.173 p50=0.195 p90=0.227 p99=0.255 p99.9=0.367 max=1.137  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-cpu_r7.json (1000 samples)
+RESULT {"tag": "idle2_r7", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1564519916428253, "p50_ms": 0.17507700249552727, "p90_ms": 0.18938099674414843, "p99_ms": 0.21120600285939872, "p999_ms": 0.2614159893710166, "max_ms": 0.3335130022605881, "mean_ms": 0.17702630088024307}
+  tag=idle2_r7     n=1000  min=0.156 p50=0.175 p90=0.189 p99=0.211 p99.9=0.261 max=0.334  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-idle2_r7.json (1000 samples)
+RESULT {"tag": "idle_r8", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15507699572481215, "p50_ms": 0.1734449906507507, "p90_ms": 0.18538100994192064, "p99_ms": 0.23008701100479811, "p999_ms": 0.31783300801180303, "max_ms": 1.01071699464228, "mean_ms": 0.17620808487117756}
+  tag=idle_r8      n=1000  min=0.155 p50=0.173 p90=0.185 p99=0.230 p99.9=0.318 max=1.011  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-idle_r8.json (1000 samples)
+RESULT {"tag": "cpu_r8", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.17610099166631699, "p50_ms": 0.19344600150361657, "p90_ms": 0.22656699002254754, "p99_ms": 0.270824006292969, "p999_ms": 0.3493529948173091, "max_ms": 0.5917609960306436, "mean_ms": 0.2005990116740577}
+  tag=cpu_r8       n=1000  min=0.176 p50=0.193 p90=0.227 p99=0.271 p99.9=0.349 max=0.592  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-cpu_r8.json (1000 samples)
+RESULT {"tag": "gpu_r8", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1497650082455948, "p50_ms": 0.16970100114122033, "p90_ms": 0.1832690031733364, "p99_ms": 0.24832700728438795, "p999_ms": 0.7112200109986588, "max_ms": 1.1160959984408692, "mean_ms": 0.17367624210601207}
+  tag=gpu_r8       n=1000  min=0.150 p50=0.170 p90=0.183 p99=0.248 p99.9=0.711 max=1.116  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-gpu_r8.json (1000 samples)
+RESULT {"tag": "idle2_r8", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15587601228617132, "p50_ms": 0.1758130092639476, "p90_ms": 0.18941301095765084, "p99_ms": 0.25747901236172765, "p999_ms": 0.30512799276039004, "max_ms": 0.3166490059811622, "mean_ms": 0.17805467027937993}
+  tag=idle2_r8     n=1000  min=0.156 p50=0.176 p90=0.189 p99=0.257 p99.9=0.305 max=0.317  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-idle2_r8.json (1000 samples)
+RESULT {"tag": "idle_r9", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15577999874949455, "p50_ms": 0.17453300824854523, "p90_ms": 0.18854999507311732, "p99_ms": 0.2385019906796515, "p999_ms": 0.30371999309863895, "max_ms": 0.4676300013670698, "mean_ms": 0.17735246625670698}
+  tag=idle_r9      n=1000  min=0.156 p50=0.175 p90=0.189 p99=0.239 p99.9=0.304 max=0.468  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-idle_r9.json (1000 samples)
+RESULT {"tag": "gpu_r9", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1527720014564693, "p50_ms": 0.16970100114122033, "p90_ms": 0.18326898862142116, "p99_ms": 0.2197499998146668, "p999_ms": 0.2827920106938109, "max_ms": 0.29168800392653793, "mean_ms": 0.17214265822258312}
+  tag=gpu_r9       n=1000  min=0.153 p50=0.170 p90=0.183 p99=0.220 p99.9=0.283 max=0.292  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-gpu_r9.json (1000 samples)
+RESULT {"tag": "cpu_r9", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15581201296299696, "p50_ms": 0.17741300689522177, "p90_ms": 0.19757299742195755, "p99_ms": 0.2796560002025217, "p999_ms": 0.6216180045157671, "max_ms": 1.5807160089025274, "mean_ms": 0.1841003608860774}
+  tag=cpu_r9       n=1000  min=0.156 p50=0.177 p90=0.198 p99=0.280 p99.9=0.622 max=1.581  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-cpu_r9.json (1000 samples)
+RESULT {"tag": "idle2_r9", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15888400957919657, "p50_ms": 0.17526900046505034, "p90_ms": 0.19072499708272517, "p99_ms": 0.24055001267697662, "p999_ms": 0.3393689985387027, "max_ms": 0.37780300772283226, "mean_ms": 0.1783974730205955}
+  tag=idle2_r9     n=1000  min=0.159 p50=0.175 p90=0.191 p99=0.241 p99.9=0.339 max=0.378  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-idle2_r9.json (1000 samples)
+RESULT {"tag": "idle_r10", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15712500317022204, "p50_ms": 0.173637003172189, "p90_ms": 0.1895099994726479, "p99_ms": 0.23744700592942536, "p999_ms": 0.32496900530532, "max_ms": 0.35108200972899795, "mean_ms": 0.17696741994586773}
+  tag=idle_r10     n=1000  min=0.157 p50=0.174 p90=0.190 p99=0.237 p99.9=0.325 max=0.351  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-idle_r10.json (1000 samples)
+RESULT {"tag": "cpu_r10", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15635701129212976, "p50_ms": 0.17334899166598916, "p90_ms": 0.1874290028354153, "p99_ms": 0.23203900491353124, "p999_ms": 0.28125599783379585, "max_ms": 0.3648749989224598, "mean_ms": 0.17598814913071692}
+  tag=cpu_r10      n=1000  min=0.156 p50=0.173 p90=0.187 p99=0.232 p99.9=0.281 max=0.365  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-cpu_r10.json (1000 samples)
+RESULT {"tag": "gpu_r10", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1536690106149763, "p50_ms": 0.1707889896351844, "p90_ms": 0.18547700892668217, "p99_ms": 0.2298949984833598, "p999_ms": 0.2857040090020746, "max_ms": 0.3186009998898953, "mean_ms": 0.17363345120975282}
+  tag=gpu_r10      n=1000  min=0.154 p50=0.171 p90=0.185 p99=0.230 p99.9=0.286 max=0.319  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-gpu_r10.json (1000 samples)
+RESULT {"tag": "idle2_r10", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15472399536520243, "p50_ms": 0.17552499775774777, "p90_ms": 0.19027698726858944, "p99_ms": 0.222565999138169, "p999_ms": 0.27565599884837866, "max_ms": 0.3057690046261996, "mean_ms": 0.17787872515327763}
+  tag=idle2_r10    n=1000  min=0.155 p50=0.176 p90=0.190 p99=0.223 p99.9=0.276 max=0.306  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-idle2_r10.json (1000 samples)
+RESULT {"tag": "idle_r11", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15776399231981486, "p50_ms": 0.17526900046505034, "p90_ms": 0.18720499065238982, "p99_ms": 0.20835798932239413, "p999_ms": 0.3162010107189417, "max_ms": 0.34269699244759977, "mean_ms": 0.17712143587414175}
+  tag=idle_r11     n=1000  min=0.158 p50=0.175 p90=0.187 p99=0.208 p99.9=0.316 max=0.343  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-idle_r11.json (1000 samples)
+RESULT {"tag": "gpu_r11", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15498099674005061, "p50_ms": 0.17366900283377618, "p90_ms": 0.1925169926835224, "p99_ms": 0.2285189984831959, "p999_ms": 0.2657990116858855, "max_ms": 0.2830159937730059, "mean_ms": 0.17719598110124934}
+  tag=gpu_r11      n=1000  min=0.155 p50=0.174 p90=0.193 p99=0.229 p99.9=0.266 max=0.283  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-gpu_r11.json (1000 samples)
+RESULT {"tag": "cpu_r11", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15552499098703265, "p50_ms": 0.17450099403504282, "p90_ms": 0.18701300723478198, "p99_ms": 0.2081660059047863, "p999_ms": 0.3064089978579432, "max_ms": 0.32800900225993246, "mean_ms": 0.17615331220440567}
+  tag=cpu_r11      n=1000  min=0.156 p50=0.175 p90=0.187 p99=0.208 p99.9=0.306 max=0.328  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-cpu_r11.json (1000 samples)
+RESULT {"tag": "idle2_r11", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15901199367363006, "p50_ms": 0.1745650079101324, "p90_ms": 0.18755700148176402, "p99_ms": 0.23271101235877723, "p999_ms": 0.270151998847723, "max_ms": 0.32269800431095064, "mean_ms": 0.17661932451301254}
+  tag=idle2_r11    n=1000  min=0.159 p50=0.175 p90=0.188 p99=0.233 p99.9=0.270 max=0.323  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-idle2_r11.json (1000 samples)
+RESULT {"tag": "idle_r12", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15613299910910428, "p50_ms": 0.17306099471170455, "p90_ms": 0.1850929984357208, "p99_ms": 0.20586200116667897, "p999_ms": 0.334568991092965, "max_ms": 0.3640100039774552, "mean_ms": 0.17496974200184923}
+  tag=idle_r12     n=1000  min=0.156 p50=0.173 p90=0.185 p99=0.206 p99.9=0.335 max=0.364  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-idle_r12.json (1000 samples)
+RESULT {"tag": "cpu_r12", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1742449967423454, "p50_ms": 0.1916210021590814, "p90_ms": 0.2036540099652484, "p99_ms": 0.22925400116946548, "p999_ms": 0.30352899921126664, "max_ms": 0.33156099379993975, "mean_ms": 0.19342141808010638}
+  tag=cpu_r12      n=1000  min=0.174 p50=0.192 p90=0.204 p99=0.229 p99.9=0.304 max=0.332  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-cpu_r12.json (1000 samples)
+RESULT {"tag": "gpu_r12", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15113998961169273, "p50_ms": 0.16912500723265111, "p90_ms": 0.18701299268286675, "p99_ms": 0.22935100423637778, "p999_ms": 0.31639299413654953, "max_ms": 0.3642350056907162, "mean_ms": 0.17224946393980645}
+  tag=gpu_r12      n=1000  min=0.151 p50=0.169 p90=0.187 p99=0.229 p99.9=0.316 max=0.364  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-gpu_r12.json (1000 samples)
+RESULT {"tag": "idle2_r12", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.15597300080116838, "p50_ms": 0.17405299877282232, "p90_ms": 0.18595700385048985, "p99_ms": 0.23930201132316142, "p999_ms": 0.2907919988501817, "max_ms": 0.31540099007543176, "mean_ms": 0.1761470150522655}
+  tag=idle2_r12    n=1000  min=0.156 p50=0.174 p90=0.186 p99=0.239 p99.9=0.291 max=0.315  bad=0 rej=0
+  wrote /home/<user>/interference-out/20260921T130114Z/lat-idle2_r12.json (1000 samples)

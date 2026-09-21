@@ -1,0 +1,12 @@
+round 1 order: idle gpu cpu idle2
+round 2 order: idle cpu gpu idle2
+round 3 order: idle gpu cpu idle2
+round 4 order: idle cpu gpu idle2
+round 5 order: idle gpu cpu idle2
+round 6 order: idle cpu gpu idle2
+round 7 order: idle gpu cpu idle2
+round 8 order: idle cpu gpu idle2
+round 9 order: idle gpu cpu idle2
+round 10 order: idle cpu gpu idle2
+round 11 order: idle gpu cpu idle2
+round 12 order: idle cpu gpu idle2

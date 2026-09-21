@@ -102,6 +102,14 @@ results/orin-native-port/*/s1/
 # blanket *.log silently excluded the guest-side captures that findings.md cites
 # (2026-09-18: both the KVM-concurrency and cross-partition-demo consoles).
 !results/orin-native-port/*/*.log
+# 2026-09-21: the A6 campaign records keep their raw traces one and two levels
+# deeper (<exp>/raw/, dry-run-stalls/<run>/), and the rule above stops at one
+# level, so the placement and clock traces the records cite went untracked.
+# Deliberately NARROW: a first try with results/orin-native-port/**/*.log also
+# exposed M4 dry-run and TCG logs, which stay local under 4.6(i).
+!results/orin-native-port/20260921T-a6-*/*/*.log
+!results/orin-native-port/20260921T-a6-*/*/raw/*.log
+!results/orin-native-port/20260921T-a6-*/dry-run-stalls/*/*.log
 
 # Python
 __pycache__/
