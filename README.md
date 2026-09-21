@@ -57,10 +57,12 @@ are explained under [Reading the ids](#reading-the-ids).
   [drive-os-comparison.md](docs/drive-os-comparison.md), whose verdicts are six
   Partial, two Cannot and no Validates.
 
-- **What is next.** Settle A6's gate — now down to sample sizes. A design is in
-  [measurement-design.md](docs/measurement-design.md); its finding is that
-  sample size was the wrong knob, because run-to-run variation on this board is
-  ~69× the sampling noise at p50.
+- **What is next.** A6's gate is settled. The measurement design in
+  [measurement-design.md](docs/measurement-design.md) was adopted on 2026-09-21;
+  its finding is that sample size was the wrong knob, because run-to-run
+  variation on this board is ~69× the sampling noise at p50, so the budget goes
+  into repetitions (k ≥ 12) rather than samples. What remains is running the
+  campaign.
 
 ---
 
@@ -186,7 +188,7 @@ Detail: [architecture.md](docs/architecture.md) ·
 | **1** — Cloud twin bring-up: QHV `qvm` + QNX guest under TCG | ✅ done | [boot log](logs/sample-boot/qhv-tcg-host-and-guest-boot.log) |
 | **2** — Cloud twin IPC + latency | ✅ **closed as A1 history** — real P50/P99/Max exist, but the 100k target was never reached; the `qvm`/TCG stall that capped it is recoverable, **not root-caused**, and stays open | [cloud-ipc-latest.csv](results/cloud/cloud-ipc-latest.csv) |
 | **3** — Hardware twin port (Orin Nano) | ✅ **closed as A2 history** — QNX↔Linux IPC over a real `br0`/tap bridge ran under **TCG**, 2 × 100,000 iterations with no echo-sequence mismatch or I/O error reported, **using a rebuilt IFS with new TCP server code, not the byte-identical Phase-1 image**. KVM boot never worked **with the SDP's shipped `startup-qemu-virt`**, and the root-caused GICv3/`KVM_EXIT_ARM_NISV` defect stays open in that shipped binary. It is **boot-verified as of 2026-09-18**: an IFS whose `startup-qemu-virt` this repo rebuilt with `-fno-auto-inc-dec`, from board source the SDP does not ship (`orin-native/startup/qemu-virt/`), booted under `-enable-kvm` to `Startup complete` and the guest banner, while the shipped startup on the same launch line, host and session hung after `FOUND GICv3 ITS` as before. The rebuilt arm's captures were byte-identical on QEMU 6.2.0 and 11.1.0. Nothing was timed, it is not a QNX-supported configuration, and the owner decided not to file the defect. | [orin-ipc-latest.csv](results/hw/orin-ipc-latest.csv), [orin-port.md](docs/orin-port.md), [orin-kvm-*.log](logs/sample-boot/) |
-| **3b** — Native QNX on the Orin (no QEMU) | 🟡 **M path complete (2026-09-13); S1-F met (QNX plus Linux) 2026-09-17** — the two-guest rung (B5) ran once and passed: the QNX guest's banner and IPC completed beside the Linux guest. One observation, not a series. What remains is settling A6's gate — now down to sample sizes — and the one campaign on A6; v1 was superseded before it was ever frozen — see [The native port](#the-native-port-phase-3b) | [ADR-003](docs/adr-003-hardware-timed-qhv.md), [the plan](docs/orin-native-port-plan.md) |
+| **3b** — Native QNX on the Orin (no QEMU) | 🟡 **M path complete (2026-09-13); S1-F met (QNX plus Linux) 2026-09-17** — the two-guest rung (B5) ran once and passed: the QNX guest's banner and IPC completed beside the Linux guest. One observation, not a series. A6's gate was settled on 2026-09-21; what remains is the one campaign on A6; v1 was superseded before it was ever frozen — see [The native port](#the-native-port-phase-3b) | [ADR-003](docs/adr-003-hardware-timed-qhv.md), [the plan](docs/orin-native-port-plan.md) |
 | **4** — Twin diff + DRIVE OS comparison | ✅ **done 2026-09-20** — both deliverables exist. The twin diff is the KVM pair: a byte-identical IFS timed under KVM on the Orin and on AWS `a1.metal` ([§1b](docs/digital-twin-design.md)); the earlier TCG diffs stay history and are not re-run (OD10 withdrew the TCG legs). The verdicts in [drive-os-comparison.md](docs/drive-os-comparison.md) are written: **six Partial, two Cannot, no Validates**. Done does not mean the gap closed — it means it is now measured and stated | [digital-twin-design.md](docs/digital-twin-design.md) §1a, §4, §5 |
 | **5** — FuSa & Cybersecurity overlay | ⬜ not started as a dedicated phase (a Phase-1-gate pass did run) | [fusa/](docs/fusa/), [cyber/](docs/cyber/) |
 | **6** — Polish, public README, demo | ⬜ not started | — |
@@ -311,7 +313,8 @@ fire after `kexec`, so a hung run needs a physical power cycle.
       (2026-09-17)
 - [x] **Phase 4** — the twin diff and the DRIVE OS verdicts: six Partial, two
       Cannot, no Validates (2026-09-20)
-- [ ] **Settle A6's gate** — down to sample sizes; a design is proposed in
+- [x] **Settle A6's gate** — sample sizes and campaign content adopted
+      (2026-09-21); the design is in
       [measurement-design.md](docs/measurement-design.md)
 - [ ] **One measurement campaign on A6**
 - [ ] **Phase 7** _(stretch)_ — domain-controller extension, two tracks in

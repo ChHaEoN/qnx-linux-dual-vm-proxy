@@ -1,10 +1,13 @@
 # Measurement design — how the numbers in this repo are produced
 
-> **Status (2026-09-21): proposed, not yet run.** This is the answer to one open
-> question — *what sample size should A6 use?* — and the answer turned out to be
-> that sample size was the wrong knob. Nothing below has been executed. The
-> figures already published were taken under the **current** design, described
-> and criticised here as the starting point.
+> **Status (2026-09-21): ADOPTED as owner decision OD11, not yet run.** This is
+> the answer to one open question — *what sample size should A6 use?* — and the
+> answer turned out to be that sample size was the wrong knob. The design below
+> is now A6's, and settling it closed A6's last gate item
+> ([the plan](orin-native-port-plan.md#architecture-versions), OD11). **Nothing
+> below has been executed yet.** The figures already published were taken under
+> the **previous** design (n = 3000, k = 2), described and criticised here as the
+> starting point; they keep that label and are not re-derived.
 
 ## 1. The question, and why it was the wrong one
 

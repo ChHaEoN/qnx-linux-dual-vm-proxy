@@ -9,6 +9,46 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-21 — OD11: A6's gate closes on k, not n
+
+The owner adopted [measurement-design.md](measurement-design.md) as written, which settles
+the last item A6's gate had left. A6's gate is closed: OD10 fixed what it measures (KVM
+only, TCG twin legs withdrawn), OD11 fixes how much.
+
+**The answer was not a bigger sample.** The question on the table was "what sample size
+should A6 use?", and measuring the thing itself answered it differently. Within one run of
+n = 3000 the p50 moves ±0.2%; between two runs of the *same arm* it moves 13.3% — about
+**69×** the sampling noise at p50, and 3.4× at p99. Raising n buys precision on the quantity
+that was already precise. The budget goes into **k**, the number of interleaved rounds.
+Adopted: n = 1000 timed samples, 200 warm-up discarded, 2 ms spacing, **k ≥ 12**. That costs
+1.0 minute per arm against 0.3, and takes the p50 confidence interval from ±9.4% to ±3.8%.
+
+Adopted with it, because the design fixes them together: the attribution ladder, guest-side
+timestamps, the frame-size sweep, the §3.5 controls, the §3.6 reporting rules — including
+publishing the per-run maximum as a k-sample set rather than as one number — and the §3.7
+falsification.
+
+**What it does not settle.** No isolation or freedom-from-interference claim follows from
+any of it. The 126 µs guest crossing stays undivided between tap, virtio-net, `io-sock` and
+the guest scheduler; splitting it needs kernel tracing on both sides and is not proposed.
+Nothing already published is retracted or re-derived — figures taken under n = 3000 / k = 2
+keep that label. And the campaign itself has **not been run**: this is a design decision, not
+a measurement.
+
+v1's manifest fields are not inherited. A6 has no native QNX Hypervisor host, no kexec entry,
+no second memory window and no startup `-P` value, so freeze gate items 3, 4, 6 and the
+entry-path choice describe an architecture that no longer exists.
+
+Also decided the same day: the 9 remaining prose-gate warnings stay as warnings. Six are ISO
+26262 vocabulary in a study worksheet's own column headers; three name the never-built
+Graviton runtime host in the body of `docs/fusa/phase1-cloud-bringup-fmea.md` and
+`docs/tara/phase1-cloud-tara.md`, and both documents keep that body **verbatim on purpose**,
+with a dated addendum correcting it — tara:14 says so in those words. The documents are
+honest; the scanner cannot see a document-level correction. Building machinery to teach it
+that convention was judged not worth it for nine warn-only lines.
+
+---
+
 ## 2026-09-21 — seven paths out of a public repo, and the three things a link-checker could not see
 
 The owner unpublished the AI-facing material: `CLAUDE.md`, `AGENTS.md`, `agents/`,

@@ -621,10 +621,10 @@ just having one canonical artefact.
 > **2026-09-11:** The owner's freeze decision defines the twin diff. ~~It runs
 > once, in the v1 campaign: the two TCG legs against each other (two host
 > bundles, §1a), and each TCG leg against the native leg.~~ **2026-09-18: v1 was
-> superseded before it was ever frozen (A6). What the campaign measures on A6,
-> the sample sizes, and whether the TCG twin legs survive at all are open owner
-> choices. The twin diff has not been re-run; A1/A2/A3 remain
-> architecture-version history.** A table compares only
+> superseded before it was ever frozen (A6). 2026-09-20 (OD10): the TCG twin legs
+> do not survive — A6 measures under KVM only. 2026-09-21 (OD11): A6's sample
+> sizes and campaign content are settled, so A6's gate is closed. The twin diff
+> has not been re-run; A1/A2/A3 remain architecture-version history.** A table compares only
 > records with the same `arch=` stamp
 > ([orin-native-port-plan.md](orin-native-port-plan.md#the-campaign)).
 

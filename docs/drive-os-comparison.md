@@ -11,8 +11,8 @@ and which are off-limits.
 > **Status (2026-09-20): the verdicts are written.** They waited on a
 > measurement campaign; owner decision **OD10** settled that campaign's shape
 > (A6 measures under KVM only, the TCG twin legs are withdrawn) and every A6
-> measurement has now run. What remains open is sample sizes, which changes no
-> verdict below. Earlier wording and its corrections are in
+> measurement has now run. **OD11 (2026-09-21) settled the sample sizes**, closing
+> A6's gate; it changes no verdict below. Earlier wording and its corrections are in
 > [`findings.md`](findings.md); this file states the current reading and does
 > not accumulate strike-throughs.
 

@@ -373,11 +373,38 @@ S1-F — with no timing attached. That is a defensible position, and it is now a
 GPU concurrency (2026-09-18); interference and saturation, as a 64-byte frame round trip from L4T to the
 guest's `qnx-safety-monitor` over a real `br0`/`tap-qnx` bridge (2026-09-19); a native L4T control for that
 same program (2026-09-19); and a two-host boot comparison against AWS `a1.metal` on a byte-identical image
-([§1b](digital-twin-design.md), 2026-09-20). What remains open is the sample sizes and whether anything
-further is added.
+([§1b](digital-twin-design.md), 2026-09-20). What remained open was the sample sizes and whether anything
+further is added; OD11 below settles both.
 
-Until those are written down, **A6 is the current direction, not a frozen reference architecture** — and no
-record should claim otherwise.
+**2026-09-21 (owner decision, OD11): A6's sample sizes and campaign content are settled. The gate is
+closed.** The design in [measurement-design.md](measurement-design.md) is adopted as written: **n = 1000
+timed samples per run, 200 warm-up discarded, 2 ms spacing, and k ≥ 12 interleaved rounds** per arm,
+replacing the n = 3000 / k = 2 that the published A6 figures were taken under.
+
+**Why k and not n.** Within one run of n = 3000 the p50 moves ±0.2%; between two runs of the same arm it
+moves 13.3% — about **69×** the sampling noise at p50, and 3.4× at p99. Sample size was the wrong knob:
+raising n buys precision on a quantity that is not the one that varies. k = 12 costs 1.0 minute per arm
+against 0.3, and takes the p50 confidence interval from ±9.4% to ±3.8%.
+
+**Adopted with it**, because the design fixes them together and they were never separable choices: the
+attribution ladder (§3.2), guest-side timestamps (§3.3), the frame-size sweep (§3.4), the controls in §3.5,
+the reporting rules in §3.6 — which include publishing the per-run maximum as a k-sample set rather than as
+one number — and the falsification in §3.7.
+
+**What OD11 does not settle.** The design's own §4 limits stand unchanged: no isolation or
+freedom-from-interference claim follows from any of it, and splitting the 126 µs guest crossing between tap,
+virtio-net, `io-sock` and the guest scheduler needs kernel tracing on both sides and is not proposed. No
+already-published figure is retracted or re-derived; figures taken under the old n = 3000 / k = 2 design keep
+that label.
+
+**v1's manifest fields are not inherited.** A6 has no native QNX Hypervisor host, no kexec entry, no second
+memory window and no startup `-P` value, so freeze gate items 3, 4, 6 and the entry-path choice describe an
+architecture that no longer exists. A6's gate was the two items this section named — what the campaign
+measures, and the sample sizes — and OD10 and OD11 settle them both.
+
+With OD10 and OD11 written down, **A6's gate is settled and the campaign can run.** A6 is no longer
+"a direction with an open gate"; it is the architecture the campaign measures, and records from it are
+stamped `arch=A6`.
 
 Measurements taken before the freeze become architecture-version history. They are kept, labelled with the architecture they ran on, and not chased.
 
