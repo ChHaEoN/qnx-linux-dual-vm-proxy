@@ -114,34 +114,55 @@ These are deliberate. Documenting them precisely is the engineering point.
 
 ## Architecture
 
-Every QNX image is built on an x86_64 host; SDP 8.0 ships Windows and Linux
-x86_64 host tools and no arm64 or macOS ones. The architecture has been
-replaced several times and **every record keeps the id of the version it ran
-on**. Closed does not mean a target was met: A1 never reached its
-100k-iteration target, and KVM boot on the Orin never worked with the SDP's
-shipped `startup-qemu-virt`.
+**A6, the current arrangement.** Linux is on the metal and keeps the GPU; QNX
+is a KVM guest beside it. The partition boundary is real hardware EL2/EL1, but
+the supervisor is Linux — there is no Type-1 layer, because QHV needs EL2 and
+ARM KVM does not nest on A78AE.
 
 ```
- HISTORY (closed, not redone)
-   A1  cloud leg       Windows PC, QEMU TCG: QHV qvm + one QNX guest
-   A2  Orin plain leg  L4T host, QEMU TCG: QNX guest, br0/tap IPC
-   A3  same images     A1's images unchanged, TCG on both hosts
-   A4  native          QNX Hypervisor at EL2 on the Orin's own cores, no QEMU
-   A5  A4 + Linux      a Linux guest under qvm (S1-F), and both guests at once
+ Jetson Orin Nano — Tegra234, 6 x Cortex-A78AE, Ampere iGPU
+ ┌──────────────────────────────────────────────────────────────────┐
+ │  L4T / JetPack 6  — EL1, owns the machine                        │
+ │                                                                  │
+ │   TensorRT / CUDA ────────────────► Ampere iGPU                  │
+ │                                       QNX never touches it       │
+ │                                                                  │
+ │   latency probe on L4T                                           │
+ │        │ 64-byte frame, TCP :7100                                │
+ │        ▼                                                         │
+ │   br0 ── tap-qnx                                                 │
+ │        │ virtio-net                                              │
+ │        ▼                                                         │
+ │  ┌────────────────────────────────────────────────────┐          │
+ │  │ QEMU + KVM  — 2 of 6 vCPU, 1 GB                    │          │
+ │  │  ┌──────────────────────────────────────────────┐  │          │
+ │  │  │  QNX SDP 8.0 guest — EL1, on A78AE           │  │          │
+ │  │  │  procnto · io-sock · qnx-safety-monitor      │  │          │
+ │  │  │  boots only with a startup we rebuilt        │  │          │
+ │  │  └──────────────────────────────────────────────┘  │          │
+ │  └────────────────────────────────────────────────────┘          │
+ └──────────────────────────────────────────────────────────────────┘
 
- CURRENT  A6: L4T on the metal owning the GPU, QNX as a KVM guest beside it
-   Linux is the supervisor and owns the guest's memory. There is no Type-1
-   layer: QHV needs EL2, and ARM KVM does not nest on A78AE.
+ measured round trip, L4T to the guest and back — 182 us at p50
+   53 us  the probe itself, measured on loopback
+    3 us  br0
+  126 us  the crossing: tap, virtio-net, io-sock, scheduler, monitor
 ```
 
-A4 and A5 are real and are not withdrawn — they are simply no longer the
-direction, because **under a native QNX Hypervisor no OS can use the GPU** on
-Tegra234: the iGPU has no SMMU stream ID, and its clock, reset and power go
-through BPMP, for which QNX has no client driver.
+**Why not a Type-1 hypervisor here.** The QNX Hypervisor did run natively at
+EL2 on these cores, hosting a QNX guest and a stock Linux kernel. That
+arrangement is not withdrawn — it is simply no longer the direction, because
+**under it no OS can use the GPU** on Tegra234: the iGPU has no SMMU stream ID,
+and its clock, reset and power go through BPMP, for which QNX has no client
+driver. Earlier architectures are closed and not redone; each record keeps the
+id of the version it ran on.
 
 Two items stay open on their own: the `qvm`/TCG virtio-queue stall, never
-root-caused and only survivable; and the GICv3/NISV defect, which is open in
-QNX's **shipped** binary only and which the owner decided not to file.
+root-caused and only survivable; and the GICv3/NISV defect, open in QNX's
+**shipped** binary only, which the owner decided not to file.
+
+Every QNX image is built on an x86_64 host — SDP 8.0 ships Windows and Linux
+x86_64 host tools, no arm64 and no macOS.
 
 Detail: [architecture.md](docs/architecture.md) ·
 [digital-twin-design.md](docs/digital-twin-design.md) ·
