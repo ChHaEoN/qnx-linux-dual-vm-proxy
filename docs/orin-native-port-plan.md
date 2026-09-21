@@ -420,6 +420,13 @@ Adaptive Platform Implementation — public on GitHub but not open source: its l
 information-only use without modification). A SOME/IP arm over the UDP path with vsomeip is proposed, not
 decided.
 
+**OD12, the same day, on CAPI (owner):** the grey-area use may be evaluated — CAPI unmodified on the Linux
+side, speaking SOME/IP across the boundary to a QNX-side peer, with this project's own application code.
+Nothing of it is published until the owner has discussed it with the supervising professor, together with
+the other results: CAPI's source, build output and generated code never enter the repo, and any result or
+record that depends on CAPI stays local, as the 4.6(i) material does. Porting CAPI to QNX is out: that is a
+modification.
+
 Measurements taken before the freeze become architecture-version history. They are kept, labelled with the architecture they ran on, and not chased.
 
 This section carries no figures. Public figures stay where the inventory below points. Figures from M3 and from dry run 7b stay on the local branch `m3-results-unpublished` (§9).
