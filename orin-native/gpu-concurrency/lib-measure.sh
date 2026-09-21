@@ -402,6 +402,14 @@ m_write_stamp() {
 		fi
 		printf '  "qemu_threads": %s,\n' "$QTHREADS"
 		printf '  "qemu_affinity": "%s",\n' "$QAFF"
+		printf '  "sample_window": %s,\n' "${SAMPLE_WINDOW:-0}"
+		if [ "${SAMPLE_WINDOW:-0}" = 1 ]; then
+			printf '  "sampler_paths": {"emc_bpmp": "%s", "emc_ccf": "%s", "gpu_devfreq": "%s"},\n' \
+				"$EMC_BPMP" "$EMC_CCF" "$GPU_DEVFREQ"
+		fi
+		printf '  "fifo_arms": "%s",\n' "${FIFO_ARMS:-}"
+		printf '  "stall_policy": "%s", "probe_timeout_s": %s, "recover_max_s": %s,\n' \
+			"${STALL_POLICY:-refuse}" "$PROBE_TIMEOUT_S" "$RECOVER_MAX_S"
 		local kv; for kv in "$@"; do printf '  %s,\n' "$kv"; done
 		printf '  "n": %s, "k": %s, "warmup": %s, "interval_ms": %s\n' "$N" "$K" "$WARMUP" "$INTERVAL_MS"
 		printf '}\n'
@@ -428,15 +436,64 @@ PY
 # kept going. A failed arm is a failed run. The probe now aborts on a
 # desynchronised stream and writes no file (see latency_probe.py), and any
 # non-zero exit here stops the run.
+#
+# ONE EXCEPTION, decided by the owner on 2026-09-21: a STALL. A board dry run
+# found that with QEMU's threads squeezed onto one core, the guest can stop
+# answering for longer than the probe's timeout -- and then recover. Under the
+# rule above that stopped the whole campaign at the first stall, and the finding
+# would have produced no data at all. With STALL_POLICY=record, a probe that
+# exits EXIT_DESYNC (3) AND wrote its stall record is an OUTCOME: m_probe
+# returns 3, the caller stops the load and calls m_await_recovery, and the run
+# goes on. Only a TIMEOUT is a stall -- no reply, or no connect, within
+# PROBE_TIMEOUT_S. A reset, a broken pipe or lost framing exits 5 with no
+# record and stops the run like any other failure (found by review: they used
+# to be filed as stalls). So does a stall without a record. The ladder does not
+# set STALL_POLICY: its figures are headlines, and a stall there is a failure.
+PROBE_TIMEOUT_S="${PROBE_TIMEOUT_S:-10}"
+RECOVER_MAX_S="${RECOVER_MAX_S:-120}"
 m_probe() {         # $1 out-dir  $2 tag  $3 host  $4 port  [$5 prefix command]
-	local out="$1" tag="$2" host="$3" port="$4" pre="${5:-}" rc
-	rm -f "$out/lat-$tag.json"
+	local out="$1" tag="$2" host="$3" port="$4" pre="${5:-}" rc t0 t1 ms stall=()
+	rm -f "$out/lat-$tag.json" "$out/stall-$tag.json"
+	[ "${STALL_POLICY:-refuse}" = record ] && stall=(--stall-out "$out/stall-$tag.json")
+	# The window sampler brackets exactly the probe, when the script asked for
+	# it (SAMPLE_WINDOW=1). Off by default: the ladder's numbers are the
+	# headline, and a new process running beside them is a new perturbation.
+	[ "${SAMPLE_WINDOW:-0}" = 1 ] && m_sampler_start "$tag"
+	t0="$(date +%s%N)"
 	$pre taskset -c "$CORE_PROBE" python3 "$PROBE" --host "$host" --port "$port" \
-		--n "$N" --warmup "$WARMUP" --interval-ms "$INTERVAL_MS" \
-		--tag "$tag" --out "$out/lat-$tag.json" >> "$out/probe.log" 2>&1
+		--n "$N" --warmup "$WARMUP" --interval-ms "$INTERVAL_MS" --timeout-s "$PROBE_TIMEOUT_S" \
+		"${stall[@]}" --tag "$tag" --out "$out/lat-$tag.json" >> "$out/probe.log" 2>&1
 	rc=$?
+	t1="$(date +%s%N)"
+	ms=$(( (t1 - t0) / 1000000 ))
+	if [ "${SAMPLE_WINDOW:-0}" = 1 ]; then
+		m_sampler_stop || die "the window sampler for $tag would not stop -- it would run on into the next arm"
+	fi
+	if [ "$rc" -eq 3 ] && [ "${STALL_POLICY:-refuse}" = record ]; then
+		[ -s "$out/stall-$tag.json" ] || die "probe stopped on $tag (exit 3) but wrote no stall record -- see $out/probe.log"
+		[ -e "$out/lat-$tag.json" ] && die "probe wrote both a result and a stall record for $tag"
+		[ "${SAMPLE_WINDOW:-0}" = 1 ] && m_sampler_require "$tag" "$ms"
+		echo "$tag stalled after ${ms} ms: $(grep -E '^FATAL desync tag='"$tag"' ' "$out/probe.log" | tail -1)" >> "$out/stalls.log"
+		say "STALL on $tag: no reply within ${PROBE_TIMEOUT_S} s -- recorded as an outcome; the run goes on"
+		return 3
+	fi
 	[ "$rc" -eq 0 ] || die "probe failed on $tag (exit $rc) -- see $out/probe.log; the run stops here"
 	[ -s "$out/lat-$tag.json" ] || die "probe exited 0 but wrote no file for $tag"
+	[ "${SAMPLE_WINDOW:-0}" = 1 ] && m_sampler_require "$tag" "$ms"
+	return 0
+}
+# After a stall, with the arm's load already stopped: time until the guest
+# answers one framed echo again, written to recovery-<tag>.json. A guest that
+# does not answer within RECOVER_MAX_S stops the run -- the next arm would be
+# measuring a guest that is not there.
+m_await_recovery() {  # $1 out-dir  $2 tag  $3 host  $4 port
+	local out="$1" tag="$2" rc
+	taskset -c "$CORE_PROBE" python3 "$PROBE" --host "$3" --port "$4" --tag "$tag" \
+		--await-recovery "$RECOVER_MAX_S" --out "$out/recovery-$tag.json" >> "$out/probe.log" 2>&1
+	rc=$?
+	echo "$tag recovery: $(tail -1 "$out/probe.log")" >> "$out/stalls.log"
+	[ "$rc" -eq 0 ] || die "the guest did not answer within ${RECOVER_MAX_S} s after the $tag stall -- see $out/stalls.log"
+	say "$tag: guest answering again ($(tail -1 "$out/probe.log"))"
 }
 
 # ------------------------------------------------------------- completeness
@@ -446,11 +503,31 @@ m_probe() {         # $1 out-dir  $2 tag  $3 host  $4 port  [$5 prefix command]
 # stamp, and every file's own summary to say it is a full, clean sample: the
 # requested n and warm-up, zero bad frames, zero monitor rejections, and the
 # tag it is named for.
+#
+# ADDED 2026-09-21: every file must also carry the probe's OWN report of how it
+# was scheduled. An arm in FIFO_ARMS must say SCHED_FIFO at priority 50, every
+# other arm SCHED_OTHER, and every arm's affinity must be exactly CORE_PROBE.
+# Before this, cpu6_prio's real-time priority was established only by procedure,
+# and an independent analysis rightly called the control uninformative.
+# CORE_PROBE unset is a refusal, not a skip.
+#
+# STALLS (2026-09-21): with STALL_POLICY=record, a round may hold a stall record
+# INSTEAD of a result -- never both, never neither -- and the record must carry
+# the same scheduling report and be followed by a recovery record that says the
+# guest answered again. Without that policy a stall record is itself a refusal.
 m_require_complete() {  # $1 = out dir, then arm tags
 	local out="$1"; shift
+	[ -n "${CORE_PROBE:-}" ] || die "m_require_complete needs CORE_PROBE to check the probe's affinity"
+	MP_CORE="$CORE_PROBE" MP_FIFO="${FIFO_ARMS:-}" MP_STALL="${STALL_POLICY:-refuse}" \
+	MP_TIMEOUT="$PROBE_TIMEOUT_S" \
 	python3 - "$out" "$K" "$N" "$WARMUP" "$@" <<'PY' || die "the run is incomplete or unclean -- do not publish a median from it"
 import json, os, sys
 out, k, n, warmup, arms = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]), sys.argv[5:]
+probe_core = int(os.environ["MP_CORE"])
+fifo_arms = set(os.environ.get("MP_FIFO", "").split())
+record_stalls = os.environ.get("MP_STALL") == "record"
+timeout_s = float(os.environ["MP_TIMEOUT"])
+stalls = {}
 if not os.path.exists(os.path.join(out, "stamp.json")):
     print("INCOMPLETE: no stamp.json", file=sys.stderr); sys.exit(1)
 # The reference is the run's START marker, written once by m_prepare_out and
@@ -460,11 +537,47 @@ if not os.path.exists(start):
     print("INCOMPLETE: no .run-start marker -- was the directory made by m_prepare_out?", file=sys.stderr); sys.exit(1)
 t0 = os.path.getmtime(start)
 problems = []
+def sched_problems(tag, a, s):
+    """The probe's own report of how it ran, from a result or a stall record."""
+    if a in fifo_arms:
+        want = (("sched_policy", "SCHED_FIFO"), ("sched_priority", 50))
+    else:
+        want = (("sched_policy", "SCHED_OTHER"),)
+    return ["%s: %s=%r, expected %r (the probe's own report)" % (tag, key, s.get(key), w)
+            for key, w in want + (("cpu_affinity", [probe_core]),) if s.get(key) != w]
 for a in arms:
     for r in range(1, k + 1):
         tag = "%s_r%d" % (a, r)
         p = os.path.join(out, "lat-%s.json" % tag)
-        if not os.path.exists(p):
+        sp = os.path.join(out, "stall-%s.json" % tag)
+        have, stalled = os.path.exists(p), os.path.exists(sp)
+        if have and stalled:
+            problems.append("%s: both a result and a stall record" % tag); continue
+        if stalled:
+            if not record_stalls:
+                problems.append("%s: stall record, but STALL_POLICY is not 'record'" % tag); continue
+            if os.path.getmtime(sp) < t0:
+                problems.append("%s: stall record older than this run's start" % tag); continue
+            try:
+                st = json.load(open(sp))["stall"]
+            except Exception as e:
+                problems.append("%s: stall record unreadable (%s)" % (tag, e)); continue
+            for key, want in (("tag", tag), ("warmup", warmup), ("of", warmup + n), ("timeout_s", timeout_s)):
+                if st.get(key) != want:
+                    problems.append("%s: stall %s=%r, expected %r" % (tag, key, st.get(key), want))
+            if st.get("kind") not in ("timeout", "connect"):
+                problems.append("%s: stall kind=%r" % (tag, st.get("kind")))
+            problems.extend(sched_problems(tag, a, st))
+            rp = os.path.join(out, "recovery-%s.json" % tag)
+            try:
+                rec = json.load(open(rp))
+                if rec.get("recovered") is not True or rec.get("tag") != tag:
+                    problems.append("%s: recovery record does not say the guest answered again" % tag)
+            except Exception as e:
+                problems.append("%s: no readable recovery record (%s)" % (tag, e))
+            stalls.setdefault(a, []).append(r)
+            continue
+        if not have:
             problems.append("%s: missing" % tag); continue
         if os.path.getmtime(p) < t0:
             problems.append("%s: older than this run's start" % tag); continue
@@ -476,17 +589,22 @@ for a in arms:
                           ("bad", 0), ("rejected_by_monitor", 0)):
             if s.get(key) != want:
                 problems.append("%s: %s=%r, expected %r" % (tag, key, s.get(key), want))
-    extra = [f for f in os.listdir(out)
-             if f.startswith("lat-%s_r" % a) and f.endswith(".json")
-             and f[len("lat-%s_r" % a):-5].isdigit()
-             and not (1 <= int(f[len("lat-%s_r" % a):-5]) <= k)]
-    for f in extra:
-        problems.append("%s: round outside 1..%d" % (f, k))
+        problems.extend(sched_problems(tag, a, s))
+    for prefix in ("lat-", "stall-"):
+        pre = "%s%s_r" % (prefix, a)
+        for f in os.listdir(out):
+            if (f.startswith(pre) and f.endswith(".json") and f[len(pre):-5].isdigit()
+                    and not (1 <= int(f[len(pre):-5]) <= k)):
+                problems.append("%s: round outside 1..%d" % (f, k))
 for p in problems:
     print("INCOMPLETE: " + p, file=sys.stderr)
+for a in arms:
+    if a in stalls:
+        print("STALLED: %s in %d of %d rounds (r%s) -- recorded, each followed by recovery"
+              % (a, len(stalls[a]), k, ",r".join(str(r) for r in stalls[a])))
 sys.exit(1 if problems else 0)
 PY
-	say "complete and clean: ${#@} arm(s) x $K round(s), every file this run's"
+	say "complete: ${#@} arm(s) x $K round(s), each round a clean result or a recorded stall, every file this run's"
 }
 
 # ------------------------------------------------------------- the summary
@@ -511,26 +629,194 @@ def load(a):
         d[int(s["tag"].rsplit("_r", 1)[1])] = s
     return d
 data = {a: load(a) for a in arms}
+stalled = {a: len(glob.glob("%s/stall-%s_r*.json" % (out, a))) for a in arms}
 print("  %-11s %3s  %24s  %24s  %s" % ("arm", "k", "p50 ms: median [band]",
                                         "paired vs %s: med [band]" % ref, "max ms: min/med/max of k"))
 for a in arms:
     d = data[a]
     if not d:
-        print("  %-11s   0  (no data)" % a); continue
+        print("  %-11s   0  (no data)%s" % (a, "  STALLED in %d round(s)" % stalled[a] if stalled[a] else "")); continue
     p50 = [s["p50_ms"] for s in d.values()]; mx = [s["max_ms"] for s in d.values()]
     if a != ref and ref in data:
         diffs = [d[r]["p50_ms"] - data[ref][r]["p50_ms"] for r in d if r in data[ref]]
         pair = "%+7.3f [%+.3f,%+.3f]" % (st.median(diffs), min(diffs), max(diffs))
     else:
         pair = "(reference)"
-    print("  %-11s %3d  %7.3f [%6.3f-%6.3f]  %24s  %.3f / %.3f / %.3f"
-          % (a, len(d), st.median(p50), min(p50), max(p50), pair, min(mx), st.median(mx), max(mx)))
+    print("  %-11s %3d  %7.3f [%6.3f-%6.3f]  %24s  %.3f / %.3f / %.3f%s"
+          % (a, len(d), st.median(p50), min(p50), max(p50), pair, min(mx), st.median(mx), max(mx),
+             "  + STALLED in %d round(s), not in k" % stalled[a] if stalled[a] else ""))
 print("  headline = median of the k run-medians. 'paired' = median over rounds of (arm - %s) in the SAME round." % ref)
 print("  'max' is the largest OBSERVED value in each round, never a bound.")
+if any(stalled.values()):
+    print("  k counts complete rounds only. A stalled round has no median: the guest did not answer within")
+    print("  the probe's timeout, so every figure for that arm is conditional on the guest answering.")
 PY
 }
 
+# ------------------------------------------------------------- the window sampler
+# ADDED 2026-09-21 to close two gaps an independent analysis named. Load
+# placement was read from ONE tegrastats sample taken before each probe
+# started, and could change once it began -- identical sampled placements gave
+# both cost regimes. And the memory-controller (EMC) clock, the leading
+# hypothesis for why a GPU load speeds the guest up, was never recorded at all.
+# So each probe window is now traced continuously, every 500 ms:
+#   tegra-<tag>.log  tegrastats AS ROOT: per-core CPU % and MHz, EMC_FREQ
+#                    (memory-controller utilisation % and clock), GR3D % and
+#                    clock, temperatures
+#   clk-<tag>.log    EMC rate from BOTH debugfs sources, which disagree on this
+#                    board -- BPMP said 2133 MHz, the kernel clock framework
+#                    204 MHz; tegrastats' own EMC clock agrees with BPMP -- plus
+#                    the GPU devfreq clock.
+# tegrastats prints EMC_FREQ and the GR3D clock only when it runs as root. The
+# first draft ran it as the user and concluded "this JetPack build has no EMC
+# field"; a review asked, and one board command showed the field is there under
+# root. m_thermal and m_gpu_busy_pct still run it as the user, which is enough
+# for per-core CPU and GR3 busy.
+#
+# WHAT THE SAMPLER COSTS, stated rather than assumed away: root tegrastats,
+# which reads dozens of sysfs and debugfs files per interval, plus a root shell
+# loop -- both UNPINNED, so they run wherever the scheduler puts them, which
+# differs by arm and in the cpu6 arms means on a loaded core. The loop reads
+# with shell builtins and forks only `sleep`, once per 500 ms; its first draft
+# forked five processes per sample. Each window must hold at least half the
+# samples its length calls for, from both, or the run stops: a recorder that can
+# go quiet mid-run would only move the gap, not close it.
+SAMPLER_ROOT=""
+# Overridable for tests only. A real run uses the defaults; an override is
+# announced, and every path actually read is written to the stamp.
+EMC_BPMP_DEFAULT="/sys/kernel/debug/bpmp/debug/clk/emc/rate"
+EMC_CCF_DEFAULT="/sys/kernel/debug/clk/emc/clk_rate"
+DEVFREQ_ROOT_DEFAULT="/sys/class/devfreq"
+EMC_BPMP="${EMC_BPMP:-$EMC_BPMP_DEFAULT}"
+EMC_CCF="${EMC_CCF:-$EMC_CCF_DEFAULT}"
+DEVFREQ_ROOT="${DEVFREQ_ROOT:-$DEVFREQ_ROOT_DEFAULT}"
+GPU_DEVFREQ=""
+# Each value is cleared before it is read, so a read that fails mid-run leaves
+# the field EMPTY rather than repeating the previous sample. LC_ALL=C because
+# the board's locale writes a decimal comma into the timestamp.
+SAMPLER_LOOP='while :; do
+	a= b= c=
+	read -r a < "$1"; read -r b < "$2"; read -r c < "$3"
+	printf "%s emc_bpmp_hz=%s emc_ccf_hz=%s gpu_hz=%s\n" "${EPOCHREALTIME:-$(date +%s.%N)}" "$a" "$b" "$c"
+	sleep 0.5
+done'
+m_sampler_start() {  # $1 = tag
+	local t="$1" ceil root
+	# The ceiling follows the probe's nominal length plus a wide margin: long
+	# enough that a slow probe cannot outlast its sampler, short enough that a
+	# dead run cannot leave one behind for long.
+	ceil=$(( (${N:-1000} + ${WARMUP:-200}) * ${INTERVAL_MS:-2} / 1000 + ${PROBE_TIMEOUT_S:-10} + 120 ))
+	# FOUND ON THE BOARD, 2026-09-21, by the first smoke test -- the unit tests'
+	# sudo stub could not show it. The loop used to run as a background
+	# `sudo -n timeout ...` and be stopped with `sudo -n kill <sudo's pid>`. sudo
+	# before 1.9.13 -- the board has 1.9.9 -- does not relay a signal sent from a
+	# process in sudo's OWN process group, and the script, both sudos and the
+	# kill all shared it: the stop was ignored, `wait` blocked until the 122 s
+	# ceiling, and the loop wrote on through it. Now a short sudo starts
+	# `timeout` in the background and prints its pid. timeout leads its own
+	# process group and forwards a TERM to all of it, so it is signalled directly.
+	root="$(sudo -n bash -c 'timeout "$1" tegrastats --interval 500 > "$2" 2>/dev/null & echo $!' \
+		_ "$ceil" "$OUT/tegra-$t.log" 2>/dev/null)"
+	SAMPLER_ROOT="$SAMPLER_ROOT $root"
+	root="$(sudo -n bash -c 'timeout "$1" env LC_ALL=C bash -c "$2" _ "$3" "$4" "$5" > "$6" 2>/dev/null & echo $!' \
+		_ "$ceil" "$SAMPLER_LOOP" "$EMC_BPMP" "$EMC_CCF" "$GPU_DEVFREQ" "$OUT/clk-$t.log" 2>/dev/null)"
+	SAMPLER_ROOT="$SAMPLER_ROOT $root"
+}
+# Returns non-zero if a sampler survived, and never dies: it also runs from the
+# cleanup trap, where a die would skip restoring the governor and idle states.
+m_sampler_stop() {
+	local p i rc=0
+	for p in $SAMPLER_ROOT; do
+		sudo -n kill -TERM "$p" 2>/dev/null
+		for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+			[ -d "/proc/$p" ] || break
+			sleep 0.1
+		done
+		if [ -d "/proc/$p" ]; then
+			sudo -n kill -KILL -- "-$p" 2>/dev/null
+			sleep 0.2
+			if [ -d "/proc/$p" ]; then
+				echo "WARNING: window sampler $p is still running after TERM and KILL" >&2; rc=1
+			fi
+		fi
+	done
+	SAMPLER_ROOT=""
+	return "$rc"
+}
+# One window's trace must hold COMPLETE clock lines -- all three values present
+# -- and tegrastats lines with per-core CPU and EMC_FREQ, at least HALF as many
+# as the window's length calls for at 2 per second (tegrastats one fewer: its
+# first line comes a full interval in), and never fewer than one. Checked after
+# every probe, not only in the preflight: sudo's cached credential or a debugfs
+# node can go away mid-run, and one sample at the start of a 3 s window is not
+# "traced across the window". FOUND BY REVIEW: the first version asked for one.
+m_sampler_require() {  # $1 = tag  [$2 = window length in ms]
+	local t="$1" ms="${2:-0}" need clk tg
+	need=$(( ms / 1000 )); [ "$need" -ge 1 ] || need=1
+	clk="$(grep -cE '^[0-9.]+ emc_bpmp_hz=[0-9]+ emc_ccf_hz=[0-9]+ gpu_hz=[0-9]+$' "$OUT/clk-$t.log" 2>/dev/null)"
+	tg="$(grep -cE 'CPU \[.*EMC_FREQ [0-9]+%@[0-9]+' "$OUT/tegra-$t.log" 2>/dev/null)"
+	[ "${clk:-0}" -ge "$need" ] \
+		|| die "the clock sampler recorded ${clk:-0} complete reading(s) during $t, fewer than $need for a ${ms} ms window (see $OUT/clk-$t.log)"
+	[ "${tg:-0}" -ge $(( need > 1 ? need - 1 : 1 )) ] \
+		|| die "tegrastats recorded ${tg:-0} line(s) with per-core CPU and EMC_FREQ during $t, too few for a ${ms} ms window -- is it running as root?"
+}
+# Run both samplers for ~1.5 s before round 1 and refuse the run if any source
+# produced nothing usable, naming which one.
+m_sampler_preflight() {
+	local d v
+	for v in EMC_BPMP EMC_CCF DEVFREQ_ROOT; do
+		d="${v}_DEFAULT"
+		[ "${!v}" = "${!d}" ] || say "WARNING: $v overridden to ${!v} -- recorded in the stamp"
+	done
+	GPU_DEVFREQ=""
+	for d in "$DEVFREQ_ROOT"/*; do
+		case "$(cat "$d/name" 2>/dev/null)$(basename "$d")" in *gpu*) GPU_DEVFREQ="$d/cur_freq"; break ;; esac
+	done
+	[ -n "$GPU_DEVFREQ" ] || die "no GPU devfreq node found -- the GPU clock would go unrecorded"
+	m_sampler_start "preflight"
+	sleep 1.6
+	m_sampler_stop || die "the window sampler would not stop -- it would run on through the run"
+	grep -qE 'emc_bpmp_hz=[0-9]+ ' "$OUT/clk-preflight.log" \
+		|| die "EMC sampler produced no BPMP reading (sudo -n denied, or $EMC_BPMP absent)"
+	grep -qE 'emc_ccf_hz=[0-9]+ ' "$OUT/clk-preflight.log" \
+		|| die "EMC sampler produced no clock-framework reading ($EMC_CCF absent or unreadable)"
+	grep -qE 'gpu_hz=[0-9]+$' "$OUT/clk-preflight.log" \
+		|| die "GPU clock sampler produced no reading from $GPU_DEVFREQ"
+	grep -qE 'EMC_FREQ [0-9]+%@[0-9]+' "$OUT/tegra-preflight.log" \
+		|| die "tegrastats printed no EMC_FREQ -- it only does as root (sudo -n denied?)"
+	m_sampler_require preflight 1600
+	say "window sampler verified: $(grep -c . "$OUT/clk-preflight.log") clock and $(grep -c . "$OUT/tegra-preflight.log") tegrastats sample(s) in 1.6 s"
+}
+
+# measurement-design §3.5: the instrument must not share a core with the thing
+# it measures. FOUND BY REVIEW, 2026-09-21: nothing enforced it, so overriding
+# CORE_PROBE onto a QEMU core would have run every arm, idle included, with the
+# probe beside a vCPU. Each argument is label=spec; a core named twice refuses.
+m_require_disjoint() {  # $@ = label=spec ...
+	local kv label c
+	local -A owner=()
+	for kv in "$@"; do
+		label="${kv%%=*}"
+		for c in $(_cpuset "${kv#*=}"); do
+			[ -z "${owner[$c]:-}" ] \
+				|| die "core $c is both ${owner[$c]}'s and $label's -- the instrument must not share a core with what it measures"
+			owner[$c]="$label"
+		done
+	done
+}
+
 # ------------------------------------------------------------- loads
+# BUILT BY THE RUN, NOT BY HAND (2026-09-21). cpuload used to be compiled once,
+# manually, and the stamp hashed whatever binary sat in ~/interference -- which
+# ties a run to a binary but not to any source. Now the run builds it from the
+# cpuload.c beside the script, warnings as errors, and the stamp records both
+# hashes. A stale unpinned binary was already refused by m_load_require_pinned;
+# this also refuses a stale pinned one built from different source.
+m_build_cpuload() {  # $1 = source  $2 = binary to write
+	command -v gcc >/dev/null || die "gcc absent -- cannot build $2 from $1"
+	gcc -O2 -Wall -Wextra -Werror -o "$2" "$1" -lpthread -lm || die "cpuload did not build from $1"
+	say "cpuload built from $1 ($(_sha "$1" | cut -c1-12))"
+}
 # REVIEW FINDING, reproduced: nothing checked that a load generator started,
 # stayed up, or outlasted the probe. A failed fma turned a "gpu" arm into an idle
 # arm with a gpu label; a load that exited early left part of the window
@@ -554,6 +840,21 @@ m_load_require_alive() {   # $1 = when, for the message
 	for p in $LOAD_PIDS; do
 		kill -0 "$p" 2>/dev/null || die "load pid $p is not running $1 -- the arm would be measured unloaded"
 	done
+}
+# ADDED 2026-09-21. A pinned arm must SHOW its pins, not just have a process
+# alive: cpuload prints one "thread i pinned to core c (verified)" line per
+# thread after reading its own affinity back. This is the check a stale binary
+# fails -- a cpuload built before CORES existed ignores the third argument, runs
+# unpinned, stays alive, and would pass every other check in this file.
+m_load_require_pinned() {  # $1 load log  $2 comma-separated cores, thread i on the i-th
+	local log="$1" cores="$2" i=0 c
+	for c in ${cores//,/ }; do
+		grep -qxF "cpuload: thread $i pinned to core $c (verified)" "$log" \
+			|| die "cpuload did not confirm thread $i on core $c (see $log) -- a stale binary ignores CORES and runs unpinned"
+		i=$((i + 1))
+	done
+	[ "$(grep -c ' (verified)$' "$log")" -eq "$i" ] \
+		|| die "cpuload confirmed a different number of pins than the $i asked for (see $log)"
 }
 m_load_stop() {
 	local p

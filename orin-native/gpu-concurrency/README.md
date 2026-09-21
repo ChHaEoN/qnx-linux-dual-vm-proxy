@@ -66,13 +66,16 @@ does the GPU work cost the QNX guest anything? — needs three more pieces:
   one connection and reporting a distribution (p50/p90/p99/max) instead of a
   liveness yes/no. One connection on purpose: opening a socket per sample would
   measure TCP setup, not the service.
-- **`cpuload.c`** — **the control that makes the GPU arm interpretable.** `fma.cu`
-  drives the GPU from a CPU thread, so "GPU saturated" and "system busier" arrive
-  together; without a CPU-only arm at the same footprint, a latency change cannot
-  be attributed to the GPU. Build with `gcc -O2 -o cpuload cpuload.c -lpthread -lm`.
-- **`run-interference.sh`** — runs idle → gpu → cpu → idle2. The repeated idle arm
-  is the drift check: the board heats under load, and without it a thermal effect
-  would be indistinguishable from an effect of the load.
+- **`cpuload.c`** — N busy threads, optionally pinned one per named core
+  (`cpuload SECS N [CORES]`), each pin read back and printed as `(verified)`.
+  It was written as a CPU twin of `fma.cu`'s driver thread; that premise was
+  measured false on 2026-09-21 (fma's host thread uses ≤1% CPU), so it is "busy
+  cores, here", not a control for the GPU arm. Build with
+  `gcc -O2 -o cpuload cpuload.c -lpthread -lm`.
+- **`run-interference.sh`** — per round: idle, then gpu, cpu_q (one thread on a
+  QEMU core) and cpu_nq (one thread off QEMU's and the probe's cores) in a
+  Williams order, then idle2. The repeated idle arm is the drift check. The
+  script header is the current arm list; this page does not repeat it.
 
 A first run showed the GPU arm's p90 about 11% above idle. Repeating the arms
 interleaved dissolved it — across three GPU arms the p90 range (0.326-0.386 ms)
@@ -107,8 +110,10 @@ on someone else's board.
 
 ## `run-saturation.sh` — where interference actually starts
 
-Escalates CPU load (2 → 4 → 6 threads of 6 cores), with a GPU arm, a combined
-arm, and repeated idle arms for drift. It carries one control worth keeping:
+Since 2026-09-21 the arms are named by placement, not count — cpu2_q, cpu2_nq,
+cpu3_q, cpu6, cpu6_prio, gpu_cpu6, between idle and idle2 (see the script
+header). Before that it escalated unpinned CPU load (2 → 4 → 6 threads of 6
+cores), with a GPU arm, a combined arm, and repeated idle arms for drift. It carries one control worth keeping:
 `cpu6_prio` reruns full saturation with the probe at elevated priority, because
 under saturation the probe is itself competing for a core — if the high-priority
 arm returns to idle, the degradation was the probe waiting, not the guest. It came
@@ -122,7 +127,10 @@ the **tail improves** under load (p99 −28%, busy cores never idle), and GPU lo
 alone still shows nothing even under a pinned clock. **2026-09-19: read the first
 with the native control below — the same shift appears in a native process, so it
 is not a virtualisation cost; and the second is a p99-only effect, which does not
-hold at p99.9 or at the maximum.**
+hold at p99.9 or at the maximum.** **2026-09-21: the tail improvement was not load at all but
+the deep idle state c7 leaving the unloaded arms. With c7 disabled, cpu6 p99 is
++68.4 µs above idle, higher in 18 of 20 rounds — load worsens the tail. See
+`results/orin-native-port/20260921T-a6-orin/results.md` §1.**
 
 Results: `results/orin-native-port/20260919T-saturation/`.
 

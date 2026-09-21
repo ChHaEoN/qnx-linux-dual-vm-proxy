@@ -55,6 +55,9 @@ MON="$HOME/ladder/monitor-native"
 
 CORE_MON="${CORE_MON:-3}"        # native monitor, host side and namespace side
 CORE_PROBE="${CORE_PROBE:-4}"    # the instrument, off the measured cores
+FIFO_ARMS=""                     # every arm runs the probe at SCHED_OTHER; the gate checks it
+SAMPLE_WINDOW=0                  # no window sampler: these are the headline numbers, and a
+                                 # sampler running beside them would be a new perturbation
 QEMU_CORES="${QEMU_CORES:-0-2}"  # guest vCPUs + QEMU I/O thread
 
 cleanup() {
@@ -79,6 +82,7 @@ trap cleanup EXIT
 
 m_prepare_out "${OUT:-}" "$HOME/ladder-out"
 m_check_cores "$QEMU_CORES" "$CORE_MON" "$CORE_PROBE"
+m_require_disjoint "qemu=$QEMU_CORES" "monitor=$CORE_MON" "probe=$CORE_PROBE"
 say "cores: $NCPU total; qemu=$QEMU_CORES monitor=$CORE_MON probe=$CORE_PROBE"
 m_governor_pin
 m_cstate_apply
