@@ -154,3 +154,8 @@ agents/
 # Both stay on disk, so Claude Code and Codex still load them.
 CLAUDE.md
 AGENTS.md
+
+# AI tooling config and AI-written study notes: private, kept on the build
+# machine. Removed from the public repo 2026-09-21 with agents/ and CLAUDE.md.
+.codex/
+skills/

@@ -2429,7 +2429,7 @@ Both safety and security disciplines completed a full V-model loop and
 pair-reviewed the cyber-FuSa interaction. **Analysis** appended dated
 gate addenda: FuSa added 9 new failure modes (NF-1…NF-9) and deferred ~20
 KVM/br0/Linux-guest rows to Phase 2/3
-([`../skills/fmea/examples/phase1-cloud-bringup-fmea.md`](../skills/fmea/examples/phase1-cloud-bringup-fmea.md));
+([`fusa/phase1-cloud-bringup-fmea.md`](fusa/phase1-cloud-bringup-fmea.md));
 Cyber added 6 threats (T29–T34) + 6 assets with `qvm` as the new TCB root
 ([`tara/phase1-cloud-tara.md`](tara/phase1-cloud-tara.md)). **Design** wrote
 8 TSRs ([`fusa/phase1-gate-safety-concept.md`](fusa/phase1-gate-safety-concept.md))
@@ -2606,7 +2606,7 @@ Marketplace subscribe + software-fee confirmation + explicit apply approval).
 >
 > Initial HARA + Design FMEA for the Phase 1 cloud twin (QNX SDP 8.0 +
 > Linux aarch64 on Graviton QEMU/KVM) is captured in
-> [`skills/fmea/examples/phase1-cloud-bringup-fmea.md`](../skills/fmea/examples/phase1-cloud-bringup-fmea.md).
+> [`fusa/phase1-cloud-bringup-fmea.md`](fusa/phase1-cloud-bringup-fmea.md).
 > Scope is the cloud twin only; Orin / hardware-twin failures are
 > deferred to Phase 3. Top hazards at notional integration level:
 > HE-02 / HE-03 / HE-06 (loss or stale Safety-partition IPC) score

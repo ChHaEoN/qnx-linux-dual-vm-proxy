@@ -87,8 +87,8 @@
 !Anything about NVIDIA DRIVE OS	an explicit out-of-scope list, not a claim
 
 # docs/findings.md 2026-06-11 -- a quoted HARA study result, already scoped to
-# "the study's notional vehicle integration". skills/ are study artefacts and
-# say so; the notional qualifier is in the same sentence.
+# "the study's notional vehicle integration" -- the notional qualifier is in
+# the same sentence as the rating it scopes.
 !under the study's notional vehicle integration	a quoted study rating, already marked notional
 
 # docs/bsp-selection.md:47 -- states the correct conclusion in its own words:

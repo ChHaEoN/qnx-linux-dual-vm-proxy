@@ -224,11 +224,11 @@ Phase 7 research items (added):
 
 ---
 
-## New skills folders Phase 7 will add
+## What Phase 7 would have to be read up on
 
-- `skills/multi-soc-arch/` — domain controller / zonal architecture; E/E topology evolution from distributed ECUs → domain → zonal → centralised
-- `skills/automotive-ethernet/` — TSN (802.1AS, Qbv, Qci), SOME/IP-SD, AUTOSAR Adaptive (ara::com), DDS
-- `skills/qualcomm-cockpit/` — Snapdragon Cockpit family (8155/8295/8775); Android Automotive stack; Hexagon DSP — honest gap doc; **no Snapdragon-specific code shipped** (all simulation is generic ARMv8 in QEMU)
+- **Domain and zonal architecture** — the E/E topology evolution from distributed ECUs → domain → zonal → centralised
+- **Automotive Ethernet** — TSN (802.1AS, Qbv, Qci), SOME/IP-SD, AUTOSAR Adaptive (`ara::com`), DDS
+- **Snapdragon Cockpit** (8155/8295/8775), the Android Automotive stack and the Hexagon DSP — with the honest gap that would come with it: **no Snapdragon-specific code would be shipped**, since every simulation here is generic ARMv8 in QEMU
 
 ---
 

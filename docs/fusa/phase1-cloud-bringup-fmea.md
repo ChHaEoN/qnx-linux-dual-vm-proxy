@@ -18,7 +18,7 @@
 - **Type:** ISO 26262 Part 3 HARA + Part 9 D-FMEA, study-level
 - **Date:** 2026-05-07
 - **Reviewer(s):** self-review (FuSa-Analysis Agent; pair-review with Cyber-Analysis at Phase-1 gate)
-- **Reference docs:** [`docs/architecture.md`](../../../docs/architecture.md), [`docs/bsp-selection.md`](../../../docs/bsp-selection.md), [`docs/orin-port.md`](../../../docs/orin-port.md)
+- **Reference docs:** [`docs/architecture.md`](../architecture.md), [`docs/bsp-selection.md`](../bsp-selection.md), [`docs/orin-port.md`](../orin-port.md)
 - **Out of scope:** Hardware twin (Phase 3); IPC application logic and benchmarks (Phase 2); Orin / DRIVE-class SoC failures.
 
 ---
@@ -149,7 +149,7 @@ device only — see the honest-framing note above.
 
 ## 4. Failure Mode Catalogue (Design FMEA)
 
-D-FMEA scoring uses the local 1–5 scale from `skills/fmea/template.md`
+D-FMEA scoring uses a local 1–5 scale
 (S = Severity at the integrator level; O = likelihood of the cause
 manifesting in Phase-1 day-to-day use on AWS; D = how likely the
 existing Phase-1 instrumentation catches it pre-release). RPN = S×O×D;
@@ -313,7 +313,7 @@ pair-review at the gate.
 >
 > - **Date:** 2026-06-11
 > - **Reviewer(s):** self-review (FuSa-Analysis Agent; pair-review with Cyber-Analysis at the Phase-1 gate)
-> - **Evidence:** [`logs/sample-boot/qhv-tcg-host-and-guest-boot.log`](../../../logs/sample-boot/qhv-tcg-host-and-guest-boot.log); [`docs/findings.md`](../../../docs/findings.md) entries 2026-06-11 (QHV pull-forward) and 2026-06-10 (IFS build).
+> - **Evidence:** [`logs/sample-boot/qhv-tcg-host-and-guest-boot.log`](../../logs/sample-boot/qhv-tcg-host-and-guest-boot.log); [`docs/findings.md`](../findings.md) entries 2026-06-11 (QHV pull-forward) and 2026-06-10 (IFS build).
 
 ## A.1 Item re-definition delta (as-built vs. assumed)
 

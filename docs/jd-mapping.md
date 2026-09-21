@@ -31,7 +31,7 @@ real customer-port work.
 |---|---|---|
 | "Strong knowledge of C/C++, QNX and/or Linux OS" | `ipc-test/` — QNX server and host-client source (qcc) and `ipc-test/linux-client/` (Linux, gcc); C99 | 2, 3 |
 | "Understanding of CPU/GPU architectures, data structures, OS internals, multi-threading, **inter-process communications**, memory management techniques" | `ipc-test/` IPC client/server and benchmark, including the `vdev shmem` probes; IPC findings in `docs/findings.md` | 2, 3 |
-| "Extensive hands-on experience in **BSP porting** and device driver internals" | `scripts/build-qnx-ifs.bat`; the native Tegra234 startup board directory `orin-native/startup/t234-orin-nano/` (Phase 3b); `docs/bsp-selection.md`; `skills/bsp-porting/` paradigm | 1, 3b |
+| "Extensive hands-on experience in **BSP porting** and device driver internals" | `scripts/build-qnx-ifs.bat`; the native Tegra234 startup board directory `orin-native/startup/t234-orin-nano/` (Phase 3b); `docs/bsp-selection.md` | 1, 3b |
 | "Knowledge and experience working in **multicore/heterogenous SoCs**" | Native SMP bring-up on the Orin's Cortex-A78AE cores (M2, `docs/orin-native-port-plan.md`); QEMU SMP guest config in `scripts/launch-qhv-tcg.ps1` and `scripts/orin/launch-qhv-on-orin-tcg.sh` | 1, 3b |
 | "Prior experience of working in software development in complex automotive systems" | Honest framing: this is a personal study project, not in-production automotive work. Documented as such in narrative. | — |
 | "ECU bring-up, profiling, and debug" | Phase 1 bring-up (curated boot logs in `logs/sample-boot/`, findings in `docs/findings.md`); Phase 2 latency profiling (`results/`); Phase 3b native bring-up (`docs/orin-native-port-plan.md`) | 1, 2, 3b |
@@ -48,7 +48,7 @@ real customer-port work.
 | ⭐ "Experience with **QNX OS for Safety (QOS)**" | Honest gap: SDP ≠ QOS. Framed as a POSIX-realtime proxy in the README limitations table and `docs/architecture.md`; a dedicated QOS-vs-SDP study note is not written yet | 0 |
 | ⭐ "Exposure in **hypervisors and virtualization**" | The QNX Hypervisor (an uncertified Type-1), emulated under QEMU TCG (cloud leg, ADR-002) and running natively on the Orin (Phase 3b, `docs/orin-native-port-plan.md`); gap analysis against DRIVE OS in `docs/drive-os-comparison.md` (Phase 4) | 1, 3b, 4 |
 | ⭐ "Knowledge of **bootloaders**" | Phase 3b: the kexec entry shim from L4T and ~~the planned M5-F UEFI Shell cold boot~~ **(2026-09-13: M5-F ran and passed: our own EFI loader, launched from the firmware's UEFI Shell on a cold boot, hands the unchanged M1b image to the same shim and startup; attended, and not a vendor-shaped QNX UEFI boot)** (`docs/orin-native-port-plan.md` §3 and M5); no U-Boot and no Linux guest boot chain yet | 3b |
-| ⭐ "Experience with Automotive **SPICE** and/or **ISO 26262** standards" | Study notes only: `skills/aspice/`, `skills/iso-26262/`, applied FMEA examples in `skills/fmea/examples/`. **Honest framing: study artifacts, not certification evidence.** | 0–4 |
+| ⭐ "Experience with Automotive **SPICE** and/or **ISO 26262** standards" | The applied Phase-1 FMEA in `docs/fusa/phase1-cloud-bringup-fmea.md`, consumed by the two FuSa gate documents beside it. **Honest framing: study artifacts, not certification evidence.** | 0–4 |
 | ⭐ "Extensively supported customers both onsite and offsite" | Soft requirement; addressed in interview. Customer-port framing of this entire project speaks to the spirit of the bullet. | — |
 
 ---

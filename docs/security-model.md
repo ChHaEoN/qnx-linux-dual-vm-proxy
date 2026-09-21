@@ -12,7 +12,8 @@
 > qualitative L/M/H using ISO/SAE 21434 vocabulary.
 
 This document is the cybersecurity-overlay deliverable. It pairs with
-the FuSa overlay (FMEA worksheets in `skills/fmea/examples/`) — both
+the FuSa overlay (the Phase-1 FMEA worksheet in
+[`fusa/phase1-cloud-bringup-fmea.md`](fusa/phase1-cloud-bringup-fmea.md)) — both
 are **study-level** artefacts, not certification evidence. The aim is
 to demonstrate that the project can be discussed in ISO/SAE 21434 and
 ISO 26262 vocabulary without overclaiming compliance.
@@ -117,8 +118,8 @@ exists so the gap is documented rather than glossed over.
 | Guest IPL signature check | Yes | No (mkqnximage IFS, unsigned) | No (same IFS) |
 
 **What the project can study (not implement):** the bootloader chain
-paradigm itself, walked through in `skills/bsp-porting/` and the
-forthcoming `skills/cybersecurity-21434/`.
+paradigm itself. This project boots an unsigned IFS and has no secure-boot
+chain of any kind; see [drive-os-comparison.md](drive-os-comparison.md).
 
 ---
 

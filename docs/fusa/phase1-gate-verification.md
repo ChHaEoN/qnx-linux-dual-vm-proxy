@@ -12,7 +12,7 @@
 
 - **Role:** FuSa-Verification (ISO 26262 V-model: Analysis → Design → **Verification**)
 - **Date:** 2026-06-11
-- **Inputs:** TSR-CFG-001, TSR-VDEV-001, TSR-RMGR-001, TSR-PE-001, TSR-NET-001, TSR-PKG-001 (closeable on this leg); TSR-FFI-001, TSR-TIM-001 (deferred residual). Parent failure modes NF-1…NF-9 in [`../../skills/fmea/examples/phase1-cloud-bringup-fmea.md`](../../skills/fmea/examples/phase1-cloud-bringup-fmea.md) Gate Addendum.
+- **Inputs:** TSR-CFG-001, TSR-VDEV-001, TSR-RMGR-001, TSR-PE-001, TSR-NET-001, TSR-PKG-001 (closeable on this leg); TSR-FFI-001, TSR-TIM-001 (deferred residual). Parent failure modes NF-1…NF-9 in [`phase1-cloud-bringup-fmea.md`](phase1-cloud-bringup-fmea.md) Gate Addendum.
 - **Mechanisms under test:** `scripts/qhv/verify-bringup.sh`, `artifact-manifest.sh`, `entropy-gate.sh`, `validate-g2conf.sh`, the `vdev.manifest`/`rmgr.manifest`/`rmgr-policy.table`/`g2.conf.allow` data files, and the TSR-PKG-001(a) assertion in `scripts/build-qnx-ifs.{bat,sh}`.
 - **Test fixture:** `logs/sample-boot/qhv-tcg-host-and-guest-boot.log` (the real as-built capture) plus synthetic mutation logs for fault injection.
 - **Method:** mechanisms were actually executed (POSIX sh via the runtime's shell). Commands and verbatim output are reproduced below — no result is asserted that was not run.

@@ -16,7 +16,7 @@
 
 - **Role:** FuSa-Design (ISO 26262 Part 3/4/5/6 architect, study-level)
 - **Date:** 2026-06-11
-- **Input artefact:** [`skills/fmea/examples/phase1-cloud-bringup-fmea.md`](../../skills/fmea/examples/phase1-cloud-bringup-fmea.md) — **Phase-1 Gate Addendum (2026-06-11)**, failure modes NF-1…NF-9, Safety Goals SG-A1…SG-A7, DFA §A.4, hand-off §A.6 (OQ-A1…OQ-A7)
+- **Input artefact:** [`phase1-cloud-bringup-fmea.md`](phase1-cloud-bringup-fmea.md) — **Phase-1 Gate Addendum (2026-06-11)**, failure modes NF-1…NF-9, Safety Goals SG-A1…SG-A7, DFA §A.4, hand-off §A.6 (OQ-A1…OQ-A7)
 - **Evidence:** [`logs/sample-boot/qhv-tcg-host-and-guest-boot.log`](../../logs/sample-boot/qhv-tcg-host-and-guest-boot.log)
 - **Architecture context:** [`docs/findings.md`](../findings.md) 2026-06-11 (QHV/TCG) + 2026-06-10 (IFS build / split VMDK)
 - **Downstream consumers:** Implementation agent (briefs in §6), FuSa-Verification (evidence asks in §7), Cyber-Design (interaction items in §8)

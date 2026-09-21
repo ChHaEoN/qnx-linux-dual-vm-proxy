@@ -321,7 +321,6 @@ fire after `kexec`, so a hung run needs a physical power cycle.
 | [`scripts/`](scripts/) | bring-up, QHV configs, twin sync and diff, the CI claims gate |
 | [`logs/sample-boot/`](logs/sample-boot/) | curated boot and benchmark logs — the evidence |
 | [`results/`](results/) | benchmark CSVs, GICv3 reports, run records (A4/A5 unpublished; A6 published) |
-| [`skills/`](skills/) | **study artefacts, not certification evidence** |
 
 **Start here:** [findings.md](docs/findings.md) is append-only, dated, and the
 ground truth when anything else disagrees with it.
