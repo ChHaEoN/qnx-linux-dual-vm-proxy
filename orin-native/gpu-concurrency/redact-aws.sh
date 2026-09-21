@@ -29,15 +29,33 @@ filter() {
 	awk -v pcuser="${USER:-}" -v awsuser="${AWS_SSH_USER:-ubuntu}" '
 	function isword(c) { return (c ~ /[0-9A-Za-z_-]/) }
 	# Replace every occurrence of `re` that stands alone, with `rep`.
-	function mask(s, re, rep,    out, rest, tok, before, after, pos) {
+	#
+	# `num` (optional): the token is a NUMBER, and a digit run is not a
+	# standalone number if it is part of a decimal. FOUND 2026-09-21 by
+	# corrupting real data: the account mask took the 12 fraction digits of a
+	# latency sample, "0.178123456789," -- "." before, "," after, neither a
+	# word character -- and wrote "0.<account>,", which is no longer JSON.
+	#
+	# The rule is deliberately NOT "a dot on either side blocks". That first
+	# attempt would have let "account 123456789012." through -- a real id at
+	# the end of a sentence -- which trades corrupted data for a leak. So:
+	#   a "." BEFORE the run      -> it is a fraction            -> keep it
+	#   a "." AFTER, then a digit -> the integer part of a decimal -> keep it
+	#   a "." AFTER, then not     -> sentence punctuation        -> mask it
+	# Every other mask keeps the ordinary boundary, because an AWS id beside a
+	# "." still has to go.
+	function mask(s, re, rep, num,    out, rest, tok, before, after, after2, pos, bb, ba) {
 		out = ""; rest = s
 		while (match(rest, re)) {
 			pos = RSTART
 			tok = substr(rest, pos, RLENGTH)
 			before = (pos > 1) ? substr(rest, pos - 1, 1) : ""
 			after  = substr(rest, pos + RLENGTH, 1)
+			after2 = substr(rest, pos + RLENGTH + 1, 1)
 			out = out substr(rest, 1, pos - 1)
-			if ((before == "" || !isword(before)) && (after == "" || !isword(after)))
+			bb = isword(before) || (num && before == ".")
+			ba = isword(after)  || (num && after == "." && after2 ~ /[0-9]/)
+			if ((before == "" || !bb) && (after == "" || !ba))
 				out = out rep
 			else
 				out = out tok
@@ -91,7 +109,7 @@ filter() {
 		line = mask(line, "eni-" H,    "<eni-id>")
 		line = mask(line, "snap-" H,   "<snapshot-id>")
 		gsub(/arn:aws[a-z-]*:[^ ]+/, "<arn>", line)
-		line = mask(line, "[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]", "<account>")
+		line = mask(line, "[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]", "<account>", 1)
 		line = mask_ips(line)
 		line = mask_macs(line)
 		if (pcuser  != "") gsub(pcuser, "<user>", line)
@@ -133,6 +151,16 @@ if [ "${1:-}" = "selftest" ]; then
 	check "the figures"   "p50 181.8 us crossing 126.0 us"     "181.8" 1
 	check "kernel ver"    "kernel 6.8.0-1063-aws"              "6.8.0-1063-aws" 1
 	check "sha256"        "sha256 26170cd7dc74c216181db71c5"   "26170cd7dc74c216181db71c5" 1
+	# 2026-09-21: the account mask corrupted a real latency sample. Both
+	# directions pinned -- the data must survive AND a real id must not.
+	check "12-digit fraction" "0.0058861896, 0.178123456789, 0.5888" "0.178123456789" 1
+	check "decimal integer"   "value 123456789012.75 ms"            "123456789012.75" 1
+	check "fraction, EOL"     "p50 0.178123456789"                  "0.178123456789" 1
+
+	echo "masked direction, numeric edge cases:"
+	check "id then period"    "the account is 123456789012."        "123456789012" 0
+	check "id in parens"      "owner (123456789012) set"            "123456789012" 0
+	check "id then comma"     "123456789012, then"                  "123456789012" 0
 
 	[ "$fail" -eq 0 ] && echo "PASS -- both directions" || { echo "SELFTEST FAILED"; exit 1; }
 	exit 0
