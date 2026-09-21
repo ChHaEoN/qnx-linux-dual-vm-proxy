@@ -323,8 +323,12 @@ holds every owner decision **OD1–OD10** in full.
 
 ### Open
 
-1. **A6 sample sizes** — the last gate item, and an owner decision. Current
-   arms are n=3000 per latency arm and n=5 per boot arm.
+1. **A6 sample sizes** — the last gate item, and an owner decision. A design is
+   proposed in [docs/measurement-design.md](docs/measurement-design.md) and has
+   **not been run**. Its finding: sample size was the wrong knob. Run-to-run
+   variation is ~69x the sampling noise at p50, so the budget belongs in **k**
+   (repetitions) not **n** (samples per run). Current arms are n=3000, k=2 per
+   latency arm and n=5 per boot arm.
 2. **The `qvm`/TCG virtio-queue stall** (A1) was never root-caused. It is
    survivable via the sentinel frame, not fixed, and is tracked outside any
    phase.
