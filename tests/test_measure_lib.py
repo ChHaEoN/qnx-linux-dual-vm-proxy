@@ -255,10 +255,13 @@ def _run_dir(tmp_path, k=12, arms=("idle", "gpu"), stamp_first=True, mutate=None
     d = tmp_path / "run"
     d.mkdir(exist_ok=True)
     stamp = d / "stamp.json"
+    start = d / ".run-start"
     if stamp_first:
         stamp.write_text("{}")
+        start.write_text("")
         past = time.time() - 60
         os.utime(stamp, (past, past))
+        os.utime(start, (past, past))
     for a in arms:
         for r in range(1, k + 1):
             tag = "%s_r%d" % (a, r)
@@ -372,3 +375,76 @@ def test_probe_aborts_on_a_stall_and_writes_nothing(tmp_path):
     assert r.returncode == 3, r.stdout + r.stderr
     assert "FATAL desync" in r.stdout
     assert not out.exists(), "an aborted arm must not leave a result file"
+
+
+def test_full_sequence_passes_even_though_stamp_after_rewrites_the_stamp(tmp_path):
+    """FOUND BY THE FIRST REAL RUN, 2026-09-21, not by the unit tests.
+
+    m_stamp_after rewrites stamp.json at the end of a run. The first version of
+    the freshness check compared result files against stamp.json's mtime, so
+    after that rewrite every file looked older than the run and a clean Orin
+    run was refused. The unit tests above call m_require_complete against a
+    pre-dated stamp and never run m_stamp_after first -- the two only met in a
+    real run. This drives the actual order a script uses.
+    """
+    base = tmp_path / "base"
+    tags = " ".join('%s_r%d' % (a, r) for a in ("idle", "gpu") for r in (1, 2))
+    snippet = textwrap.dedent("""
+        N=1000; K=2; WARMUP=200; INTERVAL_MS=2
+        m_prepare_out "" "%s"
+        m_write_stamp "$OUT/stamp.json" '"experiment": "test"'
+        sleep 1
+        F='{"summary":{"tag":"%%s","n":1000,"warmup_discarded":200,"bad":0,'
+        F="$F"'"rejected_by_monitor":0,"p50_ms":0.2,"p99_ms":0.3,"max_ms":0.4}}'
+        for t in %s; do
+            printf "$F" "$t" > "$OUT/lat-$t.json"
+        done
+        sleep 1
+        m_stamp_after "$OUT/stamp.json"
+        m_require_complete "$OUT" idle gpu
+        echo PASSED
+    """) % (_posix(base), tags)
+    r = _run(tmp_path, snippet)
+    assert "PASSED" in r.stdout, r.stdout + r.stderr
+
+
+# ============================================================ the GPU load check
+
+# A real JetPack 6 tegrastats line, as the Orin printed it on 2026-09-21.
+TEGRA_LINE = ("09-21-2026 12:04:00 RAM 2345/7620MB (lfb 2x4MB) SWAP 0/3810MB (cached 0MB) "
+              "CPU [2%@729,1%@729,0%@729,0%@729,0%@729,0%@729] EMC_FREQ 0%@2133 "
+              "GR3D_FREQ {pct}%@[1020] NVDEC off NVJPG off VIC off OFA off APE 200 "
+              "cpu@49.031C soc2@47.5C gpu@48.843C tj@49.031C")
+
+
+def _stub_tegrastats(tmp_path, pct):
+    b = tmp_path / "bin"
+    b.mkdir(exist_ok=True)
+    s = b / "tegrastats"
+    s.write_text("#!/usr/bin/env bash\necho '%s'\n" % TEGRA_LINE.format(pct=pct))
+    s.chmod(0o755)
+
+
+@pytest.mark.parametrize("pct", [99, 7, 0, 100, 3, 33])
+def test_gpu_busy_reads_the_value_not_the_digit_in_the_label(tmp_path, pct):
+    """FOUND ON THE FIRST REAL RUN: '[0-9]+' also matched the 3 in 'GR3D'.
+
+    pct=3 and pct=33 are here on purpose: they are the values most easily
+    confused with that stray digit.
+    """
+    _stub_tegrastats(tmp_path, pct)
+    r = _run(tmp_path, "m_gpu_busy_pct")
+    assert r.stdout.strip() == str(pct), "read %r from a %d%% line" % (r.stdout, pct)
+
+
+def test_gpu_arm_passes_when_the_gpu_is_loaded(tmp_path):
+    _stub_tegrastats(tmp_path, 99)
+    r = _run(tmp_path, 'm_require_gpu_busy 50; echo "OK $GPU_PCT"')
+    assert r.returncode == 0 and "OK 99" in r.stdout, r.stderr
+
+
+def test_gpu_arm_refuses_when_the_gpu_is_idle(tmp_path):
+    _stub_tegrastats(tmp_path, 7)
+    r = _run(tmp_path, 'm_require_gpu_busy 50; echo "SHOULD NOT REACH"')
+    assert r.returncode != 0 and "SHOULD NOT REACH" not in r.stdout
+    assert "GR3D is 7%" in r.stderr

@@ -55,6 +55,14 @@ m_prepare_out() {   # $1 = requested OUT (may be empty)  $2 = base for a fresh o
 	mkdir -p "$want" || die "cannot create $want"
 	: > "$want/probe.log"
 	: > "$want/order.log"
+	# The freshness reference for m_require_complete. It is written ONCE, here,
+	# and never touched again. The first version compared against stamp.json's
+	# mtime -- but m_stamp_after rewrites the stamp at the end to append the
+	# after-state, so its mtime became the END of the run and every result file
+	# looked older than it. The first real run on the Orin, 2026-09-21, was
+	# refused for exactly that; the unit tests had missed it because they never
+	# ran m_stamp_after before the check.
+	: > "$want/.run-start"
 	OUT="$want"
 }
 
@@ -155,11 +163,40 @@ _cpuset() {
 	printf '%s\n' "${out[@]}" | sort -n | uniq | tr '\n' ' ' | sed 's/ $//'
 }
 
+# ------------------------------------------------------------- finding processes
+# PIDs whose argv[0] basename is EXACTLY $1. Found live on the Orin, 2026-09-21:
+# `pgrep -f "[m]onitor-nativ"` matched the invoking shell. The bracket trick
+# only stops a pattern matching ITSELF; it does nothing when the unbracketed
+# name appears anywhere else on the same command line -- and a `bash -c` sent
+# over ssh carries its whole script as one argument. run-ladder.sh used that
+# pattern both to REFUSE a run and, in cleanup, to KILL, so invoked the wrong way
+# it would have refused falsely or killed its own caller.
+#
+# Not `pgrep -x` either: that matches `comm`, which the kernel truncates to 15
+# characters, so qemu-system-aarch64 reads as "qemu-system-aar" and never
+# matches. argv[0] is not truncated, and a shell's argv[0] is the shell.
+#
+# Safe under `set -euo pipefail` (launch-qnx-kvm-bridged.sh runs that way): no
+# pipeline and no subshell per process. A process can vanish between the /proc
+# glob and the read, and a `tr | head` pipeline could also SIGPIPE when head
+# closed early -- under pipefail either would have exited the caller. `read -d ''`
+# is a builtin that stops at argv[0]'s NUL; a vanished process or a kernel thread
+# (empty cmdline) just reads as empty. Always returns 0.
+m_pids_of() {       # $1 = executable basename
+	local want="$1" d a0
+	for d in /proc/[0-9]*; do
+		a0=""
+		IFS= read -r -d '' a0 < "$d/cmdline" 2>/dev/null || true
+		if [ -n "$a0" ] && [ "${a0##*/}" = "$want" ]; then echo "${d#/proc/}"; fi
+	done
+	return 0
+}
+
 # ------------------------------------------------------------- the guest
 QPID=""; QTHREADS=0; QAFF=""; QEXE=""; QVER=""
 m_pin_qemu() {      # $1 = core spec for every QEMU thread
 	local want="$1" pids n t
-	pids="$(pgrep -f "[q]emu-system-aarch64" || true)"
+	pids="$(m_pids_of qemu-system-aarch64)"
 	n="$(printf '%s\n' "$pids" | grep -c . || true)"
 	[ "$n" -eq 1 ] || die "expected exactly 1 qemu-system-aarch64, found $n"
 	QPID="$pids"
@@ -321,10 +358,14 @@ m_require_complete() {  # $1 = out dir, then arm tags
 	python3 - "$out" "$K" "$N" "$WARMUP" "$@" <<'PY' || die "the run is incomplete or unclean -- do not publish a median from it"
 import json, os, sys
 out, k, n, warmup, arms = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]), sys.argv[5:]
-stamp = os.path.join(out, "stamp.json")
-if not os.path.exists(stamp):
+if not os.path.exists(os.path.join(out, "stamp.json")):
     print("INCOMPLETE: no stamp.json", file=sys.stderr); sys.exit(1)
-t0 = os.path.getmtime(stamp)
+# The reference is the run's START marker, written once by m_prepare_out and
+# never rewritten -- not stamp.json, which m_stamp_after rewrites at the end.
+start = os.path.join(out, ".run-start")
+if not os.path.exists(start):
+    print("INCOMPLETE: no .run-start marker -- was the directory made by m_prepare_out?", file=sys.stderr); sys.exit(1)
+t0 = os.path.getmtime(start)
 problems = []
 for a in arms:
     for r in range(1, k + 1):
@@ -333,7 +374,7 @@ for a in arms:
         if not os.path.exists(p):
             problems.append("%s: missing" % tag); continue
         if os.path.getmtime(p) < t0:
-            problems.append("%s: older than this run's stamp" % tag); continue
+            problems.append("%s: older than this run's start" % tag); continue
         try:
             s = json.load(open(p))["summary"]
         except Exception as e:
@@ -428,16 +469,25 @@ m_load_stop() {
 	LOAD_PIDS=""
 }
 # GR3D busy percentage from one tegrastats line, or -1 if it cannot be read.
+#
+# FOUND ON THE FIRST REAL RUN, 2026-09-21: the first version piped the match
+# through `grep -oE '[0-9]+'`, which on "GR3D_FREQ 99%" also matches the 3
+# INSIDE "GR3D" -- so it returned "3" and "99" on two lines, the integer test
+# failed, and a GPU loaded to 99% was reported as unreadable. It refused the run,
+# which is the right direction to fail, but a check that can never pass blocks
+# every run. The number is now taken as the field AFTER the label, and anything
+# that is not a single integer is rejected by name.
 m_gpu_busy_pct() {
 	local v
 	v="$(timeout 3 tegrastats --interval 1000 2>/dev/null | head -1 \
-		| grep -oE 'GR3D_FREQ [0-9]+%' | grep -oE '[0-9]+')"
+		| grep -oE 'GR3D_FREQ [0-9]+' | awk '{print $2}' | head -1)"
 	echo "${v:--1}"
 }
 # Sets the global GPU_PCT; never call this inside $(...) -- see m_prepare_out.
 GPU_PCT=""
 m_require_gpu_busy() {     # $1 = minimum percent
 	GPU_PCT="$(m_gpu_busy_pct)"
+	[[ "$GPU_PCT" =~ ^-?[0-9]+$ ]] || die "GPU arm, but the GR3D reading is not an integer: '$GPU_PCT'"
 	[ "$GPU_PCT" -ge 0 ] || die "GPU arm, but tegrastats gave no GR3D reading -- load unverified"
 	[ "$GPU_PCT" -ge "$1" ] || die "GPU arm, but GR3D is ${GPU_PCT}% (need >= $1%) -- the GPU is not loaded"
 }

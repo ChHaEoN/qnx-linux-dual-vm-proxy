@@ -43,9 +43,14 @@ ip link show "${TAP}" >/dev/null 2>&1 || {
 if ! ip link show "${TAP}" | grep -q 'master br0'; then
 	echo "ERROR: ${TAP} is not enslaved to br0; arm D would not reach the guest." >&2; exit 1
 fi
-if pgrep -f "[q]emu-system-aarch64" >/dev/null 2>&1; then
-	echo "ERROR: a qemu-system-aarch64 is already running. run-ladder.sh picks the" >&2
-	echo "       guest by pgrep and cannot tell two apart. Stop it first." >&2
+# By argv[0], never by a pgrep -f pattern, which can match the invoking shell's
+# own command line. See m_pids_of in lib-measure.sh.
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[ -r "$here/lib-measure.sh" ] || { echo "ERROR: lib-measure.sh not found beside $0" >&2; exit 1; }
+. "$here/lib-measure.sh"
+if [ -n "$(m_pids_of qemu-system-aarch64)" ]; then
+	echo "ERROR: a qemu-system-aarch64 is already running. The measurement scripts" >&2
+	echo "       pick the guest by process and cannot tell two apart. Stop it first." >&2
 	exit 1
 fi
 

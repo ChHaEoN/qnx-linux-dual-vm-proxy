@@ -59,7 +59,8 @@ QEMU_CORES="${QEMU_CORES:-0-2}"  # guest vCPUs + QEMU I/O thread
 
 cleanup() {
 	say "cleanup"
-	for p in $(pgrep -f "[m]onitor-nativ" 2>/dev/null); do kill "$p" 2>/dev/null; done
+	# By argv[0], never by pattern: see m_pids_of in lib-measure.sh.
+	for p in $(m_pids_of monitor-native); do kill "$p" 2>/dev/null; sudo kill "$p" 2>/dev/null; done
 	sudo ip netns pids "$NS" 2>/dev/null | while read -r p; do sudo kill "$p" 2>/dev/null; done
 	sudo ip netns del "$NS" 2>/dev/null
 	sudo ip link del veth-l 2>/dev/null
@@ -69,7 +70,7 @@ cleanup() {
 # ---------------------------------------------------------------- preflight
 # Checked BEFORE the trap is set, so a refusal here cannot kill a server this
 # run did not start.
-pgrep -f "[m]onitor-nativ" >/dev/null \
+[ -n "$(m_pids_of monitor-native)" ] \
 	&& die "a monitor-native is already running; it would answer arm A in place of this run's. Stop it first."
 [ -x "$MON" ] || die "$MON missing -- run build-monitor-native.sh on this host"
 [ -r "$PROBE" ] || die "missing: $PROBE"
