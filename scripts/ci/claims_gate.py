@@ -41,11 +41,17 @@ LOGS = "logs/sample-boot"
 DELTA_AWK = os.path.join("scripts", "twin", "delta.awk")
 
 # Current-state files: they say what is true now, and nothing else. Adding a
-# file here is a commitment to rewrite it rather than annotate it. README.md and
-# docs/architecture.md are deliberately NOT here yet -- they still carry earlier
-# strike-throughs, and listing them before they are cleaned would only produce a
-# red build nobody can act on.
-OVERWRITE_ONLY = ("CLAUDE.md",)
+# file here is a commitment to rewrite it rather than annotate it.
+#
+# README.md joined on 2026-09-21, and it should have been here first. Deferring
+# it produced exactly the failure the rule exists to stop: an owner decision was
+# patched into one sentence of a section that still carried six older
+# corrections, so README ended up saying both "whether the TCG twin legs survive
+# is one of the open choices" and "the TCG twin legs do NOT survive" -- a
+# contradiction introduced by annotating instead of overwriting.
+#
+# docs/architecture.md is still outstanding.
+OVERWRITE_ONLY = ("CLAUDE.md", "README.md")
 
 
 class ClaimNotFound(Exception):
@@ -80,8 +86,16 @@ class Claim(object):
         self.note = note
 
     def read_claim(self, readme_text):
-        """(value, unit_as_written) straight out of README.md."""
-        m = self.anchor.search(readme_text)
+        """(value, unit_as_written) straight out of README.md.
+
+        Whitespace is collapsed before matching. README wraps prose, so an
+        anchor like /rebuilt startup, ([0-9,]+) bytes/ silently stopped matching
+        the moment a rewrite put "rebuilt" at the end of one line and "startup,"
+        at the start of the next -- the claim was still there and still true, and
+        the gate reported it as removed. A claim must not depend on where the
+        text happens to wrap.
+        """
+        m = self.anchor.search(" ".join(readme_text.split()))
         if not m:
             raise ClaimNotFound(
                 "%s: no sentence in README matches /%s/ -- the claim was reworded or "
