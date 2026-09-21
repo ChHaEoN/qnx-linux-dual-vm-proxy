@@ -36,7 +36,10 @@ Picking up qnx-linux-dual-vm-proxy on Windows after migrating from M1 Max macOS.
 CONTEXT
 - CLAUDE.md is the project guide (already loaded as project instructions). Re-read it now to refresh.
 - 5 commits so far on main; last is e4f22c3 (F1 tightening to Linux x86_64 only). Run git log --oneline -5 to confirm.
-- 14 custom subagents live in .claude/agents/. They should load natively in this session — verify by attempting a subagent_type: research Task tool call with a trivial no-op prompt and reporting whether the agent type was found. If not found, fall back to general-purpose with role-injection prompts.
+- STALE FILE. This is the project's original bootstrap prompt. It says
+  "5 commits so far" against a repo with 257, and quotes an AWS credit
+  balance from April 2026. Kept only until the owner decides whether to
+  delete it or mark it as a dated artefact.
 - AWS Free Plan: $100 credit / ~98 days remaining. Budget alert ($80 monthly) and Cost Anomaly Detection (daily summary, $5/day) are already configured by the user.
 
 PENDING (decided in prior conversation, not yet committed)
@@ -50,7 +53,6 @@ Doc edits needed (this is the next commit):
 - scripts/README.md: add Windows-native walkthrough at the top; mark the existing EC2 walkthrough as "Fallback (if no local x86_64 host)"
 - scripts/bootstrap-build-host.sh: add header banner stating it is the AWS fallback path
 - NEW: scripts/build-qnx-ifs.bat — Windows cmd equivalent of build-qnx-ifs.sh (calls qnxsdp-env.bat, then mkqnximage)
-- agents/research.md, agents/implementation.md: minor updates if they reference build-host platform
 
 TASK
 1. First action: read CLAUDE.md, run git log --oneline -5, and test subagent_type: research. Report a 6-line orientation summary: phase status, agent count + .claude/agents loading test result, last 3 commits, AWS guardrails state per docs, top-of-stack pending item, what you think the immediate next action is.
@@ -81,9 +83,6 @@ revised to:
   delta) and replace it with whatever the next active delta is.
 - Replace **PENDING** wording with a direct pointer to the live
   `docs/findings.md` Phase-N gate-review entry.
-- Drop the "test subagent_type: research" smoke-test step once
-  `.claude/agents/` loading has been confirmed stable across machines
-  for >1 session.
 - Generalise **TASK** step 3 from "architect → implementation" into a
   reference to the project's standard Phase-gate flow already in
   `CLAUDE.md`.

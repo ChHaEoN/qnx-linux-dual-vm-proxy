@@ -441,7 +441,6 @@ never built.
 | [`logs/sample-boot/`](logs/sample-boot/) | curated boot and benchmark logs — the evidence |
 | [`results/`](results/) | benchmark CSVs, GICv3 reports, Phase 3b records (M3–M5 and S1 run records unpublished; the A6 KVM-guest measurements are published) |
 | [`skills/`](skills/) | study artefacts: FMEA, ISO 26262, ISO/SAE 21434, ASPICE, BSP porting, digital twin, Jetson, Tegra virtualisation. **Study artefacts, not certification evidence** |
-| [`agents/`](agents/), [`.claude/agents/`](.claude/agents/) | agent role definitions, long-form and as subagent definitions |
 
 **docs/ index.** [findings.md](docs/findings.md) — append-only, dated, the
 ground truth · [architecture.md](docs/architecture.md) ·

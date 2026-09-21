@@ -136,3 +136,12 @@ orin-native/tools/memcanary-w
 # mkifs [+keeplinked] drops symbol files next to the buildfile; they are derived
 # from QNX binaries and must never be committed.
 *.sym
+
+# The agent roster: removed from the public repo 2026-09-21 (owner). It described
+# a 14-role automotive-SDV team process that the work largely did not follow --
+# 11 of 257 commits mention an agent, and the real work used ad-hoc task
+# delegation. A document asserting an organisational structure the repo cannot
+# evidence is the same class of problem the claims gate exists to catch.
+# Both trees stay on disk so the subagent definitions keep working locally.
+agents/
+.claude/agents/

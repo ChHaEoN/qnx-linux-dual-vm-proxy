@@ -38,10 +38,9 @@ table.
 
 - [docs/security-model.md](../../docs/security-model.md) — STRIDE
   table + secure-boot framing + NCEULA audit + supply-chain hygiene
-- [agents/cyber-analysis.md](../../agents/cyber-analysis.md),
-  [agents/cyber-design.md](../../agents/cyber-design.md),
-  [agents/cyber-verification.md](../../agents/cyber-verification.md)
-  — the three sub-prompt templates
+- [docs/tara/phase1-cloud-tara.md](../../docs/tara/phase1-cloud-tara.md),
+  [docs/cyber/](../../docs/cyber/) — the Phase-1-gate TARA, concept
+  and verification work products
 
 ## Pair with
 

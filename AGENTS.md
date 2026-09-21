@@ -112,7 +112,6 @@ qnx-linux-dual-vm-proxy/
 ├── AGENTS.md                  # this file (Codex guidance)
 ├── LICENSE                    # MIT (source only; not QNX/Linux binaries)
 ├── docs/                      # narrative, decisions, findings
-├── agents/                    # sub-prompt templates per agent in the roster
 ├── scripts/                   # cloud-twin scripts (top-level), qhv/, orin/, twin/
 ├── ipc-test/                  # Phase 2 cross-VM IPC client/server source
 ├── orin-native/               # Phase 3b native-port source: shim, startup board dir, tools, qvm configs, M4 tooling
@@ -137,78 +136,19 @@ Each placeholder file carries a `Phase N` tag in its header. Do not strip Phase 
 
 ---
 
-## Agents (delegate work to these roles)
+## How work is delegated
 
-The roster is modelled on real automotive SDV team roles. Each agent
-has a sub-prompt template at `agents/<agent-name>.md`.
+Work is delegated ad hoc: the orchestrator describes a concrete task and hands
+it to a subagent or a workflow, and integrates the result. There is no fixed
+roster.
 
-| # | Agent | Industry-role mapping | Primary responsibilities |
-|---|-------|---|---|
-| 1 | 🔍 **Research** | Tech scout / requirements engineer | external research (BSP, license, baselines, Jetson L4T quirks); fills decision-record stubs |
-| 2 | 📐 **Architect / Planner** | System architect | architecture diagrams, phase decomposition, risk assessment; arbitrates trade-offs from Research |
-| 3 | 🏗️ **Implementation** | Software engineer | scripts, configs, IFS build wrappers, IPC C99 source, infra-as-code |
-| 4 | 🧪 **Test / V&V** | Verification & validation engineer | unit + integration tests, latency benchmarks, regression sweeps, **twin-diff** measurements (Phase 4) |
-| 5 | 🛡️ **FuSa-Analysis** | FuSa analyst (ISO 26262) | HARA, FMEA, DFA — *finds* hazards and failure modes; produces `skills/fmea/examples/<phase>-fmea.md` |
-| 6 | 🛡️ **FuSa-Design** | FuSa architect (ISO 26262) | Safety Concept, Technical Safety Requirements (TSR), safety mechanism design — *designs* mitigations for findings from FuSa-Analysis |
-| 7 | 🛡️ **FuSa-Verification** | FuSa V&V engineer (ISO 26262) | FMEDA, fault injection plans, residual-risk argument — *proves* the mitigations work |
-| 8 | 🔐 **Cyber-Analysis** | Cybersec analyst (ISO/SAE 21434) | TARA — Threat Analysis and Risk Assessment, asset / threat / damage / attack-feasibility tables; *finds* threats |
-| 9 | 🔐 **Cyber-Design** | Cybersec architect (ISO/SAE 21434) | Cybersecurity Concept + Technical Cybersecurity Requirements (TCR), security mechanism selection (mTLS, secure-boot, signing); *designs* mitigations |
-| 10 | 🔐 **Cyber-Verification** | Cybersec V&V engineer (ISO/SAE 21434) | Pen-test plans, fuzzing harnesses, vulnerability management process, NCEULA + supply-chain audit checklist; *proves* mitigations work |
-| 11 | 📝 **Docs** | Tech writer | README, narrative, findings log, comparison doc; cross-links between artifacts |
-| 12 | 📊 **Comparison** | Domain analyst | dimension-by-dimension DRIVE OS gap doc (Phase 4); honest verdicts |
-| 13 | 🎓 **Skills** | Knowledge curator | populates `skills/*` paradigm READMEs; worked examples per phase milestone |
-| 14 | 🧭 **Twin Sync** (Phase 3+) | Integration engineer | orchestrates ~~AWS↔Orin~~ cloud-leg↔Orin parity; owns `scripts/twin/sync.sh` and `scripts/twin/sync-qhv.sh` (**2026-09-11:** the cloud leg runs on the Windows PC, and the hypervisor images move with `sync-qhv.sh`; `sync.sh` needs `rsync`, which Git Bash lacks) |
-
-**Coordination rules:**
-
-- **Forward flow per Phase milestone:** Research → Architect → Implementation → Test.
-- **FuSa (3 sub-roles) and Cybersecurity (3 sub-roles) are cross-cutting:** they review at every Phase boundary, not just at the end. Internal flow within each is **Analysis → Design → Verification** (ISO 26262 / 21434 V-model order). The two disciplines pair-review at phase gates for cyber-FuSa interaction analysis.
-- **Docs / Comparison / Skills are continuous:** they pull from the work products of the other agents.
-- Multiple agents may run in **parallel** only when their work products do not overlap (FuSa worksheet + Cybersecurity threat model: fine; two Implementation agents on the same script: not).
-- **Room to grow:** explicit candidates for future addition are Performance, Release / DevOps, and Customer-facing Application Engineer (the latter would role-play DRIVE OS customer-port engagements).
-
-**Where the agent definitions live (two locations, on purpose):**
-
-| Location | Audience | Format | Use |
-|---|---|---|---|
-| `agents/<name>.md` | Humans (PR reviewers, GitHub readers) | Long-form prose: role, inputs, outputs, handoff, sub-prompt template | Documentation; on-boarding new collaborators |
-| `.codex/agents/<name>.toml` | Codex Task tool | TOML (`name`, `description`, `developer_instructions`) with a concise system prompt | Native subagent invocation: `subagent_type: <name>` |
-
-The `.codex/agents/` files are intentionally thin and refer back to `agents/<name>.md` for full context. Edit both together so they don't drift.
-
-**How to invoke a subagent (in any Codex session):**
-
-1. Ask the orchestrator (the main session): _"Run the Research agent on the F6 BSP questions in `docs/bsp-selection.md`."_
-2. The orchestrator spawns a Task tool call with `subagent_type: research` and a concrete task description.
-3. The subagent reads `AGENTS.md` + `agents/research.md` + the target phase doc, does its work, returns a summary.
-4. The orchestrator integrates the result and decides next agent.
-
-**Phase 1 starting sequence (concrete):**
-
-> **Superseded in part by [ADR-002](docs/phase2-topology-decision.md) (Accepted).**
-> Steps 3–5 below assume the falsified cloud topology — KVM + `br0`/tap +
-> a dual QNX/Linux VM launch. The as-built cloud leg is the QHV host
-> `qvm` + a **single** QNX guest under QEMU **TCG** (no KVM, no
-> `br0`/tap, no Linux guest). Treat `setup-bridge.sh` and
-> `launch-linux-vm.sh` on the cloud runtime as **not used on cloud**;
-> they belong to the Phase-3 Orin heterogeneous path. The live cloud
-> bring-up path is `scripts/qhv/` (first booted 2026-06-11; see that day's
-> QHV milestone in [docs/findings.md](docs/findings.md)) and the Phase-2
-> IPC is QNX-host↔QNX-guest over the `qvm` virtio-console vdev.
-
-```text
-1. research + architect  → complete (commit 072446c — HARA / TARA / F6 verdicts; 2026-05-07 amendment in findings.md — Windows build-host pivot)
-2. user (manual)         → install QNX SDP 8.0 on local Windows PC via QNX Software Center (primary path is GUI-only; not scripted)
-3. implementation        → scripts/bootstrap-runtime-host.sh on Graviton c7g.large (provision QEMU + bridge tooling). [ADR-002: no KVM on cloud — TCG only] Fallback only: scripts/bootstrap-build-host.sh on a t3.medium EC2 if no local x86_64 host
-4. implementation        → scripts/build-qnx-ifs.bat on Windows (or build-qnx-ifs.sh on EC2 fallback) → scp ifs.bin to runtime → boot QHV host + single QNX guest under TCG via scripts/qhv/. [ADR-002 supersedes the old setup-bridge.sh + launch-{qnx,linux}-vm.sh dual-VM-over-bridge step — that is Phase-3/Orin only]
-5. test                  → capture boot logs into logs/sample-boot/cloud-{qnx,linux}-boot1.log (cloud is QNX-only per ADR-002); record QNX boot time
-6. fusa-analysis         + cyber-analysis (parallel)  →  Phase-1-gate review
-7. docs                  → update findings.md with Phase 1 measured numbers
-```
-
-Three parallel-friendly handoffs in that flow: step 6 (FuSa-Analysis ∥ Cyber-Analysis) and the eventual Phase-2 IPC implementation can split client / server work between two Implementation agents.
-
----
+There used to be one — fourteen role definitions modelled on an automotive SDV
+team, under `agents/` and `.claude/agents/`. It was removed from the repo on
+2026-09-21 because the work did not follow it: 11 of 257 commits mention an
+agent, and the delegation that actually happened was task-shaped, not
+role-shaped. A document asserting an organisational structure the repo cannot
+evidence is the same class of problem the claims gate exists to catch, so it was
+held to the same standard as any other claim here.
 
 ## What this project does NOT do
 
