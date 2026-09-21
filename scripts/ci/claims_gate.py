@@ -38,6 +38,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import claims_lib as C  # noqa: E402
 
 LOGS = "logs/sample-boot"
+
+# The attribution ladder's committed evidence (A6, 2026-09-21). Twelve rounds
+# per arm: OD11 puts the budget in k, not n, because between-round variation on
+# this board is ~69x the within-run sampling noise at p50.
+LADDER_RAW_REL = "results/orin-native-port/20260921T-ladder/raw"
+LADDER_K = 12
 DELTA_AWK = os.path.join("scripts", "twin", "delta.awk")
 
 # Current-state files: they say what is true now, and nothing else. Adding a
@@ -54,8 +60,10 @@ DELTA_AWK = os.path.join("scripts", "twin", "delta.awk")
 # they are development tooling, and a repo should carry ONE public statement of
 # current state, not two that can drift. README is that statement.
 #
-# docs/architecture.md is still outstanding.
-OVERWRITE_ONLY = ("README.md",)
+# docs/architecture.md joined on 2026-09-21, once it was rewritten: 511 lines and
+# 52 strike markers down to 189 and none. It states current architecture, so it
+# earns the same rule -- and adding it here is what stops it drifting back.
+OVERWRITE_ONLY = ("README.md", "docs/architecture.md")
 
 
 class ClaimNotFound(Exception):
@@ -145,6 +153,32 @@ def build_claims(repo):
 
     def boot(rel):
         return C.parse_boot_times(os.path.join(repo, LOGS, rel))
+
+    # --- the attribution ladder (A6, 2026-09-21) --------------------------
+    def arm(name):
+        """One arm's median-of-round-medians, asserting the round count.
+
+        K is asserted because a missing arm file would silently change the
+        median rather than fail: at k=12 the arms differ by up to 6.4% between
+        rounds, so eleven files still produce a plausible-looking number. OD11
+        fixed k >= 12, and a figure taken at a different k is a different
+        measurement.
+        """
+        value, k = C.ladder_arm_p50_us(os.path.join(repo, LADDER_RAW_REL), name)
+        assert k == LADDER_K, "arm %s has k=%d, expected %d" % (name, k, LADDER_K)
+        return value
+
+    def ladder_total():
+        return arm("D-guest"), "us"
+
+    def ladder_instrument():
+        return arm("A-loopback"), "us"
+
+    def ladder_bridge():
+        return arm("B-bridge") - arm("A-loopback"), "us"
+
+    def ladder_crossing():
+        return arm("D-guest") - arm("B-bridge"), "us"
 
     # --- A2 plain-IFS boot, Windows vs Orin -------------------------------
     def a2_median_delta():
@@ -278,6 +312,27 @@ def build_claims(repo):
               r"recovered ([0-9]+)/19 real (?P<unit>stalls)", 0, "stalls", "stalls",
               ["qhv-tcg-sentinel-recovery-diag300-run{1,2,3}.log", "qhv-tcg-rq2-shmem-roundtrip-success.log"],
               sentinel_recoveries),
+        # The attribution ladder, added 2026-09-21. These four were published in
+        # README and docs/architecture.md with NO committed evidence and no entry
+        # on the UNBACKED list, so nothing checked them -- the 36 arm files were
+        # sitting in Windows TEMP. Each of the four is now re-derived from those
+        # files, and the two DERIVED ones are the point: "bridge" and "crossing"
+        # are differences between arms, never measured directly, and a reader has
+        # no way to see that from the number alone.
+        Claim("C21", "ladder total, D-guest arm",
+              r"splits the ([0-9]+) (?P<unit>µs) cross-partition round trip", 0, "µs", "us",
+              [LADDER_RAW_REL + "/lat-D-guest_r*.json"], ladder_total),
+        Claim("C22", "ladder instrument floor, A-loopback arm",
+              r"into ([0-9]+) (?P<unit>µs) of instrument", 0, "µs", "us",
+              [LADDER_RAW_REL + "/lat-A-loopback_r*.json"], ladder_instrument),
+        Claim("C23", "ladder bridge cost, DERIVED B minus A",
+              r"([0-9]+) (?P<unit>µs) of bridge", 0, "µs", "us",
+              [LADDER_RAW_REL + "/lat-{A-loopback,B-bridge}_r*.json"], ladder_bridge,
+              note="derived: B-bridge minus A-loopback"),
+        Claim("C24", "ladder guest crossing, DERIVED D minus B",
+              r"\*\*([0-9]+) (?P<unit>µs) of guest crossing\*\*", 0, "µs", "us",
+              [LADDER_RAW_REL + "/lat-{B-bridge,D-guest}_r*.json"], ladder_crossing,
+              note="derived: D-guest minus B-bridge"),
     ]
 
 

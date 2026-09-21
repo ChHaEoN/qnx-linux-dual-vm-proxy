@@ -22,6 +22,7 @@ hardcoded 1000000000 placeholder on the hw leg (its own notes field says
 import difflib
 import glob
 import io
+import json
 import os
 import re
 
@@ -201,6 +202,34 @@ def sentinel_counts(path):
     rec = sum(int(v) for v in _RECOVERY_RE.findall(text))
     bounce = sum(int(v) for v in _BOUNCE_RE.findall(text))
     return rec, bounce
+
+
+def ladder_arm_p50_us(raw_dir, arm):
+    """Median of the per-round p50s for one attribution-ladder arm, in MICROSECONDS.
+
+    The ladder writes one JSON per (arm, round), so an arm at k=12 is twelve
+    files. The published figure is the MEDIAN OF THE ROUND MEDIANS, not the p50
+    of all samples pooled: pooling would let a single slow round pull the figure
+    while hiding that it was one round, and the whole reason OD11 spends the
+    budget on k is that between-round variation is ~69x the within-round noise
+    at p50. Reducing across rounds is therefore the measurement, not a summary
+    of it.
+
+    The files record milliseconds (`p50_ms`); this returns microseconds, because
+    that is the unit README quotes. The conversion is here rather than at the
+    call site so the gate's unit check has one place to disagree with.
+    """
+    paths = sorted(glob.glob(os.path.join(raw_dir, "lat-%s_r*.json" % arm)))
+    if not paths:
+        raise ValueError("no ladder files for arm %r under %s" % (arm, raw_dir))
+    p50s = []
+    for p in paths:
+        with io.open(p, "r", encoding="utf-8") as fh:
+            s = json.load(fh)["summary"]
+        if s["n"] <= 0:
+            raise ValueError("%s: n=%r" % (p, s["n"]))
+        p50s.append(float(s["p50_ms"]) * 1000.0)
+    return median(p50s), len(p50s)
 
 
 def file_size(path):
