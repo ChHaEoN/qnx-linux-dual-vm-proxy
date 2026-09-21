@@ -425,7 +425,7 @@ def main():
     print("PROSE BEYOND README -- scripts/ is instructions (hard fail); docs/ and results/ warn")
     print("-" * 100)
     # gitignored, local-only: CI never sees them, so a local run must not either
-    skip = ("interview-narrative.md", "cv-architecture-brief.md")
+    skip = C.LOCAL_ONLY
     for label, globs, hard in (
             ("scripts/", ["scripts/**/*.sh", "scripts/**/*.bat",
                           "scripts/**/*.ps1", "scripts/**/*.md"], True),

@@ -133,11 +133,12 @@ def test_struck_through_text_is_not_scanned(repo_root):
 def test_local_only_files_are_excluded_from_discovery(repo_root):
     """A gitignored file must not make a developer's run disagree with CI's.
 
-    docs/interview-narrative.md and docs/cv-architecture-brief.md exist on the
-    owner's machine and in no clone. If the gate scanned them, a local failure
-    would be unreproducible in Actions -- the worst failure shape available.
+    The files in C.LOCAL_ONLY exist on the owner's machine and in no clone. If
+    the gate scanned them, a local failure would be unreproducible in Actions
+    -- the worst failure shape available. This asserts the gate's real list,
+    not a copy of it: a copy is how the list drifts.
     """
-    skip = ("interview-narrative.md", "cv-architecture-brief.md")
+    skip = C.LOCAL_ONLY
     found = C.prose_files(repo_root, ["docs/*.md"], exclude=skip)
     assert found, "discovery returned nothing at all"
     assert all(os.path.basename(p) not in skip for p in found)
@@ -260,8 +261,7 @@ def test_every_exemption_is_justified_and_used(repo_root):
     sentences = []
     scanned = ["docs/*.md", "README.md", "scripts/**/*.md", "scripts/**/*.sh",
                "scripts/**/*.bat", "scripts/**/*.ps1", "results/**/*.md"]
-    for rel in C.prose_files(repo_root, scanned,
-                             exclude=("interview-narrative.md", "cv-architecture-brief.md")):
+    for rel in C.prose_files(repo_root, scanned, exclude=C.LOCAL_ONLY):
         text = C.strip_superseded(C._read(os.path.join(repo_root, rel)))
         sentences.extend(C.split_sentences(text))
     corpus = chr(10).join(sentences)

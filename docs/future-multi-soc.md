@@ -271,9 +271,8 @@ bridges instead of one, two OS distributions instead of one). The
 risk of getting stuck in bring-up before any IPC measurement
 happens is high.
 
-The Phase 1–6 narrative — single-SoC NVIDIA twin done well, with
-honest framing — is already enough for the AVOS / DRIVE OS JD
-target. Phase 7 is the upgrade path: when the user has time and
-budget, it converts the project from "single-SoC twin" to
-"E/E architecture twin," which is meaningfully more ambitious and a
-cleaner story for a senior platform-integration role.
+The Phase 1–6 work — a single-SoC NVIDIA twin done carefully, with
+honest framing — stands on its own. Phase 7 is the upgrade path: given
+time and budget it converts the project from a single-SoC twin into an
+E/E architecture twin, which is meaningfully more ambitious and
+exercises integration surface a single SoC never reaches.

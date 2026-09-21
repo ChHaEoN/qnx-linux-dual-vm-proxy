@@ -99,10 +99,6 @@
 # figure attributed to "cloud" was produced on the local Windows host.
 !attributed to "cloud" was produced on the \*\*local Windows host\*\*	the sentence is the correction itself
 
-# docs/jd-mapping.md -- already carries the qualifier inline: "(designed for AWS
-# Graviton; as built, QEMU TCG on a local Windows PC)".
-!designed for AWS Graviton; as built, QEMU TCG	already qualified inline as designed-not-built
-
 # docs/phase2-topology-decision.md -- a two-column "what this IS / what it is
 # NOT" table. The matched text is the NOT column, listing certified Type-1
 # isolation and ASIL-D as things explicitly not demonstrated.

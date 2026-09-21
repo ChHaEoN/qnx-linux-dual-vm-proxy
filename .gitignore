@@ -38,8 +38,7 @@ ipc-test/qnx-safety-monitor/qnx-safety-monitor
 ipc-test/qnx-dds-monitor/qnx-dds-monitor
 
 # Interview / application material: local only, never published (owner,
-# 2026-09-20). docs/jd-mapping.md is the sibling case -- CLAUDE.md already
-# forbids surfacing it in README.
+# 2026-09-20 for the narrative, 2026-09-21 for the JD mapping).
 #
 # This hides the file from the tip only: it is present in 10 earlier commits of
 # this public repo. The owner reviewed that on 2026-09-20 and decided NOT to
@@ -53,6 +52,11 @@ docs/interview-narrative.md
 # Same rule, same reason: architecture brief written for CV prep (2026-09-20).
 # This one has never been committed, so it leaves no history behind it.
 docs/cv-architecture-brief.md
+# Same rule, same reason: a table mapping a job description to repo artefacts.
+# Untracked from the tip on 2026-09-21; it remains in 5 earlier commits, and
+# history is not being rewritten -- see the note above. Its basename is also in
+# claims_lib.LOCAL_ONLY so the prose scan skips it locally as CI does.
+docs/jd-mapping.md
 # idlc-generated sources: regenerated at build time from av.idl, and they carry
 # no licence header of their own, so they are not committed.
 ipc-test/qnx-dds-monitor/av.c

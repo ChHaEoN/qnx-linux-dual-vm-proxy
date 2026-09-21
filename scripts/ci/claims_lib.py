@@ -25,6 +25,19 @@ import io
 import os
 import re
 
+# Files that exist on the owner's machine and in no clone: gitignored, so CI
+# never sees them. Every prose scan must exclude them, or a local run fails on
+# text Actions cannot see -- the worst failure shape available. This tuple was
+# duplicated in claims_gate.py and twice in tests/test_prose_gate.py until
+# 2026-09-21, when adding a third file showed the copies could drift: a stale
+# test copy would keep sustaining an exemption locally that is dead in CI.
+# Matching is by BASENAME, which is what prose_files compares.
+LOCAL_ONLY = (
+    "interview-narrative.md",
+    "cv-architecture-brief.md",
+    "jd-mapping.md",
+)
+
 # --------------------------------------------------------------------------
 # statistics
 # --------------------------------------------------------------------------
