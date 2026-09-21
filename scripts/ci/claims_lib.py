@@ -232,6 +232,37 @@ def ladder_arm_p50_us(raw_dir, arm):
     return median(p50s), len(p50s)
 
 
+def paired_p50_us(raw_dir, arm, ref):
+    """Median over rounds of (arm p50 - ref p50) in the SAME round, in MICROSECONDS.
+
+    The A6 campaign records publish effects this way: arms are interleaved in
+    rounds, and between-round drift is ~69x the within-round noise at p50, so
+    only a difference taken inside one round cancels it. The median of those
+    per-round differences is not the difference of the two arms' medians, and
+    it is the one the records cite.
+
+    Returns (median, k). The two arms must hold the same rounds: a round present
+    for one arm only -- a stall, a missing file -- is an error rather than being
+    dropped, because silently shrinking k is how a paired figure stops meaning
+    what its record says.
+    """
+    def per_round(name):
+        out = {}
+        for p in sorted(glob.glob(os.path.join(raw_dir, "lat-%s_r*.json" % name))):
+            with io.open(p, "r", encoding="utf-8") as fh:
+                s = json.load(fh)["summary"]
+            if s["n"] <= 0:
+                raise ValueError("%s: n=%r" % (p, s["n"]))
+            out[int(s["tag"].rsplit("_r", 1)[1])] = float(s["p50_ms"]) * 1000.0
+        if not out:
+            raise ValueError("no files for arm %r under %s" % (name, raw_dir))
+        return out
+    a, b = per_round(arm), per_round(ref)
+    if sorted(a) != sorted(b):
+        raise ValueError("arms %r and %r hold different rounds: %s vs %s" % (arm, ref, sorted(a), sorted(b)))
+    return median([a[r] - b[r] for r in sorted(a)]), len(a)
+
+
 def file_size(path):
     """Raw size on disk.
 

@@ -44,6 +44,11 @@ LOGS = "logs/sample-boot"
 # this board is ~69x the within-run sampling noise at p50.
 LADDER_RAW_REL = "results/orin-native-port/20260921T-ladder/raw"
 LADDER_K = 12
+# The pinned-load campaign (A6, 2026-09-21): interference and saturation at
+# k = 12 with every load thread pinned. README quotes three PAIRED effects from
+# it; each is re-derived here from the arm files, round by round.
+PINNED_REL = "results/orin-native-port/20260921T-a6-orin-pinned"
+PINNED_K = 12
 DELTA_AWK = os.path.join("scripts", "twin", "delta.awk")
 
 # Current-state files: they say what is true now, and nothing else. Adding a
@@ -176,6 +181,11 @@ def build_claims(repo):
 
     def ladder_bridge():
         return arm("B-bridge") - arm("A-loopback"), "us"
+
+    def pinned(exp, arm, ref):
+        value, k = C.paired_p50_us(os.path.join(repo, PINNED_REL, exp, "raw"), arm, ref)
+        assert k == PINNED_K, "%s %s-%s has k=%d, expected %d" % (exp, arm, ref, k, PINNED_K)
+        return value, "us"
 
     def ladder_crossing():
         return arm("D-guest") - arm("B-bridge"), "us"
@@ -333,6 +343,30 @@ def build_claims(repo):
               r"\*\*([0-9]+) (?P<unit>µs) of guest crossing\*\*", 0, "µs", "us",
               [LADDER_RAW_REL + "/lat-{B-bridge,D-guest}_r*.json"], ladder_crossing,
               note="derived: D-guest minus B-bridge"),
+        # The pinned-load campaign, added 2026-09-21. All three are PAIRED: the
+        # median over rounds of a within-round difference, never a difference of
+        # medians. C25 names core 0 and core 5 rather than "on and off QEMU's
+        # cores" because that is all this design separates.
+        Claim("C25", "one pinned thread, core 0 minus core 5, PAIRED",
+              r"costs \*\*([0-9]+) (?P<unit>µs)\*\* more at p50 on QEMU's core 0 than on core 5", 0, "µs", "us",
+              [PINNED_REL + "/interference/raw/lat-{cpu_q,cpu_nq}_r*.json"],
+              lambda: pinned("interference", "cpu_q", "cpu_nq"),
+              note="paired: cpu_q minus cpu_nq in the same round"),
+        Claim("C26", "QEMU's cores 0 and 1 loaded, PAIRED vs idle",
+              r"loading QEMU's cores 0 and 1 costs \*\*([0-9]+) (?P<unit>µs)\*\* over idle", 0, "µs", "us",
+              [PINNED_REL + "/saturation/raw/lat-{cpu2_q,idle}_r*.json"],
+              lambda: pinned("saturation", "cpu2_q", "idle"),
+              note="paired: cpu2_q minus idle in the same round"),
+        Claim("C27", "all six cores loaded, PAIRED vs idle",
+              r"or all six cores \(\*\*([0-9]+) (?P<unit>µs)\*\*\)", 0, "µs", "us",
+              [PINNED_REL + "/saturation/raw/lat-{cpu6,idle}_r*.json"],
+              lambda: pinned("saturation", "cpu6", "idle"),
+              note="paired: cpu6 minus idle in the same round"),
+        Claim("C28", "all three of QEMU's cores loaded, PAIRED vs idle",
+              r"all three of its cores \(\*\*([0-9]+) (?P<unit>µs)\*\*\)", 0, "µs", "us",
+              [PINNED_REL + "/saturation/raw/lat-{cpu3_q,idle}_r*.json"],
+              lambda: pinned("saturation", "cpu3_q", "idle"),
+              note="paired: cpu3_q minus idle in the same round"),
     ]
 
 

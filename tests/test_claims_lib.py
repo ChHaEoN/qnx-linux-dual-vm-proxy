@@ -320,3 +320,30 @@ def test_denylist_catches_a_bad_description():
             "EL2 on the board's own Cortex-A78AE cores, hosting a QNX guest and a "
             "stock Linux guest. Nothing is certified; every limit is documented.")
     assert C.scan_denylist(good, rules) == []
+
+
+def _arm_files(d, arm, p50s_ms):
+    import json
+    for r, v in enumerate(p50s_ms, 1):
+        (d / ("lat-%s_r%d.json" % (arm, r))).write_text(json.dumps(
+            {"summary": {"tag": "%s_r%d" % (arm, r), "n": 1000, "p50_ms": v}}))
+
+
+def test_paired_p50_is_the_median_of_within_round_differences(tmp_path):
+    """Not the difference of the two medians: here those disagree on purpose.
+    arm - ref per round = +200, +10, +10 us  -> paired median +10 us,
+    while median(arm) - median(ref) = 300 - 200 = +100 us. (A first version of
+    this fixture had both estimators at +10 us and so could not tell them apart;
+    a mutation check caught it.)"""
+    _arm_files(tmp_path, "ref", [0.100, 0.200, 0.300])
+    _arm_files(tmp_path, "arm", [0.300, 0.210, 0.310])
+    value, k = C.paired_p50_us(str(tmp_path), "arm", "ref")
+    assert k == 3 and abs(value - 10.0) < 1e-6
+
+
+def test_paired_p50_refuses_arms_with_different_rounds(tmp_path):
+    """A stalled or missing round must not shrink k in silence."""
+    _arm_files(tmp_path, "ref", [0.100, 0.200, 0.300])
+    _arm_files(tmp_path, "arm", [0.110, 0.210])
+    with pytest.raises(ValueError, match="different rounds"):
+        C.paired_p50_us(str(tmp_path), "arm", "ref")

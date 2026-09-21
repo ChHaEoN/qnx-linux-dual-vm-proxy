@@ -406,6 +406,20 @@ With OD10 and OD11 written down, **A6's gate is settled and the campaign can run
 "a direction with an open gate"; it is the architecture the campaign measures, and records from it are
 stamped `arch=A6`.
 
+**2026-09-21 (owner decision, OD12): next, other IPC paths across the same boundary — UDP first, then
+shared memory over QEMU `ivshmem`.** UDP needs new client and server code but keeps the existing virtio-net
+path and launch line, so a UDP-minus-TCP figure is the difference between the two protocols on the same
+path, code included. `ivshmem` adds a device to the launch line, and is the closest this project can come to
+DRIVE OS's shared-memory IPC; SDP 8.0 ships `pci-server` and `pci_hw-fdt` for the guest side, and the ring
+and its signalling are this project's own code. Each new path is measured beside the existing TCP path in
+the same run and paired, never compared with earlier figures. The rest of OD11's content (§3.3, §3.4, the
+offered-rate sweep of §3.5, §3.7) is not scheduled by this decision. Considered and not adopted for now:
+virtio-vsock (no vsock driver in SDP 8.0's target tree); Eclipse S-CORE `mw::com` (shared memory within one
+OS instance, so it cannot cross this boundary — at most a same-OS baseline); and AUTOSAR's CAPI (Common
+Adaptive Platform Implementation — public on GitHub but not open source: its licence permits
+information-only use without modification). A SOME/IP arm over the UDP path with vsomeip is proposed, not
+decided.
+
 Measurements taken before the freeze become architecture-version history. They are kept, labelled with the architecture they ran on, and not chased.
 
 This section carries no figures. Public figures stay where the inventory below points. Figures from M3 and from dry run 7b stay on the local branch `m3-results-unpublished` (§9).

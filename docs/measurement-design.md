@@ -1,13 +1,17 @@
 # Measurement design — how the numbers in this repo are produced
 
-> **Status (2026-09-21): ADOPTED as owner decision OD11, not yet run.** This is
+> **Status (2026-09-21): ADOPTED as owner decision OD11, run in part.** This is
 > the answer to one open question — *what sample size should A6 use?* — and the
 > answer turned out to be that sample size was the wrong knob. The design below
 > is now A6's, and settling it closed A6's last gate item
-> ([the plan](orin-native-port-plan.md#architecture-versions), OD11). **Nothing
-> below has been executed yet.** The figures already published were taken under
-> the **previous** design (n = 3000, k = 2), described and criticised here as the
-> starting point; they keep that label and are not re-derived.
+> ([the plan](orin-native-port-plan.md#architecture-versions), OD11). **Run** on
+> 2026-09-21: the attribution ladder of §3.2 with all four arms, interference
+> and saturation at k = 12, and the §3.5 pinning and governor controls — records
+> under `results/orin-native-port/20260921T-a6-*`. **Not yet run:** §3.3, §3.4,
+> the offered-rate sweep of §3.5, and §3.7. The figures published before OD11
+> were taken under the **previous** design (n = 3000, k = 2), described and
+> criticised here as the starting point; they keep that label and are not
+> re-derived.
 
 ## 1. The question, and why it was the wrong one
 
