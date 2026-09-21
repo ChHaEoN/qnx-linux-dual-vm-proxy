@@ -452,9 +452,8 @@ def count_strike_markers(text):
        so an unbalanced marker -- the likeliest typo -- slipped through
        silently. Markers are counted, not spans, and one is a failure.
     2. A file that DOCUMENTS the no-strike-through rule has to be able to name
-       the marker. CLAUDE.md says "fails the build if `~~` appears here", in
-       backticks. Inline code is removed before counting, so the rule can
-       describe itself without breaking itself.
+       the marker in backticks. Inline code is removed before counting, so a
+       file can describe the rule it is governed by without breaking itself.
     """
     return INLINE_CODE.sub(" ", text).count("~~")
 

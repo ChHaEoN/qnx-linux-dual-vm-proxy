@@ -50,8 +50,12 @@ DELTA_AWK = os.path.join("scripts", "twin", "delta.awk")
 # is one of the open choices" and "the TCG twin legs do NOT survive" -- a
 # contradiction introduced by annotating instead of overwriting.
 #
+# CLAUDE.md was here until 2026-09-21, when the AI briefings were unpublished:
+# they are development tooling, and a repo should carry ONE public statement of
+# current state, not two that can drift. README is that statement.
+#
 # docs/architecture.md is still outstanding.
-OVERWRITE_ONLY = ("CLAUDE.md", "README.md")
+OVERWRITE_ONLY = ("README.md",)
 
 
 class ClaimNotFound(Exception):

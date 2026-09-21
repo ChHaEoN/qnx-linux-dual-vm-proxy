@@ -445,7 +445,7 @@ that is **outside the project's current reach**: demonstrating hardware-enforced
 partition isolation requires real silicon with EL2 / SMMU, which TCG-on-Windows
 structurally cannot provide.
 
-## A.5 Honest framing (per CLAUDE.md — every claim paired with what it does NOT show)
+## A.5 Honest framing (per the project's honest-framing rule — every claim paired with what it does NOT show)
 
 - The as-built leg **proves the QHV software architecture**: `qvm` parses a
   config, synthesises a virtual platform, and boots a *distinct* QNX guest

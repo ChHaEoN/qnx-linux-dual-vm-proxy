@@ -281,7 +281,7 @@ GICv3 finding: an emulator that decodes only a subset of real encodings.
 
 **How claims are checked.** Each Phase 3b design record from M1b to S1 carries
 a review-outcomes section; an independent review narrowed M4-F's claim before
-it was recorded. In findings.md, CLAUDE.md and the plan, statements later
+it was recorded. In findings.md and the plan, statements later
 shown wrong are **struck through in place with a dated note rather than
 deleted**, and [ADR-002](docs/phase2-topology-decision.md) records how Phase 1
 falsified the original KVM cloud topology.

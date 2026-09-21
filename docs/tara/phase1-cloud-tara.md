@@ -665,7 +665,7 @@ different:
 | Dimension | TARA-body / §A–§H assumption | As-built (2026-06-11) | Consequence for the model |
 |---|---|---|---|
 | Acceleration | QEMU/**KVM** on Graviton (EL2 passthrough) | QEMU-**TCG** pure emulation of an EL2-capable `-cpu max` | The host-kernel-KVM TCB assumption (§1.2) is **not exercised**; the new TCB root is the `qvm` hypervisor process itself. KVM acceleration deferred to Phase 3 (Orin). **2026-09-11:** KVM boot of QNX on the Orin is blocked by the GICv3/NISV defect ([orin-port.md](../orin-port.md) risk register). |
-| Hypervisor model | None ("no Type-1 hypervisor", per CLAUDE.md) — KVM host-mediated | **QHV `qvm` Type-1 hypervisor** synthesising a guest partition | A genuine Type-1 partition boundary (host `QEMU_virt` ↔ guest `ARMv8_Foundation_Model`) now exists **in software** and is the central new attack surface. |
+| Hypervisor model | None (no Type-1 hypervisor) — KVM host-mediated | **QHV `qvm` Type-1 hypervisor** synthesising a guest partition | A genuine Type-1 partition boundary (host `QEMU_virt` ↔ guest `ARMv8_Foundation_Model`) now exists **in software** and is the central new attack surface. |
 | Guests | QNX guest **+** Linux guest (peer VMs, not mutually trusted) | **QNX host (`qnx-qhv`) + QNX guest (`qnx-guest`)**; **no Linux guest** | All Linux-guest assets/threats (A2, A4; T6, T7, T8, T9, T10) **defer** — they are not present in the as-built leg. |
 | IPC / network | virtio-net over `br0` + `tap-qnx`/`tap-linux`, live in Phase 2 | **Inert** — host io-sock stack down (`network stack down`, `Address family not supported`); qvm config ran **no-network** | The entire bridge/tap data-path asset+threat cluster (A5, A6; T1, T2, T3, T4, T8, T9, T11, T12, T13, T14, T15) **defers** for this leg. New IPC surface is the **qvm vdev / synthetic-platform** boundary, not `br0`. |
 | Runtime location | AWS cloud (c7g.large Graviton) | **Local Windows build host**, QEMU-TCG; **no AWS in the demonstrated leg** | The build host **is** the runtime host in this leg. The Windows-host asset/threat surface (§A–§H: A11; T22–T28) is **retained and now also hosts execution**, not just the build. |
@@ -950,7 +950,7 @@ strongest cyber-FuSa joins for the parallel FuSa-Analysis HARA:
   and is reachable*; it demonstrates **nothing** about real
   hardware-partition isolation, RoT, fuse-backed secure boot, or timing.
   A real DRIVE OS hypervisor analysis would run against silicon EL2 with
-  a hardware RoT in scope. (Pairs with CLAUDE.md "no Type-1 partition
+  a hardware RoT in scope. (Pairs with the "no Type-1 partition
   isolation … KVM-on-Linux is host-mediated, not certified Type-1" — and
   note QHV here is real *software* Type-1, but **not** hardware-isolated
   in this leg.)

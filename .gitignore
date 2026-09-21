@@ -145,3 +145,12 @@ orin-native/tools/memcanary-w
 # Both trees stay on disk so the subagent definitions keep working locally.
 agents/
 .claude/agents/
+
+# The AI briefings: unpublished 2026-09-21 (owner). They are development
+# tooling, and a repo should carry ONE public statement of current state --
+# README -- not two that can drift. Every fact in them is already public
+# elsewhere: the distinctive ones appear in 6 to 147 other files under docs/ and
+# results/. What is not public is the synthesis, which is the owner's work.
+# Both stay on disk, so Claude Code and Codex still load them.
+CLAUDE.md
+AGENTS.md
