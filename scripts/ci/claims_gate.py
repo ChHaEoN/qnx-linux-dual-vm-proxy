@@ -477,13 +477,22 @@ def main():
     # read it as live text would report the honest record as a violation.
     print()
     print("-" * 100)
-    print("PROSE BEYOND README -- scripts/ is instructions (hard fail); docs/ and results/ warn")
+    print("PROSE BEYOND README -- runnable trees hard-fail; docs/ and results/ warn")
     print("-" * 100)
     # gitignored, local-only: CI never sees them, so a local run must not either
     skip = C.LOCAL_ONLY
     for label, globs, hard in (
-            ("scripts/", ["scripts/**/*.sh", "scripts/**/*.bat",
-                          "scripts/**/*.ps1", "scripts/**/*.md"], True),
+            # Widened 2026-09-21 from scripts/ alone. orin-native/ holds 32
+            # tracked files (16 shell) and ipc-test/ 6, every .md among them a
+            # README a reader follows -- the same "instructions a reader
+            # executes" category that made scripts/ hard-fail, and none of it
+            # had ever been scanned. It was clean at the time of widening
+            # (0 asserted hits), so this costs nothing and closes the gap
+            # before something drifts into it.
+            ("runnable/", ["scripts/**/*.sh", "scripts/**/*.bat",
+                           "scripts/**/*.ps1", "scripts/**/*.md",
+                           "orin-native/**/*.sh", "orin-native/**/*.md",
+                           "ipc-test/**/*.sh", "ipc-test/**/*.md"], True),
             # docs/**, not docs/*: the FuSa, Cyber and TARA gate material under
             # docs/fusa|cyber|tara and docs/middleware are published prose making
             # claims, and were never scanned until 2026-09-21. README said "docs/**"

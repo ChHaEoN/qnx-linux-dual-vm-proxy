@@ -27,8 +27,16 @@ decision **OD11** ([the plan](../../../docs/orin-native-port-plan.md)); this run
 predates the decision and happens to match it, because the decision was taken
 from this run's own variance data.
 
-Script: `orin-native/gpu-concurrency/run-ladder.sh`,
+Script **as run**: `orin-native/gpu-concurrency/run-ladder.sh`,
 sha256 `05f38c6838444780d83d97cd75045fda4b9721c6f4a47fc911616c793024b84c`.
+That version is **not** the one at HEAD. The script was revised the same day,
+after this record was written, precisely because of the provenance gap below:
+it now detects and records the governor rather than silently skipping it on a
+host that has no cpufreq, verifies the core map and the QEMU affinity readback,
+requires exactly one guest process, asserts every arm produced k rounds, and
+writes a `stamp.json`. It also gained an opt-in arm C. **None of that was in
+effect for this run**, which is why the section below exists. Current version:
+sha256 `ed5669819c623e8e4ae49e39a6a8663b0aca6900891a558d2a9e0d1fd88a81d1`.
 
 ---
 

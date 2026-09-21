@@ -78,8 +78,8 @@ committed data in `logs/` and `results/` through the project's own
 `scripts/twin/delta.awk`; units, separately from values; asserted claims the
 data does not support, against a reviewable
 [denylist](scripts/ci/claim-denylist.txt) matched per sentence so denials stay
-legal; the same denylist over `scripts/**`, whose files are instructions a
-reader executes; a strike-through in this file, which states current state and
+legal; the same denylist over `scripts/**`, `orin-native/**` and
+`ipc-test/**`, whose files are instructions a reader executes; a strike-through in this file, which states current state and
 is rewritten rather than annotated; the Phase badge against the Status table;
 and the GitHub "About" field against its pin in
 [docs/repo-description.md](docs/repo-description.md).
