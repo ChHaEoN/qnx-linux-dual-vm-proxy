@@ -103,12 +103,6 @@
 # Graviton; as built, QEMU TCG on a local Windows PC)".
 !designed for AWS Graviton; as built, QEMU TCG	already qualified inline as designed-not-built
 
-# docs/architecture.md -- an ASCII diagram of NVIDIA's REFERENCE architecture,
-# the thing this project is compared against. "Safety guest: QNX OS for Safety
-# (QOS)" describes DRIVE OS, not this repo, and the whole point of the diagram
-# is the contrast.
-!Safety guest: QNX OS for Safety	a diagram of NVIDIA's reference architecture, not a claim about this repo
-
 # docs/phase2-topology-decision.md -- a two-column "what this IS / what it is
 # NOT" table. The matched text is the NOT column, listing certified Type-1
 # isolation and ASIL-D as things explicitly not demonstrated.
