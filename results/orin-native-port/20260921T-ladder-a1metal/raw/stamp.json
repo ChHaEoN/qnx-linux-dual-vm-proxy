@@ -1,0 +1,17 @@
+{
+  "utc": "2026-09-21T10:14:20Z",
+  "machine": "aarch64",
+  "kernel": "6.8.0-1063-aws",
+  "ncpu": 16,
+  "governor_state": "absent",
+  "governor_before": "",
+  "cpuidle": "absent",
+  "qemu_version": "QEMU emulator version 6.2.0 (Debian 1:6.2+dfsg-2<user>6.31)",
+  "qemu_cmdline": "qemu-system-aarch64 -machine virt,gic-version=3 -cpu host -enable-kvm -smp 2 -m 1G -drive file=/home/<user>/img/disk-qemu,if=none,id=drv0,format=raw -device virtio-blk-device,drive=drv0 -snapshot -netdev tap,id=n0,ifname=tap-qnx,script=no,downscript=no -device virtio-net-device,netdev=n0,mac=52:54:00:11:11:11 -object rng-random,filename=/dev/urandom,id=rng0 -device virtio-rng-device,rng=rng0 -kernel /home/<user>/img/ifs-demo2.bin -nographic ",
+  "qemu_threads": 4,
+  "qemu_affinity": "0-2",
+  "pin": {"qemu": "0-2", "monitor": 3, "probe": 4},
+  "monitor_native_sha256": "80f36725620b3b58383c1d7078313000483eef22635b09115f31713345c60e81",
+  "n": 1000, "k": 12, "warmup": 200, "interval_ms": 2,
+  "arms": ["A-loopback", "B-bridge", "C-null", "D-guest"]
+}

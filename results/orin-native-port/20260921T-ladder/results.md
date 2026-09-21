@@ -46,8 +46,14 @@ sha256 `ed5669819c623e8e4ae49e39a6a8663b0aca6900891a558d2a9e0d1fd88a81d1`.
 §3.2 specifies four arms; the fourth is a guest running a *null* server that
 replies without judging the frame. Without it, the 126 µs attributed to "the
 crossing" is the crossing **plus the monitor's own read, verdict and write
-work** inside the guest. The split between those two is not measured. Arm C is
-the single cheapest thing that would sharpen this result.
+work** inside the guest. The split between those two is not measured here.
+
+**Partially answered the same day, on the other host.** The `a1.metal` ladder
+([its record](../20260921T-ladder-a1metal/results.md)) ran all four arms, and
+arms C and D landed 0.04 µs apart — 0.02% of the crossing. So the monitor's own
+work is not measurable against the transport there. That makes the same very
+likely on this board, but it was **not measured on this board**, and the 126 µs
+above still formally contains an unmeasured monitor component.
 
 **Both derived rows are differences, not measurements.** Nothing was ever
 instrumented at the bridge or at the partition boundary. Subtracting arm
