@@ -3,8 +3,16 @@
  * v1 was wrong and would have produced a misleading arm: `y = y*x + c` with
  * x > 1 overflows to +inf within a few thousand iterations, and once y is inf
  * every later multiply is a trivial special case the FPU disposes of without
- * the pipeline pressure a real FP workload creates. The arm exists to be a
+ * the pipeline pressure a real FP workload creates. The arm was designed as a
  * faithful CPU twin of fma.cu's driver thread, so it must stay in normal range.
+ *
+ * THAT DESIGN PREMISE IS FALSE (measured 2026-09-21). fma.cu's host thread does
+ * not keep a core busy: it blocks in cudaDeviceSynchronize, and during all 12
+ * interference gpu arms no core exceeded 1% CPU while the GPU sat at 99%. So
+ * this program is not a twin of anything in the gpu arm -- it is "one busy core",
+ * a legitimate arm in its own right but not a control that separates "GPU busy"
+ * from "system busy". The code below is unchanged and still correct for what it
+ * does; only the reason it was written has been corrected.
  *
  * This keeps the value bounded by construction: an FMA chain that decays back
  * toward a fixed point instead of growing. Verified by printing the sink, which

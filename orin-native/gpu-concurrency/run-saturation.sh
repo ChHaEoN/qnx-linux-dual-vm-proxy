@@ -40,10 +40,14 @@
 # still alive when the probe ends; gpu_cpu6 must show GR3D at 50% or more. The
 # load stops the moment the probe does.
 #
-# KNOWN, PRE-EXISTING, RECORDED NOT FIXED: gpu_cpu6 is not a matched-footprint
-# control for cpu6. fma's driver thread keeps a core busy, so gpu_cpu6 runs seven
-# busy threads against cpu6's six. A difference between them is GPU load plus
-# one extra CPU thread, and cannot be attributed to the GPU alone.
+# gpu_cpu6 IS CLOSE TO A MATCHED-FOOTPRINT CONTROL FOR cpu6 -- the opposite of
+# what this header said until 2026-09-21. It claimed fma's driver thread keeps a
+# core busy, making gpu_cpu6 seven busy threads against six. Measured: during
+# all 12 interference gpu arms no core exceeded 1% CPU while GR3D sat at 99%;
+# fma's host thread blocks in cudaDeviceSynchronize. So gpu_cpu6 - cpu6 isolates
+# the GPU load about as well as this design can. The claim came from a review
+# finding repeated here without being checked against the data. Stamps written
+# before the correction still carry the false "known_confound" line.
 #
 # COMPARABILITY WITH 2026-09-19 -- none of these figures pairs with that run.
 # That run used n=3000 and k=1, pinned the governor by hand, and left the probe
@@ -135,7 +139,7 @@ m_write_stamp "$OUT/stamp.json" \
 	'"probe_priority": "SCHED_FIFO 50 in cpu6_prio only, verified before round 1"' \
 	"\"load_policy\": \"started, verified alive after 3 s and at probe end, stopped at probe end; ceiling ${SECS}s\"" \
 	'"order": "Williams over the five loaded arms (period 10); idle first and idle2 last every round"' \
-	'"known_confound": "gpu_cpu6 runs 7 busy threads (6 + fma driver) against cpu6 six; not a matched-footprint control"' \
+	'"gpu_footprint": "fma host thread measured at <=1% CPU (it blocks in cudaDeviceSynchronize); gpu_cpu6 vs cpu6 is close to matched"' \
 	'"arms": ["idle", "cpu2", "cpu4", "cpu6", "cpu6_prio", "gpu_cpu6", "idle2"]'
 
 # ---------------------------------------------------------------- the run

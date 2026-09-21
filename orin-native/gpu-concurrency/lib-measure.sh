@@ -139,14 +139,28 @@ m_governor_restore() {
 
 # ------------------------------------------------------------- CPU idle states
 # FOUND IN THE FIRST ORIN CAMPAIGN, 2026-09-21. The governor pin controls
-# FREQUENCY. It never touched IDLE STATES, and the Orin exposes one that matters:
-# state1 "c7", exit latency 5000 us, enabled. An unloaded arm lets cores fall into
-# c7 between 2 ms-spaced frames and pay the wake-up on some of them; a loaded arm
-# keeps them busy and never does. So the "idle" reference was not "the same
-# machine, unloaded" -- it was "the machine, free to sleep". The saturation run
-# then showed p99 about 196 us LOWER under full load than idle, which is the
-# shape that confound predicts. The stamp said only "cpuidle": "present", which
-# is how it went unnoticed; it now records every state a run was exposed to.
+# FREQUENCY. It never touched IDLE STATES, and the Orin exposes state1 "c7",
+# declared exit latency 5000 us, enabled. The stamp said only "cpuidle":
+# "present", which is how it went unnoticed; it now records every state a run
+# was exposed to.
+#
+# WHAT WAS SEEN, THEN TESTED. Unloaded guest arms carried a separate slow mode:
+# a copy of the main distribution shifted about +292 us, holding a median ~11%
+# of samples. Host-native arms never had it; full load removed it; one busy
+# thread on core 0 removed it in 4 of 4 rounds. That made saturation's p99 look
+# ~196 us LOWER than idle's -- the mode disappearing, not load improving a tail.
+# The first version of this comment asserted c7 as the cause before any test.
+# The test was to change the variable: with state1 disabled, the slow mode fell
+# from 12.8% to 0.0% of D-guest samples, and 6.25% to 0.0% of C-null, in every
+# one of 12 rounds. So disabling state1 removes it.
+#
+# WHAT IS NOT SHOWN. The slow mode costs ~0.29 ms per affected sample, far below
+# the 5000 us the state declares -- the declared figure is a bound the idle
+# governor works with, not a measured wake cost, and no sample shows 5 ms. Which
+# core's wake-up is paid (a vCPU, QEMU's I/O thread, the network softirq core)
+# is not shown; core 0 is the leading candidate, a HYPOTHESIS. The probe stored
+# its samples sorted until 2026-09-21, so time order -- periodic, bursty, tied
+# to a tick -- could not be examined in these runs.
 #
 # Two policies, and both are legitimate measurements of different things:
 #   CSTATE=""        (default) leave idle states as found -- the realistic,

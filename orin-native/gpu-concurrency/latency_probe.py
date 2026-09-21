@@ -153,6 +153,12 @@ def main():
         print("FATAL no samples survived (bad=%d rejected=%d)" % (bad, rejected))
         return 1
 
+    # Keep the TIME ORDER before sorting. Until 2026-09-21 only the sorted list
+    # was saved, and an idle-state slow mode (~11% of samples, +0.29 ms) could
+    # then not be examined for periodicity, bursts or a tick: the order it
+    # arrived in was gone. `samples_ms` stays sorted, because existing tools
+    # read it that way; `samples_in_order` is the same values in arrival order.
+    in_order = list(rtts)
     rtts.sort()
 
     def pct(p):
@@ -179,7 +185,7 @@ def main():
 
     if a.out:
         with open(a.out, "w") as f:
-            json.dump({"summary": res, "samples_ms": rtts}, f)
+            json.dump({"summary": res, "samples_ms": rtts, "samples_in_order": in_order}, f)
         print("  wrote %s (%d samples)" % (a.out, len(rtts)))
     return 0
 

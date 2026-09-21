@@ -6,8 +6,8 @@
 #
 #   idle    no load beside the guest              -- baseline, and the pairing reference
 #   gpu     fma.cu saturating the iGPU            -- the question
-#   cpu     cpuload, same CPU footprint, no GPU   -- the control that separates
-#                                                   "GPU busy" from "system busy"
+#   cpu     cpuload, ONE busy core, no GPU        -- NOT a footprint twin of gpu;
+#                                                   see "THE cpu ARM" below
 #   idle2   no load                               -- drift bracket
 #
 # k ROUNDS (owner decision OD11, 2026-09-21). The first run of this experiment
@@ -16,6 +16,17 @@
 # from run-to-run motion. Every figure is now the median of k round-medians with
 # its band, and the effect to cite is the PAIRED column: the median over rounds
 # of (arm - idle) measured in the same round.
+#
+# THE cpu ARM, AND WHAT IT IS NOT. It was designed as a "faithful CPU twin of
+# fma.cu's driver thread" (cpuload.c's own header), so that gpu - cpu would
+# separate "GPU busy" from "system busy". That premise is false: during all 12
+# gpu arms on 2026-09-21 no core exceeded 1% CPU -- fma's host thread blocks in
+# cudaDeviceSynchronize. So the gpu arm adds a GPU load and essentially no CPU,
+# while the cpu arm adds one full busy core, and gpu - cpu mixes two different
+# things. And the load threads are unpinned, so WHICH core that one thread lands
+# on decides the result: on core 3 it cost ~0, on core 2 ~+50 us, and on core 0
+# it erased the idle-state slow mode altogether. Read the cpu arm as "one busy
+# core, placed by the scheduler", not as a control for the gpu arm.
 #
 # COUNTERBALANCED. gpu and cpu carry heat into whatever runs next. With two
 # loaded arms a Williams design is simply alternation -- gpu,cpu then cpu,gpu --
