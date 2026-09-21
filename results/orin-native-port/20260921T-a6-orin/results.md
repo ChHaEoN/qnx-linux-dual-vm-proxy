@@ -127,11 +127,28 @@ each, and the floor rises too.
 where the scheduler put them decided the cost. Read from one tegrastats sample
 per arm, before the probe started (so correlational, a HYPOTHESIS):
 
-- In cpu4, the 7 rounds with load on two of QEMU's three cores cost **+158 to
-  +177 µs** — *more than cpu6*. The 13 rounds with one QEMU core loaded cost
-  +27 to +52 µs.
-- One thread in interference cost ~0 on core 3, +2 to +14 µs on cores 0–1,
-  and +35 to +53 µs on core 2.
+- cpu4 had two regimes, ~+35 µs and ~+165 µs — the second *more than cpu6*.
+  With c7 on, 6 of the 7 rounds sampled with two of QEMU's three cores loaded
+  cost **+158 to +176 µs**, and 12 of the 13 sampled with one cost +27 to
+  +53 µs; the exceptions were r18 (two sampled, +32.9 µs) and r1 (one sampled,
+  +197.3 µs). With c7 off, the two-core rounds split 6 high (+155 to +187 µs)
+  and 4 low (+36 to +40 µs), and all 10 one-core rounds were low (+35 to
+  +41 µs). So the high regime went with two loaded QEMU cores, but identical
+  sampled placements gave both regimes: one sample before the probe cannot
+  decide it.
+- One thread in interference, with c7 on, cost ~0 on core 3, +2 to +14 µs on
+  cores 0–1, and +35 to +53 µs on core 2. With c7 off it cost +18 to +22 µs
+  on any of cores 0–2 and −2 to +3 µs on cores 3–5.
+
+*Corrected 2026-09-21, the same day:* the first version of these two bullets
+said the 7 two-core rounds cost +158 to +177 µs and the 13 one-core rounds
++27 to +52 µs, without exceptions, and gave the one-thread split without
+saying it held for c7 on only. A review of the tooling re-derived both from the
+raw files and they did not hold as written. The corrected figures are above;
+the reading — cost follows load on QEMU's cores — is unchanged, and is what
+the pinned arms of the next run test directly. A second review the same day found the
+cpu6_prio − cpu6 figure with c7 off printed as −3.8 µs; the raw data gives
++3.8 µs (12 of 20 rounds positive). Corrected in place; still uninformative.
 
 So the cost follows load on QEMU's cores — where the vCPU threads, QEMU's
 userspace virtio-net/tap thread, the host's receive-path softirq and its
@@ -140,7 +157,7 @@ them. **Placement was not controlled, so the cpu2 → cpu4 → cpu6 sequence is 
 placement lottery, not a load sweep.**
 
 **cpu6_prio is uninformative in these runs.** SCHED_FIFO 50 left the median
-shift where it was (cpu6_prio − cpu6: 0.0 µs with c7 on, −3.8 µs with c7 off,
+shift where it was (cpu6_prio − cpu6: 0.0 µs with c7 on, +3.8 µs with c7 off,
 bands spanning zero). But that FIFO was in effect is established by procedure —
 `chrt` exits non-zero on failure and the harness aborts — never by measurement.
 The run shows neither that the priority worked nor that it failed.
