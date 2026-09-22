@@ -2,14 +2,15 @@
 #
 # setup-bridge.sh — create br0 + tap-qnx + tap-linux on the runtime host
 #
-# !! NEVER BUILT: there is no Graviton runtime host and there never was. !!
-# Non-metal Graviton exposes no /dev/kvm (ADR-002: docs/phase2-topology-decision.md),
-# so this KVM launch line has no host to run on, and no cloud-leg figure was ever
-# taken on AWS. Kept as the record of a falsified design. The as-built path is
-# scripts/qhv/ (QEMU TCG on the local Windows PC); the bridged QNX<->Linux
-# topology exists only on the Orin, via scripts/orin/.
+# The Graviton RUNTIME HOST it was written for was never built: non-metal
+# Graviton exposes no /dev/kvm (ADR-002: docs/phase2-topology-decision.md), so no
+# cloud leg exists. It does run on a bare-metal a1.metal TEST BED, where
+# scripts/aws/remote-ladder.sh uses it (and then removes tap-linux, to match the
+# Orin's bridge) for the A6 ladders -- a QNX guest under KVM, which is still not
+# a cloud leg in this project's sense (QHV cannot run under KVM). The bridged
+# QNX<->Linux topology of A2 exists only on the Orin, via scripts/orin/.
 #
-# Run on: arm64 runtime host — see NEVER BUILT above, as root (sudo).
+# Run on: an arm64 host with /dev/kvm (bare metal), as root (sudo).
 #
 # Topology produced:
 #

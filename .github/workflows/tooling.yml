@@ -2,10 +2,13 @@ name: tooling
 
 # Lint, type-check and unit-test the Python in this repo.
 #
-# SCOPE NOTE. This job targets orin-native/ and scripts/ci/, which is where all
-# the Python actually is. scripts/ and ipc-test/ contain none -- scripts/ is
-# bash/PowerShell/batch and ipc-test/ is C -- so pointing a linter at them would
-# produce a green check over an empty file set, which is worse than no check.
+# SCOPE NOTE. The ruff and mypy lines below are the whole of the coverage --
+# read them, not this paragraph, for what is checked. Two places hold tracked
+# Python that they do not reach: scripts/twin/time-kvm-boot.py, and the as-run
+# copies under results/, which must never be reformatted. The rest of scripts/
+# and ipc-test/ contain none -- bash/PowerShell/batch and C -- so pointing a
+# linter at them would produce a green check over an empty file set, which is
+# worse than no check.
 #
 # NO QNX ANYWHERE. QNX SDP 8.0 is non-commercial-licensed; no QNX binary, IFS or
 # header may enter this repo or run on a GitHub-hosted runner. Nothing in this
@@ -41,13 +44,13 @@ jobs:
         # both chosen from a trial run against the real tree rather than
         # guessed. See the comments there for why the default rule set was
         # rejected.
-        run: ruff check --output-format=github orin-native scripts/ci tests
+        run: ruff check --output-format=github orin-native scripts/ci scripts/aws scripts/twin tests
 
       - name: mypy
         # Deliberately non-strict: the tracked Python carries zero annotations,
         # so a strict run would emit noise proportional to ~14k lines. This is a
         # regression guard against syntax-level and obvious call errors.
-        run: mypy scripts/ci tests
+        run: mypy scripts/ci scripts/aws scripts/twin tests
 
       - name: pytest
         run: pytest -q
