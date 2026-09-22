@@ -48,8 +48,27 @@
 # and on UDP a lost datagram cannot be told from a stalled guest: the first run
 # keeps the TCP rule (an implementation choice of 2026-09-22, recorded under
 # OD12). If it bites, the evidence is probe.log's "FATAL desync" line for that
-# -udp tag. UDP=1 needs an even K, so that each transport goes first equally
-# often; an odd K is refused rather than recorded as balanced.
+# -udp tag.
+#
+# SHM ARMS (OD12, 2026-09-22), opt-in with SHM=1: the frame through shared
+# memory instead of a network stack (ipc-test/common/shm_chan.h). Two rungs:
+#   A-shm  probe -> native monitor on the host, through a file in /dev/shm
+#          (SHM_HOST_FILE): the same slot with no partition in the way
+#   D-shm  probe -> the guest's monitor, through QEMU's ivshmem device, whose
+#          memory is the host file IVSHMEM
+# There is no B or C rung: no bridge is involved, and the guest image runs no
+# shm echo server. BOTH ENDS POLL -- there is no interrupt on this path -- so
+# during an shm arm the probe holds its core and the monitor holds one core
+# (host) or one vCPU (guest); that cost belongs to the figure. The running QEMU
+# must have been launched with IVSHMEM behind -device ivshmem-plain (checked
+# from its own command line), and the probe's end is libshmchan.so, built here
+# from shmchan.c.
+#
+# TRANSPORT ORDER. With more than one transport, the order of the transport
+# groups in each round follows a Williams design over the groups (as the loaded
+# arms elsewhere do), so K must be a multiple of its period: 2 for two
+# transports (TCP first in odd rounds, as before), 6 for three. A K that breaks
+# the balance is refused rather than recorded as balanced.
 #
 # The shared controls live in lib-measure.sh, one copy for all three scripts.
 set -u
@@ -68,18 +87,29 @@ ARM_C_PORT="${ARM_C_PORT:-}"
 UDP="${UDP:-0}"
 PORT_UDP="${PORT_UDP:-7101}"
 ARM_C_UDP_PORT="${ARM_C_UDP_PORT:-}"
+SHM="${SHM:-0}"
+SHM_HOST_FILE="${SHM_HOST_FILE:-/dev/shm/a6-shm-host}"
+IVSHMEM="${IVSHMEM:-/dev/shm/a6-ivshmem}"
 STALL_POLICY=refuse              # the ladder's figures are headlines: any stall stops it
 case "$UDP" in 0|1) ;; *) die "UDP='$UDP' must be 0 or 1" ;; esac
+case "$SHM" in 0|1) ;; *) die "SHM='$SHM' must be 0 or 1" ;; esac
 case "$PORT_UDP" in ''|*[!0-9]*) die "PORT_UDP='$PORT_UDP' is not a port number" ;; esac
 case "$ARM_C_UDP_PORT" in *[!0-9]*) die "ARM_C_UDP_PORT='$ARM_C_UDP_PORT' is not a port number" ;; esac
-if [ "$UDP" = 1 ] && [ $((K % 2)) -ne 0 ]; then
-	die "UDP=1 needs an even K so each transport goes first equally often; K=$K"
+case "$K" in ''|*[!0-9]*) die "K='$K' is not a round count" ;; esac
+TGROUPS=(tcp)
+[ "$UDP" = 1 ] && TGROUPS+=(udp)
+[ "$SHM" = 1 ] && TGROUPS+=(shm)
+if [ "${#TGROUPS[@]}" -gt 1 ]; then
+	TPERIOD="$(m_williams_period "${#TGROUPS[@]}")"
+	[ $((K % TPERIOD)) -eq 0 ] \
+		|| die "${#TGROUPS[@]} transports (${TGROUPS[*]}) need K to be a multiple of $TPERIOD so their order is balanced; K=$K"
 fi
 GUEST="${GUEST:-192.168.100.10}"
 NS="ladder"
 NS_IP="192.168.100.20"
 PROBE="$HOME/interference/latency_probe.py"
 MON="$HOME/ladder/monitor-native"
+SHM_COMMON="${SHM_COMMON:-$here/../../ipc-test/common}"
 
 CORE_MON="${CORE_MON:-3}"        # native monitor, host side and namespace side
 CORE_PROBE="${CORE_PROBE:-4}"    # the instrument, off the measured cores
@@ -95,6 +125,7 @@ cleanup() {
 	sudo ip netns pids "$NS" 2>/dev/null | while read -r p; do sudo kill "$p" 2>/dev/null; done
 	sudo ip netns del "$NS" 2>/dev/null
 	sudo ip link del veth-l 2>/dev/null
+	[ "$SHM" = 1 ] && rm -f "$SHM_HOST_FILE"
 	m_cstate_restore
 	m_governor_restore
 }
@@ -106,6 +137,20 @@ cleanup() {
 	&& die "a monitor-native is already running; it would answer arm A in place of this run's. Stop it first."
 [ -x "$MON" ] || die "$MON missing -- run build-monitor-native.sh on this host"
 [ -r "$PROBE" ] || die "missing: $PROBE"
+if [ "$SHM" = 1 ]; then
+	[ -r "$here/shmchan.c" ] || die "missing: $here/shmchan.c"
+	[ -r "$SHM_COMMON/shm_chan.h" ] || die "missing: $SHM_COMMON/shm_chan.h (set SHM_COMMON to ipc-test/common)"
+	[ -e "$SHM_HOST_FILE" ] && die "$SHM_HOST_FILE exists -- a leftover from another run; remove it first"
+	# The guest's end must be THIS file: read from the running QEMU itself.
+	qp="$(m_pids_of qemu-system-aarch64)"
+	[ -n "$qp" ] || die "SHM=1: no qemu-system-aarch64 is running"
+	qcmd="$(tr '\0' ' ' < "/proc/${qp%% *}/cmdline")"
+	case "$qcmd" in
+		*"mem-path=$IVSHMEM,"*|*"mem-path=$IVSHMEM "*) ;;
+		*) die "SHM=1: the running QEMU does not back a device with $IVSHMEM -- relaunch with IVSHMEM=$IVSHMEM" ;;
+	esac
+	case "$qcmd" in *ivshmem-plain*) ;; *) die "SHM=1: the running QEMU has no ivshmem-plain device" ;; esac
+fi
 trap cleanup EXIT
 
 m_prepare_out "${OUT:-}" "$HOME/ladder-out"
@@ -134,6 +179,13 @@ taskset -c "$CORE_MON" "$MON" "$PORT" > "$OUT/monitor-host.log" 2>&1 &
 MON_HOST=$!
 sudo ip netns exec "$NS" taskset -c "$CORE_MON" "$MON" "$PORT" \
 	> "$OUT/monitor-ns.log" 2>&1 &
+if [ "$SHM" = 1 ]; then
+	m_build_shmchan "$here/shmchan.c" "$SHM_COMMON" "$OUT/libshmchan.so"
+	# A fresh, zeroed page set for the host rung: no magic, no counters.
+	dd if=/dev/zero of="$SHM_HOST_FILE" bs=4096 count=256 status=none || die "could not create $SHM_HOST_FILE"
+	taskset -c "$CORE_MON" "$MON" shm "$SHM_HOST_FILE" > "$OUT/monitor-host-shm.log" 2>&1 &
+	MON_HOST_SHM=$!
+fi
 if [ "$UDP" = 1 ]; then
 	taskset -c "$CORE_MON" "$MON" "$PORT_UDP" udp > "$OUT/monitor-host-udp.log" 2>&1 &
 	MON_HOST_UDP=$!
@@ -152,6 +204,12 @@ if [ "$UDP" = 1 ]; then
 			|| die "$(basename "$l" .log) did not start in UDP mode -- rebuild $MON with build-monitor-native.sh (a pre-OD12 binary ignores 'udp' and serves TCP)"
 	done
 fi
+if [ "$SHM" = 1 ]; then
+	kill -0 "$MON_HOST_SHM" 2>/dev/null \
+		|| die "host monitor-native (shm) exited -- see $OUT/monitor-host-shm.log (built before the shm transport?)"
+	grep -q "serving shm on file $SHM_HOST_FILE," "$OUT/monitor-host-shm.log" \
+		|| die "monitor-host-shm did not start in shm mode on $SHM_HOST_FILE -- see $OUT/monitor-host-shm.log"
+fi
 
 # ---------------------------------------------------------------- arm set
 ARMS=("A-loopback 127.0.0.1 $PORT tcp" "B-bridge $NS_IP $PORT tcp")
@@ -164,31 +222,51 @@ if [ "$UDP" = 1 ]; then
 	[ -n "$ARM_C_UDP_PORT" ] && UARMS+=("C-udp $GUEST $ARM_C_UDP_PORT udp")
 	UARMS+=("D-udp $GUEST $PORT_UDP udp")
 fi
+SARMS=()
+SHM_ARMS=""
+[ "$SHM" = 1 ] && SARMS=("A-shm $SHM_HOST_FILE - shm" "D-shm $IVSHMEM - shm")
 TAGS=(); ARMJSON=""; sep=""
-for a in "${ARMS[@]}" "${UARMS[@]}"; do
+for a in "${ARMS[@]}" "${UARMS[@]}" "${SARMS[@]}"; do
 	set -- $a
 	if [ "$4" = udp ]; then
 		m_reachable_udp "$2" "$3" "$1"
 		UDP_ARMS="$UDP_ARMS $1"
+	elif [ "$4" = shm ]; then
+		m_reachable_shm "$2" "$1"
+		SHM_ARMS="$SHM_ARMS $1"
 	else
 		m_reachable "$2" "$3" "$1"
 	fi
 	TAGS+=("$1"); ARMJSON="$ARMJSON$sep\"$1\""; sep=", "
 done
 UDP_ARMS="${UDP_ARMS# }"
+SHM_ARMS="${SHM_ARMS# }"
+SHMJSON='"enabled": 0'
+if [ "$SHM" = 1 ]; then
+	SHMJSON="\"enabled\": 1, \"host_file\": \"$SHM_HOST_FILE\", \"ivshmem_file\": \"$IVSHMEM\", \"libshmchan_sha256\": \"$(_sha "$OUT/libshmchan.so")\", \"shmchan_c_sha256\": \"$(_sha "$here/shmchan.c")\", \"shm_chan_h_sha256\": \"$(_sha "$SHM_COMMON/shm_chan.h")\", \"shm_map_posix_c_sha256\": \"$(_sha "$SHM_COMMON/shm_map_posix.c")\""
+fi
 
 m_write_stamp "$OUT/stamp.json" \
 	'"experiment": "ladder"' \
 	"\"pin\": {\"qemu\": \"$QEMU_CORES\", \"monitor\": $CORE_MON, \"probe\": $CORE_PROBE}" \
 	"\"monitor_native_sha256\": \"$(_sha "$MON")\"" \
 	"\"udp\": {\"enabled\": $UDP, \"port\": $PORT_UDP, \"arm_c_port\": \"$ARM_C_UDP_PORT\"}" \
-	'"order": "fixed A, B, C, D within a transport; with UDP=1 the transport that goes first alternates by round (tcp first in odd rounds)"' \
+	"\"shm\": {$SHMJSON}" \
+	"\"transports\": \"${TGROUPS[*]}\"" \
+	'"order": "fixed A, B, C, D within a transport; the transport groups follow a Williams design by round (two transports: tcp first in odd rounds)"' \
 	"\"arms\": [$ARMJSON]"
 
 # ---------------------------------------------------------------- the run
 say "k=$K rounds, n=$N, warmup=$WARMUP, interval=${INTERVAL_MS}ms, ${#TAGS[@]} arms, interleaved -> $OUT"
 for r in $(seq 1 "$K"); do
-	if [ $((r % 2)) -eq 1 ]; then ROUND=("${ARMS[@]}" "${UARMS[@]}"); else ROUND=("${UARMS[@]}" "${ARMS[@]}"); fi
+	ROUND=()
+	for gi in $(m_williams_row "$r" "${#TGROUPS[@]}"); do
+		case "${TGROUPS[gi]}" in
+			tcp) ROUND+=("${ARMS[@]}") ;;
+			udp) ROUND+=("${UARMS[@]}") ;;
+			shm) ROUND+=("${SARMS[@]}") ;;
+		esac
+	done
 	order=""
 	for a in "${ROUND[@]}"; do
 		set -- $a
@@ -209,4 +287,10 @@ if [ "$UDP" = 1 ]; then
 	[ -n "$ARM_C_UDP_PORT" ] && [ -n "$ARM_C_PORT" ] && PAIRS+=("C-udp:C-null")
 	PAIRS+=("D-udp:D-guest" "D-guest:B-bridge" "D-udp:B-udp")
 	m_pairs "$OUT" "${PAIRS[@]}"
+fi
+if [ "$SHM" = 1 ]; then
+	# No bridge on the shm path, so its crossing is D - A; the TCP line beside
+	# it is D - A too, for like against like.
+	say "shm rungs paired with their TCP rungs, and each transport's D - A"
+	m_pairs "$OUT" "A-shm:A-loopback" "D-shm:D-guest" "D-shm:A-shm" "D-guest:A-loopback"
 fi

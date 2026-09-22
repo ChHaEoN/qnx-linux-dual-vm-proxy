@@ -26,18 +26,23 @@ repo="$(cd "${here}/../.." && pwd)"
 
 SRC="${repo}/ipc-test/qnx-safety-monitor/monitor.c"
 INC="${repo}/ipc-test/common"
+# OD12 (2026-09-22): the shm transport's region is mapped by a separate file per
+# target -- this one on the host (a /dev/shm file), shm_map_qnx.c in the guest
+# (QEMU's ivshmem device, configured through ECAM). monitor.c calls shm_map() and never learns
+# which one it got.
+MAP="${INC}/shm_map_posix.c"
 OUT="${OUT:-${HOME}/ladder/monitor-native}"
 CC="${CC:-gcc}"
 
-for f in "${SRC}" "${INC}/frame.h" "${INC}/frame_io.h"; do
+for f in "${SRC}" "${INC}/frame.h" "${INC}/frame_io.h" "${INC}/shm_chan.h" "${INC}/shm_map.h" "${MAP}"; do
 	[ -r "$f" ] || { echo "ERROR: missing source: $f" >&2; exit 1; }
 done
 
 # Refuse to build if a QNX-only symbol has appeared in the shared source since
 # this was written. Silently producing a binary that no longer matches the
 # guest's would invalidate the control without anything failing.
-if grep -nE '^[^*/]*\b(ClockCycles|MsgSend|MsgReceive|MsgReply|name_attach|name_open|devctl|iofunc_|dispatch_|resmgr_|ThreadCtl|InterruptAttach)\b' \
-	"${SRC}" "${INC}/frame.h" "${INC}/frame_io.h" >/dev/null 2>&1; then
+if grep -nE '^[^*/]*\b(ClockCycles|MsgSend|MsgReceive|MsgReply|name_attach|name_open|devctl|iofunc_|dispatch_|resmgr_|ThreadCtl|InterruptAttach|mmap_device_memory|pci_device_[a-z_]+)\b' \
+	"${SRC}" "${INC}/frame.h" "${INC}/frame_io.h" "${INC}/shm_chan.h" >/dev/null 2>&1; then
 	echo "ERROR: a QNX-only symbol appeared in the shared source." >&2
 	echo "       The host and guest servers would no longer be the same program," >&2
 	echo "       so the ladder's arms would not be comparable. Fix the source or" >&2
@@ -47,13 +52,14 @@ fi
 
 mkdir -p "$(dirname "${OUT}")"
 set -x
-"${CC}" -O2 -std=gnu99 -Wall -Wextra -I "${INC}" -o "${OUT}" "${SRC}"
+"${CC}" -O2 -std=gnu99 -Wall -Wextra -I "${INC}" -o "${OUT}" "${SRC}" "${MAP}"
 set +x
 
 echo
 echo "built:  ${OUT}"
 echo "sha256: $(sha256sum "${OUT}" | cut -d' ' -f1)"
 echo "source: $(sha256sum "${SRC}" | cut -d' ' -f1)  monitor.c"
+echo "source: $(sha256sum "${MAP}" | cut -d' ' -f1)  $(basename "${MAP}")"
 echo
 echo "The guest runs this same monitor.c, cross-compiled with qcc. The binaries"
 echo "differ; the program does not."

@@ -376,6 +376,21 @@ m_reachable_udp() { # $1 host  $2 port  $3 label
 		*) die "the UDP check for $3 could not run (probe exit $rc) -- is $PROBE older than --proto? see $log" ;;
 	esac
 }
+# A shm slot (OD12, 2026-09-22) likewise: "reachable" means one framed round
+# trip through it completed. A slot with no server behind it -- no magic, or a
+# magic left by a server that died -- fails this within 5 s.
+m_reachable_shm() { # $1 shm file  $2 label
+	local log=/dev/null rc
+	[ -n "${OUT:-}" ] && log="$OUT/probe.log"
+	[ -n "${SHMCHAN_LIB:-}" ] || die "m_reachable_shm: SHMCHAN_LIB unset -- call m_build_shmchan first"
+	python3 "$PROBE" --proto shm --shm "$1" --shm-lib "$SHMCHAN_LIB" --tag "$2" --await-recovery 5 >> "$log" 2>&1
+	rc=$?
+	case "$rc" in
+		0) say "reachable: $2 ($1, shm)" ;;
+		4) die "UNREACHABLE: $2 ($1, shm) -- no framed reply in 5 s" ;;
+		*) die "the shm check for $2 could not run (probe exit $rc) -- see $log" ;;
+	esac
+}
 
 # ------------------------------------------------------------- counterbalance
 # A WILLIAMS DESIGN over the loaded middle arms, with idle fixed first and
@@ -411,12 +426,11 @@ m_require_balanced_k() {  # $1 k  $2 n loaded arms
 	[ $(( $1 % p )) -eq 0 ] \
 		|| die "K=$1 is not a multiple of $p, the Williams period for $2 loaded arms; carryover would not be balanced"
 }
-m_round_order() {   # $1 round, then: first  middle...  last
-	local r="$1"; shift
-	local first="$1"; shift
-	local n=$(( $# - 1 )) last="${!#}"
-	local mid=("${@:1:$n}")
-	local base period row idx rev i out=("$first") seq=()
+# The Williams row for round r over n items, as indices 0..n-1. Lifted out of
+# m_round_order on 2026-09-22 so the ladder can order its TRANSPORTS with the
+# same design; m_round_order's output is unchanged (the tests pin it).
+m_williams_row() {  # $1 round  $2 n
+	local r="$1" n="$2" base period row rev i seq=()
 	read -r -a base <<< "$(_williams_base "$n")"
 	period="$(m_williams_period "$n")"
 	row=$(( (r - 1) % period ))
@@ -424,10 +438,19 @@ m_round_order() {   # $1 round, then: first  middle...  last
 	if [ "$row" -ge "$n" ]; then rev=1; row=$(( row - n )); fi
 	for i in "${base[@]}"; do seq+=( $(( (i + row) % n )) ); done
 	if [ "$rev" -eq 1 ]; then
-		for ((i=${#seq[@]}-1; i>=0; i--)); do out+=("${mid[${seq[i]}]}"); done
+		for ((i=${#seq[@]}-1; i>=0; i--)); do printf '%s ' "${seq[i]}"; done
 	else
-		for idx in "${seq[@]}"; do out+=("${mid[$idx]}"); done
+		printf '%s ' "${seq[@]}"
 	fi
+	echo
+}
+m_round_order() {   # $1 round, then: first  middle...  last
+	local r="$1"; shift
+	local first="$1"; shift
+	local n=$(( $# - 1 )) last="${!#}"
+	local mid=("${@:1:$n}")
+	local idx out=("$first")
+	for idx in $(m_williams_row "$r" "$n"); do out+=("${mid[$idx]}"); done
 	out+=("$last")
 	echo "${out[@]}"
 }
@@ -521,8 +544,15 @@ PY
 # set STALL_POLICY: its figures are headlines, and a stall there is a failure.
 PROBE_TIMEOUT_S="${PROBE_TIMEOUT_S:-10}"
 RECOVER_MAX_S="${RECOVER_MAX_S:-120}"
-m_probe() {         # $1 out-dir  $2 tag  $3 host  $4 port  [$5 prefix command]  [$6 tcp|udp]
-	local out="$1" tag="$2" host="$3" port="$4" pre="${5:-}" proto="${6:-tcp}" rc t0 t1 ms stall=()
+m_probe() {         # $1 out-dir  $2 tag  $3 host  $4 port  [$5 prefix command]  [$6 tcp|udp|shm]
+	local out="$1" tag="$2" host="$3" port="$4" pre="${5:-}" proto="${6:-tcp}" rc t0 t1 ms stall=() dest
+	# shm (OD12, 2026-09-22): "host" is the shared-memory file, and the port is unused.
+	if [ "$proto" = shm ]; then
+		[ -n "${SHMCHAN_LIB:-}" ] || die "m_probe $tag: SHMCHAN_LIB unset -- call m_build_shmchan first"
+		dest=(--shm "$host" --shm-lib "$SHMCHAN_LIB")
+	else
+		dest=(--host "$host" --port "$port")
+	fi
 	rm -f "$out/lat-$tag.json" "$out/stall-$tag.json"
 	[ "${STALL_POLICY:-refuse}" = record ] && stall=(--stall-out "$out/stall-$tag.json")
 	# The window sampler brackets exactly the probe, when the script asked for
@@ -530,7 +560,7 @@ m_probe() {         # $1 out-dir  $2 tag  $3 host  $4 port  [$5 prefix command] 
 	# headline, and a new process running beside them is a new perturbation.
 	[ "${SAMPLE_WINDOW:-0}" = 1 ] && m_sampler_start "$tag"
 	t0="$(date +%s%N)"
-	$pre taskset -c "$CORE_PROBE" python3 "$PROBE" --host "$host" --port "$port" \
+	$pre taskset -c "$CORE_PROBE" python3 "$PROBE" "${dest[@]}" \
 		--n "$N" --warmup "$WARMUP" --interval-ms "$INTERVAL_MS" --timeout-s "$PROBE_TIMEOUT_S" --proto "$proto" \
 		"${stall[@]}" --tag "$tag" --out "$out/lat-$tag.json" >> "$out/probe.log" 2>&1
 	rc=$?
@@ -556,9 +586,10 @@ m_probe() {         # $1 out-dir  $2 tag  $3 host  $4 port  [$5 prefix command] 
 # answers one framed echo again, written to recovery-<tag>.json. A guest that
 # does not answer within RECOVER_MAX_S stops the run -- the next arm would be
 # measuring a guest that is not there.
-m_await_recovery() {  # $1 out-dir  $2 tag  $3 host  $4 port  [$5 tcp|udp]
-	local out="$1" tag="$2" rc
-	taskset -c "$CORE_PROBE" python3 "$PROBE" --host "$3" --port "$4" --tag "$tag" --proto "${5:-tcp}" \
+m_await_recovery() {  # $1 out-dir  $2 tag  $3 host  $4 port  [$5 tcp|udp|shm]
+	local out="$1" tag="$2" rc dest=(--host "$3" --port "$4")
+	[ "${5:-tcp}" = shm ] && dest=(--shm "$3" --shm-lib "${SHMCHAN_LIB:?SHMCHAN_LIB unset}")
+	taskset -c "$CORE_PROBE" python3 "$PROBE" "${dest[@]}" --tag "$tag" --proto "${5:-tcp}" \
 		--await-recovery "$RECOVER_MAX_S" --out "$out/recovery-$tag.json" >> "$out/probe.log" 2>&1
 	rc=$?
 	echo "$tag recovery: $(tail -1 "$out/probe.log")" >> "$out/stalls.log"
@@ -589,6 +620,7 @@ m_require_complete() {  # $1 = out dir, then arm tags
 	local out="$1"; shift
 	[ -n "${CORE_PROBE:-}" ] || die "m_require_complete needs CORE_PROBE to check the probe's affinity"
 	MP_CORE="$CORE_PROBE" MP_FIFO="${FIFO_ARMS:-}" MP_STALL="${STALL_POLICY:-refuse}" MP_UDP="${UDP_ARMS:-}" \
+	MP_SHM="${SHM_ARMS:-}" \
 	MP_TIMEOUT="$PROBE_TIMEOUT_S" \
 	python3 - "$out" "$K" "$N" "$WARMUP" "$@" <<'PY' || die "the run is incomplete or unclean -- do not publish a median from it"
 import json, os, sys
@@ -596,6 +628,7 @@ out, k, n, warmup, arms = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(s
 probe_core = int(os.environ["MP_CORE"])
 fifo_arms = set(os.environ.get("MP_FIFO", "").split())
 udp_arms = set(os.environ.get("MP_UDP", "").split())
+shm_arms = set(os.environ.get("MP_SHM", "").split())
 record_stalls = os.environ.get("MP_STALL") == "record"
 timeout_s = float(os.environ["MP_TIMEOUT"])
 stalls = {}
@@ -612,8 +645,8 @@ def proto_problems(tag, a, s):
     """ADDED 2026-09-22 (OD12): each file says which transport carried it. An arm
     in UDP_ARMS must say udp and every other arm tcp -- a UDP arm silently run
     over TCP would pair two copies of the same path and report a difference of
-    zero as a finding."""
-    want = "udp" if a in udp_arms else "tcp"
+    zero as a finding. 2026-09-22: likewise shm for an arm in SHM_ARMS."""
+    want = "udp" if a in udp_arms else "shm" if a in shm_arms else "tcp"
     if s.get("proto") != want:
         return ["%s: proto=%r, expected %r" % (tag, s.get("proto"), want)]
     return []
@@ -923,6 +956,16 @@ m_require_disjoint() {  # $@ = label=spec ...
 # cpuload.c beside the script, warnings as errors, and the stamp records both
 # hashes. A stale unpinned binary was already refused by m_load_require_pinned;
 # this also refuses a stale pinned one built from different source.
+# The probe's end of the shm transport (OD12, 2026-09-22), built by the run from
+# committed source like cpuload, and published to m_probe through SHMCHAN_LIB.
+m_build_shmchan() {  # $1 = shmchan.c  $2 = ipc-test/common  $3 = library to write
+	command -v gcc >/dev/null || die "gcc absent -- cannot build $3 from $1"
+	[ -r "$2/shm_chan.h" ] && [ -r "$2/shm_map_posix.c" ] || die "shm sources missing under $2"
+	gcc -O2 -Wall -Wextra -Werror -shared -fPIC -I "$2" -o "$3" "$1" "$2/shm_map_posix.c" \
+		|| die "libshmchan did not build from $1"
+	SHMCHAN_LIB="$3"
+	say "libshmchan built from $1 ($(_sha "$1" | cut -c1-12)) + shm_map_posix.c ($(_sha "$2/shm_map_posix.c" | cut -c1-12))"
+}
 m_build_cpuload() {  # $1 = source  $2 = binary to write
 	command -v gcc >/dev/null || die "gcc absent -- cannot build $2 from $1"
 	gcc -O2 -Wall -Wextra -Werror -o "$2" "$1" -lpthread -lm || die "cpuload did not build from $1"

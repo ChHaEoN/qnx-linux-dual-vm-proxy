@@ -5,11 +5,18 @@ distribution rather than a liveness yes/no.
   usage: latency_probe.py --host H [--port 7100] [--proto tcp|udp] [--n 2000]
                           [--warmup 200] [--interval-ms 2] [--tag NAME] [--out FILE]
                           [--timeout-s 10] [--stall-out FILE] [--await-recovery S]
+         latency_probe.py --proto shm --shm FILE --shm-lib LIB [the same options]
 
-TWO TRANSPORTS (OD12). --proto tcp (the default) holds one connection, as below.
---proto udp sends one frame per datagram on a connected socket and reads one
-datagram back; the rest of this description applies to both, except that UDP
-has no connection to hold.
+THREE TRANSPORTS (OD12). --proto tcp (the default) holds one connection, as
+below. --proto udp sends one frame per datagram on a connected socket and reads
+one datagram back. --proto shm (2026-09-22) puts the frame in a shared-memory
+slot (ipc-test/common/shm_chan.h) in FILE -- across the partition, the /dev/shm
+file QEMU backs the guest's ivshmem device with -- and spins for the reply.
+The slot is written and read by libshmchan.so (shmchan.c, built by the run),
+because its ordering needs store-release/load-acquire, which Python lacks; the
+timing stays here, around that call, as it is around send/recv for the others.
+The rest of this description applies to all three, except that UDP and shm
+have no connection to hold.
 
 WHAT IT MEASURES. One TCP connection is opened and held; each sample writes a
 valid 64-byte frame (ipc-test/common/frame.h layout) and waits for the monitor's
@@ -169,7 +176,13 @@ def await_recovery(a):
         attempts += 1
         try:
             frame = build_frame(1)
-            if a.proto == "udp":
+            if a.proto == "shm":
+                chan = ShmChannel(a.shm_lib, a.shm)
+                rc = chan.roundtrip(frame, 1.0)
+                if rc != ShmChannel.OK:
+                    raise OSError("shm roundtrip rc=%d" % rc)
+                got = chan.rsp.raw
+            elif a.proto == "udp":
                 with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
                     s.connect((a.host, a.port))
                     s.settimeout(1.0)
@@ -209,9 +222,41 @@ def await_recovery(a):
     return EXIT_NOT_RECOVERED
 
 
+class ShmChannel:
+    """The probe's end of a shm_chan.h slot, through libshmchan.so."""
+    OK, TIMEOUT, NOTREADY = 0, 1, 2
+
+    def __init__(self, lib_path, spec):
+        import ctypes
+        self._c = ctypes
+        lib = ctypes.CDLL(lib_path)
+        lib.shm_map.restype = ctypes.c_void_p
+        lib.shm_map.argtypes = [ctypes.c_char_p, ctypes.POINTER(ctypes.c_size_t),
+                                ctypes.c_char_p, ctypes.c_size_t]
+        lib.shmchan_ready.restype = ctypes.c_int
+        lib.shmchan_ready.argtypes = [ctypes.c_void_p]
+        lib.shmchan_roundtrip.restype = ctypes.c_int
+        lib.shmchan_roundtrip.argtypes = [ctypes.c_void_p, ctypes.c_char_p,
+                                          ctypes.POINTER(ctypes.c_char), ctypes.c_uint64]
+        size = ctypes.c_size_t(0)
+        what = ctypes.create_string_buffer(192)
+        base = lib.shm_map(spec.encode(), ctypes.byref(size), what, len(what))
+        if not base:
+            raise OSError("shm_map(%s) failed -- see stderr" % spec)
+        self.lib, self.base, self.what = lib, base, what.value.decode()
+        self.rsp = ctypes.create_string_buffer(FRAME_TOTAL)
+
+    def ready(self):
+        return bool(self.lib.shmchan_ready(self.base))
+
+    def roundtrip(self, frame, timeout_s):
+        """Returns OK, TIMEOUT or NOTREADY; the reply is then in self.rsp.raw."""
+        return self.lib.shmchan_roundtrip(self.base, frame, self.rsp, int(timeout_s * 1e9))
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--host", required=True)
+    ap.add_argument("--host", default="")
     ap.add_argument("--port", type=int, default=7100)
     ap.add_argument("--n", type=int, default=2000)
     ap.add_argument("--warmup", type=int, default=200)
@@ -222,11 +267,19 @@ def main():
                     help="per-connect and per-reply limit; a reply later than this is a stall")
     ap.add_argument("--stall-out", default="",
                     help="on a stall, write a stall record here (the arm still exits %d)" % EXIT_DESYNC)
-    ap.add_argument("--proto", choices=("tcp", "udp"), default="tcp",
-                    help="transport; udp sends one frame per datagram on a connected socket")
+    ap.add_argument("--proto", choices=("tcp", "udp", "shm"), default="tcp",
+                    help="transport; udp sends one frame per datagram on a connected socket, "
+                         "shm uses a shared-memory slot in --shm")
+    ap.add_argument("--shm", default="", help="with --proto shm: the shared-memory file")
+    ap.add_argument("--shm-lib", default="", help="with --proto shm: libshmchan.so, built from shmchan.c")
     ap.add_argument("--await-recovery", type=float, default=0.0,
                     help="instead of sampling: seconds to wait for the guest to answer again")
     a = ap.parse_args()
+    if a.proto == "shm":
+        if not (a.shm and a.shm_lib):
+            ap.error("--proto shm needs --shm and --shm-lib")
+    elif not a.host:
+        ap.error("--host is required for --proto %s" % a.proto)
 
     if a.await_recovery > 0:
         return await_recovery(a)
@@ -242,7 +295,21 @@ def main():
     # wrong sequence number (a late or duplicate reply) or an ICMP error is a
     # broken stream, exit 5, exactly as on TCP.
     udp = a.proto == "udp"
-    if udp:
+    shm = a.proto == "shm"
+    chan = None
+    if shm:
+        # No server (magic not published) is "could not connect", exit 2, as a
+        # refused TCP connect is: nothing was sampled, and nothing stalled.
+        try:
+            chan = ShmChannel(a.shm_lib, a.shm)
+        except OSError as e:
+            print("FATAL shm: %s" % e)
+            return 2
+        if not chan.ready():
+            print("FATAL shm: no server is serving %s (%s)" % (a.shm, chan.what))
+            return 2
+        s = None
+    elif udp:
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect((a.host, a.port))
@@ -280,32 +347,46 @@ def main():
         if seq >= (1 << 63):          # never reach the sentinel
             seq = 1
         frame = build_frame(seq)
-        t0 = time.perf_counter()
-        try:
-            if udp:
-                if s.send(frame) != FRAME_TOTAL:
-                    return _broken(a, "sample %d: short datagram sent" % i, i, bad + 1, rejected)
-                got = s.recv(2048)
-            else:
-                s.sendall(frame)
-                got = b""
-                while len(got) < FRAME_TOTAL:
-                    chunk = s.recv(FRAME_TOTAL - len(got))
-                    if not chunk:
-                        break
-                    got += chunk
-        except socket.timeout as e:
-            # A timeout here leaves the late reply IN FLIGHT on this socket.
-            # Carrying on would read that reply as the next frame's, fail the
-            # sequence check, and stay one frame out of phase for the rest of
-            # the arm -- every later sample "bad", and the stall itself never
-            # entering the timings, so `max` would silently omit the worst
-            # event it exists to report. A desynchronised stream cannot be
-            # measured on. The arm aborts and writes no result file.
-            return _abort(a, "sample %d: %s" % (i, e), i, bad + 1, rejected, "timeout", in_arrival)
-        except OSError as e:
-            return _broken(a, "sample %d: %s" % (i, e), i, bad + 1, rejected)
-        t1 = time.perf_counter()
+        if shm:
+            t0 = time.perf_counter()
+            rc = chan.roundtrip(frame, a.timeout_s)
+            t1 = time.perf_counter()
+            if rc == ShmChannel.TIMEOUT:
+                # The late reply may still land; the slot cannot be reused
+                # until it does, so -- as on TCP -- the arm aborts.
+                return _abort(a, "sample %d: no reply within %.1f s" % (i, a.timeout_s),
+                              i, bad + 1, rejected, "timeout", in_arrival)
+            if rc != ShmChannel.OK:
+                return _broken(a, "sample %d: the server stopped serving (rc=%d)" % (i, rc),
+                               i, bad + 1, rejected)
+            got = chan.rsp.raw
+        else:
+            t0 = time.perf_counter()
+            try:
+                if udp:
+                    if s.send(frame) != FRAME_TOTAL:
+                        return _broken(a, "sample %d: short datagram sent" % i, i, bad + 1, rejected)
+                    got = s.recv(2048)
+                else:
+                    s.sendall(frame)
+                    got = b""
+                    while len(got) < FRAME_TOTAL:
+                        chunk = s.recv(FRAME_TOTAL - len(got))
+                        if not chunk:
+                            break
+                        got += chunk
+            except socket.timeout as e:
+                # A timeout here leaves the late reply IN FLIGHT on this socket.
+                # Carrying on would read that reply as the next frame's, fail the
+                # sequence check, and stay one frame out of phase for the rest of
+                # the arm -- every later sample "bad", and the stall itself never
+                # entering the timings, so `max` would silently omit the worst
+                # event it exists to report. A desynchronised stream cannot be
+                # measured on. The arm aborts and writes no result file.
+                return _abort(a, "sample %d: %s" % (i, e), i, bad + 1, rejected, "timeout", in_arrival)
+            except OSError as e:
+                return _broken(a, "sample %d: %s" % (i, e), i, bad + 1, rejected)
+            t1 = time.perf_counter()
 
         if len(got) != FRAME_TOTAL or got[:8] != frame[:8]:
             # Short read or wrong sequence without a timeout: the peer closed
@@ -323,7 +404,8 @@ def main():
         if gap > 0:
             time.sleep(gap)
 
-    s.close()
+    if s is not None:
+        s.close()
 
     if not rtts:
         print("FATAL no samples survived (bad=%d rejected=%d)" % (bad, rejected))
@@ -355,6 +437,8 @@ def main():
         "max_ms": rtts[-1],
         "mean_ms": sum(rtts) / len(rtts),
     }
+    if shm:
+        res["shm_region"] = chan.what
     res.update(own_scheduling())
     print("RESULT %s" % json.dumps(res))
     print("  tag=%-12s n=%-5d min=%.3f p50=%.3f p90=%.3f p99=%.3f p99.9=%.3f max=%.3f  bad=%d rej=%d"

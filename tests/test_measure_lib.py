@@ -1696,8 +1696,12 @@ LADDER = os.path.join(HERE, "..", "orin-native", "gpu-concurrency", "run-ladder.
 
 @pytest.mark.parametrize("env,why", [
     ({"UDP": "yes"}, "UDP='yes' must be 0 or 1"),
-    ({"UDP": "1", "K": "13"}, "UDP=1 needs an even K"),
+    ({"UDP": "1", "K": "13"}, "need K to be a multiple of 2"),
     ({"UDP": "1", "PORT_UDP": "71o1"}, "is not a port number"),
+    ({"SHM": "yes"}, "SHM='yes' must be 0 or 1"),
+    ({"SHM": "1", "K": "13"}, "need K to be a multiple of 2"),
+    ({"UDP": "1", "SHM": "1", "K": "8"}, "need K to be a multiple of 6"),
+    ({"K": "twelve"}, "K='twelve' is not a round count"),
 ])
 def test_ladder_refuses_a_udp_setting_it_cannot_honour(tmp_path, env, why):
     """FOUND BY REVIEW: UDP=true ran TCP-only under a stamp saying enabled; an odd K
@@ -1713,6 +1717,8 @@ def test_ladder_refuses_a_udp_setting_it_cannot_honour(tmp_path, env, why):
 MONITOR_C = os.path.join(HERE, "..", "ipc-test", "qnx-safety-monitor", "monitor.c")
 SERVER_C = os.path.join(HERE, "..", "ipc-test", "qnx-server-net", "server.c")
 COMMON = os.path.join(HERE, "..", "ipc-test", "common")
+SHM_MAP_POSIX_C = os.path.join(COMMON, "shm_map_posix.c")
+SHMCHAN_C = os.path.join(HERE, "..", "orin-native", "gpu-concurrency", "shmchan.c")
 
 
 @pytest.fixture(scope="module")
@@ -1721,9 +1727,14 @@ def native_servers(tmp_path_factory):
     if gcc is None or not hasattr(os, "sched_getaffinity"):
         pytest.skip("needs gcc on Linux: runs in CI's tooling job")
     d = tmp_path_factory.mktemp("servers")
-    for src, name in ((MONITOR_C, "monitor"), (SERVER_C, "echo")):
+    # OD12 (2026-09-22): the monitor's shm transport maps its region through
+    # shm_map(), which the host build takes from shm_map_posix.c.
+    for srcs, name in (([MONITOR_C, SHM_MAP_POSIX_C], "monitor"), ([SERVER_C], "echo")):
         subprocess.run([gcc, "-O2", "-std=gnu99", "-Wall", "-Wextra", "-Werror", "-I", COMMON,
-                        "-o", str(d / name), src], check=True, capture_output=True)
+                        "-o", str(d / name)] + srcs, check=True, capture_output=True)
+    subprocess.run([gcc, "-O2", "-Wall", "-Wextra", "-Werror", "-shared", "-fPIC", "-I", COMMON,
+                    "-o", str(d / "libshmchan.so"), SHMCHAN_C, SHM_MAP_POSIX_C],
+                   check=True, capture_output=True)
     return d
 
 
@@ -1797,3 +1808,228 @@ def test_native_server_refuses_an_unknown_transport(native_servers, name):
     r = subprocess.run([str(native_servers / name), str(_free_udp_port()), "udq"],
                        capture_output=True, text=True, timeout=10)
     assert r.returncode == 2 and "unknown transport" in r.stderr
+
+
+# ============================================================ the shm transport (OD12, 2026-09-22)
+#
+# shm_chan.h's slot: magic @0, version @4, req_seq @64, request @128, rsp_seq @192,
+# reply @256. The tests that run the real monitor and the real libshmchan.so need
+# gcc on Linux (CI's tooling job); the rest run anywhere bash does.
+
+SHM_MAGIC = 0x314D4853
+_PY = __import__("sys").executable
+
+
+def _shm_file(tmp_path, name="slot"):
+    f = tmp_path / name
+    f.write_bytes(b"\0" * (1 << 20))
+    return f
+
+
+def _shm_serve(native_servers, f):
+    """The native monitor in shm mode on file f; returns the process once its
+    banner is out."""
+    import time as _t
+    p = subprocess.Popen([str(native_servers / "monitor"), "shm", str(f)],
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    for _ in range(100):
+        if f.read_bytes()[:4] == SHM_MAGIC.to_bytes(4, "little"):
+            return p
+        _t.sleep(0.02)
+    p.kill()
+    raise AssertionError("the monitor never published its magic: %r" % (p.communicate(timeout=5),))
+
+
+def test_native_monitor_shm_mode_judges_through_the_slot(native_servers, tmp_path):
+    lp = _probe_mod()
+    f = _shm_file(tmp_path)
+    # A request left in the slot BEFORE the server starts must not be answered:
+    # its client is gone, and answering would give a later client a reply to a
+    # frame it never sent. (It is an acceptable claim, so answering it would show
+    # up as seen=3 below.)
+    raw = bytearray(f.read_bytes())
+    raw[64:72] = (5).to_bytes(8, "little")
+    raw[128:192] = lp.build_frame(99)
+    f.write_bytes(bytes(raw))
+    p = _shm_serve(native_servers, f)
+    try:
+        chan = lp.ShmChannel(str(native_servers / "libshmchan.so"), str(f))
+        assert chan.ready() and chan.what.startswith("file ")
+        frame = lp.build_frame(7)
+        bad = bytearray(lp.build_frame(8))
+        bad[16] = 42                                  # class out of range: must be REJECTED
+        bad = bytes(bad)
+        assert chan.roundtrip(frame, 2.0) == lp.ShmChannel.OK
+        got = chan.rsp.raw
+        assert got[:8] == frame[:8] and got[16 + 6] == 0 and got[16 + 7] == 0
+        assert chan.roundtrip(bad, 2.0) == lp.ShmChannel.OK
+        rej = chan.rsp.raw
+        assert rej[:8] == bad[:8] and rej[16 + 6] == 1 and rej[16 + 7] == 1, "class 42: reject, reason 1"
+        sentinel = b"\xff" * 8 + bad[8:]
+        assert chan.roundtrip(sentinel, 2.0) == lp.ShmChannel.OK
+        assert chan.rsp.raw == sentinel, "the sentinel comes back untouched"
+        slot = f.read_bytes()
+        assert int.from_bytes(slot[64:72], "little") == 8, "three requests after the stale 5"
+        assert int.from_bytes(slot[192:200], "little") == 8
+    finally:
+        p.terminate()
+        out, err = p.communicate(timeout=10)
+    assert "shm done: seen=2 accepted=1 rejected=1 jumps=0" in out.decode(), (out, err)
+    assert f.read_bytes()[:4] == b"\0\0\0\0", "a stopped server must withdraw its magic"
+
+
+def test_shm_probe_times_a_clean_arm(native_servers, tmp_path):
+    f = _shm_file(tmp_path)
+    p = _shm_serve(native_servers, f)
+    out = tmp_path / "lat.json"
+    try:
+        r = subprocess.run([_PY, PROBE, "--proto", "shm",
+                            "--shm", str(f), "--shm-lib", str(native_servers / "libshmchan.so"),
+                            "--n", "50", "--warmup", "5", "--interval-ms", "0", "--tag", "s_r1",
+                            "--out", str(out)], capture_output=True, text=True, timeout=60)
+    finally:
+        p.terminate()
+        p.communicate(timeout=10)
+    assert r.returncode == 0, r.stdout + r.stderr
+    summ = json.loads(out.read_text())["summary"]
+    assert summ["proto"] == "shm" and summ["n"] == 50 and summ["bad"] == 0
+    assert summ["shm_region"].startswith("file %s" % f)
+
+
+def test_shm_probe_with_no_server_is_a_refused_connect(native_servers, tmp_path):
+    f = _shm_file(tmp_path)
+    r = subprocess.run([_PY, PROBE, "--proto", "shm",
+                        "--shm", str(f), "--shm-lib", str(native_servers / "libshmchan.so"),
+                        "--n", "5", "--warmup", "0", "--tag", "s_r1"],
+                       capture_output=True, text=True, timeout=60)
+    assert r.returncode == 2 and "no server is serving" in r.stdout, r.stdout + r.stderr
+
+
+def test_shm_probe_records_a_silent_server_as_a_stall(native_servers, tmp_path):
+    """A slot whose magic says 'serving' but which never answers: the probe must
+    time out, write a stall record that says shm, and write no result."""
+    f = _shm_file(tmp_path)
+    raw = bytearray(f.read_bytes())
+    raw[0:4] = SHM_MAGIC.to_bytes(4, "little")
+    raw[4:8] = (1).to_bytes(4, "little")
+    f.write_bytes(bytes(raw))
+    out, st = tmp_path / "lat.json", tmp_path / "stall.json"
+    r = subprocess.run([_PY, PROBE, "--proto", "shm",
+                        "--shm", str(f), "--shm-lib", str(native_servers / "libshmchan.so"),
+                        "--n", "5", "--warmup", "0", "--timeout-s", "0.2", "--tag", "s_r1",
+                        "--out", str(out), "--stall-out", str(st)],
+                       capture_output=True, text=True, timeout=60)
+    assert r.returncode == 3, r.stdout + r.stderr
+    rec = json.loads(st.read_text())["stall"]
+    assert rec["proto"] == "shm" and rec["kind"] == "timeout" and rec["at_sample"] == 0
+    assert not out.exists()
+
+
+@pytest.mark.parametrize("args,why", [
+    (["--proto", "shm", "--shm-lib", "x.so"], "--proto shm needs --shm and --shm-lib"),
+    (["--proto", "shm", "--shm", "/dev/shm/x"], "--proto shm needs --shm and --shm-lib"),
+    (["--proto", "tcp"], "--host is required for --proto tcp"),
+    (["--proto", "udp", "--port", "1"], "--host is required for --proto udp"),
+])
+def test_probe_refuses_a_destination_its_transport_cannot_use(args, why):
+    import sys
+    r = subprocess.run([sys.executable, PROBE] + args, capture_output=True, text=True, timeout=60)
+    assert r.returncode == 2 and why in r.stderr, r.stderr
+
+
+def test_m_probe_hands_an_shm_arm_its_file_and_library(tmp_path):
+    fake = tmp_path / "argv.py"
+    fake.write_bytes(b"import sys, json\na = sys.argv\n"
+                     b"open(a[a.index('--out') + 1], 'w').write(json.dumps({'argv': a[1:]}))\n")
+    out = tmp_path / "out"
+    out.mkdir()
+    r = _run(tmp_path, 'N=10; WARMUP=1; INTERVAL_MS=0; CORE_PROBE=0; SAMPLE_WINDOW=0; PROBE="%s"; '
+             'SHMCHAN_LIB=x.so; taskset() { shift 2; "$@"; }; '
+             'm_probe "%s" s_r1 shm-slot - "" shm' % (_posix(fake), _posix(out)))
+    assert r.returncode == 0, r.stderr
+    a = json.loads((out / "lat-s_r1.json").read_text())["argv"]
+    assert a[a.index("--proto") + 1] == "shm"
+    # Names without a slash: Git Bash rewrites /-paths it hands to a Windows python.
+    assert a[a.index("--shm") + 1] == "shm-slot" and a[a.index("--shm-lib") + 1] == "x.so"
+    assert "--host" not in a and "--port" not in a
+
+
+def test_m_probe_refuses_an_shm_arm_without_the_library(tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    r = _run(tmp_path, 'N=10; WARMUP=1; INTERVAL_MS=0; CORE_PROBE=0; SAMPLE_WINDOW=0; PROBE=/x; '
+             'unset SHMCHAN_LIB; m_probe "%s" s_r1 /dev/shm/slot - "" shm; echo SHOULD NOT REACH' % _posix(out))
+    assert r.returncode != 0 and "SHMCHAN_LIB unset" in r.stderr, r.stderr
+
+
+@pytest.mark.parametrize("rc,why", [(0, None), (4, "no framed reply in 5 s"), (2, "could not run (probe exit 2)")])
+def test_shm_reachability(tmp_path, rc, why):
+    fake = tmp_path / "p.py"
+    fake.write_bytes(b"import sys\nsys.exit(%d)\n" % rc)
+    r = _run(tmp_path, 'PROBE="%s"; SHMCHAN_LIB=/lib/x.so; m_reachable_shm /dev/shm/slot D-shm; echo REACHED'
+             % _posix(fake))
+    if why is None:
+        assert "REACHED" in r.stdout and "reachable: D-shm (/dev/shm/slot, shm)" in r.stderr + r.stdout
+    else:
+        assert r.returncode != 0 and why in r.stderr, r.stderr
+
+
+def _shm_gate(tmp_path, d, arms, shm_arms, udp_arms=""):
+    return _run(tmp_path, 'K=2; N=1000; WARMUP=200; CORE_PROBE=4; FIFO_ARMS=""; UDP_ARMS="%s"; SHM_ARMS="%s"; '
+                'm_require_complete "%s" %s; echo PASSED' % (udp_arms, shm_arms, _posix(d), " ".join(arms)))
+
+
+def test_gate_accepts_shm_arms_that_say_shm(tmp_path):
+    arms = ["A-loopback", "A-udp", "A-shm"]
+    d = _proto_dir(tmp_path, arms, lambda a: a.split("-")[1] if a != "A-loopback" else "tcp")
+    r = _shm_gate(tmp_path, d, arms, "A-shm", "A-udp")
+    assert "PASSED" in r.stdout, r.stderr
+
+
+@pytest.mark.parametrize("proto_of,why", [
+    (lambda a: "tcp", "A-shm_r1: proto='tcp', expected 'shm'"),
+    (lambda a: "shm", "A-loopback_r1: proto='shm', expected 'tcp'"),
+])
+def test_gate_refuses_an_shm_arm_run_over_another_transport(tmp_path, proto_of, why):
+    arms = ["A-loopback", "A-shm"]
+    d = _proto_dir(tmp_path, arms, proto_of)
+    r = _shm_gate(tmp_path, d, arms, "A-shm")
+    assert "PASSED" not in r.stdout and why in r.stderr, r.stderr
+
+
+def _williams_rows(tmp_path, n, rounds):
+    snippet = "; ".join("m_williams_row %d %d" % (r, n) for r in range(1, rounds + 1))
+    return [[int(x) for x in line.split()] for line in _run(tmp_path, snippet).stdout.strip().splitlines()]
+
+
+def test_two_transports_keep_tcp_first_in_odd_rounds(tmp_path):
+    """The UDP ladder of 2026-09-22 ran TCP first in odd rounds; ordering the
+    transport groups by m_williams_row must not have changed that."""
+    assert _williams_rows(tmp_path, 2, 4) == [[0, 1], [1, 0], [0, 1], [1, 0]]
+
+
+def test_three_transports_balance_position_and_carryover_over_six_rounds(tmp_path):
+    rows = _williams_rows(tmp_path, 3, 6)
+    assert all(sorted(r) == [0, 1, 2] for r in rows)
+    for pos in range(3):
+        assert sorted(r[pos] for r in rows) == [0, 0, 1, 1, 2, 2], "position unbalanced: %r" % rows
+    adj = {}
+    for r in rows:
+        for p_, q in zip(r, r[1:]):
+            adj[(p_, q)] = adj.get((p_, q), 0) + 1
+    assert len(adj) == 6 and len(set(adj.values())) == 1, "carryover unbalanced: %r" % adj
+
+
+def test_native_build_keeps_qnx_only_calls_out_of_the_shared_source(tmp_path):
+    """build-monitor-native.sh refuses a shared source that grew a QNX-only call.
+    FOUND BY DESIGN, 2026-09-22: the guest's ivshmem mapping is QNX-only
+    (mmap_device_memory), so it lives in shm_map_qnx.c; if it ever moved into
+    monitor.c or shm_chan.h the host and guest would stop being one program."""
+    src = os.path.join(HERE, "..", "orin-native", "gpu-concurrency", "build-monitor-native.sh")
+    body = open(src, encoding="utf-8").read()
+    for word in ("mmap_device_memory", "pci_device_", "shm_chan.h", "shm_map_posix.c"):
+        assert word in body, "build-monitor-native.sh no longer mentions %s" % word
+    for f in ("monitor.c",):
+        text = open(os.path.join(HERE, "..", "ipc-test", "qnx-safety-monitor", f), encoding="utf-8").read()
+        code = [ln for ln in text.splitlines() if not ln.lstrip().startswith(("*", "/*", "//"))]
+        assert not any("mmap_device_memory" in ln for ln in code)

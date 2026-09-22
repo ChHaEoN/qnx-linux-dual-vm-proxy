@@ -23,6 +23,13 @@
 # under KVM. It must also actually START the server the ladder probes: several
 # images in this tree stage a binary without running it, and their startup
 # script is visibly shorter. Pass IFS= explicitly; there is no safe default.
+#
+# SHARED MEMORY (OD12, 2026-09-22), opt-in with IVSHMEM=/dev/shm/<name>: adds
+# QEMU's ivshmem-plain PCI device, its BAR2 backed by that host file (1 MiB,
+# created fresh and zeroed here, so no magic or counter survives from an earlier
+# guest). It is PCI, not virtio-mmio, so the blk/net/rng slot order above is
+# untouched. The guest needs an image whose monitor runs in shm mode
+# (ifs-shm.bin); ifs-demo2.bin and ifs-udp.bin never look at the device.
 set -euo pipefail
 
 IFS_BIN="${IFS_BIN:?set IFS_BIN to the QNX image (it must start the server the ladder probes)}"
@@ -33,6 +40,7 @@ MEM="${MEM:-1G}"
 MAC="${MAC:-52:54:00:11:11:11}"
 QEMU="${QEMU:-qemu-system-aarch64}"
 LOG="${LOG:-${HOME}/ladder/guest-console.log}"
+IVSHMEM="${IVSHMEM:-}"
 
 for f in "${IFS_BIN}" "${DISK}"; do
 	[ -r "$f" ] || { echo "ERROR: unreadable: $f" >&2; exit 1; }
@@ -54,11 +62,24 @@ if [ -n "$(m_pids_of qemu-system-aarch64)" ]; then
 	exit 1
 fi
 
+SHM_ARGS=()
+if [ -n "${IVSHMEM}" ]; then
+	case "${IVSHMEM}" in
+		/dev/shm/*[!/]) ;;
+		*) echo "ERROR: IVSHMEM='${IVSHMEM}' must be a file under /dev/shm" >&2; exit 1 ;;
+	esac
+	case "${IVSHMEM}" in *,*) echo "ERROR: IVSHMEM may not contain a comma (QEMU option syntax)" >&2; exit 1 ;; esac
+	dd if=/dev/zero of="${IVSHMEM}" bs=1M count=1 status=none
+	SHM_ARGS=(-object "memory-backend-file,id=ivshm0,share=on,mem-path=${IVSHMEM},size=1M"
+	          -device "ivshmem-plain,memdev=ivshm0")
+fi
+
 mkdir -p "$(dirname "${LOG}")"
 echo "ifs    : ${IFS_BIN}  sha256 $(sha256sum "${IFS_BIN}" | cut -c1-16)..."
 echo "disk   : ${DISK}  sha256 $(sha256sum "${DISK}" | cut -c1-16)...  (-snapshot: not written)"
 echo "qemu   : $(${QEMU} --version | head -1)"
 echo "console: ${LOG}"
+[ -n "${IVSHMEM}" ] && echo "ivshmem: ${IVSHMEM} (1 MiB, zeroed, -device ivshmem-plain)"
 
 # -snapshot ALWAYS: the guest disk is an input to a measurement, and a run that
 # mutates it makes the next run a different experiment.
@@ -72,6 +93,7 @@ nohup "${QEMU}" \
 	-device virtio-net-device,netdev=n0,mac="${MAC}" \
 	-object rng-random,filename=/dev/urandom,id=rng0 \
 	-device virtio-rng-device,rng=rng0 \
+	${SHM_ARGS[@]+"${SHM_ARGS[@]}"} \
 	-kernel "${IFS_BIN}" \
 	-nographic > "${LOG}" 2>&1 &
 

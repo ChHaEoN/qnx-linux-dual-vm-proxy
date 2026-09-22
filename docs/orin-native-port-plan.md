@@ -436,6 +436,27 @@ first UDP run keeps the TCP loss rule:** no reply within the probe's timeout is 
 refuses a stall. On UDP a lost datagram cannot be told from a stalled guest; if a UDP stall appears, this is
 the rule to revisit, with a per-frame loss deadline and loss counters in the gate.
 
+**OD12, implementation choices for shared memory, 2026-09-22 (stated to the owner, not separately
+decided):** QEMU's `ivshmem-plain` device, its BAR2 backed by a 1 MiB file in the host's `/dev/shm`, and
+one request/reply slot in it ([`ipc-test/common/shm_chan.h`](../ipc-test/common/shm_chan.h)), written
+with store-release and read with load-acquire on both ends. **Both ends poll**: the plain device has no
+interrupt, so the first shared-memory run measures a polling path, and a waiter holds a core (host) or a
+vCPU (guest) while an arm runs; an interrupt-driven arm (`ivshmem-doorbell`, MSI-X in the guest) is a
+separate step, not built. The guest finds and configures the device itself through ECAM
+([`shm_map_qnx.c`](../ipc-test/common/shm_map_qnx.c)), not through `pci-server` as proposed above: SDP
+8.0's `pci_hw-fdt.so` refused QEMU virt's generic ECAM host bridge (by its own log, the ECAM window's
+size read as zero and no memory window found; EINVAL), and its HW configuration file can filter address
+windows but not add them. BAR2 is mapped cacheable on purpose -- the A78AE has no FEAT_S2FWB, so an
+uncached guest view beside the host's cacheable one would have mismatched attributes. Two rungs: A-shm
+(host process to the native monitor through a `/dev/shm` file) and D-shm (host to the guest's monitor
+through ivshmem); there is no B or C rung. The probe's end is a small C library
+([`shmchan.c`](../orin-native/gpu-concurrency/shmchan.c)), because Python has no acquire/release; the
+timing stays in Python, around that call. The guest image is `ifs-shm.bin`, built from
+[`ifs-shm.build`](../ipc-test/qnx-safety-monitor/ifs-shm.build): `ifs-udp.bin` plus one start line, with
+the monitor binary rebuilt. With three transports in one ladder the transport order is a Williams design
+over the groups, so K is a multiple of 6. The monitor keeps spinning 50 ms after its last request, then
+looks every 10 ms.
+
 Measurements taken before the freeze become architecture-version history. They are kept, labelled with the architecture they ran on, and not chased.
 
 This section carries no figures. Public figures stay where the inventory below points. Figures from M3 and from dry run 7b stay on the local branch `m3-results-unpublished` (§9).

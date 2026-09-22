@@ -49,6 +49,19 @@
  * to a fragment would hand the initiator bytes it did not send. The UDP socket
  * does NOT set SO_REUSEADDR, so a second UDP monitor on the same port fails to
  * bind -- the ladder relies on that to refuse a leftover server.
+ *
+ * A THIRD TRANSPORT: SHARED MEMORY (OD12, 2026-09-22)
+ *
+ *   monitor shm SPEC      one request/reply slot in shared memory (shm_chan.h)
+ *
+ * SPEC is resolved by whichever shm_map_*.c was linked in: on the host a file
+ * path under /dev/shm, in the guest "ivshmem" (QEMU's ivshmem PCI device). This
+ * file has no #ifdef for it -- the guest and the host still build one source.
+ * The same judge_frame() again. There is no interrupt: the loop polls. It spins
+ * while requests are arriving and, 50 ms after the last one, falls back to
+ * looking every 10 ms, so a monitor left running between arms costs a wake-up
+ * every 10 ms rather than a whole core. The first frames after a quiet spell
+ * wait for that 10 ms look -- the probe's warm-up frames absorb it.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -60,9 +73,12 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
+#include <time.h>
 
 #include "frame.h"
 #include "frame_io.h"
+#include "shm_chan.h"
+#include "shm_map.h"
 
 #define DEFAULT_PORT 7100
 
@@ -153,7 +169,7 @@ static const char *reason_name(uint8_t r)
 }
 
 /* Judge one non-sentinel frame in place: write verdict and reason into the
- * payload, log a reject. Shared by both transports. Returns the verdict. */
+ * payload, log a reject. Shared by every transport. Returns the verdict. */
 static uint8_t judge_frame(uint8_t *buf)
 {
 	uint8_t reason = RSN_OK;
@@ -294,6 +310,104 @@ static int serve_udp(int port)
 	return 0;
 }
 
+#define SHM_SPIN_NS  50000000ull   /* keep spinning this long after a request */
+#define SHM_IDLE_NS  10000000L     /* then look this often */
+#define SHM_SPIN_CHECK 4096u       /* spins between clock reads */
+
+static uint64_t now_ns(void)
+{
+	struct timespec ts;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+}
+
+/* Shared memory: one request outstanding, answered in place (shm_chan.h). */
+static int serve_shm(const char *spec)
+{
+	uint8_t buf[FRAME_TOTAL_BYTES];
+	unsigned long long seen = 0, accepted = 0, rejected = 0, jumps = 0;
+	unsigned long long seen_at_quiet = 0;
+	char what[192];
+	size_t len = 0;
+	uint64_t last, active;
+	unsigned spins = 0;
+	int quiet = 1;
+	void *base = shm_map(spec, &len, what, sizeof(what));
+
+	if (base == NULL) {
+		return 1;
+	}
+
+	/* Take the slot over. Not serving (magic 0) while it is set up; a
+	 * request left in it from before this server started is NOT answered --
+	 * its client is gone, and answering would hand a later client a reply to
+	 * a frame it never sent. */
+	__atomic_store_n(shm_chan_u32(base, SHM_CHAN_OFF_MAGIC), 0u, __ATOMIC_RELEASE);
+	last = shm_chan_load(base, SHM_CHAN_OFF_REQ_SEQ);
+	shm_chan_store(base, SHM_CHAN_OFF_RSP_SEQ, last);
+	*shm_chan_u32(base, SHM_CHAN_OFF_VERSION) = SHM_CHAN_VERSION;
+	__atomic_store_n(shm_chan_u32(base, SHM_CHAN_OFF_MAGIC), SHM_CHAN_MAGIC, __ATOMIC_RELEASE);
+
+	printf("monitor: safety monitor serving shm on %s (frame=%u bytes, conf_min=%u%%)\n",
+	       what, (unsigned)FRAME_TOTAL_BYTES, (unsigned)CONF_MIN);
+	fflush(stdout);
+
+	active = now_ns();
+	while (!g_stop) {
+		uint64_t const cur = shm_chan_load(base, SHM_CHAN_OFF_REQ_SEQ);
+
+		if (cur == last) {
+			shm_chan_relax();
+			if (++spins < SHM_SPIN_CHECK) {
+				continue;
+			}
+			spins = 0;
+			if (now_ns() - active > SHM_SPIN_NS) {
+				struct timespec const idle = { 0, SHM_IDLE_NS };
+				if (!quiet) {
+					/* One line per burst of traffic, so a console
+					 * shows sessions the way the TCP path's
+					 * "client done" lines do. */
+					printf("monitor: shm quiet: seen=%llu accepted=%llu rejected=%llu (%llu this burst)\n",
+					       seen, accepted, rejected, seen - seen_at_quiet);
+					fflush(stdout);
+					seen_at_quiet = seen;
+					quiet = 1;
+				}
+				nanosleep(&idle, NULL);
+			}
+			continue;
+		}
+		/* A client publishes previous + 1. Anything else means a second
+		 * client, or a client that lost count: still answered (the
+		 * client waits for exactly this value), but counted. */
+		if (cur != last + 1u) {
+			jumps++;
+		}
+		shm_chan_get_frame(base, SHM_CHAN_OFF_REQ, buf);
+		if (frame_get_u64(&buf[0]) != FRAME_SENTINEL_SEQ) {
+			seen++;
+			if (judge_frame(buf) == V_ACCEPT) {
+				accepted++;
+			} else {
+				rejected++;
+			}
+		}
+		shm_chan_put_frame(base, SHM_CHAN_OFF_RSP, buf);
+		shm_chan_store(base, SHM_CHAN_OFF_RSP_SEQ, cur);
+		last = cur;
+		active = now_ns();
+		quiet = 0;
+	}
+
+	__atomic_store_n(shm_chan_u32(base, SHM_CHAN_OFF_MAGIC), 0u, __ATOMIC_RELEASE);
+	printf("monitor: shm done: seen=%llu accepted=%llu rejected=%llu jumps=%llu\n",
+	       seen, accepted, rejected, jumps);
+	fflush(stdout);
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
 	int const port = (argc > 1) ? atoi(argv[1]) : DEFAULT_PORT;
@@ -307,13 +421,20 @@ int main(int argc, char **argv)
 	sigaction(SIGTERM, &sa, NULL);
 	signal(SIGPIPE, SIG_IGN);
 
+	if (argc > 1 && strcmp(argv[1], "shm") == 0) {
+		if (argc != 3) {
+			fprintf(stderr, "monitor: usage: monitor shm SPEC (a /dev/shm file on a host, 'ivshmem' in the guest)\n");
+			return 2;
+		}
+		return serve_shm(argv[2]);
+	}
 	if (argc > 2) {
 		if (strcmp(argv[2], "udp") == 0) {
 			return serve_udp(port);
 		}
 		/* Refuse an unknown transport word rather than guess. (Only the
 		 * word is checked: the port is still atoi(argv[1]), as before.) */
-		fprintf(stderr, "monitor: unknown transport '%s' (only 'udp', or none for tcp)\n",
+		fprintf(stderr, "monitor: unknown transport '%s' (only 'udp', or none for tcp; shm is 'monitor shm SPEC')\n",
 		        argv[2]);
 		return 2;
 	}
