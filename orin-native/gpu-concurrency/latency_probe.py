@@ -2,8 +2,14 @@
 """latency_probe.py — round-trip latency of the QNX guest's safety monitor, as a
 distribution rather than a liveness yes/no.
 
-  usage: latency_probe.py --host H [--port 7100] [--n 2000] [--warmup 200]
-                          [--interval-ms 2] [--tag NAME] [--out FILE]
+  usage: latency_probe.py --host H [--port 7100] [--proto tcp|udp] [--n 2000]
+                          [--warmup 200] [--interval-ms 2] [--tag NAME] [--out FILE]
+                          [--timeout-s 10] [--stall-out FILE] [--await-recovery S]
+
+TWO TRANSPORTS (OD12). --proto tcp (the default) holds one connection, as below.
+--proto udp sends one frame per datagram on a connected socket and reads one
+datagram back; the rest of this description applies to both, except that UDP
+has no connection to hold.
 
 WHAT IT MEASURES. One TCP connection is opened and held; each sample writes a
 valid 64-byte frame (ipc-test/common/frame.h layout) and waits for the monitor's
@@ -136,7 +142,7 @@ def _abort(a, why, at, bad, rejected, kind, before):
           % (a.tag, at, a.warmup + a.n, why, bad, rejected))
     print("      the arm is aborted and no result file is written")
     if a.stall_out:
-        rec = {"stall": {"tag": a.tag, "kind": kind, "at_sample": at, "of": a.warmup + a.n,
+        rec = {"stall": {"tag": a.tag, "proto": a.proto, "kind": kind, "at_sample": at, "of": a.warmup + a.n,
                          "warmup": a.warmup, "timeout_s": a.timeout_s, "why": why,
                          "bad": bad, "rejected_by_monitor": rejected,
                          "utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())},
@@ -162,16 +168,27 @@ def await_recovery(a):
     while time.monotonic() - t0 < a.await_recovery:
         attempts += 1
         try:
-            with socket.create_connection((a.host, a.port), timeout=1.0) as s:
-                s.settimeout(1.0)
-                frame = build_frame(1)
-                s.sendall(frame)
-                got = b""
-                while len(got) < FRAME_TOTAL:
-                    chunk = s.recv(FRAME_TOTAL - len(got))
-                    if not chunk:
-                        break
-                    got += chunk
+            frame = build_frame(1)
+            if a.proto == "udp":
+                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                    s.connect((a.host, a.port))
+                    s.settimeout(1.0)
+                    s.send(frame)
+                    got = s.recv(2048)
+            else:
+                with socket.create_connection((a.host, a.port), timeout=1.0) as s:
+                    if s.getsockname() == s.getpeername():
+                        # A loopback connect can land on its own source port and
+                        # echo itself -- seen in the unit tests, never a guest.
+                        raise OSError("connected to itself")
+                    s.settimeout(1.0)
+                    s.sendall(frame)
+                    got = b""
+                    while len(got) < FRAME_TOTAL:
+                        chunk = s.recv(FRAME_TOTAL - len(got))
+                        if not chunk:
+                            break
+                        got += chunk
             if len(got) == FRAME_TOTAL and got[:8] == frame[:8]:
                 after = time.monotonic() - t0
                 print("RECOVERED after %.2f s (attempts=%d)" % (after, attempts))
@@ -205,6 +222,8 @@ def main():
                     help="per-connect and per-reply limit; a reply later than this is a stall")
     ap.add_argument("--stall-out", default="",
                     help="on a stall, write a stall record here (the arm still exits %d)" % EXIT_DESYNC)
+    ap.add_argument("--proto", choices=("tcp", "udp"), default="tcp",
+                    help="transport; udp sends one frame per datagram on a connected socket")
     ap.add_argument("--await-recovery", type=float, default=0.0,
                     help="instead of sampling: seconds to wait for the guest to answer again")
     a = ap.parse_args()
@@ -212,21 +231,41 @@ def main():
     if a.await_recovery > 0:
         return await_recovery(a)
 
-    try:
-        s = socket.create_connection((a.host, a.port), timeout=a.timeout_s)
-    except socket.timeout as e:
-        # FOUND BY REVIEW: the load starts ~5 s before the probe connects, so a
-        # stall can already be under way. Without this it exited 2 and the run
-        # stopped, while the same stall one frame later was recorded.
-        if a.stall_out:
-            return _abort(a, "connect: %s" % e, 0, 0, 0, "connect", [])
-        print("FATAL connect: %s" % e)
-        return 2
-    except OSError as e:
-        print("FATAL connect: %s" % e)
-        return 2
-    s.settimeout(a.timeout_s)
-    s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    # UDP (owner decision OD12, 2026-09-21): the same frame, one per datagram,
+    # on a CONNECTED socket -- connect() fixes the peer, so a datagram from
+    # anywhere else is never read as a reply, and an ICMP port-unreachable comes
+    # back as an error instead of a silent timeout. Losses get the TCP rule for
+    # the first run (an implementation choice of 2026-09-22, recorded under OD12
+    # in the plan): no reply within --timeout-s is recorded as a stall, and on
+    # UDP a lost datagram and a stalled guest cannot be told apart from here --
+    # the stall record says which transport it was. A reply of the wrong size, a
+    # wrong sequence number (a late or duplicate reply) or an ICMP error is a
+    # broken stream, exit 5, exactly as on TCP.
+    udp = a.proto == "udp"
+    if udp:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect((a.host, a.port))
+        except OSError as e:
+            print("FATAL connect: %s" % e)
+            return 2
+        s.settimeout(a.timeout_s)
+    else:
+        try:
+            s = socket.create_connection((a.host, a.port), timeout=a.timeout_s)
+        except socket.timeout as e:
+            # FOUND BY REVIEW: the load starts ~5 s before the probe connects, so a
+            # stall can already be under way. Without this it exited 2 and the run
+            # stopped, while the same stall one frame later was recorded.
+            if a.stall_out:
+                return _abort(a, "connect: %s" % e, 0, 0, 0, "connect", [])
+            print("FATAL connect: %s" % e)
+            return 2
+        except OSError as e:
+            print("FATAL connect: %s" % e)
+            return 2
+        s.settimeout(a.timeout_s)
+        s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
     rtts = []
     in_arrival = []     # the timed samples in arrival order, for a stall record
@@ -243,13 +282,18 @@ def main():
         frame = build_frame(seq)
         t0 = time.perf_counter()
         try:
-            s.sendall(frame)
-            got = b""
-            while len(got) < FRAME_TOTAL:
-                chunk = s.recv(FRAME_TOTAL - len(got))
-                if not chunk:
-                    break
-                got += chunk
+            if udp:
+                if s.send(frame) != FRAME_TOTAL:
+                    return _broken(a, "sample %d: short datagram sent" % i, i, bad + 1, rejected)
+                got = s.recv(2048)
+            else:
+                s.sendall(frame)
+                got = b""
+                while len(got) < FRAME_TOTAL:
+                    chunk = s.recv(FRAME_TOTAL - len(got))
+                    if not chunk:
+                        break
+                    got += chunk
         except socket.timeout as e:
             # A timeout here leaves the late reply IN FLIGHT on this socket.
             # Carrying on would read that reply as the next frame's, fail the
@@ -298,6 +342,7 @@ def main():
 
     res = {
         "tag": a.tag,
+        "proto": a.proto,
         "n": len(rtts),
         "warmup_discarded": a.warmup,
         "bad": bad,

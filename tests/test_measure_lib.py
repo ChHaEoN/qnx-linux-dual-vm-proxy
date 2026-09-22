@@ -249,7 +249,7 @@ def test_prepare_out_sets_the_global_and_can_really_die(tmp_path):
 
 def _summary(tag, n=1000, warmup=200, bad=0, rejected=0,
              policy="SCHED_OTHER", priority=0, affinity=(4,)):
-    return {"summary": {"tag": tag, "n": n, "warmup_discarded": warmup, "bad": bad,
+    return {"summary": {"tag": tag, "proto": "tcp", "n": n, "warmup_discarded": warmup, "bad": bad,
                         "sched_policy": policy, "sched_priority": priority,
                         "cpu_affinity": list(affinity) if affinity is not None else None,
                         "rejected_by_monitor": rejected, "p50_ms": 0.2, "p99_ms": 0.3,
@@ -401,7 +401,7 @@ def test_full_sequence_passes_even_though_stamp_after_rewrites_the_stamp(tmp_pat
         sleep 1
         F='{"summary":{"tag":"%%s","n":1000,"warmup_discarded":200,"bad":0,'
         F="$F"'"rejected_by_monitor":0,"p50_ms":0.2,"p99_ms":0.3,"max_ms":0.4,'
-        F="$F"'"sched_policy":"SCHED_OTHER","sched_priority":0,"cpu_affinity":[4]}}'
+        F="$F"'"sched_policy":"SCHED_OTHER","sched_priority":0,"cpu_affinity":[4],"proto":"tcp"}}'
         for t in %s; do
             printf "$F" "$t" > "$OUT/lat-$t.json"
         done
@@ -1223,7 +1223,7 @@ def test_await_recovery_goes_on_only_if_the_guest_answers(tmp_path, rc, ok):
 
 
 def _stall_record(tag, policy="SCHED_OTHER", priority=0, timeout=10.0):
-    return {"stall": {"tag": tag, "kind": "timeout", "at_sample": 391, "of": 1200, "warmup": 200,
+    return {"stall": {"tag": tag, "proto": "tcp", "kind": "timeout", "at_sample": 391, "of": 1200, "warmup": 200,
                       "timeout_s": timeout, "why": "timed out", "bad": 1, "rejected_by_monitor": 0,
                       "sched_policy": policy, "sched_priority": priority, "cpu_affinity": [4]},
             "samples_before_ms": [0.3] * 191}
@@ -1425,3 +1425,375 @@ def test_a_garbled_reply_is_broken_not_stalled(tmp_path):
     assert r.returncode == 5, r.stdout + r.stderr
     assert "framing lost" in r.stdout and "seq MISMATCH" in r.stdout
     assert not st.exists() and not out.exists()
+
+
+# ============================================================ UDP arms (owner decision OD12, 2026-09-21)
+
+def _probe_mod():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("latency_probe_mod", PROBE)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _udp_server(behaviour):
+    """A UDP echo on loopback. behaviour(n, datagram) returns a list of datagrams
+    to send back for the n-th datagram received (1-based)."""
+    import socket
+    import threading
+    srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    srv.bind(("127.0.0.1", 0))
+    srv.settimeout(0.2)
+    stop = threading.Event()
+
+    def serve():
+        n = 0
+        while not stop.is_set():
+            try:
+                data, peer = srv.recvfrom(4096)
+            except OSError:
+                continue
+            n += 1
+            for out in behaviour(n, data):
+                srv.sendto(out, peer)
+    threading.Thread(target=serve, daemon=True).start()
+    return srv, srv.getsockname()[1], stop
+
+
+def _udp_probe(port, tmp_path, *extra):
+    out, st = tmp_path / "lat.json", tmp_path / "stall.json"
+    r = subprocess.run(_probe_cmd(port, "--proto", "udp", "--n", "60", "--warmup", "5", "--interval-ms", "0",
+                                  "--timeout-s", "1", "--tag", "u_r1", "--out", str(out),
+                                  "--stall-out", str(st), *extra),
+                       capture_output=True, text=True, timeout=60)
+    return r, out, st
+
+
+def test_udp_probe_times_a_clean_arm(tmp_path):
+    srv, port, stop = _udp_server(lambda n, d: [d])
+    r, out, st = _udp_probe(port, tmp_path)
+    stop.set()
+    srv.close()
+    assert r.returncode == 0, r.stdout + r.stderr
+    s = json.loads(out.read_text())["summary"]
+    assert s["proto"] == "udp" and s["n"] == 60 and not st.exists()
+
+
+def test_udp_probe_records_a_missing_reply_as_a_stall(tmp_path):
+    """The first run's loss policy: no reply within --timeout-s is a stall, and the
+    record says it was UDP, where a loss and a stall cannot be told apart."""
+    srv, port, stop = _udp_server(lambda n, d: [] if n == 20 else [d])
+    r, out, st = _udp_probe(port, tmp_path)
+    stop.set()
+    srv.close()
+    assert r.returncode == 3, r.stdout + r.stderr
+    rec = json.loads(st.read_text())["stall"]
+    assert rec["proto"] == "udp" and rec["kind"] == "timeout" and rec["at_sample"] == 19
+    assert not out.exists()
+
+
+@pytest.mark.parametrize("name,behaviour,why", [
+    ("wrong seq", lambda n, d: [bytes([d[0] ^ 0xFF]) + d[1:]] if n == 20 else [d], "seq MISMATCH"),
+    ("short", lambda n, d: [d[:63]] if n == 20 else [d], "framing lost (got 63 of 64"),
+    ("long", lambda n, d: [d + b"x"] if n == 20 else [d], "framing lost (got 65 of 64"),
+    ("duplicate", lambda n, d: [d, d] if n == 20 else [d], "seq MISMATCH"),
+])
+def test_udp_probe_treats_a_wrong_reply_as_broken(tmp_path, name, behaviour, why):
+    """A reply that is not exactly the frame sent -- wrong sequence, wrong size, a
+    duplicate read as the next frame's -- is a broken stream: exit 5, no record."""
+    srv, port, stop = _udp_server(behaviour)
+    r, out, st = _udp_probe(port, tmp_path)
+    stop.set()
+    srv.close()
+    assert r.returncode == 5, (name, r.stdout, r.stderr)
+    assert why in r.stdout, r.stdout
+    assert not out.exists() and not st.exists()
+
+
+def test_udp_recovery_waits_for_a_framed_reply(tmp_path):
+    import socket
+    import threading
+    import time as _t
+    tmp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    tmp.bind(("127.0.0.1", 0))
+    port = tmp.getsockname()[1]
+    tmp.close()
+
+    def late():
+        _t.sleep(1.0)
+        srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        srv.bind(("127.0.0.1", port))
+        srv.settimeout(10)
+        data, peer = srv.recvfrom(4096)
+        srv.sendto(data, peer)
+        srv.close()
+    threading.Thread(target=late, daemon=True).start()
+    out = tmp_path / "rec.json"
+    r = subprocess.run(_probe_cmd(port, "--proto", "udp", "--tag", "u_r1", "--await-recovery", "20",
+                                  "--out", str(out)), capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stdout + r.stderr
+    rec = json.loads(out.read_text())
+    assert rec["recovered"] is True and 0.5 <= rec["after_s"] < 10
+
+
+def _proto_dir(tmp_path, arms, proto_of):
+    def m(a, r, s):
+        s["proto"] = proto_of(a)
+    return _sched_dir(tmp_path, arms, m)
+
+
+def _proto_gate(tmp_path, d, arms, udp_arms):
+    return _run(tmp_path, 'K=2; N=1000; WARMUP=200; CORE_PROBE=4; FIFO_ARMS=""; UDP_ARMS="%s"; '
+                'm_require_complete "%s" %s; echo PASSED' % (udp_arms, _posix(d), " ".join(arms)))
+
+
+def test_gate_accepts_udp_arms_that_say_udp(tmp_path):
+    arms = ["A-loopback", "A-udp"]
+    d = _proto_dir(tmp_path, arms, lambda a: "udp" if a.endswith("-udp") else "tcp")
+    r = _proto_gate(tmp_path, d, arms, "A-udp")
+    assert "PASSED" in r.stdout, r.stderr
+
+
+@pytest.mark.parametrize("proto_of,udp_arms,why", [
+    (lambda a: "tcp", "A-udp", "A-udp_r1: proto='tcp', expected 'udp'"),
+    (lambda a: "udp", "A-udp", "A-loopback_r1: proto='udp', expected 'tcp'"),
+    (lambda a: None, "", "A-loopback_r1: proto=None, expected 'tcp'"),
+])
+def test_gate_refuses_a_file_run_over_the_wrong_transport(tmp_path, proto_of, udp_arms, why):
+    """FOUND BY DESIGN: a UDP arm silently run over TCP would pair two copies of one
+    path and report a difference of zero as a finding."""
+    arms = ["A-loopback", "A-udp"]
+    d = _proto_dir(tmp_path, arms, proto_of)
+    r = _proto_gate(tmp_path, d, arms, udp_arms)
+    assert "PASSED" not in r.stdout and why in r.stderr, r.stderr
+
+
+def test_gate_refuses_a_stall_record_from_the_wrong_transport(tmp_path):
+    """FOUND BY REVIEW: deleting the stall-record half of the proto check left every
+    test passing."""
+    arms = ["D-guest", "D-udp"]
+
+    def proto(a, r, s):
+        s["proto"] = "udp" if a == "D-udp" else "tcp"
+    d = _sched_dir(tmp_path, arms, proto)
+    rec = _stall_record("D-udp_r2")          # proto 'tcp' in a UDP arm's stall record
+    (d / "stall-D-udp_r2.json").write_text(json.dumps(rec))
+    (d / "lat-D-udp_r2.json").unlink()
+    (d / "recovery-D-udp_r2.json").write_text(json.dumps({"tag": "D-udp_r2", "recovered": True}))
+    r = _run(tmp_path, 'K=2; N=1000; WARMUP=200; CORE_PROBE=4; FIFO_ARMS=""; STALL_POLICY=record; '
+             'UDP_ARMS="D-udp"; m_require_complete "%s" %s; echo PASSED' % (_posix(d), " ".join(arms)))
+    assert "PASSED" not in r.stdout and "D-udp_r2: proto='tcp', expected 'udp'" in r.stderr, r.stderr
+
+
+def test_m_probe_passes_the_transport_to_the_probe(tmp_path):
+    fake = tmp_path / "argv.py"
+    fake.write_bytes(b"import sys, json\na = sys.argv\n"
+                     b"open(a[a.index('--out') + 1], 'w').write(json.dumps({'argv': a[1:]}))\n")
+    out = tmp_path / "out"
+    out.mkdir()
+    r = _run(tmp_path, 'N=10; WARMUP=1; INTERVAL_MS=0; CORE_PROBE=0; SAMPLE_WINDOW=0; PROBE="%s"; '
+             'taskset() { shift 2; "$@"; }; m_probe "%s" x_r1 127.0.0.1 1 "" udp; '
+             'm_probe "%s" y_r1 127.0.0.1 1' % (_posix(fake), _posix(out), _posix(out)))
+    assert r.returncode == 0, r.stderr
+    ux = json.loads((out / "lat-x_r1.json").read_text())["argv"]
+    ty = json.loads((out / "lat-y_r1.json").read_text())["argv"]
+    assert ux[ux.index("--proto") + 1] == "udp"
+    assert ty[ty.index("--proto") + 1] == "tcp", "the default must stay tcp"
+
+
+def test_m_pairs_is_the_median_of_within_round_differences(tmp_path):
+    d = tmp_path / "run"
+    d.mkdir()
+    for arm, vals in (("A-loopback", [0.100, 0.200, 0.300]), ("A-udp", [0.300, 0.210, 0.310])):
+        for r, v in enumerate(vals, 1):
+            (d / ("lat-%s_r%d.json" % (arm, r))).write_text(json.dumps(
+                {"summary": {"tag": "%s_r%d" % (arm, r), "p50_ms": v}}))
+    r = _run(tmp_path, 'm_pairs "%s" A-udp:A-loopback B-udp:B-bridge' % _posix(d))
+    assert r.returncode == 0, r.stderr
+    line = [l for l in r.stdout.splitlines() if "A-udp - A-loopback" in l][0]
+    assert "+10.0" in line and "3/3" in line, line   # per-round +200, +10, +10: paired median +10
+    assert "no round where both completed" in r.stdout
+
+
+BTIME = 1790000000        # 2026-09-21T13:33:20Z
+STARTTIME = 500000        # clock ticks after boot: 500 s at 1000/s, 5000 s at 100/s
+
+
+def _fake_qemu(tmp_path, kernel, drive, files=(), mtime=BTIME - 3600):
+    """A fake /proc for pid 4242: its cmdline, a stat whose fields 20-23 are all
+    DISTINCT (so reading the wrong field gives the wrong time), btime, and a cwd."""
+    proc = tmp_path / "proc"
+    (proc / "4242").mkdir(parents=True, exist_ok=True)
+    cwd = proc / "4242" / "cwd"
+    cwd.mkdir(exist_ok=True)
+    for name, data in files:
+        f = cwd / name
+        f.write_bytes(data)
+        os.utime(f, (mtime, mtime))
+    argv = ["qemu-system-aarch64", "-machine", "virt", "-kernel", kernel, "-drive", drive, "-snapshot"]
+    (proc / "4242" / "cmdline").write_bytes(("\0".join(argv) + "\0").encode())
+    # Fields 4..21, then 22 = starttime, then 23. Fields 20 and 21 are small and
+    # distinct and 22 is large, so reading the wrong field moves the start by
+    # minutes whatever CLK_TCK is (Git Bash reports 1000, Linux 100). A first
+    # version put 500 in field 23 and missed a field-21 mutant: at 1000 ticks/s
+    # both it and the real field rounded to 0 s.
+    fields = [b"0"] * 16 + [b"7", b"8"] + [b"%d" % STARTTIME, b"11"]
+    (proc / "4242" / "stat").write_bytes(b"4242 (qemu-system-aar) S " + b" ".join(fields) + b"\n")
+    (proc / "stat").write_bytes(b"cpu 1 2 3\nbtime %d\n" % BTIME)
+    return proc, cwd
+
+
+def _identity(tmp_path, proc):
+    return _run(tmp_path, 'PROC_ROOT="%s"; QPID=4242; _guest_identity; echo "IFS=$GUEST_IFS"; '
+                'echo "SHA=$GUEST_IFS_SHA"; echo "DSHA=$GUEST_DISK_SHA"; echo "START=$QSTART"' % _posix(proc))
+
+
+def test_stamp_identifies_the_guest_by_hash(tmp_path):
+    """ADDED 2026-09-22: the image and disk the running QEMU actually booted, read
+    from its own command line -- relative paths resolved against QEMU's cwd, not
+    this script's -- hashed; and when that process started, to the second."""
+    import datetime
+    import hashlib
+    proc, cwd = _fake_qemu(tmp_path, "ifs-udp.bin", "file=disk-qemu,if=none,id=drv0,format=raw",
+                           files=(("ifs-udp.bin", b"image"), ("disk-qemu", b"disk")))
+    r = _identity(tmp_path, proc)
+    assert r.returncode == 0, r.stderr
+    assert "SHA=%s" % hashlib.sha256(b"image").hexdigest() in r.stdout
+    assert "DSHA=%s" % hashlib.sha256(b"disk").hexdigest() in r.stdout
+    tck = int(subprocess.run([BASH, "-c", "getconf CLK_TCK"], capture_output=True, text=True).stdout)
+    want = datetime.datetime.fromtimestamp(BTIME + STARTTIME // tck, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    assert "START=%s" % want in r.stdout, (want, r.stdout)
+
+
+@pytest.mark.parametrize("case,why", [
+    ("unreadable", "cannot read the guest image"),
+    ("changed", "changed after QEMU started"),
+])
+def test_guest_identity_refuses_an_image_it_cannot_vouch_for(tmp_path, case, why):
+    """FOUND BY REVIEW: the hash is taken at stamp time, so a missing file, or one
+    rebuilt over the same path after boot, would name the wrong image."""
+    files = (("disk-qemu", b"disk"),) if case == "unreadable" else (("ifs-udp.bin", b"image"), ("disk-qemu", b"disk"))
+    # well after QEMU's start at either clock rate (start = BTIME + 500 s or + 5000 s)
+    mtime = BTIME + 100000 if case == "changed" else BTIME - 3600
+    proc, cwd = _fake_qemu(tmp_path, "ifs-udp.bin", "file=disk-qemu,if=none", files=files, mtime=mtime)
+    r = _identity(tmp_path, proc)
+    assert r.returncode != 0 and why in r.stderr, r.stdout + r.stderr
+
+
+@pytest.mark.parametrize("rc,why", [(4, "no framed reply in 5 s"), (2, "could not run (probe exit 2)")])
+def test_udp_reachability_names_why_it_failed(tmp_path, rc, why):
+    """FOUND BY REVIEW: a probe too old to know --proto exits 2 on the argument, and
+    was reported as an unreachable guest."""
+    fake = tmp_path / "p.py"
+    fake.write_bytes(b"import sys\nsys.exit(%d)\n" % rc)
+    r = _run(tmp_path, 'PROBE="%s"; m_reachable_udp 127.0.0.1 1 D-udp; echo SHOULD NOT REACH' % _posix(fake))
+    assert r.returncode != 0 and why in r.stderr, r.stderr
+
+
+LADDER = os.path.join(HERE, "..", "orin-native", "gpu-concurrency", "run-ladder.sh")
+
+
+@pytest.mark.parametrize("env,why", [
+    ({"UDP": "yes"}, "UDP='yes' must be 0 or 1"),
+    ({"UDP": "1", "K": "13"}, "UDP=1 needs an even K"),
+    ({"UDP": "1", "PORT_UDP": "71o1"}, "is not a port number"),
+])
+def test_ladder_refuses_a_udp_setting_it_cannot_honour(tmp_path, env, why):
+    """FOUND BY REVIEW: UDP=true ran TCP-only under a stamp saying enabled; an odd K
+    left the transport order unbalanced while the header called it balanced."""
+    e = dict(os.environ)
+    e.update(env)
+    r = subprocess.run([BASH, LADDER], env=e, capture_output=True, text=True, timeout=60)
+    assert r.returncode != 0 and why in r.stderr, r.stdout + r.stderr
+
+
+# ============================================================ the servers' UDP modes (need gcc)
+
+MONITOR_C = os.path.join(HERE, "..", "ipc-test", "qnx-safety-monitor", "monitor.c")
+SERVER_C = os.path.join(HERE, "..", "ipc-test", "qnx-server-net", "server.c")
+COMMON = os.path.join(HERE, "..", "ipc-test", "common")
+
+
+@pytest.fixture(scope="module")
+def native_servers(tmp_path_factory):
+    gcc = shutil.which("gcc")
+    if gcc is None or not hasattr(os, "sched_getaffinity"):
+        pytest.skip("needs gcc on Linux: runs in CI's tooling job")
+    d = tmp_path_factory.mktemp("servers")
+    for src, name in ((MONITOR_C, "monitor"), (SERVER_C, "echo")):
+        subprocess.run([gcc, "-O2", "-std=gnu99", "-Wall", "-Wextra", "-Werror", "-I", COMMON,
+                        "-o", str(d / name), src], check=True, capture_output=True)
+    return d
+
+
+def _free_udp_port():
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.bind(("127.0.0.1", 0))
+    p = s.getsockname()[1]
+    s.close()
+    return p
+
+
+def _exchange(port, data, timeout=1.0):
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect(("127.0.0.1", port))
+    s.settimeout(timeout)
+    s.send(data)
+    try:
+        return s.recv(4096)
+    except socket.timeout:
+        return None
+    finally:
+        s.close()
+
+
+@pytest.mark.parametrize("name", ["monitor", "echo"])
+def test_native_server_udp_mode(native_servers, name):
+    import time as _t
+    lp = _probe_mod()
+    port = _free_udp_port()
+    p = subprocess.Popen([str(native_servers / name), str(port), "udp"],
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        _t.sleep(0.3)
+        frame = lp.build_frame(7)
+        # A claim the monitor must REJECT (class 42 is outside 0..9). FOUND BY
+        # REVIEW: with only acceptable claims, whose verdict bytes are already 0,
+        # a UDP path that never judged passed every assertion.
+        bad = bytearray(lp.build_frame(8))
+        bad[16] = 42
+        bad = bytes(bad)
+        got = _exchange(port, frame)
+        assert got is not None and len(got) == 64 and got[:8] == frame[:8]
+        rej = _exchange(port, bad)
+        if name == "monitor":
+            assert got[16 + 6] == 0 and got[16 + 7] == 0, "an acceptable claim: verdict 0, reason 0"
+            assert rej[16 + 6] == 1 and rej[16 + 7] == 1, "class 42: verdict 1 (reject), reason 1 (class range)"
+        else:
+            assert got == frame and rej == bad, "the echo must be verbatim, whatever the payload"
+        # The sentinel carries the REJECTABLE payload: judging it would change it.
+        sentinel = b"\xff" * 8 + bad[8:]
+        assert _exchange(port, sentinel) == sentinel, "the sentinel comes back untouched"
+        assert _exchange(port, frame[:63], timeout=0.5) is None, "a short datagram gets no reply"
+        assert _exchange(port, frame + b"x", timeout=0.5) is None, "a long datagram gets no reply"
+        second = subprocess.run([str(native_servers / name), str(port), "udp"],
+                                capture_output=True, text=True, timeout=10)
+        assert second.returncode == 1 and "bind" in second.stderr, "a second UDP server must fail to bind"
+    finally:
+        p.terminate()
+        out, err = p.communicate(timeout=10)
+    if name == "monitor":
+        assert "udp done: seen=2 accepted=1 rejected=1 dropped=2" in out.decode(), \
+            "the sentinel is not counted, drops are: %r" % out
+    else:
+        assert "udp stop after 3 frames, 2 dropped" in err.decode(), err
+
+
+@pytest.mark.parametrize("name", ["monitor", "echo"])
+def test_native_server_refuses_an_unknown_transport(native_servers, name):
+    r = subprocess.run([str(native_servers / name), str(_free_udp_port()), "udq"],
+                       capture_output=True, text=True, timeout=10)
+    assert r.returncode == 2 and "unknown transport" in r.stderr

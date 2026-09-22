@@ -427,6 +427,15 @@ the other results: CAPI's source, build output and generated code never enter th
 record that depends on CAPI stays local, as the 4.6(i) material does. Porting CAPI to QNX is out: that is a
 modification.
 
+**OD12, implementation choices of 2026-09-22 (stated to the owner, not separately decided):** the UDP rungs
+use their own ports — 7101/udp for the monitor, 7001/udp for the echo server — so a TCP/UDP mix-up fails
+instead of answering. The guest image that serves them is `ifs-udp.bin`, built from
+[`ipc-test/qnx-safety-monitor/ifs-udp.build`](../ipc-test/qnx-safety-monitor/ifs-udp.build): the build file
+embedded in the campaigns' `ifs-demo2.bin` plus two start lines, with every other file byte-identical. **The
+first UDP run keeps the TCP loss rule:** no reply within the probe's timeout is a stall, and the ladder
+refuses a stall. On UDP a lost datagram cannot be told from a stalled guest; if a UDP stall appears, this is
+the rule to revisit, with a per-frame loss deadline and loss counters in the gate.
+
 Measurements taken before the freeze become architecture-version history. They are kept, labelled with the architecture they ran on, and not chased.
 
 This section carries no figures. Public figures stay where the inventory below points. Figures from M3 and from dry run 7b stay on the local branch `m3-results-unpublished` (§9).

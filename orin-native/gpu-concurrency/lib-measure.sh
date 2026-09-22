@@ -284,6 +284,8 @@ m_pids_of() {       # $1 = executable basename
 
 # ------------------------------------------------------------- the guest
 QPID=""; QTHREADS=0; QAFF=""; QEXE=""; QVER=""
+QSTART=""; GUEST_IFS=""; GUEST_IFS_SHA=""; GUEST_DISK=""; GUEST_DISK_SHA=""
+PROC_ROOT="${PROC_ROOT:-/proc}"   # overridable for tests only, like SYSFS_CPU
 m_pin_qemu() {      # $1 = core spec for every QEMU thread
 	local want="$1" pids n t
 	pids="$(m_pids_of qemu-system-aarch64)"
@@ -303,12 +305,76 @@ m_pin_qemu() {      # $1 = core spec for every QEMU thread
 	QEXE="$(readlink -f "/proc/$QPID/exe" 2>/dev/null)"
 	QVER="$("$QEXE" --version 2>/dev/null | head -1)"
 	say "qemu pid=$QPID pinned to $want (readback '$QAFF', $QTHREADS threads) exe=$QEXE"
+	_guest_identity
+}
+# ADDED 2026-09-22. The stamp named QEMU but not the GUEST: which image it
+# booted, from which disk, and when that QEMU process started. The 2026-09-21
+# ladder record could not say which image it ran, and "the same guest boot as the
+# earlier campaigns" rested on the operator's word. OD12's UDP arms need a new
+# image, so the image is now identified by hash in every stamp, read from the
+# running process's own command line rather than from a path someone typed.
+#
+# REVIEW FINDINGS, 2026-09-22: a path QEMU was given relative is resolved against
+# QEMU's own working directory, not this script's; the disk is taken only from
+# the argument after -drive; and a file that cannot be read, or that changed
+# after QEMU started, refuses the run -- its hash would name a different image
+# from the one that booted.
+_guest_identity() {
+	local a prev="" ticks btime cwd start_epoch f m
+	[ "$PROC_ROOT" = /proc ] || say "WARNING: PROC_ROOT overridden to $PROC_ROOT -- test use only"
+	GUEST_IFS=""; GUEST_DISK=""
+	while IFS= read -r -d '' a; do
+		[ "$prev" = "-kernel" ] && GUEST_IFS="$a"
+		if [ "$prev" = "-drive" ]; then
+			case "$a" in *if=pflash*) ;; *file=*) GUEST_DISK="${a#*file=}"; GUEST_DISK="${GUEST_DISK%%,*}" ;; esac
+		fi
+		prev="$a"
+	done < "$PROC_ROOT/$QPID/cmdline"
+	cwd="$(readlink -f "$PROC_ROOT/$QPID/cwd" 2>/dev/null)"
+	case "$GUEST_IFS" in /*|[A-Za-z]:/*|"") ;; *) GUEST_IFS="$cwd/$GUEST_IFS" ;; esac
+	case "$GUEST_DISK" in /*|[A-Za-z]:/*|"") ;; *) GUEST_DISK="$cwd/$GUEST_DISK" ;; esac
+	[ -n "$GUEST_IFS" ] || die "the running QEMU has no -kernel argument -- the guest image cannot be identified"
+	GUEST_IFS_SHA="$(_sha "$GUEST_IFS")"
+	[ "$GUEST_IFS_SHA" != unreadable ] || die "cannot read the guest image QEMU booted: $GUEST_IFS"
+	if [ -n "$GUEST_DISK" ]; then
+		GUEST_DISK_SHA="$(_sha "$GUEST_DISK")"
+		[ "$GUEST_DISK_SHA" != unreadable ] || die "cannot read the guest disk QEMU was given: $GUEST_DISK"
+	else
+		GUEST_DISK_SHA="absent"
+	fi
+	ticks="$(awk '{print $22}' "$PROC_ROOT/$QPID/stat" 2>/dev/null)"
+	btime="$(awk '/^btime/ {print $2}' "$PROC_ROOT/stat" 2>/dev/null)"
+	if [ -n "$ticks" ] && [ -n "$btime" ]; then
+		start_epoch=$(( btime + ticks / $(getconf CLK_TCK) ))
+		QSTART="$(date -u -d "@$start_epoch" +%Y-%m-%dT%H:%M:%SZ)"
+		for f in "$GUEST_IFS" "$GUEST_DISK"; do
+			[ -n "$f" ] || continue
+			m="$(stat -c %Y "$f" 2>/dev/null)"
+			[ -z "$m" ] || [ "$m" -le "$start_epoch" ] \
+				|| die "$f changed after QEMU started ($QSTART) -- its hash would not be the image that booted"
+		done
+	fi
+	say "guest image ${GUEST_IFS##*/} $(printf %.12s "$GUEST_IFS_SHA"), disk ${GUEST_DISK##*/} $(printf %.12s "$GUEST_DISK_SHA"), qemu started ${QSTART:-unknown}"
 }
 
 m_reachable() {     # $1 host  $2 port  $3 label
 	timeout 3 bash -c "echo > /dev/tcp/$1/$2" 2>/dev/null \
 		|| die "UNREACHABLE: $3 ($1:$2)"
 	say "reachable: $3 ($1:$2)"
+}
+# UDP has no connection to open, so "reachable" means one framed datagram came
+# back: the probe's own recovery exchange, with a short deadline. A port with no
+# server answers with ICMP unreachable or nothing, and both fail this.
+m_reachable_udp() { # $1 host  $2 port  $3 label
+	local log=/dev/null rc
+	[ -n "${OUT:-}" ] && log="$OUT/probe.log"
+	python3 "$PROBE" --host "$1" --port "$2" --proto udp --await-recovery 5 >> "$log" 2>&1
+	rc=$?
+	case "$rc" in
+		0) say "reachable: $3 ($1:$2/udp)" ;;
+		4) die "UNREACHABLE: $3 ($1:$2/udp) -- no framed reply in 5 s" ;;
+		*) die "the UDP check for $3 could not run (probe exit $rc) -- is $PROBE older than --proto? see $log" ;;
+	esac
 }
 
 # ------------------------------------------------------------- counterbalance
@@ -402,6 +468,10 @@ m_write_stamp() {
 		fi
 		printf '  "qemu_threads": %s,\n' "$QTHREADS"
 		printf '  "qemu_affinity": "%s",\n' "$QAFF"
+		printf '  "qemu_pid": "%s", "qemu_started": "%s",\n' "$QPID" "$QSTART"
+		printf '  "guest_ifs": "%s", "guest_ifs_sha256": "%s",\n' "$GUEST_IFS" "$GUEST_IFS_SHA"
+		printf '  "guest_disk": "%s", "guest_disk_sha256": "%s",\n' "$GUEST_DISK" "$GUEST_DISK_SHA"
+		printf '  "udp_arms": "%s",\n' "${UDP_ARMS:-}"
 		printf '  "sample_window": %s,\n' "${SAMPLE_WINDOW:-0}"
 		if [ "${SAMPLE_WINDOW:-0}" = 1 ]; then
 			printf '  "sampler_paths": {"emc_bpmp": "%s", "emc_ccf": "%s", "gpu_devfreq": "%s"},\n' \
@@ -451,8 +521,8 @@ PY
 # set STALL_POLICY: its figures are headlines, and a stall there is a failure.
 PROBE_TIMEOUT_S="${PROBE_TIMEOUT_S:-10}"
 RECOVER_MAX_S="${RECOVER_MAX_S:-120}"
-m_probe() {         # $1 out-dir  $2 tag  $3 host  $4 port  [$5 prefix command]
-	local out="$1" tag="$2" host="$3" port="$4" pre="${5:-}" rc t0 t1 ms stall=()
+m_probe() {         # $1 out-dir  $2 tag  $3 host  $4 port  [$5 prefix command]  [$6 tcp|udp]
+	local out="$1" tag="$2" host="$3" port="$4" pre="${5:-}" proto="${6:-tcp}" rc t0 t1 ms stall=()
 	rm -f "$out/lat-$tag.json" "$out/stall-$tag.json"
 	[ "${STALL_POLICY:-refuse}" = record ] && stall=(--stall-out "$out/stall-$tag.json")
 	# The window sampler brackets exactly the probe, when the script asked for
@@ -461,7 +531,7 @@ m_probe() {         # $1 out-dir  $2 tag  $3 host  $4 port  [$5 prefix command]
 	[ "${SAMPLE_WINDOW:-0}" = 1 ] && m_sampler_start "$tag"
 	t0="$(date +%s%N)"
 	$pre taskset -c "$CORE_PROBE" python3 "$PROBE" --host "$host" --port "$port" \
-		--n "$N" --warmup "$WARMUP" --interval-ms "$INTERVAL_MS" --timeout-s "$PROBE_TIMEOUT_S" \
+		--n "$N" --warmup "$WARMUP" --interval-ms "$INTERVAL_MS" --timeout-s "$PROBE_TIMEOUT_S" --proto "$proto" \
 		"${stall[@]}" --tag "$tag" --out "$out/lat-$tag.json" >> "$out/probe.log" 2>&1
 	rc=$?
 	t1="$(date +%s%N)"
@@ -486,9 +556,9 @@ m_probe() {         # $1 out-dir  $2 tag  $3 host  $4 port  [$5 prefix command]
 # answers one framed echo again, written to recovery-<tag>.json. A guest that
 # does not answer within RECOVER_MAX_S stops the run -- the next arm would be
 # measuring a guest that is not there.
-m_await_recovery() {  # $1 out-dir  $2 tag  $3 host  $4 port
+m_await_recovery() {  # $1 out-dir  $2 tag  $3 host  $4 port  [$5 tcp|udp]
 	local out="$1" tag="$2" rc
-	taskset -c "$CORE_PROBE" python3 "$PROBE" --host "$3" --port "$4" --tag "$tag" \
+	taskset -c "$CORE_PROBE" python3 "$PROBE" --host "$3" --port "$4" --tag "$tag" --proto "${5:-tcp}" \
 		--await-recovery "$RECOVER_MAX_S" --out "$out/recovery-$tag.json" >> "$out/probe.log" 2>&1
 	rc=$?
 	echo "$tag recovery: $(tail -1 "$out/probe.log")" >> "$out/stalls.log"
@@ -518,13 +588,14 @@ m_await_recovery() {  # $1 out-dir  $2 tag  $3 host  $4 port
 m_require_complete() {  # $1 = out dir, then arm tags
 	local out="$1"; shift
 	[ -n "${CORE_PROBE:-}" ] || die "m_require_complete needs CORE_PROBE to check the probe's affinity"
-	MP_CORE="$CORE_PROBE" MP_FIFO="${FIFO_ARMS:-}" MP_STALL="${STALL_POLICY:-refuse}" \
+	MP_CORE="$CORE_PROBE" MP_FIFO="${FIFO_ARMS:-}" MP_STALL="${STALL_POLICY:-refuse}" MP_UDP="${UDP_ARMS:-}" \
 	MP_TIMEOUT="$PROBE_TIMEOUT_S" \
 	python3 - "$out" "$K" "$N" "$WARMUP" "$@" <<'PY' || die "the run is incomplete or unclean -- do not publish a median from it"
 import json, os, sys
 out, k, n, warmup, arms = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]), sys.argv[5:]
 probe_core = int(os.environ["MP_CORE"])
 fifo_arms = set(os.environ.get("MP_FIFO", "").split())
+udp_arms = set(os.environ.get("MP_UDP", "").split())
 record_stalls = os.environ.get("MP_STALL") == "record"
 timeout_s = float(os.environ["MP_TIMEOUT"])
 stalls = {}
@@ -537,6 +608,15 @@ if not os.path.exists(start):
     print("INCOMPLETE: no .run-start marker -- was the directory made by m_prepare_out?", file=sys.stderr); sys.exit(1)
 t0 = os.path.getmtime(start)
 problems = []
+def proto_problems(tag, a, s):
+    """ADDED 2026-09-22 (OD12): each file says which transport carried it. An arm
+    in UDP_ARMS must say udp and every other arm tcp -- a UDP arm silently run
+    over TCP would pair two copies of the same path and report a difference of
+    zero as a finding."""
+    want = "udp" if a in udp_arms else "tcp"
+    if s.get("proto") != want:
+        return ["%s: proto=%r, expected %r" % (tag, s.get("proto"), want)]
+    return []
 def sched_problems(tag, a, s):
     """The probe's own report of how it ran, from a result or a stall record."""
     if a in fifo_arms:
@@ -568,6 +648,7 @@ for a in arms:
             if st.get("kind") not in ("timeout", "connect"):
                 problems.append("%s: stall kind=%r" % (tag, st.get("kind")))
             problems.extend(sched_problems(tag, a, st))
+            problems.extend(proto_problems(tag, a, st))
             rp = os.path.join(out, "recovery-%s.json" % tag)
             try:
                 rec = json.load(open(rp))
@@ -590,6 +671,7 @@ for a in arms:
             if s.get(key) != want:
                 problems.append("%s: %s=%r, expected %r" % (tag, key, s.get(key), want))
         problems.extend(sched_problems(tag, a, s))
+        problems.extend(proto_problems(tag, a, s))
     for prefix in ("lat-", "stall-"):
         pre = "%s%s_r" % (prefix, a)
         for f in os.listdir(out):
@@ -650,6 +732,35 @@ print("  'max' is the largest OBSERVED value in each round, never a bound.")
 if any(stalled.values()):
     print("  k counts complete rounds only. A stalled round has no median: the guest did not answer within")
     print("  the probe's timeout, so every figure for that arm is conditional on the guest answering.")
+PY
+}
+
+# Paired contrasts between named arms (OD12): for each "arm:ref", the median
+# over rounds of (arm p50 - ref p50) in the SAME round, its band, and how many
+# rounds lie above zero -- the estimator the records cite. m_summary pairs every
+# arm against ONE reference; the UDP rungs need each paired with its own TCP
+# rung, which m_summary cannot express.
+m_pairs() {         # $1 = out dir, then arm:ref ...
+	local out="$1"; shift
+	python3 - "$out" "$@" <<'PY'
+import glob, json, statistics as st, sys
+out, pairs = sys.argv[1], sys.argv[2:]
+def load(a):
+    d = {}
+    for f in glob.glob("%s/lat-%s_r*.json" % (out, a)):
+        s = json.load(open(f))["summary"]
+        d[int(s["tag"].rsplit("_r", 1)[1])] = s["p50_ms"] * 1000.0
+    return d
+print("  %-24s %4s  %26s  %s" % ("paired p50, arm - ref", "k", "median us [band]", "rounds above 0"))
+for pr in pairs:
+    a, r = pr.split(":", 1)
+    x, y = load(a), load(r)
+    rounds = sorted(set(x) & set(y))
+    if not rounds:
+        print("  %-24s    0  (no round where both completed)" % pr); continue
+    d = [x[k] - y[k] for k in rounds]
+    print("  %-24s %4d  %+8.1f [%+7.1f, %+7.1f]  %d/%d" % (
+        a + " - " + r, len(d), st.median(d), min(d), max(d), sum(v > 0 for v in d), len(d)))
 PY
 }
 

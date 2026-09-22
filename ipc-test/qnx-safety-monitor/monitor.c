@@ -36,6 +36,19 @@
  * compute partition across a real VM boundary; it does not show freedom from
  * interference, and the boundary here is KVM (Linux owns this guest's memory),
  * not a certified Type-1 partition.
+ *
+ * TWO TRANSPORTS, ONE JUDGEMENT (owner decision OD12, 2026-09-21)
+ *
+ *   monitor [PORT]        TCP, one client at a time (the original)
+ *   monitor PORT udp      UDP, one 64-byte frame per datagram
+ *
+ * Both paths call judge_frame(), so a claim gets the same verdict whichever
+ * transport carried it -- the point of a UDP arm is to vary the transport and
+ * nothing else. A datagram that is not exactly one frame is dropped without a
+ * reply and counted: on UDP there is no stream to resynchronise, and replying
+ * to a fragment would hand the initiator bytes it did not send. The UDP socket
+ * does NOT set SO_REUSEADDR, so a second UDP monitor on the same port fails to
+ * bind -- the ladder relies on that to refuse a leftover server.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -139,6 +152,31 @@ static const char *reason_name(uint8_t r)
 	}
 }
 
+/* Judge one non-sentinel frame in place: write verdict and reason into the
+ * payload, log a reject. Shared by both transports. Returns the verdict. */
+static uint8_t judge_frame(uint8_t *buf)
+{
+	uint8_t reason = RSN_OK;
+	uint8_t const verdict = check_claim(&buf[FRAME_HEADER_BYTES], &reason);
+
+	buf[FRAME_HEADER_BYTES + P_VERDICT] = verdict;
+	buf[FRAME_HEADER_BYTES + P_REASON]  = reason;
+
+	if (verdict != V_ACCEPT) {
+		/* Log only rejects: an accepted frame is the common case and
+		 * flooding the console would itself be a hazard on a
+		 * serial-consoled guest. */
+		printf("monitor: REJECT seq=%llu class=%u conf=%u us=%u reason=%s\n",
+		       (unsigned long long)frame_get_u64(&buf[0]),
+		       buf[FRAME_HEADER_BYTES + P_CLASS],
+		       buf[FRAME_HEADER_BYTES + P_CONF],
+		       get_u32_le(&buf[FRAME_HEADER_BYTES + P_INFER_US]),
+		       reason_name(reason));
+		fflush(stdout);
+	}
+	return verdict;
+}
+
 static int serve_one_client(int cfd)
 {
 	uint8_t buf[FRAME_TOTAL_BYTES];
@@ -173,27 +211,11 @@ static int serve_one_client(int cfd)
 			continue;
 		}
 
-		uint8_t reason = RSN_OK;
-		uint8_t const verdict = check_claim(&buf[FRAME_HEADER_BYTES], &reason);
-
-		buf[FRAME_HEADER_BYTES + P_VERDICT] = verdict;
-		buf[FRAME_HEADER_BYTES + P_REASON]  = reason;
-
 		seen++;
-		if (verdict == V_ACCEPT) {
+		if (judge_frame(buf) == V_ACCEPT) {
 			accepted++;
 		} else {
 			rejected++;
-			/* Log only rejects: an accepted frame is the common case
-			 * and flooding the console would itself be a hazard on a
-			 * serial-consoled guest. */
-			printf("monitor: REJECT seq=%llu class=%u conf=%u us=%u reason=%s\n",
-			       (unsigned long long)frame_get_u64(&buf[0]),
-			       buf[FRAME_HEADER_BYTES + P_CLASS],
-			       buf[FRAME_HEADER_BYTES + P_CONF],
-			       get_u32_le(&buf[FRAME_HEADER_BYTES + P_INFER_US]),
-			       reason_name(reason));
-			fflush(stdout);
 		}
 
 		if (frameio_write_frame(cfd, buf) != 0) {
@@ -204,6 +226,71 @@ static int serve_one_client(int cfd)
 	printf("monitor: client done: seen=%llu accepted=%llu rejected=%llu\n",
 	       seen, accepted, rejected);
 	fflush(stdout);
+	return 0;
+}
+
+/* UDP: one frame per datagram, the reply to the sender's address. The receive
+ * buffer is larger than a frame on purpose -- an oversize datagram must be SEEN
+ * as oversize and dropped, not silently truncated to 64 bytes and answered. */
+static int serve_udp(int port)
+{
+	struct sockaddr_in addr;
+	uint8_t buf[2048];
+	unsigned long long seen = 0, accepted = 0, rejected = 0, dropped = 0;
+	int fd = socket(AF_INET, SOCK_DGRAM, 0);
+
+	if (fd < 0) {
+		fprintf(stderr, "monitor: socket(udp): %s\n", strerror(errno));
+		return 1;
+	}
+	memset(&addr, 0, sizeof(addr));
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	addr.sin_port = htons((uint16_t)port);
+	if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
+		fprintf(stderr, "monitor: bind(%d/udp): %s\n", port, strerror(errno));
+		close(fd);
+		return 1;
+	}
+
+	printf("monitor: safety monitor listening on :%d/udp (frame=%u bytes, conf_min=%u%%)\n",
+	       port, (unsigned)FRAME_TOTAL_BYTES, (unsigned)CONF_MIN);
+	fflush(stdout);
+
+	while (!g_stop) {
+		struct sockaddr_in peer;
+		socklen_t plen = sizeof(peer);
+		ssize_t const n = recvfrom(fd, buf, sizeof(buf), 0,
+		                           (struct sockaddr *)&peer, &plen);
+		if (n < 0) {
+			if (errno == EINTR) {
+				continue;
+			}
+			fprintf(stderr, "monitor: recvfrom: %s\n", strerror(errno));
+			break;
+		}
+		if (n != (ssize_t)FRAME_TOTAL_BYTES) {
+			dropped++;
+			continue;
+		}
+		if (frame_get_u64(&buf[0]) != FRAME_SENTINEL_SEQ) {
+			seen++;
+			if (judge_frame(buf) == V_ACCEPT) {
+				accepted++;
+			} else {
+				rejected++;
+			}
+		}
+		if (sendto(fd, buf, FRAME_TOTAL_BYTES, 0, (struct sockaddr *)&peer, plen)
+		    != (ssize_t)FRAME_TOTAL_BYTES) {
+			fprintf(stderr, "monitor: sendto: %s\n", strerror(errno));
+		}
+	}
+
+	printf("monitor: udp done: seen=%llu accepted=%llu rejected=%llu dropped=%llu\n",
+	       seen, accepted, rejected, dropped);
+	fflush(stdout);
+	close(fd);
 	return 0;
 }
 
@@ -219,6 +306,17 @@ int main(int argc, char **argv)
 	sigaction(SIGINT, &sa, NULL);
 	sigaction(SIGTERM, &sa, NULL);
 	signal(SIGPIPE, SIG_IGN);
+
+	if (argc > 2) {
+		if (strcmp(argv[2], "udp") == 0) {
+			return serve_udp(port);
+		}
+		/* Refuse an unknown transport word rather than guess. (Only the
+		 * word is checked: the port is still atoi(argv[1]), as before.) */
+		fprintf(stderr, "monitor: unknown transport '%s' (only 'udp', or none for tcp)\n",
+		        argv[2]);
+		return 2;
+	}
 
 	lfd = socket(AF_INET, SOCK_STREAM, 0);
 	if (lfd < 0) {

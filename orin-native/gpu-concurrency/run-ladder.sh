@@ -33,6 +33,24 @@
 # the new one would fail to bind, and the reachability check would pass against
 # the wrong process. Found by review, pre-existing; now checked before start.
 #
+# UDP ARMS (owner decision OD12, 2026-09-21), opt-in with UDP=1. The same four
+# rungs over UDP, beside the TCP rungs in the SAME run: A-udp and B-udp against
+# the native monitor in UDP mode (port PORT_UDP, default 7101) on the host and
+# in the namespace, D-udp against the guest's monitor in UDP mode, and C-udp
+# against the guest's echo server in UDP mode (ARM_C_UDP_PORT, default unset).
+# Distinct ports on purpose: a TCP/UDP mix-up must fail, not answer with the
+# other transport's figure. The guest must run an image that starts both UDP
+# servers; the run refuses if a UDP rung does not answer. Which transport goes
+# first alternates by round, so position in the round is not folded into
+# UDP - TCP. The summary pairs each UDP rung with its TCP rung.
+#
+# A UDP stall stops the ladder like a TCP one (STALL_POLICY=refuse, set below),
+# and on UDP a lost datagram cannot be told from a stalled guest: the first run
+# keeps the TCP rule (an implementation choice of 2026-09-22, recorded under
+# OD12). If it bites, the evidence is probe.log's "FATAL desync" line for that
+# -udp tag. UDP=1 needs an even K, so that each transport goes first equally
+# often; an odd K is refused rather than recorded as balanced.
+#
 # The shared controls live in lib-measure.sh, one copy for all three scripts.
 set -u
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -47,6 +65,16 @@ WARMUP="${WARMUP:-200}"
 INTERVAL_MS="${INTERVAL_MS:-2}"
 PORT="${PORT:-7100}"
 ARM_C_PORT="${ARM_C_PORT:-}"
+UDP="${UDP:-0}"
+PORT_UDP="${PORT_UDP:-7101}"
+ARM_C_UDP_PORT="${ARM_C_UDP_PORT:-}"
+STALL_POLICY=refuse              # the ladder's figures are headlines: any stall stops it
+case "$UDP" in 0|1) ;; *) die "UDP='$UDP' must be 0 or 1" ;; esac
+case "$PORT_UDP" in ''|*[!0-9]*) die "PORT_UDP='$PORT_UDP' is not a port number" ;; esac
+case "$ARM_C_UDP_PORT" in *[!0-9]*) die "ARM_C_UDP_PORT='$ARM_C_UDP_PORT' is not a port number" ;; esac
+if [ "$UDP" = 1 ] && [ $((K % 2)) -ne 0 ]; then
+	die "UDP=1 needs an even K so each transport goes first equally often; K=$K"
+fi
 GUEST="${GUEST:-192.168.100.10}"
 NS="ladder"
 NS_IP="192.168.100.20"
@@ -106,33 +134,68 @@ taskset -c "$CORE_MON" "$MON" "$PORT" > "$OUT/monitor-host.log" 2>&1 &
 MON_HOST=$!
 sudo ip netns exec "$NS" taskset -c "$CORE_MON" "$MON" "$PORT" \
 	> "$OUT/monitor-ns.log" 2>&1 &
+if [ "$UDP" = 1 ]; then
+	taskset -c "$CORE_MON" "$MON" "$PORT_UDP" udp > "$OUT/monitor-host-udp.log" 2>&1 &
+	MON_HOST_UDP=$!
+	sudo ip netns exec "$NS" taskset -c "$CORE_MON" "$MON" "$PORT_UDP" udp \
+		> "$OUT/monitor-ns-udp.log" 2>&1 &
+fi
 sleep 2
 kill -0 "$MON_HOST" 2>/dev/null || die "host monitor-native exited -- see $OUT/monitor-host.log (port in use?)"
+if [ "$UDP" = 1 ]; then
+	kill -0 "$MON_HOST_UDP" 2>/dev/null \
+		|| die "host monitor-native (udp) exited -- see $OUT/monitor-host-udp.log (port in use?)"
+	# Positive check, not only liveness: a monitor-native built before OD12
+	# ignores "udp", listens on TCP, and stays alive.
+	for l in "$OUT/monitor-host-udp.log" "$OUT/monitor-ns-udp.log"; do
+		grep -q ":$PORT_UDP/udp" "$l" \
+			|| die "$(basename "$l" .log) did not start in UDP mode -- rebuild $MON with build-monitor-native.sh (a pre-OD12 binary ignores 'udp' and serves TCP)"
+	done
+fi
 
 # ---------------------------------------------------------------- arm set
-ARMS=("A-loopback 127.0.0.1 $PORT" "B-bridge $NS_IP $PORT")
-[ -n "$ARM_C_PORT" ] && ARMS+=("C-null $GUEST $ARM_C_PORT")
-ARMS+=("D-guest $GUEST $PORT")
+ARMS=("A-loopback 127.0.0.1 $PORT tcp" "B-bridge $NS_IP $PORT tcp")
+[ -n "$ARM_C_PORT" ] && ARMS+=("C-null $GUEST $ARM_C_PORT tcp")
+ARMS+=("D-guest $GUEST $PORT tcp")
+UARMS=()
+UDP_ARMS=""
+if [ "$UDP" = 1 ]; then
+	UARMS=("A-udp 127.0.0.1 $PORT_UDP udp" "B-udp $NS_IP $PORT_UDP udp")
+	[ -n "$ARM_C_UDP_PORT" ] && UARMS+=("C-udp $GUEST $ARM_C_UDP_PORT udp")
+	UARMS+=("D-udp $GUEST $PORT_UDP udp")
+fi
 TAGS=(); ARMJSON=""; sep=""
-for a in "${ARMS[@]}"; do
+for a in "${ARMS[@]}" "${UARMS[@]}"; do
 	set -- $a
-	m_reachable "$2" "$3" "$1"
+	if [ "$4" = udp ]; then
+		m_reachable_udp "$2" "$3" "$1"
+		UDP_ARMS="$UDP_ARMS $1"
+	else
+		m_reachable "$2" "$3" "$1"
+	fi
 	TAGS+=("$1"); ARMJSON="$ARMJSON$sep\"$1\""; sep=", "
 done
+UDP_ARMS="${UDP_ARMS# }"
 
 m_write_stamp "$OUT/stamp.json" \
 	'"experiment": "ladder"' \
 	"\"pin\": {\"qemu\": \"$QEMU_CORES\", \"monitor\": $CORE_MON, \"probe\": $CORE_PROBE}" \
 	"\"monitor_native_sha256\": \"$(_sha "$MON")\"" \
+	"\"udp\": {\"enabled\": $UDP, \"port\": $PORT_UDP, \"arm_c_port\": \"$ARM_C_UDP_PORT\"}" \
+	'"order": "fixed A, B, C, D within a transport; with UDP=1 the transport that goes first alternates by round (tcp first in odd rounds)"' \
 	"\"arms\": [$ARMJSON]"
 
 # ---------------------------------------------------------------- the run
-say "k=$K rounds, n=$N, warmup=$WARMUP, interval=${INTERVAL_MS}ms, ${#ARMS[@]} arms, interleaved -> $OUT"
+say "k=$K rounds, n=$N, warmup=$WARMUP, interval=${INTERVAL_MS}ms, ${#TAGS[@]} arms, interleaved -> $OUT"
 for r in $(seq 1 "$K"); do
-	for a in "${ARMS[@]}"; do
+	if [ $((r % 2)) -eq 1 ]; then ROUND=("${ARMS[@]}" "${UARMS[@]}"); else ROUND=("${UARMS[@]}" "${ARMS[@]}"); fi
+	order=""
+	for a in "${ROUND[@]}"; do
 		set -- $a
-		m_probe "$OUT" "$1_r$r" "$2" "$3"
+		m_probe "$OUT" "$1_r$r" "$2" "$3" "" "$4"
+		order="$order $1"
 	done
+	echo "round $r order:$order" >> "$OUT/order.log"
 	say "round $r/$K done"
 done
 
@@ -140,3 +203,10 @@ m_governor_recheck
 m_stamp_after "$OUT/stamp.json"
 m_require_complete "$OUT" "${TAGS[@]}"
 m_summary "$OUT" "${TAGS[0]}" "${TAGS[@]}"
+if [ "$UDP" = 1 ]; then
+	say "UDP rungs paired with their TCP rungs, and each transport's crossing"
+	PAIRS=("A-udp:A-loopback" "B-udp:B-bridge")
+	[ -n "$ARM_C_UDP_PORT" ] && [ -n "$ARM_C_PORT" ] && PAIRS+=("C-udp:C-null")
+	PAIRS+=("D-udp:D-guest" "D-guest:B-bridge" "D-udp:B-udp")
+	m_pairs "$OUT" "${PAIRS[@]}"
+fi
