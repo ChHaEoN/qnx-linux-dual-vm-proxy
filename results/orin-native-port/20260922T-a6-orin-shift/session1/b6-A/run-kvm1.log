@@ -1,0 +1,30 @@
+[15:25:24] cores: 6 total; qemu=0-2 monitor=3 probe=4
+[15:25:24] governor: schedutil -> performance on every core (will restore)
+[15:25:24] idle states: SHALLOW -- disabled 6 state(s) with exit latency > 10 us; now WFI:1us:on c7:5000us:off (will restore)
+[15:25:24] qemu pid=118638 pinned to 0-2 (readback '0-2', 5 threads) exe=/usr/bin/qemu-system-aarch64
+[15:25:25] guest image ifs-udp.bin 853de923f700, disk disk-qemu f326b7924868, qemu started 2026-09-22T15:25:17Z
+[15:25:25] netns ladder up at 192.168.100.20 behind br0
+[15:25:27] reachable: A-loopback (127.0.0.1:7100)
+[15:25:27] reachable: B-bridge (192.168.100.20:7100)
+[15:25:27] reachable: C-null (192.168.100.10:7000)
+[15:25:27] reachable: D-guest (192.168.100.10:7100)
+[15:25:28] reachable: D-udp (192.168.100.10:7101/udp)
+[15:25:28] stamp written and parsed: /home/<user>/a6-shift/rec/b6-A/kvm1/stamp.json
+[15:25:28] k=4 rounds, n=1000, warmup=200, interval=2ms, 5 arms, interleaved -> /home/<user>/a6-shift/rec/b6-A/kvm1
+[15:25:43] round 1/4 done
+[15:25:59] round 2/4 done
+[15:26:14] round 3/4 done
+[15:26:30] round 4/4 done
+[15:26:30] governor: still performance on every core at the end
+[15:26:30] complete: 5 arm(s) x 4 round(s), each round a clean result or a recorded stall, every file this run's
+  arm           k     p50 ms: median [band]  paired vs A-loopback: med [band]  max ms: min/med/max of k
+  A-loopback    4    0.053 [ 0.052- 0.054]               (reference)  0.088 / 0.475 / 1.518
+  B-bridge      4    0.056 [ 0.056- 0.057]    +0.003 [+0.003,+0.004]  0.104 / 0.219 / 0.824
+  C-null        4    0.183 [ 0.181- 0.184]    +0.129 [+0.128,+0.132]  0.311 / 0.654 / 1.092
+  D-guest       4    0.182 [ 0.178- 0.182]    +0.128 [+0.125,+0.130]  0.323 / 0.356 / 0.592
+  D-udp         4    0.163 [ 0.159- 0.163]    +0.109 [+0.106,+0.111]  0.293 / 0.413 / 0.537
+  headline = median of the k run-medians. 'paired' = median over rounds of (arm - A-loopback) in the SAME round.
+  'max' is the largest OBSERVED value in each round, never a bound.
+[15:26:30] cleanup
+[15:26:30] idle states restored and verified (6 state(s))
+[15:26:30] governor restored and verified on 6 core(s)

@@ -85,16 +85,24 @@ are explained under [Reading the ids](#reading-the-ids).
   userspace (10 000 doorbells, 4 userspace exits). Pairing does not remove three
   things from these contrasts: KVM's halt polling ended 18% of the guest's halts
   in the doorbell arm against 3% over TCP, QEMU's main thread queued 4.6 µs per
-  exchange in the doorbell arm only, and TCP ran 32–38 µs slower on that boot
-  than on the two before it, so the 92 µs may include up to that much
-  ([record](results/orin-native-port/20260922T-a6-orin-kick/results.md)).
+  exchange in the doorbell arm only, and TCP in that image ran 34–38 µs slow.
+  The last was isolated the same day to what that image adds for its kick, most
+  plausibly the guest's virtio console driver, with QEMU's main thread doing about
+  58 µs more work per TCP exchange. The 92 µs is against TCP in that same image;
+  against TCP without it, measured on other boots, the doorbell arm is about
+  55–58 µs faster, and whether the doorbell arm itself pays part of that cost is
+  unknown
+  ([record](results/orin-native-port/20260922T-a6-orin-kick/results.md),
+  [isolation](results/orin-native-port/20260922T-a6-orin-shift/results.md)).
   The same ladder on AWS `a1.metal` (Graviton1, same image and QEMU build) keeps
   the order of the paths in every round and puts the doorbell arm **97 µs** under
   TCP there, with halt polling ending about 1–2% of the guest's halts in both
   arms and no main-thread queueing. Answering over the console cost the guest
   65 µs more than the doorbell there, against 37 µs on the Orin. Its guest TCP
   rungs ran about 76 µs slower than on an earlier `a1.metal` ladder (another
-  instance, image and script revision), so the 97 µs may include up to that much
+  instance, image and script revision). If that is the same console-driver cost,
+  which was isolated on the Orin but not on `a1.metal`, the doorbell arm there is
+  about 21 µs faster than that earlier ladder's TCP, and the console arm slower
   ([record](results/orin-native-port/20260922T-a6-a1metal-kick/results.md)).
 
 - **What it cannot show.** No certified Type-1 isolation, no freedom from

@@ -30,7 +30,7 @@ parameters match the Orin's (500000/2/10000/0).
 - **Tooling.** Every stamped source and script hash (script, library, probe,
   `shmchan.c`, `shm_chan.h`, `shm_map_posix.c`, `ivshm_client.c`,
   `ivshmem_server.py`) equals the Orin run's. This run used a `git archive` of
-  `4bf21b4`, which differs from the Orin's `6e1362a` only in tests, docs, the
+  `0e19d15`, which differs from the Orin's `a9df382` only in tests, docs, the
   claims gate and `redact-aws.sh`. The native monitor and `libshmchan.so` were
   built on this host from byte-identical sources, so their binary hashes differ.
 
@@ -178,6 +178,22 @@ on the socket rungs that §4's level shift may inflate.
 
 ## 4. The level shift, on both hosts
 
+> **Isolated on the Orin later the same day**
+> ([20260922T-a6-orin-shift](../20260922T-a6-orin-shift/results.md)).
+>
+> - **The cause there.** The shift is what the notified image adds for its kick,
+>   most plausibly the guest's virtio console driver (`devc-virtio`): 34–38 µs on
+>   every guest socket rung.
+> - **This host.** It was not isolated here, and the ~76 µs here is about twice
+>   the Orin's figure. If it is the same effect, the doorbell arm (203.0 µs) is
+>   about 21 µs faster than the 2026-09-21 ladder's TCP (224.3 µs; another
+>   instance and image), and the console arm slower.
+> - **The polled monitor.** It is "ruled out" below by argument; it was then
+>   ruled out by measurement on the Orin. The images carrying it add ~266 halts a
+>   second, and those halts cost the socket rungs nothing.
+>
+> The text below is as written before that.
+
 This run's guest rungs sit **about 76 µs higher** than on the 2026-09-21
 `a1.metal` ladder:
 
@@ -206,7 +222,7 @@ separated here:
 - the devices: none → `ivshmem-doorbell` and a virtio-serial console;
 - two ivshmem servers on core 5;
 - a KVM snapshot with `sudo` and a 100 ms pause around every arm;
-- the ladder script, `002bc7a` → `4bf21b4`.
+- the ladder script, `002bc7a` → `0e19d15`.
 
 One candidate is ruled out: the guest's polled monitor stops spinning 50 ms after
 its last request, and every arm is preceded by a 100 ms pause.
@@ -251,7 +267,7 @@ changes; whether it is the same effect is not established.
 - **Rehearsal.** The same instance script had first run end to end on the Orin
   at k = 4. That rehearsal found two capture bugs, both fixed before launch:
   - The redactor's MAC pattern never matched under Ubuntu's `mawk`
-    (`4bf21b4`).
+    (`0e19d15`).
   - Piping JSON through the redactor would have rewritten 12-digit KVM counters
     as `<account>`.
 

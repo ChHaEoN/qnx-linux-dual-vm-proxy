@@ -1,0 +1,4 @@
+ivshmem-server: serving /dev/shm/a6-ivshmem, 1048576 bytes, 1 vector(s), on /tmp/a6-ivshmem.sock (pid 125805)
+ivshmem-server: peer 1 connected (1 peers)
+ivshmem-server: peer 1 disconnected (0 peers)
+ivshmem-server: stopped

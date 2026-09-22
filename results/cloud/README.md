@@ -69,9 +69,15 @@ of them is what this directory's CSV measures:
   rung, the polled shared-memory slot, and the notified slot with a
   virtio-console kick in and a console reply or an `ivshmem` doorbell out.
   Within each run, the order of the paths and the doorbell's lead over TCP
-  replicate: 97 µs on `a1.metal`, 92 µs on the Orin. The `a1.metal` figure may
-  include up to about 76 µs of a level shift between setups. The cost of the
-  console reply does not replicate — see
+  replicate: 97 µs on `a1.metal`, 92 µs on the Orin. But TCP in that image pays
+  for what the image adds for its kick, most plausibly the guest's virtio console
+  driver: 34–38 µs, isolated on the Orin
+  ([record](../orin-native-port/20260922T-a6-orin-shift/results.md)). The
+  `a1.metal` TCP rungs sat about 76 µs above an earlier `a1.metal` ladder. If that
+  is the same cost (not isolated there, and about twice the Orin's), the doorbell
+  arm on `a1.metal` is about 21 µs faster than that earlier ladder's TCP, which
+  was measured on another instance with another image and script revision.
+  The cost of the console reply does not replicate — see
   [`results/orin-native-port/20260922T-a6-a1metal-kick/`](../orin-native-port/20260922T-a6-a1metal-kick/results.md).
 
 No throughput figure has been taken on a cloud host. No figure has been taken

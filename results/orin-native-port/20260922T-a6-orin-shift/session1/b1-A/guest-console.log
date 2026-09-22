@@ -1,0 +1,60 @@
+---> Starting slogger2
+---> Starting PCI Services
+---> Starting fsevmgr
+# ---> Starting devb
+Path=0 ---> Mounting file systems
+- 
+ target=0 lun=0     Direct-Access(0) - VIRTIO  Rev: 
+---> Mounting file systems
+---> Starting Networking
+---> Starting sshd
+---> Starting misc
+=== Phase 3: static IP for br0/tap-qnx ===
+=== Phase 3: starting qnx-echo-server-net on :7000 ===
+server: echo endpoint listening on 0.0.0.0:7000 (frame=64 bytes)
+
+To exit QEMU, type <ctrl>a x
+
+Process count:22
+Startup complete
+monitor: safety monitor listening on :7100 (frame=64 bytes, conf_min=60%)
+monitor: safety monitor listening on :7101/udp (frame=64 bytes, conf_min=60%)
+server: echo endpoint listening on 0.0.0.0:7001/udQNXp qnx-safety  8.0.0( 2026/02/27-10:59:13ESTf QEMU_virt_(aarch64),_KVM_guestr aaarch64lem
+e=64 bytes)
+monitor: frame read failed: No such process
+monitor: client done: seen=0 accepted=0 rejected=0
+server: client connected from 192.168.100.1:34060
+server: read: No such process
+server: client session ended with an error; awaiting next client
+monitor: frame read failed: No such process
+monitor: client done: seen=0 accepted=0 rejected=0
+server: client connected from 192.168.100.1:34066
+server: client EOF after 1200 frames
+monitor: client done: seen=1200 accepted=1200 rejected=0
+server: client connected from 192.168.100.1:44084
+server: client EOF after 1200 frames
+monitor: client done: seen=1200 accepted=1200 rejected=0
+server: client connected from 192.168.100.1:60034
+server: client EOF after 1200 frames
+monitor: client done: seen=1200 accepted=1200 rejected=0
+server: client connected from 192.168.100.1:60170
+server: client EOF after 1200 frames
+monitor: client done: seen=1200 accepted=1200 rejected=0
+server: client connected from 192.168.100.1:47922
+server: read: No such process
+server: client session ended with an error; awaiting next client
+monitor: frame read failed: No such process
+monitor: client done: seen=0 accepted=0 rejected=0
+server: client connected from 192.168.100.1:47936
+server: client EOF after 1200 frames
+monitor: client done: seen=1200 accepted=1200 rejected=0
+server: client connected from 192.168.100.1:56452
+server: client EOF after 1200 frames
+monitor: client done: seen=1200 accepted=1200 rejected=0
+server: client connected from 192.168.100.1:45900
+server: client EOF after 1200 frames
+monitor: client done: seen=1200 accepted=1200 rejected=0
+server: client connected from 192.168.100.1:59950
+server: client EOF after 1200 frames
+monitor: client done: seen=1200 accepted=1200 rejected=0
+qemu-system-aarch64: terminating on signal 15 from pid 108136 ()

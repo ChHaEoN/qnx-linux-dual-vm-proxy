@@ -22,6 +22,6 @@ completeness gate.
 
 **Provenance:** library `b42e13955e1b`, run-ladder `a7928dca0b7d`,
 run-interference `3217c44242f1`, run-saturation `cabfaa249328` — committed
-exactly as run in `c518768`, before the comment corrections that followed.
+exactly as run in `48fb342`, before the comment corrections that followed.
 The saturation stamp carries the false `known_confound` line described in the
 main record.

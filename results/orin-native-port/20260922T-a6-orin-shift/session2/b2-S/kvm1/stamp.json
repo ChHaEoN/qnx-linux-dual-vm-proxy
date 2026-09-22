@@ -1,0 +1,79 @@
+{
+  "utc": "2026-09-22T15:33:23Z",
+  "script": "run-ladder.sh",
+  "script_sha256": "8685ee4e6e8191ea942c883de4b68c28dfdee605e100087eeabdb1ab92195606",
+  "lib_sha256": "d71b9ba667dca1eb9b37d58ae3f638b5a0fd7fdd3b8390a63806831e2ff79970",
+  "probe_sha256": "976ac7587b5f78762266552b12739034dd6e5b7bf1153869247fb73243ba65f9",
+  "python3": "/usr/bin/python3",
+  "python3_under_sudo": "/usr/bin/python3",
+  "machine": "aarch64",
+  "kernel": "5.15.148-tegra",
+  "ncpu": 6,
+  "sysfs_cpu": "/sys/devices/system/cpu",
+  "governor_state": "pinned",
+  "governor_before": "schedutil",
+  "cur_freq_khz_before": "1267200 1267200 1267200 1267200 729600 729600",
+  "cpuidle": "present",
+  "cstate_policy": "shallow",
+  "cstate_exposed": "WFI:1us:on c7:5000us:off",
+  "cstate_disabled": "6 state(s) with exit latency > 10 us",
+  "qemu_exe": "/usr/bin/qemu-system-aarch64",
+  "qemu_version": "QEMU emulator version 6.2.0 (Debian 1:6.2+dfsg-2ubuntu6.31)",
+  "qemu_cmdline": "qemu-system-aarch64 -machine virt,gic-version=3 -cpu host -enable-kvm -smp 2 -m 1G -drive file=/home/<user>/output/disk-qemu,if=none,id=drv0,format=raw -device virtio-blk-device,drive=drv0 -snapshot -netdev tap,id=n0,ifname=tap-qnx,script=no,downscript=no -device virtio-net-device,netdev=n0,mac=52:54:00:11:11:11 -object rng-random,filename=/dev/urandom,id=rng0 -device virtio-rng-device,rng=rng0 -device virtio-serial-device -chardev socket,id=kick0,path=/tmp/a6-kick.sock,server=on,wait=off -device virtconsole,chardev=kick0 -chardev socket,id=ivsh0,path=/tmp/a6-ivshmem.sock -device ivshmem-doorbell,chardev=ivsh0,vectors=1 -kernel /home/<user>/output/ifs-shm.bin -nographic ",
+  "qemu_threads": 5,
+  "qemu_affinity": "0-2",
+  "qemu_pid": "123656",
+  "qemu_started": "2026-09-22T15:33:12Z",
+  "guest_ifs": "/home/<user>/output/ifs-shm.bin",
+  "guest_ifs_sha256": "1e330bbad086ce6c18843117357b8dec354984c28028ac2efa028c09ed54b29f",
+  "guest_disk": "/home/<user>/output/disk-qemu",
+  "guest_disk_sha256": "f326b792486805c9406c1a0c6ccd6489bf2714aaf708aabc57f96cf06810ce68",
+  "udp_arms": "D-udp",
+  "sample_window": 0,
+  "fifo_arms": "",
+  "stall_policy": "refuse",
+  "probe_timeout_s": 10,
+  "recover_max_s": 120,
+  "experiment": "ladder",
+  "pin": {
+    "qemu": "0-2",
+    "monitor": 3,
+    "probe": 4
+  },
+  "monitor_native_sha256": "f4a88e599fa0d4b87d0bf1af1e446b78c711d3a969bc1c254f5a8f95307cc168",
+  "udp": {
+    "enabled": 0,
+    "port": 7101,
+    "arm_c_port": ""
+  },
+  "shm": {
+    "enabled": 0
+  },
+  "notified": {
+    "kick": 0,
+    "db": 0
+  },
+  "kvm_stats": 1,
+  "kvm_halt_poll": {
+    "halt_poll_ns": "500000",
+    "halt_poll_ns_grow": "2",
+    "halt_poll_ns_grow_start": "10000",
+    "halt_poll_ns_shrink": "0"
+  },
+  "udp_in_tcp": 1,
+  "transports": "tcp",
+  "order": "within each transport its rungs in fixed order A, B, C, D (those it has); the transport groups in a Williams order by round, as run in order.log (two transports: tcp first in odd rounds)",
+  "arms": [
+    "A-loopback",
+    "B-bridge",
+    "C-null",
+    "D-guest",
+    "D-udp"
+  ],
+  "n": 1000,
+  "k": 4,
+  "warmup": 200,
+  "interval_ms": 2,
+  "governor_after": "performance",
+  "cur_freq_khz_after": "1344000 1344000 1344000 1344000 1344000 1344000"
+}

@@ -60,7 +60,7 @@ console line), 12 sessions of 1200 frames on each TCP server, and 1 + 12 × 1200
 same ladder ran clean on an earlier boot of the same image; nothing from it is in
 `raw/`.
 
-**Provenance.** Tooling as committed in `410e78f`, run from a `git archive` of that
+**Provenance.** Tooling as committed in `2abbfba`, run from a `git archive` of that
 commit: the stamp's script, library and probe hashes, and those of `shmchan.c`,
 `shm_chan.h` and `shm_map_posix.c`, are that commit's files. The probe's
 `libshmchan.so` was built by the run from them (sha256 in the stamp); the host's

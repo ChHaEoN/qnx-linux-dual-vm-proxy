@@ -1,0 +1,6 @@
+boot 1 cond A image ifs-udp.bin devices none kvm_stats 0 1
+boot 2 cond B image ifs-udp.bin devices ivshmem-doorbell+virtconsole kvm_stats 1 0
+boot 3 cond C image ifs-kick.bin devices ivshmem-doorbell+virtconsole kvm_stats 0 1
+boot 4 cond C image ifs-kick.bin devices ivshmem-doorbell+virtconsole kvm_stats 1 0
+boot 5 cond B image ifs-udp.bin devices ivshmem-doorbell+virtconsole kvm_stats 0 1
+boot 6 cond A image ifs-udp.bin devices none kvm_stats 1 0

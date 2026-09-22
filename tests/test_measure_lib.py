@@ -2246,7 +2246,7 @@ def test_notified_arm_ends_every_exchange_on_exactly_one_notification(native_ser
     done = mout.decode()
     # Not " stale=0 ": with --interval-ms 0 the monitor's re-check can take
     # request n+1 before reading its kick byte, which it then counts as stale
-    # (CI on main, 6e1362a). A stale kick answered by a notification would show
+    # (CI on main, a9df382). A stale kick answered by a notification would show
     # above, as an early wake-up or a stray, and that is the deterministic check.
     assert "shm-kick done:" in done and " jumps=0 " in done and " stray=0 " in done and " ring_misses=0 " in done, done
 

@@ -31,7 +31,7 @@ from the live process, now shows it; the stamps record both from this date on.
 same round, with the min–max band and how many rounds lie above zero. All at p50 unless
 marked.
 
-**Provenance.** Run as committed in `a3f20ac`: every script, library and probe hash in
+**Provenance.** Run as committed in `9dcf444`: every script, library and probe hash in
 both stamps names a file of that commit (`run-interference.sh 7d8d31f9`,
 `run-saturation.sh beb2b8bd`, `lib-measure.sh b0fb3e8f`, `latency_probe.py 11c8d142`).
 cpuload was built by the run itself from `cpuload.c 9a1ca8f5`, and both hashes are
@@ -143,7 +143,7 @@ No round of this campaign stalled. Two board dry runs of the same tooling did:
 | dry run | arm | what the files show | tooling |
 |---|---|---|---|
 | 1 (K=6, N=1000) | cpu2_q r3 | no reply for ≥10 s from sample 391 of 1200; core 2 at 100% from the 3rd of 21 trace samples to the end of the window; the arm aborted, and **no recovery was recorded** | an intermediate version: its script, library and probe hashes name the files kept in `dry1-cpu2_q_r3/tooling-as-run/` |
-| 2 (K=6, N=1000) | cpu6 r6 | no reply for ≥10 s from sample 507; stall record written; after the harness stopped the load, the guest answered **about 1 s later (≥0.99 s), on the first attempt** | exactly `a3f20ac` |
+| 2 (K=6, N=1000) | cpu6 r6 | no reply for ≥10 s from sample 507; stall record written; after the harness stopped the load, the guest answered **about 1 s later (≥0.99 s), on the first attempt** | exactly `9dcf444` |
 
 Dry run 1's stall is why the tooling now records a stall as an outcome instead of
 stopping (owner decision); dry run 2, on that tooling, recorded one. Two stalls in 89

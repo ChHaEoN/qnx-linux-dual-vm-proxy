@@ -217,9 +217,9 @@ among loaded arms is neither shown nor ruled out.
   wrong — see §5 — and was corrected in the tooling after these runs; the stamps
   are left as written.
 - **Provenance.** The c7-off runs' library and scripts are in git exactly as
-  run (commit `c518768`). The c7-on ladder ran on library `62931898…`, which no
-  commit holds; it is `4ce9876`'s library with its GR3D block taken verbatim
-  from `65f7011`, reconstructed and verified byte-for-byte. The ladder never
+  run (commit `48fb342`). The c7-on ladder ran on library `62931898…`, which no
+  commit holds; it is `578286a`'s library with its GR3D block taken verbatim
+  from `d7a035d`, reconstructed and verified byte-for-byte. The ladder never
   calls the GPU check, so that one function cannot have affected it.
 - **Two refused runs**, not included and not read: a first ladder the gate
   refused because of a freshness-check bug, and a first interference run

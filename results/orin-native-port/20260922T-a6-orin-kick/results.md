@@ -78,14 +78,14 @@ notified monitor ends with 28 815 exchanges, 14 414 doorbells rung, 0 peer-table
 misses, 0 stale kicks, 0 stray bytes, 26 clients. A K = 4 dry run of an earlier
 build ran on an earlier boot; nothing from it is in `raw/`.
 
-**Provenance.** Tooling as committed in `6e1362a` (on `main`), run from a
+**Provenance.** Tooling as committed in `a9df382` (on `main`), run from a
 `git archive` of it: the stamp's script, library, probe, `shmchan.c`,
 `shm_chan.h`, `shm_map_posix.c`, `ivshm_client.c` and `ivshmem_server.py` hashes
 — the guest's server's own script included — are that commit's files. That
 commit's tests, including the Linux-only ivshmem-server and notified end-to-end
 tests, passed in CI on its branch with none skipped. On `main` the same commit
 then failed one test asserting an exact stale-kick count, which with no spacing
-between requests is timing, not behaviour; `779d0e4` changes that test only, and
+between requests is timing, not behaviour; `16826cc` changes that test only, and
 CI passed it with none skipped. The code was shaped by a design review (3
 lenses) and a code review (4 lenses; 24 findings, each verified, 19 real, all
 fixed). Result and KVM JSONs copied byte-for-byte; logs and stamp redacted at
@@ -191,6 +191,17 @@ round trip that carries 64 bytes through the guest's network stack, in this run
 (C-null carries the shift of §5).
 
 ## 5. Replications and a level shift
+
+> **Isolated later the same day** ([20260922T-a6-orin-shift](../20260922T-a6-orin-shift/results.md)).
+> The shift is what this run's image adds for its kick, most plausibly the guest's
+> virtio console driver (`devc-virtio`). Guest boots running it put every guest
+> socket rung 34–38 µs higher (UDP 31–36), with QEMU's main thread doing about
+> 58 µs more work per TCP exchange. Ruled out: the devices, the guest's ivshmem
+> server, the KVM snapshots and both shm monitors. This run's host-side ivshmem
+> server and host-side shm arms were not part of that test. §1's −92.4 µs is
+> against TCP in this same image; against TCP without the driver, on other boots,
+> the doorbell arm is about 55–58 µs faster. Whether the doorbell arm itself pays
+> part of the cost is unknown. The text below is as written before that.
 
 UDP, a third time: D-udp − D-guest −19.0 µs [−22.2, −15.3], 0/12 (the earlier
 runs: −20.0 and −18.3). The socket rungs, however, sit **32–38 µs higher** than in

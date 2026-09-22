@@ -32,7 +32,7 @@ the boot console, with all four servers' listening lines (the UDP echo's is
 interleaved with the guest's banner, `…:7001/u` + `QNX…` + `d…`), is in
 [`ladder/guest-console.log`](ladder/guest-console.log).
 
-**Provenance.** Tooling as committed in `a089719`; the stamp's script, library and
+**Provenance.** Tooling as committed in `1d51b5f`; the stamp's script, library and
 probe hashes name files of that commit. The host-side `monitor-native` is a
 post-OD12 build whose UDP mode the run checked at start (its listening banner on
 both ports); the stamp holds the binary's sha256 (`0bcb2a94…`), not the source it

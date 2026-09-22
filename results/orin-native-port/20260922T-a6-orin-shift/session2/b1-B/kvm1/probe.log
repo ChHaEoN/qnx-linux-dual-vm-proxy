@@ -1,0 +1,61 @@
+RECOVERED after 0.00 s (attempts=1)
+RESULT {"tag": "A-loopback_r1", "proto": "tcp", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.04736098344437778, "p50_ms": 0.053601019317284226, "p90_ms": 0.05628800136037171, "p99_ms": 0.06572899292223155, "p999_ms": 0.11289800750091672, "max_ms": 0.5088720063213259, "mean_ms": 0.05437253919080831, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=A-loopback_r1 n=1000  min=0.047 p50=0.054 p90=0.056 p99=0.066 p99.9=0.113 max=0.509  bad=0 rej=0
+  wrote /home/<user>/a6-shift/rec2/b1-B/kvm1/lat-A-loopback_r1.json (1000 samples)
+RESULT {"tag": "B-bridge_r1", "proto": "tcp", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.047873007133603096, "p50_ms": 0.056065007811412215, "p90_ms": 0.05942498682998121, "p99_ms": 0.0787210010457784, "p999_ms": 0.10070498683489859, "max_ms": 0.4108860157430172, "mean_ms": 0.05697316996520385, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=B-bridge_r1  n=1000  min=0.048 p50=0.056 p90=0.059 p99=0.079 p99.9=0.101 max=0.411  bad=0 rej=0
+  wrote /home/<user>/a6-shift/rec2/b1-B/kvm1/lat-B-bridge_r1.json (1000 samples)
+RESULT {"tag": "C-null_r1", "proto": "tcp", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.16589000006206334, "p50_ms": 0.18604999058879912, "p90_ms": 0.2591079974081367, "p99_ms": 0.4248069890309125, "p999_ms": 1.2961149914190173, "max_ms": 2.976749005028978, "mean_ms": 0.2080087143694982, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=C-null_r1    n=1000  min=0.166 p50=0.186 p90=0.259 p99=0.425 p99.9=1.296 max=2.977  bad=0 rej=0
+  wrote /home/<user>/a6-shift/rec2/b1-B/kvm1/lat-C-null_r1.json (1000 samples)
+RESULT {"tag": "D-guest_r1", "proto": "tcp", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.16147398855537176, "p50_ms": 0.18381100380793214, "p90_ms": 0.1969310105778277, "p99_ms": 0.2248039818368852, "p999_ms": 0.31814901740290225, "max_ms": 0.33482100116088986, "mean_ms": 0.185560894315131, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=D-guest_r1   n=1000  min=0.161 p50=0.184 p90=0.197 p99=0.225 p99.9=0.318 max=0.335  bad=0 rej=0
+  wrote /home/<user>/a6-shift/rec2/b1-B/kvm1/lat-D-guest_r1.json (1000 samples)
+RESULT {"tag": "D-udp_r1", "proto": "udp", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.149986008182168, "p50_ms": 0.16729801427572966, "p90_ms": 0.2058910031337291, "p99_ms": 0.5140239954926074, "p999_ms": 0.7139630033634603, "max_ms": 2.8153699822723866, "mean_ms": 0.1876430148840882, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=D-udp_r1     n=1000  min=0.150 p50=0.167 p90=0.206 p99=0.514 p99.9=0.714 max=2.815  bad=0 rej=0
+  wrote /home/<user>/a6-shift/rec2/b1-B/kvm1/lat-D-udp_r1.json (1000 samples)
+RESULT {"tag": "A-loopback_r2", "proto": "tcp", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.04729698412120342, "p50_ms": 0.052800984121859074, "p90_ms": 0.05580802098847926, "p99_ms": 0.07139300578273833, "p999_ms": 0.08774499292485416, "max_ms": 0.09507400682196021, "mean_ms": 0.053312200179789215, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=A-loopback_r2 n=1000  min=0.047 p50=0.053 p90=0.056 p99=0.071 p99.9=0.088 max=0.095  bad=0 rej=0
+  wrote /home/<user>/a6-shift/rec2/b1-B/kvm1/lat-A-loopback_r2.json (1000 samples)
+RESULT {"tag": "B-bridge_r2", "proto": "tcp", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.04844900104217231, "p50_ms": 0.055168988183140755, "p90_ms": 0.05820899968966842, "p99_ms": 0.07270500645972788, "p999_ms": 0.10147300781682134, "max_ms": 0.12326601427048445, "mean_ms": 0.05568643508013338, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=B-bridge_r2  n=1000  min=0.048 p50=0.055 p90=0.058 p99=0.073 p99.9=0.101 max=0.123  bad=0 rej=0
+  wrote /home/<user>/a6-shift/rec2/b1-B/kvm1/lat-B-bridge_r2.json (1000 samples)
+RESULT {"tag": "C-null_r2", "proto": "tcp", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1636509841773659, "p50_ms": 0.18064200412482023, "p90_ms": 0.19142698147334158, "p99_ms": 0.20995497470721602, "p999_ms": 0.2608040231280029, "max_ms": 0.30938099371269345, "mean_ms": 0.18170262168860063, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=C-null_r2    n=1000  min=0.164 p50=0.181 p90=0.191 p99=0.210 p99.9=0.261 max=0.309  bad=0 rej=0
+  wrote /home/<user>/a6-shift/rec2/b1-B/kvm1/lat-C-null_r2.json (1000 samples)
+RESULT {"tag": "D-guest_r2", "proto": "tcp", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.164483004482463, "p50_ms": 0.1830749970395118, "p90_ms": 0.19517098553478718, "p99_ms": 0.23510699975304306, "p999_ms": 0.5144710012245923, "max_ms": 0.8409410074818879, "mean_ms": 0.1859796006756369, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=D-guest_r2   n=1000  min=0.164 p50=0.183 p90=0.195 p99=0.235 p99.9=0.514 max=0.841  bad=0 rej=0
+  wrote /home/<user>/a6-shift/rec2/b1-B/kvm1/lat-D-guest_r2.json (1000 samples)
+RESULT {"tag": "D-udp_r2", "proto": "udp", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.14899499365128577, "p50_ms": 0.1652509963605553, "p90_ms": 0.17545800074003637, "p99_ms": 0.227779004490003, "p999_ms": 0.3250929876230657, "max_ms": 0.9132619888987392, "mean_ms": 0.16759084290242754, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=D-udp_r2     n=1000  min=0.149 p50=0.165 p90=0.175 p99=0.228 p99.9=0.325 max=0.913  bad=0 rej=0
+  wrote /home/<user>/a6-shift/rec2/b1-B/kvm1/lat-D-udp_r2.json (1000 samples)
+RESULT {"tag": "A-loopback_r3", "proto": "tcp", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.046689005102962255, "p50_ms": 0.05289699765853584, "p90_ms": 0.05651300307363272, "p99_ms": 0.07955299224704504, "p999_ms": 0.1513299939688295, "max_ms": 0.3380209964234382, "mean_ms": 0.05406624815077521, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=A-loopback_r3 n=1000  min=0.047 p50=0.053 p90=0.057 p99=0.080 p99.9=0.151 max=0.338  bad=0 rej=0
+  wrote /home/<user>/a6-shift/rec2/b1-B/kvm1/lat-A-loopback_r3.json (1000 samples)
+RESULT {"tag": "B-bridge_r3", "proto": "tcp", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.04828898818232119, "p50_ms": 0.05497699021361768, "p90_ms": 0.05952100036665797, "p99_ms": 0.09046497871167958, "p999_ms": 0.364614010322839, "max_ms": 0.5284240178298205, "mean_ms": 0.05733660561963916, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=B-bridge_r3  n=1000  min=0.048 p50=0.055 p90=0.060 p99=0.090 p99.9=0.365 max=0.528  bad=0 rej=0
+  wrote /home/<user>/a6-shift/rec2/b1-B/kvm1/lat-B-bridge_r3.json (1000 samples)
+RESULT {"tag": "C-null_r3", "proto": "tcp", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.16227402375079691, "p50_ms": 0.18403501599095762, "p90_ms": 0.1952989841811359, "p99_ms": 0.2201629977207631, "p999_ms": 0.25766799808479846, "max_ms": 0.26560400146991014, "mean_ms": 0.18527306118630804, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=C-null_r3    n=1000  min=0.162 p50=0.184 p90=0.195 p99=0.220 p99.9=0.258 max=0.266  bad=0 rej=0
+  wrote /home/<user>/a6-shift/rec2/b1-B/kvm1/lat-C-null_r3.json (1000 samples)
+RESULT {"tag": "D-guest_r3", "proto": "tcp", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.16531397704966366, "p50_ms": 0.1823709753807634, "p90_ms": 0.1939870126079768, "p99_ms": 0.24982800823636353, "p999_ms": 0.47069499851204455, "max_ms": 0.8316609892062843, "mean_ms": 0.1853002774878405, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=D-guest_r3   n=1000  min=0.165 p50=0.182 p90=0.194 p99=0.250 p99.9=0.471 max=0.832  bad=0 rej=0
+  wrote /home/<user>/a6-shift/rec2/b1-B/kvm1/lat-D-guest_r3.json (1000 samples)
+RESULT {"tag": "D-udp_r3", "proto": "udp", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.14828998246230185, "p50_ms": 0.16790698282420635, "p90_ms": 0.26912399334833026, "p99_ms": 0.5524570005945861, "p999_ms": 1.241460005985573, "max_ms": 1.954910985659808, "mean_ms": 0.1986149532312993, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=D-udp_r3     n=1000  min=0.148 p50=0.168 p90=0.269 p99=0.552 p99.9=1.241 max=1.955  bad=0 rej=0
+  wrote /home/<user>/a6-shift/rec2/b1-B/kvm1/lat-D-udp_r3.json (1000 samples)
+RESULT {"tag": "A-loopback_r4", "proto": "tcp", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.04649700713343918, "p50_ms": 0.052704999689012766, "p90_ms": 0.05603299359790981, "p99_ms": 0.07043298683129251, "p999_ms": 0.16086699906736612, "max_ms": 0.768267986131832, "mean_ms": 0.05403862890671007, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=A-loopback_r4 n=1000  min=0.046 p50=0.053 p90=0.056 p99=0.070 p99.9=0.161 max=0.768  bad=0 rej=0
+  wrote /home/<user>/a6-shift/rec2/b1-B/kvm1/lat-A-loopback_r4.json (1000 samples)
+RESULT {"tag": "B-bridge_r4", "proto": "tcp", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.04764797631651163, "p50_ms": 0.05484899156726897, "p90_ms": 0.05824098479934037, "p99_ms": 0.06809699698351324, "p999_ms": 0.3663100069388747, "max_ms": 0.8280129986815155, "mean_ms": 0.05627961712889373, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=B-bridge_r4  n=1000  min=0.048 p50=0.055 p90=0.058 p99=0.068 p99.9=0.366 max=0.828  bad=0 rej=0
+  wrote /home/<user>/a6-shift/rec2/b1-B/kvm1/lat-B-bridge_r4.json (1000 samples)
+RESULT {"tag": "C-null_r4", "proto": "tcp", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.1636829983908683, "p50_ms": 0.18176299636252224, "p90_ms": 0.1941150112543255, "p99_ms": 0.23341100313700736, "p999_ms": 0.27501300792209804, "max_ms": 0.8433100010734051, "mean_ms": 0.18410744905122556, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=C-null_r4    n=1000  min=0.164 p50=0.182 p90=0.194 p99=0.233 p99.9=0.275 max=0.843  bad=0 rej=0
+  wrote /home/<user>/a6-shift/rec2/b1-B/kvm1/lat-C-null_r4.json (1000 samples)
+RESULT {"tag": "D-guest_r4", "proto": "tcp", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.16348998178727925, "p50_ms": 0.18448298214934766, "p90_ms": 0.1979549997486174, "p99_ms": 0.23366700042970479, "p999_ms": 0.3291890025138855, "max_ms": 0.3678459906950593, "mean_ms": 0.18667293805629015, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=D-guest_r4   n=1000  min=0.163 p50=0.184 p90=0.198 p99=0.234 p99.9=0.329 max=0.368  bad=0 rej=0
+  wrote /home/<user>/a6-shift/rec2/b1-B/kvm1/lat-D-guest_r4.json (1000 samples)
+RESULT {"tag": "D-udp_r4", "proto": "udp", "n": 1000, "warmup_discarded": 200, "bad": 0, "rejected_by_monitor": 0, "min_ms": 0.14896297943778336, "p50_ms": 0.16633898485451937, "p90_ms": 0.17613099771551788, "p99_ms": 0.22154001635499299, "p999_ms": 0.2918770187534392, "max_ms": 0.3705659764818847, "mean_ms": 0.16801413631765172, "sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]}
+  tag=D-udp_r4     n=1000  min=0.149 p50=0.166 p90=0.176 p99=0.222 p99.9=0.292 max=0.371  bad=0 rej=0
+  wrote /home/<user>/a6-shift/rec2/b1-B/kvm1/lat-D-udp_r4.json (1000 samples)

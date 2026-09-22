@@ -1,0 +1,45 @@
+---> Starting slogger2
+---> Starting PCI Services
+---> Starting fsevmgr
+# ---> Starting devb
+Path=0 - 
+---> Mounting file systems
+ target=0 lun=0     Direct-Access(0) - VIRTIO  Rev: 
+---> Mounting file systems
+---> Starting Networking
+---> Starting sshd
+---> Starting misc
+=== Phase 3: static IP for br0/tap-qnx ===
+=== Phase 3: starting qnx-echo-server-net on :7000 ===
+server: echo endpoint listening on 0.0.0.0:7000 (frame=64 bytes)
+
+To exit QEMU, type <ctrl>a x
+
+Process count:22
+monitor: safety monitor listening on :7100 (frame=64 bytes, conf_min=60%)
+monitor: safety monitor listening on :7101/udp (frame=64 bytes, conf_min=60%)
+server: echo endpoint listening on 0.0.0.0:7001/udp (frame=64 bytes)
+monitor: shm configured: ivshmem 00:01.0 BAR2 0x10000000 (1048576 bytes, prefetchable) BAR0 0x10100000 (256 bytes), addresses assigned here, cmd=0x0002
+monitor: safety monitor serving shm on ivshmem 00:01.0 BAR2 0x10000000, 1048576 bytes, BAR0 0x10100000, from the marker, cacheable (frame=64 bytes, conf_min=60%)
+Startup complete
+QNX qnx-safety 8.0.0 2026/02/27-10:59:13EST QEMU_virt_(aarch64),_KVM_guest aarch64le
+monitor: frame read failed: No such process
+monitor: client done: seen=0 accepted=0 rejected=0
+server: client connected from 192.168.100.1:49208
+server: read: No such process
+server: client session ended with an error; awaiting next client
+monitor: frame read failed: No such process
+monitor: client done: seen=0 accepted=0 rejected=0
+server: client connected from 192.168.100.1:48642
+server: client EOF after 1200 frames
+monitor: client done: seen=1200 accepted=1200 rejected=0
+server: client connected from 192.168.100.1:52302
+server: client EOF after 1200 frames
+monitor: client done: seen=1200 accepted=1200 rejected=0
+server: client connected from 192.168.100.1:56960
+server: client EOF after 1200 frames
+monitor: client done: seen=1200 accepted=1200 rejected=0
+server: client connected from 192.168.100.1:33142
+server: client EOF after 1200 frames
+monitor: client done: seen=1200 accepted=1200 rejected=0
+qemu-system-aarch64: terminating on signal 15 from pid 134535 ()

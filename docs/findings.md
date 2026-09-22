@@ -9,6 +9,72 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-22 — the guest's socket rungs rise 34–38 µs with the notified image's console driver, and QEMU's main thread does 58 µs more per exchange
+
+Both notified-shm records carried an unexplained rise in the guest's socket rungs:
+32–38 µs on the Orin and ~76 µs on `a1.metal`. It was isolated on the Orin in two
+sessions of alternating guest boots (A B C C B A, then B S N C C N S B), at k = 4
+per boot. Each boot's services were read back from its console. Record:
+[results.md](../results/orin-native-port/20260922T-a6-orin-shift/results.md).
+
+- **What it is.** The rise comes from what the notified image adds over the shm
+  image (S → N): D-guest +37.9 µs, the crossing +38.3, TCP echo +36.7, UDP +34.4.
+  The whole kick image gives +34.3 to +37.6 on D-guest across the two sessions.
+  - What N adds is `devc-virtio`, `shmcfg`'s BAR0 placement (lasting for the
+    whole boot) and a rebuilt monitor.
+  - The most plausible part is `devc-virtio`, the SDP's virtio console driver,
+    which brings QEMU's virtio-serial device to life. The design does not
+    separate the three.
+- **Ruled out.**
+  - The ivshmem and console devices with the guest's ivshmem server, while the
+    guest ignores them: +1.7.
+  - The per-arm KVM snapshots: median +0.1.
+  - The polled monitor: −0.6.
+  - The notified monitor: −3.0.
+  - Boot-to-boot drift within a condition was up to 4.8 µs on D-guest and 6.4
+    on C-null and D-udp, so the contrasts within ±3 µs are noise.
+- **What the host shows, as correlations.**
+  - Per TCP exchange the guest traps about as often (18.9–19.7 exits, 2.10 to
+    QEMU's userspace in every condition).
+  - QEMU's main thread runs about twice per exchange in every snapshot round of
+    every boot. But each run costs about 29 µs more: 61–62 µs against 30–33. That
+    is +58 µs of main-thread CPU per exchange; the other QEMU threads add about
+    10 µs.
+  - What in QEMU does it was not identified, and nothing shows that the latency
+    passes through that work.
+- **An earlier hypothesis, now ruled out.** That the kick image's ~5× idle halts
+  (about +266 a second) caused the shift. They come with the polled monitor and
+  cost the socket rungs nothing.
+- **What it changes.**
+  - *The Orin.* The doorbell arm's −92.4 µs against TCP is against TCP in the
+    same image, which pays this cost.
+    - Subtracting the kick image's +34.3 to +37.6 leaves it about 55–58 µs faster
+      than TCP without the driver.
+    - By levels across boots, 124.8 against 179–184 µs gives 54–59.
+    - Both carry a ~7 µs host-side offset between the kick boot and these boots,
+      unexplained.
+    - Whether the doorbell arm itself pays part of the cost is unknown.
+  - *`a1.metal`.* It stays open: the ~76 µs there crossed more changes and is
+    about twice the Orin's. If it is the same effect, the doorbell arm is about
+    21 µs faster than the earlier `a1.metal` TCP ladder (another instance), and
+    the console arm slower.
+  - *The docs.* README and `results/cloud/README.md` now say so, and the two
+    records carry a pointer.
+
+Also this day, from a review of the AWS tooling before it was committed
+(`scripts/aws/`).
+- **Termination.** `launch` and `wait` now terminate on any failure and confirm
+  it. The earlier form could exit on an EC2 eventual-consistency error, or on a
+  failed terminate, with the instance still running.
+- **Reboot-safe self-termination.** The shutdown is now re-armed on reboot: the
+  AMI boots with `panic=-1`, and a pending shutdown does not survive a reboot.
+- **Leak scan.** `fetch` refuses a capture that a new leak scan
+  (`leakscan.py`) finds identifying.
+- **Tests.** Stub `aws`/`ssh`/`scp` tests now drive those paths. The committed
+  versions have not driven a billed session yet.
+
+---
+
 ## 2026-09-22 — the notified-shm ladder on AWS a1.metal: within each run the order and the doorbell's lead replicate, the console's cost does not
 
 The owner asked for the cloud work to run first. The Orin's notified ladder
@@ -63,7 +129,7 @@ against one with them, is the obvious next experiment.
   read both for cost, teardown, leaks and fidelity.
 - **The rehearsal found two capture bugs.**
   - Ubuntu 22.04's `mawk` does not support `{n}` intervals, so the redactor's
-    MAC pattern had never matched there. Fixed in `4bf21b4`, with a test under
+    MAC pattern had never matched there. Fixed in `0e19d15`, with a test under
     each awk. The published AWS records hold only the documented guest MAC.
   - The redactor's 12-digit account mask would have rewritten KVM nanosecond
     counters. JSON is now published byte-for-byte after checking only its
@@ -180,14 +246,14 @@ much of it. The notified arms have no earlier run to tell which.
   long as the timeout.
 - **Two CI failures.** On the branch, a server outlived its SIGTERM on Python
   3.12; it now stops by a flag and a wake-up. On `main`, the same commit
-  `6e1362a` then failed one test that asserted an exact count of stale kicks
+  `a9df382` then failed one test that asserted an exact count of stale kicks
   (2 against 1). With no spacing between requests, the monitor's re-check can
   take request n+1 before reading its kick byte, and then counts that byte as
-  stale, so the count is timing. `779d0e4` asserts the probe's own notification
+  stale, so the count is timing. `16826cc` asserts the probe's own notification
   accounting instead, and at least one stale kick where one is sent. That
   commit changes tests only; CI passed it with none of 337 tests skipped.
 
-The run used a `git archive` of `6e1362a`, whose tests had passed on its branch
+The run used a `git archive` of `a9df382`, whose tests had passed on its branch
 with none skipped.
 
 **Next (OD12):** a SOME/IP arm stays proposed, not decided. A doorbell into the
@@ -244,7 +310,7 @@ the probe's cost around socket calls.
   stays in Python as for the sockets.
 - **Three transports in one ladder** are ordered by a Williams design over the
   groups (period 6), lifted from the load arms' design with its output unchanged.
-- The run's tooling was committed and pushed first (`410e78f`, CI green including
+- The run's tooling was committed and pushed first (`2abbfba`, CI green including
   the gcc-only shm tests, which were also run by hand on the Orin), and the run used
   a `git archive` of that commit; a K = 6 dry run on an earlier boot was clean.
 
@@ -304,7 +370,7 @@ closed: the probe reports its own scheduling, every window is traced (root tegra
 both EMC readings, the GPU clock), and load threads are pinned and read back, so arms are
 named by placement. Record:
 [results.md](../results/orin-native-port/20260921T-a6-orin-pinned/results.md). All 156
-windows complete, c7 disabled, tooling as committed in `a3f20ac`. An independent check of
+windows complete, c7 disabled, tooling as committed in `9dcf444`. An independent check of
 the record's first draft re-derived every number from the raw files and confirmed 27 of 30
 objections -- among them the same sign slip on cpu6_prio - cpu6 that the first record had,
 and two readings stated more strongly than a 500 ms trace allows. The record is the

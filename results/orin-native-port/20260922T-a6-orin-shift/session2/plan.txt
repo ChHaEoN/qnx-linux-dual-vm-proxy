@@ -1,0 +1,8 @@
+boot 1 cond B image ifs-udp.bin devices ivshmem-doorbell+virtconsole kvm_stats 1
+boot 2 cond S image ifs-shm.bin devices ivshmem-doorbell+virtconsole kvm_stats 1
+boot 3 cond N image ifs-kick-nomon.bin devices ivshmem-doorbell+virtconsole kvm_stats 1
+boot 4 cond C image ifs-kick.bin devices ivshmem-doorbell+virtconsole kvm_stats 1
+boot 5 cond C image ifs-kick.bin devices ivshmem-doorbell+virtconsole kvm_stats 1
+boot 6 cond N image ifs-kick-nomon.bin devices ivshmem-doorbell+virtconsole kvm_stats 1
+boot 7 cond S image ifs-shm.bin devices ivshmem-doorbell+virtconsole kvm_stats 1
+boot 8 cond B image ifs-udp.bin devices ivshmem-doorbell+virtconsole kvm_stats 1

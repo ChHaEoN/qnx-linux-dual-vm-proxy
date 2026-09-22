@@ -1,0 +1,8 @@
+monitor: safety monitor listening on :7100 (frame=64 bytes, conf_min=60%)
+monitor: frame read failed: Success
+monitor: client done: seen=0 accepted=0 rejected=0
+monitor: client done: seen=1200 accepted=1200 rejected=0
+monitor: client done: seen=1200 accepted=1200 rejected=0
+monitor: client done: seen=1200 accepted=1200 rejected=0
+monitor: client done: seen=1200 accepted=1200 rejected=0
+monitor: stopped
