@@ -43,16 +43,23 @@
 \bKVM[- ]accelerated\b[^.]{0,40}\b(A1|A2|A3|cloud|twin diff|IPC)\b	no KVM-accelerated figure exists for those legs; they are TCG
 
 # --- the cloud LEG. Still never built, and that is separate from the boot arms.
-# AWS has been used four times (a t4g.small /dev/kvm probe, an a1.metal hang
-# reproduction, an a1.metal control/test pair, and the 2026-09-20 twin boot
-# measurement), so "nothing ran on AWS" is false. What does not exist is a cloud
-# LEG in this project's sense: a QHV host plus guest running the IPC benchmark.
+# AWS has been used five times (a t4g.small /dev/kvm probe, an a1.metal hang
+# reproduction, an a1.metal control/test pair, the 2026-09-20 twin boot
+# measurement, and the 2026-09-21 A6 attribution ladder over TCP), so "nothing
+# ran on AWS" is false. What does not exist is a cloud LEG in this project's
+# sense: a QHV host plus guest running the IPC benchmark.
+#
+# 2026-09-22: these two rules said "the only cloud measurement is boot timing"
+# for a day after the a1.metal ladder ran (20260921T-ladder-a1metal), and three
+# documents repeated it. The rules stay, because every OTHER cloud IPC claim is
+# still unsupported; the ladder is cleared by the exemption below them.
 
 # Keyed on the HOST token, never on the word "cloud": "cloud leg" is this
 # project's NAME for architecture A1, which ran on the local Windows PC, so
 # banning "cloud" near "IPC" would ban the project's own vocabulary.
-\b(Graviton|AWS|EC2|a1\.metal|c7g|t4g)\b[^.]{0,80}\b(IPC|latenc\w*|throughput|p50|p99|benchmark\w*)\b	no IPC, latency or throughput figure was ever taken on a cloud host; the only cloud measurement is boot timing (2026-09-20)
-\b(IPC|latenc\w*|throughput|p50|p99|benchmark\w*)\b[^.]{0,80}\b(Graviton|AWS|EC2|a1\.metal|c7g|t4g)\b	no IPC, latency or throughput figure was ever taken on a cloud host; the only cloud measurement is boot timing (2026-09-20)
+\b(Graviton|AWS|EC2|a1\.metal|c7g|t4g)\b[^.]{0,80}\b(IPC|latenc\w*|throughput|p50|p99|benchmark\w*)\b	the only cloud IPC/latency figure is A6's TCP attribution ladder on a1.metal (2026-09-21); no other IPC, latency or throughput figure was taken on a cloud host
+\b(IPC|latenc\w*|throughput|p50|p99|benchmark\w*)\b[^.]{0,80}\b(Graviton|AWS|EC2|a1\.metal|c7g|t4g)\b	the only cloud IPC/latency figure is A6's TCP attribution ladder on a1.metal (2026-09-21); no other IPC, latency or throughput figure was taken on a cloud host
+!\battribution ladder\b[^.]*\ba1\.metal\b|\ba1\.metal\b[^.]*\battribution ladder\b	the A6 attribution ladder over TCP did run on a1.metal (2026-09-21, results/orin-native-port/20260921T-ladder-a1metal)
 
 # --- Graviton as a LEG or a RUNTIME HOST. Narrowed twice.
 # 2026-09-20 (first): the rule was a bare \bGraviton\b, from when every Graviton

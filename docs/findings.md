@@ -9,6 +9,31 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-22 — correction: a cloud latency figure does exist, and four places said none did
+
+The owner asked why `results/cloud/`'s figure is still TCG when a cloud host with
+KVM exists. Answering it turned up a stale claim. On 2026-09-21 the A6
+attribution ladder ran on AWS `a1.metal` over TCP
+([record](../results/orin-native-port/20260921T-ladder-a1metal/results.md): D-guest
+224.3 µs at p50 against the Orin's 181.8 µs). Yet `results/cloud/README.md`,
+`docs/architecture.md` and `docs/digital-twin-design.md` all still said no IPC,
+latency or throughput figure had ever been taken on a cloud host, and so did two
+rules in `scripts/ci/claim-denylist.txt`. The first two were written before the
+run (2026-09-20, and the morning of 2026-09-21); nothing flagged them afterwards,
+and this log never had an entry for the a1.metal ladder. All four now name it as
+the only cloud IPC figure. The rules stay for every other cloud IPC claim, and an
+exemption clears the ladder.
+
+The question's answer is now in `results/cloud/README.md`: A1 is QHV hosting a
+QNX guest over QHV's own virtio-console vdev. QHV needs EL2, a KVM guest gets EL1,
+and KVM on `a1.metal`'s Cortex-A72 does not nest. So a cloud host with KVM can
+run A6 (QNX as a guest) but never A1, and A1's figure stays TCG history (OD10).
+
+What this does not change: no cloud leg has been built, and no UDP,
+shared-memory or throughput figure exists from any cloud host.
+
+---
+
 ## 2026-09-22 — notified shared memory: 125 µs with an ivshmem doorbell out, 92 µs under TCP; no doorbell reaches this guest
 
 The owner asked for the interrupt-driven variant of the shared-memory arm. It

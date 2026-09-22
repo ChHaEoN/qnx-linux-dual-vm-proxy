@@ -242,12 +242,14 @@ Detail: [architecture.md](docs/architecture.md) ·
 built*, ran on the **local Windows host under QEMU TCG** — not on the
 Graviton instance the design called for, because non-metal Graviton exposes
 no `/dev/kvm`/EL2 ([ADR-002](docs/phase2-topology-decision.md)). AWS earned
-its keep three times over. An `a1.metal` instance supplied the cross-vendor
+its keep four times over. An `a1.metal` instance supplied the cross-vendor
 reproduction of the defect (2026-07-29); on 2026-09-19 a matched pair there
 reproduced both the defect (shipped startup, 17 bytes) and its removal (rebuilt
 startup, 1301 bytes, `Startup complete` + banner), refuting Hypothesis 7; and on
 2026-09-20 it was the second host in the boot comparison of
-[`§1b`](docs/digital-twin-design.md). H-C stays open — no trace was taken
+[`§1b`](docs/digital-twin-design.md); and on 2026-09-21 the attribution ladder of
+A6 ran there over TCP, the only IPC figure this project has taken on a cloud host
+([record](results/orin-native-port/20260921T-ladder-a1metal/results.md)). H-C stays open — no trace was taken
 there — and the 2026-09-19 arms are one run each with nothing timed.
 
 ---

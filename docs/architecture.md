@@ -191,6 +191,9 @@ the design called for was never built. Bare metal is different: `a1.metal` has
 2026-09-20 it was the second host in a two-host boot comparison on a
 byte-identical image.
 
-**No IPC, latency or throughput figure has ever been taken on any cloud host.**
+On 2026-09-21 the attribution ladder of A6 ran on `a1.metal` too, over TCP
+([record](../results/orin-native-port/20260921T-ladder-a1metal/results.md)). That
+is the only cloud IPC figure: no UDP, shared-memory or throughput figure has been
+taken on a cloud host.
 `c7g.metal`, the closer core match, stays quota-blocked at 64 vCPU against a
 32-vCPU account limit.

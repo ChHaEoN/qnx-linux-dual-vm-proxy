@@ -39,11 +39,32 @@ comparison in any respect: different host, different ISA, different transport,
 different OS pair, different sample size. `diff-results.sh` prints that warning
 at run time; read it.
 
+## Why it is still TCG, now that a cloud host has KVM
+
+Because what it measures cannot run under KVM. A1 is the QNX Hypervisor (`qvm`)
+hosting a QNX guest, and the transport is QHV's own virtio-console vdev. QHV has
+to run at EL2. A KVM guest only ever gets EL1, and KVM on `a1.metal`'s
+Cortex-A72 offers no nested virtualisation, so KVM can host a QNX *guest* there
+but not a QNX *hypervisor*. That left TCG, which emulates EL2, or bare metal,
+which is A4 on the Orin (figures unpublished). OD10 (2026-09-20) withdrew the
+TCG legs, so this figure is history: it is not re-run, and it never will be
+under KVM.
+
 ## What has been measured on a cloud host
 
-One thing, once: **boot timing**. On 2026-09-20 a byte-identical QNX IFS booted
-under KVM on an AWS `a1.metal` and on the Jetson Orin Nano, and both sides were
-timed — see
-[`results/orin-native-port/20260920T-kvm-twin/`](../orin-native-port/20260920T-kvm-twin/results.md).
-That is a boot comparison and nothing more. **No IPC, latency or throughput
-figure has ever been taken on any cloud host**, and no cloud leg has been built.
+Two things, both on `a1.metal` under KVM with QNX as a guest (A6), and neither
+is what this directory's CSV measures:
+
+- **Boot timing** (2026-09-20). A byte-identical QNX IFS booted under KVM on
+  `a1.metal` and on the Jetson Orin Nano, and both sides were timed — see
+  [`results/orin-native-port/20260920T-kvm-twin/`](../orin-native-port/20260920T-kvm-twin/results.md).
+- **A6's attribution ladder over TCP** (2026-09-21). The same four arms as on
+  the Orin, a 64-byte round trip from the host to the guest's monitor; the
+  attribution ladder on `a1.metal` put it at 224.3 µs at p50 against the Orin's
+  181.8 µs — see
+  [`results/orin-native-port/20260921T-ladder-a1metal/`](../orin-native-port/20260921T-ladder-a1metal/results.md).
+  Graviton1 is a Cortex-A72 against the Orin's A78AE, on a different kernel,
+  so the pair differs in a bundle of variables, not one.
+
+No UDP, shared-memory or throughput figure has been taken on a cloud host, and
+no cloud leg in this project's sense — a QHV host plus a guest — has been built.

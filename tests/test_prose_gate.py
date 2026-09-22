@@ -37,9 +37,9 @@ DENYLIST = os.path.join("scripts", "ci", "claim-denylist.txt")
 GATE = os.path.join("scripts", "ci", "claims_gate.py")
 STAGED_SCRIPT = os.path.join("scripts", "prose-gate-test.sh")
 
-# Sentences that assert a Graviton LEG or a Graviton NUMBER. None of this ever
-# existed: no cloud leg was built and no timing, latency or throughput figure
-# was ever taken on AWS.
+# Sentences that assert a Graviton LEG or a Graviton NUMBER. None of these
+# exist: no cloud leg was built, and the one cloud latency figure is A6's TCP
+# attribution ladder on a1.metal (2026-09-21), which none of them describes.
 MUST_BLOCK = [
     "The cloud twin runs on a Graviton c7g.large runtime host.",
     "Latency was measured on Graviton and on the Orin.",
@@ -75,6 +75,9 @@ MUST_ALLOW = [
     # "cloud leg" is the project's NAME for architecture A1, which ran on the
     # local Windows PC. The rules key on host tokens, never on this word.
     "The cloud-leg IPC benchmark produced its first real numbers.",
+    # True since 2026-09-21 (results/orin-native-port/20260921T-ladder-a1metal),
+    # yet banned by the rules until 2026-09-22; cleared by an exemption.
+    "The attribution ladder ran on a1.metal over TCP, with a p50 latency of 224 us to the guest's monitor.",
 ]
 
 

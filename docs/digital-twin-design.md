@@ -53,9 +53,11 @@ substrates:
   So an ARM cloud host running these images under KVM is possible again — on
   `*.metal` only. **2026-09-20: `a1.metal` has now been measured** — it was the
   second host in the boot comparison of §1b, n=5 timed boots on a byte-identical
-  image. What still does not exist is a cloud *leg* in this project's sense: no
-  QHV host plus guest, and **no IPC, latency or throughput figure has ever been
-  taken on any cloud host**. The §5 figures stay architecture-version history.
+  image. On 2026-09-21 the attribution ladder of A6 ran on `a1.metal` too, over
+  TCP ([record](../results/orin-native-port/20260921T-ladder-a1metal/results.md)),
+  the only cloud IPC figure. What still does not exist is a cloud *leg* in this
+  project's sense, a QHV host plus guest, and QHV cannot run under KVM at all.
+  The §5 figures stay architecture-version history.
   Non-metal Graviton still has no `/dev/kvm` (the t4g.small probe stands),
   `c7g.metal` — the closer core match — stays quota-blocked at 64 vCPU, and
   `a1.metal` is Cortex-A72 against the Orin's A78AE, so even a revived pair
