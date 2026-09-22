@@ -457,6 +457,28 @@ the monitor binary rebuilt. With three transports in one ladder the transport or
 over the groups, so K is a multiple of 6. The monitor keeps spinning 50 ms after its last request, then
 looks every 10 ms.
 
+**OD12, the notified shared-memory arms, 2026-09-22 (owner, when told the doorbell cannot reach the guest:
+build both variants).** QEMU 6.2's `ivshmem-doorbell` interrupts a guest only by MSI-X -- its
+`ivshmem_vector_notify()` drops the notification when MSI-X is off -- and MSI-X in this QNX guest needs the
+PCI server, whose `pci_hw-fdt.so` refuses QEMU virt (an `[ecam]` override in its HW configuration file
+changed nothing). So the host reaches the guest through a virtio console in every guest arm (`devc-virtio` on
+the fourth virtio-mmio slot, SPI 44), and the guest answers either over the same console (D-kick) or through
+the ivshmem Doorbell register, which a KVM ioeventfd turns into a write to the probe's eventfd (D-db). Host
+baselines: A-kick (a kick byte each way over a UNIX socket) and A-db (the reply as an eventfd write, through
+this project's own ivshmem server); a bare echo, C-kick, separates the console round trip from the slot. So
+(D-kick − D-db) − (A-kick − A-db) isolates the guest's transmit path net of the host's wait primitive. Data
+stays in the slot of the polled arm's protocol, at offset 4096, with its own magic. A design review before any
+code found a use-after-free in QEMU 6.2 on reused peer ids (ids now only go up, from 1), a race in which QEMU
+drops a doorbell to a peer it has not registered yet (an untimed handshake before warm-up; a reply without its
+notification is its own failure, never a stall), and a system call on the host monitor's reply path that only
+A-db would pay (none now). Before any D-db sample the run proves the doorbell stays in the kernel: one
+exchange answered by N doorbells must deliver all N and raise the VM's `mmio_exit_kernel` by at least N while
+`mmio_exit_user` stays at background, or the run refuses. The VM's KVM counters and QEMU's per-thread schedstat
+are snapshotted around every arm, and the gate requires every notified exchange to end on exactly one
+notification. The guest image is `ifs-kick.bin`, built from
+[`ifs-kick.build`](../ipc-test/qnx-safety-monitor/ifs-kick.build): `ifs-shm.bin` plus `devc-virtio` and three
+start lines, one of which configures the ivshmem function once before any monitor maps it.
+
 Measurements taken before the freeze become architecture-version history. They are kept, labelled with the architecture they ran on, and not chased.
 
 This section carries no figures. Public figures stay where the inventory below points. Figures from M3 and from dry run 7b stay on the local branch `m3-results-unpublished` (§9).

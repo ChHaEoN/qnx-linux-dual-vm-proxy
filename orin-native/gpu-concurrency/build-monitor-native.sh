@@ -31,10 +31,11 @@ INC="${repo}/ipc-test/common"
 # (QEMU's ivshmem device, configured through ECAM). monitor.c calls shm_map() and never learns
 # which one it got.
 MAP="${INC}/shm_map_posix.c"
+IVC="${INC}/ivshm_client.c"   # the host side's ivshmem peer (the notified variant)
 OUT="${OUT:-${HOME}/ladder/monitor-native}"
 CC="${CC:-gcc}"
 
-for f in "${SRC}" "${INC}/frame.h" "${INC}/frame_io.h" "${INC}/shm_chan.h" "${INC}/shm_map.h" "${MAP}"; do
+for f in "${SRC}" "${INC}/frame.h" "${INC}/frame_io.h" "${INC}/shm_chan.h" "${INC}/shm_map.h" "${MAP}" "${IVC}" "${INC}/ivshm_client.h"; do
 	[ -r "$f" ] || { echo "ERROR: missing source: $f" >&2; exit 1; }
 done
 
@@ -52,7 +53,7 @@ fi
 
 mkdir -p "$(dirname "${OUT}")"
 set -x
-"${CC}" -O2 -std=gnu99 -Wall -Wextra -I "${INC}" -o "${OUT}" "${SRC}" "${MAP}"
+"${CC}" -O2 -std=gnu99 -Wall -Wextra -I "${INC}" -o "${OUT}" "${SRC}" "${MAP}" "${IVC}"
 set +x
 
 echo
@@ -60,6 +61,7 @@ echo "built:  ${OUT}"
 echo "sha256: $(sha256sum "${OUT}" | cut -d' ' -f1)"
 echo "source: $(sha256sum "${SRC}" | cut -d' ' -f1)  monitor.c"
 echo "source: $(sha256sum "${MAP}" | cut -d' ' -f1)  $(basename "${MAP}")"
+echo "source: $(sha256sum "${IVC}" | cut -d' ' -f1)  $(basename "${IVC}")"
 echo
 echo "The guest runs this same monitor.c, cross-compiled with qcc. The binaries"
 echo "differ; the program does not."

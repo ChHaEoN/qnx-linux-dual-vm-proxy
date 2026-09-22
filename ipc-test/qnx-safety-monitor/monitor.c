@@ -62,6 +62,19 @@
  * looking every 10 ms, so a monitor left running between arms costs a wake-up
  * every 10 ms rather than a whole core. The first frames after a quiet spell
  * wait for that 10 ms look -- the probe's warm-up frames absorb it.
+ * SPEC may end in @OFFSET to place the slot inside the region.
+ *
+ * AND ITS NOTIFIED VARIANT (OD12, 2026-09-22)
+ *
+ *   monitor shmkick SPEC@OFFSET KICK   the same slot; the server sleeps until a
+ *                                      kick byte arrives on KICK, and tells the
+ *                                      client its reply is ready by a kick byte
+ *                                      back or by a doorbell (shm_chan.h)
+ *   monitor shmcfg SPEC                configure the shared-memory device once and
+ *                                      exit (the guest; a host has nothing to do)
+ *
+ * Nobody spins in shmkick: the server blocks in the kick channel's read. The
+ * judgement is judge_frame() again.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -310,6 +323,36 @@ static int serve_udp(int port)
 	return 0;
 }
 
+/* "NAME@OFFSET" -> NAME in `name`, OFFSET in *off (0 when there is none).
+ * Pure string work, so it stays in the shared source. */
+static int split_spec(const char *spec, char *name, size_t name_len, size_t *off)
+{
+	const char *at = strrchr(spec, '@');
+	size_t n = at ? (size_t)(at - spec) : strlen(spec);
+	char *end = NULL;
+
+	if (n == 0u || n >= name_len) {
+		return -1;
+	}
+	memcpy(name, spec, n);
+	name[n] = '\0';
+	*off = 0u;
+	if (at != NULL) {
+		unsigned long long v;
+		/* strtoull() takes a sign and wraps it: "-4096" would become a huge
+		 * multiple of 64 that passes every later check (FOUND BY CODE REVIEW). */
+		if (at[1] < '0' || at[1] > '9') {
+			return -1;
+		}
+		v = strtoull(at + 1, &end, 0);
+		if (end == at + 1 || *end != '\0' || (v % SHM_CHAN_LINE) != 0u || v > (1ull << 40)) {
+			return -1;
+		}
+		*off = (size_t)v;
+	}
+	return 0;
+}
+
 #define SHM_SPIN_NS  50000000ull   /* keep spinning this long after a request */
 #define SHM_IDLE_NS  10000000L     /* then look this often */
 #define SHM_SPIN_CHECK 4096u       /* spins between clock reads */
@@ -328,15 +371,30 @@ static int serve_shm(const char *spec)
 	uint8_t buf[FRAME_TOTAL_BYTES];
 	unsigned long long seen = 0, accepted = 0, rejected = 0, jumps = 0;
 	unsigned long long seen_at_quiet = 0;
-	char what[192];
-	size_t len = 0;
+	char what[320], name[256];
+	size_t len = 0, off = 0;
 	uint64_t last, active;
 	unsigned spins = 0;
 	int quiet = 1;
-	void *base = shm_map(spec, &len, what, sizeof(what));
+	void *base;
 
+	if (split_spec(spec, name, sizeof(name), &off) != 0) {
+		fprintf(stderr, "monitor: bad shm spec '%s' (NAME or NAME@OFFSET, OFFSET a multiple of %u)\n",
+		        spec, (unsigned)SHM_CHAN_LINE);
+		return 2;
+	}
+	base = shm_map(name, &len, what, sizeof(what));
 	if (base == NULL) {
 		return 1;
+	}
+	if (off > len || len - off < SHM_CHAN_MIN_BYTES) {
+		fprintf(stderr, "monitor: slot @%zu does not fit a %zu-byte region\n", off, len);
+		return 1;
+	}
+	base = (uint8_t *)base + off;
+	if (off != 0u) {
+		size_t const l = strlen(what);
+		snprintf(what + l, sizeof(what) - l, ", slot @%zu", off);
 	}
 
 	/* Take the slot over. Not serving (magic 0) while it is set up; a
@@ -408,6 +466,106 @@ static int serve_shm(const char *spec)
 	return 0;
 }
 
+/* The notified variant: one request outstanding, answered in place, the
+ * client told by a kick byte or a doorbell (shm_chan.h). */
+static int serve_kick(const char *spec, const char *kick)
+{
+	uint8_t buf[FRAME_TOTAL_BYTES];
+	unsigned long long seen = 0, accepted = 0, rejected = 0, jumps = 0, stale = 0;
+	unsigned long long seen_at_burst = 0;
+	char what[384], name[256];
+	size_t off = 0;
+	uint64_t last, last_req_ns = 0;
+	void *slot = NULL;
+	struct shm_kick *k;
+	struct shm_kick_stats st;
+
+	if (split_spec(spec, name, sizeof(name), &off) != 0) {
+		fprintf(stderr, "monitor: bad shm spec '%s' (NAME or NAME@OFFSET, OFFSET a multiple of %u)\n",
+		        spec, (unsigned)SHM_CHAN_LINE);
+		return 2;
+	}
+	k = shm_kick_open(name, off, kick, &slot, what, sizeof(what));
+	if (k == NULL) {
+		return 1;
+	}
+	/* Take the slot over, as the polling server does: a request left from
+	 * before this server is not answered. Its own magic, so a polling client
+	 * refuses it rather than spinning on a server that will never look. */
+	__atomic_store_n(shm_chan_u32(slot, SHM_CHAN_OFF_MAGIC), 0u, __ATOMIC_RELEASE);
+	last = shm_chan_load(slot, SHM_CHAN_OFF_REQ_SEQ);
+	shm_chan_store(slot, SHM_CHAN_OFF_RSP_SEQ, last);
+	*shm_chan_u32(slot, SHM_CHAN_OFF_VERSION) = SHM_CHAN_VERSION;
+	__atomic_store_n(shm_chan_u32(slot, SHM_CHAN_OFF_MAGIC), SHM_CHAN_MAGIC_KICK, __ATOMIC_RELEASE);
+
+	printf("monitor: safety monitor serving shm-kick on %s (frame=%u bytes, conf_min=%u%%)\n",
+	       what, (unsigned)FRAME_TOTAL_BYTES, (unsigned)CONF_MIN);
+	fflush(stdout);
+
+	while (!g_stop) {
+		int handled = 0;
+		int const r = shm_kick_wait(k);
+
+		if (r < 0) {
+			fprintf(stderr, "monitor: shm-kick wait failed: %s\n", strerror(errno));
+			break;
+		}
+		if (r == 0) {
+			continue;
+		}
+		for (;;) {
+			uint64_t const cur = shm_chan_load(slot, SHM_CHAN_OFF_REQ_SEQ);
+			uint32_t via, peer, count;
+			uint64_t const now = now_ns();
+
+			if (cur == last) {
+				break;
+			}
+			if (seen > seen_at_burst && now - last_req_ns > 1000000000ull) {
+				/* A second without requests ends a burst: one line per
+				 * session, as the other servers print. */
+				printf("monitor: shm-kick burst: seen=%llu accepted=%llu rejected=%llu (%llu this burst)\n",
+				       seen, accepted, rejected, seen - seen_at_burst);
+				fflush(stdout);
+				seen_at_burst = seen;
+			}
+			last_req_ns = now;
+			if (cur != last + 1u) {
+				jumps++;
+			}
+			via = shm_chan_load32(slot, SHM_CHAN_OFF_REPLY_VIA);
+			peer = shm_chan_load32(slot, SHM_CHAN_OFF_CLIENT_PEER);
+			count = shm_chan_load32(slot, SHM_CHAN_OFF_RING_COUNT);
+			shm_chan_get_frame(slot, SHM_CHAN_OFF_REQ, buf);
+			if (frame_get_u64(&buf[0]) != FRAME_SENTINEL_SEQ) {
+				seen++;
+				if (judge_frame(buf) == V_ACCEPT) {
+					accepted++;
+				} else {
+					rejected++;
+				}
+			}
+			shm_chan_put_frame(slot, SHM_CHAN_OFF_RSP, buf);
+			shm_chan_store(slot, SHM_CHAN_OFF_RSP_SEQ, cur);
+			last = cur;
+			handled = 1;
+			(void)shm_kick_notify(k, via, peer, count);   /* failures are counted inside */
+		}
+		if (!handled) {
+			stale++;        /* a kick that found no new request */
+		}
+	}
+
+	shm_kick_get_stats(k, &st);
+	printf("monitor: shm-kick done: seen=%llu accepted=%llu rejected=%llu jumps=%llu stale=%llu "
+	       "kick_bytes=%llu echoes=%llu stray=%llu notify_kicks=%llu rings=%llu ring_misses=%llu "
+	       "notify_fail=%llu clients=%llu\n",
+	       seen, accepted, rejected, jumps, stale, st.kick_bytes, st.echoes, st.stray_bytes,
+	       st.notify_kicks, st.rings, st.ring_misses, st.notify_fail, st.clients);
+	fflush(stdout);
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
 	int const port = (argc > 1) ? atoi(argv[1]) : DEFAULT_PORT;
@@ -421,6 +579,26 @@ int main(int argc, char **argv)
 	sigaction(SIGTERM, &sa, NULL);
 	signal(SIGPIPE, SIG_IGN);
 
+	if (argc > 1 && strcmp(argv[1], "shmcfg") == 0) {
+		char what[320];
+		if (argc != 3) {
+			fprintf(stderr, "monitor: usage: monitor shmcfg SPEC\n");
+			return 2;
+		}
+		if (shm_configure(argv[2], what, sizeof(what)) != 0) {
+			return 1;
+		}
+		printf("monitor: shm configured: %s\n", what);
+		fflush(stdout);
+		return 0;
+	}
+	if (argc > 1 && strcmp(argv[1], "shmkick") == 0) {
+		if (argc != 4) {
+			fprintf(stderr, "monitor: usage: monitor shmkick SPEC[@OFFSET] KICK\n");
+			return 2;
+		}
+		return serve_kick(argv[2], argv[3]);
+	}
 	if (argc > 1 && strcmp(argv[1], "shm") == 0) {
 		if (argc != 3) {
 			fprintf(stderr, "monitor: usage: monitor shm SPEC (a /dev/shm file on a host, 'ivshmem' in the guest)\n");

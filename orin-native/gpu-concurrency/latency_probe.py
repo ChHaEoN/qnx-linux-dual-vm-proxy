@@ -6,6 +6,9 @@ distribution rather than a liveness yes/no.
                           [--warmup 200] [--interval-ms 2] [--tag NAME] [--out FILE]
                           [--timeout-s 10] [--stall-out FILE] [--await-recovery S]
          latency_probe.py --proto shm --shm FILE --shm-lib LIB [the same options]
+         latency_probe.py --proto shmkick --shm FILE@OFF --kick SOCK --shm-lib LIB [...]
+         latency_probe.py --proto shmdb --shm FILE@OFF --kick SOCK --ivshm SOCK --shm-lib LIB [...]
+         latency_probe.py --proto kickecho --kick SOCK --shm-lib LIB [...]
 
 THREE TRANSPORTS (OD12). --proto tcp (the default) holds one connection, as
 below. --proto udp sends one frame per datagram on a connected socket and reads
@@ -17,6 +20,20 @@ because its ordering needs store-release/load-acquire, which Python lacks; the
 timing stays here, around that call, as it is around send/recv for the others.
 The rest of this description applies to all three, except that UDP and shm
 have no connection to hold.
+
+NOTIFIED SHARED MEMORY (OD12, 2026-09-22): the same slot, and nobody spins.
+--proto shmkick sends one kick byte down --kick (a UNIX socket: a host-side
+monitor's, or QEMU's virtio console) and sleeps until a kick byte comes back.
+--proto shmdb sends the same kick but sleeps on its own eventfd, which the far
+end rings -- in the guest, by a write to the ivshmem Doorbell register that KVM
+turns into a write to that eventfd. It joins the ivshmem server --ivshm first,
+keeps that connection for the whole arm, and does an untimed handshake before
+the warm-up until one doorbell has actually arrived: QEMU learns a new peer
+asynchronously and drops a doorbell to one it does not know yet. --proto
+kickecho is the bare notification round trip: one byte out, the same byte back,
+no slot. Each arm's summary counts what woke the probe, and a reply that was in
+the slot with no notification is its own failure ("notification lost", exit 5),
+never a stall.
 
 WHAT IT MEASURES. One TCP connection is opened and held; each sample writes a
 valid 64-byte frame (ipc-test/common/frame.h layout) and waits for the monitor's
@@ -176,7 +193,21 @@ def await_recovery(a):
         attempts += 1
         try:
             frame = build_frame(1)
-            if a.proto == "shm":
+            if a.proto in NOTIFIED:
+                # Each attempt joins and LEAVES: an attempt that kept its ivshmem
+                # peer would leave a phantom peer at QEMU and the monitor.
+                kc = KickChannel(a.shm_lib, a.proto, a.shm, a.kick, a.ivshm)
+                try:
+                    if not kc.ready():
+                        raise OSError("no notified server")
+                    kc.handshake(within_s=1.0)
+                    rc = kc.roundtrip(frame, 1.0)
+                    if rc != KickChannel.OK:
+                        raise OSError("%s roundtrip rc=%d" % (a.proto, rc))
+                    got = frame if a.proto == "kickecho" else kc.rsp.raw
+                finally:
+                    kc.close()
+            elif a.proto == "shm":
                 chan = ShmChannel(a.shm_lib, a.shm)
                 rc = chan.roundtrip(frame, 1.0)
                 if rc != ShmChannel.OK:
@@ -254,6 +285,146 @@ class ShmChannel:
         return self.lib.shmchan_roundtrip(self.base, frame, self.rsp, int(timeout_s * 1e9))
 
 
+NOTIFIED = ("shmkick", "shmdb", "kickecho")
+SHM_VIA_KICK, SHM_VIA_DOORBELL, SHM_VIA_BURST = 0, 1, 3
+
+
+class KickChannel:
+    """The probe's end of the notified variant (shm_chan.h), through libshmchan.so."""
+    OK, TIMEOUT, NOTREADY, BROKEN, LOST = 0, 1, 2, 3, 4
+    COUNT_NAMES = ("exchanges", "wakeups", "early_wakeups", "notifications", "stray", "eagain")
+
+    def __init__(self, lib_path, proto, slot_spec, kick_path, ivshm_path):
+        import ctypes
+        c = ctypes
+        lib = c.CDLL(lib_path)
+        lib.shm_map.restype = c.c_void_p
+        lib.shm_map.argtypes = [c.c_char_p, c.POINTER(c.c_size_t), c.c_char_p, c.c_size_t]
+        lib.shmchan_kick_ready.restype = c.c_int
+        lib.shmchan_kick_ready.argtypes = [c.c_void_p]
+        lib.shmchan_kick_roundtrip.restype = c.c_int
+        lib.shmchan_kick_roundtrip.argtypes = [c.c_void_p, c.c_char_p, c.POINTER(c.c_char), c.c_uint64,
+                                               c.c_int, c.c_int, c.c_uint32, c.c_uint32, c.c_uint32]
+        lib.shmchan_echo_roundtrip.restype = c.c_int
+        lib.shmchan_echo_roundtrip.argtypes = [c.c_int, c.c_uint64]
+        lib.shmchan_burst_total.restype = c.c_uint64
+        lib.shmchan_burst_total.argtypes = [c.c_int, c.c_uint64, c.c_uint64]
+        lib.shmchan_counts.restype = None
+        lib.shmchan_counts.argtypes = [c.POINTER(c.c_uint64)]
+        lib.shmchan_fd_flags.restype = c.c_int
+        lib.shmchan_fd_flags.argtypes = [c.c_int]
+        lib.shmchan_ivshm_connect.restype = c.c_void_p
+        lib.shmchan_ivshm_connect.argtypes = [c.c_char_p]
+        lib.shmchan_ivshm_id.restype = c.c_longlong
+        lib.shmchan_ivshm_id.argtypes = [c.c_void_p]
+        lib.shmchan_ivshm_efd.restype = c.c_int
+        lib.shmchan_ivshm_efd.argtypes = [c.c_void_p]
+        lib.shmchan_ivshm_close.restype = None
+        lib.shmchan_ivshm_close.argtypes = [c.c_void_p]
+        lib.shmchan_drain_quiet.restype = None
+        lib.shmchan_drain_quiet.argtypes = [c.c_int, c.c_int]
+        lib.shmchan_slot_answered.restype = c.c_int
+        lib.shmchan_slot_answered.argtypes = [c.c_void_p]
+        self._c, self.lib, self.proto = c, lib, proto
+        self.via = SHM_VIA_DOORBELL if proto == "shmdb" else SHM_VIA_KICK
+        self.peer, self.efd, self.ivshm, self.slot, self.what = 0, -1, None, None, ""
+        self.rsp = c.create_string_buffer(FRAME_TOTAL)
+        # The ivshmem server FIRST, then the kick socket: the server tells the
+        # far end about this peer before it hands this peer its eventfd, so by
+        # the time the first kick lands the far end can already ring it.
+        if proto == "shmdb":
+            self.ivshm = lib.shmchan_ivshm_connect(ivshm_path.encode())
+            if not self.ivshm:
+                raise OSError("could not join the ivshmem server %s -- see stderr" % ivshm_path)
+            self.peer = lib.shmchan_ivshm_id(self.ivshm)
+            self.efd = lib.shmchan_ivshm_efd(self.ivshm)
+        if proto != "kickecho":
+            path, _, off = slot_spec.rpartition("@")
+            if not path:
+                path, off = slot_spec, "0"
+            if not off.isdigit():
+                # a sign would put the slot outside the mapping (FOUND BY CODE REVIEW)
+                raise OSError("slot offset %r is not a plain non-negative number" % off)
+            size = c.c_size_t(0)
+            what = c.create_string_buffer(320)
+            base = lib.shm_map(path.encode(), c.byref(size), what, len(what))
+            if not base:
+                raise OSError("shm_map(%s) failed -- see stderr" % path)
+            off = int(off, 0)
+            if off % 64 or off + 4096 > size.value:
+                raise OSError("slot @%d does not fit %s (%d bytes)" % (off, path, size.value))
+            self.slot = base + off
+            self.what = "%s, slot @%d" % (what.value.decode(), off)
+        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.sock.connect(kick_path)
+        self.kick_fd = self.sock.fileno()
+        self.wait_fd = self.efd if proto == "shmdb" else self.kick_fd
+        self.flags_start = lib.shmchan_fd_flags(self.wait_fd)
+
+    def ready(self):
+        return self.proto == "kickecho" or bool(self.lib.shmchan_kick_ready(self.slot))
+
+    def roundtrip(self, frame, timeout_s, via=None, count=0):
+        ns = int(timeout_s * 1e9)
+        if self.proto == "kickecho":
+            return self.lib.shmchan_echo_roundtrip(self.kick_fd, ns)
+        return self.lib.shmchan_kick_roundtrip(self.slot, frame, self.rsp, ns, self.kick_fd, self.efd,
+                                               self.via if via is None else via, self.peer, count)
+
+    def handshake(self, within_s=5.0):
+        """shmdb only: exchanges until one doorbell has arrived, untimed. Returns
+        the number of attempts; raises OSError if none arrives in time.
+
+        A LOST attempt (reply in the slot, doorbell dropped: QEMU had not yet
+        registered this peer) is simply retried. A TIMEOUT (no reply yet) is
+        waited out before the next attempt, so a slot never has two requests in
+        it; and whatever that late reply's doorbell leaves on the eventfd is
+        discarded, uncounted, before the arm's first timed exchange."""
+        if self.proto != "shmdb":
+            return 0
+        t0 = time.monotonic()
+        attempts = 0
+        while time.monotonic() - t0 < within_s:
+            attempts += 1
+            rc = self.roundtrip(build_frame(1), 0.2)
+            if rc == self.OK:
+                self.lib.shmchan_drain_quiet(self.efd, 1)
+                return attempts
+            if rc == self.TIMEOUT:
+                while not self.lib.shmchan_slot_answered(self.slot) and time.monotonic() - t0 < within_s:
+                    time.sleep(0.01)
+                self.lib.shmchan_drain_quiet(self.efd, 1)
+            elif rc != self.LOST:
+                raise OSError("handshake failed (rc=%d)" % rc)
+        raise OSError("no doorbell arrived in %.0f s (%d attempts)" % (within_s, attempts))
+
+    def burst(self, n, timeout_s):
+        """One SHM_VIA_BURST exchange: the far end rings n doorbells. Returns
+        (rc, doorbells counted)."""
+        before = self.counts()["notifications"]
+        rc = self.roundtrip(build_frame(1), timeout_s, via=SHM_VIA_BURST, count=n)
+        got = self.counts()["notifications"] - before
+        if rc == self.OK and got < n:
+            got += self.lib.shmchan_burst_total(self.efd, n - got, int(timeout_s * 1e9))
+        return rc, got
+
+    def counts(self):
+        arr = (self._c.c_uint64 * 6)()
+        self.lib.shmchan_counts(arr)
+        return dict(zip(self.COUNT_NAMES, (int(v) for v in arr)))
+
+    def nonblocking(self):
+        return bool(self.lib.shmchan_fd_flags(self.wait_fd) & os.O_NONBLOCK)
+
+    def close(self):
+        """Leave everything this channel joined: the kick stream and the ivshmem
+        server (which then tells QEMU or the monitor that this peer is gone)."""
+        self.sock.close()
+        if self.ivshm:
+            self.lib.shmchan_ivshm_close(self.ivshm)
+            self.ivshm = None
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default="")
@@ -267,9 +438,15 @@ def main():
                     help="per-connect and per-reply limit; a reply later than this is a stall")
     ap.add_argument("--stall-out", default="",
                     help="on a stall, write a stall record here (the arm still exits %d)" % EXIT_DESYNC)
-    ap.add_argument("--proto", choices=("tcp", "udp", "shm"), default="tcp",
+    ap.add_argument("--proto", choices=("tcp", "udp", "shm") + NOTIFIED, default="tcp",
                     help="transport; udp sends one frame per datagram on a connected socket, "
-                         "shm uses a shared-memory slot in --shm")
+                         "shm uses a shared-memory slot in --shm; shmkick, shmdb and kickecho "
+                         "are its notified variants")
+    ap.add_argument("--kick", default="", help="notified variants: the kick socket")
+    ap.add_argument("--ivshm", default="", help="with --proto shmdb: the ivshmem server socket")
+    ap.add_argument("--db-burst", type=int, default=0,
+                    help="with --proto shmdb, instead of sampling: one exchange whose reply is N "
+                         "doorbells, and a count of how many arrived")
     ap.add_argument("--shm", default="", help="with --proto shm: the shared-memory file")
     ap.add_argument("--shm-lib", default="", help="with --proto shm: libshmchan.so, built from shmchan.c")
     ap.add_argument("--await-recovery", type=float, default=0.0,
@@ -278,8 +455,16 @@ def main():
     if a.proto == "shm":
         if not (a.shm and a.shm_lib):
             ap.error("--proto shm needs --shm and --shm-lib")
+    elif a.proto in NOTIFIED:
+        if not (a.kick and a.shm_lib) or (a.proto != "kickecho" and not a.shm):
+            ap.error("--proto %s needs --kick, --shm-lib and (but for kickecho) --shm" % a.proto)
+        if a.proto == "shmdb" and not a.ivshm:
+            ap.error("--proto shmdb needs --ivshm")
     elif not a.host:
         ap.error("--host is required for --proto %s" % a.proto)
+
+    if a.db_burst and a.proto != "shmdb":
+        ap.error("--db-burst needs --proto shmdb")
 
     if a.await_recovery > 0:
         return await_recovery(a)
@@ -296,8 +481,37 @@ def main():
     # broken stream, exit 5, exactly as on TCP.
     udp = a.proto == "udp"
     shm = a.proto == "shm"
+    notified = a.proto in NOTIFIED
     chan = None
-    if shm:
+    kc = None
+    handshake = 0
+    counts0 = None
+    if notified:
+        # Nothing to connect to is "could not connect", exit 2, as for TCP.
+        try:
+            kc = KickChannel(a.shm_lib, a.proto, a.shm, a.kick, a.ivshm)
+        except OSError as e:
+            print("FATAL %s: %s" % (a.proto, e))
+            return 2
+        if not kc.ready():
+            print("FATAL %s: no notified server is serving %s (%s)" % (a.proto, a.shm, kc.what))
+            return 2
+        try:
+            handshake = kc.handshake()
+        except OSError as e:
+            return _broken(a, "doorbell handshake: %s" % e, 0, 1, 0)
+        if a.db_burst:
+            rc, got = kc.burst(a.db_burst, a.timeout_s)
+            rec = {"burst": {"tag": a.tag, "want": a.db_burst, "got": got, "rc": rc,
+                             "peer": kc.peer, "handshake_attempts": handshake}}
+            print("BURST %s" % json.dumps(rec["burst"]))
+            if a.out:
+                with open(a.out, "w") as f:
+                    json.dump(rec, f)
+            return 0 if (rc == KickChannel.OK and got == a.db_burst) else 6
+        counts0 = kc.counts()
+        s = None
+    elif shm:
         # No server (magic not published) is "could not connect", exit 2, as a
         # refused TCP connect is: nothing was sampled, and nothing stalled.
         try:
@@ -347,7 +561,21 @@ def main():
         if seq >= (1 << 63):          # never reach the sentinel
             seq = 1
         frame = build_frame(seq)
-        if shm:
+        if notified:
+            t0 = time.perf_counter()
+            rc = kc.roundtrip(frame, a.timeout_s)
+            t1 = time.perf_counter()
+            if rc == KickChannel.TIMEOUT:
+                return _abort(a, "sample %d: no reply within %.1f s" % (i, a.timeout_s),
+                              i, bad + 1, rejected, "timeout", in_arrival)
+            if rc == KickChannel.LOST:
+                return _broken(a, "sample %d: notification lost -- the reply was in the slot and "
+                               "nothing said so within %.1f s" % (i, a.timeout_s), i, bad + 1, rejected)
+            if rc != KickChannel.OK:
+                return _broken(a, "sample %d: the kick channel broke (rc=%d)" % (i, rc),
+                               i, bad + 1, rejected)
+            got = frame if a.proto == "kickecho" else kc.rsp.raw
+        elif shm:
             t0 = time.perf_counter()
             rc = chan.roundtrip(frame, a.timeout_s)
             t1 = time.perf_counter()
@@ -395,7 +623,7 @@ def main():
                            % (i, len(got), FRAME_TOTAL,
                               "match" if got[:8] == frame[:8] else "MISMATCH"),
                            i, bad + 1, rejected)
-        if got[FRAME_HEADER + P_VERDICT] != 0:
+        if a.proto != "kickecho" and got[FRAME_HEADER + P_VERDICT] != 0:
             rejected += 1          # monitor disagreed: a fault, not a timing sample
             continue
         if i >= a.warmup:
@@ -439,6 +667,13 @@ def main():
     }
     if shm:
         res["shm_region"] = chan.what
+    if notified:
+        counts1 = kc.counts()
+        res["shm_region"] = kc.what
+        res["notify"] = {k: counts1[k] - counts0[k] for k in KickChannel.COUNT_NAMES}
+        res["wait_fd_nonblock"] = [bool(kc.flags_start & os.O_NONBLOCK), kc.nonblocking()]
+        res["ivshm_peer"] = kc.peer
+        res["handshake_attempts"] = handshake
     res.update(own_scheduling())
     print("RESULT %s" % json.dumps(res))
     print("  tag=%-12s n=%-5d min=%.3f p50=%.3f p90=%.3f p99=%.3f p99.9=%.3f max=%.3f  bad=%d rej=%d"

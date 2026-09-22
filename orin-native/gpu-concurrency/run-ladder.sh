@@ -64,6 +64,30 @@
 # from its own command line), and the probe's end is libshmchan.so, built here
 # from shmchan.c.
 #
+# NOTIFIED SHM ARMS (OD12, 2026-09-22), opt-in with KICK=1 and DB=1: the same
+# slot (at SLOT_OFF, clear of the polled one), and nobody spins (shm_chan.h).
+#   A-kick  probe <-> host monitor, a kick byte each way over a UNIX socket
+#   C-kick  probe <-> the guest's shmkick monitor over the virtio console, one
+#           byte echoed, no slot: the bare notification round trip
+#   D-kick  probe <-> the guest's shmkick monitor: kick over the virtio console,
+#           the reply kicked back over it
+#   A-db    as A-kick, but the host monitor answers by writing the probe's
+#           eventfd, learned as a peer of a host-side ivshmem server
+#   D-db    as D-kick, but the guest answers by writing the ivshmem Doorbell
+#           register, which KVM turns into a write to the probe's eventfd
+# QEMU 6.2's ivshmem-doorbell interrupts a guest only by MSI-X, which this guest
+# cannot have, so host->guest is the virtio console in every guest arm and only
+# guest->host varies between D-kick and D-db. The running QEMU must present
+# ivshmem-doorbell on IVSHMEM_SERVER and a virtconsole on KICK_SOCK (checked from
+# its command line), with the server alive on CORE_AUX. With DB=1 the run first
+# PROVES the doorbell path: one exchange answered by DB_BURST doorbells must
+# deliver all of them and raise the VM's mmio_exit_kernel by at least that many
+# while mmio_exit_user stays at background -- otherwise the doorbells are taking
+# QEMU's userspace path and D-db would not measure what it is called; the run
+# refuses. KVM_STATS=1 snapshots the VM's KVM counters and QEMU's per-thread
+# schedstat around every arm (lib-measure.sh m_kvm_snap). UDP_IN_TCP=1 puts D-udp
+# in the tcp group, a datagram comparator without a fifth group.
+#
 # TRANSPORT ORDER. With more than one transport, the order of the transport
 # groups in each round follows a Williams design over the groups (as the loaded
 # arms elsewhere do), so K must be a multiple of its period: 2 for two
@@ -90,15 +114,38 @@ ARM_C_UDP_PORT="${ARM_C_UDP_PORT:-}"
 SHM="${SHM:-0}"
 SHM_HOST_FILE="${SHM_HOST_FILE:-/dev/shm/a6-shm-host}"
 IVSHMEM="${IVSHMEM:-/dev/shm/a6-ivshmem}"
+KICK="${KICK:-0}"
+DB="${DB:-0}"
+UDP_IN_TCP="${UDP_IN_TCP:-0}"
+KVM_STATS="${KVM_STATS:-0}"
+DB_BURST="${DB_BURST:-10000}"
+SLOT_OFF="${SLOT_OFF:-4096}"
+KICK_SOCK="${KICK_SOCK:-/tmp/a6-kick.sock}"
+IVSHMEM_SERVER="${IVSHMEM_SERVER:-/tmp/a6-ivshmem.sock}"
+HOST_IVSHM_SOCK="${HOST_IVSHM_SOCK:-/tmp/a6-ivshmem-host.sock}"
+HOST_KICK_SOCK="${HOST_KICK_SOCK:-/tmp/a6-kick-host.sock}"
+CORE_AUX="${CORE_AUX:-5}"        # the ivshmem servers and the KVM counter reader
 STALL_POLICY=refuse              # the ladder's figures are headlines: any stall stops it
 case "$UDP" in 0|1) ;; *) die "UDP='$UDP' must be 0 or 1" ;; esac
 case "$SHM" in 0|1) ;; *) die "SHM='$SHM' must be 0 or 1" ;; esac
+for v in KICK DB UDP_IN_TCP KVM_STATS; do
+	case "${!v}" in 0|1) ;; *) die "$v='${!v}' must be 0 or 1" ;; esac
+done
+case "$DB_BURST" in ''|*[!0-9]*) die "DB_BURST='$DB_BURST' is not a count" ;; esac
+# At least 1000, so the ordinary console-RX user exits during the burst cannot
+# fail the proof's "under a tenth" bound; at most the monitor's SHM_BURST_MAX.
+[ "$DB_BURST" -ge 1000 ] && [ "$DB_BURST" -le 100000 ] || die "DB_BURST=$DB_BURST must be 1000..100000"
+[ "$UDP$UDP_IN_TCP" = 11 ] && die "UDP_IN_TCP=1 needs UDP=0: with UDP=1, D-udp is already in the udp group"
+case "$SLOT_OFF" in ''|*[!0-9]*) die "SLOT_OFF='$SLOT_OFF' is not a byte offset" ;; esac
+[ $((SLOT_OFF % 4096)) -eq 0 ] && [ "$SLOT_OFF" -gt 0 ] || die "SLOT_OFF=$SLOT_OFF must be a non-zero multiple of 4096 (the polled slot is at 0)"
 case "$PORT_UDP" in ''|*[!0-9]*) die "PORT_UDP='$PORT_UDP' is not a port number" ;; esac
 case "$ARM_C_UDP_PORT" in *[!0-9]*) die "ARM_C_UDP_PORT='$ARM_C_UDP_PORT' is not a port number" ;; esac
 case "$K" in ''|*[!0-9]*) die "K='$K' is not a round count" ;; esac
 TGROUPS=(tcp)
 [ "$UDP" = 1 ] && TGROUPS+=(udp)
 [ "$SHM" = 1 ] && TGROUPS+=(shm)
+[ "$KICK" = 1 ] && TGROUPS+=(kick)
+[ "$DB" = 1 ] && TGROUPS+=(db)
 if [ "${#TGROUPS[@]}" -gt 1 ]; then
 	TPERIOD="$(m_williams_period "${#TGROUPS[@]}")"
 	[ $((K % TPERIOD)) -eq 0 ] \
@@ -125,7 +172,9 @@ cleanup() {
 	sudo ip netns pids "$NS" 2>/dev/null | while read -r p; do sudo kill "$p" 2>/dev/null; done
 	sudo ip netns del "$NS" 2>/dev/null
 	sudo ip link del veth-l 2>/dev/null
-	[ "$SHM" = 1 ] && rm -f "$SHM_HOST_FILE"
+	[ -n "${HOST_SRV_PID:-}" ] && kill "$HOST_SRV_PID" 2>/dev/null
+	[ "$KICK$DB" != 00 ] && rm -f "$HOST_KICK_SOCK" "$HOST_IVSHM_SOCK" "$HOST_IVSHM_SOCK.ready"
+	[ "$SHM$KICK$DB" != 000 ] && rm -f "$SHM_HOST_FILE"
 	m_cstate_restore
 	m_governor_restore
 }
@@ -137,25 +186,58 @@ cleanup() {
 	&& die "a monitor-native is already running; it would answer arm A in place of this run's. Stop it first."
 [ -x "$MON" ] || die "$MON missing -- run build-monitor-native.sh on this host"
 [ -r "$PROBE" ] || die "missing: $PROBE"
-if [ "$SHM" = 1 ]; then
+if [ "$SHM$KICK$DB" != 000 ]; then
 	[ -r "$here/shmchan.c" ] || die "missing: $here/shmchan.c"
 	[ -r "$SHM_COMMON/shm_chan.h" ] || die "missing: $SHM_COMMON/shm_chan.h (set SHM_COMMON to ipc-test/common)"
 	[ -e "$SHM_HOST_FILE" ] && die "$SHM_HOST_FILE exists -- a leftover from another run; remove it first"
 	# The guest's end must be THIS file: read from the running QEMU itself.
 	qp="$(m_pids_of qemu-system-aarch64)"
-	[ -n "$qp" ] || die "SHM=1: no qemu-system-aarch64 is running"
-	qcmd="$(tr '\0' ' ' < "/proc/${qp%% *}/cmdline")"
+	[ -n "$qp" ] || die "no qemu-system-aarch64 is running"
+	[ "$(printf '%s\n' "$qp" | grep -c .)" = 1 ] || die "more than one qemu-system-aarch64 is running"
+	qcmd="$(tr '\0' ' ' < "/proc/$qp/cmdline")"
 	case "$qcmd" in
-		*"mem-path=$IVSHMEM,"*|*"mem-path=$IVSHMEM "*) ;;
-		*) die "SHM=1: the running QEMU does not back a device with $IVSHMEM -- relaunch with IVSHMEM=$IVSHMEM" ;;
+		*ivshmem-doorbell*)
+			# The doorbell device's memory comes from the server: QEMU must hold
+			# an fd to $IVSHMEM, and its chardev must be that server's socket.
+			case "$qcmd" in *"path=$IVSHMEM_SERVER "*|*"path=$IVSHMEM_SERVER,"*) ;;
+				*) die "the running QEMU's ivshmem-doorbell does not use the server $IVSHMEM_SERVER" ;; esac
+			case "$qcmd" in *ioeventfd=off*) die "the running QEMU has ivshmem ioeventfd=off" ;; esac
+			ls -l "/proc/$qp/fd/" 2>/dev/null | grep -q -- "-> $IVSHMEM\$" \
+				|| die "the running QEMU holds no fd to $IVSHMEM -- is the server serving another file?"
+			;;
+		*"mem-path=$IVSHMEM,"*|*"mem-path=$IVSHMEM "*)
+			case "$qcmd" in *ivshmem-plain*) ;; *) die "the running QEMU has no ivshmem device on $IVSHMEM" ;; esac
+			[ "$KICK$DB" = 00 ] || die "KICK/DB need ivshmem-doorbell; the running QEMU has ivshmem-plain"
+			;;
+		*) die "the running QEMU does not back an ivshmem device with $IVSHMEM -- relaunch with IVSHMEM=$IVSHMEM" ;;
 	esac
-	case "$qcmd" in *ivshmem-plain*) ;; *) die "SHM=1: the running QEMU has no ivshmem-plain device" ;; esac
+	if [ "$KICK$DB" != 00 ]; then
+		case "$qcmd" in *"path=$KICK_SOCK,"*virtconsole*|*virtconsole*"path=$KICK_SOCK,"*) ;;
+			*) die "the running QEMU has no virtconsole on $KICK_SOCK -- relaunch with KICK_SOCK=$KICK_SOCK" ;; esac
+		[ -S "$KICK_SOCK" ] || die "$KICK_SOCK is not a socket"
+		[ -r "$SHM_COMMON/ivshm_client.c" ] || die "missing: $SHM_COMMON/ivshm_client.c"
+		[ -r "$here/ivshmem_server.py" ] || die "missing: $here/ivshmem_server.py"
+		GUEST_SRV_PID="$(cat "$IVSHMEM_SERVER.ready" 2>/dev/null)"
+		[ -n "$GUEST_SRV_PID" ] && kill -0 "$GUEST_SRV_PID" 2>/dev/null \
+			|| die "the guest's ivshmem server (pid file $IVSHMEM_SERVER.ready) is not running"
+		GUEST_SRV_AFF="$(taskset -pc "$GUEST_SRV_PID" 2>/dev/null | sed 's/.*: //')"
+		[ "$GUEST_SRV_AFF" = "$CORE_AUX" ] || die "the guest's ivshmem server runs on '$GUEST_SRV_AFF', not CORE_AUX=$CORE_AUX"
+		# The server must serve THIS file on THIS socket, by its own arguments.
+		GUEST_SRV_ARGS="$(tr '\0' '\n' < "/proc/$GUEST_SRV_PID/cmdline")"
+		GUEST_SRV_SCRIPT="$(printf '%s\n' "$GUEST_SRV_ARGS" | grep -m1 'ivshmem_server.py$')"
+		printf '%s\n' "$GUEST_SRV_ARGS" | grep -A1 -x -- --shm | tail -1 | grep -qx -- "$IVSHMEM" \
+			|| die "the guest's ivshmem server does not serve $IVSHMEM"
+		printf '%s\n' "$GUEST_SRV_ARGS" | grep -A1 -x -- --socket | tail -1 | grep -qx -- "$IVSHMEM_SERVER" \
+			|| die "the guest's ivshmem server is not listening on $IVSHMEM_SERVER"
+	fi
+	[ -e "$HOST_KICK_SOCK" ] || [ -e "$HOST_IVSHM_SOCK" ] \
+		&& [ "$KICK$DB" != 00 ] && die "$HOST_KICK_SOCK or $HOST_IVSHM_SOCK exists -- a leftover; remove it first"
 fi
 trap cleanup EXIT
 
 m_prepare_out "${OUT:-}" "$HOME/ladder-out"
-m_check_cores "$QEMU_CORES" "$CORE_MON" "$CORE_PROBE"
-m_require_disjoint "qemu=$QEMU_CORES" "monitor=$CORE_MON" "probe=$CORE_PROBE"
+m_check_cores "$QEMU_CORES" "$CORE_MON" "$CORE_PROBE" "$CORE_AUX"
+m_require_disjoint "qemu=$QEMU_CORES" "monitor=$CORE_MON" "probe=$CORE_PROBE" "aux=$CORE_AUX"
 say "cores: $NCPU total; qemu=$QEMU_CORES monitor=$CORE_MON probe=$CORE_PROBE"
 m_governor_pin
 m_cstate_apply
@@ -179,12 +261,25 @@ taskset -c "$CORE_MON" "$MON" "$PORT" > "$OUT/monitor-host.log" 2>&1 &
 MON_HOST=$!
 sudo ip netns exec "$NS" taskset -c "$CORE_MON" "$MON" "$PORT" \
 	> "$OUT/monitor-ns.log" 2>&1 &
-if [ "$SHM" = 1 ]; then
+if [ "$SHM$KICK$DB" != 000 ]; then
 	m_build_shmchan "$here/shmchan.c" "$SHM_COMMON" "$OUT/libshmchan.so"
-	# A fresh, zeroed page set for the host rung: no magic, no counters.
+	# A fresh, zeroed page set for the host rungs: no magic, no counters.
 	dd if=/dev/zero of="$SHM_HOST_FILE" bs=4096 count=256 status=none || die "could not create $SHM_HOST_FILE"
+fi
+if [ "$SHM" = 1 ]; then
 	taskset -c "$CORE_MON" "$MON" shm "$SHM_HOST_FILE" > "$OUT/monitor-host-shm.log" 2>&1 &
 	MON_HOST_SHM=$!
+fi
+if [ "$KICK$DB" != 00 ]; then
+	# The host rungs' own ivshmem server, on the same file, and the host's
+	# notified monitor as its first peer.
+	taskset -c "$CORE_AUX" python3 "$here/ivshmem_server.py" --socket "$HOST_IVSHM_SOCK" --shm "$SHM_HOST_FILE" \
+		--ready "$HOST_IVSHM_SOCK.ready" > "$OUT/ivshmem-server-host.log" 2>&1 &
+	HOST_SRV_PID=$!
+	for i in $(seq 1 50); do [ -s "$HOST_IVSHM_SOCK.ready" ] && break; sleep 0.1; done
+	[ -s "$HOST_IVSHM_SOCK.ready" ] || die "the host ivshmem server did not come up -- see $OUT/ivshmem-server-host.log"
+	taskset -c "$CORE_MON" "$MON" shmkick "$HOST_IVSHM_SOCK@$SLOT_OFF" "$HOST_KICK_SOCK" > "$OUT/monitor-host-kick.log" 2>&1 &
+	MON_HOST_KICK=$!
 fi
 if [ "$UDP" = 1 ]; then
 	taskset -c "$CORE_MON" "$MON" "$PORT_UDP" udp > "$OUT/monitor-host-udp.log" 2>&1 &
@@ -210,11 +305,18 @@ if [ "$SHM" = 1 ]; then
 	grep -q "serving shm on file $SHM_HOST_FILE," "$OUT/monitor-host-shm.log" \
 		|| die "monitor-host-shm did not start in shm mode on $SHM_HOST_FILE -- see $OUT/monitor-host-shm.log"
 fi
+if [ "$KICK$DB" != 00 ]; then
+	kill -0 "$MON_HOST_KICK" 2>/dev/null \
+		|| die "host monitor-native (shmkick) exited -- see $OUT/monitor-host-kick.log (built before the notified variant?)"
+	grep -q "serving shm-kick on ivshmem server $HOST_IVSHM_SOCK as peer " "$OUT/monitor-host-kick.log" \
+		|| die "monitor-host-kick did not start in shmkick mode -- see $OUT/monitor-host-kick.log"
+fi
 
 # ---------------------------------------------------------------- arm set
 ARMS=("A-loopback 127.0.0.1 $PORT tcp" "B-bridge $NS_IP $PORT tcp")
 [ -n "$ARM_C_PORT" ] && ARMS+=("C-null $GUEST $ARM_C_PORT tcp")
 ARMS+=("D-guest $GUEST $PORT tcp")
+[ "$UDP_IN_TCP" = 1 ] && ARMS+=("D-udp $GUEST $PORT_UDP udp")
 UARMS=()
 UDP_ARMS=""
 if [ "$UDP" = 1 ]; then
@@ -225,8 +327,14 @@ fi
 SARMS=()
 SHM_ARMS=""
 [ "$SHM" = 1 ] && SARMS=("A-shm $SHM_HOST_FILE - shm" "D-shm $IVSHMEM - shm")
+KARMS=(); DBARMS=(); KICK_ARMS=""; DB_ARMS=""; ECHO_ARMS=""
+[ "$KICK" = 1 ] && KARMS=("A-kick $SHM_HOST_FILE@$SLOT_OFF $HOST_KICK_SOCK shmkick"
+                          "C-kick - $KICK_SOCK kickecho"
+                          "D-kick $IVSHMEM@$SLOT_OFF $KICK_SOCK shmkick")
+[ "$DB" = 1 ] && DBARMS=("A-db $SHM_HOST_FILE@$SLOT_OFF $HOST_KICK_SOCK shmdb $HOST_IVSHM_SOCK"
+                         "D-db $IVSHMEM@$SLOT_OFF $KICK_SOCK shmdb $IVSHMEM_SERVER")
 TAGS=(); ARMJSON=""; sep=""
-for a in "${ARMS[@]}" "${UARMS[@]}" "${SARMS[@]}"; do
+for a in "${ARMS[@]}" "${UARMS[@]}" "${SARMS[@]}" "${KARMS[@]}" "${DBARMS[@]}"; do
 	set -- $a
 	if [ "$4" = udp ]; then
 		m_reachable_udp "$2" "$3" "$1"
@@ -234,6 +342,13 @@ for a in "${ARMS[@]}" "${UARMS[@]}" "${SARMS[@]}"; do
 	elif [ "$4" = shm ]; then
 		m_reachable_shm "$2" "$1"
 		SHM_ARMS="$SHM_ARMS $1"
+	elif [ "$4" = shmkick ] || [ "$4" = shmdb ] || [ "$4" = kickecho ]; then
+		m_reachable_notified "$1" "$4" "$2" "$3" "${5:-}"
+		case "$4" in
+			shmkick) KICK_ARMS="$KICK_ARMS $1" ;;
+			shmdb) DB_ARMS="$DB_ARMS $1" ;;
+			kickecho) ECHO_ARMS="$ECHO_ARMS $1" ;;
+		esac
 	else
 		m_reachable "$2" "$3" "$1"
 	fi
@@ -241,9 +356,38 @@ for a in "${ARMS[@]}" "${UARMS[@]}" "${SARMS[@]}"; do
 done
 UDP_ARMS="${UDP_ARMS# }"
 SHM_ARMS="${SHM_ARMS# }"
+KICK_ARMS="${KICK_ARMS# }"; DB_ARMS="${DB_ARMS# }"; ECHO_ARMS="${ECHO_ARMS# }"
+
+# ---------------------------------------------------------------- doorbell proof
+# Before any D-db sample: one exchange answered by DB_BURST doorbells. All must
+# arrive, the VM's mmio_exit_kernel must rise by at least that many (KVM's
+# ioeventfd caught them in the kernel), and mmio_exit_user must stay far below
+# (they did not take QEMU's userspace path). Anything else, and D-db would not
+# measure what it is called: refuse.
+BURSTJSON='"run": 0'
+if [ "$DB" = 1 ]; then
+	m_kvm_snap "$OUT/db-burst-kvm.json" before
+	taskset -c "$CORE_PROBE" python3 "$PROBE" --proto shmdb --shm "$IVSHMEM@$SLOT_OFF" --kick "$KICK_SOCK" \
+		--ivshm "$IVSHMEM_SERVER" --shm-lib "$SHMCHAN_LIB" --db-burst "$DB_BURST" --tag db-burst \
+		--out "$OUT/db-burst.json" >> "$OUT/probe.log" 2>&1 \
+		|| die "the doorbell burst did not deliver $DB_BURST doorbells -- see $OUT/probe.log"
+	m_kvm_snap "$OUT/db-burst-kvm.json" after
+	BURSTJSON="$(m_db_proof "$OUT" "$DB_BURST")" || die "the doorbell path is not KVM's in-kernel one: $BURSTJSON"
+	say "doorbell proof: $BURSTJSON"
+fi
+NOTIFJSON='"kick": 0, "db": 0'
+if [ "$KICK$DB" != 00 ]; then
+	NOTIFJSON="\"kick\": $KICK, \"db\": $DB, \"slot_offset\": $SLOT_OFF, \"kick_sock\": \"$KICK_SOCK\", \"ivshmem_server\": \"$IVSHMEM_SERVER\", \"host_ivshmem_server\": \"$HOST_IVSHM_SOCK\", \"host_kick_sock\": \"$HOST_KICK_SOCK\", \"core_aux\": $CORE_AUX, \"guest_server_pid\": $GUEST_SRV_PID, \"guest_server_affinity\": \"$GUEST_SRV_AFF\", \"guest_server_script_sha256\": \"$(_sha "$GUEST_SRV_SCRIPT")\", \"ivshmem_server_py_sha256\": \"$(_sha "$here/ivshmem_server.py")\", \"ivshm_client_c_sha256\": \"$(_sha "$SHM_COMMON/ivshm_client.c")\", \"db_burst\": {$BURSTJSON}"
+fi
+HALTJSON=""; hsep=""
+for hp in halt_poll_ns halt_poll_ns_grow halt_poll_ns_grow_start halt_poll_ns_shrink; do
+	HALTJSON="$HALTJSON$hsep\"$hp\": \"$(cat /sys/module/kvm/parameters/$hp 2>/dev/null || echo NA)\""; hsep=", "
+done
 SHMJSON='"enabled": 0'
-if [ "$SHM" = 1 ]; then
-	SHMJSON="\"enabled\": 1, \"host_file\": \"$SHM_HOST_FILE\", \"ivshmem_file\": \"$IVSHMEM\", \"libshmchan_sha256\": \"$(_sha "$OUT/libshmchan.so")\", \"shmchan_c_sha256\": \"$(_sha "$here/shmchan.c")\", \"shm_chan_h_sha256\": \"$(_sha "$SHM_COMMON/shm_chan.h")\", \"shm_map_posix_c_sha256\": \"$(_sha "$SHM_COMMON/shm_map_posix.c")\""
+# The instrument's library and the slot files are recorded whenever ANY shm-family
+# arm ran -- a notified-only run used them too (FOUND BY CODE REVIEW).
+if [ "$SHM$KICK$DB" != 000 ]; then
+	SHMJSON="\"enabled\": $SHM, \"host_file\": \"$SHM_HOST_FILE\", \"ivshmem_file\": \"$IVSHMEM\", \"libshmchan_sha256\": \"$(_sha "$OUT/libshmchan.so")\", \"shmchan_c_sha256\": \"$(_sha "$here/shmchan.c")\", \"shm_chan_h_sha256\": \"$(_sha "$SHM_COMMON/shm_chan.h")\", \"shm_map_posix_c_sha256\": \"$(_sha "$SHM_COMMON/shm_map_posix.c")\""
 fi
 
 m_write_stamp "$OUT/stamp.json" \
@@ -252,6 +396,10 @@ m_write_stamp "$OUT/stamp.json" \
 	"\"monitor_native_sha256\": \"$(_sha "$MON")\"" \
 	"\"udp\": {\"enabled\": $UDP, \"port\": $PORT_UDP, \"arm_c_port\": \"$ARM_C_UDP_PORT\"}" \
 	"\"shm\": {$SHMJSON}" \
+	"\"notified\": {$NOTIFJSON}" \
+	"\"kvm_stats\": $KVM_STATS" \
+	"\"kvm_halt_poll\": {$HALTJSON}" \
+	"\"udp_in_tcp\": $UDP_IN_TCP" \
 	"\"transports\": \"${TGROUPS[*]}\"" \
 	'"order": "within each transport its rungs in fixed order A, B, C, D (those it has); the transport groups in a Williams order by round, as run in order.log (two transports: tcp first in odd rounds)"' \
 	"\"arms\": [$ARMJSON]"
@@ -265,12 +413,14 @@ for r in $(seq 1 "$K"); do
 			tcp) ROUND+=("${ARMS[@]}") ;;
 			udp) ROUND+=("${UARMS[@]}") ;;
 			shm) ROUND+=("${SARMS[@]}") ;;
+			kick) ROUND+=("${KARMS[@]}") ;;
+			db) ROUND+=("${DBARMS[@]}") ;;
 		esac
 	done
 	order=""
 	for a in "${ROUND[@]}"; do
 		set -- $a
-		m_probe "$OUT" "$1_r$r" "$2" "$3" "" "$4"
+		m_probe "$OUT" "$1_r$r" "$2" "$3" "" "$4" "${5:-}"
 		order="$order $1"
 	done
 	echo "round $r order:$order" >> "$OUT/order.log"
@@ -293,4 +443,15 @@ if [ "$SHM" = 1 ]; then
 	# it is D - A too, for like against like.
 	say "shm rungs paired with their TCP rungs, and each transport's D - A"
 	m_pairs "$OUT" "A-shm:A-loopback" "D-shm:D-guest" "D-shm:A-shm" "D-guest:A-loopback"
+fi
+if [ "$KICK$DB" != 00 ]; then
+	say "notified rungs: against spinning, against each other, and against TCP"
+	PAIRS=()
+	[ "$KICK" = 1 ] && PAIRS+=("D-kick:C-kick" "D-kick:A-kick" "D-kick:D-guest")
+	[ "$KICK" = 1 ] && [ "$SHM" = 1 ] && PAIRS+=("A-kick:A-shm" "D-kick:D-shm")
+	[ "$DB" = 1 ] && PAIRS+=("D-db:A-db" "D-db:D-guest")
+	[ "$DB" = 1 ] && [ "$KICK" = 1 ] && PAIRS+=("A-db:A-kick" "D-db:D-kick")
+	[ "$DB" = 1 ] && [ "$SHM" = 1 ] && PAIRS+=("D-db:D-shm")
+	[ "$UDP_IN_TCP" = 1 ] && [ "$KICK" = 1 ] && PAIRS+=("D-kick:D-udp")
+	m_pairs "$OUT" "${PAIRS[@]}"
 fi

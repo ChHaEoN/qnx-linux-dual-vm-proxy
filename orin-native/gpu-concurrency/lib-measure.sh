@@ -391,6 +391,22 @@ m_reachable_shm() { # $1 shm file  $2 label
 		*) die "the shm check for $2 could not run (probe exit $rc) -- see $log" ;;
 	esac
 }
+# The notified variants (OD12, 2026-09-22): one framed round trip through the
+# slot and the kick channel -- for shmdb after the probe's doorbell handshake --
+# or, for kickecho, one echoed byte.
+m_reachable_notified() {  # $1 label  $2 proto  $3 slot spec (or -)  $4 kick socket  [$5 ivshmem server]
+	local log=/dev/null rc args=(--proto "$2" --kick "$4" --shm-lib "${SHMCHAN_LIB:?SHMCHAN_LIB unset -- call m_build_shmchan first}")
+	[ -n "${OUT:-}" ] && log="$OUT/probe.log"
+	[ "$2" != kickecho ] && args+=(--shm "$3")
+	[ "$2" = shmdb ] && args+=(--ivshm "${5:?m_reachable_notified: shmdb needs the ivshmem server}")
+	python3 "$PROBE" "${args[@]}" --tag "$1" --await-recovery 5 >> "$log" 2>&1
+	rc=$?
+	case "$rc" in
+		0) say "reachable: $1 ($2 via $4)" ;;
+		4) die "UNREACHABLE: $1 ($2 via $4) -- no notified reply in 5 s" ;;
+		*) die "the $2 check for $1 could not run (probe exit $rc) -- see $log" ;;
+	esac
+}
 
 # ------------------------------------------------------------- counterbalance
 # A WILLIAMS DESIGN over the loaded middle arms, with idle fixed first and
@@ -544,27 +560,112 @@ PY
 # set STALL_POLICY: its figures are headlines, and a stall there is a failure.
 PROBE_TIMEOUT_S="${PROBE_TIMEOUT_S:-10}"
 RECOVER_MAX_S="${RECOVER_MAX_S:-120}"
-m_probe() {         # $1 out-dir  $2 tag  $3 host  $4 port  [$5 prefix command]  [$6 tcp|udp|shm]
+# KVM COUNTERS (OD12, 2026-09-22; FOUND BY DESIGN REVIEW). A record may say an
+# access or a doorbell stays in the kernel only if it can SHOW it. Around every
+# arm, with KVM_STATS=1: the VM's debugfs counters (exits, mmio_exit_kernel,
+# mmio_exit_user, halt polling, wakeups -- VM-wide, so background included) and
+# each QEMU thread's schedstat (run time, run-queue wait), with CLOCK_MONOTONIC
+# at each snapshot so deltas can be normalised by time. Read as root from core
+# CORE_AUX, never the measured cores. "before" waits 100 ms first, longer than
+# the polled monitor's 50 ms spin tail, so one arm's tail is not charged to the
+# next. Exactly one debugfs directory must match the running QEMU.
+KVM_DEBUGFS="${KVM_DEBUGFS:-/sys/kernel/debug/kvm}"   # overridable for tests only
+KVM_COUNTERS="exits mmio_exit_kernel mmio_exit_user halt_wakeup wfi_exit_stat wfe_exit_stat signal_exits halt_attempted_poll halt_successful_poll halt_poll_invalid halt_poll_success_ns halt_poll_fail_ns halt_wait_ns"
+m_kvm_snap() {       # $1 json file  $2 before|after
+	local qp dirs raw
+	qp="${KVM_QEMU_PID:-$(m_pids_of qemu-system-aarch64)}"    # KVM_QEMU_PID: tests only
+	# m_pids_of prints one pid per LINE; count lines, not spaces (FOUND BY CODE REVIEW).
+	[ -n "$qp" ] && [ "$(printf '%s\n' "$qp" | grep -c .)" = 1 ] \
+		|| die "m_kvm_snap: need exactly one qemu-system-aarch64 (have: $(printf '%s' "$qp" | tr '\n' ' '))"
+	[ "$2" = before ] && sleep 0.1
+	dirs="$(sudo -n sh -c "ls -d $KVM_DEBUGFS/${qp}-* 2>/dev/null")"
+	[ -n "$dirs" ] && [ "$(printf '%s\n' "$dirs" | wc -l)" = 1 ] \
+		|| die "m_kvm_snap: expected one $KVM_DEBUGFS/${qp}-* directory, found: '$dirs'"
+	# taskset OUTSIDE sudo: the reader inherits the affinity either way.
+	raw="$(taskset -c "${CORE_AUX:-5}" sudo -n sh -c 'cd "$1"; shift; for f in "$@"; do printf "%s %s\n" "$f" "$(cat "$f" 2>/dev/null || echo NA)"; done' _ "$dirs" $KVM_COUNTERS)" \
+		|| die "m_kvm_snap: could not read $dirs"
+	KS_RAW="$raw" KS_QP="$qp" KS_WHEN="$2" KS_PROC="$PROC_ROOT" python3 - "$1" <<'PY' || die "m_kvm_snap: could not write $1"
+import glob, json, os, sys, time
+path, when = sys.argv[1], os.environ["KS_WHEN"]
+snap = {"t_ns": time.monotonic_ns(), "qemu_pid": int(os.environ["KS_QP"]), "counters": {}, "threads": {}}
+for line in os.environ["KS_RAW"].splitlines():
+    k, _, v = line.partition(" ")
+    snap["counters"][k] = int(v) if v.strip().lstrip("-").isdigit() else None
+proc = os.environ["KS_PROC"]
+for f in glob.glob("%s/%s/task/*/schedstat" % (proc, os.environ["KS_QP"])):
+    tid = os.path.basename(os.path.dirname(f))
+    try:
+        run_ns, wait_ns, slices = (int(x) for x in open(f).read().split())
+        comm = open("%s/%s/task/%s/comm" % (proc, os.environ["KS_QP"], tid)).read().strip()
+    except (OSError, ValueError):
+        continue
+    snap["threads"][tid] = {"comm": comm, "run_ns": run_ns, "wait_ns": wait_ns, "slices": slices}
+doc = {}
+if when == "after":
+    doc = json.load(open(path))
+    if doc.get("before", {}).get("qemu_pid") != snap["qemu_pid"]:
+        sys.exit("QEMU changed during the arm")
+doc[when] = snap
+json.dump(doc, open(path, "w"))
+PY
+}
+# THE DOORBELL PROOF (OD12, 2026-09-22): read a --db-burst result and the KVM
+# snapshots around it, print the stamp fragment, and succeed only if all WANT
+# doorbells arrived, the VM's mmio_exit_kernel rose by at least WANT (a KVM
+# ioeventfd caught them in the kernel) and mmio_exit_user by less than a tenth
+# of WANT (they did not take QEMU's userspace path). In the library, not inline
+# in the ladder, so a test can hold it to that (FOUND BY CODE REVIEW).
+m_db_proof() {      # $1 out dir (db-burst.json, db-burst-kvm.json)  $2 WANT
+	python3 - "$1" "$2" <<'PY'
+import json, sys
+out, want = sys.argv[1], int(sys.argv[2])
+try:
+    b = json.load(open(out + "/db-burst.json"))["burst"]
+    k = json.load(open(out + "/db-burst-kvm.json"))
+    d = {}
+    for c in ("mmio_exit_kernel", "mmio_exit_user", "exits"):
+        x, y = k["before"]["counters"].get(c), k["after"]["counters"].get(c)
+        d[c] = None if x is None or y is None else y - x
+except Exception as e:
+    print('"run": 1, "ok": false, "error": "%s"' % str(e).replace('"', "'"))
+    sys.exit(1)
+ok = (b.get("got") == want and d["mmio_exit_kernel"] is not None and d["mmio_exit_user"] is not None
+      and d["mmio_exit_kernel"] >= want and d["mmio_exit_user"] * 10 < want)
+print('"run": 1, "want": %d, "got": %s, "d_mmio_exit_kernel": %s, "d_mmio_exit_user": %s, "d_exits": %s, "ok": %s'
+      % (want, json.dumps(b.get("got")), json.dumps(d["mmio_exit_kernel"]), json.dumps(d["mmio_exit_user"]),
+         json.dumps(d["exits"]), "true" if ok else "false"))
+sys.exit(0 if ok else 1)
+PY
+}
+m_probe() {         # $1 out-dir  $2 tag  $3 host  $4 port  [$5 prefix command]  [$6 tcp|udp|shm|shmkick|shmdb|kickecho]  [$7 ivshmem server]
 	local out="$1" tag="$2" host="$3" port="$4" pre="${5:-}" proto="${6:-tcp}" rc t0 t1 ms stall=() dest
 	# shm (OD12, 2026-09-22): "host" is the shared-memory file, and the port is unused.
-	if [ "$proto" = shm ]; then
-		[ -n "${SHMCHAN_LIB:-}" ] || die "m_probe $tag: SHMCHAN_LIB unset -- call m_build_shmchan first"
-		dest=(--shm "$host" --shm-lib "$SHMCHAN_LIB")
-	else
-		dest=(--host "$host" --port "$port")
-	fi
+	# The notified variants: "host" is the slot (FILE@OFFSET, unused by kickecho),
+	# "port" the kick socket, and $7 the ivshmem server for shmdb.
+	case "$proto" in
+		shm|shmkick|shmdb|kickecho)
+			[ -n "${SHMCHAN_LIB:-}" ] || die "m_probe $tag: SHMCHAN_LIB unset -- call m_build_shmchan first"
+			dest=(--shm-lib "$SHMCHAN_LIB")
+			[ "$proto" != kickecho ] && dest+=(--shm "$host")
+			[ "$proto" != shm ] && dest+=(--kick "$port")
+			[ "$proto" = shmdb ] && dest+=(--ivshm "${7:?m_probe $tag: shmdb needs the ivshmem server}")
+			;;
+		*) dest=(--host "$host" --port "$port") ;;
+	esac
 	rm -f "$out/lat-$tag.json" "$out/stall-$tag.json"
 	[ "${STALL_POLICY:-refuse}" = record ] && stall=(--stall-out "$out/stall-$tag.json")
 	# The window sampler brackets exactly the probe, when the script asked for
 	# it (SAMPLE_WINDOW=1). Off by default: the ladder's numbers are the
 	# headline, and a new process running beside them is a new perturbation.
 	[ "${SAMPLE_WINDOW:-0}" = 1 ] && m_sampler_start "$tag"
+	[ "${KVM_STATS:-0}" = 1 ] && m_kvm_snap "$out/kvm-$tag.json" before
 	t0="$(date +%s%N)"
 	$pre taskset -c "$CORE_PROBE" python3 "$PROBE" "${dest[@]}" \
 		--n "$N" --warmup "$WARMUP" --interval-ms "$INTERVAL_MS" --timeout-s "$PROBE_TIMEOUT_S" --proto "$proto" \
 		"${stall[@]}" --tag "$tag" --out "$out/lat-$tag.json" >> "$out/probe.log" 2>&1
 	rc=$?
 	t1="$(date +%s%N)"
+	[ "${KVM_STATS:-0}" = 1 ] && m_kvm_snap "$out/kvm-$tag.json" after
 	ms=$(( (t1 - t0) / 1000000 ))
 	if [ "${SAMPLE_WINDOW:-0}" = 1 ]; then
 		m_sampler_stop || die "the window sampler for $tag would not stop -- it would run on into the next arm"
@@ -620,7 +721,8 @@ m_require_complete() {  # $1 = out dir, then arm tags
 	local out="$1"; shift
 	[ -n "${CORE_PROBE:-}" ] || die "m_require_complete needs CORE_PROBE to check the probe's affinity"
 	MP_CORE="$CORE_PROBE" MP_FIFO="${FIFO_ARMS:-}" MP_STALL="${STALL_POLICY:-refuse}" MP_UDP="${UDP_ARMS:-}" \
-	MP_SHM="${SHM_ARMS:-}" \
+	MP_SHM="${SHM_ARMS:-}" MP_KICK="${KICK_ARMS:-}" MP_DB="${DB_ARMS:-}" MP_ECHO="${ECHO_ARMS:-}" \
+	MP_KVM="${KVM_STATS:-0}" \
 	MP_TIMEOUT="$PROBE_TIMEOUT_S" \
 	python3 - "$out" "$K" "$N" "$WARMUP" "$@" <<'PY' || die "the run is incomplete or unclean -- do not publish a median from it"
 import json, os, sys
@@ -629,6 +731,10 @@ probe_core = int(os.environ["MP_CORE"])
 fifo_arms = set(os.environ.get("MP_FIFO", "").split())
 udp_arms = set(os.environ.get("MP_UDP", "").split())
 shm_arms = set(os.environ.get("MP_SHM", "").split())
+kick_arms = set(os.environ.get("MP_KICK", "").split())
+db_arms = set(os.environ.get("MP_DB", "").split())
+echo_arms = set(os.environ.get("MP_ECHO", "").split())
+want_kvm = os.environ.get("MP_KVM") == "1"
 record_stalls = os.environ.get("MP_STALL") == "record"
 timeout_s = float(os.environ["MP_TIMEOUT"])
 stalls = {}
@@ -646,7 +752,8 @@ def proto_problems(tag, a, s):
     in UDP_ARMS must say udp and every other arm tcp -- a UDP arm silently run
     over TCP would pair two copies of the same path and report a difference of
     zero as a finding. 2026-09-22: likewise shm for an arm in SHM_ARMS."""
-    want = "udp" if a in udp_arms else "shm" if a in shm_arms else "tcp"
+    want = ("udp" if a in udp_arms else "shm" if a in shm_arms else "shmkick" if a in kick_arms
+            else "shmdb" if a in db_arms else "kickecho" if a in echo_arms else "tcp")
     if s.get("proto") != want:
         return ["%s: proto=%r, expected %r" % (tag, s.get("proto"), want)]
     return []
@@ -705,6 +812,27 @@ for a in arms:
                 problems.append("%s: %s=%r, expected %r" % (tag, key, s.get(key), want))
         problems.extend(sched_problems(tag, a, s))
         problems.extend(proto_problems(tag, a, s))
+        if a in kick_arms or a in db_arms or a in echo_arms:
+            # ADDED 2026-09-22 (OD12): a notified arm measured what it claims only if
+            # every exchange ended on exactly one notification and nothing else woke
+            # the probe. Counted by the probe itself, after its handshake.
+            nt = s.get("notify") or {}
+            ex = nt.get("exchanges")
+            if ex != n + warmup:
+                problems.append("%s: notify.exchanges=%r, expected %d" % (tag, ex, n + warmup))
+            for key in ("notifications", "wakeups"):
+                if nt.get(key) != ex:
+                    problems.append("%s: notify.%s=%r, expected one per exchange (%r)" % (tag, key, nt.get(key), ex))
+            for key in ("early_wakeups", "stray", "eagain"):
+                if nt.get(key) != 0:
+                    problems.append("%s: notify.%s=%r, expected 0" % (tag, key, nt.get(key)))
+        if want_kvm:
+            try:
+                kv = json.load(open(os.path.join(out, "kvm-%s.json" % tag)))
+                if not ("before" in kv and "after" in kv):
+                    problems.append("%s: KVM snapshot lacks before or after" % tag)
+            except Exception as e:
+                problems.append("%s: no readable KVM snapshot (%s)" % (tag, e))
     for prefix in ("lat-", "stall-"):
         pre = "%s%s_r" % (prefix, a)
         for f in os.listdir(out):
@@ -960,11 +1088,11 @@ m_require_disjoint() {  # $@ = label=spec ...
 # committed source like cpuload, and published to m_probe through SHMCHAN_LIB.
 m_build_shmchan() {  # $1 = shmchan.c  $2 = ipc-test/common  $3 = library to write
 	command -v gcc >/dev/null || die "gcc absent -- cannot build $3 from $1"
-	[ -r "$2/shm_chan.h" ] && [ -r "$2/shm_map_posix.c" ] || die "shm sources missing under $2"
-	gcc -O2 -Wall -Wextra -Werror -shared -fPIC -I "$2" -o "$3" "$1" "$2/shm_map_posix.c" \
+	[ -r "$2/shm_chan.h" ] && [ -r "$2/shm_map_posix.c" ] && [ -r "$2/ivshm_client.c" ] || die "shm sources missing under $2"
+	gcc -O2 -Wall -Wextra -Werror -shared -fPIC -I "$2" -o "$3" "$1" "$2/shm_map_posix.c" "$2/ivshm_client.c" \
 		|| die "libshmchan did not build from $1"
 	SHMCHAN_LIB="$3"
-	say "libshmchan built from $1 ($(_sha "$1" | cut -c1-12)) + shm_map_posix.c ($(_sha "$2/shm_map_posix.c" | cut -c1-12))"
+	say "libshmchan built from $1 ($(_sha "$1" | cut -c1-12)) + shm_map_posix.c ($(_sha "$2/shm_map_posix.c" | cut -c1-12)) + ivshm_client.c ($(_sha "$2/ivshm_client.c" | cut -c1-12))"
 }
 m_build_cpuload() {  # $1 = source  $2 = binary to write
 	command -v gcc >/dev/null || die "gcc absent -- cannot build $2 from $1"

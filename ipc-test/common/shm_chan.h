@@ -37,9 +37,24 @@
  * host's cacheable mapping into mismatched attributes, and Arm then does not
  * promise coherence between the two views.
  *
- * WAITING IS BY POLLING. There is no interrupt on this path: the plain ivshmem
- * device has none, and the doorbell variant is a separate step. A polling
- * waiter holds its core -- that CPU cost is part of what the figure means.
+ * WAITING IS BY POLLING, in the slot's first use (magic "SHM1"): the plain
+ * ivshmem device has no interrupt, and a polling waiter holds its core.
+ *
+ * THE NOTIFIED VARIANT (OD12, 2026-09-22; magic "SHK1"). The same slot, but
+ * nobody spins: the client adds, in the request line and before the release of
+ * req_seq, how it wants to be told (reply_via) and its ivshmem peer id
+ * (client_peer), then sends one kick byte to the server over a stream; the
+ * server, woken by that byte, answers in the slot and then notifies the client
+ *   SHM_VIA_KICK      one kick byte back over the same stream
+ *   SHM_VIA_DOORBELL  a doorbell to client_peer (in the guest: the ivshmem
+ *                     Doorbell register, which KVM turns into a write to the
+ *                     client's eventfd; on a host: that eventfd directly)
+ *   SHM_VIA_BURST     a test only: ring_count doorbells, to show the path
+ * The kick bytes are fixed values, so a byte that is anything else is counted as
+ * stray rather than taken as a kick. SHM_ECHO_BYTE asks for no slot work at
+ * all: the server sends SHM_ECHO_BYTE straight back -- the bare notification
+ * round trip. A server of one kind publishes only its own magic, so a polling
+ * client and a notified server can never pair silently.
  */
 #ifndef IPC_TEST_SHM_CHAN_H
 #define IPC_TEST_SHM_CHAN_H
@@ -50,16 +65,27 @@
 
 #include "frame.h"
 
-#define SHM_CHAN_MAGIC     0x314D4853u    /* "SHM1", little-endian */
+#define SHM_CHAN_MAGIC     0x314D4853u    /* "SHM1", little-endian: a polling server */
+#define SHM_CHAN_MAGIC_KICK 0x314B4853u   /* "SHK1": a notified server */
 #define SHM_CHAN_VERSION   1u
 #define SHM_CHAN_LINE      64u
 #define SHM_CHAN_OFF_MAGIC     0u
 #define SHM_CHAN_OFF_VERSION   4u
 #define SHM_CHAN_OFF_REQ_SEQ   64u
+#define SHM_CHAN_OFF_REPLY_VIA 72u        /* u32, notified variant only */
+#define SHM_CHAN_OFF_CLIENT_PEER 76u      /* u32, notified variant only */
+#define SHM_CHAN_OFF_RING_COUNT 80u       /* u32, SHM_VIA_BURST only */
 #define SHM_CHAN_OFF_REQ       128u
 #define SHM_CHAN_OFF_RSP_SEQ   192u
 #define SHM_CHAN_OFF_RSP       256u
 #define SHM_CHAN_MIN_BYTES     4096u      /* the layout needs 320; a page is mapped */
+
+#define SHM_VIA_KICK      0u
+#define SHM_VIA_DOORBELL  1u
+#define SHM_VIA_BURST     3u
+#define SHM_KICK_BYTE     'K'              /* "a request is in the slot" / "the reply is" */
+#define SHM_ECHO_BYTE     'E'              /* "send this byte back", no slot */
+#define SHM_BURST_MAX     100000u
 
 static inline uint64_t *shm_chan_u64(void *base, size_t off)
 {
@@ -81,10 +107,25 @@ static inline void shm_chan_store(void *base, size_t off, uint64_t v)
 	__atomic_store_n(shm_chan_u64(base, off), v, __ATOMIC_RELEASE);
 }
 
+static inline int shm_chan_ready_as(void *base, uint32_t magic)
+{
+	return __atomic_load_n(shm_chan_u32(base, SHM_CHAN_OFF_MAGIC), __ATOMIC_ACQUIRE) == magic
+	    && *shm_chan_u32(base, SHM_CHAN_OFF_VERSION) == SHM_CHAN_VERSION;
+}
+
 static inline int shm_chan_ready(void *base)
 {
-	return __atomic_load_n(shm_chan_u32(base, SHM_CHAN_OFF_MAGIC), __ATOMIC_ACQUIRE) == SHM_CHAN_MAGIC
-	    && *shm_chan_u32(base, SHM_CHAN_OFF_VERSION) == SHM_CHAN_VERSION;
+	return shm_chan_ready_as(base, SHM_CHAN_MAGIC);
+}
+
+static inline uint32_t shm_chan_load32(void *base, size_t off)
+{
+	return __atomic_load_n(shm_chan_u32(base, off), __ATOMIC_RELAXED);
+}
+
+static inline void shm_chan_store32(void *base, size_t off, uint32_t v)
+{
+	__atomic_store_n(shm_chan_u32(base, off), v, __ATOMIC_RELAXED);
 }
 
 /* The frames are copied with memcpy AFTER the acquire (reader) or BEFORE the

@@ -1702,6 +1702,18 @@ LADDER = os.path.join(HERE, "..", "orin-native", "gpu-concurrency", "run-ladder.
     ({"SHM": "1", "K": "13"}, "need K to be a multiple of 2"),
     ({"UDP": "1", "SHM": "1", "K": "8"}, "need K to be a multiple of 6"),
     ({"K": "twelve"}, "K='twelve' is not a round count"),
+    ({"KICK": "yes"}, "KICK='yes' must be 0 or 1"),
+    ({"DB": "2"}, "DB='2' must be 0 or 1"),
+    ({"KVM_STATS": "on"}, "KVM_STATS='on' must be 0 or 1"),
+    ({"DB_BURST": "many"}, "DB_BURST='many' is not a count"),
+    ({"SLOT_OFF": "100"}, "SLOT_OFF=100 must be a non-zero multiple of 4096"),
+    ({"SLOT_OFF": "0"}, "SLOT_OFF=0 must be a non-zero multiple of 4096"),
+    ({"SHM": "1", "KICK": "1", "DB": "1", "K": "6"}, "need K to be a multiple of 4"),
+    ({"UDP": "1", "SHM": "1", "KICK": "1", "DB": "1", "K": "12"}, "need K to be a multiple of 10"),
+    ({"UDP": "1", "UDP_IN_TCP": "1", "K": "2"}, "UDP_IN_TCP=1 needs UDP=0"),
+    ({"UDP_IN_TCP": "yes"}, "UDP_IN_TCP='yes' must be 0 or 1"),
+    ({"DB_BURST": "0"}, "DB_BURST=0 must be 1000..100000"),
+    ({"DB_BURST": "200000"}, "DB_BURST=200000 must be 1000..100000"),
 ])
 def test_ladder_refuses_a_udp_setting_it_cannot_honour(tmp_path, env, why):
     """FOUND BY REVIEW: UDP=true ran TCP-only under a stamp saying enabled; an odd K
@@ -1718,6 +1730,8 @@ MONITOR_C = os.path.join(HERE, "..", "ipc-test", "qnx-safety-monitor", "monitor.
 SERVER_C = os.path.join(HERE, "..", "ipc-test", "qnx-server-net", "server.c")
 COMMON = os.path.join(HERE, "..", "ipc-test", "common")
 SHM_MAP_POSIX_C = os.path.join(COMMON, "shm_map_posix.c")
+IVSHM_CLIENT_C = os.path.join(COMMON, "ivshm_client.c")
+IVSHMEM_SERVER_PY = os.path.join(HERE, "..", "orin-native", "gpu-concurrency", "ivshmem_server.py")
 SHMCHAN_C = os.path.join(HERE, "..", "orin-native", "gpu-concurrency", "shmchan.c")
 
 
@@ -1729,11 +1743,13 @@ def native_servers(tmp_path_factory):
     d = tmp_path_factory.mktemp("servers")
     # OD12 (2026-09-22): the monitor's shm transport maps its region through
     # shm_map(), which the host build takes from shm_map_posix.c.
-    for srcs, name in (([MONITOR_C, SHM_MAP_POSIX_C], "monitor"), ([SERVER_C], "echo")):
+    # 2026-09-22, notified variant: shm_map_posix.c joins an ivshmem server
+    # through ivshm_client.c, so both the monitor and the library link it.
+    for srcs, name in (([MONITOR_C, SHM_MAP_POSIX_C, IVSHM_CLIENT_C], "monitor"), ([SERVER_C], "echo")):
         subprocess.run([gcc, "-O2", "-std=gnu99", "-Wall", "-Wextra", "-Werror", "-I", COMMON,
                         "-o", str(d / name)] + srcs, check=True, capture_output=True)
     subprocess.run([gcc, "-O2", "-Wall", "-Wextra", "-Werror", "-shared", "-fPIC", "-I", COMMON,
-                    "-o", str(d / "libshmchan.so"), SHMCHAN_C, SHM_MAP_POSIX_C],
+                    "-o", str(d / "libshmchan.so"), SHMCHAN_C, SHM_MAP_POSIX_C, IVSHM_CLIENT_C],
                    check=True, capture_output=True)
     return d
 
@@ -2027,9 +2043,857 @@ def test_native_build_keeps_qnx_only_calls_out_of_the_shared_source(tmp_path):
     monitor.c or shm_chan.h the host and guest would stop being one program."""
     src = os.path.join(HERE, "..", "orin-native", "gpu-concurrency", "build-monitor-native.sh")
     body = open(src, encoding="utf-8").read()
-    for word in ("mmap_device_memory", "pci_device_", "shm_chan.h", "shm_map_posix.c"):
+    for word in ("mmap_device_memory", "pci_device_", "shm_chan.h", "shm_map_posix.c", "ivshm_client.c"):
         assert word in body, "build-monitor-native.sh no longer mentions %s" % word
     for f in ("monitor.c",):
         text = open(os.path.join(HERE, "..", "ipc-test", "qnx-safety-monitor", f), encoding="utf-8").read()
         code = [ln for ln in text.splitlines() if not ln.lstrip().startswith(("*", "/*", "//"))]
         assert not any("mmap_device_memory" in ln for ln in code)
+
+
+# ============================================================ the notified shm variant (OD12, 2026-09-22)
+#
+# The ivshmem server's protocol (QEMU 6.2's), the host monitor's shmkick mode, and
+# the probe's shmkick/shmdb/kickecho transports, end to end on a host. The server
+# tests need Linux (eventfd, SCM_RIGHTS); the end-to-end ones also need gcc.
+
+import socket as _socket  # noqa: E402
+
+LINUX_IPC = hasattr(os, "eventfd") and hasattr(_socket, "recv_fds") and hasattr(os, "sched_getaffinity")
+needs_linux_ipc = pytest.mark.skipif(not LINUX_IPC, reason="needs Linux eventfd/SCM_RIGHTS: runs in CI's tooling job")
+
+
+def _short_dir():
+    import tempfile
+    return tempfile.mkdtemp(prefix="a6k", dir="/tmp")   # UNIX socket paths are limited to 107 bytes
+
+
+def _start_ivshmem_server(d, name="srv", extra=()):
+    import time as _t
+    shm = os.path.join(d, name + ".shm")
+    with open(shm, "wb") as f:
+        f.write(b"\0" * (1 << 20))
+    sock = os.path.join(d, name + ".sock")
+    ready = sock + ".ready"
+    p = subprocess.Popen([_PY, IVSHMEM_SERVER_PY, "--socket", sock, "--shm", shm, "--ready", ready] + list(extra),
+                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    for _ in range(100):
+        if os.path.exists(ready) and os.path.getsize(ready) > 0:
+            return p, sock, shm
+        _t.sleep(0.05)
+    p.kill()
+    raise AssertionError("server never became ready: %r" % (p.communicate(timeout=5),))
+
+
+def _msg(sock, timeout=2.0):
+    """One server message: exactly 8 bytes (the fd rides on them), as QEMU reads."""
+    import struct as _st
+    sock.settimeout(timeout)
+    data, fds, _flags, _addr = _socket.recv_fds(sock, 8, 1)
+    assert len(data) == 8, data
+    return _st.unpack("<q", data)[0], (fds[0] if fds else None)
+
+
+def _peer(path):
+    c = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
+    c.connect(path)
+    v, fd = _msg(c)
+    assert v == 0 and fd is None, "protocol version 0, no fd"
+    pid, fd = _msg(c)
+    assert fd is None
+    v, shm_fd = _msg(c)
+    assert v == -1 and shm_fd is not None, "-1 with the shared memory's fd"
+    os.close(shm_fd)
+    return c, pid
+
+
+@needs_linux_ipc
+def test_ivshmem_server_speaks_qemus_protocol_and_never_reuses_an_id():
+    """FOUND BY DESIGN REVIEW: QEMU 6.2 writes into freed memory when a peer id
+    is reused, so ids must only go up; and a newcomer must be announced to the
+    existing peers BEFORE it gets its own eventfd."""
+    import fcntl
+    import select as _sel
+    d = _short_dir()
+    srv, path, _shm = _start_ivshmem_server(d)
+    try:
+        c1, id1 = _peer(path)
+        own1, efd1 = _msg(c1)
+        assert id1 == 1 and own1 == 1 and efd1 is not None, "QEMU, the first peer, is 1 -- never 0"
+        assert fcntl.fcntl(efd1, fcntl.F_GETFL) & os.O_NONBLOCK, "eventfds are created non-blocking"
+        c2, id2 = _peer(path)
+        other, ofd = _msg(c2)
+        assert (other, ofd is not None) == (1, True), "the newcomer learns peer 1's eventfd"
+        own2, efd2 = _msg(c2)
+        assert (id2, own2) == (2, 2) and efd2 is not None
+        # by now peer 1 must already hold the newcomer's notice
+        assert _sel.select([c1], [], [], 0)[0], "peer 1 was not told about peer 2 before peer 2 got its eventfd"
+        new, nfd = _msg(c1)
+        assert new == 2 and nfd is not None
+        c2.close()
+        gone, gfd = _msg(c1)
+        assert (gone, gfd) == (2, None), "a departure is the id with no fd"
+        c3, id3 = _peer(path)
+        assert id3 == 3, "a freed id is never handed out again (got %r)" % id3
+        for fd in (efd1, efd2, ofd, nfd):
+            os.close(fd)
+        c1.close()
+        c3.close()
+    finally:
+        srv.terminate()
+        srv.communicate(timeout=10)
+
+
+@needs_linux_ipc
+def test_ivshmem_server_exits_with_its_owner_peer():
+    d = _short_dir()
+    srv, path, _shm = _start_ivshmem_server(d, extra=("--exit-with-peer", "1"))
+    c1, _ = _peer(path)
+    _msg(c1)
+    c1.close()
+    assert srv.wait(timeout=10) == 0
+    assert not os.path.exists(path), "the server removes its socket on the way out"
+
+
+@needs_linux_ipc
+@pytest.mark.parametrize("size,why", [(5000, "power of two"), (2048, "power of two")])
+def test_ivshmem_server_refuses_memory_qemu_cannot_map(size, why):
+    d = _short_dir()
+    shm = os.path.join(d, "bad.shm")
+    with open(shm, "wb") as f:
+        f.write(b"\0" * size)
+    r = subprocess.run([_PY, IVSHMEM_SERVER_PY, "--socket", os.path.join(d, "s.sock"), "--shm", shm],
+                       capture_output=True, text=True, timeout=30)
+    assert r.returncode == 2 and why in r.stdout, r.stdout
+
+
+@needs_linux_ipc
+def test_ivshmem_server_never_takes_over_an_existing_socket():
+    d = _short_dir()
+    shm = os.path.join(d, "x.shm")
+    with open(shm, "wb") as f:
+        f.write(b"\0" * 4096)
+    path = os.path.join(d, "taken.sock")
+    open(path, "w").close()
+    r = subprocess.run([_PY, IVSHMEM_SERVER_PY, "--socket", path, "--shm", shm],
+                       capture_output=True, text=True, timeout=30)
+    assert r.returncode == 2 and "exists" in r.stdout, r.stdout
+
+
+def _notified_rig(native_servers):
+    """A host ivshmem server and the native monitor in shmkick mode on it."""
+    import time as _t
+    d = _short_dir()
+    srv, path, shm = _start_ivshmem_server(d)
+    kick = os.path.join(d, "kick.sock")
+    mon = subprocess.Popen([str(native_servers / "monitor"), "shmkick", path + "@4096", kick],
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    for _ in range(100):
+        if os.path.exists(kick):
+            break
+        _t.sleep(0.05)
+    assert os.path.exists(kick), mon.communicate(timeout=5)
+    return d, srv, path, shm, kick, mon
+
+
+def _stop(*procs):
+    outs = []
+    for p in procs:
+        p.terminate()
+        outs.append(p.communicate(timeout=10))
+    return outs
+
+
+def _notified_probe(native_servers, proto, shm, kick, ivshm, tmp_path, *extra):
+    out = tmp_path / ("lat-%s.json" % proto)
+    args = [_PY, PROBE, "--proto", proto, "--kick", kick, "--shm-lib", str(native_servers / "libshmchan.so"),
+            "--n", "50", "--warmup", "5", "--interval-ms", "0", "--tag", proto + "_r1", "--out", str(out)]
+    if proto != "kickecho":
+        args += ["--shm", shm + "@4096"]
+    if proto == "shmdb":
+        args += ["--ivshm", ivshm]
+    return subprocess.run(args + list(extra), capture_output=True, text=True, timeout=120), out
+
+
+@pytest.mark.parametrize("proto", ["shmkick", "shmdb", "kickecho"])
+def test_notified_arm_ends_every_exchange_on_exactly_one_notification(native_servers, tmp_path, proto):
+    if not LINUX_IPC:
+        pytest.skip("needs Linux")
+    d, srv, path, shm, kick, mon = _notified_rig(native_servers)
+    try:
+        r, out = _notified_probe(native_servers, proto, shm, kick, path, tmp_path)
+    finally:
+        (mout, merr), _ = _stop(mon, srv)
+    assert r.returncode == 0, r.stdout + r.stderr
+    summ = json.loads(out.read_text())["summary"]
+    nt = summ["notify"]
+    assert summ["proto"] == proto and summ["n"] == 50
+    assert nt["exchanges"] == 55 and nt["notifications"] == 55 and nt["wakeups"] == 55, nt
+    assert nt["early_wakeups"] == 0 and nt["stray"] == 0 and nt["eagain"] == 0, nt
+    if proto == "shmdb":
+        assert summ["ivshm_peer"] >= 2 and summ["handshake_attempts"] >= 1
+        assert summ["wait_fd_nonblock"] == [True, True], "the server's eventfds are non-blocking"
+    done = mout.decode()
+    assert "shm-kick done:" in done and " stale=0 " in done and " stray=0 " in done and " ring_misses=0 " in done, done
+
+
+def test_db_burst_delivers_every_doorbell(native_servers, tmp_path):
+    if not LINUX_IPC:
+        pytest.skip("needs Linux")
+    d, srv, path, shm, kick, mon = _notified_rig(native_servers)
+    try:
+        r = subprocess.run([_PY, PROBE, "--proto", "shmdb", "--kick", kick, "--shm", shm + "@4096", "--ivshm", path,
+                            "--shm-lib", str(native_servers / "libshmchan.so"), "--db-burst", "1000",
+                            "--tag", "burst"], capture_output=True, text=True, timeout=120)
+    finally:
+        _stop(mon, srv)
+    assert r.returncode == 0 and '"got": 1000' in r.stdout, r.stdout + r.stderr
+
+
+def _fake_notified_server(shm, kick, behaviour, before=None, answer=True, close_on_accept=False):
+    """A kick server in Python that answers in the slot and then does
+    `behaviour(conn)` -- to make faults the real monitor never makes. `before`
+    runs before the answer; answer=False never answers; close_on_accept hangs up
+    at once."""
+    import mmap
+    import struct as _st
+    import threading
+    fd = os.open(shm, os.O_RDWR)
+    mm = mmap.mmap(fd, 1 << 20)
+    base = 4096
+    mm[base:base + 8] = _st.pack("<II", 0x314B4853, 1)          # "SHK1", version 1
+    ls = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
+    ls.bind(kick)
+    ls.listen(1)
+
+    def serve():
+        conn, _ = ls.accept()
+        if close_on_accept:
+            conn.close()
+            return
+        while True:
+            b = conn.recv(64)
+            if not b:
+                return
+            if before is not None:
+                before(conn)
+            if not answer:
+                continue
+            seq = _st.unpack("<Q", mm[base + 64:base + 72])[0]
+            mm[base + 256:base + 320] = mm[base + 128:base + 192]
+            mm[base + 192:base + 200] = _st.pack("<Q", seq)
+            behaviour(conn)
+    threading.Thread(target=serve, daemon=True).start()
+    return ls
+
+
+def test_a_reply_without_its_notification_is_lost_not_a_stall(native_servers, tmp_path):
+    """FOUND BY DESIGN REVIEW: a doorbell QEMU drops, or a kick eaten on the way,
+    leaves the reply in the slot with the probe asleep. That is a protocol fault
+    (exit 5, "notification lost"), never a stall record."""
+    if not LINUX_IPC:
+        pytest.skip("needs Linux")
+    d = _short_dir()
+    shm = os.path.join(d, "slot.shm")
+    with open(shm, "wb") as f:
+        f.write(b"\0" * (1 << 20))
+    kick = os.path.join(d, "kick.sock")
+    _fake_notified_server(shm, kick, lambda conn: None)       # answers, never notifies
+    st = tmp_path / "stall.json"
+    r, out = _notified_probe(native_servers, "shmkick", shm, kick, "", tmp_path,
+                             "--timeout-s", "0.3", "--stall-out", str(st))
+    assert r.returncode == 5 and "notification lost" in r.stdout, r.stdout + r.stderr
+    assert not st.exists() and not out.exists()
+
+
+def test_stray_bytes_on_the_kick_stream_are_counted(native_servers, tmp_path):
+    if not LINUX_IPC:
+        pytest.skip("needs Linux")
+    d = _short_dir()
+    shm = os.path.join(d, "slot.shm")
+    with open(shm, "wb") as f:
+        f.write(b"\0" * (1 << 20))
+    kick = os.path.join(d, "kick.sock")
+    _fake_notified_server(shm, kick, lambda conn: conn.sendall(b"Kx"))
+    r, out = _notified_probe(native_servers, "shmkick", shm, kick, "", tmp_path)
+    assert r.returncode == 0, r.stdout + r.stderr
+    nt = json.loads(out.read_text())["summary"]["notify"]
+    assert nt["stray"] >= 1 and nt["notifications"] == nt["exchanges"], nt
+
+
+def test_a_polling_client_and_a_notified_server_never_pair(native_servers, tmp_path):
+    """FOUND BY CODE REVIEW: the first version wrote the notified magic where the
+    polling client never looks, so it passed whatever the magic check did. Now
+    each client meets the OTHER kind's magic at its own offset."""
+    import struct as _st
+    if not LINUX_IPC:
+        pytest.skip("needs Linux")
+    d = _short_dir()
+    shm = os.path.join(d, "slot.shm")
+    with open(shm, "wb") as f:
+        f.write(b"\0" * (1 << 20))
+    with open(shm, "r+b") as f:
+        f.seek(0)
+        f.write(_st.pack("<II", 0x314B4853, 1))       # "SHK1" where a polling client looks
+        f.seek(4096)
+        f.write(_st.pack("<II", 0x314D4853, 1))       # "SHM1" where a notified client looks
+    kick = os.path.join(d, "kick.sock")
+    ls = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
+    ls.bind(kick)
+    ls.listen(1)
+    lib = str(native_servers / "libshmchan.so")
+    r = subprocess.run([_PY, PROBE, "--proto", "shm", "--shm", shm, "--shm-lib", lib,
+                        "--n", "5", "--warmup", "0", "--tag", "p"], capture_output=True, text=True, timeout=60)
+    assert r.returncode == 2 and "no server is serving" in r.stdout, r.stdout
+    r = subprocess.run([_PY, PROBE, "--proto", "shmkick", "--shm", shm + "@4096", "--kick", kick, "--shm-lib", lib,
+                        "--n", "5", "--warmup", "0", "--tag", "k"], capture_output=True, text=True, timeout=60)
+    assert r.returncode == 2 and "no notified server is serving" in r.stdout, r.stdout
+    ls.close()
+
+
+@pytest.mark.parametrize("args,why", [
+    (["--proto", "shmkick", "--shm-lib", "x.so", "--shm", "f@4096"], "needs --kick"),
+    (["--proto", "shmdb", "--shm-lib", "x.so", "--shm", "f@4096", "--kick", "k"], "--proto shmdb needs --ivshm"),
+    (["--proto", "kickecho", "--kick", "k"], "needs --kick, --shm-lib"),
+    (["--proto", "shmkick", "--kick", "k", "--shm-lib", "x.so", "--shm", "f", "--db-burst", "5"],
+     "--db-burst needs --proto shmdb"),
+])
+def test_probe_refuses_a_notified_arm_it_cannot_run(args, why):
+    import sys
+    r = subprocess.run([sys.executable, PROBE] + args, capture_output=True, text=True, timeout=60)
+    assert r.returncode == 2 and why in r.stderr, r.stderr
+
+
+def test_m_probe_hands_notified_arms_their_channels(tmp_path):
+    fake = tmp_path / "argv.py"
+    fake.write_bytes(b"import sys, json\na = sys.argv\n"
+                     b"open(a[a.index('--out') + 1], 'w').write(json.dumps({'argv': a[1:]}))\n")
+    out = tmp_path / "out"
+    out.mkdir()
+    r = _run(tmp_path, 'N=10; WARMUP=1; INTERVAL_MS=0; CORE_PROBE=0; SAMPLE_WINDOW=0; PROBE="%s"; '
+             'SHMCHAN_LIB=x.so; taskset() { shift 2; "$@"; }; '
+             'm_probe "%s" k_r1 slot@4096 kicksock "" shmkick; '
+             'm_probe "%s" d_r1 slot@4096 kicksock "" shmdb ivsock; '
+             'm_probe "%s" e_r1 - kicksock "" kickecho' % (_posix(fake), _posix(out), _posix(out), _posix(out)))
+    assert r.returncode == 0, r.stderr
+    k = json.loads((out / "lat-k_r1.json").read_text())["argv"]
+    db = json.loads((out / "lat-d_r1.json").read_text())["argv"]
+    e = json.loads((out / "lat-e_r1.json").read_text())["argv"]
+    assert k[k.index("--shm") + 1] == "slot@4096" and k[k.index("--kick") + 1] == "kicksock" and "--ivshm" not in k
+    assert db[db.index("--ivshm") + 1] == "ivsock" and db[db.index("--proto") + 1] == "shmdb"
+    assert "--shm" not in e and e[e.index("--kick") + 1] == "kicksock"
+    for a in (k, db, e):
+        assert "--host" not in a and "--port" not in a
+
+
+def test_m_probe_refuses_shmdb_without_its_server(tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    r = _run(tmp_path, 'N=10; WARMUP=1; INTERVAL_MS=0; CORE_PROBE=0; SAMPLE_WINDOW=0; PROBE=/x; SHMCHAN_LIB=x.so; '
+             'm_probe "%s" d_r1 slot@4096 kicksock "" shmdb; echo SHOULD NOT REACH' % _posix(out))
+    assert r.returncode != 0 and "shmdb needs the ivshmem server" in r.stderr, r.stderr
+
+
+@pytest.mark.parametrize("rc,why", [(0, None), (4, "no notified reply in 5 s"), (2, "could not run (probe exit 2)")])
+def test_notified_reachability(tmp_path, rc, why):
+    fake = tmp_path / "p.py"
+    fake.write_bytes(b"import sys\nsys.exit(%d)\n" % rc)
+    r = _run(tmp_path, 'PROBE="%s"; SHMCHAN_LIB=x.so; m_reachable_notified D-db shmdb slot@4096 kicksock ivsock; '
+             'echo REACHED' % _posix(fake))
+    if why is None:
+        assert "REACHED" in r.stdout and "reachable: D-db (shmdb via kicksock)" in r.stderr + r.stdout
+    else:
+        assert r.returncode != 0 and why in r.stderr, r.stderr
+
+
+def _notify_dir(tmp_path, arms, notify_of):
+    def m(a, r, s):
+        s["proto"] = {"A-kick": "shmkick", "D-db": "shmdb", "C-kick": "kickecho"}.get(a, "tcp")
+        nt = notify_of(a)
+        if nt is not None:
+            s["notify"] = nt
+    return _sched_dir(tmp_path, arms, m)
+
+
+def _clean_notify(ex=1200):
+    return {"exchanges": ex, "wakeups": ex, "early_wakeups": 0, "notifications": ex, "stray": 0, "eagain": 0}
+
+
+def _notify_gate(tmp_path, d, arms, kvm=0):
+    return _run(tmp_path, 'K=2; N=1000; WARMUP=200; CORE_PROBE=4; FIFO_ARMS=""; KICK_ARMS="A-kick"; DB_ARMS="D-db"; '
+                'ECHO_ARMS="C-kick"; KVM_STATS=%d; m_require_complete "%s" %s; echo PASSED'
+                % (kvm, _posix(d), " ".join(arms)))
+
+
+def test_gate_accepts_notified_arms_with_one_notification_per_exchange(tmp_path):
+    arms = ["A-loopback", "A-kick", "C-kick", "D-db"]
+    d = _notify_dir(tmp_path, arms, lambda a: _clean_notify() if a != "A-loopback" else None)
+    r = _notify_gate(tmp_path, d, arms)
+    assert "PASSED" in r.stdout, r.stderr
+
+
+@pytest.mark.parametrize("bad,why", [
+    ({"stray": 1}, "notify.stray=1, expected 0"),
+    ({"early_wakeups": 2}, "notify.early_wakeups=2, expected 0"),
+    ({"eagain": 1}, "notify.eagain=1, expected 0"),
+    ({"notifications": 1199}, "notify.notifications=1199, expected one per exchange"),
+    ({"wakeups": 1201}, "notify.wakeups=1201, expected one per exchange"),
+    ({"exchanges": 1000}, "notify.exchanges=1000, expected 1200"),
+])
+def test_gate_refuses_a_notified_arm_that_was_not_one_notification_per_exchange(tmp_path, bad, why):
+    arms = ["A-kick"]
+
+    def nt(a):
+        x = _clean_notify()
+        x.update(bad)
+        if "exchanges" in bad and "notifications" not in bad:
+            x["notifications"] = x["wakeups"] = bad["exchanges"]
+        return x
+    d = _notify_dir(tmp_path, arms, nt)
+    r = _notify_gate(tmp_path, d, arms)
+    assert "PASSED" not in r.stdout and why in r.stderr, r.stderr
+
+
+def test_gate_refuses_a_notified_arm_with_no_accounting(tmp_path):
+    arms = ["D-db"]
+    d = _notify_dir(tmp_path, arms, lambda a: None)
+    r = _notify_gate(tmp_path, d, arms)
+    assert "PASSED" not in r.stdout and "D-db_r1: notify.exchanges=None" in r.stderr, r.stderr
+
+
+def test_gate_wants_a_kvm_snapshot_per_arm_when_asked(tmp_path):
+    arms = ["A-loopback"]
+    d = _notify_dir(tmp_path, arms, lambda a: None)
+    r = _notify_gate(tmp_path, d, arms, kvm=1)
+    assert "PASSED" not in r.stdout and "A-loopback_r1: no readable KVM snapshot" in r.stderr, r.stderr
+    for rr in (1, 2):
+        (d / ("kvm-A-loopback_r%d.json" % rr)).write_text(json.dumps({"before": {}, "after": {}}))
+    r = _notify_gate(tmp_path, d, arms, kvm=1)
+    assert "PASSED" in r.stdout, r.stderr
+
+
+def _fake_kvm(tmp_path, dirs=("4242-12",), counters=None):
+    kvm = tmp_path / "kvm"
+    for dname in dirs:
+        (kvm / dname).mkdir(parents=True)
+        for k, v in (counters or {"exits": 100, "mmio_exit_kernel": 10, "mmio_exit_user": 3}).items():
+            (kvm / dname / k).write_text("%d\n" % v)
+    task = tmp_path / "proc" / "4242" / "task" / "4243"
+    task.mkdir(parents=True)
+    (task / "schedstat").write_text("1000 20 3\n")
+    (task / "comm").write_text("CPU 0/KVM\n")
+    return kvm
+
+
+def _kvm_snap(tmp_path, kvm, snippet):
+    return _run(tmp_path, 'KVM_QEMU_PID=4242; KVM_DEBUGFS="%s"; PROC_ROOT="%s"; CORE_AUX=0; '
+                'sleep() { :; }; taskset() { shift 2; "$@"; }; %s'
+                % (_posix(kvm), _posix(tmp_path / "proc"), snippet),
+                sudo='[ "$1" = -n ] && shift; exec "$@"')
+
+
+def test_kvm_snapshot_records_counters_and_qemu_threads(tmp_path):
+    kvm = _fake_kvm(tmp_path)
+    j = tmp_path / "kvm.json"
+    r = _kvm_snap(tmp_path, kvm, 'm_kvm_snap "%s" before && echo 250 > "%s/4242-12/mmio_exit_kernel" && '
+                  'm_kvm_snap "%s" after && echo DONE' % (_posix(j), _posix(kvm), _posix(j)))
+    assert "DONE" in r.stdout, r.stderr
+    doc = json.loads(j.read_text())
+    assert doc["before"]["counters"]["mmio_exit_kernel"] == 10 and doc["after"]["counters"]["mmio_exit_kernel"] == 250
+    assert doc["before"]["counters"]["halt_wait_ns"] is None, "an absent counter is null, not a guess"
+    assert doc["after"]["threads"]["4243"] == {"comm": "CPU 0/KVM", "run_ns": 1000, "wait_ns": 20, "slices": 3}
+    assert doc["after"]["t_ns"] >= doc["before"]["t_ns"]
+
+
+@pytest.mark.parametrize("dirs,why", [((), "expected one"), (("4242-12", "4242-13"), "expected one")])
+def test_kvm_snapshot_refuses_an_ambiguous_vm(tmp_path, dirs, why):
+    kvm = _fake_kvm(tmp_path, dirs=dirs) if dirs else (tmp_path / "kvm")
+    kvm.mkdir(exist_ok=True)
+    if not dirs:
+        task = tmp_path / "proc" / "4242" / "task"
+        task.mkdir(parents=True)
+    r = _kvm_snap(tmp_path, kvm, 'm_kvm_snap "%s" before; echo SHOULD NOT REACH' % _posix(tmp_path / "k.json"))
+    assert r.returncode != 0 and why in r.stderr, r.stderr
+
+
+
+# ------------------------------------------------ notified variant: review follow-ups (2026-09-22)
+
+def _proof_dir(tmp_path, got, dk, du):
+    d = tmp_path / "proof"
+    d.mkdir()
+    (d / "db-burst.json").write_text(json.dumps({"burst": {"got": got}}))
+    (d / "db-burst-kvm.json").write_text(json.dumps({
+        "before": {"counters": {"mmio_exit_kernel": 100, "mmio_exit_user": 50, "exits": 1000}},
+        "after": {"counters": {"mmio_exit_kernel": None if dk is None else 100 + dk,
+                               "mmio_exit_user": 50 + du, "exits": 2000}}}))
+    return d
+
+
+@pytest.mark.parametrize("got,dk,du,ok", [
+    (10000, 10000, 0, True),
+    (10000, 10200, 999, True),
+    (9999, 10000, 0, False),          # a doorbell went missing
+    (10000, 9999, 0, False),          # fewer in-kernel exits than doorbells
+    (10000, 10000, 1000, False),      # a tenth took QEMU's userspace path
+    (10000, None, 0, False),          # a counter that could not be read
+])
+def test_doorbell_proof_refuses_anything_but_the_in_kernel_path(tmp_path, got, dk, du, ok):
+    """FOUND BY CODE REVIEW: the proof was an inline heredoc no test could reach."""
+    d = _proof_dir(tmp_path, got, dk, du)
+    r = _run(tmp_path, 'm_db_proof "%s" 10000 && echo PROVEN' % _posix(d))
+    assert ("PROVEN" in r.stdout) == ok, r.stdout + r.stderr
+    assert ('"ok": true' in r.stdout) == ok
+
+
+def test_a_burst_the_monitor_refuses_fails_the_probe(native_servers, tmp_path):
+    if not LINUX_IPC:
+        pytest.skip("needs Linux")
+    d, srv, path, shm, kick, mon = _notified_rig(native_servers)
+    try:
+        r = subprocess.run([_PY, PROBE, "--proto", "shmdb", "--kick", kick, "--shm", shm + "@4096", "--ivshm", path,
+                            "--shm-lib", str(native_servers / "libshmchan.so"), "--db-burst", "100001",
+                            "--timeout-s", "0.5", "--tag", "burst"], capture_output=True, text=True, timeout=120)
+    finally:
+        _stop(mon, srv)
+    assert r.returncode == 6 and '"got": 0' in r.stdout, r.stdout + r.stderr
+
+
+def test_one_host_monitor_serves_probe_after_probe(native_servers, tmp_path):
+    """A ladder run sends ~26 probes through one host monitor in turn."""
+    if not LINUX_IPC:
+        pytest.skip("needs Linux")
+    d, srv, path, shm, kick, mon = _notified_rig(native_servers)
+    summaries = []
+    try:
+        for i, proto in enumerate(("shmdb", "shmkick", "shmdb")):
+            sub = tmp_path / ("p%d" % i)
+            sub.mkdir()
+            r, out = _notified_probe(native_servers, proto, shm, kick, path, sub)
+            assert r.returncode == 0, r.stdout + r.stderr
+            summaries.append(json.loads(out.read_text())["summary"])
+    finally:
+        (mout, _merr), _ = _stop(mon, srv)
+    assert summaries[2]["ivshm_peer"] == 3 and summaries[2]["notify"] == _clean_notify(55)
+    done = mout.decode()
+    assert " clients=3 " in done and " ring_misses=0 " in done and " notify_fail=0 " in done, done
+
+
+def _doorbell_far_end(path, shm, kick, drop_first):
+    """A far end in Python: a peer of the real server that answers in the slot and
+    rings the client's eventfd -- except, with drop_first, the first time, as
+    QEMU does for a peer it has not registered yet."""
+    import mmap
+    import struct as _st
+    import threading
+    me, _ = _peer(path)
+    _msg(me)                                      # its own eventfd
+    me.setblocking(False)
+    efds = {}
+    fd = os.open(shm, os.O_RDWR)
+    mm = mmap.mmap(fd, 1 << 20)
+    base = 4096
+    mm[base:base + 8] = _st.pack("<II", 0x314B4853, 1)
+    ls = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
+    ls.bind(kick)
+    ls.listen(1)
+    state = {"n": 0}
+
+    def drain_server():
+        while True:
+            try:
+                data, fds, _f, _a = _socket.recv_fds(me, 8, 1)
+            except BlockingIOError:
+                return
+            if len(data) < 8:
+                return
+            v = _st.unpack("<q", data)[0]
+            if fds:
+                efds[v] = fds[0]
+
+    def serve():
+        conn, _ = ls.accept()
+        while True:
+            b = conn.recv(64)
+            if not b:
+                return
+            drain_server()
+            seq = _st.unpack("<Q", mm[base + 64:base + 72])[0]
+            peer = _st.unpack("<I", mm[base + 76:base + 80])[0]
+            mm[base + 256:base + 320] = mm[base + 128:base + 192]
+            mm[base + 192:base + 200] = _st.pack("<Q", seq)
+            state["n"] += 1
+            if drop_first and state["n"] == 1:
+                continue
+            os.eventfd_write(efds[peer], 1)
+    threading.Thread(target=serve, daemon=True).start()
+    return me, ls
+
+
+def test_the_doorbell_handshake_retries_a_dropped_doorbell(native_servers, tmp_path):
+    """The reason the handshake exists: QEMU drops a doorbell to a peer it has not
+    registered yet. The first exchange's doorbell is dropped here; the arm must
+    still run, after exactly two handshake attempts, with clean accounting."""
+    if not LINUX_IPC:
+        pytest.skip("needs Linux")
+    d = _short_dir()
+    srv, path, shm = _start_ivshmem_server(d)
+    kick = os.path.join(d, "kick.sock")
+    try:
+        _doorbell_far_end(path, shm, kick, drop_first=True)
+        r, out = _notified_probe(native_servers, "shmdb", shm, kick, path, tmp_path)
+    finally:
+        _stop(srv)
+    assert r.returncode == 0, r.stdout + r.stderr
+    summ = json.loads(out.read_text())["summary"]
+    assert summ["handshake_attempts"] == 2 and summ["notify"] == _clean_notify(55), summ
+
+
+def test_an_early_notification_is_counted(native_servers, tmp_path):
+    """A far end that notifies BEFORE its reply is visible: the wake-up is early,
+    and the exchange completes only on the second notification."""
+    import time as _t
+    if not LINUX_IPC:
+        pytest.skip("needs Linux")
+    d = _short_dir()
+    shm = os.path.join(d, "slot.shm")
+    with open(shm, "wb") as f:
+        f.write(b"\0" * (1 << 20))
+    kick = os.path.join(d, "kick.sock")
+
+    def early(conn):
+        conn.sendall(b"K")
+        _t.sleep(0.05)
+    _fake_notified_server(shm, kick, lambda conn: conn.sendall(b"K"), before=early)
+    r, out = _notified_probe(native_servers, "shmkick", shm, kick, "", tmp_path, "--n", "3", "--warmup", "0")
+    assert r.returncode == 0, r.stdout + r.stderr
+    nt = json.loads(out.read_text())["summary"]["notify"]
+    assert nt["early_wakeups"] == 3 and nt["notifications"] == 6 and nt["exchanges"] == 3, nt
+
+
+def test_an_early_notification_and_no_second_is_lost_not_a_long_sample(native_servers, tmp_path):
+    """FOUND BY CODE REVIEW: this used to come back OK, as a sample as long as the
+    timeout. A reply that sits in the slot with no notification of its own is lost."""
+    import time as _t
+    if not LINUX_IPC:
+        pytest.skip("needs Linux")
+    d = _short_dir()
+    shm = os.path.join(d, "slot.shm")
+    with open(shm, "wb") as f:
+        f.write(b"\0" * (1 << 20))
+    kick = os.path.join(d, "kick.sock")
+
+    def early(conn):
+        conn.sendall(b"K")
+        _t.sleep(0.05)
+    _fake_notified_server(shm, kick, lambda conn: None, before=early)
+    r, out = _notified_probe(native_servers, "shmkick", shm, kick, "", tmp_path,
+                             "--n", "3", "--warmup", "0", "--timeout-s", "0.5")
+    assert r.returncode == 5 and "notification lost" in r.stdout, r.stdout + r.stderr
+    assert not out.exists()
+
+
+def test_no_reply_at_all_is_a_stall(native_servers, tmp_path):
+    if not LINUX_IPC:
+        pytest.skip("needs Linux")
+    d = _short_dir()
+    shm = os.path.join(d, "slot.shm")
+    with open(shm, "wb") as f:
+        f.write(b"\0" * (1 << 20))
+    kick = os.path.join(d, "kick.sock")
+    _fake_notified_server(shm, kick, lambda conn: None, answer=False)
+    st = tmp_path / "stall.json"
+    r, out = _notified_probe(native_servers, "shmkick", shm, kick, "", tmp_path,
+                             "--timeout-s", "0.3", "--stall-out", str(st))
+    assert r.returncode == 3, r.stdout + r.stderr
+    rec = json.loads(st.read_text())["stall"]
+    assert rec["kind"] == "timeout" and rec["proto"] == "shmkick" and not out.exists()
+
+
+def test_a_doorbell_arm_whose_kick_stream_closes_is_broken_not_a_stall(native_servers, tmp_path):
+    """FOUND BY CODE REVIEW: a shmdb wait watched only its eventfd, so a far end
+    that hung up the kick stream was filed as a 10 s stall."""
+    if not LINUX_IPC:
+        pytest.skip("needs Linux")
+    d = _short_dir()
+    srv, path, shm = _start_ivshmem_server(d)
+    kick = os.path.join(d, "kick.sock")
+    import struct as _st
+    with open(shm, "r+b") as f:
+        f.seek(4096)
+        f.write(_st.pack("<II", 0x314B4853, 1))
+    try:
+        _fake_notified_server(shm, kick, lambda conn: None, close_on_accept=True)
+        st = tmp_path / "stall.json"
+        r, out = _notified_probe(native_servers, "shmdb", shm, kick, path, tmp_path,
+                                 "--timeout-s", "3", "--stall-out", str(st))
+    finally:
+        _stop(srv)
+    assert r.returncode == 5, r.stdout + r.stderr
+    assert not st.exists() and not out.exists()
+
+
+def test_a_kick_with_no_request_is_stale_and_answered_by_nothing(native_servers, tmp_path):
+    if not LINUX_IPC:
+        pytest.skip("needs Linux")
+    d, srv, path, shm, kick, mon = _notified_rig(native_servers)
+    try:
+        c = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
+        c.connect(kick)
+        c.sendall(b"K")                     # the slot untouched: nothing to answer
+        c.sendall(b"E")
+        c.settimeout(2.0)
+        assert c.recv(16) == b"E", "a stale kick must not be answered"
+        c.close()
+        r, out = _notified_probe(native_servers, "shmkick", shm, kick, path, tmp_path)
+    finally:
+        (mout, _merr), _ = _stop(mon, srv)
+    assert r.returncode == 0 and json.loads(out.read_text())["summary"]["notify"] == _clean_notify(55)
+    done = mout.decode()
+    assert " stale=1 " in done and " clients=2 " in done, done
+
+
+def test_a_peer_missing_from_the_table_is_found_and_counted(native_servers, tmp_path):
+    """The table-miss fallback: a client that joins the ivshmem server only AFTER
+    the monitor accepted its kick connection. The doorbell must still arrive, and
+    the miss must be counted, because it put system calls on that reply's path."""
+    import select as _sel
+    import struct as _st
+    if not LINUX_IPC:
+        pytest.skip("needs Linux")
+    lp = _probe_mod()
+    d, srv, path, shm, kick, mon = _notified_rig(native_servers)
+    try:
+        c = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
+        c.connect(kick)
+        c.sendall(b"E")
+        c.settimeout(2.0)
+        assert c.recv(16) == b"E"          # the monitor is past accept() and its drain
+        me, pid = _peer(path)
+        own, efd = _msg(me)
+        assert own == pid
+        with open(shm, "r+b") as f:
+            f.seek(4096 + 64)
+            seq = _st.unpack("<Q", f.read(8))[0]
+            f.seek(4096 + 128)
+            f.write(lp.build_frame(1))
+            f.seek(4096 + 72)
+            f.write(_st.pack("<II", 1, pid))            # reply_via = doorbell, client_peer = pid
+            f.seek(4096 + 64)
+            f.write(_st.pack("<Q", seq + 1))
+        c.sendall(b"K")
+        assert _sel.select([efd], [], [], 2.0)[0], "the doorbell never arrived"
+        assert _st.unpack("<Q", os.read(efd, 8))[0] == 1
+        c.close()
+        me.close()
+    finally:
+        (mout, _merr), _ = _stop(mon, srv)
+    done = mout.decode()
+    assert " ring_misses=1 " in done and " rings=1 " in done, done
+
+
+@needs_linux_ipc
+def test_ivshmem_server_announces_a_newcomer_before_its_own_eventfd_in_process():
+    """FOUND BY CODE REVIEW: the socket-level order test passed with the order
+    reversed. In-process, every message is logged in the order it is sent."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("ivsrv", IVSHMEM_SERVER_PY)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    log = []
+    real = mod.send_msg
+
+    def spy(sock, value, fd=None):
+        log.append((sock.fileno(), value, fd is not None))
+        return real(sock, value, fd)
+    mod.send_msg = spy
+    d = _short_dir()
+    shm = os.path.join(d, "x.shm")
+    with open(shm, "wb") as f:
+        f.write(b"\0" * 4096)
+    sfd = os.open(shm, os.O_RDWR)
+    srv = mod.Server(os.path.join(d, "s.sock"), sfd, 1, lambda m: None)
+    clients = []
+    try:
+        for _ in range(2):
+            c = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
+            c.connect(os.path.join(d, "s.sock"))
+            clients.append(c)
+            srv.accept()
+        by_id = {p.id: fileno for fileno, p in srv.peers.items()}
+        told_old = log.index((by_id[1], 2, True))
+        own_new = log.index((by_id[2], 2, True))
+        assert told_old < own_new, "peer 1 must learn about peer 2 before peer 2 gets its own eventfd"
+    finally:
+        for c in clients:
+            c.close()
+        srv.close()
+
+
+@needs_linux_ipc
+def test_ivshmem_server_announces_the_departure_of_a_newcomer_that_failed_setup():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("ivsrv2", IVSHMEM_SERVER_PY)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    d = _short_dir()
+    shm = os.path.join(d, "x.shm")
+    with open(shm, "wb") as f:
+        f.write(b"\0" * 4096)
+    srv = mod.Server(os.path.join(d, "s.sock"), os.open(shm, os.O_RDWR), 1, lambda m: None)
+    c1 = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
+    c1.connect(os.path.join(d, "s.sock"))
+    srv.accept()
+    for _ in range(4):                         # version, id, shm, own eventfd
+        _msg(c1)
+    real = mod.send_msg
+
+    def failing(sock, value, fd=None):
+        if value == 2 and fd is not None and sock.fileno() not in srv.peers:
+            raise OSError("newcomer vanished")   # its own eventfd never goes out
+        return real(sock, value, fd)
+    mod.send_msg = failing
+    c2 = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
+    c2.connect(os.path.join(d, "s.sock"))
+    srv.accept()
+    try:
+        told, fd = _msg(c1)
+        assert (told, fd is not None) == (2, True)
+        gone, gfd = _msg(c1)
+        assert (gone, gfd) == (2, None), "peer 1 must hear that the failed newcomer is gone"
+    finally:
+        c1.close()
+        c2.close()
+        srv.close()
+
+
+def test_kvm_snapshot_pauses_once_before_and_never_after(tmp_path):
+    kvm = _fake_kvm(tmp_path)
+    j = tmp_path / "kvm.json"
+    r = _run(tmp_path, 'KVM_QEMU_PID=4242; KVM_DEBUGFS="%s"; PROC_ROOT="%s"; CORE_AUX=0; '
+             'sleep() { echo "SLEPT $*" >&2; }; taskset() { shift 2; "$@"; }; '
+             'm_kvm_snap "%s" before && m_kvm_snap "%s" after && echo DONE'
+             % (_posix(kvm), _posix(tmp_path / "proc"), _posix(j), _posix(j)),
+             sudo='[ "$1" = -n ] && shift; exec "$@"')
+    assert "DONE" in r.stdout, r.stderr
+    assert r.stderr.count("SLEPT 0.1") == 1, r.stderr
+
+
+def test_m_probe_brackets_the_probe_with_kvm_snapshots(tmp_path):
+    kvm = _fake_kvm(tmp_path)
+    fake = tmp_path / "probe.py"
+    fake.write_bytes(("import sys, json\na = sys.argv\n"
+                      "open(%r, 'w').write('250\\n')\n"
+                      "open(a[a.index('--out') + 1], 'w').write(json.dumps({'argv': a[1:]}))\n"
+                      % str(kvm / "4242-12" / "mmio_exit_kernel")).encode())
+    out = tmp_path / "out"
+    out.mkdir()
+    r = _run(tmp_path, 'N=10; WARMUP=1; INTERVAL_MS=0; CORE_PROBE=0; SAMPLE_WINDOW=0; PROBE="%s"; KVM_STATS=1; '
+             'KVM_QEMU_PID=4242; KVM_DEBUGFS="%s"; PROC_ROOT="%s"; CORE_AUX=0; '
+             'sleep() { :; }; taskset() { shift 2; "$@"; }; m_probe "%s" x_r1 127.0.0.1 1 && echo DONE'
+             % (_posix(fake), _posix(kvm), _posix(tmp_path / "proc"), _posix(out)),
+             sudo='[ "$1" = -n ] && shift; exec "$@"')
+    assert "DONE" in r.stdout, r.stderr
+    doc = json.loads((out / "kvm-x_r1.json").read_text())
+    assert doc["before"]["counters"]["mmio_exit_kernel"] == 10
+    assert doc["after"]["counters"]["mmio_exit_kernel"] == 250
