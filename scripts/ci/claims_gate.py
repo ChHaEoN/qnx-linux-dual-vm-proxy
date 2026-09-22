@@ -58,6 +58,11 @@ UDP_LADDER_K = 12
 # differences from it.
 SHM_LADDER_RAW_REL = "results/orin-native-port/20260922T-a6-orin-shm/ladder/raw"
 SHM_LADDER_K = 12
+# The notified shared-memory ladder (A6, OD12, 2026-09-22): TCP, D-udp, the polled
+# slot, and the kick/doorbell arms, k = 12. README quotes two levels and two paired
+# differences from it.
+KICK_LADDER_RAW_REL = "results/orin-native-port/20260922T-a6-orin-kick/ladder/raw"
+KICK_LADDER_K = 12
 DELTA_AWK = os.path.join("scripts", "twin", "delta.awk")
 
 # Current-state files: they say what is true now, and nothing else. Adding a
@@ -209,6 +214,16 @@ def build_claims(repo):
     def shm_level(name):
         value, k = C.ladder_arm_p50_us(os.path.join(repo, SHM_LADDER_RAW_REL), name)
         assert k == SHM_LADDER_K, "shm ladder %s has k=%d, expected %d" % (name, k, SHM_LADDER_K)
+        return value, "us"
+
+    def kick_contrast(plus, minus):
+        value, k = C.paired_contrast_us(os.path.join(repo, KICK_LADDER_RAW_REL), plus, minus)
+        assert k == KICK_LADDER_K, "kick ladder %s-%s has k=%d, expected %d" % (plus, minus, k, KICK_LADDER_K)
+        return value, "us"
+
+    def kick_level(name):
+        value, k = C.ladder_arm_p50_us(os.path.join(repo, KICK_LADDER_RAW_REL), name)
+        assert k == KICK_LADDER_K, "kick ladder %s has k=%d, expected %d" % (name, k, KICK_LADDER_K)
         return value, "us"
 
     def ladder_crossing():
@@ -425,6 +440,28 @@ def build_claims(repo):
               [SHM_LADDER_RAW_REL + "/lat-{D-shm,A-shm}_r*.json"],
               lambda: shm_contrast(["D-shm"], ["A-shm"]),
               note="paired: D-shm minus A-shm in the same round; a zero to the nearest us"),
+        # The notified ladder, added 2026-09-22. Two LEVELS (medians of the round
+        # p50s) and two PAIRED differences, each from its own anchor.
+        Claim("C34", "notified shm, guest answers by doorbell, D-db p50 level",
+              r"takes \*\*([0-9]+) (?P<unit>µs)\*\* when the guest answers through", 0, "µs", "us",
+              [KICK_LADDER_RAW_REL + "/lat-D-db_r*.json"],
+              lambda: kick_level("D-db"),
+              note="median of the 12 round p50s"),
+        Claim("C35", "TCP minus the doorbell arm, D-guest minus D-db, PAIRED",
+              r"\*\*([0-9]+) (?P<unit>µs)\*\* less than TCP's", 0, "µs", "us",
+              [KICK_LADDER_RAW_REL + "/lat-{D-guest,D-db}_r*.json"],
+              lambda: kick_contrast(["D-guest"], ["D-db"]),
+              note="paired: D-guest minus D-db in the same round"),
+        Claim("C36", "TCP level on the notified ladder's boot, D-guest p50 level",
+              r"less than TCP's ([0-9]+) (?P<unit>µs) on that boot", 0, "µs", "us",
+              [KICK_LADDER_RAW_REL + "/lat-D-guest_r*.json"],
+              lambda: kick_level("D-guest"),
+              note="median of the 12 round p50s"),
+        Claim("C37", "console reply minus doorbell reply, D-kick minus D-db, PAIRED",
+              r"the doorbell is \*\*([0-9]+) (?P<unit>µs)\*\* faster than answering over the console", 0, "µs", "us",
+              [KICK_LADDER_RAW_REL + "/lat-{D-kick,D-db}_r*.json"],
+              lambda: kick_contrast(["D-kick"], ["D-db"]),
+              note="paired: D-kick minus D-db in the same round"),
     ]
 
 

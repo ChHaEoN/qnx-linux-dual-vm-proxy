@@ -9,6 +9,96 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-22 — notified shared memory: 125 µs with an ivshmem doorbell out, 92 µs under TCP; no doorbell reaches this guest
+
+The owner asked for the interrupt-driven variant of the shared-memory arm. It
+was not built as asked. QEMU 6.2's `ivshmem-doorbell` always has its MSI feature
+and interrupts a guest only through MSI-X, with no INTx fallback. Under KVM with
+the ITS, `setup_interrupt()` leaves the guest's eventfd unattached until the
+guest enables MSI-X, and on the path without an irqfd `ivshmem_vector_notify()`
+drops the notification while MSI-X is off. MSI-X in this QNX guest would come
+from the PCI server, and `pci_hw-fdt.so` refuses QEMU virt. It read the ECAM window's size as zero and
+found no memory window, and an `[ecam]` override in its HW configuration file,
+tried on a throwaway image, changed nothing. Programming the MSI-X table and the
+GIC ITS by hand, as `shmcfg` does for the BARs, was not attempted. The SDP's
+`devc-virtio` does
+drive a virtio console on a plain SPI, and a debug boot showed bytes crossing
+both ways. So, by the owner's choice of "both variants", the probe kicks the
+guest over the console, and the guest answers either over it (D-kick) or through
+the `ivshmem` Doorbell register, which a KVM ioeventfd turns into a write to the
+probe's eventfd (D-db). Record:
+[results.md](../results/orin-native-port/20260922T-a6-orin-kick/results.md).
+
+**The figures (k = 12, paired, one boot).** D-db takes **124.8 µs** at p50 and
+D-kick 162.6 µs, against TCP's 217.0 µs in the same run: −92.4 µs [−94.5, −90.1]
+and −55.4 µs, 0/12 each. The guest answering by doorbell rather than console is
+−37.3 µs [−40.9, −35.3]. The same swap on the host is −3.9 µs, so, net of the
+host's wait primitive, answering over the console costs the guest's side
+**33.3 µs** [+31.7, +37.8] more than a doorbell, 12/12 — together with the
+halt-polling and main-thread differences below, which the contrast does not
+separate. The bare console echo (C-kick) is 158.7 µs. Both carry one byte each
+way; the slot, the judgement and replying from the monitor's loop rather than
+inside its wait add 4.0 µs to it.
+
+**What the counters show, and what they add.**
+- **The doorbell proof.** Before any D-db sample, 10 000 doorbells arrived. The
+  VM's `mmio_exit_kernel` rose by 10 174, `mmio_exit_user` by 4.
+- **MMIO exits to QEMU's userspace per exchange**, background-corrected: D-kick
+  4.1, D-db 2.1, TCP 2.1, polled shm 0.1. The console's transmit costs two such
+  exits the doorbell does not. The polled path's data does not trap; the last
+  entry inferred that, and this run observes it.
+- **Halt polling differs between the arms.** KVM polled on 72% of the vCPU's
+  halts in the console arms and on 47% in D-db and over TCP; those polls
+  succeeded 52–53%, 38% and 6% of the time. So polling ended 37–38% of all halts
+  in the console arms, 18% in D-db and 3% over TCP (raw ratios, not
+  background-corrected).
+- **QEMU's main thread waited in D-db only.** Its run-queue wait was 4.6 µs per
+  exchange there, and at most 0.04 µs anywhere else. That is unexplained.
+  Whether it lies on the exchange's path is not measured; if it does, it weighs
+  against the doorbell.
+
+**Replications, and a shift.** Polled D-shm − A-shm is −0.3 µs [−1.0, +0.2] on a
+new device and boot, within the criterion a design review proposed. UDP was
+faster than TCP a third time (−19.0 µs). But the socket rungs ran **32–38 µs
+slower** than in the two earlier runs today (D-guest 217.0 against 184.9 and
+180.0, D-udp 198.1 against 166.5 and 160.3). The image, the device, two ivshmem
+servers and the per-arm KVM snapshots all changed at once, and none of them is
+separable. Every figure is paired within the run for that reason, but pairing
+does not remove a shift present in every round: if it belongs to the socket path
+alone, the contrasts against TCP and UDP (and C-kick − C-null) include up to that
+much of it. The notified arms have no earlier run to tell which.
+
+**What it took.**
+- **This project's own ivshmem server.** A design review read QEMU 6.2's source
+  and found that reusing a peer id makes QEMU write into freed memory. Ids now
+  only go up.
+- **A readiness handshake.** QEMU drops a doorbell to a peer it has not yet
+  registered, so each doorbell arm starts with an untimed handshake. A reply
+  without its notification is its own failure ("lost"), never a stall.
+- **A doorbell proof** before any doorbell arm, and **KVM counters** around every
+  arm.
+- **A code review.** Four lenses produced 24 findings, each verified, 19 of them
+  real. They include a failing `recv` that only the kick arms paid for inside
+  the timed window, and an early notification that came back as a sample as
+  long as the timeout.
+- **Two CI failures.** On the branch, a server outlived its SIGTERM on Python
+  3.12; it now stops by a flag and a wake-up. On `main`, the same commit
+  `6e1362a` then failed one test that asserted an exact count of stale kicks
+  (2 against 1). With no spacing between requests, the monitor's re-check can
+  take request n+1 before reading its kick byte, and then counts that byte as
+  stale, so the count is timing. `779d0e4` asserts the probe's own notification
+  accounting instead, and at least one stale kick where one is sent. That
+  commit changes tests only; CI passed it with none of 337 tests skipped.
+
+The run used a `git archive` of `6e1362a`, whose tests had passed on its branch
+with none skipped.
+
+**Next (OD12):** a SOME/IP arm stays proposed, not decided. A doorbell into the
+guest would need MSI-X: from a QNX PCI stack that works on QEMU virt, or from
+programming the MSI-X table and the GIC ITS by hand, which was not attempted.
+
+---
+
 ## 2026-09-22 — shared memory over ivshmem: 5 µs to the guest's monitor, and crossing into the guest adds nothing measurable to a polled slot
 
 OD12's second other IPC path ran: one 64-byte request/reply slot in QEMU's

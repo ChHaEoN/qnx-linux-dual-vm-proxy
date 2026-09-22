@@ -1,0 +1,13 @@
+ifs    : /home/<user>/output/ifs-kick.bin  sha256 7350e601af7d7d61...
+disk   : /home/<user>/output/disk-qemu  sha256 f326b792486805c9...  (-snapshot: not written)
+qemu   : QEMU emulator version 6.2.0 (Debian 1:6.2+dfsg-2ubuntu6.31)
+console: /home/<user>/a6-db/rec/guest-console.log
+ivshmem: /dev/shm/a6-ivshmem (1 MiB, zeroed) via server /tmp/a6-ivshmem.sock (pid 78394, core 5), -device ivshmem-doorbell
+kick   : virtio console on /tmp/a6-kick.sock
+kvm    : halt_poll_ns=500000
+kvm    : halt_poll_ns_grow=2
+kvm    : halt_poll_ns_grow_start=10000
+kvm    : halt_poll_ns_shrink=0
+qemu pid: 78418
+waiting for the guest to answer on 192.168.100.10 ...
+guest up after 4s (monitor answering on :7100)

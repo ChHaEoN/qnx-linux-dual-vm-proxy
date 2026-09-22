@@ -33,7 +33,9 @@ Three things make that real and are absent here: a **certified** Type-1
 partitioner enforcing mixed-criticality isolation, **FSI lockstep and camera
 ingest** in the hardware, and an IPC path that is **shared memory between VMs,
 with a notification mechanism, not a network**. (A6's `ivshmem` slot, 2026-09-22,
-is host↔guest and polled.)
+is host↔guest, and either polled or notified — a virtio console in, and a
+console or an `ivshmem` doorbell out; no doorbell into the guest, which QEMU 6.2
+would need MSI-X for.)
 
 ---
 
@@ -137,8 +139,9 @@ Under A1 and A3 this ran inside QEMU **TCG**, so its latency measures emulation
 cost, not transport cost. Under A4 it ran on silicon, and that run is a
 completion, not a timing. **No hypervisor shared-memory or mailbox figure exists
 on any architecture**: the `vdev shmem` path was functional-only, TCG-only, never
-timed, and its notify half was deliberately skipped. (A6's `ivshmem` figure of
-2026-09-22 is host↔guest under KVM, polled, with no notification path.)
+timed, and its notify half was deliberately skipped. (A6's `ivshmem` figures of
+2026-09-22 are host↔guest under KVM: polled, and notified with a doorbell in the
+guest-to-host direction only.)
 
 ---
 

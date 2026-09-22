@@ -1,0 +1,73 @@
+[11:29:28] cores: 6 total; qemu=0-2 monitor=3 probe=4
+[11:29:28] governor: schedutil -> performance on every core (will restore)
+[11:29:28] idle states: SHALLOW -- disabled 6 state(s) with exit latency > 10 us; now WFI:1us:on c7:5000us:off (will restore)
+[11:29:28] qemu pid=78418 pinned to 0-2 (readback '0-2', 5 threads) exe=/usr/bin/qemu-system-aarch64
+[11:29:29] guest image ifs-kick.bin 7350e601af7d, disk disk-qemu f326b7924868, qemu started 2026-09-22T11:29:18Z
+[11:29:29] netns ladder up at 192.168.100.20 behind br0
+[11:29:30] libshmchan built from /home/<user>/a6-db/rec/repo/orin-native/gpu-concurrency/shmchan.c (5a20bf55f6ec) + shm_map_posix.c (4709cc0b5844) + ivshm_client.c (949a833d710b)
+[11:29:32] reachable: A-loopback (127.0.0.1:7100)
+[11:29:32] reachable: B-bridge (192.168.100.20:7100)
+[11:29:32] reachable: C-null (192.168.100.10:7000)
+[11:29:32] reachable: D-guest (192.168.100.10:7100)
+[11:29:32] reachable: D-udp (192.168.100.10:7101/udp)
+[11:29:32] reachable: A-shm (/dev/shm/a6-shm-host, shm)
+[11:29:32] reachable: D-shm (/dev/shm/a6-ivshmem, shm)
+[11:29:33] reachable: A-kick (shmkick via /tmp/a6-kick-host.sock)
+[11:29:33] reachable: C-kick (kickecho via /tmp/a6-kick.sock)
+[11:29:33] reachable: D-kick (shmkick via /tmp/a6-kick.sock)
+[11:29:33] reachable: A-db (shmdb via /tmp/a6-kick-host.sock)
+[11:29:33] reachable: D-db (shmdb via /tmp/a6-kick.sock)
+[11:29:33] doorbell proof: "run": 1, "want": 10000, "got": 10000, "d_mmio_exit_kernel": 10174, "d_mmio_exit_user": 4, "d_exits": 10347, "ok": true
+[11:29:34] stamp written and parsed: /home/<user>/a6-db/rec/ladder/stamp.json
+[11:29:34] k=12 rounds, n=1000, warmup=200, interval=2ms, 12 arms, interleaved -> /home/<user>/a6-db/rec/ladder
+[11:30:11] round 1/12 done
+[11:30:47] round 2/12 done
+[11:31:24] round 3/12 done
+[11:32:01] round 4/12 done
+[11:32:38] round 5/12 done
+[11:33:15] round 6/12 done
+[11:33:52] round 7/12 done
+[11:34:29] round 8/12 done
+[11:35:06] round 9/12 done
+[11:35:43] round 10/12 done
+[11:36:20] round 11/12 done
+[11:36:57] round 12/12 done
+[11:36:57] governor: still performance on every core at the end
+[11:36:57] complete: 12 arm(s) x 12 round(s), each round a clean result or a recorded stall, every file this run's
+  arm           k     p50 ms: median [band]  paired vs A-loopback: med [band]  max ms: min/med/max of k
+  A-loopback   12    0.061 [ 0.056- 0.063]               (reference)  0.097 / 0.181 / 4.012
+  B-bridge     12    0.063 [ 0.059- 0.065]    +0.003 [-0.004,+0.007]  0.108 / 0.220 / 14.264
+  C-null       12    0.217 [ 0.215- 0.218]    +0.156 [+0.154,+0.160]  0.373 / 0.582 / 1.778
+  D-guest      12    0.217 [ 0.214- 0.220]    +0.156 [+0.155,+0.163]  0.331 / 0.426 / 1.433
+  D-udp        12    0.198 [ 0.197- 0.199]    +0.138 [+0.136,+0.142]  0.289 / 0.427 / 1.724
+  A-shm        12    0.004 [ 0.004- 0.005]    -0.056 [-0.058,-0.052]  0.013 / 0.017 / 0.677
+  D-shm        12    0.004 [ 0.004- 0.004]    -0.056 [-0.058,-0.052]  0.014 / 0.020 / 0.774
+  A-kick       12    0.039 [ 0.037- 0.040]    -0.022 [-0.024,-0.018]  0.071 / 0.302 / 4.022
+  C-kick       12    0.159 [ 0.158- 0.160]    +0.098 [+0.097,+0.101]  0.242 / 0.309 / 2.438
+  D-kick       12    0.163 [ 0.160- 0.165]    +0.102 [+0.100,+0.105]  0.264 / 0.321 / 1.501
+  A-db         12    0.035 [ 0.034- 0.036]    -0.026 [-0.027,-0.022]  0.055 / 0.095 / 1.673
+  D-db         12    0.125 [ 0.124- 0.126]    +0.065 [+0.061,+0.068]  0.190 / 0.384 / 1.292
+  headline = median of the k run-medians. 'paired' = median over rounds of (arm - A-loopback) in the SAME round.
+  'max' is the largest OBSERVED value in each round, never a bound.
+[11:36:57] shm rungs paired with their TCP rungs, and each transport's D - A
+  paired p50, arm - ref       k            median us [band]  rounds above 0
+  A-shm - A-loopback         12     -56.1 [  -57.8,   -52.1]  0/12
+  D-shm - D-guest            12    -213.0 [ -216.0,  -210.2]  0/12
+  D-shm - A-shm              12      -0.3 [   -1.0,    +0.2]  3/12
+  D-guest - A-loopback       12    +156.3 [ +154.7,  +162.8]  12/12
+[11:36:58] notified rungs: against spinning, against each other, and against TCP
+  paired p50, arm - ref       k            median us [band]  rounds above 0
+  D-kick - C-kick            12      +4.0 [   +0.0,    +5.1]  12/12
+  D-kick - A-kick            12    +123.8 [ +122.3,  +126.0]  12/12
+  D-kick - D-guest           12     -55.4 [  -57.6,   -50.2]  0/12
+  A-kick - A-shm             12     +34.2 [  +33.0,   +35.7]  12/12
+  D-kick - D-shm             12    +158.5 [ +155.6,  +160.4]  12/12
+  D-db - A-db                12     +90.5 [  +88.2,   +91.2]  12/12
+  D-db - D-guest             12     -92.4 [  -94.5,   -90.1]  0/12
+  A-db - A-kick              12      -3.9 [   -5.1,    -1.9]  0/12
+  D-db - D-kick              12     -37.3 [  -40.9,   -35.3]  0/12
+  D-db - D-shm               12    +120.9 [ +119.5,  +121.8]  12/12
+  D-kick - D-udp             12     -35.6 [  -38.2,   -33.9]  0/12
+[11:36:58] cleanup
+[11:36:58] idle states restored and verified (6 state(s))
+[11:36:58] governor restored and verified on 6 core(s)

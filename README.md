@@ -75,6 +75,19 @@ are explained under [Reading the ids](#reading-the-ids).
   a like-for-like comparison with the interrupt-driven socket paths, and it is
   host↔guest, not VM↔VM
   ([record](results/orin-native-port/20260922T-a6-orin-shm/results.md)).
+  Notified instead of polled, so that both ends sleep as over TCP, the round
+  trip to the guest's monitor takes **125 µs** when the guest answers through
+  `ivshmem`'s doorbell, **92 µs** less than TCP's 217 µs on that boot, and the
+  doorbell is **37 µs** faster than answering over the console. The guest is
+  kicked awake over a virtio console: QEMU 6.2's doorbell interrupts a guest only
+  by MSI-X, which nothing here enables in this guest. Before measuring, the run
+  checks that KVM handles the doorbell in the kernel rather than in QEMU's
+  userspace (10 000 doorbells, 4 userspace exits). Pairing does not remove three
+  things from these contrasts: KVM's halt polling ended 18% of the guest's halts
+  in the doorbell arm against 3% over TCP, QEMU's main thread queued 4.6 µs per
+  exchange in the doorbell arm only, and TCP ran 32–38 µs slower on that boot
+  than on the two before it, so the 92 µs may include up to that much
+  ([record](results/orin-native-port/20260922T-a6-orin-kick/results.md)).
 
 - **What it cannot show.** No certified Type-1 isolation, no freedom from
   interference, no real-time guarantee, no safety certification, no accelerator
@@ -86,9 +99,9 @@ are explained under [Reading the ids](#reading-the-ids).
   Partial, two Cannot and no Validates.
 
 - **What is next.** Other IPC paths across the same boundary (owner decision
-  OD12): UDP and polled shared memory over `ivshmem` have run (above). An
-  interrupt-driven shared-memory arm (`ivshmem`'s doorbell) is not built, and a
-  SOME/IP arm is proposed, not decided. The A6 campaign adopted on 2026-09-21
+  OD12): UDP and shared memory over `ivshmem`, polled and notified, have run
+  (above). A doorbell into the guest would need MSI-X in the guest, which was not
+  attempted, and a SOME/IP arm is proposed, not decided. The A6 campaign adopted on 2026-09-21
   ([measurement-design.md](docs/measurement-design.md): k ≥ 12 repetitions
   rather than more samples, because run-to-run variation here is ~69× the
   sampling noise at p50) has run in part — the ladder, interference and
@@ -146,7 +159,7 @@ This table is the load-bearing part:
 | GPU (Ampere CUDA / vGPU) | No leg passes a GPU to a guest. The cloud host has no NVIDIA GPU at all; the Orin Nano has an Ampere iGPU but it is never exposed to the QNX guest — no in-guest CUDA, no vGPU partitioning. On the native leg the S1 guest that has now run is Linux without a GPU. GPU pass-through is a later target, studied on a separate unpublished research track; no GPU stage has started. |
 | Real-time guarantees | The QEMU-TCG legs (A1 to A3, history) were emulation-bound, not hardware-timed, and the Orin plain leg added observable host-scheduler jitter on top. **The TCG twin legs were withdrawn by owner decision on 2026-09-20; A6 measures under KVM only.** The native leg's timings are unpublished and not campaign-grade: the CPU frequency is wherever BPMP and Linux left it and the clock is recorded as unverified. On A6 the guest is **never configured for real time** — the monitor is pure POSIX at default priority — and its vCPU threads are scheduled by a general-purpose Linux kernel, so host CPU load measurably moves its round trip. The "Safety VM" framing is POSIX-realtime, not certified RT. |
 | ASIL-D certification | None. SDP 8.0 ≠ QNX OS for Safety (QOS); no safety case, no MISRA-C, no ISO 26262 evidence. |
-| Inter-VM shared memory latency | Cloud leg (A1, history): host↔guest over the `qvm` virtio-console vdev — it crosses the EL2/EL1 boundary, but TCG-emulated, so the latency measures emulation cost, not transport cost. Orin plain leg (A2, history): QNX↔Linux virtio-net → tap → bridge → tap → virtio-net, also TCG-emulated, so not hardware-timed either; these numbers stand exactly as recorded and are not re-run. **A6 does have hardware-timed cross-partition IPC**: a 64-byte frame from L4T to the guest's `qnx-safety-monitor` over a real `br0`/`tap-qnx` bridge, governor pinned — p50 0.172 ms under the earlier n = 3000 / k = 2 design; an attribution ladder (2026-09-21, k = 12) puts a 182 µs round trip at 126 µs guest crossing, 3 µs bridge and 53 µs instrument. Since 2026-09-22 A6 also has a shared-memory figure, over QEMU's `ivshmem` with both ends polling: 4.5 µs at p50 from L4T to the guest's monitor, host↔guest and with no notification path, so not DRIVE OS's VM↔VM shared memory and mailbox. What does **not** exist under KVM is an IPC figure over *this row's* transport, the `qvm` shared-memory/virtio-console path, because that path belongs to the QNX Hypervisor and QHV cannot run under KVM at all. Native leg (A4): host to guest over virtio-console under `qvm` on real cores; figures unpublished. **No hardware-timed *hypervisor* number exists on any leg and none ever will.** No sourced DRIVE OS IPC figure is in the repo, so no gap is quantified here. See [ADR-002](docs/phase2-topology-decision.md). |
+| Inter-VM shared memory latency | Cloud leg (A1, history): host↔guest over the `qvm` virtio-console vdev — it crosses the EL2/EL1 boundary, but TCG-emulated, so the latency measures emulation cost, not transport cost. Orin plain leg (A2, history): QNX↔Linux virtio-net → tap → bridge → tap → virtio-net, also TCG-emulated, so not hardware-timed either; these numbers stand exactly as recorded and are not re-run. **A6 does have hardware-timed cross-partition IPC**: a 64-byte frame from L4T to the guest's `qnx-safety-monitor` over a real `br0`/`tap-qnx` bridge, governor pinned — p50 0.172 ms under the earlier n = 3000 / k = 2 design; an attribution ladder (2026-09-21, k = 12) puts a 182 µs round trip at 126 µs guest crossing, 3 µs bridge and 53 µs instrument. Since 2026-09-22 A6 also has shared-memory figures over QEMU's `ivshmem`, host↔guest: polled, 4.5 µs at p50 from L4T to the guest's monitor; and notified, with the guest kicked over a virtio console and answering through the `ivshmem` doorbell, 125 µs. Neither is DRIVE OS's VM↔VM shared memory and mailbox, and no doorbell reaches this guest (QEMU 6.2 would need MSI-X in it for that). What does **not** exist under KVM is an IPC figure over *this row's* transport, the `qvm` shared-memory/virtio-console path, because that path belongs to the QNX Hypervisor and QHV cannot run under KVM at all. Native leg (A4): host to guest over virtio-console under `qvm` on real cores; figures unpublished. **No hardware-timed *hypervisor* number exists on any leg and none ever will.** No sourced DRIVE OS IPC figure is in the repo, so no gap is quantified here. See [ADR-002](docs/phase2-topology-decision.md). |
 | Certified bootloader chain | No SecureBoot, no measured boot, no chain-of-trust. The native leg's UEFI cold boot (M5-F) is an EFI loader of ours launched by hand from the firmware's Shell: not a supported, certified or unattended boot path. |
 
 These are deliberate. Documenting them precisely is the engineering point.
@@ -354,6 +367,8 @@ fire after `kexec`, so a hung run needs a physical power cycle.
       (2026-09-22)
 - [x] **Shared memory over `ivshmem` on A6** (OD12) — one polled slot, beside TCP
       and UDP in one run, paired (2026-09-22)
+- [x] **Notified shared memory on A6** (OD12) — a virtio-console kick in, a console
+      kick or an `ivshmem` doorbell out, beside TCP, UDP and the polled slot (2026-09-22)
 - [ ] **A6 campaign, the rest** — guest-side timestamps, the frame-size and
       offered-rate sweeps, the boot-timeout falsification
 - [ ] **Phase 7** _(stretch)_ — domain-controller extension, two tracks in
