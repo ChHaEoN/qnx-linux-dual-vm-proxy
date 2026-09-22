@@ -136,6 +136,9 @@ if [ "${1:-}" = "selftest" ]; then
 			case "$got" in *"$3"*) echo "  FAIL [$1] LEAKED '$3' -> $got"; fail=1;; *) ;; esac
 		fi
 	}
+	# Fixtures are documentation values only (AWS's example account ids, RFC 5737
+	# addresses, synthetic resource ids). Until 2026-09-22 they were real values
+	# from this account, which is exactly what this filter exists to keep out.
 	echo "masked direction:"
 	check "instance id"   "launched i-0123456789abcdef0 ok"    "i-0123456789abcdef0" 0
 	check "volume id"     "vol-0abcdef1234567890 attached"     "vol-0abcdef1234567890" 0
@@ -144,8 +147,8 @@ if [ "${1:-}" = "selftest" ]; then
 	check "account id"    "iam user 123456789012 here"         "123456789012" 0
 	check "arn"           "arn:aws:iam::111122223333:user/Bob" "arn:aws" 0
 	check "public ip"     "ssh to 203.0.113.7 now"             "203.0.113.7" 0
-	check "private ip"    "addr 172.31.20.5/20 brd"            "172.31.20.5" 0
-	check "ec2 hostname"  "root@ip-172-31-20-5 ~"              "ip-172-31-20-5" 0
+	check "private ip"    "addr 10.0.0.5/20 brd"            "10.0.0.5" 0
+	check "ec2 hostname"  "root@ip-10-0-0-5 ~"              "ip-10-0-0-5" 0
 	check "public dns"    "ec2-203-0-113-7.eu-central-1.compute.amazonaws.com" "203-0-113-7" 0
 	check "foreign mac"   "link/ether 0a:1b:2c:3d:4e:5f brd"   "0a:1b:2c:3d:4e:5f" 0
 
@@ -166,8 +169,8 @@ if [ "${1:-}" = "selftest" ]; then
 	check "fraction, EOL"     "p50 0.178123456789"                  "0.178123456789" 1
 
 	echo "masked direction, numeric edge cases:"
-	check "id then period"    "the account is 123456789012."        "123456789012" 0
-	check "id in parens"      "owner (123456789012) set"            "123456789012" 0
+	check "id then period"    "the account is 111122223333."        "111122223333" 0
+	check "id in parens"      "owner (444455556666) set"            "444455556666" 0
 	check "id then comma"     "123456789012, then"                  "123456789012" 0
 
 	[ "$fail" -eq 0 ] && echo "PASS -- both directions" || { echo "SELFTEST FAILED"; exit 1; }
