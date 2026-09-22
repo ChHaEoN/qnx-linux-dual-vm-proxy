@@ -9,6 +9,49 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-22 — UDP beside TCP on the ladder: 20 µs faster to the guest, 8 µs of it in the crossing
+
+OD12's first other IPC path ran: the four attribution-ladder rungs over UDP beside
+the same four over TCP, in one run, on one guest boot, paired within rounds (k = 12,
+c7 disabled), after a clean K = 2 dry run on the same boot. Record:
+[results.md](../results/orin-native-port/20260922T-a6-orin-udp/results.md).
+
+**UDP is faster on every rung, in 12 of 12 rounds each:** −12.3 µs host loopback,
+−11.5 µs through the bridge, −20.7 µs to the guest's echo server, −20.0 µs to the
+guest's monitor. The guest crossing itself, D − B, is +123.5 µs over TCP and
++115.3 µs over UDP — **8.4 µs cheaper [−12.0, −5.0], 12/12**. Rungs A and B have Linux
+at both ends and C and D a QNX end, so the 8.4 µs is net: the guest side's change
+minus the Linux namespace server's. Neither is resolved on its own, nor how the
+guest side's divides between QNX's `io-sock` and the virtio/tap path. The monitor's
+own work is indistinguishable from zero on both transports (+0.4 µs [−2.1, +2.2],
+−0.6 µs [−3.1, +2.5]), and at p99 no transport difference resolves. The TCP
+crossing here is 4.5 µs above the 2026-09-21 c7-off ladder's +119.0 µs under the
+same control; new image, new boot and a rebuilt host-side monitor cannot be
+separated, so the UDP figures stand
+only as pairings within this run.
+No reply was lost in 12 000 UDP exchanges per rung; that is not a loss rate, and the
+first-run rule would have stopped the run at the first one.
+
+**It needed a new guest image, built to a standard.** `ifs-udp.bin` is the campaigns'
+`ifs-demo2.bin` plus two start lines: every file in it is byte-identical except the
+two servers, the startup script, the embedded build file and the build date, and the
+build script now refuses any startup entry but ours. The stamp now identifies the
+guest from the running QEMU itself — image and disk sha256, pid, start time. Reading
+that start time from the 2026-09-21 process before stopping it also showed, rather
+than asserted, that the day's three campaigns shared one QEMU process.
+
+**What the review of the tooling caught**, among 18 confirmed findings: a monitor test
+that passed against a UDP path that never judged a claim; a build-script guard that
+checked one of its two paths; and a diagnosis of its own that was wrong — the SDP's
+msys tools strip backslashes from arguments with glob characters; its `sed` was fine.
+The build of the image also moved the rebuilt `startup-qemu-virt`, which had lived
+only in a session scratchpad since 2026-09-18, to a durable ignored location.
+
+**Next (OD12):** shared memory over `ivshmem`. A SOME/IP arm over this UDP path with
+vsomeip stays proposed, not decided.
+
+---
+
 ## 2026-09-21 — pinned loads: QEMU's cores carry the cost, two of three is the worst placement, and the probe's own wait is not it
 
 The three gaps the first campaign left are closed and the campaign re-run with them

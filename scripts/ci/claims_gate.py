@@ -49,6 +49,10 @@ LADDER_K = 12
 # it; each is re-derived here from the arm files, round by round.
 PINNED_REL = "results/orin-native-port/20260921T-a6-orin-pinned"
 PINNED_K = 12
+# The UDP ladder (A6, OD12, 2026-09-22): the four rungs over UDP beside the four
+# over TCP, same run, k = 12. README quotes two paired differences from it.
+UDP_LADDER_RAW_REL = "results/orin-native-port/20260922T-a6-orin-udp/ladder/raw"
+UDP_LADDER_K = 12
 DELTA_AWK = os.path.join("scripts", "twin", "delta.awk")
 
 # Current-state files: they say what is true now, and nothing else. Adding a
@@ -185,6 +189,11 @@ def build_claims(repo):
     def pinned(exp, arm, ref):
         value, k = C.paired_p50_us(os.path.join(repo, PINNED_REL, exp, "raw"), arm, ref)
         assert k == PINNED_K, "%s %s-%s has k=%d, expected %d" % (exp, arm, ref, k, PINNED_K)
+        return value, "us"
+
+    def udp_contrast(plus, minus):
+        value, k = C.paired_contrast_us(os.path.join(repo, UDP_LADDER_RAW_REL), plus, minus)
+        assert k == UDP_LADDER_K, "udp ladder %s-%s has k=%d, expected %d" % (plus, minus, k, UDP_LADDER_K)
         return value, "us"
 
     def ladder_crossing():
@@ -367,6 +376,20 @@ def build_claims(repo):
               [PINNED_REL + "/saturation/raw/lat-{cpu3_q,idle}_r*.json"],
               lambda: pinned("saturation", "cpu3_q", "idle"),
               note="paired: cpu3_q minus idle in the same round"),
+        # The UDP ladder, added 2026-09-22. Both PAIRED within rounds, and both
+        # stated as "faster", so the recomputed value is TCP minus UDP. C30 is a
+        # difference of differences -- the crossing over TCP minus the crossing
+        # over UDP -- taken round by round, never from two separate medians.
+        Claim("C29", "UDP vs TCP to the guest monitor, D-guest minus D-udp, PAIRED",
+              r"round trip to the guest's monitor is \*\*([0-9]+) (?P<unit>µs)\*\* faster", 0, "µs", "us",
+              [UDP_LADDER_RAW_REL + "/lat-{D-guest,D-udp}_r*.json"],
+              lambda: udp_contrast(["D-guest"], ["D-udp"]),
+              note="paired: D-guest minus D-udp in the same round"),
+        Claim("C30", "the guest crossing, TCP minus UDP, a PAIRED difference of differences",
+              r"the guest crossing itself \*\*([0-9]+) (?P<unit>µs)\*\* faster", 0, "µs", "us",
+              [UDP_LADDER_RAW_REL + "/lat-{B-bridge,D-guest,B-udp,D-udp}_r*.json"],
+              lambda: udp_contrast(["D-guest", "B-udp"], ["B-bridge", "D-udp"]),
+              note="paired: (D-guest - B-bridge) - (D-udp - B-udp) in the same round"),
     ]
 
 

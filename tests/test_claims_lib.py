@@ -347,3 +347,25 @@ def test_paired_p50_refuses_arms_with_different_rounds(tmp_path):
     _arm_files(tmp_path, "arm", [0.110, 0.210])
     with pytest.raises(ValueError, match="different rounds"):
         C.paired_p50_us(str(tmp_path), "arm", "ref")
+
+
+def test_paired_contrast_is_taken_round_by_round(tmp_path):
+    """A difference of differences, per round, then the median. Here the per-round
+    values of (D - B) - (Du - Bu) are +8, +58, +50 us -> median +50, while the same
+    expression built from each arm's own median gives +8 us."""
+    _arm_files(tmp_path, "D", [0.200, 0.300, 0.250])
+    _arm_files(tmp_path, "B", [0.050, 0.050, 0.050])
+    _arm_files(tmp_path, "Du", [0.192, 0.242, 0.300])
+    _arm_files(tmp_path, "Bu", [0.050, 0.050, 0.150])
+    value, k = C.paired_contrast_us(str(tmp_path), ["D", "Bu"], ["B", "Du"])
+    assert k == 3 and abs(value - 50.0) < 1e-6
+    one, _ = C.paired_contrast_us(str(tmp_path), ["D"], ["B"])
+    two, _ = C.paired_p50_us(str(tmp_path), "D", "B")
+    assert abs(one - two) < 1e-9, "one-against-one must agree with paired_p50_us"
+
+
+def test_paired_contrast_refuses_arms_with_different_rounds(tmp_path):
+    _arm_files(tmp_path, "D", [0.2, 0.3, 0.4])
+    _arm_files(tmp_path, "B", [0.1, 0.1])
+    with pytest.raises(ValueError, match="different rounds"):
+        C.paired_contrast_us(str(tmp_path), ["D"], ["B"])

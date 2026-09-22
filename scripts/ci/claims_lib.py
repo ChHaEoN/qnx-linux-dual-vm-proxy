@@ -263,6 +263,34 @@ def paired_p50_us(raw_dir, arm, ref):
     return median([a[r] - b[r] for r in sorted(a)]), len(a)
 
 
+def paired_contrast_us(raw_dir, plus, minus):
+    """Median over rounds of (sum of `plus` arms' p50 - sum of `minus` arms' p50),
+    all taken in the SAME round, in MICROSECONDS; returns (median, k).
+
+    paired_p50_us is the one-arm-against-one case. This one also expresses a
+    difference of differences -- e.g. the guest crossing over UDP against the
+    crossing over TCP, (D_tcp - B_tcp) - (D_udp - B_udp) -- still round by round,
+    so between-round drift cancels in the whole expression, not piecewise. Every
+    arm must hold the same rounds, for the same reason as paired_p50_us.
+    """
+    def per_round(name):
+        out = {}
+        for p in sorted(glob.glob(os.path.join(raw_dir, "lat-%s_r*.json" % name))):
+            with io.open(p, "r", encoding="utf-8") as fh:
+                s = json.load(fh)["summary"]
+            out[int(s["tag"].rsplit("_r", 1)[1])] = float(s["p50_ms"]) * 1000.0
+        if not out:
+            raise ValueError("no files for arm %r under %s" % (name, raw_dir))
+        return out
+    arms = {a: per_round(a) for a in list(plus) + list(minus)}
+    rounds = sorted(next(iter(arms.values())))
+    for a, d in arms.items():
+        if sorted(d) != rounds:
+            raise ValueError("arm %r holds different rounds: %s vs %s" % (a, sorted(d), rounds))
+    vals = [sum(arms[a][r] for a in plus) - sum(arms[a][r] for a in minus) for r in rounds]
+    return median(vals), len(rounds)
+
+
 def file_size(path):
     """Raw size on disk.
 

@@ -107,9 +107,9 @@ results/orin-native-port/*/s1/
 # level, so the placement and clock traces the records cite went untracked.
 # Deliberately NARROW: a first try with results/orin-native-port/**/*.log also
 # exposed M4 dry-run and TCG logs, which stay local under 4.6(i).
-!results/orin-native-port/20260921T-a6-*/*/*.log
-!results/orin-native-port/20260921T-a6-*/*/raw/*.log
-!results/orin-native-port/20260921T-a6-*/dry-run-stalls/*/*.log
+!results/orin-native-port/*T-a6-*/*/*.log
+!results/orin-native-port/*T-a6-*/*/raw/*.log
+!results/orin-native-port/*T-a6-*/dry-run-stalls/*/*.log
 
 # Python
 __pycache__/

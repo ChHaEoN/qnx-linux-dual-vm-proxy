@@ -1,0 +1,12 @@
+round 1 order: A-loopback B-bridge C-null D-guest A-udp B-udp C-udp D-udp
+round 2 order: A-udp B-udp C-udp D-udp A-loopback B-bridge C-null D-guest
+round 3 order: A-loopback B-bridge C-null D-guest A-udp B-udp C-udp D-udp
+round 4 order: A-udp B-udp C-udp D-udp A-loopback B-bridge C-null D-guest
+round 5 order: A-loopback B-bridge C-null D-guest A-udp B-udp C-udp D-udp
+round 6 order: A-udp B-udp C-udp D-udp A-loopback B-bridge C-null D-guest
+round 7 order: A-loopback B-bridge C-null D-guest A-udp B-udp C-udp D-udp
+round 8 order: A-udp B-udp C-udp D-udp A-loopback B-bridge C-null D-guest
+round 9 order: A-loopback B-bridge C-null D-guest A-udp B-udp C-udp D-udp
+round 10 order: A-udp B-udp C-udp D-udp A-loopback B-bridge C-null D-guest
+round 11 order: A-loopback B-bridge C-null D-guest A-udp B-udp C-udp D-udp
+round 12 order: A-udp B-udp C-udp D-udp A-loopback B-bridge C-null D-guest

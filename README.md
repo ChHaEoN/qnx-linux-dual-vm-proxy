@@ -57,7 +57,15 @@ are explained under [Reading the ids](#reading-the-ids).
   QEMU's cores 0 and 1 costs **164 µs** over idle — more than loading all three
   of its cores (**58 µs**) or all six cores (**77 µs**). This design does not
   separate QEMU's cores from core 0, and which thread waits, and why cores 0
-  and 1 cost more than all three, is not resolved.
+  and 1 cost more than all three, is not resolved. Over UDP, on the ladder's
+  rungs plus a null-echo rung, beside TCP in one run on a new guest image and
+  boot (2026-09-22, k = 12, paired), the round trip to the guest's monitor is
+  **20 µs** faster at p50 and the guest crossing itself **8 µs** faster —
+  against that run's own TCP rungs, not the 182 and 126 µs above
+  ([record](results/orin-native-port/20260922T-a6-orin-udp/results.md)). The
+  8 µs is net of the Linux side's change, how it divides between QNX's stack
+  and the virtio path is not resolved, and the tail shows no resolved
+  difference.
 
 - **What it cannot show.** No certified Type-1 isolation, no freedom from
   interference, no real-time guarantee, no safety certification, no accelerator
@@ -69,8 +77,8 @@ are explained under [Reading the ids](#reading-the-ids).
   Partial, two Cannot and no Validates.
 
 - **What is next.** Other IPC paths across the same boundary (owner decision
-  OD12): UDP, then shared memory over `ivshmem`, each measured beside the
-  existing TCP path in the same run. The A6 campaign adopted on 2026-09-21
+  OD12): UDP has run (above); next is shared memory over `ivshmem`, measured
+  beside the existing TCP path in the same run. The A6 campaign adopted on 2026-09-21
   ([measurement-design.md](docs/measurement-design.md): k ≥ 12 repetitions
   rather than more samples, because run-to-run variation here is ~69× the
   sampling noise at p50) has run in part — the ladder, interference and
@@ -227,7 +235,7 @@ Project rule: *never write "it works" without a log, a number, or a diff.*
 Every figure traces to a committed CSV or boot log here. **Every figure below
 ran on an earlier architecture and is kept with that label, not re-run for its
 own sake.** The numbers that count are taken on A6; its campaign records are
-under `results/orin-native-port/20260921T-a6-*/`. A6 is the current direction,
+under `results/orin-native-port/*T-a6-*/`. A6 is the current direction,
 not a frozen reference architecture.
 
 | What | Result | Read it with |
@@ -332,8 +340,9 @@ fire after `kexec`, so a hung run needs a physical power cycle.
       [measurement-design.md](docs/measurement-design.md)
 - [x] **A6 campaign, first part** — the ladder, interference and saturation at
       k ≥ 12, CPU loads pinned per core (2026-09-21)
-- [ ] **Other IPC paths on A6** (OD12, next) — UDP, then shared memory over
-      `ivshmem`
+- [x] **UDP beside TCP on A6** (OD12) — the four ladder rungs over both, paired
+      (2026-09-22)
+- [ ] **Shared memory over `ivshmem` on A6** (OD12, next)
 - [ ] **A6 campaign, the rest** — guest-side timestamps, the frame-size and
       offered-rate sweeps, the boot-timeout falsification
 - [ ] **Phase 7** _(stretch)_ — domain-controller extension, two tracks in
