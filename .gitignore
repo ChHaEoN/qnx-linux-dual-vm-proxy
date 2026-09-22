@@ -19,6 +19,18 @@ output/
 qnx800/
 qnx710/
 
+# Model weights — NEVER commit. Not a licence question first but a size one:
+# every quant of every candidate is 0.4-5 GB, so GitHub's 100 MB per-file block
+# would refuse the push only AFTER the blob was already in local history, which
+# is the position that cost a history rewrite on 2026-09-22. What the repo
+# records instead is the manifest: HF repo id, revision, filename, sha256.
+*.gguf
+*.safetensors
+*.onnx
+*.pt
+*.pth
+models/
+
 # Secrets / credentials / cloud
 .env
 .env.*
