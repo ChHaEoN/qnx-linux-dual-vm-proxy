@@ -9,6 +9,52 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-22 — four AWS identifiers went public inside the redactor's own selftest; 28 commits were rewritten to take them out
+
+`orin-native/gpu-concurrency/redact-aws.sh` exists to mask AWS identifiers **at
+capture time**, which is this repo's rule. Its selftest asserted both ways — a
+string that must come out masked, one that must not — and the strings it used
+were the real ones from the session it was written in: the account id, the
+`a1.metal` instance's id, that instance's root volume id, and a public IPv4. The
+redactor worked. Its fixture was the leak. The four were public from `41a2779`
+(2026-09-21) until `c77ecdc` replaced them with documentation values.
+
+- **What it exposed.** The account id is the only one with reach: it allows
+  role-name probing against that account's trust policies and it sharpens
+  targeted phishing. AWS does not treat an account id as a secret, but it is not
+  meant to be broadcast. The instance and volume ids mean nothing outside the
+  account. The IPv4 was an ephemeral EC2 address, released when the instance was
+  terminated the same day. **No credential, key, token or key material was ever
+  in the repo**, so there was nothing to revoke and nothing to rotate: this is
+  removal, not revocation.
+- **What was done.** The tip was corrected and pushed first. Then
+  `20cee01^..main` — 28 commits — was rebuilt in a mirror clone with
+  `commit-tree`/`write-tree` (the session's tool policy declined `filter-branch`,
+  as it did on 2026-09-09) and force-pushed with lease. Checked before the push:
+  author, committer, both dates and the subject identical across all 280
+  commits; the new tip's tree byte-identical to the old tip's; a pickaxe over the
+  whole new history returning zero for all five spellings; exactly four blobs
+  changed, all versions of that one file.
+- **Cost.** 28 SHAs changed; 21 citations of 9 of them across `docs/findings.md`,
+  seven `results.md` and one test were re-pointed. The repo has no forks and both
+  merged PRs predate the leak, so no fork and no `refs/pull/*` carries the old
+  objects.
+- **What the rewrite does NOT achieve.** GitHub still serves the old commits by
+  full SHA until it garbage-collects: `a34f632` and `20cee01` both still resolve
+  through the API after the force-push. Only GitHub Support can clear that. Any
+  clone taken before today keeps them outright. A rewrite removes the reference,
+  not the copies.
+- **The lesson is not the obvious one.** "Redact at capture time" held for every
+  capture — no record under `results/` carries any of these. It failed on the
+  *test fixture of the redactor*, because a redaction test reads as test code
+  rather than as captured data. It is captured data. This is the third time an
+  AWS identifier has had to come out of this repo's history (2026-07-29,
+  2026-09-09, today), and the first time it was inside the tool written to stop
+  it.
+
+---
+
+
 ## 2026-09-22 — the guest's socket rungs rise 34–38 µs with the notified image's console driver, and QEMU's main thread does 58 µs more per exchange
 
 Both notified-shm records carried an unexplained rise in the guest's socket rungs:
