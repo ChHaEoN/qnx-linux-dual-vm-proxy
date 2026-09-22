@@ -9,6 +9,40 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-22 (later) — a sweep of the whole published history: two older identifiers are still in it, and the 2026-09-09 clean-up never ran
+
+After the rewrite above, every text blob reachable from `origin/main` — all 280
+commits — was scanned for the identifier classes this repo's conventions forbid.
+**The tip is clean of all of them.** Two older ones survive in blobs no branch
+points at: an EC2 instance id from a 2026-07-29 capture (24 commits), and the
+board's address on the owner's LAN (97 commits). Both were redacted forward, in
+2026-09-09 and 2026-09-13, and left where they were. The exact paths and commit
+ranges are recorded locally rather than here, for the obvious reason.
+
+- **This corrects the entry below.** It says this was the third time an AWS
+  identifier had to come out of this history, counting 2026-09-09. That clean-up
+  was decided (owner decision 3 of 2026-09-09) and handed to the owner to run,
+  and **the evidence is that it never ran** — the id it was about is in the
+  published history today. Today's rewrite is the only one this repo can show
+  happened.
+- **The decision is to leave both, and the reason is not cost alone.** The
+  address is RFC 1918: not routable, and one of the most common home ranges
+  there is. The instance id names an instance terminated on 2026-07-29, means
+  nothing outside the account, and no account id accompanies it any more. Against
+  that, the oldest affected commit is 2026-08-24, so a rewrite changes **254
+  SHAs** and breaks **118 citations across 49 files** — and a number of those
+  citations sit inside *captured evidence*, the `git-state.txt` files that record
+  what the repo was at the moment of a capture. Editing captured evidence so it
+  agrees with a rewritten history is a worse practice than the leak it would be
+  fixing.
+- **What that leaves.** The published history is not clean, and this entry says
+  so rather than letting the repo carry an implicit claim that it is. The
+  standing rule does not change: redact at capture time, and a test fixture is
+  capture data.
+
+---
+
+
 ## 2026-09-22 — four AWS identifiers went public inside the redactor's own selftest; 28 commits were rewritten to take them out
 
 `orin-native/gpu-concurrency/redact-aws.sh` exists to mask AWS identifiers **at
