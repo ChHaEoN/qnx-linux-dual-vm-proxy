@@ -14,6 +14,7 @@ code it replaced. A test that only passes proves nothing.
 """
 import itertools
 import json
+import re
 import os
 import shutil
 import subprocess
@@ -2197,10 +2198,19 @@ def _notified_rig(native_servers):
 
 
 def _stop(*procs):
-    outs = []
+    """SIGTERM each process and collect its output. One that outlives its
+    SIGTERM by 5 s is killed -- and the test FAILS, because the harness relies on
+    these processes stopping when told."""
+    outs, hung = [], []
     for p in procs:
         p.terminate()
-        outs.append(p.communicate(timeout=10))
+        try:
+            outs.append(p.communicate(timeout=5))
+        except subprocess.TimeoutExpired:
+            p.kill()
+            outs.append(p.communicate(timeout=5))
+            hung.append(p.args)
+    assert not hung, "outlived SIGTERM: %r; output %r" % (hung, outs)
     return outs
 
 
@@ -2576,7 +2586,7 @@ def test_one_host_monitor_serves_probe_after_probe(native_servers, tmp_path):
         (mout, _merr), _ = _stop(mon, srv)
     assert summaries[2]["ivshm_peer"] == 3 and summaries[2]["notify"] == _clean_notify(55)
     done = mout.decode()
-    assert " clients=3 " in done and " ring_misses=0 " in done and " notify_fail=0 " in done, done
+    assert re.search(r"\bclients=3\b", done) and " ring_misses=0 " in done and " notify_fail=0 " in done, done
 
 
 def _doorbell_far_end(path, shm, kick, drop_first):
@@ -2750,7 +2760,7 @@ def test_a_kick_with_no_request_is_stale_and_answered_by_nothing(native_servers,
         (mout, _merr), _ = _stop(mon, srv)
     assert r.returncode == 0 and json.loads(out.read_text())["summary"]["notify"] == _clean_notify(55)
     done = mout.decode()
-    assert " stale=1 " in done and " clients=2 " in done, done
+    assert " stale=1 " in done and re.search(r"\bclients=2\b", done), done
 
 
 def test_a_peer_missing_from_the_table_is_found_and_counted(native_servers, tmp_path):
@@ -2771,7 +2781,10 @@ def test_a_peer_missing_from_the_table_is_found_and_counted(native_servers, tmp_
         assert c.recv(16) == b"E"          # the monitor is past accept() and its drain
         me, pid = _peer(path)
         own, efd = _msg(me)
-        assert own == pid
+        while own != pid:                   # the monitor (peer 1) is announced first
+            if efd is not None:
+                os.close(efd)
+            own, efd = _msg(me)
         with open(shm, "r+b") as f:
             f.seek(4096 + 64)
             seq = _st.unpack("<Q", f.read(8))[0]

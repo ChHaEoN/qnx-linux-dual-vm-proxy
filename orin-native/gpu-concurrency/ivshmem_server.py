@@ -175,14 +175,24 @@ class Server(object):
         if self.exit_with is not None and peer.id == self.exit_with:
             self.owner_gone = True
 
-    def serve(self):
-        # No timeout: the server wakes only for a connection or a hang-up, so it
-        # adds nothing periodic to the core it is pinned to. SIGTERM ends it by
-        # raising out of select().
-        while not self.owner_gone:
-            socks = [self.lsock] + [p.sock for p in self.peers.values()]
+    def serve(self, wake_fd, stopping):
+        # No timeout: the server wakes only for a connection, a hang-up or a
+        # signal, so it adds nothing periodic to the core it is pinned to. A
+        # signal only sets a flag and writes to wake_fd (signal.set_wakeup_fd);
+        # the loop then ends here, never by an exception raised at an arbitrary
+        # point (FOUND IN CI, 2026-09-22: a server once outlived its SIGTERM).
+        while not self.owner_gone and not stopping:
+            socks = [self.lsock, wake_fd] + [p.sock for p in self.peers.values()]
             ready, _, _ = select.select(socks, [], [])
             for s in ready:
+                if s is wake_fd:
+                    try:
+                        os.read(wake_fd, 64)
+                    except OSError:
+                        pass
+                    continue
+                if stopping:
+                    break
                 if s is self.lsock:
                     self.accept()
                     continue
@@ -235,17 +245,20 @@ def main():
         print("ivshmem-server: %s" % msg)
         sys.stdout.flush()
 
-    def stop(*_):
-        raise SystemExit(0)
-    signal.signal(signal.SIGTERM, stop)
-    signal.signal(signal.SIGINT, stop)
+    stopping = []
+    rfd, wfd = os.pipe()
+    os.set_blocking(rfd, False)
+    os.set_blocking(wfd, False)
+    signal.set_wakeup_fd(wfd)
+    signal.signal(signal.SIGTERM, lambda *_: stopping.append(1))
+    signal.signal(signal.SIGINT, lambda *_: stopping.append(1))
     srv = Server(a.socket, shm_fd, a.vectors, log, a.exit_with_peer)
     log("serving %s, %d bytes, %d vector(s), on %s (pid %d)" % (a.shm, size, a.vectors, a.socket, os.getpid()))
     if a.ready:
         with open(a.ready, "w") as f:
             f.write("%d\n" % os.getpid())
     try:
-        srv.serve()
+        srv.serve(rfd, stopping)
     finally:
         srv.close()
         log("stopped")
