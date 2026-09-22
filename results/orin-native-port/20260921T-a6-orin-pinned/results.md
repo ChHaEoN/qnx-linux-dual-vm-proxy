@@ -15,9 +15,17 @@ n = 1000 timed samples per round, 200 warm-up discarded, 2 ms spacing; governor 
 to `performance`, deep idle state `c7` disabled (`CSTATE=shallow`), both restored and
 verified afterwards; QEMU on cores 0–2, probe on core 4; all six cores at 1344 MHz in
 every tegrastats sample of every arm. Both experiments ran against the same QEMU process
-(pid 14449, in `*/run.log`); that it is also the process of the two earlier campaigns
-rests on the operator's account — those runs recorded no pid or boot id. **Every round
-is complete — no stall in any of the 156 windows** — and every file passed the gate.
+(pid 14449, in `*/run.log`), and so did the two earlier campaigns of the day: read from
+the board on 2026-09-22 while still running, that process started at 11:56:23 UTC on
+2026-09-21, before the first of those campaigns' stamps (12:00:38 UTC), and every run
+pins QEMU only after checking that exactly one `qemu-system-aarch64` exists — so each
+of them found this one. (The day's first ladder, committed at 09:53 UTC, predates it and
+ran on an earlier boot.) **Every round is complete — no stall in any of the 156
+windows** — and every file passed the gate.
+
+*Corrected 2026-09-22:* the first version said the shared process rested on the
+operator's account, because no run recorded a pid or start time. The start time, read
+from the live process, now shows it; the stamps record both from this date on.
 
 **Every figure below is paired**: the median over rounds of (arm − reference) in the
 same round, with the min–max band and how many rounds lie above zero. All at p50 unless
