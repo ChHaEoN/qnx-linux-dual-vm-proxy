@@ -2244,7 +2244,11 @@ def test_notified_arm_ends_every_exchange_on_exactly_one_notification(native_ser
         assert summ["ivshm_peer"] >= 2 and summ["handshake_attempts"] >= 1
         assert summ["wait_fd_nonblock"] == [True, True], "the server's eventfds are non-blocking"
     done = mout.decode()
-    assert "shm-kick done:" in done and " stale=0 " in done and " stray=0 " in done and " ring_misses=0 " in done, done
+    # Not " stale=0 ": with --interval-ms 0 the monitor's re-check can take
+    # request n+1 before reading its kick byte, which it then counts as stale
+    # (CI on main, 6e1362a). A stale kick answered by a notification would show
+    # above, as an early wake-up or a stray, and that is the deterministic check.
+    assert "shm-kick done:" in done and " jumps=0 " in done and " stray=0 " in done and " ring_misses=0 " in done, done
 
 
 def test_db_burst_delivers_every_doorbell(native_servers, tmp_path):
@@ -2760,7 +2764,10 @@ def test_a_kick_with_no_request_is_stale_and_answered_by_nothing(native_servers,
         (mout, _merr), _ = _stop(mon, srv)
     assert r.returncode == 0 and json.loads(out.read_text())["summary"]["notify"] == _clean_notify(55)
     done = mout.decode()
-    assert " stale=1 " in done and re.search(r"\bclients=2\b", done), done
+    # At least one: the probe's own kicks can add stale counts (see the notified
+    # test above), so the exact number is timing, not behaviour.
+    m = re.search(r"\bstale=(\d+) ", done)
+    assert m and int(m.group(1)) >= 1 and re.search(r"\bclients=2\b", done), done
 
 
 def test_a_peer_missing_from_the_table_is_found_and_counted(native_servers, tmp_path):
