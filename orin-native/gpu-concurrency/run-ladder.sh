@@ -253,7 +253,7 @@ m_write_stamp "$OUT/stamp.json" \
 	"\"udp\": {\"enabled\": $UDP, \"port\": $PORT_UDP, \"arm_c_port\": \"$ARM_C_UDP_PORT\"}" \
 	"\"shm\": {$SHMJSON}" \
 	"\"transports\": \"${TGROUPS[*]}\"" \
-	'"order": "fixed A, B, C, D within a transport; the transport groups follow a Williams design by round (two transports: tcp first in odd rounds)"' \
+	'"order": "within each transport its rungs in fixed order A, B, C, D (those it has); the transport groups in a Williams order by round, as run in order.log (two transports: tcp first in odd rounds)"' \
 	"\"arms\": [$ARMJSON]"
 
 # ---------------------------------------------------------------- the run

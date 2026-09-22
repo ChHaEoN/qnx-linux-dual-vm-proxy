@@ -1,0 +1,2 @@
+monitor: safety monitor listening on :7101/udp (frame=64 bytes, conf_min=60%)
+monitor: udp done: seen=14401 accepted=14401 rejected=0 dropped=0

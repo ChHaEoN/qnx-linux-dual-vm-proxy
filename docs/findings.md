@@ -9,6 +9,64 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-22 — shared memory over ivshmem: 5 µs to the guest's monitor, and crossing into the guest adds nothing measurable to a polled slot
+
+OD12's second other IPC path ran: one 64-byte request/reply slot in QEMU's
+`ivshmem`, both ends polling, beside the ladder's TCP and UDP rungs in one run, on a
+fresh boot of a new image, paired within rounds (k = 12, c7 disabled). Record:
+[results.md](../results/orin-native-port/20260922T-a6-orin-shm/results.md).
+
+**The figures.** The round trip to the guest's monitor through the slot is
+**4.5 µs** at p50: **−180.2 µs against TCP** [−181.2, −177.8] and −161.9 µs against
+UDP, 0/12 above zero each. Against the same kind of slot between two host processes
+(a host build of the same `monitor.c`), crossing into the guest adds **−0.0 µs
+[−0.3, +0.3]** (4/12 above zero;
+p90 and p99 bands also straddle zero) — where over TCP, measured the same way, D − A
+is +124.7 µs. With both ends spinning on a page that is RAM to KVM, the partition
+boundary is not on the data path; that is consistent with the figures, inferred,
+and not observed (no exit counters were read). It is a polling path set against
+interrupt-driven ones, host↔guest and not VM↔VM, and each end holds a core or a
+vCPU while it waits.
+
+**UDP, again, on a second boot.** The same run repeated the UDP rungs: every one
+faster than TCP in every round again (D −18.3 µs, crossing −6.8 µs): 1.7–2.6 µs
+smaller on the guest rungs, and 1.6 µs on the crossing, than in the first UDP run. So the UDP finding now stands
+on two boots of two images, and between-run variation of that size is visible.
+
+**The instrument.** A-shm's 4.5 µs includes the probe's whole Python loop around a
+call with no system call; rung A over TCP is 55.9 µs slower in the same rounds. The
+bulk of rung A's "instrument floor" is therefore not a fixed per-sample cost of the
+probe. The 55.9 µs is the loopback TCP path, its system calls, the probe's Python
+around them and waking two blocked ends; this run does not split that sum or bound
+the probe's cost around socket calls.
+
+**What it took.**
+- **SDP 8.0's PCI server could not be used.** `pci_hw-fdt.so` refused QEMU virt's
+  generic ECAM host bridge: two throwaway debug images, running `pci-server -c`
+  verbosely with its slog2 and debug modules and dumping `slog2info` to the serial
+  console (the guest's shell needs a password, which was not used), showed it read
+  the ECAM window's size as zero, found no memory window and returned EINVAL, and
+  the HW configuration file can only filter windows. The monitor now configures the
+  one ivshmem function itself through ECAM, with single-register inline-asm
+  accesses so KVM always gets a valid syndrome — the ISV=0 class this project
+  root-caused in the shipped `startup-qemu-virt` — and maps BAR2 cacheable, because
+  without FEAT_S2FWB an uncached guest view would mismatch the host's. The image
+  that ran carries none of the PCI server's files.
+- **The probe's end is C.** Python has no store-release or load-acquire, and Armv8
+  is weakly ordered; `shmchan.c`, built by the run, does the slot, and the timing
+  stays in Python as for the sockets.
+- **Three transports in one ladder** are ordered by a Williams design over the
+  groups (period 6), lifted from the load arms' design with its output unchanged.
+- The run's tooling was committed and pushed first (`410e78f`, CI green including
+  the gcc-only shm tests, which were also run by hand on the Orin), and the run used
+  a `git archive` of that commit; a K = 6 dry run on an earlier boot was clean.
+
+**Next (OD12):** an interrupt-driven shared-memory arm (`ivshmem`'s doorbell) is
+not built; a SOME/IP arm stays proposed, not decided. OD11's remaining items are
+still unscheduled.
+
+---
+
 ## 2026-09-22 — UDP beside TCP on the ladder: 20 µs faster to the guest, 8 µs of it in the crossing
 
 OD12's first other IPC path ran: the four attribution-ladder rungs over UDP beside

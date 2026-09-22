@@ -1,0 +1,63 @@
+[08:56:19] cores: 6 total; qemu=0-2 monitor=3 probe=4
+[08:56:20] governor: schedutil -> performance on every core (will restore)
+[08:56:20] idle states: SHALLOW -- disabled 6 state(s) with exit latency > 10 us; now WFI:1us:on c7:5000us:off (will restore)
+[08:56:20] qemu pid=70981 pinned to 0-2 (readback '0-2', 4 threads) exe=/usr/bin/qemu-system-aarch64
+[08:56:21] guest image ifs-shm.bin 1e330bbad086, disk disk-qemu f326b7924868, qemu started 2026-09-22T08:55:19Z
+[08:56:21] netns ladder up at 192.168.100.20 behind br0
+[08:56:21] libshmchan built from /home/<user>/a6-shm/rec/repo/orin-native/gpu-concurrency/shmchan.c (d750a33348f9) + shm_map_posix.c (01f61956f4a9)
+[08:56:23] reachable: A-loopback (127.0.0.1:7100)
+[08:56:24] reachable: B-bridge (192.168.100.20:7100)
+[08:56:24] reachable: C-null (192.168.100.10:7000)
+[08:56:24] reachable: D-guest (192.168.100.10:7100)
+[08:56:24] reachable: A-udp (127.0.0.1:7101/udp)
+[08:56:24] reachable: B-udp (192.168.100.20:7101/udp)
+[08:56:24] reachable: C-udp (192.168.100.10:7001/udp)
+[08:56:24] reachable: D-udp (192.168.100.10:7101/udp)
+[08:56:24] reachable: A-shm (/dev/shm/a6-shm-host, shm)
+[08:56:24] reachable: D-shm (/dev/shm/a6-ivshmem, shm)
+[08:56:24] stamp written and parsed: /home/<user>/a6-shm/rec/ladder/stamp.json
+[08:56:24] k=12 rounds, n=1000, warmup=200, interval=2ms, 10 arms, interleaved -> /home/<user>/a6-shm/rec/ladder
+[08:56:51] round 1/12 done
+[08:57:18] round 2/12 done
+[08:57:44] round 3/12 done
+[08:58:11] round 4/12 done
+[08:58:38] round 5/12 done
+[08:59:05] round 6/12 done
+[08:59:32] round 7/12 done
+[08:59:58] round 8/12 done
+[09:00:25] round 9/12 done
+[09:00:52] round 10/12 done
+[09:01:19] round 11/12 done
+[09:01:46] round 12/12 done
+[09:01:46] governor: still performance on every core at the end
+[09:01:46] complete: 10 arm(s) x 12 round(s), each round a clean result or a recorded stall, every file this run's
+  arm           k     p50 ms: median [band]  paired vs A-loopback: med [band]  max ms: min/med/max of k
+  A-loopback   12    0.060 [ 0.058- 0.062]               (reference)  0.093 / 0.186 / 0.967
+  B-bridge     12    0.062 [ 0.061- 0.064]    +0.001 [+0.000,+0.004]  0.090 / 0.170 / 4.018
+  C-null       12    0.184 [ 0.183- 0.187]    +0.123 [+0.122,+0.128]  0.312 / 0.369 / 6.779
+  D-guest      12    0.185 [ 0.182- 0.186]    +0.125 [+0.121,+0.126]  0.259 / 0.455 / 3.100
+  A-udp        12    0.047 [ 0.044- 0.048]    -0.013 [-0.017,-0.010]  0.077 / 0.274 / 13.824
+  B-udp        12    0.051 [ 0.048- 0.053]    -0.009 [-0.013,-0.006]  0.081 / 0.136 / 2.345
+  C-udp        12    0.166 [ 0.165- 0.168]    +0.106 [+0.103,+0.109]  0.299 / 0.326 / 0.393
+  D-udp        12    0.166 [ 0.165- 0.168]    +0.107 [+0.104,+0.108]  0.267 / 0.331 / 7.911
+  A-shm        12    0.005 [ 0.004- 0.005]    -0.056 [-0.057,-0.054]  0.013 / 0.015 / 0.023
+  D-shm        12    0.005 [ 0.004- 0.005]    -0.056 [-0.057,-0.053]  0.014 / 0.016 / 0.131
+  headline = median of the k run-medians. 'paired' = median over rounds of (arm - A-loopback) in the SAME round.
+  'max' is the largest OBSERVED value in each round, never a bound.
+[09:01:46] UDP rungs paired with their TCP rungs, and each transport's crossing
+  paired p50, arm - ref       k            median us [band]  rounds above 0
+  A-udp - A-loopback         12     -12.9 [  -16.7,    -9.7]  0/12
+  B-udp - B-bridge           12     -11.3 [  -14.1,    -7.9]  0/12
+  C-udp - C-null             12     -18.1 [  -20.4,   -15.7]  0/12
+  D-udp - D-guest            12     -18.3 [  -19.4,   -14.1]  0/12
+  D-guest - B-bridge         12    +122.4 [ +120.2,  +124.2]  12/12
+  D-udp - B-udp              12    +115.7 [ +112.7,  +120.2]  12/12
+[09:01:46] shm rungs paired with their TCP rungs, and each transport's D - A
+  paired p50, arm - ref       k            median us [band]  rounds above 0
+  A-shm - A-loopback         12     -55.9 [  -57.3,   -53.7]  0/12
+  D-shm - D-guest            12    -180.2 [ -181.2,  -177.8]  0/12
+  D-shm - A-shm              12      -0.0 [   -0.3,    +0.3]  4/12
+  D-guest - A-loopback       12    +124.7 [ +121.3,  +126.2]  12/12
+[09:01:47] cleanup
+[09:01:47] idle states restored and verified (6 state(s))
+[09:01:47] governor restored and verified on 6 core(s)

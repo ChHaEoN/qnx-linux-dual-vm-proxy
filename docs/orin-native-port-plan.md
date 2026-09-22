@@ -440,8 +440,8 @@ the rule to revisit, with a per-frame loss deadline and loss counters in the gat
 decided):** QEMU's `ivshmem-plain` device, its BAR2 backed by a 1 MiB file in the host's `/dev/shm`, and
 one request/reply slot in it ([`ipc-test/common/shm_chan.h`](../ipc-test/common/shm_chan.h)), written
 with store-release and read with load-acquire on both ends. **Both ends poll**: the plain device has no
-interrupt, so the first shared-memory run measures a polling path, and a waiter holds a core (host) or a
-vCPU (guest) while an arm runs; an interrupt-driven arm (`ivshmem-doorbell`, MSI-X in the guest) is a
+interrupt, so the first shared-memory run measures a polling path: the probe spins for each reply, and the
+monitor holds a core (host) or a vCPU (guest) for as long as requests keep coming; an interrupt-driven arm (`ivshmem-doorbell`, MSI-X in the guest) is a
 separate step, not built. The guest finds and configures the device itself through ECAM
 ([`shm_map_qnx.c`](../ipc-test/common/shm_map_qnx.c)), not through `pci-server` as proposed above: SDP
 8.0's `pci_hw-fdt.so` refused QEMU virt's generic ECAM host bridge (by its own log, the ECAM window's

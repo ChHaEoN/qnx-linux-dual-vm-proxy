@@ -31,8 +31,9 @@ Type-1 hypervisor:
 
 Three things make that real and are absent here: a **certified** Type-1
 partitioner enforcing mixed-criticality isolation, **FSI lockstep and camera
-ingest** in the hardware, and an IPC path that is **shared memory, not a
-network**.
+ingest** in the hardware, and an IPC path that is **shared memory between VMs,
+with a notification mechanism, not a network**. (A6's `ivshmem` slot, 2026-09-22,
+is host↔guest and polled.)
 
 ---
 
@@ -75,7 +76,9 @@ store at GICD+0x420 that reports ISV=0 and so cannot be emulated. That rebuild
 is **not a QNX-supported configuration**.
 
 **Measured, 2026-09-21.** The round trip above is 182 µs at p50, and the
-attribution ladder splits it: 53 µs is the probe itself (measured on loopback),
+attribution ladder splits it: 53 µs is rung A, the probe and a host-side server
+over loopback TCP (not the probe alone: through shared memory the same probe's loop
+measures 4.5 µs, 2026-09-22),
 3 µs is `br0`, and **126 µs is the crossing** — tap, virtio-net, the guest's
 `io-sock`, its scheduler and the monitor. Method and sample sizes:
 [measurement-design.md](measurement-design.md).
@@ -132,9 +135,10 @@ It is not a network: no bridge, no tap, no `io-sock`.
 
 Under A1 and A3 this ran inside QEMU **TCG**, so its latency measures emulation
 cost, not transport cost. Under A4 it ran on silicon, and that run is a
-completion, not a timing. **No shared-memory or mailbox figure exists on any
-architecture**: the one `vdev shmem` path was functional-only, TCG-only, never
-timed, and its notify half was deliberately skipped.
+completion, not a timing. **No hypervisor shared-memory or mailbox figure exists
+on any architecture**: the `vdev shmem` path was functional-only, TCG-only, never
+timed, and its notify half was deliberately skipped. (A6's `ivshmem` figure of
+2026-09-22 is host↔guest under KVM, polled, with no notification path.)
 
 ---
 

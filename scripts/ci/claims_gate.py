@@ -53,6 +53,11 @@ PINNED_K = 12
 # over TCP, same run, k = 12. README quotes two paired differences from it.
 UDP_LADDER_RAW_REL = "results/orin-native-port/20260922T-a6-orin-udp/ladder/raw"
 UDP_LADDER_K = 12
+# The shared-memory ladder (A6, OD12, 2026-09-22): TCP, UDP and a polled
+# ivshmem slot in one run, k = 12. README quotes one level and two paired
+# differences from it.
+SHM_LADDER_RAW_REL = "results/orin-native-port/20260922T-a6-orin-shm/ladder/raw"
+SHM_LADDER_K = 12
 DELTA_AWK = os.path.join("scripts", "twin", "delta.awk")
 
 # Current-state files: they say what is true now, and nothing else. Adding a
@@ -194,6 +199,16 @@ def build_claims(repo):
     def udp_contrast(plus, minus):
         value, k = C.paired_contrast_us(os.path.join(repo, UDP_LADDER_RAW_REL), plus, minus)
         assert k == UDP_LADDER_K, "udp ladder %s-%s has k=%d, expected %d" % (plus, minus, k, UDP_LADDER_K)
+        return value, "us"
+
+    def shm_contrast(plus, minus):
+        value, k = C.paired_contrast_us(os.path.join(repo, SHM_LADDER_RAW_REL), plus, minus)
+        assert k == SHM_LADDER_K, "shm ladder %s-%s has k=%d, expected %d" % (plus, minus, k, SHM_LADDER_K)
+        return value, "us"
+
+    def shm_level(name):
+        value, k = C.ladder_arm_p50_us(os.path.join(repo, SHM_LADDER_RAW_REL), name)
+        assert k == SHM_LADDER_K, "shm ladder %s has k=%d, expected %d" % (name, k, SHM_LADDER_K)
         return value, "us"
 
     def ladder_crossing():
@@ -390,6 +405,26 @@ def build_claims(repo):
               [UDP_LADDER_RAW_REL + "/lat-{B-bridge,D-guest,B-udp,D-udp}_r*.json"],
               lambda: udp_contrast(["D-guest", "B-udp"], ["B-bridge", "D-udp"]),
               note="paired: (D-guest - B-bridge) - (D-udp - B-udp) in the same round"),
+        # The shared-memory ladder, added 2026-09-22. C31 is a LEVEL -- the median
+        # of the round p50s, as every ladder level is -- and C32/C33 are PAIRED.
+        # C33 is a zero: README says the crossing adds nothing measurable, and the
+        # gate holds that to the nearest microsecond, so a run where it did add
+        # one would fail here rather than read as the same sentence.
+        Claim("C31", "polled shared memory to the guest monitor, D-shm p50 level",
+              r"round trip to the guest's monitor takes \*\*([0-9]+) (?P<unit>µs)\*\* at p50", 0, "µs", "us",
+              [SHM_LADDER_RAW_REL + "/lat-D-shm_r*.json"],
+              lambda: shm_level("D-shm"),
+              note="median of the 12 round p50s"),
+        Claim("C32", "TCP minus polled shared memory to the guest monitor, PAIRED",
+              r"\*\*([0-9]+) (?P<unit>µs)\*\* less than over TCP in the same run", 0, "µs", "us",
+              [SHM_LADDER_RAW_REL + "/lat-{D-guest,D-shm}_r*.json"],
+              lambda: shm_contrast(["D-guest"], ["D-shm"]),
+              note="paired: D-guest minus D-shm in the same round"),
+        Claim("C33", "what crossing into the guest adds to the polled slot, D-shm minus A-shm, PAIRED",
+              r"between two host processes: \*\*([0-9]+) (?P<unit>µs)\*\*", 0, "µs", "us",
+              [SHM_LADDER_RAW_REL + "/lat-{D-shm,A-shm}_r*.json"],
+              lambda: shm_contrast(["D-shm"], ["A-shm"]),
+              note="paired: D-shm minus A-shm in the same round; a zero to the nearest us"),
     ]
 
 

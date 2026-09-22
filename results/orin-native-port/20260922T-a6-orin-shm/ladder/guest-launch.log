@@ -1,0 +1,8 @@
+ifs    : /home/<user>/output/ifs-shm.bin  sha256 1e330bbad086ce6c...
+disk   : /home/<user>/output/disk-qemu  sha256 f326b792486805c9...  (-snapshot: not written)
+qemu   : QEMU emulator version 6.2.0 (Debian 1:6.2+dfsg-2ubuntu6.31)
+console: /home/<user>/a6-shm/rec/guest-console.log
+ivshmem: /dev/shm/a6-ivshmem (1 MiB, zeroed, -device ivshmem-plain)
+qemu pid: 70981
+waiting for the guest to answer on 192.168.100.10 ...
+guest up after 4s (monitor answering on :7100)
