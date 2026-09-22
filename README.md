@@ -88,6 +88,14 @@ are explained under [Reading the ids](#reading-the-ids).
   exchange in the doorbell arm only, and TCP ran 32–38 µs slower on that boot
   than on the two before it, so the 92 µs may include up to that much
   ([record](results/orin-native-port/20260922T-a6-orin-kick/results.md)).
+  The same ladder on AWS `a1.metal` (Graviton1, same image and QEMU build) keeps
+  the order of the paths in every round and puts the doorbell arm **97 µs** under
+  TCP there, with halt polling ending about 1–2% of the guest's halts in both
+  arms and no main-thread queueing. Answering over the console cost the guest
+  65 µs more than the doorbell there, against 37 µs on the Orin. Its guest TCP
+  rungs ran about 76 µs slower than on an earlier `a1.metal` ladder (another
+  instance, image and script revision), so the 97 µs may include up to that much
+  ([record](results/orin-native-port/20260922T-a6-a1metal-kick/results.md)).
 
 - **What it cannot show.** No certified Type-1 isolation, no freedom from
   interference, no real-time guarantee, no safety certification, no accelerator
@@ -242,14 +250,17 @@ Detail: [architecture.md](docs/architecture.md) ·
 built*, ran on the **local Windows host under QEMU TCG** — not on the
 Graviton instance the design called for, because non-metal Graviton exposes
 no `/dev/kvm`/EL2 ([ADR-002](docs/phase2-topology-decision.md)). AWS earned
-its keep four times over. An `a1.metal` instance supplied the cross-vendor
+its keep five times over. An `a1.metal` instance supplied the cross-vendor
 reproduction of the defect (2026-07-29); on 2026-09-19 a matched pair there
 reproduced both the defect (shipped startup, 17 bytes) and its removal (rebuilt
 startup, 1301 bytes, `Startup complete` + banner), refuting Hypothesis 7; and on
 2026-09-20 it was the second host in the boot comparison of
 [`§1b`](docs/digital-twin-design.md); and on 2026-09-21 the attribution ladder of
-A6 ran there over TCP, the only IPC figure this project has taken on a cloud host
-([record](results/orin-native-port/20260921T-ladder-a1metal/results.md)). H-C stays open — no trace was taken
+A6 ran there over TCP
+([record](results/orin-native-port/20260921T-ladder-a1metal/results.md)), and on
+2026-09-22 the Orin's notified-shared-memory ladder (TCP, the D-udp rung, polled
+and notified shared memory)
+([record](results/orin-native-port/20260922T-a6-a1metal-kick/results.md)). H-C stays open — no trace was taken
 there — and the 2026-09-19 arms are one run each with nothing timed.
 
 ---

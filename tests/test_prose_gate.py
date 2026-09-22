@@ -38,8 +38,8 @@ GATE = os.path.join("scripts", "ci", "claims_gate.py")
 STAGED_SCRIPT = os.path.join("scripts", "prose-gate-test.sh")
 
 # Sentences that assert a Graviton LEG or a Graviton NUMBER. None of these
-# exist: no cloud leg was built, and the one cloud latency figure is A6's TCP
-# attribution ladder on a1.metal (2026-09-21), which none of them describes.
+# exist: no cloud leg was built, and the cloud latency figures are A6's ladders
+# on a1.metal (2026-09-21, 2026-09-22), which none of them describes.
 MUST_BLOCK = [
     "The cloud twin runs on a Graviton c7g.large runtime host.",
     "Latency was measured on Graviton and on the Orin.",
@@ -49,6 +49,15 @@ MUST_BLOCK = [
     "The Graviton runtime host recorded the cloud numbers.",
     "We measured throughput on Graviton.",
     "IPC latency on a1.metal was 2.0 ms.",
+    # No cloud THROUGHPUT figure exists, ladder or not.
+    "The shared-memory ladder on a1.metal reached a throughput of 5 GB/s.",
+    "The shared-memory ladder on a1.metal reached an IPC bandwidth of 5 GB/s.",
+    # The a1.metal exemption must not clear other hosts, or other rules
+    # (FOUND 2026-09-22 by review: it cleared every rule on the sentence).
+    "The UDP ladder ran on c7g.metal and a1.metal, with a p50 latency of 150 us on each.",
+    "On a1.metal the doorbell ladder shows the QNX guest is ASIL-D certified.",
+    "The doorbell ladder on a1.metal is a hardware-timed hypervisor number.",
+    "IPC round trips on a1.metal took 2.0 ms.",
     "We took a hardware-timed hypervisor number on the board.",
     "The A1 cloud leg ran under KVM.",
 ]
@@ -78,6 +87,8 @@ MUST_ALLOW = [
     # True since 2026-09-21 (results/orin-native-port/20260921T-ladder-a1metal),
     # yet banned by the rules until 2026-09-22; cleared by an exemption.
     "The attribution ladder ran on a1.metal over TCP, with a p50 latency of 224 us to the guest's monitor.",
+    # True since 2026-09-22 (results/orin-native-port/20260922T-a6-a1metal-kick).
+    "On AWS a1.metal the doorbell arm beat TCP latency by 97 us in every round.",
 ]
 
 
@@ -269,7 +280,7 @@ def test_every_exemption_is_justified_and_used(repo_root):
         sentences.extend(C.split_sentences(text))
     corpus = chr(10).join(sentences)
     import re as _re
-    unused = [rx for rx, _why in exemptions if not _re.search(rx, corpus, _re.I)]
+    unused = [rx for rx, _why in exemptions if not _re.search(C.split_exemption(rx)[1], corpus, _re.I)]
     assert not unused, "exemption no longer matches anything, so it is stale: %r" % unused
 
 

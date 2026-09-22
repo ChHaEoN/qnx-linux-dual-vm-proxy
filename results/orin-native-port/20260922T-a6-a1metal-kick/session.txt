@@ -1,0 +1,17 @@
+# a1.metal session, 2026-09-22 -- the local driver's own output, redacted at print
+# time (instance, volume and address ids never left the driver's state directory).
+13:20:34Z  launched (eu-central-1, a1.metal, ami-02153ae97d7504246, self-terminating)
+13:20:35Z  root volume read back: one mapping, /dev/sda1, delete on termination
+13:22:06Z  provisioned (user-data finished; PROVISION_FAILED absent)
+13:22:06Z  self-termination armed: /run/systemd/shutdown/scheduled MODE=poweroff, 88 min ahead (14:51:02Z)
+13:22:32Z  setup: 16 cores, kernel 6.8.0-1063-aws, lockdown none, KVM counters readable
+13:22:39Z  quiesce: loadavg 0.53 0.26 0.10
+13:22:40Z  QEMU started (stamp: qemu_started)
+13:23:04Z  doorbell check passed; ladder started (stamp: utc)
+13:30:44Z  ladder done (cleanup)
+13:31:29Z  capture on the instance: 290 JSON verbatim, 1 JSON with strings redacted, 14 text files redacted
+13:31:32Z  fetched and verified 305 files against the instance's sha256 list
+13:31:38Z  terminate requested; state shutting-down
+13:32:01Z  region: 0 instances running or pending, 0 available volumes
+13:43:46Z  root volume: InvalidVolume.NotFound (deleted)
+13:43:49Z  instance terminated; region: 0 running or pending, 0 available volumes

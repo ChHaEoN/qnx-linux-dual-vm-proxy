@@ -55,14 +55,18 @@ substrates:
   second host in the boot comparison of §1b, n=5 timed boots on a byte-identical
   image. On 2026-09-21 the attribution ladder of A6 ran on `a1.metal` too, over
   TCP ([record](../results/orin-native-port/20260921T-ladder-a1metal/results.md)),
-  the only cloud IPC figure. What still does not exist is a cloud *leg* in this
+  and on 2026-09-22 the Orin's notified-shared-memory ladder: TCP, the D-udp
+  rung, and polled and notified
+  shared memory
+  ([record](../results/orin-native-port/20260922T-a6-a1metal-kick/results.md)).
+  What still does not exist is a cloud *leg* in this
   project's sense, a QHV host plus guest, and QHV cannot run under KVM at all.
   The §5 figures stay architecture-version history.
   Non-metal Graviton still has no `/dev/kvm` (the t4g.small probe stands),
   `c7g.metal` — the closer core match — stays quota-blocked at 64 vCPU, and
   `a1.metal` is Cortex-A72 against the Orin's A78AE, so even a revived pair
   would differ in a *bundle*, not in one variable (§1a). Every
-  QHV boot and IPC number attributed to "cloud" in this repo was
+  QHV boot and QHV IPC number attributed to the cloud leg (A1) was
   produced on the Windows box; the Phase-4 boot-time table names it
   honestly as "Local Windows (x86_64, TCG)". AWS's remaining real role
   is the KVM *test bed* (`a1.metal`, see

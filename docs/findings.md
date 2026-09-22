@@ -9,6 +9,78 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-22 — the notified-shm ladder on AWS a1.metal: within each run the order and the doorbell's lead replicate, the console's cost does not
+
+The owner asked for the cloud work to run first. The Orin's notified ladder
+(20260922T-a6-orin-kick) ran again on a bare-metal Graviton1 host. It used the
+same image, disk and QEMU package, and every stamped source and script hash was
+identical; the two binaries built on each host (the native monitor and
+libshmchan) differ.
+It covered TCP, D-udp, the polled slot, the console kick and the doorbell out,
+at k = 12. Record:
+[results.md](../results/orin-native-port/20260922T-a6-a1metal-kick/results.md).
+
+**What replicates, within each run.**
+- **The order of the paths.** D-db < D-kick < D-udp < D-guest held in every
+  round on both hosts. D-kick's place is fragile on a1.metal: the level shift
+  bound below exceeds its lead over TCP and UDP.
+- **The doorbell's lead over TCP.** −97.1 µs [−98.1, −96.2] here, −92.4 µs on
+  the Orin, each subject to its own host's shift.
+- **The polled crossing adds nothing.** D-shm − A-shm is −0.0 µs, within
+  ±0.15 µs in every round.
+- **The slot, the judgement and the reply's position cost about 4 µs
+  together**, and UDP is about 20 µs faster than TCP.
+- **Exits to QEMU's userspace.** Per exchange they are the same on both hosts
+  (D-db 2.14 on each). Halt exits are about 20% fewer on a1.metal, and
+  kernel-handled MMIO differs by up to about 1 per exchange.
+
+**What does not.**
+- **The console reply.** It costs the guest's side 59.7 µs more than the
+  doorbell here, against 33.3 µs on the Orin, so D-kick's lead over TCP shrinks
+  to 32.5 µs.
+- **The Orin's D-db-only main-thread wait.** It is absent here: 0.03 µs per
+  exchange against 4.6 µs, background-corrected.
+- **Halt polling.** It ends about 1% of halts in D-db and 2% over TCP here, so a
+  polling difference is not needed for the doorbell to lead on this host. How
+  much of the Orin's 92 µs its 18% against 3% accounts for is not measured.
+
+**A guest-rung shift on both hosts, across different changes.** This run's
+guest rungs sit about 76 µs above the 2026-09-21 a1.metal ladder (D-guest 300.2
+against 224.3 µs), while the host-only rungs moved about 2 µs. That comparison
+crosses another instance, `ifs-demo2` → `ifs-kick`, no shm device →
+`ivshmem-doorbell` plus a virtio-serial console, two ivshmem servers, per-arm
+KVM snapshots and a newer ladder script. The Orin's 32–38 µs was against
+same-day boots with fewer of those changes (about 37 µs against the `ifs-udp`
+boot, about 32 µs against `ifs-shm`). Whether the two are the same effect is not
+established, and none of the changes is separable yet. The guest's polled monitor is ruled out: it stops spinning
+50 ms after its last request, and every arm is preceded by a 100 ms pause.
+Isolating the shift on the Orin, alternating an image without the shm devices
+against one with them, is the obvious next experiment.
+
+**How it ran, and what that found first.**
+- **Driver and rehearsal.** One instance script and one local driver. The script
+  was rehearsed end to end on the Orin at k = 4 before launch, and two reviewers
+  read both for cost, teardown, leaks and fidelity.
+- **The rehearsal found two capture bugs.**
+  - Ubuntu 22.04's `mawk` does not support `{n}` intervals, so the redactor's
+    MAC pattern had never matched there. Fixed in `4bf21b4`, with a test under
+    each awk. The published AWS records hold only the documented guest MAC.
+  - The redactor's 12-digit account mask would have rewritten KVM nanosecond
+    counters. JSON is now published byte-for-byte after checking only its
+    strings.
+- **The reviewers' findings, applied.** Proof that the 90-minute self-shutdown
+  is armed before anything is uploaded, aws.exe error output redacted, and the
+  root volume read back and checked.
+- **The session.** Launched 13:20:34Z, terminate requested 13:31:38Z: about 11
+  minutes billed, roughly $0.09. Nothing running or pending afterwards, and no
+  orphaned volume.
+
+What it does not show: a one-variable host comparison, the cause of the shift,
+a doorbell into the guest, any throughput figure, or anything on a non-metal
+instance, which has no `/dev/kvm`.
+
+---
+
 ## 2026-09-22 — correction: a cloud latency figure does exist, and four places said none did
 
 The owner asked why `results/cloud/`'s figure is still TCG when a cloud host with

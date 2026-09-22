@@ -52,14 +52,18 @@
 # 2026-09-22: these two rules said "the only cloud measurement is boot timing"
 # for a day after the a1.metal ladder ran (20260921T-ladder-a1metal), and three
 # documents repeated it. The rules stay, because every OTHER cloud IPC claim is
-# still unsupported; the ladder is cleared by the exemption below them.
+# still unsupported. Later the same day the Orin's notified-shm ladder ran on
+# a1.metal too (20260922T-a6-a1metal-kick): TCP, the D-udp rung, polled and
+# notified shared memory. The exemption below clears a1.metal sentences about
+# those ladders and paths from these two rules ONLY (it is scoped {cloud-ipc}),
+# and never one that names throughput or another cloud host.
 
 # Keyed on the HOST token, never on the word "cloud": "cloud leg" is this
 # project's NAME for architecture A1, which ran on the local Windows PC, so
 # banning "cloud" near "IPC" would ban the project's own vocabulary.
-\b(Graviton|AWS|EC2|a1\.metal|c7g|t4g)\b[^.]{0,80}\b(IPC|latenc\w*|throughput|p50|p99|benchmark\w*)\b	the only cloud IPC/latency figure is A6's TCP attribution ladder on a1.metal (2026-09-21); no other IPC, latency or throughput figure was taken on a cloud host
-\b(IPC|latenc\w*|throughput|p50|p99|benchmark\w*)\b[^.]{0,80}\b(Graviton|AWS|EC2|a1\.metal|c7g|t4g)\b	the only cloud IPC/latency figure is A6's TCP attribution ladder on a1.metal (2026-09-21); no other IPC, latency or throughput figure was taken on a cloud host
-!\battribution ladder\b[^.]*\ba1\.metal\b|\ba1\.metal\b[^.]*\battribution ladder\b	the A6 attribution ladder over TCP did run on a1.metal (2026-09-21, results/orin-native-port/20260921T-ladder-a1metal)
+\b(Graviton|AWS|EC2|a1\.metal|c7g|t4g)\b[^.]{0,80}\b(IPC|latenc\w*|throughput|p50|p99|benchmark\w*)\b	[cloud-ipc] the cloud IPC/latency figures are A6's ladders on a1.metal (2026-09-21 TCP; 2026-09-22 TCP, the D-udp rung, polled and notified shared memory); no throughput figure, and none from any other cloud host
+\b(IPC|latenc\w*|throughput|p50|p99|benchmark\w*)\b[^.]{0,80}\b(Graviton|AWS|EC2|a1\.metal|c7g|t4g)\b	[cloud-ipc] the cloud IPC/latency figures are A6's ladders on a1.metal (2026-09-21 TCP; 2026-09-22 TCP, the D-udp rung, polled and notified shared memory); no throughput figure, and none from any other cloud host
+!{cloud-ipc}(?:^|(?<=\n))(?![^\n]*\b(throughput|bandwidth|[GMK]i?B/s|[GM]bit/s|msg/s|messages per second)\b)(?![^\n]*\b(c7g|t4g|Graviton[23]|non-metal)\b)(?=[^\n]*\ba1\.metal\b)[^\n]*\b(ladders?|UDP|shared[- ]memory|shm|doorbell)\b	A6 ladders did run on a1.metal: TCP on 2026-09-21 (20260921T-ladder-a1metal); TCP, the D-udp rung, polled and notified shared memory on 2026-09-22 (20260922T-a6-a1metal-kick). Scoped to the cloud-ipc rules only; never cleared when throughput or another cloud host is named
 
 # --- Graviton as a LEG or a RUNTIME HOST. Narrowed twice.
 # 2026-09-20 (first): the rule was a bare \bGraviton\b, from when every Graviton

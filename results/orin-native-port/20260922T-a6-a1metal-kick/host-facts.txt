@@ -1,0 +1,48 @@
+== uname -v
+#66~22.04.1-Ubuntu SMP Fri Aug  7 17:19:42 UTC 2026
+== uname -r
+6.8.0-1063-aws
+== nproc
+16
+== lockdown
+[none] integrity confidentiality
+== cmdline
+BOOT_IMAGE=/boot/vmlinuz-6.8.0-1063-aws root=PARTUUID=<partuuid> ro console=tty1 console=ttyS0 nvme_core.io_timeout=4294967295 panic=-1
+== transparent_hugepage
+always [madvise] never
+== br_netfilter
+0
+== bridge ports
+tap-qnx: 2
+== kvm halt_poll
+halt_poll_ns=500000
+halt_poll_ns_grow=2
+halt_poll_ns_grow_start=10000
+halt_poll_ns_shrink=0
+== qemu package
+qemu_pkg_matches_orin=yes
+== lscpu -e
+CPU NODE SOCKET CORE L1d:L1i:L2 ONLINE
+  0    0      0    0 0:0:0         yes
+  1    0      0    1 1:1:0         yes
+  2    0      0    2 2:2:0         yes
+  3    0      0    3 3:3:0         yes
+  4    0      1    4 4:4:1         yes
+  5    0      1    5 5:5:1         yes
+  6    0      1    6 6:6:1         yes
+  7    0      1    7 7:7:1         yes
+  8    0      2    8 8:8:2         yes
+  9    0      2    9 9:9:2         yes
+ 10    0      2   10 10:10:2       yes
+ 11    0      2   11 11:11:2       yes
+ 12    0      3   12 12:12:3       yes
+ 13    0      3   13 13:13:3       yes
+ 14    0      3   14 14:14:3       yes
+ 15    0      3   15 15:15:3       yes
+== L2 sharing, cpu0-5
+cpu0: 0-3
+cpu1: 0-3
+cpu2: 0-3
+cpu3: 0-3
+cpu4: 4-7
+cpu5: 4-7

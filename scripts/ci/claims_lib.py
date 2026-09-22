@@ -492,6 +492,29 @@ def load_exemptions(path):
     return out
 
 
+EXEMPTION_SCOPE = re.compile(r"^\{([\w-]+)\}")
+RULE_TAG = re.compile(r"^\[([\w-]+)\]")
+
+
+def split_exemption(rx):
+    """(scope, regex) of an exemption. `{tag}regex` is SCOPED: it clears only the
+    rules whose reason starts with `[tag]`. A bare regex clears every rule, as
+    every exemption did before 2026-09-22.
+
+    Why scopes exist: an exemption written to clear the a1.metal ladders from the
+    cloud-IPC rules also cleared the same sentence of the ASIL, certification and
+    hardware-timed-hypervisor rules, so "the doorbell ladder on a1.metal is a
+    hardware-timed hypervisor number" passed. Found by review before it shipped.
+    """
+    m = EXEMPTION_SCOPE.match(rx)
+    return (m.group(1), rx[m.end():]) if m else (None, rx)
+
+
+def rule_tag(why):
+    m = RULE_TAG.match(why or "")
+    return m.group(1) if m else None
+
+
 def scan_denylist(markdown_text, rules, exemptions=()):
     """Return [(pattern, why, sentence)] for ASSERTED matches only.
 
@@ -501,13 +524,24 @@ def scan_denylist(markdown_text, rules, exemptions=()):
     `exemptions` (from load_exemptions) skips sentences whose wording has been
     inspected and found already correct -- an out-of-scope list, a quoted study,
     a self-correction. Each is written down with its reason in the denylist file,
-    so a reader can check the judgement instead of trusting it.
+    so a reader can check the judgement instead of trusting it. A scoped
+    exemption (see split_exemption) skips only the rules carrying its tag.
     """
+    everywhere, scoped = [], {}
+    for rx, _why in (exemptions or ()):
+        scope, body = split_exemption(rx)
+        if scope:
+            scoped.setdefault(scope, []).append(body)
+        else:
+            everywhere.append(body)
     hits = []
     for sentence in split_sentences(markdown_text):
-        if any(re.search(rx, sentence, re.I) for rx, _why in (exemptions or ())):
+        if any(re.search(rx, sentence, re.I) for rx in everywhere):
             continue
         for pattern, why in rules:
+            tag = rule_tag(why)
+            if tag and any(re.search(rx, sentence, re.I) for rx in scoped.get(tag, ())):
+                continue
             if re.search(pattern, sentence, re.I) and classify_sentence(sentence) == "asserted":
                 hits.append((pattern, why, sentence))
     return hits

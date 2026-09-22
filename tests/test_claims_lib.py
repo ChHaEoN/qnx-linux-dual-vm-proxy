@@ -210,6 +210,26 @@ def test_scan_denylist_ignores_honest_denials_but_catches_claims(tmp_path):
     assert hits[0][0] == "\\bASIL\\b"
 
 
+def test_a_scoped_exemption_clears_only_its_tagged_rule():
+    """FOUND 2026-09-22 by review: an exemption clears a whole sentence, so one
+    written for the cloud-IPC rules also cleared the ASIL rule on the same
+    sentence. `{tag}` scopes it to the rules whose reason starts `[tag]`."""
+    rules = [(r"\bASIL\b", "no ASIL claim is supportable"),
+             (r"\ba1\.metal\b[^.]{0,80}\blatency\b", "[cloud-ipc] no such cloud figure")]
+    scoped = [(r"{cloud-ipc}\ba1\.metal\b[^\n]*\bladder\b", "the ladder did run")]
+    ok = "On a1.metal the ladder measured latency to the guest."
+    assert C.scan_denylist(ok, rules) != []
+    assert C.scan_denylist(ok, rules, scoped) == []
+    bad = "On a1.metal the ladder measured latency and made the guest ASIL-D."
+    hits = C.scan_denylist(bad, rules, scoped)
+    assert [h[0] for h in hits] == [r"\bASIL\b"], hits
+    # An unscoped exemption still clears every rule, as before.
+    assert C.scan_denylist(bad, rules, [(r"\ba1\.metal\b", "global")]) == []
+    assert C.split_exemption("{cloud-ipc}x") == ("cloud-ipc", "x")
+    assert C.split_exemption("x{2}") == (None, "x{2}")
+    assert C.rule_tag("[cloud-ipc] why") == "cloud-ipc" and C.rule_tag("why") is None
+
+
 def test_load_denylist_skips_comments_and_blanks(tmp_path):
     p = tmp_path / "d.txt"
     p.write_text("\n# just a comment\n\n\\bfoo\\b\twhy foo is banned\n", encoding="utf-8")

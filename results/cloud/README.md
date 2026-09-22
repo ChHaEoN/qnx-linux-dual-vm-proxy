@@ -52,19 +52,29 @@ under KVM.
 
 ## What has been measured on a cloud host
 
-Two things, both on `a1.metal` under KVM with QNX as a guest (A6), and neither
-is what this directory's CSV measures:
+Three things, all on `a1.metal` under KVM with QNX as a guest (A6), and none
+of them is what this directory's CSV measures:
 
 - **Boot timing** (2026-09-20). A byte-identical QNX IFS booted under KVM on
   `a1.metal` and on the Jetson Orin Nano, and both sides were timed — see
   [`results/orin-native-port/20260920T-kvm-twin/`](../orin-native-port/20260920T-kvm-twin/results.md).
 - **A6's attribution ladder over TCP** (2026-09-21). The same four arms as on
   the Orin, a 64-byte round trip from the host to the guest's monitor; the
-  attribution ladder on `a1.metal` put it at 224.3 µs at p50 against the Orin's
-  181.8 µs — see
+  attribution ladder put it at 224.3 µs at p50 on that instance — see
   [`results/orin-native-port/20260921T-ladder-a1metal/`](../orin-native-port/20260921T-ladder-a1metal/results.md).
   Graviton1 is a Cortex-A72 against the Orin's A78AE, on a different kernel,
   so the pair differs in a bundle of variables, not one.
+- **The Orin's notified-shared-memory ladder** (2026-09-22), run again on
+  `a1.metal` with the same image, disk, QEMU build and tooling: TCP, the D-udp
+  rung, the polled shared-memory slot, and the notified slot with a
+  virtio-console kick in and a console reply or an `ivshmem` doorbell out.
+  Within each run, the order of the paths and the doorbell's lead over TCP
+  replicate: 97 µs on `a1.metal`, 92 µs on the Orin. The `a1.metal` figure may
+  include up to about 76 µs of a level shift between setups. The cost of the
+  console reply does not replicate — see
+  [`results/orin-native-port/20260922T-a6-a1metal-kick/`](../orin-native-port/20260922T-a6-a1metal-kick/results.md).
 
-No UDP, shared-memory or throughput figure has been taken on a cloud host, and
-no cloud leg in this project's sense — a QHV host plus a guest — has been built.
+No throughput figure has been taken on a cloud host. No figure has been taken
+on any cloud host other than `a1.metal`; a `t4g.small` was only probed for
+`/dev/kvm`. And no cloud leg in this project's sense — a QHV host plus a guest —
+has been built.

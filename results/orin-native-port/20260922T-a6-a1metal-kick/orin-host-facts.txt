@@ -1,0 +1,40 @@
+== uname -v
+#1 SMP PREEMPT Thu Sep 18 15:08:33 PDT 2025
+== uname -r
+5.15.148-tegra
+== nproc
+6
+== lockdown
+absent
+== cmdline
+root=/dev/mmcblk0p1 rw rootwait rootfstype=ext4 mminit_loglevel=4 console=ttyTCU0,115200 firmware_class.path=/etc/firmware fbcon=map:0 video=efifb:off console=tty0 bl_prof_dataptr=2031616@0x271E10000 bl_prof_ro_ptr=65536@0x271E00000 
+== transparent_hugepage
+[always] madvise never
+== br_netfilter
+0
+== bridge ports
+usb0: 100
+usb1: 100
+tap-qnx: 100
+== kvm halt_poll
+halt_poll_ns=500000
+halt_poll_ns_grow=2
+halt_poll_ns_grow_start=10000
+halt_poll_ns_shrink=0
+== qemu package
+qemu_pkg_matches_orin=yes
+== lscpu -e
+CPU NODE CLUSTER CORE L1d:L1i:L2:L3 ONLINE    MAXMHZ   MINMHZ MHZ
+  0    0       0    0 0:0:0:0          yes 1728,0000 115,2000   -
+  1    0       0    1 1:1:1:0          yes 1728,0000 115,2000   -
+  2    0       0    2 2:2:2:0          yes 1728,0000 115,2000   -
+  3    0       0    3 3:3:3:0          yes 1728,0000 115,2000   -
+  4    0       1    4 4:4:4:1          yes 1728,0000 115,2000   -
+  5    0       1    5 5:5:5:1          yes 1728,0000 115,2000   -
+== L2 sharing, cpu0-5
+cpu0: 0
+cpu1: 1
+cpu2: 2
+cpu3: 3
+cpu4: 4
+cpu5: 5

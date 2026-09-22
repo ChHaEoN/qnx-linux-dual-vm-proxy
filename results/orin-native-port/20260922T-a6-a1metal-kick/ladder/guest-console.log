@@ -1,0 +1,106 @@
+---> Starting slogger2
+---> Starting PCI Services
+---> Starting fsevmgr
+# ---> Starting devb
+Path=0 ---> Mounting file systems
+- 
+ target=0 lun=0     Direct-Access(0) - VIRTIO  Rev: 
+---> Mounting file systems
+---> Starting Networking
+---> Starting sshd
+---> Starting misc
+=== Phase 3: static IP for br0/tap-qnx ===
+=== Phase 3: starting qnx-echo-server-net on :7000 ===
+server: echo endpoint listening on 0.0.0.0:7000 (frame=64 bytes)
+
+To exit QEMU, type <ctrl>a x
+
+Process count:22
+monitor: safety monitor listening on :7100 (frame=64 bytes, conf_min=60%)
+monitor: safety monitor listening on :7101/udp (frame=64 bytes, conf_min=60%)
+smonitor: shm configured: ivshmem 00:01.0 BAR2 0x10000000 (1048576 bytes, prefetchable) BAR0 0x10100000 (256 bytes), addresses assigned here, cmd=0x0002
+erver: echo endpoint listening on 0.0.0.0:7001/udpmonitor: safety monitor serving shm on ivshmem 00:01.0 BAR2 0x10000000, 1048576 bytes, BAR0 0x10100000, from the marker, cacheable (frame=64 bytes, conf_min=60%)
+ Startup complete
+(frame=64 bytes)
+monitor: safety monitor serving shm-kick on ivshmem 00:01.0 BAR2 0x10000000, 1048576 bytes, BAR0 0x10100000, from the marker, cacheable; slot @4096; peer 1; kick /dev/vcon2 (raw) (frame=64 bytes, conf_min=60%)
+QNX qnx-safety 8.0.0 2026/02/27-10:59:13EST QEMU_virt_(aarch64),_KVM_guest aarch64le
+monitor: frame read failed: No such process
+monitor: client done: seen=0 accepted=0 rejected=0
+server: client connected from 192.168.100.1:44280
+server: read: No such process
+server: client session ended with an error; awaiting next client
+monitor: frame read failed: No such process
+monitor: client done: seen=0 accepted=0 rejected=0
+monitor: shm quiet: seen=1 accepted=1 rejected=0 (1 this burst)
+server: client connected from 192.168.100.1:36830
+server: client EOF after 1200 frames
+monitor: client done: seen=1200 accepted=1200 rejected=0
+monitor: shm quiet: seen=1201 accepted=1201 rejected=0 (1200 this burst)
+monitor: shm-kick burst: seen=5 accepted=5 rejected=0 (5 this burst)
+monitor: shm-kick burst: seen=1206 accepted=1206 rejected=0 (1201 this burst)
+monitor: shm quiet: seen=2401 accepted=2401 rejected=0 (1200 this burst)
+monitor: shm-kick burst: seen=2406 accepted=2406 rejected=0 (1200 this burst)
+server: client connected from 192.168.100.1:42950
+server: client EOF after 1200 frames
+monitor: client done: seen=1200 accepted=1200 rejected=0
+monitor: shm-kick burst: seen=3606 accepted=3606 rejected=0 (1200 this burst)
+monitor: shm-kick burst: seen=4807 accepted=4807 rejected=0 (1201 this burst)
+monitor: shm-kick burst: seen=6007 accepted=6007 rejected=0 (1200 this burst)
+monitor: shm quiet: seen=3601 accepted=3601 rejected=0 (1200 this burst)
+server: client connected from 192.168.100.1:58024
+server: client EOF after 1200 frames
+monitor: client done: seen=1200 accepted=1200 rejected=0
+monitor: shm-kick burst: seen=7208 accepted=7208 rejected=0 (1201 this burst)
+server: client connected from 192.168.100.1:50420
+server: client EOF after 1200 frames
+monitor: client done: seen=1200 accepted=1200 rejected=0
+monitor: shm-kick burst: seen=8409 accepted=8409 rejected=0 (1201 this burst)
+monitor: shm quiet: seen=4801 accepted=4801 rejected=0 (1200 this burst)
+server: client connected from 192.168.100.1:48676
+server: client EOF after 1200 frames
+monitor: client done: seen=1200 accepted=1200 rejected=0
+monitor: shm quiet: seen=6001 accepted=6001 rejected=0 (1200 this burst)
+monitor: shm-kick burst: seen=9609 accepted=9609 rejected=0 (1200 this burst)
+monitor: shm-kick burst: seen=10810 accepted=10810 rejected=0 (1201 this burst)
+monitor: shm quiet: seen=7201 accepted=7201 rejected=0 (1200 this burst)
+monitor: shm-kick burst: seen=12010 accepted=12010 rejected=0 (1200 this burst)
+server: client connected from 192.168.100.1:53034
+server: client EOF after 1200 frames
+monitor: client done: seen=1200 accepted=1200 rejected=0
+monitor: shm-kick burst: seen=13210 accepted=13210 rejected=0 (1200 this burst)
+monitor: shm-kick burst: seen=14411 accepted=14411 rejected=0 (1201 this burst)
+monitor: shm-kick burst: seen=15611 accepted=15611 rejected=0 (1200 this burst)
+monitor: shm quiet: seen=8401 accepted=8401 rejected=0 (1200 this burst)
+server: client connected from 192.168.100.1:43324
+server: client EOF after 1200 frames
+monitor: client done: seen=1200 accepted=1200 rejected=0
+monitor: shm-kick burst: seen=16812 accepted=16812 rejected=0 (1201 this burst)
+server: client connected from 192.168.100.1:34540
+server: client EOF after 1200 frames
+monitor: client done: seen=1200 accepted=1200 rejected=0
+monitor: shm-kick burst: seen=18013 accepted=18013 rejected=0 (1201 this burst)
+monitor: shm quiet: seen=9601 accepted=9601 rejected=0 (1200 this burst)
+server: client connected from 192.168.100.1:43864
+server: client EOF after 1200 frames
+monitor: client done: seen=1200 accepted=1200 rejected=0
+monitor: shm quiet: seen=10801 accepted=10801 rejected=0 (1200 this burst)
+monitor: shm-kick burst: seen=19213 accepted=19213 rejected=0 (1200 this burst)
+monitor: shm-kick burst: seen=20414 accepted=20414 rejected=0 (1201 this burst)
+monitor: shm quiet: seen=12001 accepted=12001 rejected=0 (1200 this burst)
+monitor: shm-kick burst: seen=21614 accepted=21614 rejected=0 (1200 this burst)
+server: client connected from 192.168.100.1:40272
+server: client EOF after 1200 frames
+monitor: client done: seen=1200 accepted=1200 rejected=0
+monitor: shm-kick burst: seen=22814 accepted=22814 rejected=0 (1200 this burst)
+monitor: shm-kick burst: seen=24015 accepted=24015 rejected=0 (1201 this burst)
+monitor: shm-kick burst: seen=25215 accepted=25215 rejected=0 (1200 this burst)
+monitor: shm quiet: seen=13201 accepted=13201 rejected=0 (1200 this burst)
+server: client connected from 192.168.100.1:49346
+server: client EOF after 1200 frames
+monitor: client done: seen=1200 accepted=1200 rejected=0
+monitor: shm-kick burst: seen=26416 accepted=26416 rejected=0 (1201 this burst)
+server: client connected from 192.168.100.1:54836
+server: client EOF after 1200 frames
+monitor: client done: seen=1200 accepted=1200 rejected=0
+monitor: shm-kick burst: seen=27617 accepted=27617 rejected=0 (1201 this burst)
+monitor: shm quiet: seen=14401 accepted=14401 rejected=0 (1200 this burst)

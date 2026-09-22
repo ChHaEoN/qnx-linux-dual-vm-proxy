@@ -63,6 +63,9 @@ SHM_LADDER_K = 12
 # differences from it.
 KICK_LADDER_RAW_REL = "results/orin-native-port/20260922T-a6-orin-kick/ladder/raw"
 KICK_LADDER_K = 12
+# The same ladder on AWS a1.metal (A6, OD12, 2026-09-22). README quotes one paired
+# difference from it.
+A1_KICK_LADDER_RAW_REL = "results/orin-native-port/20260922T-a6-a1metal-kick/ladder/raw"
 DELTA_AWK = os.path.join("scripts", "twin", "delta.awk")
 
 # Current-state files: they say what is true now, and nothing else. Adding a
@@ -219,6 +222,11 @@ def build_claims(repo):
     def kick_contrast(plus, minus):
         value, k = C.paired_contrast_us(os.path.join(repo, KICK_LADDER_RAW_REL), plus, minus)
         assert k == KICK_LADDER_K, "kick ladder %s-%s has k=%d, expected %d" % (plus, minus, k, KICK_LADDER_K)
+        return value, "us"
+
+    def a1_kick_contrast(plus, minus):
+        value, k = C.paired_contrast_us(os.path.join(repo, A1_KICK_LADDER_RAW_REL), plus, minus)
+        assert k == KICK_LADDER_K, "a1 kick ladder %s-%s has k=%d, expected %d" % (plus, minus, k, KICK_LADDER_K)
         return value, "us"
 
     def kick_level(name):
@@ -452,6 +460,11 @@ def build_claims(repo):
               [KICK_LADDER_RAW_REL + "/lat-{D-guest,D-db}_r*.json"],
               lambda: kick_contrast(["D-guest"], ["D-db"]),
               note="paired: D-guest minus D-db in the same round"),
+        Claim("C38", "a1.metal: TCP minus the doorbell arm, D-guest minus D-db, PAIRED",
+              r"puts the doorbell arm \*\*([0-9]+) (?P<unit>µs)\*\* under", 0, "µs", "us",
+              [A1_KICK_LADDER_RAW_REL + "/lat-{D-guest,D-db}_r*.json"],
+              lambda: a1_kick_contrast(["D-guest"], ["D-db"]),
+              note="paired: D-guest minus D-db in the same round, on a1.metal"),
         Claim("C36", "TCP level on the notified ladder's boot, D-guest p50 level",
               r"less than TCP's ([0-9]+) (?P<unit>µs) on that boot", 0, "µs", "us",
               [KICK_LADDER_RAW_REL + "/lat-D-guest_r*.json"],

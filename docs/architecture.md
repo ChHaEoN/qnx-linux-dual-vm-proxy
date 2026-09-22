@@ -192,8 +192,11 @@ the design called for was never built. Bare metal is different: `a1.metal` has
 byte-identical image.
 
 On 2026-09-21 the attribution ladder of A6 ran on `a1.metal` too, over TCP
-([record](../results/orin-native-port/20260921T-ladder-a1metal/results.md)). That
-is the only cloud IPC figure: no UDP, shared-memory or throughput figure has been
-taken on a cloud host.
+([record](../results/orin-native-port/20260921T-ladder-a1metal/results.md)), and on
+2026-09-22 the Orin's notified-shared-memory ladder ran there: TCP, the D-udp
+rung, and polled and notified shared memory
+([record](../results/orin-native-port/20260922T-a6-a1metal-kick/results.md)). No
+throughput figure has been taken on a cloud host, and no figure on any cloud
+host other than `a1.metal` (a `t4g.small` was only probed for `/dev/kvm`).
 `c7g.metal`, the closer core match, stays quota-blocked at 64 vCPU against a
 32-vCPU account limit.
