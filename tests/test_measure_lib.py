@@ -2917,3 +2917,26 @@ def test_m_probe_brackets_the_probe_with_kvm_snapshots(tmp_path):
     doc = json.loads((out / "kvm-x_r1.json").read_text())
     assert doc["before"]["counters"]["mmio_exit_kernel"] == 10
     assert doc["after"]["counters"]["mmio_exit_kernel"] == 250
+
+
+# --------------------------------------------------------------------------
+# redact-aws.sh under every awk on this host
+
+
+REDACT = os.path.join(HERE, "..", "orin-native", "gpu-concurrency", "redact-aws.sh")
+
+
+@pytest.mark.parametrize("impl", ["mawk", "gawk", "original-awk"])
+def test_the_redactor_selftest_passes_under_each_awk(impl):
+    """FOUND 2026-09-22 in a rehearsal on the Orin: the MAC pattern used a {5}
+    interval, which Ubuntu 22.04's mawk does not support, so every foreign MAC
+    went through unmasked. The selftest asserts both directions; run it under
+    each implementation present rather than only the one `awk` resolves to."""
+    if BASH is None:
+        pytest.skip("needs bash")
+    exe = shutil.which(impl)
+    if exe is None:
+        pytest.skip("%s not installed" % impl)
+    env = dict(os.environ, AWK=exe)
+    r = subprocess.run([BASH, REDACT, "selftest"], capture_output=True, text=True, env=env, timeout=60)
+    assert r.returncode == 0 and "PASS" in r.stdout, r.stdout + r.stderr

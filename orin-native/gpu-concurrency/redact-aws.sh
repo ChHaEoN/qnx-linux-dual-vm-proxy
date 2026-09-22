@@ -23,10 +23,18 @@
 # which is the entire reason the selftest asserts the masked direction rather
 # than only checking that the allowlist survives. mask() therefore does its own
 # boundary check against the surrounding characters.
+#
+# NO {n} INTERVALS EITHER. mawk 1.3.4-20200120, Ubuntu 22.04's default awk on the
+# Orin and on a stock a1.metal, does not support them: /x{5}/ never matches, so
+# the MAC pattern written with {5} let every foreign MAC through. Found
+# 2026-09-22 when this selftest failed in a rehearsal on the Orin. Patterns are
+# spelled out instead, and AWK= picks the implementation so the tests can run
+# the selftest under every awk they find.
 set -euo pipefail
+AWK="${AWK:-awk}"
 
 filter() {
-	awk -v pcuser="${USER:-}" -v awsuser="${AWS_SSH_USER:-ubuntu}" '
+	"$AWK" -v pcuser="${USER:-}" -v awsuser="${AWS_SSH_USER:-ubuntu}" '
 	function isword(c) { return (c ~ /[0-9A-Za-z_-]/) }
 	# Replace every occurrence of `re` that stands alone, with `rep`.
 	#
@@ -79,7 +87,7 @@ filter() {
 	}
 	function mask_macs(s,   out, rest, tok) {
 		out = ""; rest = s
-		while (match(rest, /[0-9a-fA-F][0-9a-fA-F](:[0-9a-fA-F][0-9a-fA-F]){5}/)) {
+		while (match(rest, /[0-9a-fA-F][0-9a-fA-F]:[0-9a-fA-F][0-9a-fA-F]:[0-9a-fA-F][0-9a-fA-F]:[0-9a-fA-F][0-9a-fA-F]:[0-9a-fA-F][0-9a-fA-F]:[0-9a-fA-F][0-9a-fA-F]/)) {
 			tok = substr(rest, RSTART, RLENGTH)
 			out = out substr(rest, 1, RSTART - 1)
 			out = out ((tolower(tok) == "52:54:00:11:11:11") ? tok : "<mac>")
