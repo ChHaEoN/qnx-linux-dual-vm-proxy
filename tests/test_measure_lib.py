@@ -39,11 +39,13 @@ def _sysfs(tmp_path, governors):
     root = tmp_path / "cpu"
     for i, gov in enumerate(governors):
         d = root / ("cpu%d" % i) / "cpufreq"
-        d.mkdir(parents=True)
+        d.mkdir(parents=True, exist_ok=True)
         (d / "scaling_governor").write_text(gov + "\n")
         (d / "scaling_cur_freq").write_text("1344000\n")
     if not governors:
-        (root / "cpu0").mkdir(parents=True)
+        # exist_ok: a test may call _run more than once in one tmp_path. The
+        # first such test only ran where gcc exists -- CI -- and failed there.
+        (root / "cpu0").mkdir(parents=True, exist_ok=True)
     return root
 
 
