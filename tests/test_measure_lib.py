@@ -2046,6 +2046,75 @@ def test_vlm_claims_cross_the_shm_transport_unchanged(native_servers, tmp_path):
     assert "monitor: REJECT seq=3 class=42 conf=95 us=124 reason=class-out-of-range\n" in out, out
 
 
+def _vlm_client_mod():
+    import importlib.util
+    import sys
+    d = os.path.join(HERE, "..", "orin-native", "edge-llm")
+    if d not in sys.path:
+        sys.path.insert(0, d)
+    spec = importlib.util.spec_from_file_location("vlm_client", os.path.join(d, "vlm_client.py"))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+# An ask() result as the 2026-09-23 characterisation measured one (digit 3).
+_MEASURED = {"answer": 3, "p_answer": 0.9998, "digit_mass": 0.99999861, "prompt_n": 162,
+             "predicted_n": 2, "prompt_ms": 269.484, "predicted_ms": 12.548, "wall_ms": 309.9}
+
+
+def test_vlm_client_packs_the_frame_monitor_c_documents():
+    vc = _vlm_client_mod()
+    f = vc.claim_fields(_MEASURED)
+    assert f["total_us"] == f["prompt_us"] + f["gen_us"] == 269484 + 12548, \
+        "the total must be the integer sum of the rounded parts, or the monitor rejects it"
+    fr = vc.pack(f, 5)
+    assert len(fr) == 64 and fr[:8] == (5).to_bytes(8, "little") and fr[8:16] == bytes(8)
+    p = fr[16:]
+    assert p[0] == 3 and p[1] == 100 and int.from_bytes(p[2:6], "little") == 282032
+    assert p[6] == 0 and p[7] == 0 and p[8:24] == bytes(16), "verdict, reason and section 3.3 left zero"
+    assert p[24] == 1 and p[25] == 1
+    assert int.from_bytes(p[26:28], "little") == 162 and int.from_bytes(p[28:30], "little") == 2
+    assert int.from_bytes(p[30:34], "little") == 269484 and int.from_bytes(p[34:38], "little") == 12548
+    assert int.from_bytes(p[38:42], "little") == 309900 and int.from_bytes(p[42:46], "little") == 999999
+    assert p[46:48] == bytes(2)
+    with pytest.raises(ValueError):
+        vc.pack(f, 0xFFFFFFFFFFFFFFFF)
+
+
+def _free_tcp_port():
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind(("127.0.0.1", 0))
+    p = s.getsockname()[1]
+    s.close()
+    return p
+
+
+def test_vlm_client_claims_meet_the_monitor_over_tcp(native_servers):
+    # The client's real packing against the real monitor, over TCP as on the
+    # board's :7102: the honest claim ACCEPTs, and every --corrupt mode gets
+    # exactly the reason the client says to expect. This is what keeps the
+    # demo's labels true.
+    import time as _t
+    vc = _vlm_client_mod()
+    port = _free_tcp_port()
+    p = subprocess.Popen([str(native_servers / "monitor"), str(port)],
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        _t.sleep(0.3)
+        honest = vc.claim_fields(_MEASURED)
+        got = vc.exchange("127.0.0.1", port, vc.pack(honest, 1))
+        assert (got[16 + 6], got[16 + 7]) == (0, 0), "the honest measured claim must ACCEPT"
+        for i, (how, (_what, want)) in enumerate(sorted(vc.CORRUPTIONS.items())):
+            got = vc.exchange("127.0.0.1", port, vc.pack(vc.corrupt(honest, how), 10 + i))
+            assert (got[16 + 6], got[16 + 7]) == (1, want), \
+                "--corrupt %s: got reason %d, the client says %d" % (how, got[16 + 7], want)
+    finally:
+        p.terminate()
+        p.communicate(timeout=10)
+
+
 def test_the_monitor_announces_its_claim_kinds(native_servers):
     # A serving monitor names its kinds and bounds on a line of its own, so a
     # guest console shows which rules judged a run, and an image can be
