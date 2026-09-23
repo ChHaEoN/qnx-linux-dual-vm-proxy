@@ -1,0 +1,180 @@
+r1 idle before CPU [1%@1344,1%@1344,3%@1344,1%@1344,1%@1344,1%@1344] GR3D_FREQ 0% cpu@45.625C gpu@45.625C 
+r1 idle during CPU [1%@1344,1%@1344,1%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@45.656C gpu@45.812C 
+r1 idle after CPU [1%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@45.687C gpu@45.5C 
+r1 llm before CPU [3%@1344,0%@1344,0%@1344,0%@1344,0%@1344,2%@1344] GR3D_FREQ 0% cpu@45.625C gpu@45.812C 
+r1 llm GR3D 95% (verified >= 50%)
+r1 llm during CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,8%@1344] GR3D_FREQ 89% cpu@48.312C gpu@49.281C 
+r1 llm produced 3668 bytes of tokens across the window
+r1 llm after CPU [1%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@47.843C gpu@47.718C 
+r1 gpu before CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@47.562C gpu@47.375C 
+r1 gpu GR3D 99% (verified >= 50%)
+r1 gpu during CPU [0%@1344,0%@1344,1%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 99% cpu@48.937C gpu@50.187C 
+r1 gpu after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@48.656C gpu@48.312C 
+r1 idle2 before CPU [0%@1344,1%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@48.218C gpu@47.968C 
+r1 idle2 during CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@48.062C gpu@47.968C 
+r1 idle2 after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@47.906C gpu@47.625C 
+r2 idle before CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@47.843C gpu@47.718C 
+r2 idle during CPU [2%@1344,9%@1344,4%@1344,3%@1344,0%@1344,3%@1344] GR3D_FREQ 0% cpu@47.75C gpu@47.843C 
+r2 idle after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@47.531C gpu@47.562C 
+r2 gpu before CPU [1%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@47.562C gpu@47.281C 
+r2 gpu GR3D 99% (verified >= 50%)
+r2 gpu during CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 98% cpu@48.937C gpu@50.125C 
+r2 gpu after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@48.437C gpu@48.312C 
+r2 llm before CPU [0%@1344,2%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@48.312C gpu@48.093C 
+r2 llm GR3D 95% (verified >= 50%)
+r2 llm during CPU [0%@1344,0%@1344,0%@1344,5%@1344,0%@1344,2%@1344] GR3D_FREQ 95% cpu@50.906C gpu@51.625C 
+r2 llm produced 3651 bytes of tokens across the window
+r2 llm after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@49.875C gpu@49.75C 
+r2 idle2 before CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@49.656C gpu@49.562C 
+r2 idle2 during CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@49.5C gpu@49.531C 
+r2 idle2 after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@49.031C gpu@48.875C 
+r3 idle before CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@49C gpu@48.75C 
+r3 idle during CPU [3%@1344,4%@1344,1%@1344,8%@1344,1%@1344,0%@1344] GR3D_FREQ 0% cpu@49.031C gpu@48.843C 
+r3 idle after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@48.718C gpu@48.531C 
+r3 llm before CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,1%@1344] GR3D_FREQ 0% cpu@48.625C gpu@48.562C 
+r3 llm GR3D 94% (verified >= 50%)
+r3 llm during CPU [1%@1344,0%@1344,0%@1344,5%@1344,0%@1344,3%@1344] GR3D_FREQ 95% cpu@51.593C gpu@52.218C 
+r3 llm produced 3721 bytes of tokens across the window
+r3 llm after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.5C gpu@50.281C 
+r3 gpu before CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.187C gpu@49.906C 
+r3 gpu GR3D 99% (verified >= 50%)
+r3 gpu during CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 99% cpu@51C gpu@52.5C 
+r3 gpu after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.812C gpu@50.593C 
+r3 idle2 before CPU [0%@1344,1%@1344,1%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.156C gpu@50.062C 
+r3 idle2 during CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.218C gpu@49.812C 
+r3 idle2 after CPU [0%@1344,3%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@49.812C gpu@49.406C 
+r4 idle before CPU [0%@1344,1%@1344,0%@1344,2%@1344,2%@1344,1%@1344] GR3D_FREQ 0% cpu@49.781C gpu@49.343C 
+r4 idle during CPU [8%@1344,7%@1344,3%@1344,3%@1344,1%@1344,2%@1344] GR3D_FREQ 0% cpu@49.531C gpu@49.437C 
+r4 idle after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@49.093C gpu@48.968C 
+r4 gpu before CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@49.031C gpu@49.062C 
+r4 gpu GR3D 99% (verified >= 50%)
+r4 gpu during CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 99% cpu@50C gpu@51.687C 
+r4 gpu after CPU [2%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@49.656C gpu@49.5C 
+r4 llm before CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@49.562C gpu@49.375C 
+r4 llm GR3D 92% (verified >= 50%)
+r4 llm during CPU [6%@1344,0%@1344,0%@1344,3%@1344,0%@1344,6%@1344] GR3D_FREQ 86% cpu@51.968C gpu@52.781C 
+r4 llm produced 3704 bytes of tokens across the window
+r4 llm after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.937C gpu@50.75C 
+r4 idle2 before CPU [1%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.906C gpu@50.531C 
+r4 idle2 during CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.625C gpu@50.531C 
+r4 idle2 after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.25C gpu@49.812C 
+r5 idle before CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.125C gpu@49.75C 
+r5 idle during CPU [6%@1344,2%@1344,9%@1344,1%@1344,1%@1344,0%@1344] GR3D_FREQ 0% cpu@49.875C gpu@49.718C 
+r5 idle after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@49.625C gpu@49.406C 
+r5 llm before CPU [0%@1344,0%@1344,1%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@49.5C gpu@49.406C 
+r5 llm GR3D 91% (verified >= 50%)
+r5 llm during CPU [0%@1344,0%@1344,0%@1344,3%@1344,0%@1344,6%@1344] GR3D_FREQ 93% cpu@52.312C gpu@52.687C 
+r5 llm produced 3633 bytes of tokens across the window
+r5 llm after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@51.187C gpu@50.687C 
+r5 gpu before CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.75C gpu@50.593C 
+r5 gpu GR3D 99% (verified >= 50%)
+r5 gpu during CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 99% cpu@51.937C gpu@53C 
+r5 gpu after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@51.281C gpu@50.812C 
+r5 idle2 before CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.781C gpu@50.687C 
+r5 idle2 during CPU [0%@1344,1%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.75C gpu@50.312C 
+r5 idle2 after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.468C gpu@50.093C 
+r6 idle before CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.281C gpu@49.906C 
+r6 idle during CPU [5%@1344,7%@1344,4%@1344,3%@1344,2%@1344,1%@1344] GR3D_FREQ 0% cpu@49.906C gpu@49.656C 
+r6 idle after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@49.656C gpu@49.281C 
+r6 gpu before CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@49.343C gpu@49.281C 
+r6 gpu GR3D 99% (verified >= 50%)
+r6 gpu during CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 99% cpu@50.5C gpu@51.875C 
+r6 gpu after CPU [0%@1344,0%@1344,1%@1344,0%@1344,0%@1344,1%@1344] GR3D_FREQ 0% cpu@50C gpu@49.843C 
+r6 llm before CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@49.968C gpu@49.812C 
+r6 llm GR3D 90% (verified >= 50%)
+r6 llm during CPU [1%@1344,0%@1344,1%@1344,0%@1344,0%@1344,9%@1344] GR3D_FREQ 96% cpu@52.125C gpu@52.843C 
+r6 llm produced 3582 bytes of tokens across the window
+r6 llm after CPU [1%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@51.218C gpu@50.968C 
+r6 idle2 before CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.75C gpu@50.468C 
+r6 idle2 during CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.531C gpu@50.593C 
+r6 idle2 after CPU [0%@1344,0%@1344,1%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.468C gpu@49.906C 
+r7 idle before CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,1%@1344] GR3D_FREQ 0% cpu@50.375C gpu@49.843C 
+r7 idle during CPU [8%@1344,2%@1344,4%@1344,3%@1344,2%@1344,0%@1344] GR3D_FREQ 0% cpu@50.156C gpu@49.718C 
+r7 idle after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@49.687C gpu@49.437C 
+r7 llm before CPU [0%@1344,1%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@49.718C gpu@49.281C 
+r7 llm GR3D 92% (verified >= 50%)
+r7 llm during CPU [1%@1344,0%@1344,0%@1344,8%@1344,0%@1344,0%@1344] GR3D_FREQ 91% cpu@52.218C gpu@52.75C 
+r7 llm produced 3660 bytes of tokens across the window
+r7 llm after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@51.281C gpu@50.843C 
+r7 gpu before CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.812C gpu@50.593C 
+r7 gpu GR3D 99% (verified >= 50%)
+r7 gpu during CPU [1%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 99% cpu@51.562C gpu@52.906C 
+r7 gpu after CPU [1%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@51.125C gpu@50.812C 
+r7 idle2 before CPU [0%@1344,1%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.656C gpu@50.531C 
+r7 idle2 during CPU [0%@1344,0%@1344,0%@1344,0%@1344,1%@1344,2%@1344] GR3D_FREQ 0% cpu@50.625C gpu@50.5C 
+r7 idle2 after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.187C gpu@49.968C 
+r8 idle before CPU [0%@1344,0%@1344,1%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50C gpu@49.75C 
+r8 idle during CPU [3%@1344,0%@1344,9%@1344,7%@1344,1%@1344,1%@1344] GR3D_FREQ 0% cpu@49.906C gpu@49.75C 
+r8 idle after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@49.75C gpu@49.656C 
+r8 gpu before CPU [1%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@49.531C gpu@49.281C 
+r8 gpu GR3D 99% (verified >= 50%)
+r8 gpu during CPU [0%@1344,1%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 99% cpu@50.531C gpu@51.812C 
+r8 gpu after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.125C gpu@50.125C 
+r8 llm before CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@49.875C gpu@49.625C 
+r8 llm GR3D 95% (verified >= 50%)
+r8 llm during CPU [0%@1344,0%@1344,0%@1344,9%@1344,0%@1344,0%@1344] GR3D_FREQ 91% cpu@52.156C gpu@52.75C 
+r8 llm produced 3698 bytes of tokens across the window
+r8 llm after CPU [2%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@51.437C gpu@50.937C 
+r8 idle2 before CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.937C gpu@50.843C 
+r8 idle2 during CPU [2%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.781C gpu@50.531C 
+r8 idle2 after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.656C gpu@50.312C 
+r9 idle before CPU [0%@1344,1%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.468C gpu@50.031C 
+r9 idle during CPU [8%@1344,3%@1344,1%@1344,3%@1344,1%@1344,3%@1344] GR3D_FREQ 0% cpu@50.468C gpu@49.968C 
+r9 idle after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50C gpu@49.656C 
+r9 llm before CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@49.718C gpu@49.625C 
+r9 llm GR3D 94% (verified >= 50%)
+r9 llm during CPU [0%@1344,0%@1344,1%@1344,5%@1344,0%@1344,3%@1344] GR3D_FREQ 94% cpu@52.5C gpu@53.156C 
+r9 llm produced 3719 bytes of tokens across the window
+r9 llm after CPU [0%@1344,0%@1344,1%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@51.343C gpu@51.093C 
+r9 gpu before CPU [0%@1344,0%@1344,3%@1344,0%@1344,1%@1344,0%@1344] GR3D_FREQ 0% cpu@51.093C gpu@51.062C 
+r9 gpu GR3D 99% (verified >= 50%)
+r9 gpu during CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 99% cpu@52C gpu@53.406C 
+r9 gpu after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@51.562C gpu@51.156C 
+r9 idle2 before CPU [2%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@51.125C gpu@51.218C 
+r9 idle2 during CPU [0%@1344,1%@1344,0%@1344,0%@1344,0%@1344,1%@1344] GR3D_FREQ 0% cpu@51.031C gpu@50.937C 
+r9 idle2 after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.531C gpu@50.375C 
+r10 idle before CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.437C gpu@50.375C 
+r10 idle during CPU [3%@1344,3%@1344,5%@1344,6%@1344,2%@1344,2%@1344] GR3D_FREQ 0% cpu@50.281C gpu@50.031C 
+r10 idle after CPU [0%@1344,1%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@49.906C gpu@49.687C 
+r10 gpu before CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@49.937C gpu@49.75C 
+r10 gpu GR3D 99% (verified >= 50%)
+r10 gpu during CPU [2%@1344,0%@1344,2%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 99% cpu@50.781C gpu@52.25C 
+r10 gpu after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.312C gpu@50.218C 
+r10 llm before CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.156C gpu@49.875C 
+r10 llm GR3D 94% (verified >= 50%)
+r10 llm during CPU [1%@1344,0%@1344,0%@1344,5%@1344,0%@1344,3%@1344] GR3D_FREQ 94% cpu@52.75C gpu@53.187C 
+r10 llm produced 3677 bytes of tokens across the window
+r10 llm after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@51.468C gpu@51.312C 
+r10 idle2 before CPU [0%@1344,0%@1344,1%@1344,0%@1344,0%@1344,1%@1344] GR3D_FREQ 0% cpu@51.406C gpu@51.031C 
+r10 idle2 during CPU [0%@1344,1%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.968C gpu@51.031C 
+r10 idle2 after CPU [0%@1344,1%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.718C gpu@50.531C 
+r11 idle before CPU [0%@1344,3%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.687C gpu@50.437C 
+r11 idle during CPU [5%@1344,4%@1344,4%@1344,1%@1344,0%@1344,3%@1344] GR3D_FREQ 0% cpu@50.468C gpu@50.031C 
+r11 idle after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.125C gpu@49.812C 
+r11 llm before CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@49.968C gpu@49.843C 
+r11 llm GR3D 94% (verified >= 50%)
+r11 llm during CPU [0%@1344,0%@1344,0%@1344,6%@1344,0%@1344,3%@1344] GR3D_FREQ 94% cpu@52.593C gpu@53.093C 
+r11 llm produced 3708 bytes of tokens across the window
+r11 llm after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@51.437C gpu@51.218C 
+r11 gpu before CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@51.343C gpu@50.937C 
+r11 gpu GR3D 99% (verified >= 50%)
+r11 gpu during CPU [2%@1344,0%@1344,5%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 99% cpu@52.218C gpu@53.218C 
+r11 gpu after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@51.562C gpu@51.343C 
+r11 idle2 before CPU [1%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@51.125C gpu@51.093C 
+r11 idle2 during CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@51.125C gpu@50.718C 
+r11 idle2 after CPU [2%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.625C gpu@50.531C 
+r12 idle before CPU [1%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.5C gpu@50.312C 
+r12 idle during CPU [3%@1344,4%@1344,8%@1344,4%@1344,2%@1344,1%@1344] GR3D_FREQ 0% cpu@50.218C gpu@50C 
+r12 idle after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@49.906C gpu@49.687C 
+r12 gpu before CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@49.875C gpu@49.593C 
+r12 gpu GR3D 99% (verified >= 50%)
+r12 gpu during CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 99% cpu@50.937C gpu@52.375C 
+r12 gpu after CPU [0%@1344,0%@1344,1%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.468C gpu@50.312C 
+r12 llm before CPU [4%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.218C gpu@49.937C 
+r12 llm GR3D 90% (verified >= 50%)
+r12 llm during CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,9%@1344] GR3D_FREQ 90% cpu@52.562C gpu@53.062C 
+r12 llm produced 3641 bytes of tokens across the window
+r12 llm after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@51.531C gpu@51.5C 
+r12 idle2 before CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@51.25C gpu@51C 
+r12 idle2 during CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@51.312C gpu@50.843C 
+r12 idle2 after CPU [0%@1344,0%@1344,0%@1344,0%@1344,0%@1344,0%@1344] GR3D_FREQ 0% cpu@50.593C gpu@50.437C 
