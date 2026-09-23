@@ -80,6 +80,17 @@
 #define SHM_CHAN_OFF_RSP       256u
 #define SHM_CHAN_MIN_BYTES     4096u      /* the layout needs 320; a page is mapped */
 
+/* The request frame ends exactly where rsp_seq begins, and shm_chan_put_frame
+ * and shm_chan_get_frame copy FRAME_TOTAL_BYTES with no bound check. A bigger
+ * frame would silently overwrite the reply sequence word both ends poll on.
+ * Nothing enforced that until 2026-09-23; the VLM service arm kept the frame
+ * at 64 bytes because of it, and this makes the next change that tries to
+ * grow it fail to compile instead. */
+_Static_assert(SHM_CHAN_OFF_REQ + FRAME_TOTAL_BYTES <= SHM_CHAN_OFF_RSP_SEQ,
+               "the request frame would overrun rsp_seq in the shm slot");
+_Static_assert(SHM_CHAN_OFF_RSP + FRAME_TOTAL_BYTES <= SHM_CHAN_MIN_BYTES,
+               "the reply frame would overrun the mapped slot");
+
 #define SHM_VIA_KICK      0u
 #define SHM_VIA_DOORBELL  1u
 #define SHM_VIA_BURST     3u

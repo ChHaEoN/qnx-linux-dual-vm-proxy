@@ -17,16 +17,44 @@
  *
  *   offset 0  : uint64 seq             (initiator's, echoed back unchanged)
  *   offset 8  : uint64 tstamp_cycles   (initiator's, echoed back unchanged)
- *   payload[0]     : uint8  class id     (0..9 for the mnist demo)
- *   payload[1]     : uint8  confidence   (0..100, percent)
- *   payload[2..5]  : uint32 inference_us (Compute side's own GPU time)
- *   payload[6]     : uint8  verdict      <- WRITTEN BY THIS PROGRAM
- *   payload[7]     : uint8  reason       <- WRITTEN BY THIS PROGRAM
- *   payload[8..47] : reserved, echoed unchanged
+ *   payload[0]      : uint8  class id     (0..9, an mnist digit)
+ *   payload[1]      : uint8  confidence   (0..100, percent)
+ *   payload[2..5]   : uint32 inference_us (Compute side's own model time)
+ *   payload[6]      : uint8  verdict      <- WRITTEN BY THIS PROGRAM
+ *   payload[7]      : uint8  reason       <- WRITTEN BY THIS PROGRAM
+ *   payload[8..23]  : reserved for measurement-design section 3.3, echoed
+ *   payload[24]     : uint8  claim kind   (0 mnist, 1 vlm; see CLAIM KINDS)
+ *   payload[25..47] : kind-specific, echoed unchanged
  *
  * The initiator's seq and timestamp are never touched, exactly as in
  * qnx-server-net: only the initiator interprets a clock, so there is no
- * cross-OS clock to reconcile.
+ * cross-OS clock to reconcile. Nothing but payload[6] and [7] is ever written.
+ *
+ * CLAIM KINDS (owner decision OD13, 2026-09-23)
+ *
+ *   kind 0, mnist : the 2026-09-18 TensorRT claim. Its rules are unchanged, and
+ *                   so is everything they read: payload[25..47] is ignored. The
+ *                   latency probe's frame is all zeros past [5], so every A6
+ *                   run rides on this path; CI pins it at every boundary.
+ *   kind 1, vlm   : a vision-language model's digit claim, from llama.cpp on
+ *                   L4T. The same class and confidence slots, [2..5] the
+ *                   model's own time (prompt plus generation, image encode
+ *                   included), and in payload[25..47]:
+ *                     [25]      uint8  model id (1 = SmolVLM-500M-Instruct Q8_0)
+ *                     [26..27]  uint16 prompt tokens
+ *                     [28..29]  uint16 generated tokens
+ *                     [30..33]  uint32 prompt_us
+ *                     [34..37]  uint32 generated_us
+ *                     [38..41]  uint32 client wall time, us (not judged)
+ *                     [42..45]  uint32 the digit tokens' share of probability
+ *                               at the answer position, parts per million
+ *                               (not judged; recorded so a renormalised
+ *                               confidence cannot hide a spread distribution)
+ *                     [46..47]  reserved, zero
+ *   any other kind: rejected, reason claim-kind-unknown.
+ *
+ * The kind is dispatched inside check_claim(), which only judge_frame() calls,
+ * so all four transports carry both kinds with no change to any of them.
  *
  * WHAT THIS IS NOT
  *
@@ -101,6 +129,19 @@
 #define P_INFER_US   2u
 #define P_VERDICT    6u
 #define P_REASON     7u
+#define P_KIND       24u
+
+/* kind 1 (vlm) fields, payload[25..47] */
+#define P_VLM_MODEL        25u
+#define P_VLM_PROMPT_US    30u
+#define P_VLM_GEN_US       34u
+
+/* claim kinds */
+#define KIND_MNIST   0u
+#define KIND_VLM     1u
+
+/* vlm models this monitor has a measured bound for */
+#define VLM_MODEL_SMOLVLM_500M 1u
 
 /* verdicts */
 #define V_ACCEPT     0u
@@ -117,15 +158,28 @@
 #define RSN_CONF_RANGE     2u   /* confidence not a percentage               */
 #define RSN_CONF_LOW       3u   /* below the acceptance threshold            */
 #define RSN_INFER_IMPLAUS  4u   /* inference time implausible for this model */
+#define RSN_KIND_UNKNOWN   5u   /* payload[24] names no claim kind            */
+#define RSN_MODEL_UNBOUND  6u   /* a vlm this monitor has no measured bound for */
+#define RSN_TIME_INCONSIST 7u   /* the claimed time is not the sum of its parts */
 
 /* Acceptance threshold, percent. Chosen for the demo, not derived from any
- * hazard analysis -- see "WHAT THIS IS NOT" above. */
+ * hazard analysis -- see "WHAT THIS IS NOT" above. It applies to both kinds;
+ * the lowest honest vlm confidence measured was 0.897. */
 #define CONF_MIN     60u
 
 /* An mnist engine on this GPU runs ~0.07 ms; anything over 100 ms did not come
  * from that engine on that device, so the claim is not plausible. Generous on
  * purpose: this rejects nonsense, it does not police performance. */
 #define INFER_US_MAX 100000u
+
+/* The vlm bound (OD13). SmolVLM-500M's model time over 990 warm requests on
+ * this board, with the QNX guest running beside it and the GPU otherwise idle,
+ * had a largest observed value of 284.7 ms (record 20260923T-a6-orin-vlm-
+ * characterize). 1 s is about 3.5 times that. It is a PLAUSIBILITY bound taken
+ * from that record -- a claim slower than this did not come from that model in
+ * that configuration -- not a deadline, and it holds for that model only,
+ * which is why a model without a measured bound is rejected outright. */
+#define VLM_INFER_US_MAX 1000000u
 
 static volatile sig_atomic_t g_stop = 0;
 
@@ -141,8 +195,9 @@ static uint32_t get_u32_le(const uint8_t *p)
 	       ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
 
-/* Returns the verdict, and sets *reason. */
-static uint8_t check_claim(const uint8_t *payload, uint8_t *reason)
+/* Kind 0, the mnist claim: the 2026-09-18 rules, unchanged. Returns the
+ * verdict, and sets *reason. */
+static uint8_t check_mnist(const uint8_t *payload, uint8_t *reason)
 {
 	uint8_t const cls  = payload[P_CLASS];
 	uint8_t const conf = payload[P_CONF];
@@ -169,6 +224,71 @@ static uint8_t check_claim(const uint8_t *payload, uint8_t *reason)
 	return V_ACCEPT;
 }
 
+/* Kind 1, the vlm claim (OD13). The same class and confidence checks, then the
+ * two things a vlm claim carries that the mnist one does not: which model made
+ * it, and its time in parts. In order, first failure wins:
+ *
+ *   class > 9                        class-out-of-range
+ *   conf > 100                       confidence-not-a-percentage
+ *   model has no measured bound      vlm-model-unbounded
+ *   total != prompt_us + gen_us      vlm-time-inconsistent
+ *   total > VLM_INFER_US_MAX         inference-time-implausible
+ *   conf < CONF_MIN                  confidence-below-threshold
+ *
+ * The sum is the one recomputation this monitor can actually do: it cannot know
+ * whether the model is right, but it can refuse a total that its own parts
+ * contradict. It comes before the bound, because a bound checked on a total
+ * that does not add up means nothing. */
+static uint8_t check_vlm(const uint8_t *payload, uint8_t *reason)
+{
+	uint8_t const cls   = payload[P_CLASS];
+	uint8_t const conf  = payload[P_CONF];
+	uint8_t const model = payload[P_VLM_MODEL];
+	uint32_t const us   = get_u32_le(&payload[P_INFER_US]);
+	uint64_t const sum  = (uint64_t)get_u32_le(&payload[P_VLM_PROMPT_US]) +
+	                      (uint64_t)get_u32_le(&payload[P_VLM_GEN_US]);
+
+	if (cls > 9u) {
+		*reason = RSN_CLASS_RANGE;
+		return V_REJECT;
+	}
+	if (conf > 100u) {
+		*reason = RSN_CONF_RANGE;
+		return V_REJECT;
+	}
+	if (model != VLM_MODEL_SMOLVLM_500M) {
+		*reason = RSN_MODEL_UNBOUND;
+		return V_REJECT;
+	}
+	if ((uint64_t)us != sum) {
+		*reason = RSN_TIME_INCONSIST;
+		return V_REJECT;
+	}
+	if (us > VLM_INFER_US_MAX) {
+		*reason = RSN_INFER_IMPLAUS;
+		return V_REJECT;
+	}
+	if (conf < CONF_MIN) {
+		*reason = RSN_CONF_LOW;
+		return V_REJECT;
+	}
+
+	*reason = RSN_OK;
+	return V_ACCEPT;
+}
+
+/* Returns the verdict, and sets *reason. */
+static uint8_t check_claim(const uint8_t *payload, uint8_t *reason)
+{
+	switch (payload[P_KIND]) {
+	case KIND_MNIST: return check_mnist(payload, reason);
+	case KIND_VLM:   return check_vlm(payload, reason);
+	default:
+		*reason = RSN_KIND_UNKNOWN;
+		return V_REJECT;
+	}
+}
+
 static const char *reason_name(uint8_t r)
 {
 	switch (r) {
@@ -177,6 +297,9 @@ static const char *reason_name(uint8_t r)
 	case RSN_CONF_RANGE:    return "confidence-not-a-percentage";
 	case RSN_CONF_LOW:      return "confidence-below-threshold";
 	case RSN_INFER_IMPLAUS: return "inference-time-implausible";
+	case RSN_KIND_UNKNOWN:  return "claim-kind-unknown";
+	case RSN_MODEL_UNBOUND: return "vlm-model-unbounded";
+	case RSN_TIME_INCONSIST: return "vlm-time-inconsistent";
 	default:              return "unknown";
 	}
 }
@@ -194,13 +317,22 @@ static uint8_t judge_frame(uint8_t *buf)
 	if (verdict != V_ACCEPT) {
 		/* Log only rejects: an accepted frame is the common case and
 		 * flooding the console would itself be a hazard on a
-		 * serial-consoled guest. */
-		printf("monitor: REJECT seq=%llu class=%u conf=%u us=%u reason=%s\n",
-		       (unsigned long long)frame_get_u64(&buf[0]),
-		       buf[FRAME_HEADER_BYTES + P_CLASS],
-		       buf[FRAME_HEADER_BYTES + P_CONF],
-		       get_u32_le(&buf[FRAME_HEADER_BYTES + P_INFER_US]),
-		       reason_name(reason));
+		 * serial-consoled guest. The mnist line is byte-for-byte the
+		 * 2026-09-18 one, so that console record still reads the same. */
+		uint8_t const *p = &buf[FRAME_HEADER_BYTES];
+		unsigned long long const seq = (unsigned long long)frame_get_u64(&buf[0]);
+		if (p[P_KIND] == KIND_MNIST) {
+			printf("monitor: REJECT seq=%llu class=%u conf=%u us=%u reason=%s\n",
+			       seq, p[P_CLASS], p[P_CONF], get_u32_le(&p[P_INFER_US]),
+			       reason_name(reason));
+		} else if (p[P_KIND] == KIND_VLM) {
+			printf("monitor: REJECT seq=%llu kind=vlm model=%u class=%u conf=%u us=%u reason=%s\n",
+			       seq, p[P_VLM_MODEL], p[P_CLASS], p[P_CONF], get_u32_le(&p[P_INFER_US]),
+			       reason_name(reason));
+		} else {
+			printf("monitor: REJECT seq=%llu kind=%u reason=%s\n",
+			       seq, p[P_KIND], reason_name(reason));
+		}
 		fflush(stdout);
 	}
 	return verdict;
@@ -592,6 +724,14 @@ int main(int argc, char **argv)
 		fflush(stdout);
 		return 0;
 	}
+	/* Every serving mode says which claim kinds it judges and with what
+	 * bounds, on its own line: the guest console then shows which rules a
+	 * run was judged by, and an image can be checked for this build by the
+	 * string alone. The existing banners are left word for word, because
+	 * the harnesses grep them. */
+	printf("monitor: claim kinds: 0 mnist (us <= %u), 1 vlm model %u (us <= %u), conf_min=%u%%\n",
+	       INFER_US_MAX, VLM_MODEL_SMOLVLM_500M, VLM_INFER_US_MAX, CONF_MIN);
+	fflush(stdout);
 	if (argc > 1 && strcmp(argv[1], "shmkick") == 0) {
 		if (argc != 4) {
 			fprintf(stderr, "monitor: usage: monitor shmkick SPEC[@OFFSET] KICK\n");

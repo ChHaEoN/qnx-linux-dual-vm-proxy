@@ -1931,6 +1931,136 @@ def test_monitor_banners_the_harnesses_grep_are_pinned(native_servers, tmp_path)
     assert "safety monitor serving shm on %s (" in src
 
 
+# ============================================================ the vlm claim kind (OD13, 2026-09-23)
+#
+# payload[24] = 1 is a vision-language model's digit claim. The layout, the
+# rules and their order are documented in monitor.c's header and check_vlm().
+# The defaults below are an honest SmolVLM-500M claim as the 2026-09-23
+# characterisation measured one: 269.3 ms of prompt (image encode included),
+# 12.5 ms of generation, 281.8 ms in all -- far over the mnist kind's 100 ms,
+# well under the vlm kind's 1 s.
+
+def _vlm_claim(seq, cls=3, conf=95, model=1, prompt_us=269300, gen_us=12500, total=None,
+               kind=1, prompt_n=162, gen_n=2, wall_us=309900, mass_ppm=999999):
+    f = bytearray(_probe_mod().build_frame(seq))
+    p = 16
+    f[p + 0] = cls
+    f[p + 1] = conf
+    f[p + 2:p + 6] = (prompt_us + gen_us if total is None else total).to_bytes(4, "little")
+    f[p + 24] = kind
+    f[p + 25] = model
+    f[p + 26:p + 28] = prompt_n.to_bytes(2, "little")
+    f[p + 28:p + 30] = gen_n.to_bytes(2, "little")
+    f[p + 30:p + 34] = prompt_us.to_bytes(4, "little")
+    f[p + 34:p + 38] = gen_us.to_bytes(4, "little")
+    f[p + 38:p + 42] = wall_us.to_bytes(4, "little")
+    f[p + 42:p + 46] = mass_ppm.to_bytes(4, "little")
+    return bytes(f)
+
+
+_VLM_RULES = [
+    # label,                                          claim fields,                                verdict, reason
+    ("an honest SmolVLM claim, as measured",          {},                                              0, 0),
+    ("at the bound, 1000000 us",                      {"prompt_us": 987500},                           0, 0),
+    ("one over the bound",                            {"prompt_us": 987501},                           1, 4),
+    ("class 10",                                      {"cls": 10},                                     1, 1),
+    ("conf 101",                                      {"conf": 101},                                   1, 2),
+    ("conf 60, which is CONF_MIN",                    {"conf": 60},                                    0, 0),
+    ("conf 59",                                       {"conf": 59},                                    1, 3),
+    ("model 2 has no measured bound",                 {"model": 2},                                    1, 6),
+    ("model 0",                                       {"model": 0},                                    1, 6),
+    ("a total that is not the sum of its parts",      {"total": 281801},                               1, 7),
+    ("a sum that would wrap in 32 bits",              {"prompt_us": 0xFFFFFFFF, "gen_us": 1, "total": 0}, 1, 7),
+    # The order: the first failing check names the reason.
+    ("class before model",                            {"cls": 10, "model": 2},                         1, 1),
+    ("model before the sum",                          {"model": 2, "total": 1},                        1, 6),
+    # Over the bound AND inconsistent: the bound alone would say 4.
+    ("the sum before the bound",                      {"prompt_us": 1000000, "gen_us": 0, "total": 2000000}, 1, 7),
+    ("the bound before conf-low",                     {"prompt_us": 1000001, "gen_us": 0, "conf": 59}, 1, 4),
+]
+
+
+@pytest.mark.parametrize("label,fields,verdict,reason", _VLM_RULES, ids=[r[0] for r in _VLM_RULES])
+def test_vlm_claim_rules(udp_monitor, label, fields, verdict, reason):
+    port, _ = udp_monitor
+    frame = _vlm_claim(300 + [r[0] for r in _VLM_RULES].index(label), **fields)
+    got = _exchange(port, frame)
+    assert got is not None and len(got) == 64 and got[:8] == frame[:8], label
+    assert (got[16 + 6], got[16 + 7]) == (verdict, reason), \
+        "%s: verdict %d reason %d, want %d/%d" % (label, got[16 + 6], got[16 + 7], verdict, reason)
+    want = bytearray(frame)
+    want[16 + 6], want[16 + 7] = verdict, reason
+    assert got == bytes(want), "%s: only the verdict and reason bytes may change" % label
+
+
+def test_an_honest_vlm_time_is_why_the_kind_exists(udp_monitor):
+    # The same honest 281.8 ms under the mnist kind is rejected on time alone:
+    # the 2026-09-18 contract was written for a 0.1 ms CNN. That is the whole
+    # reason a VLM claim needs a kind of its own.
+    port, _ = udp_monitor
+    mnist = bytearray(_vlm_claim(400))
+    mnist[16 + 24] = 0
+    got = _exchange(port, bytes(mnist))
+    assert (got[16 + 6], got[16 + 7]) == (1, 4), "kind 0 must still apply the 100 ms bound"
+    got = _exchange(port, _vlm_claim(401))
+    assert (got[16 + 6], got[16 + 7]) == (0, 0), "the same claim as kind 1 is accepted"
+
+
+@pytest.mark.parametrize("kind", [2, 7, 255])
+def test_an_unknown_claim_kind_is_rejected(udp_monitor, kind):
+    port, _ = udp_monitor
+    got = _exchange(port, _vlm_claim(500 + kind, kind=kind))
+    assert (got[16 + 6], got[16 + 7]) == (1, 5), "kind %d: reason 5, claim-kind-unknown" % kind
+
+
+def test_vlm_claims_cross_the_shm_transport_unchanged(native_servers, tmp_path):
+    # The kind is dispatched inside judge_frame(), so every transport carries it
+    # with no change of its own. Check that on the slot, whose copy is a memcpy
+    # of exactly FRAME_TOTAL_BYTES: an honest claim ACCEPTs, a claim from a
+    # model with no measured bound REJECTs with reason 6, and the kind-specific
+    # bytes come back as they went.
+    lp = _probe_mod()
+    f = _shm_file(tmp_path)
+    p = _shm_serve(native_servers, f)
+    try:
+        chan = lp.ShmChannel(str(native_servers / "libshmchan.so"), str(f))
+        assert chan.ready()
+        good, bad = _vlm_claim(1), _vlm_claim(2, model=2)
+        assert chan.roundtrip(good, 2.0) == lp.ShmChannel.OK
+        got = chan.rsp.raw
+        assert got[16 + 6] == 0 and got[16 + 7] == 0 and got[16 + 8:] == good[16 + 8:]
+        assert chan.roundtrip(bad, 2.0) == lp.ShmChannel.OK
+        got = chan.rsp.raw
+        assert got[16 + 6] == 1 and got[16 + 7] == 6 and got[16 + 8:] == bad[16 + 8:]
+        # And a kind-0 reject, whose console line must still read exactly as
+        # the 2026-09-18 record's does.
+        legacy = bytearray(lp.build_frame(3))
+        legacy[16] = 42
+        assert chan.roundtrip(bytes(legacy), 2.0) == lp.ShmChannel.OK
+    finally:
+        p.terminate()
+        out, err = p.communicate(timeout=10)
+    out = out.decode()
+    assert "shm done: seen=3 accepted=1 rejected=2 jumps=0" in out, (out, err)
+    assert "monitor: REJECT seq=2 kind=vlm model=2 class=3 conf=95 us=281800 reason=vlm-model-unbounded\n" in out, out
+    assert "monitor: REJECT seq=3 class=42 conf=95 us=124 reason=class-out-of-range\n" in out, out
+
+
+def test_the_monitor_announces_its_claim_kinds(native_servers):
+    # A serving monitor names its kinds and bounds on a line of its own, so a
+    # guest console shows which rules judged a run, and an image can be
+    # checked for this build by the string alone.
+    import time as _t
+    port = _free_udp_port()
+    p = subprocess.Popen([str(native_servers / "monitor"), str(port), "udp"],
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    _t.sleep(0.3)
+    p.terminate()
+    out, _ = p.communicate(timeout=10)
+    line = [x for x in out.decode().splitlines() if "claim kinds:" in x]
+    assert line == ["monitor: claim kinds: 0 mnist (us <= 100000), 1 vlm model 1 (us <= 1000000), conf_min=60%"], out
+
+
 # ============================================================ the shm transport (OD12, 2026-09-22)
 #
 # shm_chan.h's slot: magic @0, version @4, req_seq @64, request @128, rsp_seq @192,

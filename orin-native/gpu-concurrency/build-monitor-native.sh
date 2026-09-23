@@ -51,10 +51,33 @@ if grep -nE '^[^*/]*\b(ClockCycles|MsgSend|MsgReceive|MsgReply|name_attach|name_
 	exit 1
 fi
 
+# ONE SOURCE PER BINARY PATH (2026-09-23). The ladder runs ${OUT} as its host
+# arms A and B and compares them with the guest's monitor in arm D, so the two
+# must be the same program. The VLM service arm (OD13) changed monitor.c while
+# the published guest images keep their old monitor; rebuilding the default
+# path from the new source would then pair a new host monitor with an old
+# guest one, and nothing downstream would notice. So the source that built a
+# binary is recorded beside it, and a rebuild from a different source is
+# refused unless FORCE=1 -- build a service-arm monitor to its own OUT instead.
+SIDE="${OUT}.source-sha256"
+want_src="$(cat "${SRC}" "${MAP}" "${IVC}" "${INC}/frame.h" "${INC}/frame_io.h" "${INC}/shm_chan.h" \
+	"${INC}/shm_map.h" "${INC}/ivshm_client.h" | sha256sum | cut -d' ' -f1)"
+if [ -e "${OUT}" ] && [ "${FORCE:-0}" != 1 ]; then
+	have_src="$(cat "${SIDE}" 2>/dev/null || echo unrecorded)"
+	if [ "${have_src}" != "${want_src}" ]; then
+		echo "ERROR: ${OUT} exists and was built from other source (${have_src:0:16})." >&2
+		echo "       Rebuilding it from this tree (${want_src:0:16}) would change the ladder's" >&2
+		echo "       host arms under a guest image that still runs the old monitor. Build to" >&2
+		echo "       another OUT, or pass FORCE=1 if the guest image matches this source." >&2
+		exit 1
+	fi
+fi
+
 mkdir -p "$(dirname "${OUT}")"
 set -x
 "${CC}" -O2 -std=gnu99 -Wall -Wextra -I "${INC}" -o "${OUT}" "${SRC}" "${MAP}" "${IVC}"
 set +x
+echo "${want_src}" > "${SIDE}"
 
 echo
 echo "built:  ${OUT}"
@@ -62,6 +85,7 @@ echo "sha256: $(sha256sum "${OUT}" | cut -d' ' -f1)"
 echo "source: $(sha256sum "${SRC}" | cut -d' ' -f1)  monitor.c"
 echo "source: $(sha256sum "${MAP}" | cut -d' ' -f1)  $(basename "${MAP}")"
 echo "source: $(sha256sum "${IVC}" | cut -d' ' -f1)  $(basename "${IVC}")"
+echo "tree:   ${want_src}  (recorded in $(basename "${SIDE}"))"
 echo
 echo "The guest runs this same monitor.c, cross-compiled with qcc. The binaries"
 echo "differ; the program does not."
