@@ -479,6 +479,42 @@ notification. The guest image is `ifs-kick.bin`, built from
 [`ifs-kick.build`](../ipc-test/qnx-safety-monitor/ifs-kick.build): `ifs-shm.bin` plus `devc-virtio` and three
 start lines, one of which configures the ivshmem function once before any monitor maps it.
 
+**2026-09-23 (owner decision, OD13): the VLM service arm, and where its results go.** The 2026-09-18
+cross-partition service (L4T classifies an MNIST image with TensorRT, QNX judges the claim) is upgraded to a
+vision-language model under llama.cpp on L4T. Four decisions, each taken by the owner from a stated
+recommendation, and the claim contract they rest on, which was stated to the owner and not separately
+decided:
+
+- **Publication.** A6 figures from here on stay on the local branch `a6-results-unpublished` until the 4.6(i)
+  consultation; code, tests and docs are published. This settles the contradiction the service-arm review
+  found between §9 ("campaign figures ... stay out of the public repo") and practice (A6 records were being
+  pushed). The A6 records already public, up to the LLM interference record of the same day, stay as they are.
+  4.6(i) covers "performance or functional evaluation results", so a functional demo record is held too.
+- **The claim contract (stated, not separately decided).** A VLM claim is a new claim kind, byte `payload[24]`: 0 is today's MNIST claim with
+  its rules unchanged — the probe's all-zero frame and every published A6 run depend on that path — and 1 is a
+  VLM digit claim. The kind is dispatched inside `judge_frame()`, the one choke point for monitor.c's four
+  transports; DDS is out of scope, its separate copy of the rules already diverges (class > 7) and is flagged,
+  not fixed, here. A VLM claim reuses the MNIST slots — class `[0]`, confidence `[1]`, model time `[2..5]` —
+  and its own fields live only in `payload[25..47]`: `[8..23]` stays reserved for measurement-design §3.3 and
+  the frame stays 64 bytes. New reason codes start at 5.
+- **The VLM inference bound is 1 s**, about 3.5× the largest model time in 990 warm requests (284.7 ms, the
+  2026-09-23 characterisation, GPU otherwise idle). It is a plausibility bound taken from that record, not a
+  deadline, and the monitor says so. `CONF_MIN` stays 60 for VLM claims; the lowest honest confidence measured
+  was 0.897. The confidence is the model's own: P(answer) at the digit's token position over the ten digit
+  tokens, never a constant.
+- **No liveness deadline in the first change.** The monitor still blocks for a claim forever. A deadline
+  comes later, as its own change in a dedicated service mode with its own image, so that the probe's
+  transports stay byte-identical and each change's cost stays separable (the lesson of the 34–38 µs shift,
+  whose three causes were never separated).
+- **Runs, in order.** A functional demo first: honest VLM claims ACCEPT, one corrupted claim per reason code
+  REJECT, the guest console as corroboration, no timing, outside the completeness gate. Then the verdict round
+  trip: a pre-built VLM claim frame against the MNIST frame, paired within round, k = 12, n = 1000, gate-clean
+  by construction. Image-to-verdict timing is not scheduled.
+
+The service runs on its own monitor instance and port in a new image, `ifs-svc.bin` (`ifs-udp.bin` plus a
+changed monitor, built under its own binary name, because every `ifs-*.build` embeds one shared path), so
+the probe's `:7100` is never held by the service.
+
 Measurements taken before the freeze become architecture-version history. They are kept, labelled with the architecture they ran on, and not chased.
 
 This section carries no figures. Public figures stay where the inventory below points. Figures from M3 and from dry run 7b stay on the local branch `m3-results-unpublished` (§9).
