@@ -327,6 +327,52 @@ def test_degraded_arm_file_refuses(tmp_path, field, value, message):
     assert message in r.stderr, r.stderr
 
 
+def _complete_claims(tmp_path, d, vlm_arms, arms=("mnist", "vlm"), k=12):
+    return _run(tmp_path, 'K=%d; N=1000; WARMUP=200; CORE_PROBE=4; VLM_ARMS="%s"; m_require_complete "%s" %s; echo PASSED'
+                % (k, vlm_arms, _posix(d), " ".join(arms)))
+
+
+def _claimed(want):
+    """mutate(): label every file with the claim `want(arm)` says it carried."""
+    def m(a, r, b):
+        c = want(a)
+        if c is not None:
+            b["summary"]["claim"] = c
+        return b
+    return m
+
+
+def test_claim_gate_passes_arms_that_carried_what_they_say(tmp_path):
+    d = _run_dir(tmp_path, arms=("mnist", "vlm"), mutate=_claimed(lambda a: a))
+    r = _complete_claims(tmp_path, d, "vlm")
+    assert "PASSED" in r.stdout, r.stderr
+
+
+def test_claim_gate_accepts_files_from_before_the_claim_was_recorded(tmp_path):
+    # Every A6 file written before OD13 has no "claim" key and carried the
+    # mnist claim; the gate must keep accepting them, or no older run re-checks.
+    r = _complete(tmp_path, _run_dir(tmp_path))
+    assert "PASSED" in r.stdout, r.stderr
+
+
+@pytest.mark.parametrize("arm,labelled,message", [
+    ("vlm", "mnist", "claim='mnist', expected 'vlm'"),
+    ("vlm", None, "claim='mnist', expected 'vlm'"),      # absent means mnist
+    ("mnist", "vlm", "claim='vlm', expected 'mnist'"),
+])
+def test_claim_gate_refuses_an_arm_that_carried_the_other_claim(tmp_path, arm, labelled, message):
+    # proto_problems' argument again: a vlm arm run with mnist frames pairs a
+    # claim with itself and reports a difference of zero as a finding.
+    def m(a, r, b):
+        c = a if (a, r) != (arm, 5) else labelled
+        if c is not None:
+            b["summary"]["claim"] = c
+        return b
+    r = _complete_claims(tmp_path, _run_dir(tmp_path, arms=("mnist", "vlm"), mutate=m), "vlm")
+    assert "PASSED" not in r.stdout
+    assert ("%s_r5: %s" % (arm, message)) in r.stderr, r.stderr
+
+
 def test_round_outside_one_to_k_refuses(tmp_path):
     d = _run_dir(tmp_path)
     (d / "lat-gpu_r13.json").write_text(json.dumps(_summary("gpu_r13")))
@@ -1472,13 +1518,32 @@ def _udp_probe(port, tmp_path, *extra):
 
 
 def test_udp_probe_times_a_clean_arm(tmp_path):
-    srv, port, stop = _udp_server(lambda n, d: [d])
+    kinds = set()
+
+    def echo(n, d):
+        kinds.add(d[16 + 24])
+        return [d]
+    srv, port, stop = _udp_server(echo)
     r, out, st = _udp_probe(port, tmp_path)
     stop.set()
     srv.close()
     assert r.returncode == 0, r.stdout + r.stderr
     s = json.loads(out.read_text())["summary"]
     assert s["proto"] == "udp" and s["n"] == 60 and not st.exists()
+    # FOUND BY REVIEW (OD13): with no --claim, every frame on the wire is still the
+    # kind-0 mnist claim and the file says so -- a flipped default failed only on
+    # the board, at the gate, after a full run.
+    assert s["claim"] == "mnist" and kinds == {0}, (s.get("claim"), kinds)
+
+
+@pytest.mark.parametrize("claim", ["mnist", "vlm"])
+def test_a_stall_record_says_which_claim_was_in_flight(tmp_path, claim):
+    srv, port, stop = _udp_server(lambda n, d: [] if n == 20 else [d])
+    r, out, st = _udp_probe(port, tmp_path, "--claim", claim)
+    stop.set()
+    srv.close()
+    assert r.returncode == 3, r.stdout + r.stderr
+    assert json.loads(st.read_text())["stall"]["claim"] == claim
 
 
 def test_udp_probe_records_a_missing_reply_as_a_stall(tmp_path):
@@ -1585,6 +1650,48 @@ def test_gate_refuses_a_stall_record_from_the_wrong_transport(tmp_path):
     r = _run(tmp_path, 'K=2; N=1000; WARMUP=200; CORE_PROBE=4; FIFO_ARMS=""; STALL_POLICY=record; '
              'UDP_ARMS="D-udp"; m_require_complete "%s" %s; echo PASSED' % (_posix(d), " ".join(arms)))
     assert "PASSED" not in r.stdout and "D-udp_r2: proto='tcp', expected 'udp'" in r.stderr, r.stderr
+
+
+@pytest.mark.parametrize("claim,passes", [("vlm", True), ("mnist", False), (None, False)])
+def test_gate_checks_the_claim_in_a_stall_record_too(tmp_path, claim, passes):
+    """FOUND BY REVIEW (OD13): the claim check ran on result files only, so a vlm arm
+    that stalled in every round passed whatever frames it had carried -- the gap
+    test_gate_refuses_a_stall_record_from_the_wrong_transport closed for proto."""
+    arms = ["mnist", "vlm"]
+
+    def labelled(a, r, s):
+        s["claim"] = a
+    d = _sched_dir(tmp_path, arms, labelled)
+    rec = _stall_record("vlm_r2")
+    if claim is not None:
+        rec["stall"]["claim"] = claim
+    (d / "stall-vlm_r2.json").write_text(json.dumps(rec))
+    (d / "lat-vlm_r2.json").unlink()
+    (d / "recovery-vlm_r2.json").write_text(json.dumps({"tag": "vlm_r2", "recovered": True}))
+    r = _run(tmp_path, 'K=2; N=1000; WARMUP=200; CORE_PROBE=4; FIFO_ARMS=""; STALL_POLICY=record; '
+             'VLM_ARMS="vlm"; m_require_complete "%s" %s; echo PASSED' % (_posix(d), " ".join(arms)))
+    if passes:
+        assert "PASSED" in r.stdout, r.stderr
+    else:
+        assert "PASSED" not in r.stdout and "vlm_r2: claim='mnist', expected 'vlm'" in r.stderr, r.stderr
+
+
+def test_m_probe_passes_the_claim_only_when_asked(tmp_path):
+    """FOUND BY REVIEW (OD13): every existing harness's probe command must stay what
+    it was, and PROBE_CLAIM given as a prefix to one call must not outlive it."""
+    fake = tmp_path / "argv.py"
+    fake.write_bytes(b"import sys, json\na = sys.argv\n"
+                     b"open(a[a.index('--out') + 1], 'w').write(json.dumps({'argv': a[1:]}))\n")
+    out = tmp_path / "out"
+    out.mkdir()
+    r = _run(tmp_path, 'N=10; WARMUP=1; INTERVAL_MS=0; CORE_PROBE=0; SAMPLE_WINDOW=0; PROBE="%s"; '
+             'taskset() { shift 2; "$@"; }; m_probe "%s" a_r1 127.0.0.1 1; '
+             'PROBE_CLAIM=vlm m_probe "%s" b_r1 127.0.0.1 1; m_probe "%s" c_r1 127.0.0.1 1'
+             % (_posix(fake), _posix(out), _posix(out), _posix(out)))
+    assert r.returncode == 0, r.stderr
+    argv = {t: json.loads((out / ("lat-%s_r1.json" % t)).read_text())["argv"] for t in "abc"}
+    assert "--claim" not in argv["a"] and "--claim" not in argv["c"], argv
+    assert argv["b"][argv["b"].index("--claim") + 1] == "vlm", argv["b"]
 
 
 def test_m_probe_passes_the_transport_to_the_probe(tmp_path):
@@ -2044,6 +2151,45 @@ def test_vlm_claims_cross_the_shm_transport_unchanged(native_servers, tmp_path):
     assert "shm done: seen=3 accepted=1 rejected=2 jumps=0" in out, (out, err)
     assert "monitor: REJECT seq=2 kind=vlm model=2 class=3 conf=95 us=281800 reason=vlm-model-unbounded\n" in out, out
     assert "monitor: REJECT seq=3 class=42 conf=95 us=124 reason=class-out-of-range\n" in out, out
+
+
+def test_probe_vlm_frame_is_the_kind1_layout_and_the_mnist_frame_is_unchanged():
+    # The DEFAULT (no --claim) is pinned on the wire by test_udp_probe_times_a_clean_arm.
+    lp = _probe_mod()
+    assert lp.BUILDERS["mnist"] is lp.build_frame, "the mnist claim must stay the pinned frame"
+    f = lp.build_vlm_frame(9)
+    assert len(f) == 64 and f[:8] == (9).to_bytes(8, "little") and f[8:16] == bytes(8)
+    p = f[16:]
+    assert p[0] == 3 and p[1] == 100 and int.from_bytes(p[2:6], "little") == 269484 + 12548
+    assert p[6] == 0 and p[7] == 0 and p[8:24] == bytes(16)
+    assert p[24] == 1 and p[25] == 1
+    assert int.from_bytes(p[30:34], "little") + int.from_bytes(p[34:38], "little") == \
+        int.from_bytes(p[2:6], "little"), "the total must be the sum of its parts, or the monitor rejects it"
+
+
+def test_the_monitor_accepts_the_probes_vlm_frame(udp_monitor):
+    # A latency run whose frames were rejected cannot pass the gate, so the
+    # pre-built frame must be one the real monitor ACCEPTs.
+    port, _ = udp_monitor
+    got = _exchange(port, _probe_mod().build_vlm_frame(600))
+    assert (got[16 + 6], got[16 + 7]) == (0, 0)
+
+
+def test_a_vlm_claim_probe_run_records_its_claim_and_is_gate_clean(native_servers, tmp_path):
+    import time as _t
+    port = _free_udp_port()
+    m = subprocess.Popen([str(native_servers / "monitor"), str(port), "udp"],
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        _t.sleep(0.3)
+        r, out, st = _udp_probe(port, tmp_path, "--claim", "vlm")
+    finally:
+        m.terminate()
+        mout, _ = m.communicate(timeout=10)
+    assert r.returncode == 0, r.stdout + r.stderr
+    s = json.loads(out.read_text())["summary"]
+    assert s["claim"] == "vlm" and s["n"] == 60 and s["rejected_by_monitor"] == 0 and not st.exists()
+    assert "udp done: seen=65 accepted=65 rejected=0" in mout.decode(), mout
 
 
 def _vlm_client_mod():

@@ -5,6 +5,7 @@ distribution rather than a liveness yes/no.
   usage: latency_probe.py --host H [--port 7100] [--proto tcp|udp] [--n 2000]
                           [--warmup 200] [--interval-ms 2] [--tag NAME] [--out FILE]
                           [--timeout-s 10] [--stall-out FILE] [--await-recovery S]
+                          [--claim mnist|vlm]
          latency_probe.py --proto shm --shm FILE --shm-lib LIB [the same options]
          latency_probe.py --proto shmkick --shm FILE@OFF --kick SOCK --shm-lib LIB [...]
          latency_probe.py --proto shmdb --shm FILE@OFF --kick SOCK --ivshm SOCK --shm-lib LIB [...]
@@ -80,6 +81,33 @@ def build_frame(seq):
     pay[P_CONF] = 95
     pay[P_INFER_US:P_INFER_US + 4] = struct.pack("<I", 124)
     return hdr + bytes(pay)
+
+
+# OD13 (2026-09-23): a pre-built kind-1 (vlm) claim, so the verdict round trip
+# of a VLM claim can be paired against the mnist claim's with nothing else
+# changed. Its values are one honest SmolVLM-500M answer as the 2026-09-23
+# characterisation measured it (digit 3, P = 0.9998, 269.484 + 12.548 ms), so
+# the monitor ACCEPTs it -- a run whose frames were rejected could not pass the
+# completeness gate, and choosing only images that pass would be selection
+# bias; a fixed frame needs no choosing. Layout: monitor.c's header.
+P_KIND = 24
+VLM_PROMPT_US, VLM_GEN_US = 269484, 12548
+
+
+def build_vlm_frame(seq):
+    """A kind-1 claim the monitor will ACCEPT: digit 3, 100%, 282032 us in two parts."""
+    hdr = struct.pack("<QQ", seq, 0)
+    pay = bytearray(PAYLOAD)
+    pay[P_CLASS] = 3
+    pay[P_CONF] = 100
+    pay[P_INFER_US:P_INFER_US + 4] = struct.pack("<I", VLM_PROMPT_US + VLM_GEN_US)
+    pay[P_KIND] = 1                                   # kind: vlm
+    pay[P_KIND + 1] = 1                               # model 1: SmolVLM-500M-Instruct Q8_0
+    struct.pack_into("<HHIIII", pay, P_KIND + 2, 162, 2, VLM_PROMPT_US, VLM_GEN_US, 309900, 999999)
+    return hdr + bytes(pay)
+
+
+BUILDERS = {"mnist": build_frame, "vlm": build_vlm_frame}
 
 
 def percentile(sorted_values, p):
@@ -168,7 +196,7 @@ def _abort(a, why, at, bad, rejected, kind, before):
     if a.stall_out:
         rec = {"stall": {"tag": a.tag, "proto": a.proto, "kind": kind, "at_sample": at, "of": a.warmup + a.n,
                          "warmup": a.warmup, "timeout_s": a.timeout_s, "why": why,
-                         "bad": bad, "rejected_by_monitor": rejected,
+                         "bad": bad, "rejected_by_monitor": rejected, "claim": a.claim,
                          "utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())},
                "samples_before_ms": before}
         rec["stall"].update(own_scheduling())
@@ -449,6 +477,9 @@ def main():
                          "doorbells, and a count of how many arrived")
     ap.add_argument("--shm", default="", help="with --proto shm: the shared-memory file")
     ap.add_argument("--shm-lib", default="", help="with --proto shm: libshmchan.so, built from shmchan.c")
+    ap.add_argument("--claim", choices=sorted(BUILDERS), default="mnist",
+                    help="which claim each timed frame carries: the mnist claim every A6 run has "
+                         "used (the default, unchanged), or OD13's pre-built vlm claim")
     ap.add_argument("--await-recovery", type=float, default=0.0,
                     help="instead of sampling: seconds to wait for the guest to answer again")
     a = ap.parse_args()
@@ -560,7 +591,7 @@ def main():
         seq += 1
         if seq >= (1 << 63):          # never reach the sentinel
             seq = 1
-        frame = build_frame(seq)
+        frame = BUILDERS[a.claim](seq)
         if notified:
             t0 = time.perf_counter()
             rc = kc.roundtrip(frame, a.timeout_s)
@@ -653,6 +684,7 @@ def main():
     res = {
         "tag": a.tag,
         "proto": a.proto,
+        "claim": a.claim,
         "n": len(rtts),
         "warmup_discarded": a.warmup,
         "bad": bad,

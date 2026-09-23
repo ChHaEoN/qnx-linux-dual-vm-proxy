@@ -660,9 +660,13 @@ m_probe() {         # $1 out-dir  $2 tag  $3 host  $4 port  [$5 prefix command] 
 	[ "${SAMPLE_WINDOW:-0}" = 1 ] && m_sampler_start "$tag"
 	[ "${KVM_STATS:-0}" = 1 ] && m_kvm_snap "$out/kvm-$tag.json" before
 	t0="$(date +%s%N)"
+	# OD13 (2026-09-23): PROBE_CLAIM picks the claim each timed frame carries.
+	# Passed only when set, so every existing caller's probe command is unchanged.
+	local claim=()
+	[ -n "${PROBE_CLAIM:-}" ] && claim=(--claim "$PROBE_CLAIM")
 	$pre taskset -c "$CORE_PROBE" python3 "$PROBE" "${dest[@]}" \
 		--n "$N" --warmup "$WARMUP" --interval-ms "$INTERVAL_MS" --timeout-s "$PROBE_TIMEOUT_S" --proto "$proto" \
-		"${stall[@]}" --tag "$tag" --out "$out/lat-$tag.json" >> "$out/probe.log" 2>&1
+		"${claim[@]}" "${stall[@]}" --tag "$tag" --out "$out/lat-$tag.json" >> "$out/probe.log" 2>&1
 	rc=$?
 	t1="$(date +%s%N)"
 	[ "${KVM_STATS:-0}" = 1 ] && m_kvm_snap "$out/kvm-$tag.json" after
@@ -722,7 +726,7 @@ m_require_complete() {  # $1 = out dir, then arm tags
 	[ -n "${CORE_PROBE:-}" ] || die "m_require_complete needs CORE_PROBE to check the probe's affinity"
 	MP_CORE="$CORE_PROBE" MP_FIFO="${FIFO_ARMS:-}" MP_STALL="${STALL_POLICY:-refuse}" MP_UDP="${UDP_ARMS:-}" \
 	MP_SHM="${SHM_ARMS:-}" MP_KICK="${KICK_ARMS:-}" MP_DB="${DB_ARMS:-}" MP_ECHO="${ECHO_ARMS:-}" \
-	MP_KVM="${KVM_STATS:-0}" \
+	MP_KVM="${KVM_STATS:-0}" MP_VLM="${VLM_ARMS:-}" \
 	MP_TIMEOUT="$PROBE_TIMEOUT_S" \
 	python3 - "$out" "$K" "$N" "$WARMUP" "$@" <<'PY' || die "the run is incomplete or unclean -- do not publish a median from it"
 import json, os, sys
@@ -734,6 +738,7 @@ shm_arms = set(os.environ.get("MP_SHM", "").split())
 kick_arms = set(os.environ.get("MP_KICK", "").split())
 db_arms = set(os.environ.get("MP_DB", "").split())
 echo_arms = set(os.environ.get("MP_ECHO", "").split())
+vlm_arms = set(os.environ.get("MP_VLM", "").split())
 want_kvm = os.environ.get("MP_KVM") == "1"
 record_stalls = os.environ.get("MP_STALL") == "record"
 timeout_s = float(os.environ["MP_TIMEOUT"])
@@ -756,6 +761,17 @@ def proto_problems(tag, a, s):
             else "shmdb" if a in db_arms else "kickecho" if a in echo_arms else "tcp")
     if s.get("proto") != want:
         return ["%s: proto=%r, expected %r" % (tag, s.get("proto"), want)]
+    return []
+def claim_problems(tag, a, s):
+    """ADDED 2026-09-23 (OD13): each file says which claim its frames carried. An
+    arm in VLM_ARMS must say vlm; every other arm must say mnist, or say nothing,
+    which is what every file written before the probe recorded it means. A vlm
+    arm silently run with mnist frames would pair a claim with itself and report
+    a difference of zero as a finding -- proto_problems' argument, again."""
+    got = s.get("claim", "mnist")
+    want = "vlm" if a in vlm_arms else "mnist"
+    if got != want:
+        return ["%s: claim=%r, expected %r" % (tag, got, want)]
     return []
 def sched_problems(tag, a, s):
     """The probe's own report of how it ran, from a result or a stall record."""
@@ -789,6 +805,7 @@ for a in arms:
                 problems.append("%s: stall kind=%r" % (tag, st.get("kind")))
             problems.extend(sched_problems(tag, a, st))
             problems.extend(proto_problems(tag, a, st))
+            problems.extend(claim_problems(tag, a, st))
             rp = os.path.join(out, "recovery-%s.json" % tag)
             try:
                 rec = json.load(open(rp))
@@ -812,6 +829,7 @@ for a in arms:
                 problems.append("%s: %s=%r, expected %r" % (tag, key, s.get(key), want))
         problems.extend(sched_problems(tag, a, s))
         problems.extend(proto_problems(tag, a, s))
+        problems.extend(claim_problems(tag, a, s))
         if a in kick_arms or a in db_arms or a in echo_arms:
             # ADDED 2026-09-22 (OD12): a notified arm measured what it claims only if
             # every exchange ended on exactly one notification and nothing else woke
