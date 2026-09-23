@@ -28,6 +28,7 @@ GUEST="${GUEST:-192.168.100.10}"
 SVC_PORT="${SVC_PORT:-7102}"
 CONSOLE="${CONSOLE:?set CONSOLE to the guest console log the launcher writes}"
 SECONDS_RUN="${SECONDS_RUN:-240}"
+OUTAGES="${OUTAGES:-0}"          # >0: stream until the owner has unplugged and replugged this often
 SIZE="${SIZE:-64}"
 SRV_PORT="${SRV_PORT:-8089}"
 CORE_SRV="${CORE_SRV:-3,5}"
@@ -92,13 +93,23 @@ silence=()
 head -c "$mark" "$CONSOLE" | tr -d '\0\r' | grep -a "LIVENESS" | tail -1 | grep -q "LIVENESS MISS" \
 	&& silence=(--opened-in-silence)
 echo "opened_in_silence=${#silence[@]}" >> "$OUT/console.mark"
-say "streaming for ${SECONDS_RUN} s: unplug the camera and plug it back whenever you like"
-taskset -c 5 python3 "$here/camera_client.py" --host "$GUEST" --port "$SVC_PORT" \
-	--server "http://127.0.0.1:$SRV_PORT" --size "$SIZE" --seconds "$SECONDS_RUN" \
+if [ "$OUTAGES" -gt 0 ]; then
+	say "streaming until the camera has been unplugged and replugged $OUTAGES time(s), at most ${SECONDS_RUN} s"
+else
+	say "streaming for ${SECONDS_RUN} s: unplug the camera and plug it back whenever you like"
+fi
+# A hard limit on top of the client's own: what OpenCV does when its device
+# vanishes mid-read is not something this repo controls.
+timeout $((${SECONDS_RUN%.*} + 60)) taskset -c 5 python3 "$here/camera_client.py" --host "$GUEST" --port "$SVC_PORT" \
+	--server "http://127.0.0.1:$SRV_PORT" --size "$SIZE" --seconds "$SECONDS_RUN" --outages "$OUTAGES" \
 	--log "$OUT/claims.jsonl" > "$OUT/client.log" 2>&1
 crc=$?
 srv_stop
 [ "$crc" -eq 0 ] || die "camera_client.py exited $crc -- see $OUT/client.log"
+if [ "$OUTAGES" -gt 0 ]; then
+	grep -q "\"event\": \"done\", \"outages\": $OUTAGES" "$OUT/claims.jsonl" \
+		|| die "the run ended at its limit before $OUTAGES camera outage(s) -- nothing to show"
+fi
 sleep 3                         # the run's own trailing silence: 2 s, then its MISS line
 tail -c +"$((mark + 1))" "$CONSOLE" | tr -d '\0\r' > "$OUT/guest-console.demo.log"
 
@@ -117,6 +128,7 @@ s = {"experiment": "camera-demo", "publishes_timing": False,
      "utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
      "service_port": int(os.environ.get("SVC_PORT", "7102")), "deadline_ms": 2000,
      "frame_size_px": int(os.environ.get("SIZE", "64")), "frames_kept": 0,
+     "outages_requested": int(os.environ.get("OUTAGES", "0")),
      "model": os.environ.get("MODEL", "SmolVLM-500M-Instruct-Q8_0.gguf"),
      "nvpmodel": " ".join(q.stdout.split()) if q.returncode == 0 else "unavailable",
      "governor": "left as found", "page_cache": "dropped before the server started",

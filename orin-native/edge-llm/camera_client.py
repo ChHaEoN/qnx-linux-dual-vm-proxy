@@ -72,21 +72,34 @@ def stream(a):
         print(json.dumps(rec), flush=True)
 
     cap, seq, absent = None, a.seq, False
+    ever_open, lost, outages, reopened_at = False, False, 0, None
     try:
         while time.monotonic() - t0 < a.seconds:
+            # --outages N: the run waits for the owner. It ends once N outages
+            # have ended and --tail seconds of claims have followed the last.
+            if a.outages and outages >= a.outages and time.monotonic() - reopened_at >= a.tail:
+                emit({"event": "done", "outages": outages})
+                break
             if cap is None:
                 cap, dev = open_camera(cv2)
                 if cap is None:
                     if not absent:
                         emit({"event": "camera-absent"})
                         absent = True
+                    lost = lost or ever_open
                     time.sleep(0.2)
                     continue
                 emit({"event": "camera-open", "device": dev})
                 absent = False
+                if lost:                    # an outage has ended: the camera was open before
+                    outages += 1
+                    reopened_at = time.monotonic()
+                    lost = False
+                ever_open = True
             ok, frame = cap.read()
             if not ok:
                 emit({"event": "camera-lost"})
+                lost = True
                 cap.release()
                 cap = None
                 continue
@@ -178,7 +191,10 @@ def main(argv):
     ap.add_argument("--port", type=int, default=7102)
     ap.add_argument("--server", default="http://127.0.0.1:8089")
     ap.add_argument("--size", type=int, default=64, help="the square the frame is shrunk to, pixels")
-    ap.add_argument("--seconds", type=float, default=240.0)
+    ap.add_argument("--seconds", type=float, default=240.0, help="the run's length, or with --outages its limit")
+    ap.add_argument("--outages", type=int, default=0,
+                    help="end once this many camera outages have ended (0: run for --seconds)")
+    ap.add_argument("--tail", type=float, default=10.0, help="seconds of claims to keep after the last outage")
     ap.add_argument("--seq", type=int, default=5000, help="the first claim's seq is this plus one")
     ap.add_argument("--log", required=True)
     ap.add_argument("--check", metavar="CONSOLE", help="judge a finished run's LOG against this console slice")
