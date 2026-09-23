@@ -1007,12 +1007,23 @@ SAMPLER_LOOP='while :; do
 	printf "%s emc_bpmp_hz=%s emc_ccf_hz=%s gpu_hz=%s\n" "${EPOCHREALTIME:-$(date +%s.%N)}" "$a" "$b" "$c"
 	sleep 0.5
 done'
+# INTERVAL_MS as a whole number of ms, rounded UP, for integer arithmetic.
+# ADDED 2026-09-24: the offered-rate sweep (measurement-design 3.5) runs spacings
+# below 1 ms, and bash arithmetic on "0.2" is a syntax error, not a zero.
+_ims_ceil() {
+	local v="${INTERVAL_MS:-2}" w
+	case "$v" in
+		*.*) w="${v%%.*}"; echo $(( ${w:-0} + 1 )) ;;
+		*) echo "$v" ;;
+	esac
+}
 m_sampler_start() {  # $1 = tag
-	local t="$1" ceil root
+	local t="$1" ceil root ims
 	# The ceiling follows the probe's nominal length plus a wide margin: long
 	# enough that a slow probe cannot outlast its sampler, short enough that a
 	# dead run cannot leave one behind for long.
-	ceil=$(( (${N:-1000} + ${WARMUP:-200}) * ${INTERVAL_MS:-2} / 1000 + ${PROBE_TIMEOUT_S:-10} + 120 ))
+	ims="$(_ims_ceil)"
+	ceil=$(( (${N:-1000} + ${WARMUP:-200}) * ims / 1000 + ${PROBE_TIMEOUT_S:-10} + 120 ))
 	# FOUND ON THE BOARD, 2026-09-21, by the first smoke test -- the unit tests'
 	# sudo stub could not show it. The loop used to run as a background
 	# `sudo -n timeout ...` and be stopped with `sudo -n kill <sudo's pid>`. sudo

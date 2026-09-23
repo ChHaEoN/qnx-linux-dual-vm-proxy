@@ -1536,6 +1536,29 @@ def test_udp_probe_times_a_clean_arm(tmp_path):
     assert s["claim"] == "mnist" and kinds == {0}, (s.get("claim"), kinds)
 
 
+@pytest.mark.parametrize("interval_ms", ["0", "5"])
+def test_the_probe_reports_the_period_it_achieved(tmp_path, interval_ms):
+    # ADDED 2026-09-24 (the offered-rate sweep, FOUND BY REVIEW): the period is
+    # taken from the probe's own send times, not from a bracket around the whole
+    # process, which charged start-up and the file write to every frame.
+    srv, port, stop = _udp_server(lambda n, d: [d])
+    out, st = tmp_path / "lat.json", tmp_path / "stall.json"
+    r = subprocess.run(_probe_cmd(port, "--proto", "udp", "--n", "40", "--warmup", "5",
+                                  "--interval-ms", interval_ms, "--timeout-s", "1", "--tag", "u_r1",
+                                  "--out", str(out), "--stall-out", str(st)),
+                       capture_output=True, text=True, timeout=60)
+    stop.set()
+    srv.close()
+    assert r.returncode == 0, r.stdout + r.stderr
+    s = json.loads(out.read_text())["summary"]
+    assert s["interval_ms"] == float(interval_ms)
+    p = s["period_us"]["p50"]
+    if interval_ms == "5":
+        assert 5000 <= p < 5000 + 20000, p       # the sleep, plus the round trip and the loop
+    else:
+        assert 0 < p < 5000, p
+
+
 @pytest.mark.parametrize("claim", ["mnist", "vlm"])
 def test_a_stall_record_says_which_claim_was_in_flight(tmp_path, claim):
     srv, port, stop = _udp_server(lambda n, d: [] if n == 20 else [d])
@@ -2931,6 +2954,17 @@ def test_stamp_gate_checks_a_stall_record_too(tmp_path):
     r = _run(tmp_path, 'K=2; N=1000; WARMUP=200; CORE_PROBE=4; FIFO_ARMS=""; STALL_POLICY=record; '
              'STAMP_ARMS="stamp"; m_require_complete "%s" %s; echo PASSED' % (_posix(d), " ".join(arms)))
     assert "PASSED" not in r.stdout and "stamp_r2: stamps=False, expected True" in r.stderr, r.stderr
+
+
+@pytest.mark.parametrize("ims,want", [("2", "2"), ("10", "10"), ("0.2", "1"), ("0.5", "1"), ("1.5", "2"), (".5", "1")])
+def test_a_fractional_spacing_rounds_up_for_integer_arithmetic(tmp_path, ims, want):
+    # ADDED 2026-09-24 (the offered-rate sweep): the sampler's ceiling is bash
+    # arithmetic, and "0.2" there is a syntax error, not a zero.
+    r = _run(tmp_path, 'INTERVAL_MS=%s; _ims_ceil; N=1000; WARMUP=200; PROBE_TIMEOUT_S=10; '
+                       'echo $(( (N + WARMUP) * $(_ims_ceil) / 1000 + 130 ))' % ims)
+    assert r.returncode == 0, r.stderr
+    got, ceil = r.stdout.split()
+    assert got == want and int(ceil) >= 130, r.stdout
 
 
 def test_m_probe_passes_stamps_only_when_asked(tmp_path):

@@ -587,6 +587,7 @@ def main():
     rtts = []
     in_arrival = []     # the timed samples in arrival order, for a stall record
     servers = []        # --stamps: the monitor's own time per timed sample, us, arrival order
+    sends = []          # perf_counter() at each timed frame's send, for the achieved period
     bad = 0
     rejected = 0
     seq = 0
@@ -675,6 +676,7 @@ def main():
                            "stamping instance" % i, i, bad + 1, rejected)
         if i >= a.warmup:
             rtts.append((t1 - t0) * 1000.0)
+            sends.append(t0)
             in_arrival.append(rtts[-1])
             if a.stamps:
                 servers.append((t_out - t_in) / 1000.0)
@@ -715,6 +717,15 @@ def main():
         "max_ms": rtts[-1],
         "mean_ms": sum(rtts) / len(rtts),
     }
+    # ADDED 2026-09-24 (the offered-rate sweep): the period this arm actually
+    # achieved, from the probe's own clock at each timed send -- the round trip
+    # plus the sleep plus the loop's own work, which a bracket around the whole
+    # process (start-up, connect, the file write) cannot give. The median of the
+    # gaps, so one scheduling hiccup does not move it.
+    res["interval_ms"] = a.interval_ms
+    if len(sends) > 1:
+        gaps = sorted((b - a_) * 1e6 for a_, b in zip(sends, sends[1:]))
+        res["period_us"] = {"p50": percentile(gaps, 50), "mean": sum(gaps) / len(gaps)}
     res["stamps"] = a.stamps
     if a.stamps:
         # The split, per sample: the monitor's own time (its clock) and the rest
