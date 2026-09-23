@@ -25,8 +25,10 @@ versions differ in these ways:
   the L2/L3 cache sharing, which the earlier form did not.
 
 They pass `tests/test_aws_tooling.py`. Those tests drive the real code against
-stub `aws`, `ssh` and `scp` programs. The committed versions have **not yet
-driven a billed session themselves**.
+stub `aws`, `ssh` and `scp` programs. The committed versions drove their first
+billed session on 2026-09-23: a liveness session, rehearsed on the Orin first,
+about 5 minutes billed, teardown verified. Its record is held until the 4.6(i)
+consultation. A ladder session has not yet run on the committed form.
 
 Why bare metal: non-metal Graviton instances expose no `/dev/kvm`
 ([ADR-002](../../docs/phase2-topology-decision.md)), and the ladder needs KVM.
