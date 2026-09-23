@@ -178,10 +178,14 @@ def check(log_path, console_path, deadline_s, opened_in_silence=False):
         bad.append("MISS lines name seqs %s; the claim stream calls for %s" % (misses, want_miss))
     if restored != want_restored:
         bad.append("RESTORED lines name seqs %s; the claim stream calls for %s" % (restored, want_restored))
-    rows.append("%d claims (%d ACCEPT, %d REJECT), %d camera outage(s) logged, %d gap(s) >= the deadline"
+    # An outage logs camera-lost and then camera-absent, so count them by the
+    # reopen that ends each one (the first open is the run's start), plus one
+    # still open at the end.
+    events = [r["event"] for r in recs if r["event"] in ("camera-open", "camera-lost", "camera-absent")]
+    outages = max(0, events.count("camera-open") - 1) + (1 if events and events[-1] != "camera-open" else 0)
+    rows.append("%d claims (%d ACCEPT, %d REJECT), %d camera outage(s), %d gap(s) >= the deadline"
                 % (len(claims), sum(c["verdict"] == "ACCEPT" for c in claims),
-                   sum(c["verdict"] == "REJECT" for c in claims),
-                   sum(r["event"] in ("camera-lost", "camera-absent") for r in recs), max(0, len(want_miss) - 1)))
+                   sum(c["verdict"] == "REJECT" for c in claims), outages, max(0, len(want_miss) - 1)))
     return rows, bad
 
 

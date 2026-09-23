@@ -2672,9 +2672,15 @@ def _camera_claims(verdicts=None):
 
 def test_camera_check_passes_an_outage_the_monitor_reported(tmp_path):
     cc = _camera_mod()
-    rows, bad = cc.check(*_camera_run(tmp_path, _camera_claims({2: "REJECT"})), 2.0)
+    log, con = _camera_run(tmp_path, _camera_claims({2: "REJECT"}))
+    # The outage as the client logs it: lost, then absent, then open again.
+    events = [{"event": "camera-open", "t": 0}, {"event": "camera-lost", "t": 1.1},
+              {"event": "camera-absent", "t": 1.1}, {"event": "camera-open", "t": 5.9}]
+    open(log, "a").write("".join(json.dumps(e) + "\n" for e in events))
+    rows, bad = cc.check(log, con, 2.0)
     assert bad == [], bad
     assert any("MISS since seq=3, RESTORED at seq=4" in r for r in rows), rows
+    assert any("1 camera outage(s), 1 gap(s)" in r for r in rows), rows      # found on the board: it said 2
 
 
 @pytest.mark.parametrize("drop,why", [
