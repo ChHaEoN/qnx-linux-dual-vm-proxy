@@ -272,11 +272,16 @@ _cpuset() {
 # closed early -- under pipefail either would have exited the caller. `read -d ''`
 # is a builtin that stops at argv[0]'s NUL; a vanished process or a kernel thread
 # (empty cmdline) just reads as empty. Always returns 0.
+#
+# `2>/dev/null` comes BEFORE the `<`: bash applies redirections left to right, so
+# the other way round a vanished process's "No such file or directory" reached
+# the caller's stderr before stderr was redirected (FOUND IN the 2026-09-24 rate
+# run's log; the result was unaffected).
 m_pids_of() {       # $1 = executable basename
 	local want="$1" d a0
 	for d in /proc/[0-9]*; do
 		a0=""
-		IFS= read -r -d '' a0 < "$d/cmdline" 2>/dev/null || true
+		IFS= read -r -d '' a0 2>/dev/null < "$d/cmdline" || true
 		if [ -n "$a0" ] && [ "${a0##*/}" = "$want" ]; then echo "${d#/proc/}"; fi
 	done
 	return 0

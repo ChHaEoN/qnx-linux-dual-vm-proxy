@@ -4114,3 +4114,21 @@ def test_the_redactor_selftest_passes_under_each_awk(impl):
     env = dict(os.environ, AWK=exe)
     r = subprocess.run([BASH, REDACT, "selftest"], capture_output=True, text=True, env=env, timeout=60)
     assert r.returncode == 0 and "PASS" in r.stdout, r.stdout + r.stderr
+
+
+def test_m_pids_of_silences_a_vanished_process_before_it_opens_it():
+    """FOUND 2026-09-24 in the rate run's log: two "/proc/<pid>/cmdline: No such
+    file or directory" lines. The read's `2>/dev/null` stood after its `<`, and
+    bash applies redirections left to right, so the failed open was reported on
+    the caller's stderr first. A process vanishing mid-scan cannot be staged
+    deterministically, so this pins the order in the source, and checks that
+    bash really behaves that way."""
+    src = open(LIB, encoding="utf-8").read()
+    body = src[src.index("m_pids_of() {"):]
+    body = body[:body.index("\n}\n")]
+    reads = [l.strip() for l in body.splitlines() if "cmdline" in l and "read" in l]
+    assert reads == ["IFS= read -r -d '' a0 2>/dev/null < \"$d/cmdline\" || true"], reads
+    r = subprocess.run([BASH, "-c", "read -r x 2>/dev/null < /nonexistent/cmdline; "
+                        "read -r x < /nonexistent/cmdline 2>/dev/null; true"],
+                       capture_output=True, text=True, timeout=30)
+    assert r.stderr.count("No such file") == 1, r.stderr
