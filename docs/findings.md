@@ -9,6 +9,88 @@ Format: one entry per finding, dated, one-paragraph max plus links.
 ---
 
 
+## 2026-09-23 (later) — the 2026-09-18 service's L4T client was never committed; recovered from the board
+
+The 2026-09-18 service is published, and its record describes `compute_client` —
+the L4T program that ran TensorRT on MNIST and sent the claim — only in prose. Its
+source was not in the repo on any branch. It survived on the board and is now
+committed as found:
+[ipc-test/compute-client/](../ipc-test/compute-client/README.md).
+
+- **What ties it to the run is timing, not proof.** Source 15:51:05, binary
+  15:51:28, engine 15:52:00 on 2026-09-18, sha256 of each in the README.
+- **How `mnist.engine` was built is not recorded**, and engines are not
+  byte-reproducible, so that part of the 2026-09-18 service cannot be rebuilt to
+  the same hash. Neither the binary nor the engine is committed.
+- The lesson is the one the 2026-09-22 leak taught from the other side: what is
+  not captured at the time is not recoverable later, only findable if lucky.
+
+---
+
+
+## 2026-09-23 — an LLM that eats half the memory bus does not move the guest's median round trip; the tail is unresolved
+
+The first A6 interference arm with a real workload: L4T decodes SmolVLM-500M on
+the GPU while the QNX guest runs beside it under KVM, and the probe times the
+guest's TCP round trip. k = 12, n = 1000, arms `idle` / `llm` / `gpu` (`fma.cu`) /
+`idle2`, Williams-balanced; 48 of 48 arms complete, 0 stalls, 0 rejected. Record:
+[results.md](../results/orin-native-port/20260923T-a6-orin-llm-interference/results.md).
+
+- **Median.** Paired against `idle` in the same round: `llm` −5.4 µs [−8.9, −0.9],
+  `gpu` −4.4 [−10.0, −1.6], `idle2` +0.2 [−3.6, +3.3]. Both loads make the guest
+  slightly faster — the same direction as the unexplained 2026-09-21 speed-up,
+  reproduced with a different load and still not explained. `llm` − `gpu` is
+  −0.5 µs [−4.4, +3.8]: indistinguishable.
+- **Tail.** From p90 out every band spans zero and p90's are ±250 µs. This design
+  cannot resolve the tail, which is where a safety argument would live.
+- **The control.** In this run's own window traces the `llm` arm held GR3D 94%
+  with EMC 46% at 3199 MHz, and `gpu` held GR3D 99% with EMC 0% at 2133 MHz. The
+  `llm` arm is therefore also a memory-clock change; nothing separates the two.
+- **Harness findings.** An ssh client that times out does not kill what it
+  started on the board (three copies once ran together; now an `flock`); in its
+  default REPL mode this build's `llama-cli` does not exit on SIGTERM (now TERM,
+  3 s, KILL, and `-st` — see the correction below); and
+  `set -o pipefail` breaks `m_thermal`'s `tegrastats | head -1`.
+- **Correction, found on review later the same day.** The record's load logs are
+  ~1.9 MB each, 22 MB in all, almost entirely `> ` lines. `llama-cli` was running
+  as a chat REPL, not one-shot as the script's comment claimed: SIGTERM ended the
+  turn, the REPL then read end-of-input and printed its prompt until the KILL. The
+  result stands — the decoding check reads the log size *before* the stop, and the
+  window traces show the load throughout — but the comment was wrong. The script
+  now passes `-st` (single-turn), with which SIGTERM makes it exit cleanly
+  (verified on the board: 4 KB log, no prompt lines). The published logs are left
+  as captured.
+
+---
+
+
+## 2026-09-23 — an LLM is a different load from `fma.cu`: same GPU occupancy, half the memory bus
+
+Prep on L4T alone, no QNX guest, to decide whether an `llm` interference arm was
+worth a board session. Record:
+[results.md](../results/orin-native-port/20260923T-a6-orin-llm-prep/results.md).
+
+- **At matched GR3D, `fma.cu` never moves the memory controller** (EMC 0%, clock
+  at its idle 2133 MHz) and LLM decode drives it to 44–49% at 3199 MHz, at 1.5–1.7×
+  the power. Two independent end-to-end runs agree.
+- **Bandwidth-bound, by arithmetic.** Weights streamed per second: 2.32 GiB ×
+  17.13 tok/s = 42.7 GB/s for the 4B and 414.86 MiB × 98.04 tok/s = 42.6 GB/s for
+  the 500M — 42% of the 102.4 GB/s at 3199 MHz, against tegrastats' 44–49%.
+- **Board constraints found.** `cudaMalloc` does not reclaim page cache (with
+  3.7 GB cached the 4B cannot create a context; after `drop_caches` the same
+  command runs); the 4B's default context wants a 1512 MiB KV cache; llama.cpp
+  segfaulted on one OOM path.
+- **Vision works end to end**: both VLMs read the same MNIST `.pgm` the 2026-09-18
+  service classifies and answered `0` — one image, one prompt, a functional pass.
+- **Licences checked on the base model card**, not the GGUF repo's metadata:
+  Qwen2.5-VL-3B was rejected because its base card has no licence field at all.
+  Weights stay out of the repo; `fetch-models.sh` pins them by sha256.
+- **Not demonstrated:** anything about the partition (no guest ran), any latency
+  figure (governor unpinned), anything about the models' quality.
+
+---
+
+
 ## 2026-09-22 (later) — a sweep of the whole published history: two older identifiers are still in it, and the 2026-09-09 clean-up never ran
 
 After the rewrite above, every text blob reachable from `origin/main` — all 280

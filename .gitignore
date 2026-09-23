@@ -29,7 +29,11 @@ qnx710/
 *.onnx
 *.pt
 *.pth
+*.engine
 models/
+# The 2026-09-18 service's L4T client: source is committed, its build output
+# is not (it links TensorRT/CUDA and embeds nothing of ours worth versioning).
+ipc-test/compute-client/compute_client
 
 # Secrets / credentials / cloud
 .env

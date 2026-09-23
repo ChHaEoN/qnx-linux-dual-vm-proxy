@@ -78,9 +78,13 @@ LOADED=(llm gpu)
 SECS=$(( (N + WARMUP) * INTERVAL_MS / 1000 + 15 + PROBE_TIMEOUT_S ))
 
 # stop_loads, NOT m_load_stop. m_load_stop sends SIGTERM and then waits, which is
-# right for fma and cpuload -- they die on it. llama-cli does NOT: it survived
-# SIGTERM here and the harness blocked in `wait` forever, one arm into the run.
-# So: TERM, give it three seconds, then KILL, then reap.
+# right for fma and cpuload -- they die on it. This build's llama-cli is a chat
+# REPL: SIGTERM ends the current turn, and the REPL then reads end-of-input and
+# prints its "> " prompt forever instead of exiting. That blocked the harness in
+# `wait` one arm into the 2026-09-23 run, and wrote ~634,000 "> " lines per arm
+# into that run's load logs before the KILL. LLM_ARGV now passes -st
+# (single-turn), with which TERM makes it exit cleanly (verified on the board);
+# the TERM, three seconds, KILL, reap escalation stays as the backstop.
 stop_loads() {
 	local p i alive
 	for p in $LOAD_PIDS; do kill -TERM "$p" 2>/dev/null; done
@@ -102,12 +106,14 @@ trap cleanup EXIT
 # spaces, and an unquoted expansion would split it into stray arguments that
 # llama-cli would reject -- leaving a dead load and an arm measured unloaded.
 # --ignore-eos so it never stops early, and stdbuf -oL so the log grows while it
-# runs, which is what proves it is decoding. There is no -no-cnv in this build
-# (it has -st/--single-turn); with -p plus -n, llama-cli generates one-shot
-# without entering conversation mode anyway.
+# runs, which is what proves it is decoding. -st (single-turn) because this
+# build's llama-cli is a chat REPL even with -p and -n: without it, the stopped
+# load spins on end-of-input printing "> " (see stop_loads). There is no -no-cnv
+# in this build. An earlier comment here claimed -p plus -n ran one-shot; the
+# 2026-09-23 run's logs showed that was wrong.
 LLM_ARGV=(taskset -c "$CORE_LLM" stdbuf -oL "$LLAMA"
 	-m "$MODEL" -ngl 99 -c "$LLM_CTX" -b "$LLM_BATCH" -ub "$LLM_UBATCH"
-	-t "$LLM_THREADS" -n 1000000 --ignore-eos --temp 0 --seed 42
+	-t "$LLM_THREADS" -n 1000000 --ignore-eos --temp 0 --seed 42 -st
 	-p "$LLM_PROMPT")
 
 llm_require_pinned() {   # $1 = cores asked for
@@ -202,7 +208,7 @@ m_write_stamp "$OUT/stamp.json" \
 	"\"llama_cli_sha256\": \"$(_sha "$LLAMA")\"" \
 	"\"model\": \"$(basename "$MODEL")\"" \
 	"\"model_sha256\": \"$(_sha "$MODEL")\"" \
-	"\"llm_args\": \"-ngl 99 -c $LLM_CTX -b $LLM_BATCH -ub $LLM_UBATCH -t $LLM_THREADS --ignore-eos --temp 0 --seed 42\"" \
+	"\"llm_args\": \"-ngl 99 -c $LLM_CTX -b $LLM_BATCH -ub $LLM_UBATCH -t $LLM_THREADS --ignore-eos --temp 0 --seed 42 -st\"" \
 	"\"nvpmodel\": \"$(sudo -n nvpmodel -q 2>/dev/null | tr '\n' ' ' | sed 's/  */ /g')\"" \
 	"\"gpu_min_busy_pct\": $GPU_MIN_PCT" \
 	'"page_cache": "dropped at preflight; cudaMalloc does not reclaim it on this board"' \
