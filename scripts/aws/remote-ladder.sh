@@ -12,11 +12,23 @@
 #   capture   redact on THIS host into pub/, then pack pub.tgz (see capture.py)
 #   stop      stop QEMU (a rehearsal on the Orin uses this)
 #
+# A LIVENESS SESSION (OD14, 2026-09-23) runs two other phases instead of launch
+# and ladder, with ifs-live.bin as the image:
+#
+#   launch-live  boot the guest plainly -- no ivshmem, no kick console -- and
+#                check that :7102 runs the 2000 ms deadline mode
+#   liveness     liveness-demo.sh (the synthetic demo), then run-live-cost.sh
+#                (plain TCP against the deadline mode, K rounds). On a host
+#                without Tegra tools the cost run's GPU checks and window
+#                sampler are recorded as not applicable (see its header).
+#
+# capture accepts either kind of session, but only a FINISHED one.
+#
 # W (default ~/a1) holds repo.tar, inputs.env, remote-ladder.sh, capture.py and
 # img/<ifs> + img/disk-qemu.gz. Nothing under W leaves the host except pub.tgz,
 # and everything in pub.tgz went through redact-aws.sh or capture.py's check here.
 set -euo pipefail
-PHASE="${1:?phase: setup|quiesce|launch|ladder|capture|stop}"
+PHASE="${1:?phase: setup|quiesce|launch|ladder|launch-live|liveness|capture|stop}"
 W="${W:-$HOME/a1}"
 R="$W/repo/orin-native/gpu-concurrency"
 REC="$W/rec"
@@ -138,11 +150,43 @@ ladder)
 	{ date -u +%FT%TZ; cat /proc/loadavg; cat /proc/interrupts; } > "$REC/ladder/host-after.txt"
 	tail -5 "$REC/ladder/run.log"
 	;;
+launch-live)
+	inputs
+	cd "$R"
+	mkdir -p "$REC/liveness"
+	C="$REC/liveness/guest-console.log"
+	IFS_BIN="$W/img/$IFS_NAME" DISK="$W/img/disk-qemu" LOG="$C" bash launch-qnx-kvm-bridged.sh \
+		> "$REC/liveness/guest-launch.log" 2>&1 || { cat "$REC/liveness/guest-launch.log"; die "launch failed"; }
+	cat "$REC/liveness/guest-launch.log"
+	# "guest up" means :7100 answers; the image must also run :7102 in deadline mode.
+	B='listening on :7102 (frame=64 bytes, conf_min=60%), liveness deadline 2000 ms'
+	for _ in $(seq 1 30); do tr -d '\0\r' < "$C" | grep -aqF "$B" && break; sleep 1; done
+	tr -d '\0\r' < "$C" | grep -aqF "$B" \
+		|| { tail -20 "$C"; die "no 2000 ms deadline-mode monitor on :7102 -- is the image ifs-live?"; }
+	say "deadline-mode monitor up on :7102"
+	;;
+liveness)
+	case "${K:-12}" in *[!0-9]*|'') die "K='${K:-}' is not a round count" ;; esac
+	C="$REC/liveness/guest-console.log"
+	[ -r "$C" ] || die "no $C -- run launch-live first"
+	E="$W/repo/orin-native/edge-llm"
+	[ -r "$E/liveness-demo.sh" ] && [ -r "$E/run-live-cost.sh" ] || die "the repo tarball lacks orin-native/edge-llm"
+	{ date -u +%FT%TZ; cat /proc/loadavg; cat /proc/interrupts; } > "$REC/liveness/host-before.txt"
+	CONSOLE="$C" OUT="$REC/liveness/demo" bash "$E/liveness-demo.sh" > "$REC/liveness/demo.log" 2>&1 \
+		|| { tail -20 "$REC/liveness/demo.log"; die "liveness-demo.sh failed"; }
+	tail -12 "$REC/liveness/demo.log"
+	CONSOLE="$C" OUT="$REC/liveness/cost" K="${K:-12}" bash "$E/run-live-cost.sh" > "$REC/liveness/cost.log" 2>&1 \
+		|| { tail -30 "$REC/liveness/cost.log"; die "run-live-cost.sh failed"; }
+	{ date -u +%FT%TZ; cat /proc/loadavg; cat /proc/interrupts; } > "$REC/liveness/host-after.txt"
+	tail -8 "$REC/liveness/cost.log"
+	;;
 capture)
-	# The ladder must have FINISHED: host-after.txt is written only after
-	# run-ladder.sh returned 0. Without it the run was interrupted, or refused as
-	# incomplete, and a partial record must not be packed and fetched as a whole one.
-	[ -e "$REC/ladder/host-after.txt" ] || die "no $REC/ladder/host-after.txt -- the ladder did not finish; there is no complete record to capture"
+	# The session must have FINISHED: host-after.txt is written only after the
+	# ladder, or the liveness phase, returned 0. Without it the run was
+	# interrupted, or refused as incomplete, and a partial record must not be
+	# packed and fetched as a whole one.
+	[ -e "$REC/ladder/host-after.txt" ] || [ -e "$REC/liveness/host-after.txt" ] \
+		|| die "no host-after.txt under $REC/ladder or $REC/liveness -- the session did not finish; there is no complete record to capture"
 	RED="$R/redact-aws.sh"
 	bash "$RED" selftest >/dev/null || die "redactor selftest failed"
 	rm -rf "$W/pub" "$W/pub.sha256"; mkdir -p "$W/pub"

@@ -25,6 +25,12 @@
 # preflight, GR3D 0% at preflight and on every tegrastats line of every window.
 # A STALL STOPS THE RUN (STALL_POLICY=refuse).
 #
+# OFF THE ORIN (AWS a1.metal, for scripts/aws's liveness session): a host with no
+# tegrastats has no GPU to idle and no EMC or devfreq nodes to sample, so the
+# GR3D checks and the window sampler are NOT APPLICABLE there, and the stamp
+# says so; the load-process check still runs. TEGRA=0 forces that path on the
+# Orin, so an Orin rehearsal runs exactly what the instance will.
+#
 # set -u only, like the rest of this harness family.
 set -u
 
@@ -47,7 +53,11 @@ CORE_PROBE="${CORE_PROBE:-4}"
 PROBE="${PROBE:-$here/../gpu-concurrency/latency_probe.py}"
 CONSOLE="${CONSOLE:?set CONSOLE to the guest console log the launcher writes}"
 MISS_WAIT_S="${MISS_WAIT_S:-6}"          # the deadline is 2 s; this is how long to wait for its line
-SAMPLE_WINDOW=1
+if [ -z "${TEGRA:-}" ]; then
+	if command -v tegrastats >/dev/null; then TEGRA=1; else TEGRA=0; fi
+fi
+case "$TEGRA" in 0|1) ;; *) echo "FATAL: TEGRA='$TEGRA' is not 0 or 1" >&2; exit 1 ;; esac
+SAMPLE_WINDOW="$TEGRA"
 FIFO_ARMS=""
 STALL_POLICY=refuse
 VLM_ARMS=""
@@ -74,6 +84,7 @@ await_miss() {   # $1 the MISS count before; waits for one more, returns the cou
 
 # Every tegrastats line of the window must show GR3D, and every one must read 0%.
 gpu_idle_in_window() {   # $1 tag
+	[ "$TEGRA" = 1 ] || return 0                    # no GPU on this host: not applicable
 	local log="$OUT/tegra-$1.log"
 	grep -qE 'GR3D_FREQ [0-9]+%' "$log" 2>/dev/null \
 		|| die "no GR3D reading in $1's window ($log) -- the no-load premise is unverified"
@@ -115,8 +126,13 @@ flock -n 9 || die "another run holds $LOCK"
 for x in $LOADS; do
 	[ -z "$(m_pids_of "$x")" ] || die "$x is resident -- this run must have no load"
 done
-GPU_PCT="$(m_gpu_busy_pct)"
-[ "$GPU_PCT" = 0 ] || die "GR3D reads '${GPU_PCT}' at preflight, not 0% -- this run must have no GPU load"
+if [ "$TEGRA" = 1 ]; then
+	GPU_PCT="$(m_gpu_busy_pct)"
+	[ "$GPU_PCT" = 0 ] || die "GR3D reads '${GPU_PCT}' at preflight, not 0% -- this run must have no GPU load"
+	GPU_NOTE="none: no $LOADS resident at preflight, GR3D 0% at preflight and on every tegrastats line of every window"
+else
+	GPU_NOTE="not applicable: no tegrastats on this host (TEGRA=0); no $LOADS resident at preflight; no window sampler"
+fi
 [ $((K % 2)) -eq 0 ] || die "K=$K is odd; the AB/BA crossover needs an even K"
 [ -r "$PROBE" ] || die "missing: $PROBE"
 [ -r "$CONSOLE" ] || die "missing: $CONSOLE"
@@ -124,14 +140,13 @@ tr -d '\0\r' < "$CONSOLE" | grep -aq "listening on :$SVC_PORT (frame=64 bytes, c
 	|| die "the guest console shows no 2000 ms deadline-mode monitor on :$SVC_PORT -- is this ifs-live?"
 tr -d '\0\r' < "$CONSOLE" | grep -aq "safety monitor listening on :$TCP_PORT (frame=64 bytes" \
 	|| die "the guest console shows no plain TCP monitor on :$TCP_PORT"
-command -v tegrastats >/dev/null || die "tegrastats absent -- this experiment is Orin-only"
 m_prepare_out "${OUT:-}" "$HOME/live-cost-out"
 m_check_cores "$QEMU_CORES" "$CORE_PROBE"
 m_require_disjoint "qemu=$QEMU_CORES" "probe=$CORE_PROBE"
 m_governor_pin
 m_cstate_apply
 m_pin_qemu "$QEMU_CORES"
-m_sampler_preflight
+[ "$SAMPLE_WINDOW" = 1 ] && m_sampler_preflight
 m_reachable "$GUEST" "$TCP_PORT" "the plain TCP monitor instance"
 m_reachable "$GUEST" "$SVC_PORT" "the deadline-mode monitor instance"
 
@@ -144,7 +159,8 @@ m_write_stamp "$OUT/stamp.json" \
 	'"claims": "latency_probe.build_frame on both arms: class 3, conf 95, 124 us, kind 0"' \
 	'"order": "AB/BA crossover: odd rounds tcp then svc, even rounds svc then tcp"' \
 	'"between_arms": "after each svc arm, exactly one LIVENESS MISS awaited on the console before the next arm"' \
-	"\"gpu_load\": \"none: no $LOADS resident at preflight, GR3D 0% at preflight and on every tegrastats line of every window\"" \
+	"\"gpu_load\": \"$GPU_NOTE\"" \
+	"\"tegra\": $TEGRA" \
 	'"arms": ["tcp", "svc"]'
 
 # ---------------------------------------------------------------- prologue

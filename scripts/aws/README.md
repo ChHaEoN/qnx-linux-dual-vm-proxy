@@ -76,6 +76,23 @@ Then the remaining steps, one at a time and in order:
 - `run setup`, `run quiesce`, `run launch`, `run ladder`, `run capture`;
 - `fetch`, `terminate`, `verify`, later `verify-vol`, and finally `clear`.
 
+### A liveness session instead (OD14)
+
+This replicates the liveness deadline's two A6 runs. The differences from a
+ladder session:
+- `METAL_IFS` is `ifs-live.bin`, and the tarball also carries
+  `orin-native/edge-llm`.
+- Two phases replace `launch` and `ladder`:
+  - `run launch-live` boots the guest plainly and checks that :7102 runs the
+    2000 ms deadline mode;
+  - `run liveness` runs the synthetic demo, then the deadline's cost (`K=12` by
+    default).
+- Every other step is the same.
+
+On a host with no `tegrastats` the cost run records its GPU checks and window
+sampler as not applicable, in its stamp; `TEGRA=0` forces that path on the
+Orin, so a rehearsal there runs exactly what the instance will.
+
 ## What bounds the cost
 
 - **Self-termination, proven before anything is spent.**

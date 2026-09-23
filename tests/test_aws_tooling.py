@@ -551,6 +551,44 @@ def test_remote_ladder_accepts_what_the_driver_writes(tmp_path):
 
 
 @needs_bash
+def test_run_accepts_the_liveness_phases(rig):
+    # OD14's session (2026-09-23): launch-live and liveness reach the instance,
+    # with K passed through like the ladder's.
+    run, state, stub = rig
+    _launched(state)
+    (state / "armed").touch()
+    (state / "ip").write_text("203.0.113.9\n")
+    for phase in ("launch-live", "liveness"):
+        run("run", phase, K="4")
+    log = (stub / "ssh.log").read_text()
+    assert "remote-ladder.sh launch-live" in log and "remote-ladder.sh liveness" in log, log
+    assert "K=4" in log, log
+
+
+def _remote_env(tmp_path, phase, **env):
+    return subprocess.run([BASH, REMOTE, phase], capture_output=True, text=True, timeout=60,
+                          env=dict(os.environ, W=str(tmp_path), PATH=_path_with(), **env))
+
+
+@needs_bash
+@pytest.mark.parametrize("env,msg", [({}, "run launch-live first"), ({"K": "4;reboot"}, "not a round count")])
+def test_remote_liveness_refuses_without_a_guest_or_with_a_bad_k(tmp_path, env, msg):
+    r = _remote_env(tmp_path, "liveness", **env)
+    assert r.returncode != 0 and msg in r.stdout + r.stderr, r.stdout + r.stderr
+
+
+@needs_bash
+def test_remote_capture_takes_a_finished_liveness_session_and_refuses_an_unfinished_one(tmp_path):
+    (tmp_path / "rec" / "liveness").mkdir(parents=True)
+    r = _remote_env(tmp_path, "capture")
+    assert r.returncode != 0 and "the session did not finish" in r.stdout + r.stderr, r.stdout + r.stderr
+    (tmp_path / "rec" / "liveness" / "host-after.txt").write_text("done\n")
+    r = _remote_env(tmp_path, "capture")
+    # Past the gate: it then fails for want of the redactor, which is not the gate's message.
+    assert r.returncode != 0 and "did not finish" not in r.stdout + r.stderr, r.stdout + r.stderr
+
+
+@needs_bash
 def test_remote_ladder_refuses_an_unsafe_ladder_env(tmp_path):
     (tmp_path / "repo" / "orin-native" / "gpu-concurrency").mkdir(parents=True)
     (tmp_path / "rec" / "ladder").mkdir(parents=True)
