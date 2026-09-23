@@ -1,0 +1,20 @@
+0.05.775.319 I cmn          init: llama threadpool init, n_threads = 6
+0.05.904.831 W load_tensors: ffn up/down are swapped
+0.07.339.431 I mtmd_cli_context: chat template example:
+<|im_start|>You are a helpful assistant
+
+User: Hello<end_of_utterance>
+Assistant: Hi there<end_of_utterance>
+User: How are you?<end_of_utterance>
+Assistant:
+0.07.339.446 I main: loading model: <home>/models/SmolVLM-500M-Instruct-Q8_0.gguf
+0.07.339.769 W WARN: This is an experimental CLI for testing multimodal capability.
+0.07.339.778 W       For normal use cases, please use the standard llama-cli
+0.07.421.314 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 5)
+0.08.042.570 I mtmd batch encoding done in 622 ms
+0.08.091.072 I encoding mtmd batch, n_chunks = 1 (done = 3, total = 5)
+0.08.225.780 I mtmd batch encoding done in 135 ms
+
+ 0.
+
+

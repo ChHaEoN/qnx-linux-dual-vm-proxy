@@ -1,0 +1,11 @@
+date_utc          2026-09-23T00:14:01Z
+board             NVIDIA Jetson Orin Nano Engineering Reference Developer Kit Super
+l4t               # R36 (release), REVISION: 4.7, GCID: 42132812, BOARD: generic, EABI: aarch64, DATE: Thu Sep 18 22:54:44 UTC 2025
+nvpmodel          NV Power Mode: 25W 1 
+governor          schedutil
+qemu_running      0
+0
+llama_cpp         e6ab7c1a41054a888ada952eab4c886444c2f5ad
+big_gguf          Qwen3VL-4B-Instruct-Q4_K_M.gguf
+small_gguf        SmolVLM-500M-Instruct-Q8_0.gguf
+secs              60

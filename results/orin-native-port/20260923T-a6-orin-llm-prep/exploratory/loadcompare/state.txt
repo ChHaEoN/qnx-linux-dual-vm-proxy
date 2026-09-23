@@ -1,0 +1,4 @@
+nvpmodel NV Power Mode: 25W 1 
+governor schedutil
+qemu_running 0
+0

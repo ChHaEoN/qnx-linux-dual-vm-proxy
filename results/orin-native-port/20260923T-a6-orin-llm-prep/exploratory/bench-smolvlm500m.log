@@ -1,0 +1,8 @@
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 7619 MiB):
+  Device 0: Orin, compute capability 8.7, VMM: yes, VRAM: 7619 MiB
+| model                          |       size |     params | backend    | ngl |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | --------------: | -------------------: |
+| llama 8B Q8_0                  | 414.86 MiB |   409.25 M | CUDA       |  99 |           pp512 |     3154.66 ± 777.25 |
+| llama 8B Q8_0                  | 414.86 MiB |   409.25 M | CUDA       |  99 |           tg128 |        110.32 ± 7.66 |
+
+build: e6ab7c1 (1)

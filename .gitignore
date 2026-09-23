@@ -126,6 +126,9 @@ results/orin-native-port/*/s1/
 # kvm0|kvm1 inside it); its console and ladder logs are part of the record.
 !results/orin-native-port/*T-a6-*/session*/b*/*.log
 !results/orin-native-port/*T-a6-*/session*/b*/kvm*/*.log
+# The LLM prep record keeps the windows it discarded under exploratory/, one
+# level deeper; the OOM logs there are the evidence for its page-cache finding.
+!results/orin-native-port/*T-a6-*/exploratory/*/*.log
 
 # Python
 __pycache__/

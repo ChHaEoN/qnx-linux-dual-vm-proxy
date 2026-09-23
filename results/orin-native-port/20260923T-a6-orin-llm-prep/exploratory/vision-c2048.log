@@ -1,0 +1,12 @@
+0.01.363.431 W load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+NvMapMemAllocInternalTagged: 1075072515 error 12
+NvMapMemHandleAlloc: error 0
+NvMapMemAllocInternalTagged: 1075072515 error 12
+NvMapMemHandleAlloc: error 0
+0.13.517.103 E ggml_backend_cuda_buffer_type_alloc_buffer: allocating 301.75 MiB on device 0: cudaMalloc failed: out of memory
+0.13.517.132 E ggml_gallocr_reserve_n_impl: failed to allocate CUDA0 buffer of size 316407808
+0.13.517.138 E graph_reserve: failed to allocate compute buffers
+0.13.529.382 E llama_init_from_model: failed to initialize the context: failed to allocate compute pp buffers
+0.13.529.418 E cmn  common_init_: failed to create context with model '<home>/models/Qwen3VL-4B-Instruct-Q4_K_M.gguf'
+0.13.529.427 E cmn  common_init_: failed to create context with model '<home>/models/Qwen3VL-4B-Instruct-Q4_K_M.gguf'
+(exit 1)
