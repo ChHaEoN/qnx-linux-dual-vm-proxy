@@ -515,6 +515,40 @@ The service runs on its own monitor instance and port in a new image, `ifs-svc.b
 changed monitor, built under its own binary name, because every `ifs-*.build` embeds one shared path), so
 the probe's `:7100` is never held by the service.
 
+**2026-09-23 (owner decision, OD14): the liveness deadline.** OD13's deferred step: the Safety side notices a
+Compute side that has gone silent. Four decisions, each taken by the owner from a stated recommendation, and
+the semantics they rest on, which were stated to the owner and not separately decided:
+
+- **The deadline is 2 s** from the last claim. It must exceed the 1 s VLM inference bound plus the client's
+  overhead. Otherwise a claim the monitor accepts as plausible (up to 1 s of model time) could arrive after the
+  deadline and trip a miss, and the two rules would contradict each other. It is several times the claim period
+  the 2026-09-23 characterisation measured (held on `a6-results-unpublished`, OD13).
+- **On a miss: log, count, recover.** One `LIVENESS MISS` line per silence, carrying the gap the guest measured
+  on its own monotonic clock, then `LIVENESS RESTORED` at the next claim. Verdicts are unchanged, and no reply
+  byte changes: only `payload[6]` and `[7]` are ever written. No degraded state is latched.
+- **What counts as life (stated, not separately decided).** Any judged claim resets the deadline, accepted or
+  rejected: liveness is not correctness. A sentinel (keepalive) frame does not, because a pipeline that only
+  sends keepalives has stopped producing claims. The deadline is armed by the first claim, so a monitor waiting
+  for a Compute side that has not started reports nothing. It runs across connections: silence counts whether
+  the client is connected and quiet, has hung up, or has stalled mid-frame.
+- **A stalled connection is closed (stated, not separately decided).** The monitor serves one client at a time,
+  so a hung Compute side must not hold the only slot, or a restarted one could never connect and RESTORED could
+  never print. A connection that delivers no complete frame (claim or sentinel) for the deadline is closed,
+  mid-frame or not. So is one whose client leaves its reply untaken for the deadline after the frame arrived;
+  a review found this second case before the first board run. A client that keeps one connection open must
+  reconnect after a silence. Every wait in the mode (accept, read and write) is bounded by the deadline.
+- **A dedicated service mode and image**, as OD13 required: `monitor PORT svc DEADLINE_MS`, a function of its
+  own that reuses `judge_frame()`. Every existing mode's code is untouched. The image is `ifs-live.bin`, with its
+  own build file and its own monitor binary name, and the service instance on TCP 7102 in deadline mode.
+- **Runs, in order.** First a synthetic demo: pre-built claims at controlled cadences, just under and just over
+  the deadline, plus the connected-but-silent, hung-up, mid-frame-stall and keepalive-only cases, each
+  corroborated on the guest console. Then an end-to-end demo with a USB camera: camera → VLM → claim stream.
+  Unplugging the camera must produce a MISS, and plugging it back a RESTORED. No camera frame is committed.
+  Then **the deadline's own cost**: the mnist frame to the plain TCP instance (7100) against the deadline-mode
+  instance (7102) on the same image, paired within round, k = 12, n = 1000. The harness waits out the deadline
+  between arms, so no MISS line prints inside another arm's window. Every figure stays on
+  `a6-results-unpublished` (OD13).
+
 Measurements taken before the freeze become architecture-version history. They are kept, labelled with the architecture they ran on, and not chased.
 
 This section carries no figures. Public figures stay where the inventory below points. Figures from M3 and from dry run 7b stay on the local branch `m3-results-unpublished` (§9).

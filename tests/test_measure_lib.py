@@ -2276,6 +2276,480 @@ def test_the_monitor_announces_its_claim_kinds(native_servers):
     assert line == ["monitor: claim kinds: 0 mnist (us <= 100000), 1 vlm model 1 (us <= 1000000), conf_min=60%"], out
 
 
+# ============================================================ the liveness deadline (OD14, 2026-09-23)
+#
+# `monitor PORT svc DEADLINE_MS`: a deadline on the claim stream, and a silent
+# connection closed after one deadline. The rules are in monitor.c above
+# serve_svc(). These run the real monitor with a 300 ms deadline and time what it
+# prints on the host's own monotonic clock -- the same clock the monitor reads.
+
+SVC_D = 0.300          # the deadline these tests run with, seconds
+SVC_SLACK = 0.250      # how late a report may be on a loaded CI runner
+SENTINEL = 0xFFFFFFFFFFFFFFFF
+
+
+class _Svc:
+    """The service mode, its stdout read as it prints, each line stamped."""
+
+    def __init__(self, native_servers, deadline_ms=int(SVC_D * 1000)):
+        import threading
+        self.port = _free_tcp_port()
+        self.p = subprocess.Popen([str(native_servers / "monitor"), str(self.port), "svc", str(deadline_ms)],
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self.lines = []
+        threading.Thread(target=self._read, daemon=True).start()
+        try:
+            self.wait_for("liveness deadline")
+        except BaseException:
+            self.p.kill()
+            self.p.wait()
+            raise
+
+    def _read(self):
+        for line in self.p.stdout:
+            self.lines.append((time.monotonic(), line.rstrip("\n")))
+
+    def wait_for(self, text, timeout=5.0, after=0):
+        """The first line from index `after` on that contains `text`, as (t, line)."""
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            for t, line in self.lines[after:]:
+                if text in line:
+                    return t, line
+            time.sleep(0.005)
+        raise AssertionError("no %r within %.1f s; the monitor printed:\n%s" % (text, timeout, self.text()))
+
+    def count(self, text):
+        return sum(1 for _t, line in self.lines if text in line)
+
+    def text(self):
+        return "\n".join(line for _t, line in self.lines)
+
+    def stop(self):
+        """SIGTERM, which the mode must honour promptly; a monitor that does not
+        is killed so no test leaves one behind, and the test is failed."""
+        self.p.terminate()
+        try:
+            self.p.wait(timeout=5)
+        except subprocess.TimeoutExpired as e:
+            self.p.kill()
+            self.p.wait()
+            raise AssertionError("the service monitor ignored SIGTERM for 5 s") from e
+        return self.p.stderr.read()
+
+
+@pytest.fixture
+def svc(native_servers):
+    s = _Svc(native_servers)
+    yield s
+    s.stop()
+
+
+def _recv_all(s, n):
+    b = b""
+    while len(b) < n:
+        c = s.recv(n - len(b))
+        if not c:
+            break
+        b += c
+    return b
+
+
+def _poisoned(seq):
+    """The pinned mnist claim with its verdict and reason bytes preset to 0xEE:
+    check_claim() never reads them, so an ACCEPT reply of 00 00 is one the
+    monitor WROTE, not one the request already carried. FOUND BY REVIEW."""
+    f = bytearray(_probe_mod().build_frame(seq))
+    f[16 + 6] = f[16 + 7] = 0xEE
+    return bytes(f)
+
+
+def _sentinel():
+    """A keepalive the monitor must echo untouched: a REJECTable body (class 42)
+    with poisoned verdict bytes, so a monitor that judged it would change the
+    echo and log a REJECT. FOUND BY REVIEW: build_frame(SENTINEL) was an
+    acceptable claim, so judging it wrote 00 00 over 00 00 and hid nothing."""
+    f = bytearray(_poisoned(0))
+    f[0:8] = b"\xff" * 8
+    f[16] = 42
+    return bytes(f)
+
+
+def _svc_claim(port, seq, frame=None):
+    """One claim on a connection of its own, as vlm_client.py sends them: the
+    reply, and the host time the claim was sent."""
+    import socket
+    f = frame if frame is not None else _poisoned(seq)
+    with socket.create_connection(("127.0.0.1", port), timeout=5) as s:
+        t = time.monotonic()
+        s.sendall(f)
+        return _recv_all(s, 64), t
+
+
+def test_svc_reports_a_silence_once_and_restores_at_the_next_claim(svc):
+    for seq in (1, 2, 3):
+        got, t_last = _svc_claim(svc.port, seq)
+        assert got[16 + 6:16 + 8] == b"\x00\x00", "the pinned mnist frame must ACCEPT"
+    t_miss, line = svc.wait_for("LIVENESS MISS")
+    assert "since seq=3 (deadline 300 ms, miss 1)" in line, line
+    gap = int(re.search(r"no claim for (\d+) ms", line).group(1))
+    assert 300 <= gap < 300 + SVC_SLACK * 1000, line
+    assert SVC_D - 0.005 <= t_miss - t_last < SVC_D + SVC_SLACK, (t_miss - t_last, line)
+    time.sleep(2 * SVC_D)
+    assert svc.count("LIVENESS MISS") == 1, "one line per silence, not one per deadline:\n" + svc.text()
+    n = len(svc.lines)
+    _svc_claim(svc.port, 4)
+    _t, line = svc.wait_for("LIVENESS RESTORED", after=n)
+    assert line.startswith("monitor: LIVENESS RESTORED: seq=4 after "), line
+    assert int(re.search(r"after (\d+) ms", line).group(1)) >= 3 * 300 - 50, "the whole silence: " + line
+
+
+@pytest.mark.parametrize("gap,misses", [(0.5, 0), (1.6, 4)])
+def test_svc_misses_exactly_the_gaps_longer_than_the_deadline(svc, gap, misses):
+    for seq in range(1, 6):
+        _svc_claim(svc.port, seq)
+        if seq < 5:
+            time.sleep(gap * SVC_D)
+    time.sleep(0.1)
+    assert svc.count("LIVENESS MISS") == misses, svc.text()
+    assert svc.count("LIVENESS RESTORED") == misses, svc.text()
+
+
+def test_svc_waits_without_a_deadline_until_the_first_claim(svc):
+    # A monitor that no Compute side has claimed to yet reports nothing -- not
+    # even after a connect-and-close, which is what the harness's reachability
+    # check does.
+    import socket
+    time.sleep(2 * SVC_D)
+    socket.create_connection(("127.0.0.1", svc.port), timeout=5).close()
+    time.sleep(2 * SVC_D)
+    assert svc.count("LIVENESS") == 0, svc.text()
+
+
+def test_svc_a_keepalive_is_not_a_sign_of_life(svc):
+    import socket
+    k = _sentinel()
+    with socket.create_connection(("127.0.0.1", svc.port), timeout=5) as s:
+        s.sendall(_poisoned(1))
+        assert _recv_all(s, 64)[16 + 6:16 + 8] == b"\x00\x00"
+        t0 = time.monotonic()
+        while time.monotonic() - t0 < 3 * SVC_D:
+            s.sendall(k)
+            assert _recv_all(s, 64) == k, "a sentinel is echoed byte for byte, never judged"
+            time.sleep(SVC_D / 4)
+    t_miss, line = svc.wait_for("LIVENESS MISS")
+    assert "since seq=1 " in line and t_miss - t0 < SVC_D + SVC_SLACK, (t_miss - t0, line)
+    svc.wait_for("client done: seen=1 accepted=1 rejected=0")
+    assert svc.count("LIVENESS MISS") == 1 and svc.count("client closed") == 0, svc.text()
+    assert svc.count("REJECT") == 0, "a sentinel was judged:\n" + svc.text()
+
+
+def test_svc_a_client_that_never_reads_cannot_hold_the_slot(svc):
+    # FOUND BY REVIEW: with a blocking reply write, a live client that stopped
+    # reading its verdicts parked the monitor in write() -- no MISS, the slot
+    # held forever, SIGTERM retried away. Now the reply has the deadline too.
+    import socket
+    import threading
+    lp = _probe_mod()
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4096)
+    s.connect(("127.0.0.1", svc.port))
+    flood = b"".join(lp.build_frame(i) for i in range(1, 100001))      # 6.4 MB of claims, no reads
+
+    def pour():
+        try:
+            s.sendall(flood)
+        except OSError:
+            pass
+    threading.Thread(target=pour, daemon=True).start()
+    try:
+        svc.wait_for("monitor: client closed: reply not taken for 300 ms", timeout=15)
+        _t, done = svc.wait_for("client done: seen=")
+        _t, miss = svc.wait_for("LIVENESS MISS")
+        # The claim whose reply stalled was registered BEFORE its reply: the
+        # silence runs from it, so the one MISS names the last claim judged.
+        judged = int(re.search(r"seen=(\d+)", done).group(1))
+        assert "since seq=%d " % judged in miss and svc.count("LIVENESS MISS") == 1, svc.text()[-600:]
+        n = len(svc.lines)
+        got, _ = _svc_claim(svc.port, 200001)          # a restarted Compute side gets the slot
+        assert got[16 + 6:16 + 8] == b"\x00\x00"
+        svc.wait_for("LIVENESS RESTORED: seq=200001 ", after=n)
+    finally:
+        s.close()
+
+
+def test_svc_closes_a_connection_silent_for_a_deadline(svc):
+    # One slot, one client at a time: a hung Compute side must not hold it, or a
+    # restarted one could never reconnect and RESTORED could never print.
+    import socket
+    lp = _probe_mod()
+    with socket.create_connection(("127.0.0.1", svc.port), timeout=5) as s:
+        s.sendall(lp.build_frame(1))
+        _recv_all(s, 64)
+        t0 = time.monotonic()
+        s.settimeout(SVC_D + 2)
+        assert s.recv(64) == b"", "the monitor must hang up on a client silent for a deadline"
+        t_eof = time.monotonic()
+    assert SVC_D - 0.005 <= t_eof - t0 < SVC_D + SVC_SLACK, t_eof - t0
+    svc.wait_for("monitor: client closed: no complete frame for 300 ms")
+    svc.wait_for("LIVENESS MISS")
+    n = len(svc.lines)
+    _svc_claim(svc.port, 2)
+    svc.wait_for("LIVENESS RESTORED: seq=2 ", after=n)
+
+
+def test_svc_a_stall_mid_frame_does_not_hold_the_deadline(svc):
+    # frameio_read_frame() would block here until the frame completed; the
+    # service mode waits in poll() with both limits running.
+    import socket
+    lp = _probe_mod()
+    with socket.create_connection(("127.0.0.1", svc.port), timeout=5) as s:
+        s.sendall(lp.build_frame(1))
+        _recv_all(s, 64)
+        t0 = time.monotonic()
+        s.sendall(lp.build_frame(2)[:30])
+        t_miss, line = svc.wait_for("LIVENESS MISS")
+        assert "since seq=1 " in line and t_miss - t0 < SVC_D + SVC_SLACK, (t_miss - t0, line)
+        s.settimeout(2)
+        assert s.recv(64) == b"", "the half frame's connection must be closed"
+    svc.wait_for("client closed")
+    svc.wait_for("client done: seen=1 accepted=1 rejected=0")    # the half frame was never judged
+
+
+def test_svc_a_hung_client_cannot_lock_out_the_next(svc):
+    import socket
+    hung = socket.create_connection(("127.0.0.1", svc.port), timeout=5)   # holds the slot, says nothing
+    try:
+        time.sleep(0.05)
+        t0 = time.monotonic()
+        got, _ = _svc_claim(svc.port, 1)            # queued behind it: times out at 5 s without the rule
+        waited = time.monotonic() - t0
+        assert got[16 + 6:16 + 8] == b"\x00\x00"
+        assert SVC_D / 2 <= waited < SVC_D + SVC_SLACK, waited
+    finally:
+        hung.close()
+
+
+def test_svc_judges_like_the_tcp_mode_and_a_rejected_claim_is_still_life(native_servers, svc):
+    # The same judge_frame(): every reply byte and every REJECT line matches the
+    # original TCP mode's for the same frames. And a rejected claim still
+    # proves the Compute side is alive -- liveness is not correctness.
+    frames = [_probe_mod().build_frame(1), _vlm_claim(2), _vlm_claim(3, cls=42),
+              _vlm_claim(4, model=2), _vlm_claim(5, kind=9), _vlm_claim(6, total=282001)]
+    port = _free_tcp_port()
+    p = subprocess.Popen([str(native_servers / "monitor"), str(port)],
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        time.sleep(0.3)
+        for f in frames:
+            a, _ = _svc_claim(svc.port, None, f)
+            b, _ = _svc_claim(port, None, f)
+            assert a == b and len(a) == 64, (a.hex(), b.hex())
+            time.sleep(SVC_D / 3)
+    finally:
+        p.terminate()
+        out, _ = p.communicate(timeout=10)
+    tcp_rejects = [x for x in out.splitlines() if "REJECT" in x]
+    assert len(tcp_rejects) == 4, out
+    assert [x for x in svc.text().splitlines() if "REJECT" in x] == tcp_rejects
+    assert svc.count("LIVENESS") == 0, "rejected claims 4 of 6, and not one silence:\n" + svc.text()
+
+
+@pytest.mark.parametrize("args", [["svc"], ["svc", "0"], ["svc", "60001"], ["svc", "-5"], ["svc", " 5"],
+                                  ["svc", "2000ms"], ["svc", "abc"], ["svc", ""], ["svc", "2000", "x"],
+                                  ["svc", "99999999999999999999999"]])
+def test_svc_refuses_a_deadline_it_cannot_honour(native_servers, args):
+    r = subprocess.run([str(native_servers / "monitor"), str(_free_tcp_port())] + args,
+                       capture_output=True, text=True, timeout=10)
+    assert r.returncode == 2 and "usage: monitor PORT svc DEADLINE_MS (1..60000)" in r.stderr, r
+
+
+@pytest.mark.parametrize("ms", [1, 2000, 60000])
+def test_svc_banner_and_stop_line_are_pinned(native_servers, ms):
+    # The live harnesses grep the banner on the guest console to confirm the
+    # image, and the stop line carries the run's miss count.
+    s = _Svc(native_servers, ms)
+    s.stop()
+    s.wait_for("monitor: stopped (liveness misses=0)")
+    assert ("monitor: service monitor listening on :%d (frame=64 bytes, conf_min=60%%), liveness deadline %d ms"
+            % (s.port, ms)) in s.text().splitlines(), s.text()
+    assert "monitor: claim kinds: 0 mnist (us <= 100000)" in s.text()
+
+
+def test_the_liveness_demo_passes_against_the_real_monitor(native_servers, tmp_path):
+    # liveness_demo.py end to end, every scenario and check, against the real
+    # monitor; its stdout, written to a file, stands in for the guest's serial
+    # console. What the board run will expect is what the monitor does, before a
+    # board is involved. Run TWICE on one monitor: first on a boot nothing has
+    # claimed to, then on one already armed, where the first-claim property is
+    # NOT APPLICABLE and must be reported so, never passed. A 500 ms deadline:
+    # `under` leaves 0.1 D for a connect and a sleep's overshoot on a CI runner.
+    import sys
+    port = _free_tcp_port()
+    console = tmp_path / "console.log"
+    demo = os.path.join(HERE, "..", "orin-native", "edge-llm", "liveness_demo.py")
+    runs = []
+    with open(console, "wb") as log:
+        m = subprocess.Popen([str(native_servers / "monitor"), str(port), "svc", "500"],
+                             stdout=log, stderr=subprocess.STDOUT)
+        try:
+            deadline = time.monotonic() + 5
+            while b"liveness deadline" not in console.read_bytes() and time.monotonic() < deadline:
+                time.sleep(0.02)
+            for i in (1, 2):
+                runs.append(subprocess.run([sys.executable, demo, "--host", "127.0.0.1", "--port", str(port),
+                                            "--console", str(console), "--out", str(tmp_path / ("out%d" % i))],
+                                           capture_output=True, text=True, timeout=240))
+        finally:
+            m.terminate()
+            try:
+                m.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                m.kill()
+                m.wait()
+    for i, r in enumerate(runs, 1):
+        assert r.returncode == 0 and "PASS: 0 check(s) failed" in r.stdout, (i, r.stdout + r.stderr)
+        res = json.loads((tmp_path / ("out%d" % i) / "liveness.json").read_text())
+        names = [s["scenario"] for s in res["scenarios"]]
+        assert names == ["arm", "steady", "under", "over", "rejects", "quiet", "mid-frame", "keepalive", "lockout"]
+        assert sum(len(s["misses"]) for s in res["scenarios"]) == 13      # one per scenario, four more in `over`
+        arm = res["scenarios"][0]
+        na = [c for c in arm["checks"] if c["ok"] is None]
+        assert arm["notes"]["boot"] == ("never" if i == 1 else "silence")
+        assert [c["what"] for c in na] == ([] if i == 1 else ["no deadline before the first claim of the boot"])
+    assert "NOT APPLICABLE no deadline before the first claim" in runs[1].stdout
+
+
+def _camera_mod():
+    import importlib.util
+    import sys
+    d = os.path.join(HERE, "..", "orin-native", "edge-llm")
+    if d not in sys.path:
+        sys.path.insert(0, d)
+    spec = importlib.util.spec_from_file_location("camera_client", os.path.join(d, "camera_client.py"))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+def _camera_run(tmp_path, claims, console_extra=None, drop=()):
+    """A camera run's log from (seq, t_send, t_reply, verdict) tuples, and the
+    console the deadline-mode monitor would print for it (2 s deadline), minus
+    any line whose text contains an item of `drop`."""
+    log = tmp_path / "claims.jsonl"
+    lines, con = [], []
+    prev = None
+    for seq, ts, tr, v in claims:
+        if prev is not None and ts - prev[2] >= 2.0:
+            con.append("monitor: LIVENESS MISS: no claim for 2001 ms since seq=%d (deadline 2000 ms, miss 1)" % prev[0])
+            con.append("monitor: LIVENESS RESTORED: seq=%d after %d ms without a claim" % (seq, (ts - prev[2]) * 1000))
+        if v == "REJECT":
+            con.append("monitor: REJECT seq=%d kind=vlm model=1 class=3 conf=41 us=282000 "
+                       "reason=confidence-below-threshold" % seq)
+            con.append("monitor: client done: seen=1 accepted=0 rejected=1")
+        else:
+            con.append("monitor: client done: seen=1 accepted=1 rejected=0")
+        lines.append(json.dumps({"event": "claim", "seq": seq, "verdict": v,
+                                 "reason": "ok" if v == "ACCEPT" else "confidence-below-threshold",
+                                 "t_send": ts, "t_reply": tr}))
+        prev = (seq, ts, tr)
+    con.append("monitor: LIVENESS MISS: no claim for 2001 ms since seq=%d (deadline 2000 ms, miss 2)" % prev[0])
+    con += console_extra or []
+    log.write_text("\n".join(lines) + "\n")
+    c = tmp_path / "console.log"
+    c.write_text("\n".join(x for x in con if not any(d in x for d in drop)) + "\n")
+    return str(log), str(c)
+
+
+# A stream at ~0.35 s a claim, one camera outage of ~5 s after seq 3.
+_CAMERA_OK = [(1, 0.0, 0.30), (2, 0.35, 0.65), (3, 0.70, 1.00), (4, 6.00, 6.30), (5, 6.35, 6.65, )]
+
+
+def _camera_claims(verdicts=None):
+    v = verdicts or {}
+    return [(s, ts, tr, v.get(s, "ACCEPT")) for s, ts, tr in _CAMERA_OK]
+
+
+def test_camera_check_passes_an_outage_the_monitor_reported(tmp_path):
+    cc = _camera_mod()
+    rows, bad = cc.check(*_camera_run(tmp_path, _camera_claims({2: "REJECT"})), 2.0)
+    assert bad == [], bad
+    assert any("MISS since seq=3, RESTORED at seq=4" in r for r in rows), rows
+
+
+@pytest.mark.parametrize("drop,why", [
+    ("since seq=3 ", "MISS lines name seqs [5]; the claim stream calls for [3, 5]"),
+    ("RESTORED: seq=4 ", "RESTORED lines name seqs []; the claim stream calls for [4]"),
+    ("since seq=5 ", "MISS lines name seqs [3]; the claim stream calls for [3, 5]"),
+])
+def test_camera_check_refuses_a_silence_the_monitor_did_not_report(tmp_path, drop, why):
+    cc = _camera_mod()
+    _rows, bad = cc.check(*_camera_run(tmp_path, _camera_claims(), drop=(drop,)), 2.0)
+    assert why in bad, bad
+
+
+def test_camera_check_refuses_a_miss_inside_a_steady_stream(tmp_path):
+    cc = _camera_mod()
+    extra = ["monitor: LIVENESS MISS: no claim for 2001 ms since seq=1 (deadline 2000 ms, miss 9)"]
+    _rows, bad = cc.check(*_camera_run(tmp_path, _camera_claims(), console_extra=extra), 2.0)
+    assert any(b.startswith("MISS lines name seqs [3, 5, 1]") for b in bad), bad
+
+
+def test_camera_check_refuses_a_verdict_the_console_does_not_bear_out(tmp_path):
+    cc = _camera_mod()
+    log, con = _camera_run(tmp_path, _camera_claims({2: "REJECT"}))
+    text = open(con).read()
+    open(con, "w").write(text.replace("reason=confidence-below-threshold", "reason=class-out-of-range"))
+    _rows, bad = cc.check(log, con, 2.0)
+    assert any(b.startswith("seq 2: client REJECT/confidence-below-threshold") for b in bad), bad
+    log, con = _camera_run(tmp_path, _camera_claims(), drop=("seen=1 accepted=1",))
+    _rows, bad = cc.check(log, con, 2.0)
+    assert "5 claims sent, 0 'client done' lines on the console" in bad, bad
+
+
+def test_camera_check_requires_the_opening_restored_only_after_a_reported_silence(tmp_path):
+    # FOUND BY THE FIRST BOARD SMOKE: after an earlier run on the same boot, the
+    # monitor stands in a reported silence, and the stream's first claim prints
+    # RESTORED. The check must require it then, and refuse it on a fresh boot.
+    cc = _camera_mod()
+    opening = ["monitor: LIVENESS RESTORED: seq=1 after 9000 ms without a claim"]
+    log, con = _camera_run(tmp_path, _camera_claims())
+    text = open(con).read()
+    open(con, "w").write(opening[0] + "\n" + text)
+    assert cc.check(log, con, 2.0, opened_in_silence=True)[1] == []
+    assert "RESTORED lines name seqs [1, 4]; the claim stream calls for [4]" in cc.check(log, con, 2.0)[1]
+    open(con, "w").write(text)
+    assert "RESTORED lines name seqs [4]; the claim stream calls for [1, 4]" in \
+        cc.check(log, con, 2.0, opened_in_silence=True)[1]
+
+
+def test_camera_check_does_not_judge_a_gap_at_the_deadline(tmp_path):
+    # 2.05 s apart: the monitor may or may not have printed; either is accepted.
+    cc = _camera_mod()
+    claims = [(1, 0.0, 0.3, "ACCEPT"), (2, 2.35, 2.65, "ACCEPT")]
+    for drop in ((), ("since seq=1 ", "RESTORED: seq=2 ")):
+        rows, bad = cc.check(*_camera_run(tmp_path, claims, drop=drop), 2.0)
+        assert bad == [] and any("not judged" in r for r in rows), (drop, rows, bad)
+
+
+def test_the_probe_runs_clean_against_the_service_mode(native_servers, tmp_path):
+    # The deadline's cost is measured with the latency probe (OD14): it must be
+    # gate-clean against this mode, with not one silence inside an arm.
+    s = _Svc(native_servers, 2000)
+    try:
+        out = tmp_path / "lat.json"
+        r = subprocess.run(_probe_cmd(s.port, "--n", "60", "--warmup", "5", "--interval-ms", "0",
+                                      "--tag", "svc_r1", "--out", str(out)),
+                           capture_output=True, text=True, timeout=60)
+        assert r.returncode == 0, r.stdout + r.stderr
+        sm = json.loads(out.read_text())["summary"]
+        assert sm["n"] == 60 and sm["bad"] == 0 and sm["rejected_by_monitor"] == 0
+        s.wait_for("client done: seen=65 accepted=65 rejected=0")
+        assert s.count("LIVENESS") == 0, s.text()
+    finally:
+        s.stop()
+
+
 # ============================================================ the shm transport (OD12, 2026-09-22)
 #
 # shm_chan.h's slot: magic @0, version @4, req_seq @64, request @128, rsp_seq @192,

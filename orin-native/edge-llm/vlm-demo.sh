@@ -72,6 +72,10 @@ mkdir -p "$OUT" || die "cannot create $OUT"
 m_reachable "$GUEST" "$SVC_PORT" "the service's monitor instance"
 tr -d '\0\r' < "$CONSOLE" | grep -aq "claim kinds: 0 mnist" \
 	|| die "the guest console shows no claim-kind monitor -- is this ifs-svc?"
+# Every mode prints the claim-kind line, so it cannot tell ifs-svc from ifs-live
+# (OD14), whose :7102 runs the deadline mode. Refuse that by name.
+tr -d '\0\r' < "$CONSOLE" | grep -aq "safety monitor listening on :$SVC_PORT (" \
+	|| die "the guest console shows no plain TCP monitor on :$SVC_PORT -- is this ifs-svc?"
 sync
 sudo -n sh -c 'echo 3 > /proc/sys/vm/drop_caches' 2>/dev/null || die "cannot drop the page cache"
 

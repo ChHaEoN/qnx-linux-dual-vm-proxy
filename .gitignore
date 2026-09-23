@@ -40,6 +40,8 @@ ipc-test/compute-client/compute_client
 # change what a later rebuild of ifs-udp/shm/kick embeds. *.bin does not match
 # an extensionless binary, which is why each is named here by exact path.
 ipc-test/qnx-safety-monitor/qnx-safety-monitor-svc
+# The liveness deadline's guest monitor (OD14), for the same reasons.
+ipc-test/qnx-safety-monitor/qnx-safety-monitor-live
 
 # Secrets / credentials / cloud
 .env

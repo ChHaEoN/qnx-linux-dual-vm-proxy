@@ -103,6 +103,14 @@
  *
  * Nobody spins in shmkick: the server blocks in the kick channel's read. The
  * judgement is judge_frame() again.
+ *
+ * AND A SERVICE MODE WITH A DEADLINE (owner decision OD14, 2026-09-23)
+ *
+ *   monitor PORT svc DEADLINE_MS   TCP as the original, plus a liveness
+ *                                  deadline on the claim stream (serve_svc)
+ *
+ * A function of its own, so that no mode above changes and each change's cost
+ * stays separable (OD13). The judgement is judge_frame() again.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -115,6 +123,8 @@
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <time.h>
+#include <poll.h>
+#include <fcntl.h>
 
 #include "frame.h"
 #include "frame_io.h"
@@ -698,6 +708,361 @@ static int serve_kick(const char *spec, const char *kick)
 	return 0;
 }
 
+/* THE SERVICE MODE (OD14): monitor PORT svc DEADLINE_MS. TCP as the original,
+ * one client at a time, the same judge_frame(), and two rules on top:
+ *
+ *   LIVENESS. The deadline is armed by the first claim judged. If DEADLINE_MS
+ *   pass with no further claim -- whether the client is connected and quiet,
+ *   has hung up, or has stalled mid-frame -- the monitor prints one LIVENESS
+ *   MISS line carrying the silence it measured on its own monotonic clock, and
+ *   at the next claim one LIVENESS RESTORED line. Any judged claim counts,
+ *   accepted or rejected: liveness is not correctness. A sentinel does not: a
+ *   pipeline that only sends keepalives has stopped producing claims.
+ *
+ *   A STALLED CONNECTION IS CLOSED. A client that delivers no complete frame,
+ *   claim or sentinel, for DEADLINE_MS is disconnected, mid-frame or not; so is
+ *   one that leaves its reply untaken for DEADLINE_MS after the frame it
+ *   answers arrived. The monitor serves one client at a time, so without this a
+ *   hung Compute side would hold the only slot and a restarted one could never
+ *   connect -- the RESTORED line could never come. A client that holds one
+ *   connection open must reconnect after a silence.
+ *
+ * No verdict changes: a MISS is a line on the console, not a reply, and only
+ * payload[6] and [7] are ever written. The client's socket is non-blocking and
+ * EVERY wait in this mode -- accept, read and write -- is a poll() that sleeps
+ * until the earlier limit, with both checked before it; so a silence is
+ * reported within a scheduler tick of its deadline, not whenever the next frame
+ * happens to come. A claim that ends a silence of DEADLINE_MS or more gets its
+ * MISS then its RESTORED even if it beat the timer to it by less than that tick,
+ * on either path. A monitor that nothing has claimed to yet waits without a
+ * deadline.
+ *
+ * FOUND BY REVIEW, 2026-09-23: the first version wrote replies with
+ * frameio_write_frame() on a BLOCKING socket. A live client that stopped
+ * reading its verdicts filled the send buffer and parked the monitor in
+ * write() -- no MISS, the slot held, and SIGTERM retried away by the EINTR
+ * loop. No client in this repo does that; the mode exists for ones that do. */
+#define SVC_DEADLINE_MS_MAX 60000u
+
+struct liveness {
+	uint64_t deadline_ns;
+	uint64_t last_claim_ns;         /* when the last claim arrived */
+	unsigned long long last_seq;
+	unsigned long long misses;
+	int armed;                      /* a claim has been judged */
+	int missed;                     /* the current silence has been reported */
+	uint64_t restored_gap_ns;       /* a RESTORED line owed, printed after the reply */
+	unsigned long long restored_seq;
+};
+
+/* When the running liveness deadline falls due; 0 when none is running (not
+ * armed yet, or this silence already reported). */
+static uint64_t live_due(const struct liveness *lv)
+{
+	return (lv->armed && !lv->missed) ? lv->last_claim_ns + lv->deadline_ns : 0;
+}
+
+/* Print the RESTORED line a claim is owed, if any. */
+static void live_flush(struct liveness *lv)
+{
+	if (lv->restored_gap_ns == 0) {
+		return;
+	}
+	printf("monitor: LIVENESS RESTORED: seq=%llu after %llu ms without a claim\n",
+	       lv->restored_seq, (unsigned long long)(lv->restored_gap_ns / 1000000u));
+	fflush(stdout);
+	lv->restored_gap_ns = 0;
+}
+
+/* Report the current silence, once, if its deadline has passed. A RESTORED
+ * still owed for the claim that began this silence goes out first, so the
+ * console never shows a MISS before the RESTORED that preceded it. */
+static void live_check(struct liveness *lv, uint64_t now)
+{
+	uint64_t const due = live_due(lv);
+
+	if (due == 0 || now < due) {
+		return;
+	}
+	live_flush(lv);
+	lv->missed = 1;
+	lv->misses++;
+	printf("monitor: LIVENESS MISS: no claim for %llu ms since seq=%llu (deadline %llu ms, miss %llu)\n",
+	       (unsigned long long)((now - lv->last_claim_ns) / 1000000u), lv->last_seq,
+	       (unsigned long long)(lv->deadline_ns / 1000000u), lv->misses);
+	fflush(stdout);
+}
+
+/* A claim arrived at `at`: the Compute side is alive. Registered BEFORE its
+ * reply is written, so a reply that stalls cannot be counted as silence; the
+ * RESTORED line it may be owed is only noted here, and live_flush() prints it
+ * after the reply, so the console never delays one. */
+static void live_claim(struct liveness *lv, unsigned long long seq, uint64_t at)
+{
+	if (lv->missed) {
+		lv->restored_gap_ns = at - lv->last_claim_ns;     /* > 0: a miss means >= the deadline */
+		lv->restored_seq = seq;
+	}
+	lv->armed = 1;
+	lv->missed = 0;
+	lv->last_claim_ns = at;
+	lv->last_seq = seq;
+}
+
+/* poll()'s timeout until the earlier of two instants (0 = no such instant),
+ * rounded UP to a millisecond so the wait never ends before it; -1 for none. */
+static int wait_ms(uint64_t now, uint64_t a, uint64_t b)
+{
+	uint64_t due = a;
+
+	if (b != 0 && (due == 0 || b < due)) {
+		due = b;
+	}
+	if (due == 0) {
+		return -1;
+	}
+	if (now >= due) {
+		return 0;
+	}
+	return (int)((due - now + 999999u) / 1000000u);
+}
+
+/* One frame from a service client, both limits running. Returns 0 for a frame,
+ * 1 for a clean hang-up or a stop, 2 when the connection delivered no complete
+ * frame by conn_due, -1 for an error or a frame cut short. */
+static int svc_read_frame(int cfd, uint8_t *buf, struct liveness *lv, uint64_t conn_due)
+{
+	size_t got = 0;
+
+	while (got < FRAME_TOTAL_BYTES) {
+		uint64_t const now = now_ns();
+		struct pollfd pfd;
+		int pr;
+		ssize_t n;
+
+		if (g_stop) {
+			return 1;
+		}
+		live_check(lv, now);
+		if (now >= conn_due) {
+			return 2;
+		}
+		pfd.fd = cfd;
+		pfd.events = POLLIN;
+		pfd.revents = 0;
+		pr = poll(&pfd, 1, wait_ms(now, live_due(lv), conn_due));
+		if (pr < 0) {
+			if (errno == EINTR) {
+				continue;
+			}
+			return -1;
+		}
+		if (pr == 0) {
+			continue;       /* a limit passed: the top of the loop reports it */
+		}
+		n = read(cfd, buf + got, FRAME_TOTAL_BYTES - got);
+		if (n > 0) {
+			got += (size_t)n;
+		} else if (n == 0) {
+			return (got == 0) ? 1 : -1;     /* EOF mid-frame is a protocol error */
+		} else if (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK) {
+			return -1;
+		}
+	}
+	return 0;
+}
+
+/* The reply, both limits running, on the non-blocking client socket: a client
+ * that does not take it by conn_due is closed like one that sends nothing.
+ * Returns 0 when it is written, 1 on a stop, 2 when conn_due passed, -1 for an
+ * error (a client that hung up: SIGPIPE is ignored, so that is EPIPE). */
+static int svc_write_frame(int cfd, const uint8_t *buf, struct liveness *lv, uint64_t conn_due)
+{
+	size_t put = 0;
+
+	while (put < FRAME_TOTAL_BYTES) {
+		uint64_t const now = now_ns();
+		struct pollfd pfd;
+		int pr;
+		ssize_t n;
+
+		if (g_stop) {
+			return 1;
+		}
+		live_check(lv, now);
+		if (now >= conn_due) {
+			return 2;
+		}
+		n = write(cfd, buf + put, FRAME_TOTAL_BYTES - put);
+		if (n > 0) {
+			put += (size_t)n;
+			continue;
+		}
+		if (n < 0 && errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK) {
+			return -1;
+		}
+		/* The send buffer is full: wait for room, or for a limit. */
+		pfd.fd = cfd;
+		pfd.events = POLLOUT;
+		pfd.revents = 0;
+		pr = poll(&pfd, 1, wait_ms(now, live_due(lv), conn_due));
+		if (pr < 0 && errno != EINTR) {
+			return -1;
+		}
+	}
+	return 0;
+}
+
+static void serve_svc_client(int cfd, struct liveness *lv)
+{
+	uint8_t buf[FRAME_TOTAL_BYTES];
+	unsigned long long seen = 0, accepted = 0, rejected = 0;
+	unsigned long long const d_ms = (unsigned long long)(lv->deadline_ns / 1000000u);
+	uint64_t conn_due = now_ns() + lv->deadline_ns;
+
+	for (;;) {
+		int const rc = svc_read_frame(cfd, buf, lv, conn_due);
+		uint64_t at;
+		unsigned long long seq;
+		int wrc;
+
+		if (rc == 1) {
+			break;
+		}
+		if (rc == 2) {
+			printf("monitor: client closed: no complete frame for %llu ms\n", d_ms);
+			fflush(stdout);
+			break;
+		}
+		if (rc < 0) {
+			fprintf(stderr, "monitor: frame read failed: %s\n", strerror(errno));
+			break;
+		}
+		at = now_ns();
+		conn_due = at + lv->deadline_ns;
+		/* A frame that beat poll()'s timer to a silence already past its
+		 * deadline: report the silence first, as the accept path would. */
+		live_check(lv, at);
+
+		/* A sentinel keeps the connection open but is not a claim, so it
+		 * is not a sign of life: echoed untouched, never counted. */
+		seq = (unsigned long long)frame_get_u64(&buf[0]);
+		if (seq != FRAME_SENTINEL_SEQ) {
+			seen++;
+			if (judge_frame(buf) == V_ACCEPT) {
+				accepted++;
+			} else {
+				rejected++;
+			}
+			live_claim(lv, seq, at);        /* it arrived: counts even if its reply fails */
+		}
+		wrc = svc_write_frame(cfd, buf, lv, conn_due);
+		live_flush(lv);                         /* a RESTORED line, after the reply */
+		if (wrc == 2) {
+			printf("monitor: client closed: reply not taken for %llu ms\n", d_ms);
+			fflush(stdout);
+		}
+		if (wrc != 0) {
+			break;
+		}
+	}
+
+	printf("monitor: client done: seen=%llu accepted=%llu rejected=%llu\n",
+	       seen, accepted, rejected);
+	fflush(stdout);
+}
+
+static int serve_svc(int port, unsigned deadline_ms)
+{
+	struct liveness lv;
+	struct sockaddr_in addr;
+	int lfd, fl, opt = 1;
+
+	memset(&lv, 0, sizeof(lv));
+	lv.deadline_ns = (uint64_t)deadline_ms * 1000000u;
+
+	lfd = socket(AF_INET, SOCK_STREAM, 0);
+	if (lfd < 0) {
+		fprintf(stderr, "monitor: socket: %s\n", strerror(errno));
+		return 1;
+	}
+	setsockopt(lfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+	/* Non-blocking, so a connection reset between poll() and accept() cannot
+	 * park the monitor in accept() past a deadline. */
+	fl = fcntl(lfd, F_GETFL, 0);
+	if (fl < 0 || fcntl(lfd, F_SETFL, fl | O_NONBLOCK) != 0) {
+		fprintf(stderr, "monitor: fcntl: %s\n", strerror(errno));
+		close(lfd);
+		return 1;
+	}
+
+	memset(&addr, 0, sizeof(addr));
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	addr.sin_port = htons((uint16_t)port);
+
+	if (bind(lfd, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
+		fprintf(stderr, "monitor: bind(%d): %s\n", port, strerror(errno));
+		close(lfd);
+		return 1;
+	}
+	if (listen(lfd, 4) != 0) {
+		fprintf(stderr, "monitor: listen: %s\n", strerror(errno));
+		close(lfd);
+		return 1;
+	}
+
+	printf("monitor: service monitor listening on :%d (frame=%u bytes, conf_min=%u%%), liveness deadline %u ms\n",
+	       port, (unsigned)FRAME_TOTAL_BYTES, (unsigned)CONF_MIN, deadline_ms);
+	fflush(stdout);
+
+	while (!g_stop) {
+		uint64_t const now = now_ns();
+		struct pollfd pfd;
+		int pr, cfd;
+
+		live_check(&lv, now);
+		pfd.fd = lfd;
+		pfd.events = POLLIN;
+		pfd.revents = 0;
+		pr = poll(&pfd, 1, wait_ms(now, live_due(&lv), 0));
+		if (pr < 0) {
+			if (errno == EINTR) {
+				continue;
+			}
+			fprintf(stderr, "monitor: poll: %s\n", strerror(errno));
+			break;
+		}
+		if (pr == 0) {
+			continue;
+		}
+		cfd = accept(lfd, NULL, NULL);
+		if (cfd < 0) {
+			if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK || errno == ECONNABORTED) {
+				continue;
+			}
+			fprintf(stderr, "monitor: accept: %s\n", strerror(errno));
+			break;
+		}
+		/* Non-blocking, set explicitly: a BSD stack (io-sock) hands the
+		 * listener's O_NONBLOCK to the accepted socket and Linux does not.
+		 * Every read and write on it waits in poll() with the limits running. */
+		fl = fcntl(cfd, F_GETFL, 0);
+		if (fl < 0 || fcntl(cfd, F_SETFL, fl | O_NONBLOCK) != 0) {
+			fprintf(stderr, "monitor: fcntl(client): %s\n", strerror(errno));
+			close(cfd);
+			continue;
+		}
+		setsockopt(cfd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt));
+		serve_svc_client(cfd, &lv);
+		close(cfd);
+	}
+
+	close(lfd);
+	printf("monitor: stopped (liveness misses=%llu)\n", lv.misses);
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
 	int const port = (argc > 1) ? atoi(argv[1]) : DEFAULT_PORT;
@@ -749,6 +1114,26 @@ int main(int argc, char **argv)
 	if (argc > 2) {
 		if (strcmp(argv[2], "udp") == 0) {
 			return serve_udp(port);
+		}
+		if (strcmp(argv[2], "svc") == 0) {
+			/* Digits only, 1..SVC_DEADLINE_MS_MAX: strtoul alone would
+			 * take " 5", "-1" (as a huge value) or "2000ms". */
+			unsigned long ms = 0;
+			char *end = NULL;
+
+			if (argc == 4 && argv[3][0] >= '0' && argv[3][0] <= '9') {
+				errno = 0;
+				ms = strtoul(argv[3], &end, 10);
+				if (errno != 0 || *end != '\0') {
+					ms = 0;
+				}
+			}
+			if (ms == 0 || ms > SVC_DEADLINE_MS_MAX) {
+				fprintf(stderr, "monitor: usage: monitor PORT svc DEADLINE_MS (1..%u)\n",
+				        SVC_DEADLINE_MS_MAX);
+				return 2;
+			}
+			return serve_svc(port, (unsigned)ms);
 		}
 		/* Refuse an unknown transport word rather than guess. (Only the
 		 * word is checked: the port is still atoi(argv[1]), as before.) */

@@ -97,6 +97,10 @@ grep -q -- '--claim' "$PROBE" || die "$PROBE has no --claim: it predates OD13"
 if [ -n "$CONSOLE" ]; then
 	tr -d '\0\r' < "$CONSOLE" | grep -aq "claim kinds: 0 mnist" \
 		|| die "the guest console shows no claim-kind monitor -- is this ifs-svc?"
+	# Every mode prints the claim-kind line, so it cannot tell ifs-svc from
+	# ifs-live (OD14), whose :7102 runs the deadline mode. Refuse that by name.
+	tr -d '\0\r' < "$CONSOLE" | grep -aq "safety monitor listening on :$PORT (" \
+		|| die "the guest console shows no plain TCP monitor on :$PORT -- is this ifs-svc?"
 fi
 command -v tegrastats >/dev/null || die "tegrastats absent -- this experiment is Orin-only"
 m_prepare_out "${OUT:-}" "$HOME/vlm-verdict-out"

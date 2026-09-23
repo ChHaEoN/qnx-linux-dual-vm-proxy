@@ -24,9 +24,16 @@ SRCS := monitor.c ../common/shm_map_qnx.c ../common/frame.h ../common/frame_io.h
 # qnx-safety-monitor-svc and names it qnx-safety-monitor inside the image.
 SVC := qnx-safety-monitor-svc
 
-.PHONY: all svc clean
+# `make live` builds the liveness deadline's monitor (OD14, 2026-09-23) under
+# its own name, for the same reason; ifs-live.build stages it. From OD14 on
+# monitor.c has the deadline mode, so `make svc` no longer rebuilds the binary
+# ifs-svc.bin embeds -- that image is pinned by its sha256, not by this target.
+LIVE := qnx-safety-monitor-live
+
+.PHONY: all svc live clean
 all: $(BIN)
 svc: $(SVC)
+live: $(LIVE)
 
 $(BIN): $(SRCS)
 	$(CC) $(TARGET) $(CFLAGS) -o $@ monitor.c ../common/shm_map_qnx.c $(LDFLAGS)
@@ -34,5 +41,8 @@ $(BIN): $(SRCS)
 $(SVC): $(SRCS)
 	$(CC) $(TARGET) $(CFLAGS) -o $@ monitor.c ../common/shm_map_qnx.c $(LDFLAGS)
 
+$(LIVE): $(SRCS)
+	$(CC) $(TARGET) $(CFLAGS) -o $@ monitor.c ../common/shm_map_qnx.c $(LDFLAGS)
+
 clean:
-	rm -f $(BIN) $(SVC)
+	rm -f $(BIN) $(SVC) $(LIVE)
