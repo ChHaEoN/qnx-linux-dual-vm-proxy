@@ -25,13 +25,14 @@ versions differ in these ways:
   the L2/L3 cache sharing, which the earlier form did not.
 
 They pass `tests/test_aws_tooling.py`. Those tests drive the real code against
-stub `aws`, `ssh` and `scp` programs. The committed versions have driven two
-billed sessions, both on 2026-09-23 and both rehearsed on the Orin first:
+stub `aws`, `ssh` and `scp` programs. The committed versions have driven three
+billed sessions, all on 2026-09-23 and all rehearsed on the Orin first:
 - a liveness session, about 5 minutes billed;
 - this ladder, again on a new instance, about 10.5 minutes billed. It reproduced
-  2026-09-22's paired figures to within about a microsecond.
+  2026-09-22's paired figures to within about a microsecond;
+- a guest-side-timestamp session (OD15), about 5 minutes billed.
 
-Teardown was verified both times. Their records are held until the 4.6(i)
+Teardown was verified each time. Their records are held until the 4.6(i)
 consultation.
 
 Why bare metal: non-metal Graviton instances expose no `/dev/kvm`
