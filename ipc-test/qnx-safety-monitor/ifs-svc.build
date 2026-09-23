@@ -1,0 +1,222 @@
+###############################################################################
+# ifs-svc.build -- the A6 guest image for the VLM service arm (OD13, 2026-09-23).
+#
+# NOT PORTABLE, and not generated: it is ifs-udp.build (the plain socket image,
+# sha256 853de923..., itself ifs-demo2.bin's embedded build file plus the UDP
+# rungs) with only these changes (search "OD13"):
+#   the monitor      -> staged from qnx-safety-monitor-svc, built by `make svc`
+#                       from the claim-kind monitor.c; named qnx-safety-monitor
+#                       inside the image, so the :7100 and :7101 lines run it too
+#   one start line   -> a dedicated service instance on TCP 7102, so the latency
+#                       probe's :7100 is never held by the service's client
+#   build/ifs.build  -> this file, by its repo path
+#   build.date       -> output/build/ifs-svc.build.date, written per build
+# Its own monitor binary name because every ifs-*.build stages the shared
+# ipc-test/qnx-safety-monitor/qnx-safety-monitor: rebuilding that would change
+# what a later rebuild of ifs-udp, ifs-shm or ifs-kick embeds.
+# Every file is [+optional] as mkqnximage emits it, so a missing input is skipped
+# SILENTLY and mkifs still exits 0 -- verify by dumpifs, never by exit code.
+#
+# Build (Git Bash, SDP env sourced, QNX_TARGET/QNX_HOST/PATH exported):
+#   make -C ipc-test/qnx-safety-monitor svc
+#   BSP=/e/.../qnx-safety-vm/bsp-overlay/aarch64le/boot/sys BUILD_DIR=qnx-safety-vm \
+#   BUILDFILE=E:/Project/qnx-linux-dual-vm-proxy/ipc-test/qnx-safety-monitor/ifs-svc.build \
+#   BUILD_DATE_FILE=output/build/ifs-svc.build.date OUT=output/ifs-svc.bin \
+#   /usr/bin/bash ipc-test/qnx-dds-monitor/rebuild-ifs-with-dds.sh
+# Accept only if, against ifs-udp.bin (dumpifs -x both, ELF p_paddr ignored), the
+# only files that differ are qnx-safety-monitor, startup-script, build/ifs.build
+# and build.date, none is added, and the image carries "claim kinds:".
+###############################################################################
+###############################################################################
+#
+# IFS Build file
+#
+###############################################################################
+
+[search=${MKFS_PATH}]
+
+[+dupignore]
+[+optional]
+
+
+[uid=0 gid=0 dperms=0555 perms=0555]
+
+[image=0x40080000]
+[virtual=aarch64le,raw ] boot = {
+    startup-qemu-virt  
+    # Setting PATH and LD_LIBRARY_PATH here allows them to be set both for
+    # procnto as well as programs run from the IFS startup script.
+    PATH=/proc/boot:/system/bin
+    LD_LIBRARY_PATH=/proc/boot:/system/lib:/system/lib/dll
+    [+keeplinked uid=0 gid=0 perms=0700 ] CONFIG_PATH=/proc/boot:/system/etc procnto-smp-instr -mr -d 0777 -u 0777  
+}
+
+[+script] startup-script = {
+    # As various programs expect some binaries in fixed location, create procmgr symlinks to them.
+    # We can't specify these paths for the files themselves since if we build a non-union system,
+    # the actual paths would be things like /ifs/bin/sh
+    procmgr_symlink /proc/boot/ksh /bin/ksh
+    procmgr_symlink /proc/boot/ksh /bin/sh
+    procmgr_symlink /system/bin/cp /bin/cp
+    procmgr_symlink /system/bin/rm /bin/rm
+    procmgr_symlink /data/var/tmp /tmp
+    procmgr_symlink /system/bin/ssh /usr/bin/ssh
+    procmgr_symlink /proc/boot/ldqnx-64.so.2 /usr/lib/ldqnx-64.so.2
+
+    # **FIXME**
+    # Processes should usually use _CS_CONFIG_PATH to locate configuration files.  But for now
+    # create symlinks for some locations that can't move.
+    procmgr_symlink /system/etc/terminfo /usr/share/terminfo
+    procmgr_symlink /data/var/etc /etc
+    procmgr_symlink /data/var /var
+    procmgr_symlink /system/etc/profile /etc/profile
+
+    TERM=qansi
+    HOME=/data/home/root
+    #50.builtin
+    setconf TIMEZONE UTC0
+    mount -uo noexec /dev/shmem
+    # ARM Motherboard Express uATX features a PrimeCell PL031 RTC as per:
+    # - http://infocenter.arm.com/help/topic/com.arm.doc.dui0447j/Caccaigc.html
+    # - http://infocenter.arm.com/help/topic/com.arm.doc.dui0447j/ch04s02s02.html
+    rtc -b 0x9010000 primecell
+# local/snippets/ifs_start.custom
+# Commands executed from ifs start-up script prior to invoking main start-up script or slm
+    #~30.builtin
+    /proc/boot/startup.sh
+# Phase 3b: Safety-side cross-partition monitor. Placed AFTER startup.sh
+# returns, because startup.sh is what brings up io-sock and the static
+# vtnet0 address -- binding :7100 before that would fail. Kept in the IFS
+# on purpose: post_startup.sh lives in the system partition, and editing
+# it would mean rewriting disk-qemu, which published results depend on.
+/proc/boot/qnx-safety-monitor &
+# OD12 (2026-09-21): the UDP rungs -- the same two binaries in UDP mode, on
+# their own ports so a TCP/UDP mix-up fails instead of answering. Started here,
+# after startup.sh has brought io-sock up, like the TCP monitor above.
+/proc/boot/qnx-safety-monitor 7101 udp &
+/proc/boot/qnx-echo-server-net 7001 udp &
+# OD13 (2026-09-23): the VLM service's own monitor instance, TCP 7102. The
+# TCP monitor serves one client at a time, so a service client on :7100 would
+# stall the latency probe; on its own port it never can.
+/proc/boot/qnx-safety-monitor 7102 &
+    #~80.builtin
+
+    display_msg "Startup complete"
+    uname -a
+
+    reopen /dev/ser1
+}
+
+startup.sh=output/build/startup.sh
+mount_fs.sh=output/build/mount_fs.sh
+
+#############################################
+### Toybox
+#############################################
+toybox=usr/bin/toybox
+[type=link] cat=toybox
+[type=link] chmod=toybox
+[type=link] dd=toybox
+[type=link] echo=toybox
+[type=link] ln=toybox
+[type=link] ls=toybox
+[type=link] rm=toybox
+[type=link] grep=toybox
+
+#############################################
+### Utilities
+#############################################
+bin/on
+# waitfor and ability are same binary as on
+[type=link] waitfor=on
+[type=link] ability=on
+sbin/rtc
+bin/setfacl
+bin/ksh
+bin/pidin
+# Allow sh to be found in PATH
+[type=link] sh=ksh
+bin/mount
+bin/umount
+usr/bin/getconf
+# getconf and setconf are same binary
+[type=link] setconf=getconf
+sbin/devc-serpl011
+bin/slog2info
+
+
+#############################################
+### Services
+#############################################
+sbin/devb-virtio
+bin/slogger2
+sbin/fsevmgr
+
+
+
+#############################################
+### Miscellaneous
+#############################################
+# Capture the build information
+
+[perms=0444] build/options=local/options
+[perms=0444] build/options.inc=output/build/from-ifs-demo2/options.inc
+[perms=0444] build/ifs.build=E:/Project/qnx-linux-dual-vm-proxy/ipc-test/qnx-safety-monitor/ifs-svc.build
+[perms=0444] build/system.build=output/build/from-ifs-demo2/system.build
+[perms=0444] build/data.build=output/build/data.build
+
+[perms=0444] build.date = output/build/ifs-svc.build.date
+
+#############################################
+### Customization
+#############################################
+
+[-autolink]
+
+lib/libc.so.6
+usr/lib/ldqnx-64.so.2
+lib/libgcc_s.so.1
+lib/libm.so.3
+lib/libcam.so.2
+lib/dll/io-blk.so
+lib/dll/cam-disk.so
+lib/dll/fs-qnx6.so
+lib/dll/fs-dos.so
+lib/libslog2.so.1
+[type=link] libslog2.so=libslog2.so.1
+usr/lib/libcrypto.so.3
+lib/libsocket.so.4
+[type=link] libsocket.so=libsocket.so.4
+usr/lib/libz.so.2
+lib/libslog2shim.so.1
+lib/libsecpol.so.1
+lib/libpci.so.3.0
+lib/libjson.so.1
+lib/libslog2parse.so.1
+lib/libjail.so.1
+lib/libfsnotify.so.1
+
+
+usr/lib/libqcrypto.so.1.0
+lib/dll/qcrypto-openssl-3.so
+lib/libqh.so.1
+lib/libregex.so.1
+
+[uid=0 gid=0 perms=0444] qcrypto.conf={
+openssl-3 tags=*
+}
+# local/snippets/ifs_files.custom
+# Placeholder for local list of files to add to ifs
+#
+# Phase 3 (Orin, docs/orin-port.md): stage the QNX-guest TCP echo server so
+# scripts/orin's post_start.custom can start it as /proc/boot/qnx-echo-server-net.
+# Mirrors scripts/qhv's guest ifs_files.custom staging (build-qhv.bat) for the
+# Phase-2 qnx-echo-server; same [perms=555] name=abs-path mkqnximage syntax.
+[perms=555] qnx-echo-server-net=E:/Project/qnx-linux-dual-vm-proxy/ipc-test/qnx-server-net/qnx-echo-server-net
+# OD13 (2026-09-23): the claim-kind monitor, under its own host name.
+[perms=555] qnx-safety-monitor=E:/Project/qnx-linux-dual-vm-proxy/ipc-test/qnx-safety-monitor/qnx-safety-monitor-svc
+#############################################
+### QTD
+#############################################
+qtd_public_key.pem=local/misc_files/qtd_public_key.pem
+fs-qtd.so=lib/dll/fs-qtd.so

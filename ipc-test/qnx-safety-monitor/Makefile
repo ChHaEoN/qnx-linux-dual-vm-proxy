@@ -15,12 +15,24 @@ CFLAGS  := -std=gnu99 -Wall -Wextra -Wformat=2 -O2 -I../common
 LDFLAGS := -lsocket
 
 BIN := qnx-safety-monitor
+SRCS := monitor.c ../common/shm_map_qnx.c ../common/frame.h ../common/frame_io.h ../common/shm_chan.h ../common/shm_map.h
 
-.PHONY: all clean
+# `make svc` builds the VLM service arm's monitor (OD13, 2026-09-23) under its
+# OWN name. Use it, not plain `make`: every ifs-*.build stages $(BIN) by this
+# exact path, so rebuilding $(BIN) from today's source would change what a
+# later rebuild of ifs-udp, ifs-shm or ifs-kick embeds. ifs-svc.build stages
+# qnx-safety-monitor-svc and names it qnx-safety-monitor inside the image.
+SVC := qnx-safety-monitor-svc
+
+.PHONY: all svc clean
 all: $(BIN)
+svc: $(SVC)
 
-$(BIN): monitor.c ../common/shm_map_qnx.c ../common/frame.h ../common/frame_io.h ../common/shm_chan.h ../common/shm_map.h
+$(BIN): $(SRCS)
+	$(CC) $(TARGET) $(CFLAGS) -o $@ monitor.c ../common/shm_map_qnx.c $(LDFLAGS)
+
+$(SVC): $(SRCS)
 	$(CC) $(TARGET) $(CFLAGS) -o $@ monitor.c ../common/shm_map_qnx.c $(LDFLAGS)
 
 clean:
-	rm -f $(BIN)
+	rm -f $(BIN) $(SVC)

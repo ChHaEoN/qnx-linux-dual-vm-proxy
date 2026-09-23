@@ -34,6 +34,12 @@ models/
 # The 2026-09-18 service's L4T client: source is committed, its build output
 # is not (it links TensorRT/CUDA and embeds nothing of ours worth versioning).
 ipc-test/compute-client/compute_client
+# The VLM service arm's guest monitor (OD13): a qcc-built QNX binary, so never
+# committed (NCEULA). Its own name, because every ifs-*.build stages the shared
+# ipc-test/qnx-safety-monitor/qnx-safety-monitor, and rebuilding that one would
+# change what a later rebuild of ifs-udp/shm/kick embeds. *.bin does not match
+# an extensionless binary, which is why each is named here by exact path.
+ipc-test/qnx-safety-monitor/qnx-safety-monitor-svc
 
 # Secrets / credentials / cloud
 .env
