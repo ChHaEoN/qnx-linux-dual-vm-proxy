@@ -1827,6 +1827,110 @@ def test_native_server_refuses_an_unknown_transport(native_servers, name):
     assert r.returncode == 2 and "unknown transport" in r.stderr
 
 
+# ============================================================ the monitor's rules, pinned (2026-09-23)
+#
+# ADDED BEFORE the VLM service arm touches monitor.c, so that change can prove the
+# legacy path came through it unchanged. Every A6 latency figure rides on that
+# path: latency_probe's frame (class 3, conf 95, 124 us, zeros elsewhere) must
+# keep getting verdict 0, or rejected_by_monitor > 0 and the completeness gate
+# refuses the run. Until now only class 42 (reason 1) was tested, so a change to
+# any threshold or to the order of the checks would have passed CI.
+
+_RULES = [
+    # label,                        class, conf,     us, verdict, reason
+    ("the probe's frame",               3,   95,    124, 0, 0),
+    ("class 9, the top label",          9,   95,    124, 0, 0),
+    ("class 10",                       10,   95,    124, 1, 1),
+    ("conf 100",                        3,  100,    124, 0, 0),
+    ("conf 101",                        3,  101,    124, 1, 2),
+    ("conf 60, which is CONF_MIN",      3,   60,    124, 0, 0),
+    ("conf 59",                         3,   59,    124, 1, 3),
+    ("us 100000, which is INFER_US_MAX", 3,  95, 100000, 0, 0),
+    ("us 100001",                       3,   95, 100001, 1, 4),
+    ("us 0: there is no lower bound",   3,   95,      0, 0, 0),
+    # The order: the first failing check names the reason.
+    ("class before conf range",        10,  101,    124, 1, 1),
+    ("conf range before us",            3,  101, 100001, 1, 2),
+    ("us before conf-low",              3,   59, 100001, 1, 4),
+]
+
+
+@pytest.fixture(scope="module")
+def udp_monitor(native_servers):
+    import time as _t
+    port = _free_udp_port()
+    p = subprocess.Popen([str(native_servers / "monitor"), str(port), "udp"],
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    _t.sleep(0.3)
+    yield port, p
+    p.terminate()
+    p.communicate(timeout=10)
+
+
+def _claim(seq, cls, conf, us):
+    f = bytearray(_probe_mod().build_frame(seq))
+    f[16 + 0] = cls
+    f[16 + 1] = conf
+    f[16 + 2:16 + 6] = us.to_bytes(4, "little")
+    return bytes(f)
+
+
+@pytest.mark.parametrize("label,cls,conf,us,verdict,reason", _RULES, ids=[r[0] for r in _RULES])
+def test_monitor_rules_are_pinned_at_every_boundary(udp_monitor, label, cls, conf, us, verdict, reason):
+    port, _ = udp_monitor
+    frame = _claim(100 + _RULES.index((label, cls, conf, us, verdict, reason)), cls, conf, us)
+    got = _exchange(port, frame)
+    assert got is not None and len(got) == 64 and got[:8] == frame[:8], label
+    assert (got[16 + 6], got[16 + 7]) == (verdict, reason), \
+        "%s: verdict %d reason %d, want %d/%d" % (label, got[16 + 6], got[16 + 7], verdict, reason)
+
+
+def test_monitor_echoes_every_byte_it_does_not_judge(udp_monitor):
+    # A legacy claim with payload[24] == 0 -- the byte the VLM arm will use as a
+    # claim kind, 0 meaning exactly this path -- and a pattern everywhere the
+    # monitor does not write. Only payload[6] and [7] may change. measurement-
+    # design section 3.3 will deliberately write [8..23] one day; when it does,
+    # this test must change with it, visibly.
+    port, _ = udp_monitor
+    f = bytearray(_claim(200, 3, 95, 124))
+    for i in range(8, 48):
+        f[16 + i] = (0xA0 + i) & 0xFF
+    f[16 + 24] = 0
+    f = bytes(f)
+    got = _exchange(port, f)
+    assert got is not None and got[16 + 6] == 0 and got[16 + 7] == 0
+    want = bytearray(f)
+    want[16 + 6] = 0
+    want[16 + 7] = 0
+    assert got == bytes(want), "only the verdict and reason bytes may differ"
+
+
+def test_monitor_banners_the_harnesses_grep_are_pinned(native_servers, tmp_path):
+    # run-ladder.sh:298 greps ':<port>/udp' in the UDP monitor's log, and :305
+    # greps 'serving shm on file <file>,' in the host shm monitor's. A reworded
+    # banner fails those runs at preflight, on the board, not here.
+    import time as _t
+    port = _free_udp_port()
+    p = subprocess.Popen([str(native_servers / "monitor"), str(port), "udp"],
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    _t.sleep(0.3)
+    p.terminate()
+    out, _ = p.communicate(timeout=10)
+    assert (":%d/udp" % port) in out.decode(), out
+    f = _shm_file(tmp_path)
+    s = _shm_serve(native_servers, f)
+    _t.sleep(0.3)
+    s.terminate()
+    out, err = s.communicate(timeout=10)
+    assert ("serving shm on file %s," % f) in out.decode(), (out, err)
+    # The shm-kick banner needs an ivshmem server to print; pin the words that
+    # run-ladder.sh:311, run-shift-isolation.sh:131 and remote-ladder.sh:120 grep
+    # in the source instead.
+    src = open(MONITOR_C, encoding="utf-8").read()
+    assert "safety monitor serving shm-kick on %s (" in src
+    assert "safety monitor serving shm on %s (" in src
+
+
 # ============================================================ the shm transport (OD12, 2026-09-22)
 #
 # shm_chan.h's slot: magic @0, version @4, req_seq @64, request @128, rsp_seq @192,
