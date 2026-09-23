@@ -664,6 +664,9 @@ m_probe() {         # $1 out-dir  $2 tag  $3 host  $4 port  [$5 prefix command] 
 	# Passed only when set, so every existing caller's probe command is unchanged.
 	local claim=()
 	[ -n "${PROBE_CLAIM:-}" ] && claim=(--claim "$PROBE_CLAIM")
+	# OD15 (2026-09-23): PROBE_STAMPS=1 reads a stamping monitor's t_in/t_out.
+	# Passed only when set, as PROBE_CLAIM is.
+	[ "${PROBE_STAMPS:-0}" = 1 ] && claim+=(--stamps)
 	$pre taskset -c "$CORE_PROBE" python3 "$PROBE" "${dest[@]}" \
 		--n "$N" --warmup "$WARMUP" --interval-ms "$INTERVAL_MS" --timeout-s "$PROBE_TIMEOUT_S" --proto "$proto" \
 		"${claim[@]}" "${stall[@]}" --tag "$tag" --out "$out/lat-$tag.json" >> "$out/probe.log" 2>&1
@@ -726,7 +729,7 @@ m_require_complete() {  # $1 = out dir, then arm tags
 	[ -n "${CORE_PROBE:-}" ] || die "m_require_complete needs CORE_PROBE to check the probe's affinity"
 	MP_CORE="$CORE_PROBE" MP_FIFO="${FIFO_ARMS:-}" MP_STALL="${STALL_POLICY:-refuse}" MP_UDP="${UDP_ARMS:-}" \
 	MP_SHM="${SHM_ARMS:-}" MP_KICK="${KICK_ARMS:-}" MP_DB="${DB_ARMS:-}" MP_ECHO="${ECHO_ARMS:-}" \
-	MP_KVM="${KVM_STATS:-0}" MP_VLM="${VLM_ARMS:-}" \
+	MP_KVM="${KVM_STATS:-0}" MP_VLM="${VLM_ARMS:-}" MP_STAMP="${STAMP_ARMS:-}" \
 	MP_TIMEOUT="$PROBE_TIMEOUT_S" \
 	python3 - "$out" "$K" "$N" "$WARMUP" "$@" <<'PY' || die "the run is incomplete or unclean -- do not publish a median from it"
 import json, os, sys
@@ -739,6 +742,7 @@ kick_arms = set(os.environ.get("MP_KICK", "").split())
 db_arms = set(os.environ.get("MP_DB", "").split())
 echo_arms = set(os.environ.get("MP_ECHO", "").split())
 vlm_arms = set(os.environ.get("MP_VLM", "").split())
+stamp_arms = set(os.environ.get("MP_STAMP", "").split())
 want_kvm = os.environ.get("MP_KVM") == "1"
 record_stalls = os.environ.get("MP_STALL") == "record"
 timeout_s = float(os.environ["MP_TIMEOUT"])
@@ -773,6 +777,17 @@ def claim_problems(tag, a, s):
     if got != want:
         return ["%s: claim=%r, expected %r" % (tag, got, want)]
     return []
+def stamp_problems(tag, a, s):
+    """ADDED 2026-09-23 (OD15): each file says whether its replies were stamped.
+    An arm in STAMP_ARMS must say so; every other arm must say not, or say
+    nothing, which is what every file written before the probe recorded it
+    means. The probe already refuses a reply of the wrong kind; this catches
+    an arm run without --stamps at all -- claim_problems' argument, again."""
+    got = bool(s.get("stamps", False))
+    want = a in stamp_arms
+    if got != want:
+        return ["%s: stamps=%r, expected %r" % (tag, got, want)]
+    return []
 def sched_problems(tag, a, s):
     """The probe's own report of how it ran, from a result or a stall record."""
     if a in fifo_arms:
@@ -806,6 +821,7 @@ for a in arms:
             problems.extend(sched_problems(tag, a, st))
             problems.extend(proto_problems(tag, a, st))
             problems.extend(claim_problems(tag, a, st))
+            problems.extend(stamp_problems(tag, a, st))
             rp = os.path.join(out, "recovery-%s.json" % tag)
             try:
                 rec = json.load(open(rp))
@@ -830,6 +846,7 @@ for a in arms:
         problems.extend(sched_problems(tag, a, s))
         problems.extend(proto_problems(tag, a, s))
         problems.extend(claim_problems(tag, a, s))
+        problems.extend(stamp_problems(tag, a, s))
         if a in kick_arms or a in db_arms or a in echo_arms:
             # ADDED 2026-09-22 (OD12): a notified arm measured what it claims only if
             # every exchange ended on exactly one notification and nothing else woke

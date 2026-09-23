@@ -549,6 +549,29 @@ the semantics they rest on, which were stated to the owner and not separately de
   between arms, so no MISS line prints inside another arm's window. Every figure stays on
   `a6-results-unpublished` (OD13).
 
+**2026-09-23 (owner decision, OD15): guest-side timestamps (measurement-design §3.3), first step.** The
+monitor stamps its own `CLOCK_MONOTONIC` twice per frame into the bytes OD13 kept reserved, so every sample's
+round trip splits into the time spent inside the monitor and everything else. It needs no clock synchronisation,
+because both stamps come from one clock. Four decisions, each taken by the owner from a stated recommendation:
+
+- **TCP first.** The plain TCP path (the ladder's D-guest rung) and the same monitor built natively on L4T as
+  the control. UDP and shared memory follow only if the TCP split is worth having, so that each transport's
+  change stays separable.
+- **A runtime word on its own image.** `monitor PORT stamp` writes `t_in` (just after the frame is read) into
+  `payload[8..15]` and `t_out` (just before the reply is written) into `payload[16..23]`, both little-endian ns.
+  A sentinel is never stamped. This is the first mode that writes a reply byte other than `payload[6]` and `[7]`;
+  every other mode still writes only those two. The unstamped TCP path now pays two predictable, not-taken
+  tests of `stamp` per frame (at -O2 nothing unswitches the loop). **The run does not measure that:** every
+  arm, `D-plain` included, runs the OD15 binary, so the tests cancel in each paired difference. The review
+  before the first recorded run found this sentence had claimed otherwise. The image is `ifs-stamp.bin`, with its own build file,
+  its own monitor binary name and a stamp instance on TCP 7103 beside the plain 7100.
+- **The instrument's own cost first, then the split.** Stamped against unstamped, paired within round, k = 12,
+  n = 1000, on the guest and on the native control. Then the per-sample split (monitor time, and the rest of the
+  round trip) at every percentile.
+- **The Orin with `c7` disabled, then AWS `a1.metal`.** Disabling c7 keeps the Orin's tail from being the known
+  c7 slow mode (2026-09-21). a1.metal (committed tooling; the owner launches) makes it two hosts, as the
+  liveness work had. Every figure stays on `a6-results-unpublished` (OD13).
+
 Measurements taken before the freeze become architecture-version history. They are kept, labelled with the architecture they ran on, and not chased.
 
 This section carries no figures. Public figures stay where the inventory below points. Figures from M3 and from dry run 7b stay on the local branch `m3-results-unpublished` (§9).

@@ -22,13 +22,20 @@
 #                without Tegra tools the cost run's GPU checks and window
 #                sampler are recorded as not applicable (see its header).
 #
-# capture accepts either kind of session, but only a FINISHED one.
+# A STAMP SESSION (OD15, 2026-09-23), with ifs-stamp.bin as the image:
+#
+#   launch-stamp  boot the guest plainly and check :7100 (plain) and :7103
+#                 (stamping) both came up
+#   stamp         run-stamp.sh: plain against stamped, on the guest and on the
+#                 native control, K rounds (a multiple of 4)
+#
+# capture accepts any of these sessions, but only a FINISHED one.
 #
 # W (default ~/a1) holds repo.tar, inputs.env, remote-ladder.sh, capture.py and
 # img/<ifs> + img/disk-qemu.gz. Nothing under W leaves the host except pub.tgz,
 # and everything in pub.tgz went through redact-aws.sh or capture.py's check here.
 set -euo pipefail
-PHASE="${1:?phase: setup|quiesce|launch|ladder|launch-live|liveness|capture|stop}"
+PHASE="${1:?phase: setup|quiesce|launch|ladder|launch-live|liveness|launch-stamp|stamp|capture|stop}"
 W="${W:-$HOME/a1}"
 R="$W/repo/orin-native/gpu-concurrency"
 REC="$W/rec"
@@ -180,13 +187,39 @@ liveness)
 	{ date -u +%FT%TZ; cat /proc/loadavg; cat /proc/interrupts; } > "$REC/liveness/host-after.txt"
 	tail -8 "$REC/liveness/cost.log"
 	;;
+launch-stamp)
+	inputs
+	cd "$R"
+	mkdir -p "$REC/stamp"
+	C="$REC/stamp/guest-console.log"
+	IFS_BIN="$W/img/$IFS_NAME" DISK="$W/img/disk-qemu" LOG="$C" bash launch-qnx-kvm-bridged.sh \
+		> "$REC/stamp/guest-launch.log" 2>&1 || { cat "$REC/stamp/guest-launch.log"; die "launch failed"; }
+	cat "$REC/stamp/guest-launch.log"
+	B='stamping replies on :7103: t_in payload[8..15]'
+	for _ in $(seq 1 30); do tr -d '\0\r' < "$C" | grep -aqF "$B" && break; sleep 1; done
+	tr -d '\0\r' < "$C" | grep -aqF "$B" \
+		|| { tail -20 "$C"; die "no stamping monitor on :7103 -- is the image ifs-stamp?"; }
+	say "plain monitor on :7100 and stamping monitor on :7103 up"
+	;;
+stamp)
+	case "${K:-12}" in *[!0-9]*|'') die "K='${K:-}' is not a round count" ;; esac
+	C="$REC/stamp/guest-console.log"
+	[ -r "$C" ] || die "no $C -- run launch-stamp first"
+	[ -r "$R/run-stamp.sh" ] || die "the repo tarball lacks run-stamp.sh"
+	{ date -u +%FT%TZ; cat /proc/loadavg; cat /proc/interrupts; } > "$REC/stamp/host-before.txt"
+	CONSOLE="$C" OUT="$REC/stamp/raw" MON="$W/stamp-monitor-native" K="${K:-12}" \
+		bash "$R/run-stamp.sh" > "$REC/stamp/run.log" 2>&1 \
+		|| { tail -30 "$REC/stamp/run.log"; die "run-stamp.sh failed"; }
+	{ date -u +%FT%TZ; cat /proc/loadavg; cat /proc/interrupts; } > "$REC/stamp/host-after.txt"
+	tail -22 "$REC/stamp/run.log"
+	;;
 capture)
 	# The session must have FINISHED: host-after.txt is written only after the
-	# ladder, or the liveness phase, returned 0. Without it the run was
-	# interrupted, or refused as incomplete, and a partial record must not be
-	# packed and fetched as a whole one.
-	[ -e "$REC/ladder/host-after.txt" ] || [ -e "$REC/liveness/host-after.txt" ] \
-		|| die "no host-after.txt under $REC/ladder or $REC/liveness -- the session did not finish; there is no complete record to capture"
+	# ladder, the liveness phase or the stamp phase returned 0. Without it the
+	# run was interrupted, or refused as incomplete, and a partial record must
+	# not be packed and fetched as a whole one.
+	[ -e "$REC/ladder/host-after.txt" ] || [ -e "$REC/liveness/host-after.txt" ] || [ -e "$REC/stamp/host-after.txt" ] \
+		|| die "no host-after.txt under $REC/ladder, $REC/liveness or $REC/stamp -- the session did not finish; there is no complete record to capture"
 	RED="$R/redact-aws.sh"
 	bash "$RED" selftest >/dev/null || die "redactor selftest failed"
 	rm -rf "$W/pub" "$W/pub.sha256"; mkdir -p "$W/pub"

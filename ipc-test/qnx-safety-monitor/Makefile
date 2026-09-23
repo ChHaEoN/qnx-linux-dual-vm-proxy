@@ -30,10 +30,15 @@ SVC := qnx-safety-monitor-svc
 # ifs-svc.bin embeds -- that image is pinned by its sha256, not by this target.
 LIVE := qnx-safety-monitor-live
 
-.PHONY: all svc live clean
+# `make stamp` builds guest-side timestamps' monitor (OD15, 2026-09-23) under its
+# own name, for the same reason; ifs-stamp.build stages it.
+STAMP := qnx-safety-monitor-stamp
+
+.PHONY: all svc live stamp clean
 all: $(BIN)
 svc: $(SVC)
 live: $(LIVE)
+stamp: $(STAMP)
 
 $(BIN): $(SRCS)
 	$(CC) $(TARGET) $(CFLAGS) -o $@ monitor.c ../common/shm_map_qnx.c $(LDFLAGS)
@@ -44,5 +49,8 @@ $(SVC): $(SRCS)
 $(LIVE): $(SRCS)
 	$(CC) $(TARGET) $(CFLAGS) -o $@ monitor.c ../common/shm_map_qnx.c $(LDFLAGS)
 
+$(STAMP): $(SRCS)
+	$(CC) $(TARGET) $(CFLAGS) -o $@ monitor.c ../common/shm_map_qnx.c $(LDFLAGS)
+
 clean:
-	rm -f $(BIN) $(SVC) $(LIVE)
+	rm -f $(BIN) $(SVC) $(LIVE) $(STAMP)

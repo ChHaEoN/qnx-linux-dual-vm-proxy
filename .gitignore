@@ -42,6 +42,8 @@ ipc-test/compute-client/compute_client
 ipc-test/qnx-safety-monitor/qnx-safety-monitor-svc
 # The liveness deadline's guest monitor (OD14), for the same reasons.
 ipc-test/qnx-safety-monitor/qnx-safety-monitor-live
+# Guest-side timestamps' guest monitor (OD15), for the same reasons.
+ipc-test/qnx-safety-monitor/qnx-safety-monitor-stamp
 
 # Secrets / credentials / cloud
 .env

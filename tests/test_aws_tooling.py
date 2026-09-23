@@ -558,10 +558,11 @@ def test_run_accepts_the_liveness_phases(rig):
     _launched(state)
     (state / "armed").touch()
     (state / "ip").write_text("203.0.113.9\n")
-    for phase in ("launch-live", "liveness"):
+    for phase in ("launch-live", "liveness", "launch-stamp", "stamp"):
         run("run", phase, K="4")
     log = (stub / "ssh.log").read_text()
-    assert "remote-ladder.sh launch-live" in log and "remote-ladder.sh liveness" in log, log
+    for phase in ("launch-live", "liveness", "launch-stamp", "stamp"):
+        assert "remote-ladder.sh %s" % phase in log, (phase, log)
     assert "K=4" in log, log
 
 
@@ -571,18 +572,22 @@ def _remote_env(tmp_path, phase, **env):
 
 
 @needs_bash
-@pytest.mark.parametrize("env,msg", [({}, "run launch-live first"), ({"K": "4;reboot"}, "not a round count")])
-def test_remote_liveness_refuses_without_a_guest_or_with_a_bad_k(tmp_path, env, msg):
-    r = _remote_env(tmp_path, "liveness", **env)
+@pytest.mark.parametrize("phase,env,msg", [
+    ("liveness", {}, "run launch-live first"), ("liveness", {"K": "4;reboot"}, "not a round count"),
+    ("stamp", {}, "run launch-stamp first"), ("stamp", {"K": "4;reboot"}, "not a round count"),
+])
+def test_remote_session_phases_refuse_without_a_guest_or_with_a_bad_k(tmp_path, phase, env, msg):
+    r = _remote_env(tmp_path, phase, **env)
     assert r.returncode != 0 and msg in r.stdout + r.stderr, r.stdout + r.stderr
 
 
 @needs_bash
-def test_remote_capture_takes_a_finished_liveness_session_and_refuses_an_unfinished_one(tmp_path):
-    (tmp_path / "rec" / "liveness").mkdir(parents=True)
+@pytest.mark.parametrize("session", ["liveness", "stamp"])
+def test_remote_capture_takes_a_finished_session_and_refuses_an_unfinished_one(tmp_path, session):
+    (tmp_path / "rec" / session).mkdir(parents=True)
     r = _remote_env(tmp_path, "capture")
     assert r.returncode != 0 and "the session did not finish" in r.stdout + r.stderr, r.stdout + r.stderr
-    (tmp_path / "rec" / "liveness" / "host-after.txt").write_text("done\n")
+    (tmp_path / "rec" / session / "host-after.txt").write_text("done\n")
     r = _remote_env(tmp_path, "capture")
     # Past the gate: it then fails for want of the redactor, which is not the gate's message.
     assert r.returncode != 0 and "did not finish" not in r.stdout + r.stderr, r.stdout + r.stderr

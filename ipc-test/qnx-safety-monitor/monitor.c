@@ -22,13 +22,15 @@
  *   payload[2..5]   : uint32 inference_us (Compute side's own model time)
  *   payload[6]      : uint8  verdict      <- WRITTEN BY THIS PROGRAM
  *   payload[7]      : uint8  reason       <- WRITTEN BY THIS PROGRAM
- *   payload[8..23]  : reserved for measurement-design section 3.3, echoed
+ *   payload[8..23]  : measurement-design section 3.3: echoed, or in the stamp
+ *                     mode written with t_in and t_out (see OD15 below)
  *   payload[24]     : uint8  claim kind   (0 mnist, 1 vlm; see CLAIM KINDS)
  *   payload[25..47] : kind-specific, echoed unchanged
  *
  * The initiator's seq and timestamp are never touched, exactly as in
  * qnx-server-net: only the initiator interprets a clock, so there is no
- * cross-OS clock to reconcile. Nothing but payload[6] and [7] is ever written.
+ * cross-OS clock to reconcile. Nothing but payload[6] and [7] is ever written --
+ * except by the stamp mode (OD15, below), which also writes payload[8..23].
  *
  * CLAIM KINDS (owner decision OD13, 2026-09-23)
  *
@@ -111,6 +113,21 @@
  *
  * A function of its own, so that no mode above changes and each change's cost
  * stays separable (OD13). The judgement is judge_frame() again.
+ *
+ * AND GUEST-SIDE TIMESTAMPS (owner decision OD15, 2026-09-23)
+ *
+ *   monitor PORT stamp    the TCP mode, writing into every claim's reply
+ *                            payload[8..15]   t_in,  just after the frame is read
+ *                            payload[16..23]  t_out, just before it is written
+ *                         both uint64 LE ns from CLOCK_MONOTONIC (measurement-
+ *                         design 3.3). t_out - t_in is the monitor's own time
+ *                         on its own clock, so no clock is synchronised with
+ *                         anyone's. A sentinel is echoed untouched, unstamped.
+ *
+ * The one mode that writes a reply byte other than payload[6] and [7]; every
+ * other mode still writes only those. The plain TCP mode shares its loop and
+ * pays two not-taken tests of `stamp` per frame for it (unmeasured: the OD15
+ * run's plain arms run this binary too).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -140,6 +157,8 @@
 #define P_VERDICT    6u
 #define P_REASON     7u
 #define P_KIND       24u
+#define P_T_IN        8u   /* stamp mode (OD15): uint64 ns, just after the read  */
+#define P_T_OUT      16u   /* stamp mode (OD15): uint64 ns, just before the write */
 
 /* kind 1 (vlm) fields, payload[25..47] */
 #define P_VLM_MODEL        25u
@@ -192,6 +211,8 @@
 #define VLM_INFER_US_MAX 1000000u
 
 static volatile sig_atomic_t g_stop = 0;
+
+static uint64_t now_ns(void);   /* CLOCK_MONOTONIC; defined with the shm transport */
 
 static void on_signal(int sig)
 {
@@ -348,16 +369,24 @@ static uint8_t judge_frame(uint8_t *buf)
 	return verdict;
 }
 
-static int serve_one_client(int cfd)
+/* stamp (OD15): write t_in and t_out into payload[8..23] of every claim's reply
+ * -- the only case in which a reply byte other than [6] and [7] is written.
+ * With stamp == 0 this is the original TCP loop, plus two tests per frame. */
+static int serve_one_client(int cfd, int stamp)
 {
 	uint8_t buf[FRAME_TOTAL_BYTES];
 	unsigned long long seen = 0, accepted = 0, rejected = 0;
 
 	for (;;) {
+		uint64_t t_in = 0;
+
 		if (g_stop) {
 			break;
 		}
 		int const rc = frameio_read_frame(cfd, buf);
+		if (stamp) {
+			t_in = now_ns();
+		}
 		if (rc > 0) {
 			break;      /* clean EOF: the client finished and hung up */
 		}
@@ -389,6 +418,10 @@ static int serve_one_client(int cfd)
 			rejected++;
 		}
 
+		if (stamp) {
+			frame_put_u64(&buf[FRAME_HEADER_BYTES + P_T_IN], t_in);
+			frame_put_u64(&buf[FRAME_HEADER_BYTES + P_T_OUT], now_ns());
+		}
 		if (frameio_write_frame(cfd, buf) != 0) {
 			break;
 		}
@@ -1068,7 +1101,7 @@ int main(int argc, char **argv)
 	int const port = (argc > 1) ? atoi(argv[1]) : DEFAULT_PORT;
 	struct sigaction sa;
 	struct sockaddr_in addr;
-	int lfd, opt = 1;
+	int lfd, opt = 1, stamp = 0;
 
 	memset(&sa, 0, sizeof(sa));
 	sa.sa_handler = on_signal;
@@ -1135,11 +1168,14 @@ int main(int argc, char **argv)
 			}
 			return serve_svc(port, (unsigned)ms);
 		}
-		/* Refuse an unknown transport word rather than guess. (Only the
-		 * word is checked: the port is still atoi(argv[1]), as before.) */
-		fprintf(stderr, "monitor: unknown transport '%s' (only 'udp', or none for tcp; shm is 'monitor shm SPEC')\n",
-		        argv[2]);
-		return 2;
+		if (strcmp(argv[2], "stamp") != 0 || argc != 3) {
+			/* Refuse an unknown transport word rather than guess. (Only the
+			 * word is checked: the port is still atoi(argv[1]), as before.) */
+			fprintf(stderr, "monitor: unknown transport '%s' (only 'udp', or none for tcp; shm is 'monitor shm SPEC')\n",
+			        argv[2]);
+			return 2;
+		}
+		stamp = 1;      /* OD15: the TCP mode below, stamping every claim's reply */
 	}
 
 	lfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -1167,6 +1203,11 @@ int main(int argc, char **argv)
 
 	printf("monitor: safety monitor listening on :%d (frame=%u bytes, conf_min=%u%%)\n",
 	       port, (unsigned)FRAME_TOTAL_BYTES, (unsigned)CONF_MIN);
+	if (stamp) {
+		/* A line of its own: the banner above is grepped word for word. */
+		printf("monitor: stamping replies on :%d: t_in payload[8..15], t_out payload[16..23], CLOCK_MONOTONIC ns\n",
+		       port);
+	}
 	fflush(stdout);
 
 	while (!g_stop) {
@@ -1179,7 +1220,7 @@ int main(int argc, char **argv)
 			break;
 		}
 		setsockopt(cfd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt));
-		serve_one_client(cfd);
+		serve_one_client(cfd, stamp);
 		close(cfd);
 	}
 

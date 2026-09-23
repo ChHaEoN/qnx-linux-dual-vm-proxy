@@ -5,7 +5,7 @@
 #   drive-metal.sh launch        run-instances, self-terminating; root volume read back
 #   drive-metal.sh wait          until provisioned; PROVES the shutdown safety net is armed
 #   drive-metal.sh upload        repo tarball, remote-ladder.sh, capture.py, image, gzipped disk
-#   drive-metal.sh run PHASE     remote-ladder.sh PHASE (setup|quiesce|launch|ladder|launch-live|liveness|capture)
+#   drive-metal.sh run PHASE     remote-ladder.sh PHASE (setup|quiesce|launch|ladder|launch-live|liveness|launch-stamp|stamp|capture)
 #   drive-metal.sh fetch         pub.tgz back, hash-verified, then leak-scanned
 #   drive-metal.sh terminate     terminate-instances, confirmed
 #   drive-metal.sh verify        nothing running|pending, ours shutting-down|terminated, no
@@ -44,7 +44,7 @@ IP_WAIT_S="${METAL_IP_WAIT_S:-300}"
 PROV_WAIT_S="${METAL_PROV_WAIT_S:-900}"
 CONFIRM_TRIES="${METAL_CONFIRM_TRIES:-6}"
 READBACK_TRIES="${METAL_READBACK_TRIES:-30}"
-PHASES="setup quiesce launch ladder launch-live liveness capture"
+PHASES="setup quiesce launch ladder launch-live liveness launch-stamp stamp capture"
 
 # Local paths in POSIX form: a pasted C:\... path would make scp and tar read "C:" as
 # a host, and sha256sum escape the backslashes in its output.

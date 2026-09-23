@@ -5,7 +5,7 @@ distribution rather than a liveness yes/no.
   usage: latency_probe.py --host H [--port 7100] [--proto tcp|udp] [--n 2000]
                           [--warmup 200] [--interval-ms 2] [--tag NAME] [--out FILE]
                           [--timeout-s 10] [--stall-out FILE] [--await-recovery S]
-                          [--claim mnist|vlm]
+                          [--claim mnist|vlm] [--stamps]
          latency_probe.py --proto shm --shm FILE --shm-lib LIB [the same options]
          latency_probe.py --proto shmkick --shm FILE@OFF --kick SOCK --shm-lib LIB [...]
          latency_probe.py --proto shmdb --shm FILE@OFF --kick SOCK --ivshm SOCK --shm-lib LIB [...]
@@ -71,6 +71,7 @@ FRAME_TOTAL = 64
 FRAME_HEADER = 16
 PAYLOAD = 48
 P_CLASS, P_CONF, P_INFER_US, P_VERDICT, P_REASON = 0, 1, 2, 6, 7
+P_T_IN, P_T_OUT = 8, 16      # OD15: a stamping monitor's t_in/t_out, uint64 LE ns
 
 
 def build_frame(seq):
@@ -196,7 +197,7 @@ def _abort(a, why, at, bad, rejected, kind, before):
     if a.stall_out:
         rec = {"stall": {"tag": a.tag, "proto": a.proto, "kind": kind, "at_sample": at, "of": a.warmup + a.n,
                          "warmup": a.warmup, "timeout_s": a.timeout_s, "why": why,
-                         "bad": bad, "rejected_by_monitor": rejected, "claim": a.claim,
+                         "bad": bad, "rejected_by_monitor": rejected, "claim": a.claim, "stamps": a.stamps,
                          "utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())},
                "samples_before_ms": before}
         rec["stall"].update(own_scheduling())
@@ -482,6 +483,10 @@ def main():
                          "used (the default, unchanged), or OD13's pre-built vlm claim")
     ap.add_argument("--await-recovery", type=float, default=0.0,
                     help="instead of sampling: seconds to wait for the guest to answer again")
+    ap.add_argument("--stamps", action="store_true",
+                    help="OD15: the monitor stamps t_in/t_out into payload[8..23] (`monitor PORT "
+                         "stamp`); record its own time per sample, and refuse an unstamped reply. "
+                         "Without it, a stamped reply is refused: the arm reached the wrong instance")
     a = ap.parse_args()
     if a.proto == "shm":
         if not (a.shm and a.shm_lib):
@@ -581,6 +586,7 @@ def main():
 
     rtts = []
     in_arrival = []     # the timed samples in arrival order, for a stall record
+    servers = []        # --stamps: the monitor's own time per timed sample, us, arrival order
     bad = 0
     rejected = 0
     seq = 0
@@ -657,9 +663,21 @@ def main():
         if a.proto != "kickecho" and got[FRAME_HEADER + P_VERDICT] != 0:
             rejected += 1          # monitor disagreed: a fault, not a timing sample
             continue
+        # OD15: a stamping monitor writes t_in/t_out into payload[8..23]; every
+        # other one echoes the zeros this probe sends there. Either way round, a
+        # mismatch means the arm reached the wrong instance.
+        t_in, t_out = struct.unpack_from("<QQ", got, FRAME_HEADER + P_T_IN)
+        if a.stamps and (t_in == 0 or t_out < t_in):
+            return _broken(a, "sample %d: the reply is not stamped (t_in=%d t_out=%d) -- not a "
+                           "`monitor PORT stamp` instance" % (i, t_in, t_out), i, bad + 1, rejected)
+        if not a.stamps and (t_in or t_out):
+            return _broken(a, "sample %d: the reply is stamped, and --stamps was not given -- a "
+                           "stamping instance" % i, i, bad + 1, rejected)
         if i >= a.warmup:
             rtts.append((t1 - t0) * 1000.0)
             in_arrival.append(rtts[-1])
+            if a.stamps:
+                servers.append((t_out - t_in) / 1000.0)
         if gap > 0:
             time.sleep(gap)
 
@@ -697,6 +715,15 @@ def main():
         "max_ms": rtts[-1],
         "mean_ms": sum(rtts) / len(rtts),
     }
+    res["stamps"] = a.stamps
+    if a.stamps:
+        # The split, per sample: the monitor's own time (its clock) and the rest
+        # of the round trip (the probe's RTT less it). No clock is synchronised:
+        # each interval is taken on one clock only.
+        other = [r * 1000.0 - s for r, s in zip(in_order, servers)]
+        for key, vals in (("server_us", sorted(servers)), ("other_us", sorted(other))):
+            res[key] = {"min": vals[0], "p50": percentile(vals, 50), "p90": percentile(vals, 90),
+                        "p99": percentile(vals, 99), "p999": percentile(vals, 99.9), "max": vals[-1]}
     if shm:
         res["shm_region"] = chan.what
     if notified:
@@ -712,9 +739,15 @@ def main():
           % (res["tag"], res["n"], res["min_ms"], res["p50_ms"], res["p90_ms"],
              res["p99_ms"], res["p999_ms"], res["max_ms"], bad, rejected))
 
+    if a.stamps:
+        print("  monitor's own time p50=%.2f us p99=%.2f us; the rest p50=%.2f us p99=%.2f us"
+              % (res["server_us"]["p50"], res["server_us"]["p99"], res["other_us"]["p50"], res["other_us"]["p99"]))
     if a.out:
+        body = {"summary": res, "samples_ms": rtts, "samples_in_order": in_order}
+        if a.stamps:
+            body["server_us_in_order"] = servers
         with open(a.out, "w") as f:
-            json.dump({"summary": res, "samples_ms": rtts, "samples_in_order": in_order}, f)
+            json.dump(body, f)
         print("  wrote %s (%d samples)" % (a.out, len(rtts)))
     return 0
 

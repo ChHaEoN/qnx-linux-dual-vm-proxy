@@ -2738,6 +2738,217 @@ def test_camera_check_does_not_judge_a_gap_at_the_deadline(tmp_path):
         assert bad == [] and any("not judged" in r for r in rows), (drop, rows, bad)
 
 
+# ============================================================ guest-side timestamps (OD15, 2026-09-23)
+#
+# `monitor PORT stamp`: the TCP mode, writing t_in (just after the read) into
+# payload[8..15] and t_out (just before the write) into payload[16..23], uint64
+# LE ns from CLOCK_MONOTONIC. The one mode that writes a reply byte other than
+# payload[6] and [7]; the plain TCP mode shares its loop and must stay exact.
+
+def _tcp_exchange(port, frames):
+    import socket
+    with socket.create_connection(("127.0.0.1", port), timeout=5) as s:
+        s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        out = []
+        for f in frames:
+            s.sendall(f)
+            out.append(_recv_all(s, 64))
+        return out
+
+
+def _tcp_monitor(native_servers, *words):
+    port = _free_tcp_port()
+    p = subprocess.Popen([str(native_servers / "monitor"), str(port)] + list(words),
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        try:
+            _tcp_exchange(port, [])
+            break
+        except OSError:
+            time.sleep(0.05)
+    return port, p
+
+
+def _patterned(seq):
+    """The pinned mnist claim with payload[8..47] filled with a pattern: the
+    rules never read [8..23] or, for kind 0, [25..47], so every one of those
+    bytes must come back exactly as sent -- unless the stamp mode wrote it."""
+    f = bytearray(_probe_mod().build_frame(seq))
+    for i in range(16 + 8, 64):
+        f[i] = (i * 7 + 1) & 0xFF
+    f[16 + 24] = 0                     # keep it kind 0 (mnist)
+    f[16 + 6] = f[16 + 7] = 0xEE       # poisoned: an ACCEPT's 00 00 must be written
+    return bytes(f)
+
+
+def test_the_plain_tcp_mode_still_writes_only_the_verdict(native_servers):
+    port, p = _tcp_monitor(native_servers)
+    try:
+        req = _patterned(1)
+        got = _tcp_exchange(port, [req])[0]
+    finally:
+        p.terminate()
+        out, _ = p.communicate(timeout=10)
+    assert got[16 + 6:16 + 8] == b"\x00\x00", "the verdict must be written"
+    diff = [i for i in range(64) if got[i] != req[i]]
+    assert diff == [16 + 6, 16 + 7], "only payload[6] and [7] may differ: %s" % diff
+    assert "stamping" not in out, out
+
+
+def test_the_stamp_mode_writes_t_in_and_t_out_and_nothing_else(native_servers):
+    import struct
+    port, p = _tcp_monitor(native_servers, "stamp")
+    try:
+        reqs = [_patterned(1), _patterned(2)]
+        got = _tcp_exchange(port, reqs)
+        k = bytearray(_patterned(0))
+        k[0:8] = b"\xff" * 8           # a sentinel: echoed untouched, never stamped
+        echo = _tcp_exchange(port, [bytes(k)])[0]
+    finally:
+        p.terminate()
+        out, _ = p.communicate(timeout=10)
+    stamps = []
+    for req, rep in zip(reqs, got):
+        diff = [i for i in range(64) if rep[i] != req[i]]
+        assert set(diff) <= {16 + 6, 16 + 7} | set(range(16 + 8, 16 + 24)), diff
+        assert rep[16 + 6:16 + 8] == b"\x00\x00"
+        t_in, t_out = struct.unpack_from("<QQ", rep, 16 + 8)
+        assert 0 < t_in <= t_out and t_out - t_in < 1_000_000_000, (t_in, t_out)
+        stamps.append((t_in, t_out))
+    assert stamps[0][1] <= stamps[1][0], "one monotonic clock: frame 2 is read after frame 1 is answered"
+    assert echo == bytes(k), "a sentinel is echoed byte for byte and never stamped"
+    assert ("monitor: stamping replies on :%d: t_in payload[8..15], t_out payload[16..23], "
+            "CLOCK_MONOTONIC ns" % port) in out, out
+    assert ("monitor: safety monitor listening on :%d (frame=64 bytes, conf_min=60%%)" % port) in out, \
+        "the plain banner stays word for word: the harnesses grep it"
+
+
+@pytest.mark.parametrize("words", [["stampx"], ["stamp", "extra"], ["Stamp"]])
+def test_the_stamp_word_is_exact(native_servers, words):
+    r = subprocess.run([str(native_servers / "monitor"), str(_free_tcp_port())] + words,
+                       capture_output=True, text=True, timeout=10)
+    assert r.returncode == 2 and "unknown transport" in r.stderr, r
+
+
+def _stamp_probe(port, tmp_path, *extra):
+    out = tmp_path / "lat.json"
+    r = subprocess.run(_probe_cmd(port, "--n", "60", "--warmup", "5", "--interval-ms", "0",
+                                  "--tag", "s_r1", "--out", str(out), *extra),
+                       capture_output=True, text=True, timeout=60)
+    return r, out
+
+
+def test_the_probe_splits_the_round_trip_against_the_stamp_mode(native_servers, tmp_path):
+    port, p = _tcp_monitor(native_servers, "stamp")
+    try:
+        r, out = _stamp_probe(port, tmp_path, "--stamps")
+    finally:
+        p.terminate()
+        p.communicate(timeout=10)
+    assert r.returncode == 0, r.stdout + r.stderr
+    body = json.loads(out.read_text())
+    s = body["summary"]
+    assert s["stamps"] is True and s["n"] == 60 and s["rejected_by_monitor"] == 0
+    assert 0 < s["server_us"]["p50"] < s["server_us"]["max"] + 1e-9 and s["server_us"]["p50"] < 10_000
+    assert len(body["server_us_in_order"]) == 60
+    # The split adds up, per sample: the monitor's own time plus the rest is the RTT.
+    rtt_us = body["samples_in_order"][0] * 1000.0
+    assert s["other_us"]["min"] > 0 and body["server_us_in_order"][0] < rtt_us
+
+
+@pytest.mark.parametrize("words,flags,why", [
+    ([], ["--stamps"], "the reply is not stamped"),
+    (["stamp"], [], "the reply is stamped, and --stamps was not given"),
+])
+def test_the_probe_refuses_the_wrong_instance(native_servers, tmp_path, words, flags, why):
+    port, p = _tcp_monitor(native_servers, *words)
+    try:
+        r, out = _stamp_probe(port, tmp_path, *flags)
+    finally:
+        p.terminate()
+        p.communicate(timeout=10)
+    assert r.returncode == 5 and why in r.stdout, r.stdout + r.stderr
+    assert not out.exists()
+
+
+def test_a_plain_probe_run_records_that_it_was_not_stamped(native_servers, tmp_path):
+    port, p = _tcp_monitor(native_servers)
+    try:
+        r, out = _stamp_probe(port, tmp_path)
+    finally:
+        p.terminate()
+        p.communicate(timeout=10)
+    assert r.returncode == 0, r.stdout + r.stderr
+    s = json.loads(out.read_text())["summary"]
+    assert s["stamps"] is False and "server_us" not in s
+
+
+def _stamped(want):
+    def m(a, r, b):
+        v = want(a)
+        if v is not None:
+            b["summary"]["stamps"] = v
+        return b
+    return m
+
+
+def _complete_stamps(tmp_path, d, stamp_arms, arms=("plain", "stamp")):
+    return _run(tmp_path, 'K=12; N=1000; WARMUP=200; CORE_PROBE=4; STAMP_ARMS="%s"; m_require_complete "%s" %s; echo PASSED'
+                % (stamp_arms, _posix(d), " ".join(arms)))
+
+
+def test_stamp_gate_passes_arms_that_say_what_they_were(tmp_path):
+    d = _run_dir(tmp_path, arms=("plain", "stamp"), mutate=_stamped(lambda a: a == "stamp"))
+    r = _complete_stamps(tmp_path, d, "stamp")
+    assert "PASSED" in r.stdout, r.stderr
+
+
+@pytest.mark.parametrize("arm,labelled,message", [
+    ("stamp", False, "stamps=False, expected True"),
+    ("stamp", None, "stamps=False, expected True"),       # absent means unstamped
+    ("plain", True, "stamps=True, expected False"),
+])
+def test_stamp_gate_refuses_an_arm_labelled_the_other_way(tmp_path, arm, labelled, message):
+    def m(a, r, b):
+        v = (a == "stamp") if (a, r) != (arm, 5) else labelled
+        if v is not None:
+            b["summary"]["stamps"] = v
+        return b
+    r = _complete_stamps(tmp_path, _run_dir(tmp_path, arms=("plain", "stamp"), mutate=m), "stamp")
+    assert "PASSED" not in r.stdout and ("%s_r5: %s" % (arm, message)) in r.stderr, r.stderr
+
+
+def test_stamp_gate_checks_a_stall_record_too(tmp_path):
+    arms = ["plain", "stamp"]
+
+    def labelled(a, r, s):
+        s["stamps"] = a == "stamp"
+    d = _sched_dir(tmp_path, arms, labelled)
+    (d / "stall-stamp_r2.json").write_text(json.dumps(_stall_record("stamp_r2")))   # says nothing: unstamped
+    (d / "lat-stamp_r2.json").unlink()
+    (d / "recovery-stamp_r2.json").write_text(json.dumps({"tag": "stamp_r2", "recovered": True}))
+    r = _run(tmp_path, 'K=2; N=1000; WARMUP=200; CORE_PROBE=4; FIFO_ARMS=""; STALL_POLICY=record; '
+             'STAMP_ARMS="stamp"; m_require_complete "%s" %s; echo PASSED' % (_posix(d), " ".join(arms)))
+    assert "PASSED" not in r.stdout and "stamp_r2: stamps=False, expected True" in r.stderr, r.stderr
+
+
+def test_m_probe_passes_stamps_only_when_asked(tmp_path):
+    fake = tmp_path / "argv.py"
+    fake.write_bytes(b"import sys, json\na = sys.argv\n"
+                     b"open(a[a.index('--out') + 1], 'w').write(json.dumps({'argv': a[1:]}))\n")
+    out = tmp_path / "out"
+    out.mkdir()
+    r = _run(tmp_path, 'N=10; WARMUP=1; INTERVAL_MS=0; CORE_PROBE=0; SAMPLE_WINDOW=0; PROBE="%s"; '
+             'taskset() { shift 2; "$@"; }; m_probe "%s" a_r1 127.0.0.1 1; '
+             'PROBE_STAMPS=1 m_probe "%s" b_r1 127.0.0.1 1; m_probe "%s" c_r1 127.0.0.1 1'
+             % (_posix(fake), _posix(out), _posix(out), _posix(out)))
+    assert r.returncode == 0, r.stderr
+    argv = {t: json.loads((out / ("lat-%s_r1.json" % t)).read_text())["argv"] for t in "abc"}
+    assert "--stamps" not in argv["a"] and "--stamps" not in argv["c"], argv
+    assert "--stamps" in argv["b"], argv["b"]
+
+
 def test_the_probe_runs_clean_against_the_service_mode(native_servers, tmp_path):
     # The deadline's cost is measured with the latency probe (OD14): it must be
     # gate-clean against this mode, with not one silence inside an arm.
