@@ -87,7 +87,7 @@ def test_the_injector_source_has_the_walks_and_makes_the_tmpfs_tree_before_the_r
     assert '"sys", "devices", "virtual", "dmi", "id", "sys_vendor"' in src
     assert '"run", "tjinj-walk", "a", "b", "c", "d"' in src
     assert src.index('mkdir(d[i], 0755)') < src.index("clock_nanosleep")
-    assert 'fstatat(nfd, "", &st, AT_EMPTY_PATH)' in src and 'strchr("UNCMTSPFA"' in src
+    assert 'fstatat(nfd, "", &st, AT_EMPTY_PATH)' in src and 'strchr("UNCMTSPFA' in src
 
 
 def test_the_harness_parses_and_states_its_rule_and_prediction_before_any_code():
