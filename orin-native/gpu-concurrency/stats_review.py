@@ -2,7 +2,7 @@
 """stats_review.py -- a statistical second look at a run record (Phase 3b / A6,
 2026-09-24; suggestion 3 of the literature pass: Kalibera & Jones, ISMM 2013).
 
-  stats_review.py RECORD_DIR --pairs X:Y[,X:Y...] [--arms A,B,...] [--reps 10000]
+  stats_review.py RECORD_DIR --pairs X:Y[,X:Y...] [--arms A,B,...] [--reps 10000] [--run-log PATH]
 
 For every pair X - Y, paired within round, of the per-round p50 round trips:
   - the median difference, as every record reports it;
@@ -27,7 +27,8 @@ For every arm listed (default: every arm in the pairs):
     ranks (so a few huge samples do not dominate), median over rounds; and the
     share of rounds whose lag-1 value is outside +-2/sqrt(n), the rough 95% band
     for no correlation.
-It reads only lat-*.json (summary, samples_in_order) and run.log.
+It reads only lat-*.json (summary, samples_in_order) and run.log (RECORD_DIR/run.log
+unless --run-log names another; the AWS captures keep it one level up).
 """
 import argparse
 import glob
@@ -131,6 +132,7 @@ def main(argv=None):
     ap.add_argument("--pairs", required=True)
     ap.add_argument("--arms", default="")
     ap.add_argument("--reps", type=int, default=10000)
+    ap.add_argument("--run-log", default="")
     a = ap.parse_args(argv)
     lat = load(a.record)
     pairs = [p.split(":") for p in a.pairs.split(",")]
@@ -147,7 +149,8 @@ def main(argv=None):
         excl = "excludes 0" if (lo > 0 or hi < 0) else "includes 0"
         print("  %-9s - %-9s %+8.2f   exact [%+.2f, %+.2f] %s   bootstrap [%+.2f, %+.2f]"
               % (x, y, st.median(d), lo, hi, excl, blo, bhi))
-    rs = round_seconds(os.path.join(a.record, "run.log")) if os.path.exists(os.path.join(a.record, "run.log")) else None
+    log = a.run_log or os.path.join(a.record, "run.log")
+    rs = round_seconds(log) if os.path.exists(log) else None
     n_arms_total = len(lat)
     print("variance components per arm (us^2 unless noted); c1 = achieved period; c2 = an arm-round's time"
           " beyond its exchanges%s" % (" (round %.0f s over %d arms)" % (rs, n_arms_total) if rs else " (no run.log)"))
