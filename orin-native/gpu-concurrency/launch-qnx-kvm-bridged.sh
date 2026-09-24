@@ -41,6 +41,12 @@
 # the guest's interrupt-driven kick channel (devc-virtio in the image). Both
 # devices come AFTER virtio-rng, so blk/net/rng keep their virtio-mmio slots and
 # the console takes the next one (0xa003800, SPI 44). The guest needs ifs-kick.bin.
+#
+# THREAD NAMES (2026-09-24), opt-in with THREAD_NAMES=1: adds
+# "-name qnx,debug-threads=on", so QEMU names each vCPU thread "CPU n/KVM" and a
+# harness can pin or trace a vCPU by name (run-vcpupin.sh needs it). QEMU only
+# names its threads; the device set and slot order are unchanged. Off by
+# default, so every earlier record's command line is unchanged.
 set -euo pipefail
 
 IFS_BIN="${IFS_BIN:?set IFS_BIN to the QNX image (it must start the server the ladder probes)}"
@@ -55,6 +61,12 @@ IVSHMEM="${IVSHMEM:-}"
 IVSHMEM_SERVER="${IVSHMEM_SERVER:-}"
 KICK_SOCK="${KICK_SOCK:-}"
 CORE_AUX="${CORE_AUX:-5}"
+THREAD_NAMES="${THREAD_NAMES:-0}"
+case "${THREAD_NAMES}" in
+	0) NAME_ARGS=() ;;
+	1) NAME_ARGS=(-name qnx,debug-threads=on) ;;
+	*) echo "ERROR: THREAD_NAMES='${THREAD_NAMES}' is not 0 or 1" >&2; exit 1 ;;
+esac
 
 for f in "${IFS_BIN}" "${DISK}"; do
 	[ -r "$f" ] || { echo "ERROR: unreadable: $f" >&2; exit 1; }
@@ -129,6 +141,7 @@ elif [ -n "${IVSHMEM}" ]; then
 	echo "ivshmem: ${IVSHMEM} (1 MiB, zeroed, -device ivshmem-plain)"
 fi
 [ -n "${KICK_SOCK}" ] && echo "kick   : virtio console on ${KICK_SOCK}"
+[ "${THREAD_NAMES}" = 1 ] && echo "names  : -name qnx,debug-threads=on (vCPU threads named CPU n/KVM)"
 # KVM halt polling decides whether a "sleeping" vCPU really sleeps; the VM takes
 # its maximum when it is created, so the values in force are the ones now.
 for p in halt_poll_ns halt_poll_ns_grow halt_poll_ns_grow_start halt_poll_ns_shrink; do
@@ -149,6 +162,7 @@ nohup "${QEMU}" \
 	-device virtio-rng-device,rng=rng0 \
 	${KICK_ARGS[@]+"${KICK_ARGS[@]}"} \
 	${SHM_ARGS[@]+"${SHM_ARGS[@]}"} \
+	${NAME_ARGS[@]+"${NAME_ARGS[@]}"} \
 	-kernel "${IFS_BIN}" \
 	-nographic > "${LOG}" 2>&1 &
 
