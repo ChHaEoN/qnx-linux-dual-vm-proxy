@@ -9,6 +9,14 @@ Per arm, medians over rounds: the round trip and the monitor's own time at p50,
 the rest, the idle gap, and the VM's halt counters per exchange (attempted and
 successful polls, the success share, blocked wake-ups). A prediction resting on
 a failed manipulation check prints VOID. Nothing is scored at k other than 12.
+
+Two things are printed UNSCORED, added after review (they are not in the
+pre-registered block and decide nothing):
+  - the two busiest QEMU threads' share of each arm's window, from the schedstat
+    m_kvm_snap captures. A 5 ms window keeps a vCPU spinning where D lets it
+    sleep; this shows how much host CPU that took.
+  - the within-boot contrasts (X2ms - X200us) - (D2ms - D200us), which cancel any
+    offset a single boot carries.
 """
 import glob
 import json
@@ -69,17 +77,24 @@ def _round(path):
 
 
 def load(out):
-    lat, kvm = {}, {}
+    lat, kvm, busy = {}, {}, {}
     for a in ARMS:
         lat[a] = {_round(f): json.load(open(f))["summary"] for f in glob.glob("%s/lat-%s_r*.json" % (out, a))}
-        kvm[a] = {}
+        kvm[a], busy[a] = {}, {}
         for f in glob.glob("%s/kvm-%s_r*.json" % (out, a)):
             d = json.load(open(f))
             b, e = d["before"]["counters"], d["after"]["counters"]
-            kvm[a][_round(f)] = {k: e[k] - b[k] for k in ("halt_attempted_poll", "halt_successful_poll",
-                                                          "halt_wakeup")}
+            keys = ("halt_attempted_poll", "halt_successful_poll", "halt_wakeup")
+            if any(not isinstance(b.get(k), int) or not isinstance(e.get(k), int) for k in keys):
+                raise SystemExit("%s: a halt counter was unreadable (NA); this arm-round cannot be used" % f)
+            kvm[a][_round(f)] = {k: e[k] - b[k] for k in keys}
+            win = d["after"].get("t_ns", 0) - d["before"].get("t_ns", 0)
+            tb, ta = d["before"].get("threads", {}), d["after"].get("threads", {})
+            shares = sorted(((ta[t]["run_ns"] - tb[t]["run_ns"]) / win for t in ta if t in tb and win > 0),
+                            reverse=True)
+            busy[a][_round(f)] = (shares + [0.0, 0.0])[:2]
     rounds = sorted(set.intersection(*(set(lat[a]) & set(kvm[a]) for a in ARMS)))
-    return lat, kvm, rounds
+    return lat, kvm, busy, rounds
 
 
 def tick_ns_of(out):
@@ -94,7 +109,7 @@ def main(argv):
     if tick_ns is None:
         print("no counter frequency in stamp.json: the predictions are in ticks and cannot be scored")
         return 1
-    lat, kvm, rounds = load(out)
+    lat, kvm, busy, rounds = load(out)
 
     def ticks(us):
         return us * 1000.0 / tick_ns
@@ -140,21 +155,38 @@ def main(argv):
     def mon_pair(x, y):
         return [ticks(lat[x][r]["server_us"]["p50"]) - ticks(lat[y][r]["server_us"]["p50"]) for r in rounds]
 
-    def show(name, what, d, unit, v):
-        print("  %-3s %-26s median %+6.1f %-5s [%+.1f, %+.1f], above zero %d/%d -> %s"
-              % (name, what, st.median(d), unit, min(d), max(d), sum(x > 0 for x in d), len(d), verdict(name, v)))
+    def show(name, what, d, unit, v, below=False):
+        side, cnt = ("below", sum(x < 0 for x in d)) if below else ("above", sum(x > 0 for x in d))
+        print("  %-3s %-26s median %+6.1f %-5s [%+.1f, %+.1f], %s zero %d/%d -> %s"
+              % (name, what, st.median(d), unit, min(d), max(d), side, cnt, len(d), verdict(name, v)))
 
     d = rtt_pair("N200us", "N2ms")
     show("P1", "N200us - N2ms, rtt", d, "us", score_p1(d))
     d = rtt_pair("B2ms", "D2ms")
-    show("P2", "B2ms - D2ms, rtt", d, "us", score_p2(d))
+    show("P2", "B2ms - D2ms, rtt", d, "us", score_p2(d), below=True)
     d = mon_pair("N200us", "D200us")
     show("P3a", "N200us - D200us, monitor", d, "ticks", score_p3a(d))
     d = mon_pair("B2ms", "D2ms")
-    show("P3b", "B2ms - D2ms, monitor", d, "ticks", score_p3b(d))
+    show("P3b", "B2ms - D2ms, monitor", d, "ticks", score_p3b(d), below=True)
     rd, md = rtt_pair("B200us", "D200us"), mon_pair("B200us", "D200us")
-    print("  C1  B200us - D200us: rtt median %+.1f us [%+.1f, %+.1f], monitor median %+.1f ticks -> %s"
-          % (st.median(rd), min(rd), max(rd), st.median(md), verdict("C1", score_c1(rd, md))))
+    print("  C1  B200us - D200us: rtt median %+.1f us [%+.1f, %+.1f], monitor median %+.1f ticks [%+.1f, %+.1f]"
+          " -> %s" % (st.median(rd), min(rd), max(rd), st.median(md), min(md), max(md),
+                      verdict("C1", score_c1(rd, md))))
+
+    print("  UNSCORED, added after review:")
+    print("    the two busiest QEMU threads' share of the arm's window (median over rounds):")
+    for a in ARMS:
+        print("      %-7s %.2f  %.2f" % (a, st.median(busy[a][r][0] for r in rounds),
+                                      st.median(busy[a][r][1] for r in rounds)))
+    print("    within-boot contrasts, (X2ms - X200us) - (D2ms - D200us), median [min, max]:")
+    for x in ("N", "B"):
+        rt = [((lat[x + "2ms"][r]["p50_ms"] - lat[x + "200us"][r]["p50_ms"])
+               - (lat["D2ms"][r]["p50_ms"] - lat["D200us"][r]["p50_ms"])) * 1000.0 for r in rounds]
+        mo = [(ticks(lat[x + "2ms"][r]["server_us"]["p50"]) - ticks(lat[x + "200us"][r]["server_us"]["p50"]))
+              - (ticks(lat["D2ms"][r]["server_us"]["p50"]) - ticks(lat["D200us"][r]["server_us"]["p50"]))
+              for r in rounds]
+        print("      %s: rtt %+.1f us [%+.1f, %+.1f]   monitor %+.1f ticks [%+.1f, %+.1f]"
+              % (x, st.median(rt), min(rt), max(rt), st.median(mo), min(mo), max(mo)))
     return 0
 
 

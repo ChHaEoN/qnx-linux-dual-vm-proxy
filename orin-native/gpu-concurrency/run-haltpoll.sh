@@ -14,16 +14,30 @@
 # THE INTERVENTION. halt_poll_ns caps KVM's poll window, and Linux 5.15 copies it
 # into a VM when the VM is created (kvm->max_halt_poll_ns; checked in the v5.15
 # source). So each value needs its own VM, and every round boots three:
-#   N  halt_poll_ns = 0        no polling at all: every halt blocks
+#   N  halt_poll_ns = 0        no polling at all: a halt with nothing pending blocks
 #   D  halt_poll_ns = 500000   the default, as in every A6 record
 #   B  halt_poll_ns = 5000000  a 5 ms window: a 2 ms idle ends in a poll
 # Each boot is timed at both spacings, so six arms:
 #   N200us N2ms  D200us D2ms  B200us B2ms   (the stamping monitor, ifs-stamp.bin :7103)
 # The boots' order within a round is a Williams design over the three (period 6).
-# The two spacings within a boot alternate, balanced per configuration. The value
-# stays in force for the whole boot (whether a VM reads it live or not), and the
-# found value is restored at the end. Pairs across boots within a round carry the
-# boot-to-boot variance inside their band.
+# Within a round, all three boots take their two spacings in the SAME order, and
+# that order alternates from round to round. So every scored pair across boots
+# compares arms in the same position after their boot. The value stays in force
+# for the whole boot (whether a VM reads it live or not), and the found value is
+# restored at the end. Pairs across boots within a round carry the boot-to-boot
+# variance inside their band.
+#
+# CHANGED AFTER THE FIRST RECORDED RUN HAD STARTED (2026-09-24), FOUND BY REVIEW.
+# Nothing in the prediction block below changed. Four other things did:
+#   - The spacing order within a boot was (round + configuration) % 2. That gave
+#     N and B one order and D the other in every round, so every scored pair
+#     across boots set an arm run first after its boot against one run second.
+#     A first-after-boot effect would then eat into the 10/12 counts and C1's
+#     bands. It is now round % 2 for all three.
+#   - The launcher gets an explicit VM shape, and not the harness's lock.
+#   - Cleanup stops every QEMU once the harness has booted one.
+#   - A found halt_poll_ns other than 500000 is refused.
+# The first run (the committed design) is kept and reported beside this one.
 #
 # THE PREDICTION, written and committed before any run of this harness, smoke
 # runs included. It is not to be amended. If a smoke run contradicts it, the
@@ -118,9 +132,15 @@ stop_vm() {   # stop the VM this harness booted; true once it is gone
 cleanup() {
 	say "cleanup"
 	# The preflight refused a running QEMU, so once this harness has booted one,
-	# any QEMU is its own -- including one whose pid it had not yet read.
-	[ "$BOOTED" = 1 ] && [ -z "$VM_PID" ] && VM_PID="$(m_pids_of qemu-system-aarch64 | head -1)"
-	stop_vm || echo "WARNING: the guest QEMU would not stop" >&2
+	# every QEMU is its own -- including one whose pid it had not yet read, or a
+	# second one (FOUND BY REVIEW: VM_PID could hold two pids, which stop_vm
+	# would have reported as stopped).
+	if [ "$BOOTED" = 1 ]; then
+		for VM_PID in $(m_pids_of qemu-system-aarch64); do
+			stop_vm || echo "WARNING: the guest QEMU $VM_PID would not stop" >&2
+		done
+	fi
+	VM_PID=""
 	if [ -n "$HP_BEFORE" ]; then
 		echo "$HP_BEFORE" | sudo -n tee "$HP_PARAM" > /dev/null 2>&1 \
 			&& [ "$(cat "$HP_PARAM")" = "$HP_BEFORE" ] && say "halt_poll_ns restored to $HP_BEFORE" \
@@ -150,7 +170,13 @@ boot_vm() {   # $1 config  $2 label: boot a VM with that config's halt_poll_ns
 	set_hp "${HP[$c]}"
 	BOOTED=1
 	t0="$(date +%s%N)"
-	IFS_BIN="$IFS_BIN" DISK="$DISK" LOG="$log" CORE_AUX="$CORE_AUX" bash "$LAUNCH" >> "$OUT/boots.log" 2>&1 \
+	# The VM's shape is given, not inherited: an exported IVSHMEM, KICK_SOCK,
+	# THREAD_NAMES, SMP, MEM or TAP would otherwise change it silently. And QEMU
+	# must not inherit fd 9: a QEMU that outlived the run would hold the lock.
+	IFS_BIN="$IFS_BIN" DISK="$DISK" LOG="$log" CORE_AUX="$CORE_AUX" \
+		IVSHMEM= IVSHMEM_SERVER= KICK_SOCK= THREAD_NAMES=0 SMP=2 MEM=1G TAP=tap-qnx \
+		MAC=52:54:00:11:11:11 QEMU=qemu-system-aarch64 \
+		bash "$LAUNCH" >> "$OUT/boots.log" 2>&1 9>&- \
 		|| die "boot $lab failed -- see $OUT/boots.log and $log"
 	VM_PID="$(m_pids_of qemu-system-aarch64)"
 	[ -n "$VM_PID" ] && [ "$(printf '%s\n' "$VM_PID" | grep -c .)" = 1 ] || die "boot $lab: not exactly one QEMU"
@@ -217,6 +243,11 @@ case "$IFS_BIN$DISK" in *" "*) die "IFS_BIN and DISK may not contain spaces (the
 grep -q -- '--stamps' "$PROBE" || die "$PROBE has no --stamps: it predates OD15"
 [ -r "$HP_PARAM" ] || die "no $HP_PARAM on this host"
 HP_BEFORE="$(cat "$HP_PARAM")"
+# D is 500000 because that is the value every A6 record ran with. Anything else
+# is most likely left behind by a run that was killed before its cleanup, and
+# "restoring" it at the end would carry it into every later harness.
+[ "$HP_BEFORE" = 500000 ] \
+	|| die "$HP_PARAM reads $HP_BEFORE, not the default 500000 -- a killed run may have left it; restore it first"
 TIMER="$(sudo -n dmesg 2>/dev/null | grep -o 'arch_timer: cp15 timer(s) running at [0-9.]*MHz' | head -1)"
 [ -n "$TIMER" ] || die "no arch_timer frequency in dmesg -- the monitor's ticks could not be counted"
 HALT_POLL=""
@@ -244,7 +275,7 @@ INTERVAL_MS='"per arm: see spacings_ms"' m_write_stamp "$OUT/stamp.json" \
 	"\"halt_poll_ns_found\": \"$HP_BEFORE\"" \
 	"\"kvm_halt_poll_at_preflight\": $HALT_POLL" \
 	'"spacings_ms": {"200us": 0.2, "2ms": 2}' \
-	'"boots": "three per round, a Williams order over N D B (period 6); both spacings per boot, alternating; see boots.log"' \
+	'"boots": "three per round, a Williams order over N D B (period 6); both spacings per boot, in the same order for every boot of a round, alternating by round; see boots.log"' \
 	"\"settle_s\": $SETTLE_S" \
 	'"kvm_stats": 1' \
 	"\"counter\": \"$TIMER\"" \
@@ -264,10 +295,10 @@ for r in $(seq 1 "$K"); do
 	line="round $r order:"
 	for ci in "${!order[@]}"; do
 		c="${order[$ci]}"
-		# The spacing order alternates per configuration across rounds: each gets
-		# each order in half the rounds.
-		case "$c" in N) idx=0 ;; D) idx=1 ;; B) idx=2 ;; esac
-		if [ $(( (r + idx) % 2 )) -eq 0 ]; then sp=(200us 2ms); else sp=(2ms 200us); fi
+		# The same spacing order for every boot in the round, alternating across
+		# rounds: each configuration gets each order in half the rounds, and every
+		# pair across boots is matched by position (FOUND BY REVIEW; see the header).
+		if [ $(( r % 2 )) -eq 0 ]; then sp=(200us 2ms); else sp=(2ms 200us); fi
 		boot_vm "$c" "${c}_r$r"
 		for s in "${sp[@]}"; do run_arm "$c$s" "$r"; line="$line $c$s"; done
 		stop_vm || die "the guest of ${c}_r$r would not stop"
