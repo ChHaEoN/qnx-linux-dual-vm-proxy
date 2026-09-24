@@ -59,6 +59,17 @@
 #   M6 no SSH login was accepted during the rounds -> P1 P2 P3
 # Scored only at k = 24.
 #
+# CHANGED AFTER THE SMOKE RUN, BEFORE THE RECORDED ONE (2026-09-24): every isolate
+# re-runs the oneshot services multi-user.target wants, nvpmodel.service among them,
+# and nvpmodel re-applies power mode 1, which sets the governor back to schedutil. The
+# smoke run's end-of-run check caught it ("governor drifted"). So after every switch
+# and its settle, the harness now re-pins the governor to performance on every core and
+# re-disables the deep idle states it disabled at the start, logs what had drifted
+# (switches.log), and stops unless the power mode and cpu0's maximum frequency are
+# what they were at the start. Before and after every round it stops unless the
+# governor and idle states are still as set. The rule, the checks and the predictions
+# are unchanged.
+#
 # NEEDS: the guest running (ifs-stamp.bin; CONSOLE its console log), the desktop
 # running at the start. c7 OFF (CSTATE=shallow, set before the library). NO LOAD.
 # A STALL STOPS THE RUN.
@@ -165,9 +176,36 @@ set_state() {   # $1 G or H
 		desktop_up || die "the desktop is not back 120 s after isolate graphical.target"
 	fi
 	if [ "$1" = H ]; then sleep "$SETTLE_H"; else sleep "$SETTLE_G"; fi
+	reapply_conditions "the switch to $1"
 	[ -d "/proc/$QPID" ] || die "QEMU ($QPID) is gone after the switch to $1"
 	m_reachable "$GUEST" "$D_PORT" "the guest's stamping monitor, after the switch to $1"
 	say "state $1: $(desktop_counts)"
+}
+
+conditions_ok() {
+	local c d
+	for c in "${!GOV_ORIG[@]}"; do [ "$(cat "$c")" = performance ] || return 1; done
+	for d in "${!CSTATE_ORIG[@]}"; do [ "$(cat "$d")" = 1 ] || return 1; done
+}
+
+reapply_conditions() {   # $1 label
+	local c d now found=""
+	for c in "${!GOV_ORIG[@]}"; do
+		now="$(cat "$c")"
+		[ "$now" = performance ] || found="$found ${c#/sys/devices/system/cpu/}=$now"
+		echo performance | sudo tee "$c" > /dev/null
+		[ "$(cat "$c")" = performance ] || die "could not re-pin $c after $1"
+	done
+	for d in "${!CSTATE_ORIG[@]}"; do
+		now="$(cat "$d")"
+		[ "$now" = 1 ] || found="$found ${d#/sys/devices/system/cpu/}=$now"
+		echo 1 | sudo tee "$d" > /dev/null
+		[ "$(cat "$d")" = 1 ] || die "could not re-disable $d after $1"
+	done
+	[ "$(sudo -n nvpmodel -q 2>/dev/null | tr '\n' ' ')" = "$NVP0" ] || die "the power mode changed after $1"
+	[ "$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq)" = "$MAXF0" ] || die "cpu0's maximum frequency changed after $1"
+	echo "$1: re-pinned and re-disabled; drifted:${found:- nothing}" >> "$OUT/switches.log"
+	say "$1: conditions re-applied (drifted:${found:- nothing})"
 }
 
 cleanup() {
@@ -244,6 +282,10 @@ m_require_disjoint "qemu=$QEMU_CORES" "probe=$CORE_PROBE" "aux=$CORE_AUX"
 m_governor_pin
 m_cstate_apply
 m_pin_qemu "$QEMU_CORES"
+NVP0="$(sudo -n nvpmodel -q 2>/dev/null | tr '\n' ' ')"
+[ -n "$NVP0" ] || die "cannot read the power mode"
+MAXF0="$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq)"
+: > "$OUT/switches.log"
 m_reachable "$GUEST" "$D_PORT" "the guest's stamping monitor"
 TRACE_TOUCHED=1
 tsu "cd '$TRACE' && echo mono > trace_clock && echo $TRACE_KB > buffer_size_kb" || die "could not set the trace clock and buffer"
@@ -274,6 +316,7 @@ for r in $(seq 1 "$K"); do
 	case "$pos" in 0|3) state=G ;; *) state=H ;; esac
 	[ "$state" = "$prev" ] || { set_state "$state"; prev="$state"; }
 	echo "round $r state: $state" >> "$OUT/order.log"
+	conditions_ok || die "the governor or idle states drifted before round $r"
 	echo "round $r before $(desktop_counts)" >> "$OUT/states.log"
 	m_thermal "r$r t2ms before" >> "$OUT/thermal.log"
 	: > "$OUT/inj-t2ms_r$r.jsonl"
@@ -286,6 +329,7 @@ for r in $(seq 1 "$K"); do
 	IPID=""
 	[ "$(grep -c . "$OUT/inj-t2ms_r$r.jsonl")" -eq 4 ] || die "the injector logged $(grep -c . "$OUT/inj-t2ms_r$r.jsonl") injections in round $r, not 4"
 	trace_take "t2ms_r$r"
+	conditions_ok || die "the governor or idle states drifted during round $r"
 	echo "round $r after $(desktop_counts)" >> "$OUT/states.log"
 	m_thermal "r$r t2ms after" >> "$OUT/thermal.log"
 	gpu_idle_around "$r" t2ms
@@ -295,6 +339,7 @@ done
 RUN_T1=$(date +%s)
 echo "accepted=$(sudo -n journalctl -u ssh -u sshd --since "@$RUN_T0" --until "@$RUN_T1" -o cat 2>/dev/null | grep -c '^Accepted ')" > "$OUT/logins.txt"
 desktop_up || set_state G
+conditions_ok || reapply_conditions "the end of the run"
 m_governor_recheck
 m_stamp_after "$OUT/stamp.json"
 m_require_complete "$OUT" "${ARMS[@]}"
