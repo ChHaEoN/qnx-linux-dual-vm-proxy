@@ -36,6 +36,8 @@ THE SEGMENTS of one exchange, all on the host's mono clock:
   also notifies its receive queue before it transmits, the first such waking is
   not the transmit, and the C/D boundary moves (A+B+C+D does not).
 An exchange missing any of the five marks is counted and skipped, never guessed.
+Each row keeps k, the request's index in the trace (0-based), so a row can be matched
+to the probe's own sample for the same exchange (run-tailpath.sh).
 """
 import argparse
 import json
@@ -179,7 +181,7 @@ def segments(ev, min_len=100):
                 load_lat.append(e[0] - sw[-1][0])
         m_wakes = sum(1 for e in win if eout[0] >= e[0] >= ev_v[0] and e[2] == "W" and e[3][0] == "m"
                       and e[3][1] in ("v0", "v1"))
-        rows.append({"m_wakes": m_wakes, "t0": t0, "A": ei[0] - t0, "B": ev_v[0] - ei[0], "C": etx[0] - ev_v[0],
+        rows.append({"k": k, "m_wakes": m_wakes, "t0": t0, "A": ei[0] - t0, "B": ev_v[0] - ei[0], "C": etx[0] - ev_v[0],
                      "D": eout[0] - etx[0], "total": eout[0] - t0, "v_first": ev_v[3][0],
                      "v_ctx": ev_v[3][2], "blocked": blocked, "polled": polled,
                      "wake_us": sum(wake_lat), "load_us": sum(load_lat)})
