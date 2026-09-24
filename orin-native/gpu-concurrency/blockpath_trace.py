@@ -125,9 +125,13 @@ def read(path):
     return ev
 
 
-def segments(ev, min_len=100):
-    """(per-exchange dicts, summary dict)."""
-    reqs = [i for i, e in enumerate(ev) if e[2] == "X" and int(e[3][0]) >= min_len]
+def segments(ev, min_len=100, req_len=None):
+    """(per-exchange dicts, summary dict). A request is a frame into the tap of
+    length >= min_len, or, with req_len, of exactly that length (2026-09-24,
+    run-tailpath.sh's smoke run: a 101-byte frame that was not the probe's counted
+    as a request, and the round could not be aligned with the probe)."""
+    reqs = [i for i, e in enumerate(ev) if e[2] == "X"
+            and (int(e[3][0]) == req_len if req_len else int(e[3][0]) >= min_len)]
     # The interrupt number that most often rises first after a request.
     firsts = Counter()
     for k, i in enumerate(reqs):
@@ -185,7 +189,8 @@ def segments(ev, min_len=100):
                      "D": eout[0] - etx[0], "total": eout[0] - t0, "v_first": ev_v[3][0],
                      "v_ctx": ev_v[3][2], "blocked": blocked, "polled": polled,
                      "wake_us": sum(wake_lat), "load_us": sum(load_lat)})
-    summ = {"requests": len(reqs), "segmented": len(rows), "skipped": dict(skipped), "irq": irq}
+    summ = {"requests": len(reqs), "segmented": len(rows), "skipped": dict(skipped), "irq": irq,
+            "req_len": req_len}
     if rows:
         for key in ("A", "B", "C", "D", "total", "blocked", "polled", "wake_us", "load_us", "m_wakes"):
             summ[key + "_p50"] = st.median(r[key] for r in rows)

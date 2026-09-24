@@ -40,6 +40,12 @@
 #   M2 >= 95% of the aligned rounds' timed exchanges are segmented -> P1
 # tailpath_report.py applies it, and scores only at k = 24.
 #
+# CHANGED AFTER THE SMOKE RUN, BEFORE THE RECORDED ONE (2026-09-24): a request is
+# now a frame into the tap of the round's most common length (the probe's 130
+# bytes), not any frame of 100 bytes or more. The smoke run's round 3 traced a
+# 101-byte frame that was not the probe's, and could not be aligned. The rule and
+# the prediction above are unchanged.
+#
 # The trace costs ~9-11 us per exchange (the block-path record), on every exchange
 # alike. The ring buffer is raised to TRACE_KB (4096) per core for the run and
 # restored after; lost events stop the run.

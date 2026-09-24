@@ -85,7 +85,12 @@ def main(argv):
         bp = os.path.join(out, "bp-t2ms_r%d.log" % r)
         if not os.path.exists(bp):
             continue
-        rows, summ = bpt.segments(bpt.read(bp))
+        ev = bpt.read(bp)
+        # The probe's requests are all one length (130 bytes); another host frame
+        # into the tap is not a request (found by the smoke run: a 101-byte one).
+        lens = [int(e[3][0]) for e in ev if e[2] == "X" and int(e[3][0]) >= 100]
+        req_len = max(set(lens), key=lens.count) if lens else None
+        rows, summ = bpt.segments(ev, req_len=req_len)
         pairs = round_rows(lat, rows, summ["requests"], n, warm)
         if pairs is None:
             print("  round %d not aligned: %d requests traced, %d expected" % (r, summ["requests"], n + warm))

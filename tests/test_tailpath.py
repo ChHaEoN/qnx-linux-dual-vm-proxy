@@ -111,3 +111,16 @@ def test_the_harness_parses_and_states_its_rule_and_prediction_before_any_code()
               "C has the largest median excess of the five, and C's share of the summed\n#      excess is >= 50%",
               "REFUTED if another segment's median excess is larger", "in >= 90% of", ">= 95% of"):
         assert s in head, s
+
+
+def test_a_stray_frame_into_the_tap_is_not_a_request(tmp_path):
+    # FOUND BY THE SMOKE RUN: a 101-byte frame that was not the probe's counted as a
+    # request, and its round could not be aligned with the probe's samples.
+    out = tmp_path / "o"
+    _run(out, 24)
+    f = out / "bp-t2ms_r3.log"
+    lines = f.read_text().splitlines()
+    lines.insert(50, "%.6f 004 X 101" % (float(lines[49].split()[0]) + 1e-6))
+    f.write_text("\n".join(lines) + "\n")
+    s = _report(out)
+    assert "rounds 24, aligned 24" in s and "not aligned" not in s, s
