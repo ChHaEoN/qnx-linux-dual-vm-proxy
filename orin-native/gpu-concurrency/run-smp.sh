@@ -354,7 +354,7 @@ INTERVAL_MS='"per arm: see spacings_ms"' m_write_stamp "$OUT/stamp.json" \
 stop_vm || die "the preflight guest would not stop"
 
 # ---------------------------------------------------------------- the run
-say "k=$K rounds, n=$N, warmup=$WARMUP, boots N D B (halt_poll_ns 0 500000 5000000) x spacings 200us 2ms -> $OUT"
+say "k=$K rounds, n=$N, warmup=$WARMUP, boots 2D 2B 1D 1B (-smp 2/2/1/1, halt_poll_ns 500000/5000000/500000/5000000) x spacings 200us 2ms -> $OUT"
 : > "$OUT/thermal.log"
 for r in $(seq 1 "$K"); do
 	order=()
