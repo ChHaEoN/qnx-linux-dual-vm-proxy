@@ -5,7 +5,7 @@ distribution rather than a liveness yes/no.
   usage: latency_probe.py --host H [--port 7100] [--proto tcp|udp] [--n 2000]
                           [--warmup 200] [--interval-ms 2] [--tag NAME] [--out FILE]
                           [--timeout-s 10] [--stall-out FILE] [--await-recovery S]
-                          [--claim mnist|vlm] [--stamps]
+                          [--claim mnist|vlm] [--stamps] [--arrival const|exp] [--seed N]
          latency_probe.py --proto shm --shm FILE --shm-lib LIB [the same options]
          latency_probe.py --proto shmkick --shm FILE@OFF --kick SOCK --shm-lib LIB [...]
          latency_probe.py --proto shmdb --shm FILE@OFF --kick SOCK --ivshm SOCK --shm-lib LIB [...]
@@ -62,6 +62,7 @@ keepalive carrying no claim, which would not exercise the verdict path.
 import argparse
 import json
 import os
+import random
 import socket
 import struct
 import sys
@@ -483,6 +484,11 @@ def main():
                          "used (the default, unchanged), or OD13's pre-built vlm claim")
     ap.add_argument("--await-recovery", type=float, default=0.0,
                     help="instead of sampling: seconds to wait for the guest to answer again")
+    ap.add_argument("--arrival", choices=("const", "exp"), default="const",
+                    help="the sleep after each reply: --interval-ms every time (const, the default, "
+                         "unchanged), or drawn from an exponential distribution with that mean (exp; "
+                         "2026-09-24, the arrival test)")
+    ap.add_argument("--seed", type=int, default=1, help="with --arrival exp: the draws' seed")
     ap.add_argument("--stamps", action="store_true",
                     help="OD15: the monitor stamps t_in/t_out into payload[8..23] (`monitor PORT "
                          "stamp`); record its own time per sample, and refuse an unstamped reply. "
@@ -501,6 +507,8 @@ def main():
 
     if a.db_burst and a.proto != "shmdb":
         ap.error("--db-burst needs --proto shmdb")
+    if a.arrival == "exp" and a.interval_ms <= 0:
+        ap.error("--arrival exp needs a positive --interval-ms: it is the mean of the draws")
 
     if a.await_recovery > 0:
         return await_recovery(a)
@@ -593,6 +601,10 @@ def main():
     seq = 0
     total = a.warmup + a.n
     gap = a.interval_ms / 1000.0
+    # --arrival exp (2026-09-24): every sleep is its own draw, seeded, so an arm is
+    # repeatable; every draw is kept, so the record can show the distribution it got.
+    rng = random.Random(a.seed)
+    drawn = []
 
     for i in range(total):
         seq += 1
@@ -681,7 +693,12 @@ def main():
             if a.stamps:
                 servers.append((t_out - t_in) / 1000.0)
         if gap > 0:
-            time.sleep(gap)
+            if a.arrival == "exp":
+                d = rng.expovariate(1.0 / gap)
+                drawn.append(d)
+                time.sleep(d)
+            else:
+                time.sleep(gap)
 
     if s is not None:
         s.close()
@@ -726,6 +743,13 @@ def main():
     if len(sends) > 1:
         gaps = sorted((b - a_) * 1e6 for a_, b in zip(sends, sends[1:]))
         res["period_us"] = {"p50": percentile(gaps, 50), "mean": sum(gaps) / len(gaps)}
+    if a.arrival == "exp":
+        sd = sorted(drawn)
+        mean = sum(sd) / len(sd)
+        res["arrival"] = {"kind": "exp", "seed": a.seed, "draws": len(sd),
+                          "sleep_ms": {"mean": mean * 1000.0, "p50": percentile(sd, 50) * 1000.0,
+                                       "sd": (sum((x - mean) ** 2 for x in sd) / len(sd)) ** 0.5 * 1000.0,
+                                       "max": sd[-1] * 1000.0}}
     res["stamps"] = a.stamps
     if a.stamps:
         # The split, per sample: the monitor's own time (its clock) and the rest

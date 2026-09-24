@@ -2983,6 +2983,25 @@ def test_m_probe_passes_stamps_only_when_asked(tmp_path):
     assert "--stamps" in argv["b"], argv["b"]
 
 
+def test_m_probe_passes_arrival_and_seed_only_when_asked(tmp_path):
+    # 2026-09-24 (the arrival test): as PROBE_STAMPS, set for one call only.
+    fake = tmp_path / "argv.py"
+    fake.write_bytes(b"import sys, json\na = sys.argv\n"
+                     b"open(a[a.index('--out') + 1], 'w').write(json.dumps({'argv': a[1:]}))\n")
+    out = tmp_path / "out"
+    out.mkdir()
+    r = _run(tmp_path, 'N=10; WARMUP=1; INTERVAL_MS=0.2; CORE_PROBE=0; SAMPLE_WINDOW=0; PROBE="%s"; '
+             'taskset() { shift 2; "$@"; }; m_probe "%s" a_r1 127.0.0.1 1; '
+             'PROBE_ARRIVAL=exp PROBE_SEED=9 m_probe "%s" b_r1 127.0.0.1 1; m_probe "%s" c_r1 127.0.0.1 1'
+             % (_posix(fake), _posix(out), _posix(out), _posix(out)))
+    assert r.returncode == 0, r.stderr
+    argv = {t: json.loads((out / ("lat-%s_r1.json" % t)).read_text())["argv"] for t in "abc"}
+    for t in "ac":
+        assert "--arrival" not in argv[t] and "--seed" not in argv[t], argv[t]
+    b = argv["b"]
+    assert b[b.index("--arrival") + 1] == "exp" and b[b.index("--seed") + 1] == "9", b
+
+
 def test_the_probe_runs_clean_against_the_service_mode(native_servers, tmp_path):
     # The deadline's cost is measured with the latency probe (OD14): it must be
     # gate-clean against this mode, with not one silence inside an arm.
