@@ -43,8 +43,14 @@ def test_classes_and_phase():
     P = tr.PERIOD
     assert tr.cdist(1000.0, P - 1000.0) == 2000.0
     ph, spread = tr.old_phase([5000.0, 5000.0 + P, 5200.0 + 2 * P])
-    assert abs(ph - 5066.7) < 1 and abs(spread - 133.3) < 1
+    assert abs(ph - 5000.0) < 1e-6 and abs(spread - 200.0) < 1e-6
     assert tr.old_phase([1.0]) == (None, None)
+    # FOUND BY THE SMOKE RUN: two reads 1020 ms apart, the first a jiffy late. The phase
+    # is the earliest read's, the fire jiffy's, and one jiffy of lag passes M3.
+    ph, spread = tr.old_phase([12_000.0, 12_000.0 + P - 4000.0])
+    assert abs(ph - 8000.0) < 1e-6 and abs(spread - 4000.0) < 1e-6 and spread <= tr.LATE
+    ph, spread = tr.old_phase([P - 1000.0, 2 * P + 1000.0])          # across the cycle's end
+    assert abs(ph - (P - 1000.0)) < 1e-6 and abs(spread - 2000.0) < 1e-6
     assert tr.classify(10_000.0, [9_600.0], None, []) == "tj"          # 0.4 ms after a read
     assert tr.classify(9_600.0 - 400.0, [9_600.0], None, []) == "tj"   # 0.4 ms before
     assert tr.classify(9_600.0 - 600.0, [9_600.0], None, []) == "out"

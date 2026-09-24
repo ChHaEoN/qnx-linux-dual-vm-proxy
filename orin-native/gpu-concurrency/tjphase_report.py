@@ -33,6 +33,7 @@ PERIOD = 1024000.0              # us: 256 jiffies at HZ=250
 BEFORE, AFTER = 500.0, 6000.0   # us: a read's window
 AWAY = 32000.0                  # us: a moved poll is at least this far from the old phase
 MIN_IN = 30
+LATE = 4500.0                   # us: the old reads may lag the earliest by up to one jiffy (4 ms)
 
 
 def pct(v, p):
@@ -47,12 +48,16 @@ def cdist(a, b, period=PERIOD):
 
 
 def old_phase(reads):
-    """(phase, spread) of the tj reads before the first toggle, or (None, None)."""
+    """(phase, spread) of the tj reads before the first toggle, or (None, None). The
+    phase is the EARLIEST read's: the poll's timer keeps its jiffy, but the read can run
+    a jiffy late (found by the smoke run: two reads 1020 ms apart, not 1024). The spread
+    is the latest read's lag behind it."""
     if len(reads) < 2:
         return None, None
     z = sum(cmath.exp(2j * math.pi * (t % PERIOD) / PERIOD) for t in reads) / len(reads)
-    ph = (cmath.phase(z) % (2 * math.pi)) / (2 * math.pi) * PERIOD
-    return ph, max(cdist(t % PERIOD, ph) for t in reads)
+    mean = (cmath.phase(z) % (2 * math.pi)) / (2 * math.pi) * PERIOD
+    lags = [((t - mean + PERIOD / 2) % PERIOD) - PERIOD / 2 for t in reads]     # signed, around the mean
+    return (mean + min(lags)) % PERIOD, max(lags) - min(lags)
 
 
 def near(t0, reads):
@@ -141,7 +146,7 @@ def main(argv):
     rate = {c: (100.0 * t / e if e else float("nan")) for c, (e, t) in counts.items()}
     ok = {"M1": k > 0 and aligned / k >= 0.9,
           "M2": aligned > 0 and with_tj / aligned >= 0.9 and counts["tj"][0] >= MIN_IN,
-          "M3": old is not None and spread <= 1000.0 and aligned > 0 and moved / aligned >= 0.8
+          "M3": old is not None and spread <= LATE and aligned > 0 and moved / aligned >= 0.8
           and counts["old"][0] >= MIN_IN,
           "M4": aligned > 0 and with_other / aligned >= 0.9 and counts["other"][0] >= MIN_IN}
     print("  rounds %d, aligned %d" % (k, aligned))
@@ -151,7 +156,7 @@ def main(argv):
     if old is None:
         print("  M3 no old phase: fewer than 2 tj-thermal reads before the first toggle -> FAILED")
     else:
-        print("  M3 old phase %.1f ms (reads within %.2f ms); moved >= %.0f ms away in %d of %d rounds (want >= 80%%);"
+        print("  M3 old phase %.1f ms (the latest read %.2f ms behind the earliest); moved >= %.0f ms away in %d of %d rounds (want >= 80%%);"
               " %d exchanges in its windows (want >= %d) -> %s"
               % (old / 1000.0, spread / 1000.0, AWAY / 1000.0, moved, aligned, counts["old"][0], MIN_IN,
                  "ok" if ok["M3"] else "FAILED"))

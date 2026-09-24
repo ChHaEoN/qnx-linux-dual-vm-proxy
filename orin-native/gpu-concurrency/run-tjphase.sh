@@ -57,13 +57,21 @@
 #   M1 >= 90% of rounds align -> P1 P2 P3
 #   M2 a tj-thermal read falls inside the timed span in >= 90% of aligned rounds,
 #      and the tj class holds >= 30 exchanges -> P1
-#   M3 the old phase is known (>= 2 reads before the first toggle, within 1 ms of
-#      each other in the 1024 ms cycle); in >= 80% of aligned rounds every
+#   M3 the old phase is known (>= 2 reads before the first toggle, the latest at
+#      most one jiffy, 4.5 ms, behind the earliest in the 1024 ms cycle; the old
+#      phase is the earliest read's); in >= 80% of aligned rounds every
 #      tj-thermal read is >= 32 ms from it; the old class holds >= 30 exchanges
 #      -> P1 P3
 #   M4 another zone's read falls inside the timed span in >= 90% of aligned rounds,
 #      and the other class holds >= 30 exchanges -> P2
 # Scored only at k = 24.
+#
+# CHANGED AFTER THE SMOKE RUN, BEFORE THE RECORDED ONE (2026-09-24): M3 asked for the
+# old reads "within 1 ms of each other" and took their mean as the old phase. The
+# smoke run's two old reads were 1020 ms apart, not 1024: the poll's timer keeps its
+# jiffy, but the work that reads the zone ran one jiffy late once. So the old phase
+# is now the earliest read's, and one jiffy of lag is allowed. The rule, the
+# classes' windows and the predictions are unchanged.
 #
 # NEEDS: the guest running (ifs-stamp.bin; CONSOLE its console log). c7 OFF
 # (CSTATE=shallow, set before the library). NO LOAD. A STALL STOPS THE RUN.
