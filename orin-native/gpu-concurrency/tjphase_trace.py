@@ -7,6 +7,9 @@ zones' reads to the two things run-tjphase.sh needs (Phase 3b / A6, 2026-09-24).
       unparsed line or a frame on another device. The events:
         X len     net_dev_xmit on tap-qnx    a frame into the guest's tap
         T zone    thermal_temperature        a thermal zone was read (its type)
+        M kind i  tracing_mark_write         an injection marker "tjinj KIND I"
+                                             (uevent_inject.py, run-uevent.sh);
+                                             any other marker text is refused
 """
 import re
 import sys
@@ -31,7 +34,7 @@ def reduce(lines, tap="tap-qnx"):
         if line.startswith("#") or not line.strip():
             continue
         m = PREFIX.match(line.rstrip("\n"))
-        if not m or m.group(5) not in ("net_dev_xmit", "thermal_temperature"):
+        if not m or m.group(5) not in ("net_dev_xmit", "thermal_temperature", "tracing_mark_write"):
             return None, "unparsed line at line %d" % no      # its text names other processes: not echoed
         core, ts, ev, body = m.group(3), m.group(4), m.group(5), m.group(6)
         if ev == "net_dev_xmit":
@@ -42,6 +45,11 @@ def reduce(lines, tap="tap-qnx"):
             if dev.group(1) != tap:
                 return None, "a frame on a device other than %s at line %d: the filter failed" % (tap, no)
             out.append("%s %s X %s" % (ts, core, ln.group(1)))
+        elif ev == "tracing_mark_write":
+            mk = re.match(r"tjinj ([A-Z]) (\d+)\s*$", body)
+            if not mk:
+                return None, "a trace marker that is not an injection's at line %d" % no
+            out.append("%s %s M %s %s" % (ts, core, mk.group(1), mk.group(2)))
         else:
             z = re.search(r"thermal_zone=(\S+)", body)
             if not z:
