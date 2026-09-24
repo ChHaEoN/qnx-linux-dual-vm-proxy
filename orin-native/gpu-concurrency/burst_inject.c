@@ -1,7 +1,8 @@
 /*
- * burst_inject.c -- run-bursts.sh's injector (Phase 3b / A6, 2026-09-24). Run as root,
- * pinned to the aux core, while a probe round runs. At seeded, jittered times it does one
- * of six things, each marked in the ftrace marker just before ("tjinj KIND I"):
+ * burst_inject.c -- the injector of run-bursts.sh, run-queue.sh and run-walks.sh (Phase 3b
+ * / A6, 2026-09-24). Run as root, pinned to the aux core, while a probe round runs. At
+ * seeded, jittered times it does one of these, each marked in the ftrace marker just
+ * before ("tjinj KIND I"):
  *
  *   U  three "change" writes to the thermal zone's uevent file (the uevents; control)
  *   N  nothing (the null control)
@@ -10,6 +11,12 @@
  *   T  TLB maintenance for BURST_MS: mmap 64 KB anonymous, touch one page, munmap, again
  *      (each munmap flushes the range, which arm64 broadcasts to every core)
  *   S  syscalls for BURST_MS: getppid() in a loop, no memory-map change
+ *   P  sysfs path walks for BURST_MS, as systemd-udevd resolves a path: from "/", openat
+ *      each component of /sys/devices/virtual/dmi/id/sys_vendor with O_PATH|O_NOFOLLOW,
+ *      fstatat(fd, "", AT_EMPTY_PATH) it, close the one before, again (run-walks.sh)
+ *   F  the same walk on tmpfs, through /run/tjinj-walk/a/b/c/d (made at start)
+ *   A  sysfs attribute reads for BURST_MS: open, read and close
+ *      /sys/devices/virtual/dmi/id/sys_vendor, again
  *
  * Nothing is allocated, forked or mapped between the start and the end of the run except
  * by T itself. One JSON line per injection goes to the log: its index, kind, CLOCK_MONOTONIC
@@ -23,6 +30,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <sys/syscall.h>
 #include <time.h>
 #include <unistd.h>
@@ -68,6 +76,30 @@ static long read_seq(const char *p)
 
 static volatile uint64_t sink;
 
+static const char *const SYS_WALK[] = {"sys", "devices", "virtual", "dmi", "id", "sys_vendor", NULL};
+static const char *const TMP_WALK[] = {"run", "tjinj-walk", "a", "b", "c", "d", NULL};
+
+static long walk(const char *const *comp)
+{
+	struct stat st;
+	int fd = open("/", O_PATH | O_CLOEXEC);
+	if (fd < 0)
+		return -1;
+	for (int i = 0; comp[i]; i++) {
+		int nfd = openat(fd, comp[i], O_PATH | O_NOFOLLOW | O_CLOEXEC);
+		close(fd);
+		if (nfd < 0)
+			return -1;
+		if (fstatat(nfd, "", &st, AT_EMPTY_PATH) != 0) {
+			close(nfd);
+			return -1;
+		}
+		fd = nfd;
+	}
+	close(fd);
+	return 1;
+}
+
 static long act(char k, const char *uevent, int64_t burst_ns, unsigned char *buf)
 {
 	long it = 0;
@@ -108,6 +140,21 @@ static long act(char k, const char *uevent, int64_t burst_ns, unsigned char *buf
 				munmap((void *)p, 65536);
 			}
 			it += 16;
+		} while (now_ns() < end);
+	} else if (k == 'P' || k == 'F') {
+		do {
+			if (walk(k == 'P' ? SYS_WALK : TMP_WALK) < 0)
+				return -1;
+			it++;
+		} while (now_ns() < end);
+	} else if (k == 'A') {
+		char b[128];
+		do {
+			int fd = open("/sys/devices/virtual/dmi/id/sys_vendor", O_RDONLY | O_CLOEXEC);
+			if (fd < 0 || read(fd, b, sizeof b) < 0)
+				return -1;
+			close(fd);
+			it++;
 		} while (now_ns() < end);
 	} else if (k == 'S') {
 		do {
@@ -153,7 +200,7 @@ int main(int argc, char **argv)
 	}
 	size_t nk = strlen(kinds);
 	for (size_t i = 0; i < nk; i++)
-		if (!strchr("UNCMTS", kinds[i])) {
+		if (!strchr("UNCMTSPFA", kinds[i])) {
 			fprintf(stderr, "burst_inject: unknown kind %c\n", kinds[i]);
 			return 2;
 		}
@@ -175,6 +222,12 @@ int main(int argc, char **argv)
 		return 1;
 	}
 	memset(buf, 1, BUF);                               /* touched now, not during a burst */
+	if (strpbrk(kinds, "F")) {                         /* the tmpfs walk's directories, now */
+		const char *d[] = {"/run/tjinj-walk", "/run/tjinj-walk/a", "/run/tjinj-walk/a/b",
+				   "/run/tjinj-walk/a/b/c", "/run/tjinj-walk/a/b/c/d", NULL};
+		for (int i = 0; d[i]; i++)
+			mkdir(d[i], 0755);
+	}
 	char uevent[512];
 	snprintf(uevent, sizeof uevent, "%s/uevent", zone);
 	int mfd = open(marker, O_WRONLY | O_APPEND);
