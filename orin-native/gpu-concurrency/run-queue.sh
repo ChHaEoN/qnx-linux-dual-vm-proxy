@@ -56,6 +56,18 @@
 #   M6 the null windows are quiet in both arms: N's excess within +-10 us -> all
 # Scored only at k = 24.
 #
+# CHANGED AFTER THE SMOKE RUN, BEFORE THE RECORDED ONE (2026-09-24): the smoke run
+# stopped at round 2 because `udevadm control --start-exec-queue` waited 60 s for udevd's
+# reply and reported "Connection timed out". Reproduced by hand: after a hold of more
+# than ~3 s, which is when udevd kills its idle workers, the reply never comes, yet the
+# queue IS released (a settle then succeeds and the queue is empty); after a 1 s hold it
+# replies in 21 ms. So the release now waits at most 5 s for the reply and does not trust
+# its exit status: it is verified by `udevadm settle` succeeding and /run/udev/queue being
+# gone, and the run stops otherwise. Whether the reply came goes to queue.log. A side
+# effect this makes visible, not a change: in a hold round udevd's idle workers exit, so
+# the next run round's first events may pay for new ones. The rule, the checks and the
+# predictions are unchanged.
+#
 # NEEDS: the guest running (ifs-stamp.bin; CONSOLE its console log), gcc. c7 OFF
 # (CSTATE=shallow, set before the library). NO LOAD. A STALL STOPS THE RUN.
 set -u
@@ -145,7 +157,8 @@ cleanup() {
 	[ -n "${IPID:-}" ] && kill "$IPID" 2>/dev/null
 	rm -f "$INJ"
 	if [ "$QUEUE_TOUCHED" = 1 ]; then
-		sudo -n udevadm control --start-exec-queue && sudo -n udevadm settle --timeout=30 \
+		sudo -n udevadm control --timeout=5 --start-exec-queue
+		sudo -n udevadm settle --timeout=30 && [ ! -e /run/udev/queue ] \
 			&& say "udevd's queue released and settled" \
 			|| echo "WARNING: udevd's queue may still be held -- release it by hand: sudo udevadm control --start-exec-queue" >&2
 	fi
@@ -260,8 +273,10 @@ for r in $(seq 1 "$K"); do
 	if [ "$arm" = hold ]; then
 		if [ -e /run/udev/queue ]; then q=held; else q=empty; fi
 		echo "round $r end: queue $q" >> "$OUT/queue.log"
-		sudo -n udevadm control --start-exec-queue || die "could not release udevd's queue after round $r"
-		sudo -n udevadm settle --timeout=30 || die "udevd's queue did not settle after round $r"
+		if sudo -n udevadm control --timeout=5 --start-exec-queue 2>/dev/null; then rep=replied; else rep=no-reply; fi
+		sudo -n udevadm settle --timeout=30 || die "udevd's queue did not settle after its release in round $r"
+		[ ! -e /run/udev/queue ] || die "udevd's queue is not empty after its release in round $r"
+		echo "round $r release: $rep, settled, empty" >> "$OUT/queue.log"
 		QUEUE_TOUCHED=0
 	else
 		sudo -n udevadm settle --timeout=30 || die "udevd's queue did not settle after round $r"
