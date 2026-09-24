@@ -17,6 +17,14 @@
  *   F  the same walk on tmpfs, through /run/tjinj-walk/a/b/c/d (made at start)
  *   A  sysfs attribute reads for BURST_MS: open, read and close
  *      /sys/devices/virtual/dmi/id/sys_vendor, again
+ *   R  a random pointer chase through 2 MB (one cluster's L3) for BURST_MS, here
+ *   Q  the same chase after moving to core CORE_Q (3: QEMU's L3), marked after the move;
+ *      back to the start core after it (run-caches.sh)
+ *   L  a random pointer chase through 128 KB (fits a core's L2) for BURST_MS, here
+ *   W  wake-up ping-pong for BURST_MS: one byte through a pipe to a helper thread pinned
+ *      to core CORE_Q, one byte back, again (every hop wakes the other core)
+ * The chase buffers are random cyclic permutations of 64-byte lines, built at start; the
+ * helper thread is started at start. Neither happens during a round.
  *
  * Nothing is allocated, forked or mapped between the start and the end of the run except
  * by T itself. One JSON line per injection goes to the log: its index, kind, CLOCK_MONOTONIC
@@ -25,6 +33,8 @@
  */
 #define _GNU_SOURCE
 #include <fcntl.h>
+#include <pthread.h>
+#include <sched.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -75,6 +85,67 @@ static long read_seq(const char *p)
 }
 
 static volatile uint64_t sink;
+
+#define LINE 64
+static void **chase_big, **chase_small;
+static int core_q = 3;
+static int pa[2], pb[2];
+
+static void **build_chase(size_t bytes)
+{
+	size_t n = bytes / LINE;
+	unsigned char *b = aligned_alloc(LINE, bytes);
+	size_t *perm = malloc(n * sizeof *perm);
+	if (!b || !perm)
+		return NULL;
+	for (size_t i = 0; i < n; i++)
+		perm[i] = i;
+	for (size_t i = n - 1; i > 0; i--) {
+		size_t j = (size_t)(rng() % (i + 1)), t = perm[i];
+		perm[i] = perm[j];
+		perm[j] = t;
+	}
+	for (size_t i = 0; i < n; i++)
+		*(void **)(b + perm[i] * LINE) = b + perm[(i + 1) % n] * LINE;
+	void **start = (void **)(b + perm[0] * LINE);
+	free(perm);
+	return start;
+}
+
+static void pin(int core)
+{
+	cpu_set_t set;
+	CPU_ZERO(&set);
+	CPU_SET(core, &set);
+	sched_setaffinity(0, sizeof set, &set);
+	sched_yield();
+}
+
+static void *helper(void *arg)
+{
+	char c;
+	(void)arg;
+	cpu_set_t set;
+	CPU_ZERO(&set);
+	CPU_SET(core_q, &set);
+	pthread_setaffinity_np(pthread_self(), sizeof set, &set);
+	while (read(pa[0], &c, 1) == 1)
+		if (write(pb[1], &c, 1) != 1)
+			break;
+	return NULL;
+}
+
+static long chase(void **p, int64_t end)
+{
+	long it = 0;
+	do {
+		for (int i = 0; i < 256; i++)
+			p = (void **)*p;
+		it += 256;
+	} while (now_ns() < end);
+	sink = (uint64_t)(uintptr_t)p;
+	return it;
+}
 
 static const char *const SYS_WALK[] = {"sys", "devices", "virtual", "dmi", "id", "sys_vendor", NULL};
 static const char *const TMP_WALK[] = {"run", "tjinj-walk", "a", "b", "c", "d", NULL};
@@ -156,6 +227,17 @@ static long act(char k, const char *uevent, int64_t burst_ns, unsigned char *buf
 			close(fd);
 			it++;
 		} while (now_ns() < end);
+	} else if (k == 'R' || k == 'Q') {
+		it = chase(chase_big, end);
+	} else if (k == 'L') {
+		it = chase(chase_small, end);
+	} else if (k == 'W') {
+		char c = 1;
+		do {
+			if (write(pa[1], &c, 1) != 1 || read(pb[0], &c, 1) != 1)
+				return -1;
+			it++;
+		} while (now_ns() < end);
 	} else if (k == 'S') {
 		do {
 			for (int i = 0; i < 256; i++)
@@ -182,6 +264,7 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "--step")) step = atof(argv[i + 1]);
 		else if (!strcmp(argv[i], "--jitter")) jitter = atof(argv[i + 1]);
 		else if (!strcmp(argv[i], "--burst-ms")) burst_ms = atof(argv[i + 1]);
+		else if (!strcmp(argv[i], "--core-q")) core_q = atoi(argv[i + 1]);
 		else if (!strcmp(argv[i], "--kinds")) {
 			size_t j = 0;
 			for (const char *c = argv[i + 1]; *c && j < MAXK - 1; c++)
@@ -195,12 +278,12 @@ int main(int argc, char **argv)
 	}
 	if (!zone || !marker || !logp) {
 		fprintf(stderr, "usage: burst_inject --zone DIR --marker FILE --log FILE --seed N [--kinds UNCMTS] "
-				"[--start S] [--step S] [--jitter S] [--burst-ms MS] [--seqnum FILE]\n");
+				"[--start S] [--step S] [--jitter S] [--burst-ms MS] [--seqnum FILE] [--core-q N]\n");
 		return 2;
 	}
 	size_t nk = strlen(kinds);
 	for (size_t i = 0; i < nk; i++)
-		if (!strchr("UNCMTSPFA", kinds[i])) {
+		if (!strchr("UNCMTSPFARQLW", kinds[i])) {
 			fprintf(stderr, "burst_inject: unknown kind %c\n", kinds[i]);
 			return 2;
 		}
@@ -216,6 +299,20 @@ int main(int argc, char **argv)
 	int64_t offs[MAXK];
 	for (size_t i = 0; i < nk; i++)
 		offs[i] = (int64_t)((start + step * (double)i + jitter * urand()) * 1e9);
+	cpu_set_t home;
+	sched_getaffinity(0, sizeof home, &home);
+	if (strpbrk(kinds, "RQ") && !(chase_big = build_chase(2u << 20)))
+		return 1;
+	if (strchr(kinds, 'L') && !(chase_small = build_chase(128u << 10)))
+		return 1;
+	if (strchr(kinds, 'W')) {                          /* the helper thread, started now */
+		pthread_t th;
+		char c = 0;
+		if (pipe(pa) || pipe(pb) || pthread_create(&th, NULL, helper, NULL))
+			return 1;
+		if (write(pa[1], &c, 1) != 1 || read(pb[0], &c, 1) != 1)
+			return 1;
+	}
 	unsigned char *buf = malloc(BUF);
 	if (!buf) {
 		fprintf(stderr, "burst_inject: no memory\n");
@@ -243,6 +340,8 @@ int main(int argc, char **argv)
 		ts.tv_sec = at / 1000000000ll;
 		ts.tv_nsec = at % 1000000000ll;
 		clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, NULL);
+		if (kinds[i] == 'Q')
+			pin(core_q);                           /* moved first; the marker is after */
 		long s0 = read_seq(seqp);
 		char m[64];
 		int ml = snprintf(m, sizeof m, "tjinj %c %zu\n", kinds[i], i);
@@ -253,6 +352,10 @@ int main(int argc, char **argv)
 		int64_t t = now_ns();
 		long it = act(kinds[i], uevent, (int64_t)(burst_ms * 1e6), buf);
 		double dur = (double)(now_ns() - t) / 1000.0;
+		if (kinds[i] == 'Q') {
+			sched_setaffinity(0, sizeof home, &home);
+			sched_yield();
+		}
 		long s1 = read_seq(seqp);
 		if (it < 0) {
 			fprintf(stderr, "burst_inject: action %c failed\n", kinds[i]);
