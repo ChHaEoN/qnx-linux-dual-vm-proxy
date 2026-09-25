@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # partition-boot.sh -- add, select and remove a second L4T boot entry that partitions the
-# kernel: the host's housekeeping on cores 3 and 5, QEMU's cores and the probe's isolated.
+# kernel: the host's housekeeping on cores 0 and 5, QEMU's cores and the probe's isolated.
 # Phase 3b / A6, 2026-09-25; for run-partition.sh. The owner asked for this (2026-09-25).
 #
 #   partition-boot.sh status             DEFAULT, whether the entry exists, the running cmdline
@@ -9,18 +9,19 @@
 #   partition-boot.sh remove             restore the saved extlinux.conf, byte for byte
 #
 # The entry is a copy of LABEL primary (comment lines left out) whose APPEND line gains
-# PARAMS (default "isolcpus=managed_irq,domain,0-2,4 irqaffinity=3,5"). This kernel has
+# PARAMS (default "isolcpus=managed_irq,domain,1-4 irqaffinity=0,5"; core 0, the boot CPU,
+# cannot be isolated on this kernel). This kernel has
 # CPU_ISOLATION but not NO_HZ_FULL or RCU_NOCB_CPU, so the tick itself stays: isolcpus=domain
 # takes the cores out of the scheduler's load balancing and gives unbound work queues and
 # init (so all of userspace) the housekeeping cores; managed_irq and irqaffinity keep device
-# interrupts off them. Nothing is changed but /boot/extlinux/extlinux.conf; the original is
+# interrupts off the isolated ones. Nothing is changed but /boot/extlinux/extlinux.conf; the original is
 # kept beside it as extlinux.conf.pre-partition with its sha256, and every write is synced
 # and read back. A boot that fails needs the owner at the board: the L4T menu on the serial
 # console (TIMEOUT 3 s) still offers LABEL primary.
 set -u
 CONF="${CONF:-/boot/extlinux/extlinux.conf}"
 SAVE="$CONF.pre-partition"
-PARAMS="${PARAMS:-isolcpus=managed_irq,domain,0-2,4 irqaffinity=3,5}"
+PARAMS="${PARAMS:-isolcpus=managed_irq,domain,1-4 irqaffinity=0,5}"
 LABEL=partition
 tmp=""
 

@@ -15,6 +15,7 @@ import partition_report as pr  # noqa: E402
 REPORT = os.path.join(GC, "partition_report.py")
 HARNESS = os.path.join(GC, "run-partition.sh")
 BASH = shutil.which("bash")
+PARAMS = "isolcpus=managed_irq,domain,1-4 irqaffinity=0,5"
 SOFT = ("HI", "TIMER", "NET_TX", "NET_RX", "BLOCK", "IRQ_POLL", "TASKLET", "SCHED", "HRTIMER", "RCU")
 
 
@@ -24,13 +25,13 @@ def _irq(sched, dev0):
         out.append("== round 1 %s softirqs" % when)
         out.append("                    CPU0       CPU1       CPU2       CPU3       CPU4       CPU5")
         for row in SOFT:
-            v = [100 + add * (sched if row == "SCHED" and c in (0, 1, 2, 4) else 7) for c in range(6)]
+            v = [100 + add * (sched if row == "SCHED" and c in (1, 2, 3, 4) else 7) for c in range(6)]
             out.append("%12s: %s" % (row, " ".join("%10d" % x for x in v)))
         out.append("== round 1 %s interrupts" % when)
         out.append("           CPU0       CPU1       CPU2       CPU3       CPU4       CPU5")
         out.append(" 13: %s     GICv3  30 Level     arch_timer" % " ".join("%10d" % (500 + add * 250) for _ in range(6)))
         out.append("276: %s     GICv3 104 Level     rtl88x2ce" % " ".join(
-            "%10d" % (40 + add * (dev0 if c == 0 else 0)) for c in range(6)))
+            "%10d" % (40 + add * (dev0 if c == 1 else 0)) for c in range(6)))
         out.append("IPI0: %s       Rescheduling interrupts" % " ".join("%10d" % (9 + add) for _ in range(6)))
     return "\n".join(out) + "\n"
 
@@ -40,17 +41,18 @@ def _boot(out, tag, k=16, tick=11.0, tail_every=10, sched=None, iso=None, uptime
     out.mkdir(parents=True)
     rng = random.Random(seed + ord(tag[0]) * 7 + int(tag[1]))
     part = arm == "partition"
-    iso = ("0-2,4" if part else "") if iso is None else iso
+    iso = ("1-4" if part else "") if iso is None else iso
     info = "cmdline isolcpus/irqaffinity: %s; isolated '%s'; default_smp_affinity %s; uptime at preflight %d s" % (
-        " ".join(pr.PARAMS) if part else "", iso, "28" if part else "3f", uptime)
+        PARAMS if part else "", iso, "21" if part else "3f", uptime)
     (out / "stamp.json").write_text(json.dumps({"arm": arm, "boot_tag": tag, "boot": info,
-                                                "pin": {"qemu": "0-2", "probe": 4}}))
+                                                "layout": {"conf": "0,5", "isolated": "1-4", "params": PARAMS},
+                                                "pin": {"qemu": "1-3", "probe": 4}}))
     order, clog, plog = [], [], []
     for r in range(1, k + 1):
         order.append("round %d arm: %s" % (r, arm))
         for w in ("before", "after"):
-            clog.append("round %d %s udevd=3,5 pid1=3,5 gnome-shell=3,5 qemu=0 1 2" % (r, w))
-            plog += ["round %d %s 5001 1 1" % (r, w), "round %d %s 5002 2 2" % (r, w), "round %d %s 5000 0 0" % (r, w)]
+            clog.append("round %d %s udevd=0,5 pid1=0,5 gnome-shell=0,5 qemu=1 2 3" % (r, w))
+            plog += ["round %d %s 5001 1 1" % (r, w), "round %d %s 5002 2 2" % (r, w), "round %d %s 5000 3 3" % (r, w)]
         base = 1e9 + r * 1e7
         lines = ["%.6f 003 T tj-thermal" % ((base + t) / 1e6) for t in (600_000.0, 1_624_000.0)]
         samples = []
@@ -98,8 +100,8 @@ def test_irq_counts_read_softirqs_and_device_interrupts(tmp_path):
     p = tmp_path / "irq.txt"
     p.write_text(_irq(1000, 50))
     c = pr.irq_counts(str(p))
-    assert pr.delta(c, "SCHED", (0, 1, 2, 4)) == 4000 and pr.delta(c, "SCHED", (3,)) == 7
-    assert pr.delta(c, "DEV", (0,)) == 50 and pr.delta(c, "DEV", (1,)) == 0   # the timer and IPIs are not devices
+    assert pr.delta(c, "SCHED", (1, 2, 3, 4)) == 4000 and pr.delta(c, "SCHED", (0,)) == 7
+    assert pr.delta(c, "DEV", (1,)) == 50 and pr.delta(c, "DEV", (0,)) == 0   # the timer and IPIs are not devices
 
 
 def test_a_partition_that_halves_the_tick_holds_everything(tmp_path):
@@ -124,7 +126,7 @@ def test_a_partition_that_did_not_take_or_boots_out_of_order_void(tmp_path):
     s = _report([d[1], d[0], d[2], d[3]])
     assert "not scored" in _line(s, "P1"), s
     s = _report(["--one", d[1]])
-    assert "B1  partition rounds 16 aligned 16" in s and "isolated '0-2,4'" in s, s
+    assert "B1  partition rounds 16 aligned 16" in s and "isolated '1-4'" in s, s
 
 
 def test_the_harness_parses_and_states_its_rule_and_prediction_before_any_code():
@@ -135,6 +137,8 @@ def test_the_harness_parses_and_states_its_rule_and_prediction_before_any_code()
     head, body = text.split("\nset -u\n", 1)
     for s in ("partition SLOWDOWN <= 0.75x default's", "partition SLOWDOWN >= +3 us", "partition RATIO <= 0.75x default's",
               "both partition boots' SLOWDOWN below both default boots'", "|p50 partition - p50 default| <= 3 us",
-              "A1 B1 B2 A2", "It is not to be amended", "The owner asked for", "ONE PER CORE"):
+              "A1 B1 B2 A2", "It is not to be amended", "The owner asked for", "ONE PER CORE",
+              "CHANGED AFTER THE FIRST ATTEMPT", "will not isolate it", "The rule, the checks\n# and the predictions are unchanged"):
         assert s in head, s
-    assert 'HK=3,5' in body and 'irq_snap "$r" before' in body and "partition_report.py" in body
+    assert 'HK="$CONF_CORES"' in body and 'irq_snap "$r" before' in body and "partition_report.py" in body
+    assert 'QEMU_CORES="${QEMU_CORES:-1-3}"' in body and 'ISO_CORES="${ISO_CORES:-1-4}"' in body

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # run-partition.sh -- one boot's rounds of the partition test: does partitioning the kernel
-# (isolcpus=managed_irq,domain,0-2,4 irqaffinity=3,5) take part of the host's tick off the
+# (isolcpus=managed_irq,domain,1-4 irqaffinity=0,5) take part of the host's tick off the
 # exchange? Phase 3b / A6, 2026-09-25; follows 20260925T-a6-orin-tick. The owner asked for
 # this test (2026-09-25), which reboots the board into a second boot entry and back
 # (partition-boot.sh) and changes systemd settings at runtime, all restored after.
@@ -13,19 +13,20 @@
 # (20260925T-a6-orin-tick). This kernel has CPU_ISOLATION but not NO_HZ_FULL or
 # RCU_NOCB_CPU: the tick cannot be stopped, but isolcpus=domain takes the isolated cores
 # out of the scheduler's domains, so no load balancing runs there, and gives unbound work
-# queues and init (so all of userspace) the housekeeping cores 3 and 5; managed_irq and
-# irqaffinity=3,5 keep device interrupts off 0-2 and 4. Per-CPU work (vmstat_update, the
-# per-CPU timers) and the tick's interrupt stay.
+# queues and init (so all of userspace) the housekeeping cores 0 and 5; managed_irq and
+# irqaffinity=0,5 keep device interrupts off 1-4. Per-CPU work (vmstat_update, the per-CPU
+# timers) and the tick's interrupt stay.
 #
 # THE DESIGN. Two ARMS, one per boot entry: default (LABEL primary, as shipped) and
 # partition (LABEL partition, the same plus PARAMS). Four boots in the order A1 B1 B2 A2
 # (A default, B partition), each a fresh reboot; this harness runs one boot's rounds and
 # refuses a boot whose command line does not match its BOOT_TAG. In every boot and round:
 #   - the host's userspace confined as run-tick.sh's: system.slice, init.scope,
-#     user@1000.service and every session scope but the harness's own on AllowedCPUs=3,5,
-#     restored to 0-5 and the drop-ins removed at the end (confine.log);
+#     user@1000.service and every session scope but the harness's own on AllowedCPUs=0,5
+#     (the housekeeping cores), restored to 0-5 and the drop-ins removed at the end
+#     (confine.log);
 #   - QEMU's threads pinned ONE PER CORE, in both arms: vCPU n ("CPU n/KVM") alone on the
-#     n-th core of VCPU_CORES (1 2), every other QEMU thread on OTHER_CORES (0), read back
+#     n-th core of VCPU_CORES (1 2), every other QEMU thread on OTHER_CORES (3), read back
 #     per thread before and after every round (pin.log). The isolated cores get no load
 #     balancing, so a set pin could leave two threads on one core for good; the default arm
 #     gets the same layout so that only the boot entry differs. This is not the set pin
@@ -59,16 +60,28 @@
 #   P5 the typical exchange does not change: |p50 partition - p50 default| <= 3 us.
 # THE CHECKS (a prediction resting on a failed one prints VOID):
 #   M1 >= 90% of each boot's rounds align -> all
-#   M2 every round confined (udevd, PID 1, gnome-shell on 3,5) and every QEMU thread on its
-#      own pin, before and after -> all
+#   M2 every round confined (udevd, PID 1, gnome-shell on CONF_CORES) and every QEMU thread
+#      on its own pin, before and after -> all
 #   M3 no SSH login during any boot's rounds -> all
 #   M4 the arms are what they say: each boot's command line has PARAMS (partition) or
 #      neither isolcpus= nor irqaffinity= (default), /sys/devices/system/cpu/isolated reads
-#      0-2,4 or nothing, and the SCHED softirqs on cores 0-2 and 4 per round in the
-#      partition boots are <= 5% of the default boots' -> all
+#      ISO_CORES or nothing, and the SCHED softirqs on ISO_CORES per round in the partition
+#      boots are <= 5% of the default boots' -> all
 #   M5 four boots, A1 B1 B2 A2, each settled (uptime >= 600 s at its first round) -> all
 #   M6 >= 25 tick-bin tail exchanges per arm -> P1 P3
 # Scored only with all four boots at k = 16.
+#
+# CHANGED AFTER THE FIRST ATTEMPT, BEFORE ANY SCORED RUN (2026-09-25). The layout first
+# committed isolated 0-2 and 4 (isolcpus=managed_irq,domain,0-2,4 irqaffinity=3,5), with
+# QEMU's other threads on core 0 and the userspace confined to 3 and 5. The first partition
+# boot read isolated '1-2,4': this kernel keeps the boot CPU, core 0, as a housekeeping core
+# and will not isolate it, and the harness refused the boot as neither arm. So the layout
+# moved one core, in both arms: isolated 1-4 (isolcpus=managed_irq,domain,1-4
+# irqaffinity=0,5), QEMU's other threads on core 3 (QEMU_CORES 1-3), the vCPUs still on 1
+# and 2, the probe still on 4, the userspace and the housekeeping on 0 and 5, and M2 and M4
+# read their expected cores from these settings (stamp.json "layout"). The rule, the checks
+# and the predictions are unchanged. The one default boot run under the old layout (its
+# QEMU threads on 0, 1, 2) is kept as not scored; its figures were seen before this change.
 #
 # NEEDS: the guest running (ifs-stamp.bin; CONSOLE its console log), launched with
 # THREAD_NAMES=1. c7 OFF (CSTATE=shallow, set before the library). NO LOAD. A STALL STOPS
@@ -90,7 +103,7 @@ K="${K:-16}"
 WARMUP="${WARMUP:-200}"
 INTERVAL_MS=2
 SEED="${SEED:-24}"
-QEMU_CORES="${QEMU_CORES:-0-2}"
+QEMU_CORES="${QEMU_CORES:-1-3}"
 CORE_PROBE="${CORE_PROBE:-4}"
 CORE_AUX="${CORE_AUX:-5}"
 PROBE="${PROBE:-$here/latency_probe.py}"
@@ -98,10 +111,11 @@ TJT="${TJT:-$here/tjphase_trace.py}"
 REPORT="${REPORT:-$here/partition_report.py}"
 BOOT_TAG="${BOOT_TAG:?set BOOT_TAG to A1, B1, B2 or A2}"
 SETTLE_S="${SETTLE_S:-600}"
-PARAMS="${PARAMS:-isolcpus=managed_irq,domain,0-2,4 irqaffinity=3,5}"
+PARAMS="${PARAMS:-isolcpus=managed_irq,domain,1-4 irqaffinity=0,5}"
+ISO_CORES="${ISO_CORES:-1-4}"
 VCPU_CORES="${VCPU_CORES:-1 2}"
-OTHER_CORES="${OTHER_CORES:-0}"
-CONF_CORES="${CONF_CORES:-3,5}"
+OTHER_CORES="${OTHER_CORES:-3}"
+CONF_CORES="${CONF_CORES:-0,5}"
 TRACE="${TRACE:-/sys/kernel/tracing}"
 TRACE_KB="${TRACE_KB:-2048}"
 ZONE_TYPE=tj-thermal
@@ -253,12 +267,12 @@ ISO="$(cat /sys/devices/system/cpu/isolated 2>/dev/null)"
 HAS=""
 for p in $PARAMS; do tr ' ' '\n' < /proc/cmdline | grep -qxF -- "$p" && HAS="$HAS+" || HAS="$HAS-"; done
 ANY="$(tr ' ' '\n' < /proc/cmdline | grep -cE '^(isolcpus|irqaffinity)=')"
-if [ "${HAS//+/}" = "" ] && [ "$ISO" = 0-2,4 ]; then ARM=partition
+if [ "${HAS//+/}" = "" ] && [ "$ISO" = "$ISO_CORES" ]; then ARM=partition
 elif [ "$ANY" = 0 ] && [ -z "$ISO" ]; then ARM=default
 else die "this boot is neither arm: cmdline tokens $HAS, isolcpus/irqaffinity tokens $ANY, isolated '$ISO'"; fi
 case "$BOOT_TAG:$ARM" in A1:default|A2:default|B1:partition|B2:partition) ;;
 	*) die "BOOT_TAG $BOOT_TAG does not match this boot's arm ($ARM)" ;; esac
-HK=0-5; [ "$ARM" = partition ] && HK=3,5   # the affinity every userspace task inherits from init
+HK=0-5; [ "$ARM" = partition ] && HK="$CONF_CORES"   # the affinity every userspace task inherits from init
 UPTIME0="$(cut -d' ' -f1 /proc/uptime | cut -d. -f1)"
 [ "$UPTIME0" -ge "$SETTLE_S" ] || die "the boot is ${UPTIME0} s old, under SETTLE_S=$SETTLE_S: let it settle"
 ME="$(basename "$(cut -d: -f3 /proc/self/cgroup)")"
@@ -312,6 +326,7 @@ INTERVAL_MS=2 m_write_stamp "$OUT/stamp.json" \
 	'"experiment": "partition"' \
 	"\"arm\": \"$ARM\"" \
 	"\"boot_tag\": \"$BOOT_TAG\"" \
+	"\"layout\": {\"conf\": \"$CONF_CORES\", \"isolated\": \"$ISO_CORES\", \"params\": \"$PARAMS\"}" \
 	"\"boot\": \"cmdline isolcpus/irqaffinity: $(tr ' ' '\n' < /proc/cmdline | grep -E '^(isolcpus|irqaffinity)=' | tr '\n' ' '); isolated '$ISO'; default_smp_affinity $(cat /proc/irq/default_smp_affinity); uptime at preflight ${UPTIME0} s\"" \
 	"\"pin\": {\"qemu\": \"$QEMU_CORES\", \"vcpus\": \"$VCPU_CORES\", \"qemu_other\": \"$OTHER_CORES\", \"probe\": $CORE_PROBE, \"aux\": $CORE_AUX}" \
 	"\"port\": $D_PORT" \

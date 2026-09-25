@@ -32,8 +32,6 @@ TAGS = ("A1", "B1", "B2", "A2")
 ARM_OF = {"A1": "default", "A2": "default", "B1": "partition", "B2": "partition"}
 ARMS = ("default", "partition")
 SCORED_K, SETTLE_S = 16, 600
-PARAMS = ("isolcpus=managed_irq,domain,0-2,4", "irqaffinity=3,5")
-WATCHED = (0, 1, 2, 4)
 LESS, FLOOR, SAME, SCHED_LEFT, MIN_TAIL = 0.75, 3.0, 3.0, 0.05, 25
 
 
@@ -85,13 +83,18 @@ def delta(counts, row, cpus):
 def boot(out, n, warm):
     """Everything one boot's directory says, as a dict."""
     stamp = json.load(open(os.path.join(out, "stamp.json")))
+    lay = stamp.get("layout", {})
+    params = tuple(lay.get("params", "").split())
+    watched = tuple(sorted(_cpus(lay.get("isolated", ""))))
     info = stamp.get("boot", "")
     up = re.search(r"uptime at preflight (\d+) s", info)
     iso = re.search(r"isolated '([^']*)'", info)
     b = {"dir": out, "tag": stamp.get("boot_tag"), "arm": stamp.get("arm"), "uptime": int(up.group(1)) if up else -1,
-         "isolated": iso.group(1) if iso else None, "params": [p for p in PARAMS if p in info],
+         "isolated": iso.group(1) if iso else None, "params": [p for p in params if p in info],
+         "want_params": params, "want_iso": lay.get("isolated", ""), "conf": _cpus(lay.get("conf", "")),
+         "watched": watched,
          "any_param": bool(re.search(r"(isolcpus|irqaffinity)=", info.split(";")[0])),
-         "rows": [], "all": [], "rounds": 0, "aligned": 0, "sched": [], "timer": [], "dev0": []}
+         "rows": [], "all": [], "rounds": 0, "aligned": 0, "sched": [], "timer": [], "dev": []}
     rounds = sorted(int(re.search(r"_r(\d+)\.", f).group(1)) for f in glob.glob(os.path.join(out, "lat-t2ms_r*.json")))
     b["rounds"] = len(rounds)
     for r in rounds:
@@ -104,7 +107,7 @@ def boot(out, n, warm):
         p = os.path.join(out, "irq-t2ms_r%d.txt" % r)
         if os.path.exists(p):
             c = irq_counts(p)
-            for key, row, cpus in (("sched", "SCHED", WATCHED), ("timer", "TIMER", WATCHED), ("dev0", "DEV", (0,))):
+            for key, row, cpus in (("sched", "SCHED", watched), ("timer", "TIMER", watched), ("dev", "DEV", watched)):
                 d = delta(c, row, cpus)
                 if d is not None:
                     b[key].append(d)
@@ -116,7 +119,8 @@ def boot(out, n, warm):
             if m:
                 conf[int(m.group(1))].append(m.groups()[2:])
     b["confined"] = sum(1 for r in rounds if len(conf[r]) == 2 and
-                        all(u == "3,5" and p1 == "3,5" and gs in ("3,5", "none") for u, p1, gs in conf[r]))
+                        all(_cpus(u) == b["conf"] and _cpus(p1) == b["conf"] and (gs == "none" or _cpus(gs) == b["conf"])
+                            for u, p1, gs in conf[r]))
     pins = collections.defaultdict(lambda: [0, 0])
     p = os.path.join(out, "pin.log")
     if os.path.exists(p):
@@ -146,7 +150,7 @@ def arm_ok(b):
     if b["arm"] != ARM_OF.get(b["tag"]):
         return False
     if b["arm"] == "partition":
-        return len(b["params"]) == len(PARAMS) and b["isolated"] == "0-2,4"
+        return bool(b["want_params"]) and len(b["params"]) == len(b["want_params"]) and b["isolated"] == b["want_iso"]
     return not b["any_param"] and b["isolated"] == ""
 
 
@@ -157,9 +161,10 @@ def show_boot(b):
           % (b["tag"], b["arm"], b["rounds"], b["aligned"], p50, br.pct(v, 99) if v else float("nan"),
              br.pct(v, 99.9) if v else float("nan"), slow, ratio, tin))
     print("      confined %d/%d, pinned %d/%d, logins %s, uptime %d s, isolated '%s', params %d/%d;"
-          " per round on cores 0-2,4: SCHED %s, TIMER %s; device IRQs on core 0 %s"
+          " per round on cores %s: SCHED %s, TIMER %s, device IRQs %s"
           % (b["confined"], b["rounds"], b["pinned"], b["rounds"], b["logins"], b["uptime"], b["isolated"],
-             len(b["params"]), len(PARAMS), _m(b["sched"]), _m(b["timer"]), _m(b["dev0"])))
+             len(b["params"]), len(b["want_params"]), ",".join(map(str, b["watched"])), _m(b["sched"]), _m(b["timer"]),
+             _m(b["dev"])))
 
 
 def _m(xs):
@@ -203,7 +208,7 @@ def main(argv):
           % (", ".join("%s %d+%d/%d" % (b["tag"], b["confined"], b["pinned"], b["rounds"]) for b in boots),
              "ok" if ok["M2"] else "FAILED"))
     print("  M3 SSH logins during the rounds: %s -> %s" % ([b["logins"] for b in boots], "ok" if ok["M3"] else "FAILED"))
-    print("  M4 the arms are what they say (%s); SCHED softirqs per round on cores 0-2,4: default %.0f, partition %.0f"
+    print("  M4 the arms are what they say (%s); SCHED softirqs per round on the isolated cores: default %.0f, partition %.0f"
           " (want <= %.0f%%) -> %s" % (", ".join("%s %s" % (b["tag"], "ok" if arm_ok(b) else "WRONG") for b in boots),
                                         sd["default"], sd["partition"], 100 * SCHED_LEFT, "ok" if ok["M4"] else "FAILED"))
     print("  M5 four boots in the order %s, each settled (>= %d s): %s -> %s"

@@ -56,8 +56,8 @@ def test_install_select_and_remove_round_trip(tmp_path):
     text = conf.read_text()
     assert text.startswith(L4T) and "\nLABEL partition\n" in text and "DEFAULT primary" in text
     new = text[len(L4T):]
-    assert "#" not in new and "MENU LABEL partition: isolcpus=managed_irq,domain,0-2,4 irqaffinity=3,5" in new
-    assert "console=tty0 isolcpus=managed_irq,domain,0-2,4 irqaffinity=3,5\n" in new
+    assert "#" not in new and "MENU LABEL partition: isolcpus=managed_irq,domain,1-4 irqaffinity=0,5" in new
+    assert "console=tty0 isolcpus=managed_irq,domain,1-4 irqaffinity=0,5\n" in new
     assert "LINUX /boot/Image\n" in new and "INITRD /boot/initrd\n" in new
     assert _run(env, "install")[0] != 0                       # twice: refused
     rc, out = _run(env, "default", "partition")
