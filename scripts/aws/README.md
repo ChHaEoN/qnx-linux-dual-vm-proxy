@@ -53,6 +53,9 @@ This is a test bed for one measurement session, never a runtime host.
 cp scripts/aws/.env.example scripts/aws/.env.local   # then fill it in; it is gitignored
 ```
 
+A `METAL_*` value exported in the environment wins over the file's. Pass a
+session's own `METAL_REPO_TAR` that way.
+
 **Check these before `launch`, while nothing is billed yet.** `launch` validates only
 `METAL_KEY_NAME` and `METAL_SG_NAME`; the values below are first read once the instance
 is up, so a stale one costs a launched `a1.metal` and the full 15-minute provisioning

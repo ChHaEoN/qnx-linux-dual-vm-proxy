@@ -195,6 +195,22 @@ def _sched(tmp_path, minutes, mode="poweroff"):
 
 
 @needs_bash
+def test_the_environment_wins_over_env_local(tmp_path):
+    # 2026-09-25: .env.local's METAL_REPO_TAR replaced the one given on the command line,
+    # and an older session's repository was uploaded. A value in the environment now wins;
+    # a value only the file sets still comes from the file.
+    d = tmp_path / "aws"
+    d.mkdir()
+    shutil.copy(DRIVER, str(d / "drive-metal.sh"))
+    _write(d / ".env.local", "METAL_REPO_TAR=/from/file/repo.tar\nMETAL_IFS=/from/file/ifs-stamp.bin")
+    e = {k: v for k, v in os.environ.items() if k not in ("METAL_NO_ENV_LOCAL", "METAL_IFS", "METAL_REPO_TAR")}
+    e.update(PATH=_path_with(), METAL_REPO_TAR="/given/repo.tar")
+    r = subprocess.run([BASH, "-c", '. "$1"; echo "tar=$METAL_REPO_TAR ifs=$METAL_IFS"', "_", str(d / "drive-metal.sh")],
+                       capture_output=True, text=True, env=e, timeout=60)
+    assert "tar=/given/repo.tar ifs=/from/file/ifs-stamp.bin" in r.stdout, r.stdout + r.stderr
+
+
+@needs_bash
 def test_launch_terminates_when_the_block_devices_are_wrong(rig):
     run, state, _ = rig
     r, log = run("launch", STUB_MAPPINGS="/dev/sda1 2 /dev/sda1 True vol-0abcdef1234567890")

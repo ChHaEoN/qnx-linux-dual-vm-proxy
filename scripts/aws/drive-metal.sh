@@ -32,7 +32,16 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # METAL_NO_ENV_LOCAL: the tests must not pick up a developer's local configuration.
-[ -z "${METAL_NO_ENV_LOCAL:-}" ] && [ -r "$HERE/.env.local" ] && . "$HERE/.env.local"
+# The environment wins over the file: every METAL_* value already exported is put back
+# after .env.local is read. On 2026-09-25 the file's METAL_REPO_TAR silently replaced
+# the one given on the command line, and an older session's repository was uploaded.
+if [ -z "${METAL_NO_ENV_LOCAL:-}" ] && [ -r "$HERE/.env.local" ]; then
+	declare -A _given=()
+	for _v in $(env | sed -n 's/^\(METAL_[A-Z0-9_]*\)=.*/\1/p'); do _given[$_v]="${!_v}"; done
+	. "$HERE/.env.local"
+	for _v in "${!_given[@]}"; do printf -v "$_v" '%s' "${_given[$_v]}"; export "$_v"; done
+	unset _given _v
+fi
 AWS="${AWS:-aws}"
 REGION="${METAL_REGION:-eu-central-1}"
 AMI="${METAL_AMI:-ami-02153ae97d7504246}"      # ubuntu-jammy-22.04-arm64-server-20260904 (public)
