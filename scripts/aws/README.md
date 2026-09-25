@@ -100,6 +100,17 @@ On a host with no `tegrastats` the cost run records its GPU checks and window
 sampler as not applicable, in its stamp; `TEGRA=0` forces that path on the
 Orin, so a rehearsal there runs exactly what the instance will.
 
+### A metal session instead (2026-09-25)
+
+This runs `run-metal.sh`: the natural-state confinement comparison and the tick
+bin, on this host's own cores and HZ.
+- `METAL_IFS` is `ifs-stamp.bin`.
+- One phase replaces `launch` and `ladder`: `run metal` boots the guest and
+  runs the harness **in the same SSH session**. The harness confines every
+  other session scope to the cores QEMU and the probe do not use, so a guest
+  booted by an earlier phase would be confined with them.
+- `K` defaults to 40. Every other step is the same.
+
 ## What bounds the cost
 
 - **Self-termination, proven before anything is spent.**

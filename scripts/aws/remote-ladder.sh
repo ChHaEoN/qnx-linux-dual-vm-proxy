@@ -29,13 +29,21 @@
 #   stamp         run-stamp.sh: plain against stamped, on the guest and on the
 #                 native control, K rounds (a multiple of 4)
 #
+# A METAL SESSION (2026-09-25), with ifs-stamp.bin as the image:
+#
+#   metal         boot the guest plainly and check :7103 came up, then run-metal.sh
+#                 (open against confined host userspace, and the tick bin; K rounds,
+#                 default 40) IN THE SAME SSH SESSION: the harness confines every
+#                 other session scope, so a guest booted by an earlier phase would be
+#                 confined with them
+#
 # capture accepts any of these sessions, but only a FINISHED one.
 #
 # W (default ~/a1) holds repo.tar, inputs.env, remote-ladder.sh, capture.py and
 # img/<ifs> + img/disk-qemu.gz. Nothing under W leaves the host except pub.tgz,
 # and everything in pub.tgz went through redact-aws.sh or capture.py's check here.
 set -euo pipefail
-PHASE="${1:?phase: setup|quiesce|launch|ladder|launch-live|liveness|launch-stamp|stamp|capture|stop}"
+PHASE="${1:?phase: setup|quiesce|launch|ladder|launch-live|liveness|launch-stamp|stamp|metal|capture|stop}"
 W="${W:-$HOME/a1}"
 R="$W/repo/orin-native/gpu-concurrency"
 REC="$W/rec"
@@ -213,13 +221,35 @@ stamp)
 	{ date -u +%FT%TZ; cat /proc/loadavg; cat /proc/interrupts; } > "$REC/stamp/host-after.txt"
 	tail -22 "$REC/stamp/run.log"
 	;;
+metal)
+	case "${K:-40}" in *[!0-9]*|'') die "K='${K:-}' is not a round count" ;; esac
+	inputs
+	[ -r "$R/run-metal.sh" ] || die "the repo tarball lacks run-metal.sh"
+	[ -e "$REC/metal" ] && die "$REC/metal exists: one metal run per session"
+	cd "$R"
+	mkdir -p "$REC/metal"
+	C="$REC/metal/guest-console.log"
+	IFS_BIN="$W/img/$IFS_NAME" DISK="$W/img/disk-qemu" LOG="$C" bash launch-qnx-kvm-bridged.sh \
+		> "$REC/metal/guest-launch.log" 2>&1 || { cat "$REC/metal/guest-launch.log"; die "launch failed"; }
+	cat "$REC/metal/guest-launch.log"
+	B='stamping replies on :7103: t_in payload[8..15]'
+	for _ in $(seq 1 30); do tr -d '\0\r' < "$C" | grep -aqF "$B" && break; sleep 1; done
+	tr -d '\0\r' < "$C" | grep -aqF "$B" \
+		|| { tail -20 "$C"; die "no stamping monitor on :7103 -- is the image ifs-stamp?"; }
+	{ date -u +%FT%TZ; cat /proc/loadavg; cat /proc/interrupts; } > "$REC/metal/host-before.txt"
+	CONSOLE="$C" OUT="$REC/metal/raw" K="${K:-40}" bash "$R/run-metal.sh" > "$REC/metal/run.log" 2>&1 \
+		|| { tail -30 "$REC/metal/run.log"; die "run-metal.sh failed"; }
+	{ date -u +%FT%TZ; cat /proc/loadavg; cat /proc/interrupts; } > "$REC/metal/host-after.txt"
+	tail -24 "$REC/metal/run.log"
+	;;
 capture)
 	# The session must have FINISHED: host-after.txt is written only after the
 	# ladder, the liveness phase or the stamp phase returned 0. Without it the
 	# run was interrupted, or refused as incomplete, and a partial record must
 	# not be packed and fetched as a whole one.
 	[ -e "$REC/ladder/host-after.txt" ] || [ -e "$REC/liveness/host-after.txt" ] || [ -e "$REC/stamp/host-after.txt" ] \
-		|| die "no host-after.txt under $REC/ladder, $REC/liveness or $REC/stamp -- the session did not finish; there is no complete record to capture"
+		|| [ -e "$REC/metal/host-after.txt" ] \
+		|| die "no host-after.txt under $REC/ladder, $REC/liveness, $REC/stamp or $REC/metal -- the session did not finish; there is no complete record to capture"
 	RED="$R/redact-aws.sh"
 	bash "$RED" selftest >/dev/null || die "redactor selftest failed"
 	rm -rf "$W/pub" "$W/pub.sha256"; mkdir -p "$W/pub"
