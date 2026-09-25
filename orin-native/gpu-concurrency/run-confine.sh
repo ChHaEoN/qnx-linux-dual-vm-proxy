@@ -62,6 +62,19 @@
 #   M7 every QEMU thread stayed on 0-2 in every round -> all
 # Scored only at k = 24.
 #
+# CHANGED AFTER THE SMOKE RUN, BEFORE THE RECORDED ONE (2026-09-25). The smoke run's M7
+# failed in every round: QEMU's threads were on 0-5, not 0-2. The first set-property turns
+# the cpuset controller on under user-1000.slice, and that resets the affinity of every task
+# in its scopes to their cpuset's, 0-5 -- QEMU's taskset pin included, although the
+# harness's own scope is never set. So after every switch the harness now pins every QEMU
+# thread back to QEMU_CORES and checks it (M7 still reads it before and after every round).
+# Two more fixes: confine.log wrote gnome-shell's pid after its allowed CPUs (a shell
+# expansion); and preflight took the smoke run's own restore (init.scope's AllowedCPUs left
+# at 0-5 in systemd's memory after the drop-ins were removed) for someone else's setting,
+# so it now accepts an AllowedCPUs of empty or 0-5, both meaning every core. The rule, the
+# checks and the predictions are unchanged. The smoke run's figures, with QEMU unpinned, say
+# nothing about the prediction.
+#
 # NEEDS: the guest running (ifs-stamp.bin; CONSOLE its console log), gcc. c7 OFF
 # (CSTATE=shallow, set before the library). NO LOAD. A STALL STOPS THE RUN.
 set -u
@@ -156,11 +169,22 @@ set_units() {   # $1 core list
 }
 
 conf_state() {   # one line: udevd, PID 1, gnome-shell and QEMU threads' allowed CPUs
-	local g q t
+	local g gs q t
 	g="$(pgrep -o -x gnome-shell)"
+	if [ -n "$g" ]; then gs="$(allowed "$g")"; else gs=none; fi
 	q=""
 	for t in $(ls "/proc/$QPID/task"); do q="$q$(allowed "$QPID/task/$t") "; done
-	echo "udevd=$(allowed "$(pgrep -o -x systemd-udevd)") pid1=$(allowed 1) gnome-shell=${g:+$(allowed "$g")}${g:-none} qemu=$(echo $q | tr ' ' '\n' | sort -u | tr '\n' ' ' | sed 's/ $//')"
+	echo "udevd=$(allowed "$(pgrep -o -x systemd-udevd)") pid1=$(allowed 1) gnome-shell=$gs qemu=$(echo $q | tr ' ' '\n' | sort -u | tr '\n' ' ' | sed 's/ $//')"
+}
+
+repin_qemu() {   # the cpuset changes reset QEMU's own pin; put it back and check it
+	local t
+	for t in $(ls "/proc/$QPID/task"); do
+		sudo -n taskset -pc "$QEMU_CORES" "$t" > /dev/null || return 1
+	done
+	for t in $(ls "/proc/$QPID/task"); do
+		[ "$(_cpuset "$(allowed "$QPID/task/$t")")" = "$(_cpuset "$QEMU_CORES")" ] || return 1
+	done
 }
 
 cleanup() {
@@ -208,7 +232,7 @@ ME="$(basename "$(cut -d: -f3 /proc/self/cgroup)")"
 case "$ME" in session-*.scope) ;; *) die "the harness is not in a session scope ($ME)" ;; esac
 UNITS="system.slice init.scope $(systemctl list-units 'user@*.service' --no-legend | awk '{print $1}') $(systemctl list-units --type=scope --state=running --no-legend | awk '{print $1}' | grep '^session-' | grep -vx "$ME")"
 for u in $UNITS; do
-	[ -z "$(systemctl show -p AllowedCPUs --value "$u")" ] || die "$u already has AllowedCPUs set -- someone else changed it"
+	case "$(systemctl show -p AllowedCPUs --value "$u")" in ""|0-5) ;; *) die "$u already has AllowedCPUs set -- someone else changed it" ;; esac
 done
 for s in /proc/[0-9]*/task/[0-9]*/status; do
 	c="$(awk '/^Cpus_allowed_list/ {print $2}' "$s" 2>/dev/null)"
@@ -278,6 +302,7 @@ for r in $(seq 1 "$K"); do
 	arm="${CPAT[$(( (r - 1) % ${#CPAT[@]} ))]}"
 	echo "round $r arm: $arm" >> "$OUT/order.log"
 	if [ "$arm" = confined ]; then set_units "$CONF_CORES"; else set_units 0-5; fi || die "could not set the units for round $r"
+	repin_qemu || die "could not pin QEMU back to $QEMU_CORES for round $r"
 	sleep 1
 	echo "round $r before $(conf_state)" >> "$OUT/confine.log"
 	m_thermal "r$r t2ms before" >> "$OUT/thermal.log"
