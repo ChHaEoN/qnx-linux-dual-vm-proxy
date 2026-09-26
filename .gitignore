@@ -63,6 +63,7 @@ ipc-test/qnx-server-net/qnx-echo-server-net
 ipc-test/qnx-server-net/qnx-echo-server-sweep
 ipc-test/qnx-server-net/qnx-echo-server-reads
 ipc-test/qnx-server-net/qnx-echo-server-timed
+ipc-test/qnx-ipcbench/qnx-ipcbench
 ipc-test/qnx-safety-monitor/qnx-safety-monitor
 ipc-test/qnx-dds-monitor/qnx-dds-monitor
 ipc-test/qnx-clockctl/qnx-clockctl
