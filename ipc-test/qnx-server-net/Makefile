@@ -16,11 +16,15 @@ SWEEP := qnx-echo-server-sweep
 # `make reads` builds the same source under its own name for the read-count test
 # (2026-09-26, run-reads.sh; ifs-reads.build), so ifs-sweep.bin's binary keeps its name.
 READS := qnx-echo-server-reads
+# `make timed`: the same source with -DSWEEP_TIMING (2026-09-26, run-readtime.sh;
+# ifs-timed.build), under its own name.
+TIMED := qnx-echo-server-timed
 
-.PHONY: all sweep reads clean
+.PHONY: all sweep reads timed clean
 all: $(BIN)
 sweep: $(SWEEP)
 reads: $(READS)
+timed: $(TIMED)
 
 $(BIN): server.c ../common/frame.h ../common/frame_io.h
 	$(CC) $(TARGET) $(CFLAGS) -o $@ server.c $(LDFLAGS)
@@ -31,5 +35,8 @@ $(SWEEP): sweep.c ../common/frame.h
 $(READS): sweep.c ../common/frame.h
 	$(CC) $(TARGET) $(CFLAGS) -o $@ sweep.c $(LDFLAGS)
 
+$(TIMED): sweep.c ../common/frame.h
+	$(CC) $(TARGET) $(CFLAGS) -DSWEEP_TIMING -o $@ sweep.c $(LDFLAGS)
+
 clean:
-	rm -f $(BIN) $(SWEEP) $(READS)
+	rm -f $(BIN) $(SWEEP) $(READS) $(TIMED)

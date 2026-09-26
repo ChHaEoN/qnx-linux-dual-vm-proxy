@@ -31,7 +31,8 @@
  *
  * TCP only, one client at a time, TCP_NODELAY per connection, as server.c.
  * Usage: qnx-echo-server-sweep PORT [greedy|split]
- * (built as qnx-echo-server-reads by `make reads` for ifs-reads.build)
+ * (built as qnx-echo-server-reads by `make reads` for ifs-reads.build, and with
+ * -DSWEEP_TIMING as qnx-echo-server-timed by `make timed` for ifs-timed.build: see TIMING)
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -61,12 +62,73 @@ static void on_signal(int sig)
     g_stop = 1;
 }
 
+#ifdef SWEEP_TIMING
+/* TIMING (2026-09-26, run-readtime.sh), only in a build with -DSWEEP_TIMING
+ * (qnx-echo-server-timed): each frame's second read() that returned data, its write(s),
+ * and its service time (from the return of its first read to the return of its write) are
+ * timed on this OS's CLOCK_MONOTONIC and kept per connection; their medians are printed with
+ * the read count. The first read of a frame is not timed as a cost: it waits for the frame.
+ * A default build compiles none of this. */
+#include <time.h>
+#define TIMED_MAX 8192u
+static long long t_r2[TIMED_MAX], t_w[TIMED_MAX], t_svc[TIMED_MAX];
+static unsigned long long n_r2, n_w, n_svc;
+static unsigned g_read_idx;      /* read() calls that returned data, this frame */
+static long long g_first_ret;    /* when this frame's first such read returned */
+
+static long long now_ns(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (long long)ts.tv_sec * 1000000000LL + ts.tv_nsec;
+}
+
+static void keep(long long *a, unsigned long long *n, long long v)
+{
+    if (*n < TIMED_MAX) {
+        a[*n] = v;
+    }
+    (*n)++;
+}
+
+static int cmp_ll(const void *a, const void *b)
+{
+    long long x = *(const long long *)a, y = *(const long long *)b;
+    return (x > y) - (x < y);
+}
+
+static long long median(long long *a, unsigned long long n)
+{
+    size_t m = n < TIMED_MAX ? (size_t)n : TIMED_MAX;
+    if (m == 0) {
+        return -1;
+    }
+    qsort(a, m, sizeof a[0], cmp_ll);
+    return a[m / 2];
+}
+
+#define FRAME_BEGIN() (g_read_idx = 0, g_first_ret = now_ns())
+#else
+#define FRAME_BEGIN() ((void)0)
+#endif
+
 /* One read(), counted when it returns data. */
 static ssize_t counted_read(int fd, uint8_t *buf, size_t len)
 {
+#ifdef SWEEP_TIMING
+    long long t0 = now_ns();
+#endif
     ssize_t n = read(fd, buf, len);
     if (n > 0) {
         g_reads++;
+#ifdef SWEEP_TIMING
+        long long t1 = now_ns();
+        if (++g_read_idx == 1) {
+            g_first_ret = t1;
+        } else if (g_read_idx == 2) {
+            keep(t_r2, &n_r2, t1 - t0);
+        }
+#endif
     }
     return n;
 }
@@ -107,6 +169,21 @@ static int write_full(int fd, const uint8_t *buf, size_t len)
     return 0;
 }
 
+/* A frame's reply: write_full, timed in a SWEEP_TIMING build. */
+static int write_frame(int fd, const uint8_t *buf, size_t len)
+{
+#ifdef SWEEP_TIMING
+    long long t0 = now_ns();
+    int rc = write_full(fd, buf, len);
+    long long t1 = now_ns();
+    keep(t_w, &n_w, t1 - t0);
+    keep(t_svc, &n_svc, t1 - g_first_ret);
+    return rc;
+#else
+    return write_full(fd, buf, len);
+#endif
+}
+
 /* The frame's length from its first 64 bytes, or 0 if it is out of range. */
 static size_t frame_len(const uint8_t *buf)
 {
@@ -128,6 +205,7 @@ static int serve_stepwise(int cfd, int split, unsigned long long *echoed)
     static uint8_t buf[SWEEP_MAX_BYTES];
 
     while (!g_stop) {
+        FRAME_BEGIN();
         int r = split ? read_full(cfd, buf, FRAME_TOTAL_BYTES / 2u) : read_full(cfd, buf, FRAME_TOTAL_BYTES);
         if (r == 0 && split && read_full(cfd, buf + FRAME_TOTAL_BYTES / 2u, FRAME_TOTAL_BYTES / 2u) != 0) {
             r = -1;
@@ -148,7 +226,7 @@ static int serve_stepwise(int cfd, int split, unsigned long long *echoed)
             fprintf(stderr, "sweep: read: %s\n", errno ? strerror(errno) : "EOF mid-frame");
             return -1;
         }
-        if (write_full(cfd, buf, len) < 0) {
+        if (write_frame(cfd, buf, len) < 0) {
             fprintf(stderr, "sweep: write: %s\n", strerror(errno));
             return -1;
         }
@@ -167,6 +245,7 @@ static int serve_greedy(int cfd, unsigned long long *echoed)
 
     while (!g_stop) {
         size_t len = 0;
+        FRAME_BEGIN();
         for (;;) {
             if (have >= FRAME_TOTAL_BYTES) {
                 if (len == 0 && (len = frame_len(buf)) == 0) {
@@ -198,7 +277,7 @@ static int serve_greedy(int cfd, unsigned long long *echoed)
             }
             have += (size_t)n;
         }
-        if (write_full(cfd, buf, len) < 0) {
+        if (write_frame(cfd, buf, len) < 0) {
             fprintf(stderr, "sweep: write: %s\n", strerror(errno));
             return -1;
         }
@@ -283,10 +362,18 @@ int main(int argc, char **argv)
                 inet_ntoa(peer.sin_addr), (unsigned)ntohs(peer.sin_port));
         unsigned long long echoed = 0;
         g_reads = 0;
+#ifdef SWEEP_TIMING
+        n_r2 = n_w = n_svc = 0;
+#endif
         int rc = (mode == MODE_GREEDY) ? serve_greedy(cfd, &echoed)
                                        : serve_stepwise(cfd, mode == MODE_SPLIT, &echoed);
         /* run-reads.sh parses this line: keep its form. */
         fprintf(stderr, "sweep: reads :%u %s frames=%llu reads=%llu\n", port, names[mode], echoed, g_reads);
+#ifdef SWEEP_TIMING
+        /* run-readtime.sh parses this line: keep its form. */
+        fprintf(stderr, "sweep: timing :%u %s frames=%llu r2_n=%llu r2_p50_ns=%lld w_p50_ns=%lld svc_p50_ns=%lld\n",
+                port, names[mode], echoed, n_r2, median(t_r2, n_r2), median(t_w, n_w), median(t_svc, n_svc));
+#endif
         if (rc < 0) {
             fprintf(stderr, "sweep: client session ended with an error; awaiting next client\n");
         }
