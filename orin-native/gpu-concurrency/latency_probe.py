@@ -111,6 +111,20 @@ def build_vlm_frame(seq):
 
 BUILDERS = {"mnist": build_frame, "vlm": build_vlm_frame}
 
+# The frame-size sweep (2026-09-26, measurement-design 3.4, run-sweep.sh): a frame
+# of S bytes for qnx-echo-server-sweep. Its first 64 bytes are the claim as built,
+# with S as a little-endian uint16 in payload[46..47] (the only payload bytes no
+# claim kind uses); the rest is a fixed pseudo-random tail per S, so a stale or
+# shifted echo cannot compare equal. Only the sweep endpoint knows the length
+# field: the monitor would answer each 64-byte piece as a frame of its own, and
+# the arm would break or stall.
+SWEEP_LEN_OFF = FRAME_TOTAL - 2
+SWEEP_MAX = 4096
+
+
+def sweep_frame(frame, size, tail):
+    return frame[:SWEEP_LEN_OFF] + struct.pack("<H", size) + tail
+
 
 def percentile(sorted_values, p):
     """Nearest-rank percentile over an ALREADY SORTED list.
@@ -493,7 +507,13 @@ def main():
                     help="OD15: the monitor stamps t_in/t_out into payload[8..23] (`monitor PORT "
                          "stamp`); record its own time per sample, and refuse an unstamped reply. "
                          "Without it, a stamped reply is refused: the arm reached the wrong instance")
+    ap.add_argument("--frame-bytes", type=int, default=0,
+                    help="the frame-size sweep (2026-09-26): frames of this many bytes, %d..%d, for "
+                         "qnx-echo-server-sweep, every echoed byte checked; tcp only. Without it, the "
+                         "64-byte frame every A6 run has used (unchanged)" % (FRAME_TOTAL, SWEEP_MAX))
     a = ap.parse_args()
+    if a.frame_bytes and (a.proto != "tcp" or not FRAME_TOTAL <= a.frame_bytes <= SWEEP_MAX):
+        ap.error("--frame-bytes needs --proto tcp and a size in %d..%d" % (FRAME_TOTAL, SWEEP_MAX))
     if a.proto == "shm":
         if not (a.shm and a.shm_lib):
             ap.error("--proto shm needs --shm and --shm-lib")
@@ -605,12 +625,16 @@ def main():
     # repeatable; every draw is kept, so the record can show the distribution it got.
     rng = random.Random(a.seed)
     drawn = []
+    want = a.frame_bytes or FRAME_TOTAL
+    tail = random.Random(want).randbytes(want - FRAME_TOTAL) if a.frame_bytes else b""
 
     for i in range(total):
         seq += 1
         if seq >= (1 << 63):          # never reach the sentinel
             seq = 1
         frame = BUILDERS[a.claim](seq)
+        if a.frame_bytes:
+            frame = sweep_frame(frame, want, tail)
         if notified:
             t0 = time.perf_counter()
             rc = kc.roundtrip(frame, a.timeout_s)
@@ -648,8 +672,8 @@ def main():
                 else:
                     s.sendall(frame)
                     got = b""
-                    while len(got) < FRAME_TOTAL:
-                        chunk = s.recv(FRAME_TOTAL - len(got))
+                    while len(got) < want:
+                        chunk = s.recv(want - len(got))
                         if not chunk:
                             break
                         got += chunk
@@ -666,13 +690,16 @@ def main():
                 return _broken(a, "sample %d: %s" % (i, e), i, bad + 1, rejected)
             t1 = time.perf_counter()
 
-        if len(got) != FRAME_TOTAL or got[:8] != frame[:8]:
+        if len(got) != want or got[:8] != frame[:8]:
             # Short read or wrong sequence without a timeout: the peer closed
             # or garbled the stream. Broken, not stalled.
             return _broken(a, "sample %d: framing lost (got %d of %d bytes, seq %s)"
-                           % (i, len(got), FRAME_TOTAL,
+                           % (i, len(got), want,
                               "match" if got[:8] == frame[:8] else "MISMATCH"),
                            i, bad + 1, rejected)
+        if a.frame_bytes and got != frame:
+            return _broken(a, "sample %d: the echo of a %d-byte frame differs from what was sent"
+                           % (i, want), i, bad + 1, rejected)
         if a.proto != "kickecho" and got[FRAME_HEADER + P_VERDICT] != 0:
             rejected += 1          # monitor disagreed: a fault, not a timing sample
             continue
@@ -751,6 +778,8 @@ def main():
                                        "sd": (sum((x - mean) ** 2 for x in sd) / len(sd)) ** 0.5 * 1000.0,
                                        "max": sd[-1] * 1000.0}}
     res["stamps"] = a.stamps
+    if a.frame_bytes:
+        res["frame_bytes"] = a.frame_bytes
     if a.stamps:
         # The split, per sample: the monitor's own time (its clock) and the rest
         # of the round trip (the probe's RTT less it). No clock is synchronised:

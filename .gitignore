@@ -60,6 +60,7 @@ ipc-test/qnx-safety-monitor/qnx-safety-monitor-stamp
 ipc-test/qnx-server/qnx-echo-server
 ipc-test/qnx-host-client/qnx-host-client
 ipc-test/qnx-server-net/qnx-echo-server-net
+ipc-test/qnx-server-net/qnx-echo-server-sweep
 ipc-test/qnx-safety-monitor/qnx-safety-monitor
 ipc-test/qnx-dds-monitor/qnx-dds-monitor
 ipc-test/qnx-clockctl/qnx-clockctl

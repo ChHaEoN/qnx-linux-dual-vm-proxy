@@ -677,6 +677,9 @@ m_probe() {         # $1 out-dir  $2 tag  $3 host  $4 port  [$5 prefix command] 
 	# Passed only when set, as PROBE_CLAIM is.
 	[ -n "${PROBE_ARRIVAL:-}" ] && claim+=(--arrival "$PROBE_ARRIVAL")
 	[ -n "${PROBE_SEED:-}" ] && claim+=(--seed "$PROBE_SEED")
+	# 2026-09-26 (the frame-size sweep): PROBE_FRAME_BYTES=S sends S-byte frames to
+	# qnx-echo-server-sweep. Passed only when set, as PROBE_CLAIM is.
+	[ -n "${PROBE_FRAME_BYTES:-}" ] && claim+=(--frame-bytes "$PROBE_FRAME_BYTES")
 	$pre taskset -c "$CORE_PROBE" python3 "$PROBE" "${dest[@]}" \
 		--n "$N" --warmup "$WARMUP" --interval-ms "$INTERVAL_MS" --timeout-s "$PROBE_TIMEOUT_S" --proto "$proto" \
 		"${claim[@]}" "${stall[@]}" --tag "$tag" --out "$out/lat-$tag.json" >> "$out/probe.log" 2>&1
