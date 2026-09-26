@@ -1,9 +1,13 @@
 /*
- * clockctl.c -- Phase 3b / A6 (2026-09-26): a guest-side control for the QNX clock period,
- * so that a host harness can change the guest's timer granularity between rounds of ONE
- * boot (run-clock.sh). The guest's own timer, firing while an exchange is inside the guest,
- * is half of the confined tail's explained part (results 20260925T-a6-orin-guesttick); this
- * is the intervention on it.
+ * clockctl.c -- Phase 3b / A6 (2026-09-26): a guest-side reader (and, where the OS allows,
+ * setter) of the QNX clock period, for run-clock.sh.
+ *
+ * QNX OS 8.0 DOES NOT ALLOW SETTING IT AT RUN TIME: ClockPeriod() with a new value fails with
+ * ENOTSUP (errno 48; found on this guest 2026-09-26, and so documented for 8.0). The tick is
+ * fixed at boot by procnto -C, so the intervention is two images (ifs-clock.build at 1 kHz,
+ * ifs-clock100.build at 100 Hz), and run-clock.sh uses only `get`, to prove in every guest
+ * boot which tick it runs. `set` is kept for an OS that allows it; here it answers
+ * "error set 48".
  *
  * It is NOT the monitor: monitor.c stays pure POSIX, and this program calls ClockPeriod(),
  * which is QNX's own (sys/neutrino.h). It never sees a claim frame.
