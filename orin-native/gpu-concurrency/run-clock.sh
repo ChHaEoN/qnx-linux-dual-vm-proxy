@@ -65,6 +65,13 @@
 #   M5 eight guest boots in the pattern, 20 rounds per arm -> all
 # Scored only at k = 40.
 #
+# CHANGED AFTER THE FIRST RECORDED ATTEMPT (2026-09-26). The smoke run (k = 8) passed its
+# gate (M2, M4). The first recorded run stopped at round 14 with "could not pin QEMU back":
+# a freshly booted guest makes QEMU start and end worker threads, and repin_qemu gave up on
+# one that exited between its listing and taskset. repin_qemu now skips a thread that is
+# gone, as run-partition.sh's pin_threads already did. The rule, the checks and the
+# predictions are unchanged; the attempt's 13 rounds are kept, unscored.
+#
 # NEEDS: NO guest running (the harness boots its own); IMG_A and IMG_B (defaults
 # ~/output/ifs-clock.bin and ifs-clock100.bin) and DISK. c7 OFF (CSTATE=shallow, set before
 # the library). NO LOAD. A STALL STOPS THE RUN.
@@ -178,12 +185,16 @@ conf_state() {   # one line: udevd, PID 1, gnome-shell and QEMU threads' allowed
 }
 
 repin_qemu() {   # the cpuset changes reset QEMU's own pin; put it back and check it
-	local t
+	local t c
+	# A freshly booted guest makes QEMU start and end worker threads: one that exits between
+	# the listing and taskset is not a failure (found by the first recorded run, round 14).
 	for t in $(ls "/proc/$QPID/task"); do
-		sudo -n taskset -pc "$QEMU_CORES" "$t" > /dev/null || return 1
+		sudo -n taskset -pc "$QEMU_CORES" "$t" > /dev/null 2>&1 || [ ! -d "/proc/$QPID/task/$t" ] || return 1
 	done
 	for t in $(ls "/proc/$QPID/task"); do
-		[ "$(_cpuset "$(allowed "$QPID/task/$t")")" = "$(_cpuset "$QEMU_CORES")" ] || return 1
+		c="$(allowed "$QPID/task/$t")"
+		[ -n "$c" ] || continue
+		[ "$(_cpuset "$c")" = "$(_cpuset "$QEMU_CORES")" ] || return 1
 	done
 }
 
