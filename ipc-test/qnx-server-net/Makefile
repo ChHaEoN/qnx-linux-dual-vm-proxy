@@ -13,10 +13,14 @@ BIN := qnx-echo-server-net
 # from its own source under its own name: server.c and the binary every
 # published image stages are not touched.
 SWEEP := qnx-echo-server-sweep
+# `make reads` builds the same source under its own name for the read-count test
+# (2026-09-26, run-reads.sh; ifs-reads.build), so ifs-sweep.bin's binary keeps its name.
+READS := qnx-echo-server-reads
 
-.PHONY: all sweep clean
+.PHONY: all sweep reads clean
 all: $(BIN)
 sweep: $(SWEEP)
+reads: $(READS)
 
 $(BIN): server.c ../common/frame.h ../common/frame_io.h
 	$(CC) $(TARGET) $(CFLAGS) -o $@ server.c $(LDFLAGS)
@@ -24,5 +28,8 @@ $(BIN): server.c ../common/frame.h ../common/frame_io.h
 $(SWEEP): sweep.c ../common/frame.h
 	$(CC) $(TARGET) $(CFLAGS) -o $@ sweep.c $(LDFLAGS)
 
+$(READS): sweep.c ../common/frame.h
+	$(CC) $(TARGET) $(CFLAGS) -o $@ sweep.c $(LDFLAGS)
+
 clean:
-	rm -f $(BIN) $(SWEEP)
+	rm -f $(BIN) $(SWEEP) $(READS)
