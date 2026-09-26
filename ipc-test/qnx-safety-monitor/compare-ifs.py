@@ -16,7 +16,9 @@ image changes size, so an identical binary placed elsewhere would otherwise
 count as changed. Nothing else is ignored.
 
 Exit 0 only if the files that differ are exactly EXPECTED (by path inside the
-image), none was added and none removed. Prints the verdict per file. Contains
+image), none was removed, and the files added are exactly those named after
+--added (2026-09-26, for an image that stages one more program, ifs-clock.bin):
+  compare-ifs.py OLD.bin NEW.bin [EXPECTED...] [--added PATH]... Prints the verdict per file. Contains
 no QNX code; needs the SDP's dumpifs on PATH to run.
 """
 import os
@@ -66,7 +68,17 @@ def main(argv):
     if len(argv) < 3:
         print(__doc__.strip().splitlines()[0], file=sys.stderr)
         return 2
-    old_img, new_img, expected = argv[1], argv[2], set(argv[3:])
+    old_img, new_img, rest = argv[1], argv[2], argv[3:]
+    expected, want_added = set(), set()
+    while rest:
+        a = rest.pop(0)
+        if a == "--added":
+            if not rest:
+                print("--added needs a path", file=sys.stderr)
+                return 2
+            want_added.add(rest.pop(0))
+        else:
+            expected.add(a)
     tmp = tempfile.mkdtemp(prefix="compare-ifs-")
     try:
         old = extract(old_img, os.path.join(tmp, "old"))
@@ -88,13 +100,15 @@ def main(argv):
         for f in differ:
             print("  DIFFERS       %s%s" % (f, "" if f in expected else "   <-- NOT EXPECTED"))
         for f in added:
-            print("  ADDED         %s   <-- NOT EXPECTED" % f)
+            print("  ADDED         %s%s" % (f, "" if f in want_added else "   <-- NOT EXPECTED"))
+        for f in sorted(want_added - set(added)):
+            print("  expected to be added but is not: %s" % f)
         for f in removed:
             print("  REMOVED       %s   <-- NOT EXPECTED" % f)
         missing = sorted(expected - set(differ))
         for f in missing:
             print("  expected to differ but does not: %s" % f)
-        ok = not added and not removed and set(differ) == expected
+        ok = set(added) == want_added and not removed and set(differ) == expected
         print("ACCEPT" if ok else "REFUSE")
         return 0 if ok else 1
     finally:
