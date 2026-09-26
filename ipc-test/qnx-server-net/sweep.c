@@ -29,14 +29,21 @@
  * that returned data, and prints them with the frames in one more line at the end of
  * each connection -- the check that the mode did what it says.
  *
+ * WAIT MODE (2026-09-27, run-spin.sh). "splitw SPIN_US" is split with a busy wait of SPIN_US
+ * microseconds between the frame's first 32 bytes and its second read. The wait spins on
+ * CLOCK_MONOTONIC so the thread stays runnable; a sleep would round up to QNX's 1 ms tick. A
+ * SWEEP_TIMING build also prints the waits' median, the check that the wait was what was asked.
+ *
  * TCP only, one client at a time, TCP_NODELAY per connection, as server.c.
- * Usage: qnx-echo-server-sweep PORT [greedy|split]
+ * Usage: qnx-echo-server-sweep PORT [greedy|split|splitw SPIN_US]
  * (built as qnx-echo-server-reads by `make reads` for ifs-reads.build, and with
- * -DSWEEP_TIMING as qnx-echo-server-timed by `make timed` for ifs-timed.build: see TIMING)
+ * -DSWEEP_TIMING as qnx-echo-server-timed by `make timed` for ifs-timed.build and as
+ * qnx-echo-server-spin by `make spin` for ifs-spin.build: see TIMING)
  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <signal.h>
 #include <errno.h>
@@ -51,10 +58,11 @@
 #define SWEEP_LEN_OFF    (FRAME_TOTAL_BYTES - 2u)   /* payload[46..47] */
 #define SWEEP_MAX_BYTES  4096u
 
-enum mode { MODE_DEFAULT, MODE_GREEDY, MODE_SPLIT };
+enum mode { MODE_DEFAULT, MODE_GREEDY, MODE_SPLIT, MODE_SPLITW };
 
 static volatile sig_atomic_t g_stop = 0;
 static unsigned long long g_reads = 0;   /* read() calls that returned data, this connection */
+static long g_spin_us = 0;               /* splitw: the wait between the two halves' reads */
 
 static void on_signal(int sig)
 {
@@ -69,10 +77,9 @@ static void on_signal(int sig)
  * timed on this OS's CLOCK_MONOTONIC and kept per connection; their medians are printed with
  * the read count. The first read of a frame is not timed as a cost: it waits for the frame.
  * A default build compiles none of this. */
-#include <time.h>
 #define TIMED_MAX 8192u
-static long long t_r2[TIMED_MAX], t_w[TIMED_MAX], t_svc[TIMED_MAX];
-static unsigned long long n_r2, n_w, n_svc;
+static long long t_r2[TIMED_MAX], t_w[TIMED_MAX], t_svc[TIMED_MAX], t_spin[TIMED_MAX];
+static unsigned long long n_r2, n_w, n_svc, n_spin;
 static unsigned g_read_idx;      /* read() calls that returned data, this frame */
 static long long g_first_ret;    /* when this frame's first such read returned */
 
@@ -111,6 +118,21 @@ static long long median(long long *a, unsigned long long n)
 #else
 #define FRAME_BEGIN() ((void)0)
 #endif
+
+/* splitw's wait: spin on the monotonic clock until SPIN_US have passed. */
+static void spin_wait(long us)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    long long t0 = (long long)ts.tv_sec * 1000000000LL + ts.tv_nsec, t = t0, end = t0 + (long long)us * 1000LL;
+    while (t < end) {
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        t = (long long)ts.tv_sec * 1000000000LL + ts.tv_nsec;
+    }
+#ifdef SWEEP_TIMING
+    keep(t_spin, &n_spin, t - t0);
+#endif
+}
 
 /* One read(), counted when it returns data. */
 static ssize_t counted_read(int fd, uint8_t *buf, size_t len)
@@ -207,8 +229,13 @@ static int serve_stepwise(int cfd, int split, unsigned long long *echoed)
     while (!g_stop) {
         FRAME_BEGIN();
         int r = split ? read_full(cfd, buf, FRAME_TOTAL_BYTES / 2u) : read_full(cfd, buf, FRAME_TOTAL_BYTES);
-        if (r == 0 && split && read_full(cfd, buf + FRAME_TOTAL_BYTES / 2u, FRAME_TOTAL_BYTES / 2u) != 0) {
-            r = -1;
+        if (r == 0 && split) {
+            if (g_spin_us > 0) {
+                spin_wait(g_spin_us);
+            }
+            if (read_full(cfd, buf + FRAME_TOTAL_BYTES / 2u, FRAME_TOTAL_BYTES / 2u) != 0) {
+                r = -1;
+            }
         }
         if (r == 1) {
             fprintf(stderr, "sweep: client EOF after %llu frames\n", *echoed);
@@ -291,16 +318,20 @@ static int serve_greedy(int cfd, unsigned long long *echoed)
 
 int main(int argc, char **argv)
 {
-    static const char *const names[] = { "default", "greedy", "split" };
+    static const char *const names[] = { "default", "greedy", "split", "splitw" };
     unsigned short port = (argc > 1) ? (unsigned short)strtoul(argv[1], NULL, 10) : DEFAULT_PORT;
     enum mode mode = MODE_DEFAULT;
     if (argc > 2 && strcmp(argv[2], "greedy") == 0) {
         mode = MODE_GREEDY;
     } else if (argc > 2 && strcmp(argv[2], "split") == 0) {
         mode = MODE_SPLIT;
+    } else if (argc > 3 && strcmp(argv[2], "splitw") == 0) {
+        mode = MODE_SPLITW;
+        g_spin_us = strtol(argv[3], NULL, 10);
     }
-    if (argc > 3 || (argc > 2 && mode == MODE_DEFAULT)) {
-        fprintf(stderr, "sweep: usage: %s [PORT [greedy|split]]\n", argv[0]);
+    if (argc > (mode == MODE_SPLITW ? 4 : 3) || (argc > 2 && mode == MODE_DEFAULT)
+        || (mode == MODE_SPLITW && (g_spin_us < 0 || g_spin_us > 100000))) {
+        fprintf(stderr, "sweep: usage: %s [PORT [greedy|split|splitw SPIN_US]]\n", argv[0]);
         return 2;
     }
 
@@ -342,6 +373,9 @@ int main(int argc, char **argv)
             (unsigned)SWEEP_LEN_OFF, (unsigned)SWEEP_LEN_OFF + 1u);
     if (mode != MODE_DEFAULT) {
         fprintf(stderr, "sweep: :%u read mode %s\n", port, names[mode]);
+        if (mode == MODE_SPLITW) {
+            fprintf(stderr, "sweep: :%u spin %ld us\n", port, g_spin_us);
+        }
     }
 
     while (!g_stop) {
@@ -363,16 +397,21 @@ int main(int argc, char **argv)
         unsigned long long echoed = 0;
         g_reads = 0;
 #ifdef SWEEP_TIMING
-        n_r2 = n_w = n_svc = 0;
+        n_r2 = n_w = n_svc = n_spin = 0;
 #endif
         int rc = (mode == MODE_GREEDY) ? serve_greedy(cfd, &echoed)
-                                       : serve_stepwise(cfd, mode == MODE_SPLIT, &echoed);
+                                       : serve_stepwise(cfd, mode == MODE_SPLIT || mode == MODE_SPLITW, &echoed);
         /* run-reads.sh parses this line: keep its form. */
         fprintf(stderr, "sweep: reads :%u %s frames=%llu reads=%llu\n", port, names[mode], echoed, g_reads);
 #ifdef SWEEP_TIMING
         /* run-readtime.sh parses this line: keep its form. */
         fprintf(stderr, "sweep: timing :%u %s frames=%llu r2_n=%llu r2_p50_ns=%lld w_p50_ns=%lld svc_p50_ns=%lld\n",
                 port, names[mode], echoed, n_r2, median(t_r2, n_r2), median(t_w, n_w), median(t_svc, n_svc));
+        if (mode == MODE_SPLITW) {
+            /* run-spin.sh parses this line: keep its form. */
+            fprintf(stderr, "sweep: spin :%u frames=%llu spin_us=%ld spin_p50_ns=%lld\n",
+                    port, echoed, g_spin_us, median(t_spin, n_spin));
+        }
 #endif
         if (rc < 0) {
             fprintf(stderr, "sweep: client session ended with an error; awaiting next client\n");

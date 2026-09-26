@@ -19,12 +19,16 @@ READS := qnx-echo-server-reads
 # `make timed`: the same source with -DSWEEP_TIMING (2026-09-26, run-readtime.sh;
 # ifs-timed.build), under its own name.
 TIMED := qnx-echo-server-timed
+# `make spin`: the same timed build under its own name, for the wait mode's image (2026-09-27,
+# run-spin.sh; ifs-spin.build), so qnx-echo-server-timed keeps the identity its images have.
+SPIN := qnx-echo-server-spin
 
-.PHONY: all sweep reads timed clean
+.PHONY: all sweep reads timed spin clean
 all: $(BIN)
 sweep: $(SWEEP)
 reads: $(READS)
 timed: $(TIMED)
+spin: $(SPIN)
 
 $(BIN): server.c ../common/frame.h ../common/frame_io.h
 	$(CC) $(TARGET) $(CFLAGS) -o $@ server.c $(LDFLAGS)
@@ -38,5 +42,8 @@ $(READS): sweep.c ../common/frame.h
 $(TIMED): sweep.c ../common/frame.h
 	$(CC) $(TARGET) $(CFLAGS) -DSWEEP_TIMING -o $@ sweep.c $(LDFLAGS)
 
+$(SPIN): sweep.c ../common/frame.h
+	$(CC) $(TARGET) $(CFLAGS) -DSWEEP_TIMING -o $@ sweep.c $(LDFLAGS)
+
 clean:
-	rm -f $(BIN) $(SWEEP) $(READS) $(TIMED)
+	rm -f $(BIN) $(SWEEP) $(READS) $(TIMED) $(SPIN)
