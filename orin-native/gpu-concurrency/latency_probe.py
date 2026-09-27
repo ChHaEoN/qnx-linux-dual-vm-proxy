@@ -10,6 +10,8 @@ distribution rather than a liveness yes/no.
          latency_probe.py --proto shmkick --shm FILE@OFF --kick SOCK --shm-lib LIB [...]
          latency_probe.py --proto shmdb --shm FILE@OFF --kick SOCK --ivshm SOCK --shm-lib LIB [...]
          latency_probe.py --proto kickecho --kick SOCK --shm-lib LIB [...]
+         latency_probe.py --proto someip|someipu|csomeip|csomeipu|vsomeip|vsomeipu --host H
+                          --port 30509 [...]    (SOME/IP, 2026-09-27: see SOMEIP below)
 
 THREE TRANSPORTS (OD12). --proto tcp (the default) holds one connection, as
 below. --proto udp sends one frame per datagram on a connected socket and reads
@@ -65,6 +67,7 @@ import os
 import random
 import socket
 import struct
+import subprocess
 import sys
 import time
 
@@ -330,6 +333,80 @@ class ShmChannel:
 
 
 NOTIFIED = ("shmkick", "shmdb", "kickecho")
+
+# SOME/IP (OD12's SOME/IP arm, 2026-09-27): the guest's qnx-someip-monitor serves the monitor's
+# judgement as method 0x0001 of service 0x5AFE, interface version 1, on TCP and UDP 30509.
+# someip / someipu: this probe wraps each frame in the 16-byte SOME/IP header itself -- built
+# before t0 and checked after t1, so the timed span is the socket's, as for tcp and udp.
+# vsomeip / vsomeipu: the exchanges are made by someip_vprobe (orin-native/someip), a C++ client
+# whose path is $SOMEIP_VPROBE, through vsomeip 3.4.10 (configured by $VSOMEIP_CONFIGURATION).
+# csomeip / csomeipu: the same client with no vsomeip, the header by hand on a plain socket --
+# the control for vsomeip's own cost, since the client's code is otherwise the same.
+# For all four, the client prints its samples and this probe writes the result from them, with
+# the scheduling the client reports for itself.
+SOMEIP = ("someip", "someipu")
+VPROBE_MODES = {"vsomeip": "tcp", "vsomeipu": "udp", "csomeip": "rawtcp", "csomeipu": "rawudp"}
+VSOMEIP = tuple(VPROBE_MODES)
+SIP_SERVICE, SIP_METHOD, SIP_IFACE, SIP_CLIENT = 0x5AFE, 0x0001, 1, 0x0100
+SIP_HDR = struct.Struct(">HHIHHBBBB")
+
+
+def sip_session(seq):
+    """The SOME/IP session of frame seq: 1..0xFFFF, never 0 (0 means no session handling)."""
+    return (seq - 1) % 0xFFFF + 1
+
+
+def sip_wrap(frame, seq):
+    """A REQUEST of the judge method carrying frame."""
+    return SIP_HDR.pack(SIP_SERVICE, SIP_METHOD, 8 + len(frame), SIP_CLIENT, sip_session(seq),
+                        1, SIP_IFACE, 0x00, 0x00) + frame
+
+
+def sip_unwrap(msg, seq):
+    """(payload, "") for the E_OK RESPONSE to frame seq's request, else (None, why)."""
+    if len(msg) < SIP_HDR.size:
+        return None, "short SOME/IP message (%d bytes)" % len(msg)
+    svc, meth, length, client, sess, proto, iface, mtype, rc = SIP_HDR.unpack_from(msg)
+    if mtype == 0x81:
+        return None, "SOME/IP ERROR, return code 0x%02x" % rc
+    want = (SIP_SERVICE, SIP_METHOD, len(msg) - 8, SIP_CLIENT, sip_session(seq), 1, SIP_IFACE, 0x80, 0x00)
+    got = (svc, meth, length, client, sess, proto, iface, mtype, rc)
+    if got != want:
+        return None, "SOME/IP header %r, expected %r" % (got, want)
+    return msg[SIP_HDR.size:], ""
+
+
+def run_vprobe(a):
+    """Run someip_vprobe for --proto vsomeip, vsomeipu, csomeip or csomeipu: its parsed result, or an
+    exit code."""
+    exe = os.environ.get("SOMEIP_VPROBE", "")
+    if not exe or not os.access(exe, os.X_OK):
+        print("FATAL %s: SOMEIP_VPROBE (%r) is not an executable someip_vprobe" % (a.proto, exe))
+        return 2
+    cmd = [exe, VPROBE_MODES[a.proto], str(a.n), str(a.warmup), repr(a.interval_ms), repr(a.timeout_s)]
+    if VPROBE_MODES[a.proto].startswith("raw"):
+        cmd += [a.host, str(a.port)]
+    limit = 60.0 + (a.n + a.warmup) * (a.interval_ms / 1000.0 + 0.02)
+    # vsomeip dlopens its own plugins (the configuration module first) by name, and the
+    # client's rpath does not reach them: they are found through the install's lib directory,
+    # the client's ../lib, when there is one (build-vsomeip.sh installs it there).
+    env = dict(os.environ)
+    libdir = os.path.normpath(os.path.join(os.path.dirname(exe), "..", "lib"))
+    if os.path.isdir(libdir):
+        env["LD_LIBRARY_PATH"] = libdir + (":" + env["LD_LIBRARY_PATH"] if env.get("LD_LIBRARY_PATH") else "")
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=limit, env=env)
+    except subprocess.TimeoutExpired:
+        return _broken(a, "someip_vprobe did not finish within %.0f s" % limit, 0, 1, 0)
+    sys.stderr.write(p.stderr[-4000:])
+    lines = [ln for ln in p.stdout.splitlines() if ln.startswith("{")]
+    if not lines:
+        print("FATAL %s: someip_vprobe gave no result (rc=%d)" % (a.proto, p.returncode))
+        return 2
+    r = json.loads(lines[-1])
+    if "error" in r:
+        return _broken(a, "someip_vprobe: %s" % r["error"], 0, 1, 0)
+    return r
 SHM_VIA_KICK, SHM_VIA_DOORBELL, SHM_VIA_BURST = 0, 1, 3
 
 
@@ -482,10 +559,13 @@ def main():
                     help="per-connect and per-reply limit; a reply later than this is a stall")
     ap.add_argument("--stall-out", default="",
                     help="on a stall, write a stall record here (the arm still exits %d)" % EXIT_DESYNC)
-    ap.add_argument("--proto", choices=("tcp", "udp", "shm") + NOTIFIED, default="tcp",
+    ap.add_argument("--proto", choices=("tcp", "udp", "shm") + NOTIFIED + SOMEIP + VSOMEIP, default="tcp",
                     help="transport; udp sends one frame per datagram on a connected socket, "
                          "shm uses a shared-memory slot in --shm; shmkick, shmdb and kickecho "
-                         "are its notified variants")
+                         "are its notified variants; someip and someipu wrap the frame in a SOME/IP "
+                         "request over tcp and udp; vsomeip and vsomeipu make the exchanges with "
+                         "vsomeip (someip_vprobe, $SOMEIP_VPROBE), csomeip and csomeipu with the same "
+                         "client and no vsomeip")
     ap.add_argument("--kick", default="", help="notified variants: the kick socket")
     ap.add_argument("--ivshm", default="", help="with --proto shmdb: the ivshmem server socket")
     ap.add_argument("--db-burst", type=int, default=0,
@@ -527,6 +607,9 @@ def main():
 
     if a.db_burst and a.proto != "shmdb":
         ap.error("--db-burst needs --proto shmdb")
+    if a.proto in VSOMEIP and (a.claim != "mnist" or a.stamps or a.arrival != "const" or a.stall_out):
+        ap.error("--proto %s sends the mnist claim at a constant interval: no --claim, --stamps, "
+                 "--arrival or --stall-out" % a.proto)
     if a.arrival == "exp" and a.interval_ms <= 0:
         ap.error("--arrival exp needs a positive --interval-ms: it is the mean of the draws")
 
@@ -543,7 +626,10 @@ def main():
     # the stall record says which transport it was. A reply of the wrong size, a
     # wrong sequence number (a late or duplicate reply) or an ICMP error is a
     # broken stream, exit 5, exactly as on TCP.
-    udp = a.proto == "udp"
+    udp = a.proto in ("udp", "someipu")
+    sip = a.proto in SOMEIP
+    vs = a.proto in VSOMEIP
+    vs_result = None
     shm = a.proto == "shm"
     notified = a.proto in NOTIFIED
     chan = None
@@ -574,6 +660,8 @@ def main():
                     json.dump(rec, f)
             return 0 if (rc == KickChannel.OK and got == a.db_burst) else 6
         counts0 = kc.counts()
+        s = None
+    elif vs:
         s = None
     elif shm:
         # No server (magic not published) is "could not connect", exit 2, as a
@@ -627,6 +715,15 @@ def main():
     drawn = []
     want = a.frame_bytes or FRAME_TOTAL
     tail = random.Random(want).randbytes(want - FRAME_TOTAL) if a.frame_bytes else b""
+    if vs:
+        vs_result = run_vprobe(a)
+        if isinstance(vs_result, int):
+            return vs_result
+        rtts = [x / 1e6 for x in vs_result["rtt_ns"]]
+        in_arrival = list(rtts)
+        sends = [x / 1e9 for x in vs_result["send_ns"]]
+        rejected = vs_result["rejected"]
+        total = 0
 
     for i in range(total):
         seq += 1
@@ -663,17 +760,19 @@ def main():
                                i, bad + 1, rejected)
             got = chan.rsp.raw
         else:
+            wire = sip_wrap(frame, seq) if sip else frame
+            want_wire = len(wire) if sip else want
             t0 = time.perf_counter()
             try:
                 if udp:
-                    if s.send(frame) != FRAME_TOTAL:
+                    if s.send(wire) != len(wire):
                         return _broken(a, "sample %d: short datagram sent" % i, i, bad + 1, rejected)
                     got = s.recv(2048)
                 else:
-                    s.sendall(frame)
+                    s.sendall(wire)
                     got = b""
-                    while len(got) < want:
-                        chunk = s.recv(want - len(got))
+                    while len(got) < want_wire:
+                        chunk = s.recv(want_wire - len(got))
                         if not chunk:
                             break
                         got += chunk
@@ -689,6 +788,10 @@ def main():
             except OSError as e:
                 return _broken(a, "sample %d: %s" % (i, e), i, bad + 1, rejected)
             t1 = time.perf_counter()
+            if sip:
+                got, why = sip_unwrap(got, seq)
+                if why:
+                    return _broken(a, "sample %d: %s" % (i, why), i, bad + 1, rejected)
 
         if len(got) != want or got[:8] != frame[:8]:
             # Short read or wrong sequence without a timeout: the peer closed
@@ -797,7 +900,11 @@ def main():
         res["wait_fd_nonblock"] = [bool(kc.flags_start & os.O_NONBLOCK), kc.nonblocking()]
         res["ivshm_peer"] = kc.peer
         res["handshake_attempts"] = handshake
-    res.update(own_scheduling())
+    if vs_result is not None:
+        res.update(vs_result["sched"])       # the vsomeip client's own report, not this wrapper's
+        res["vsomeip"] = vs_result.get("vsomeip")
+    else:
+        res.update(own_scheduling())
     print("RESULT %s" % json.dumps(res))
     print("  tag=%-12s n=%-5d min=%.3f p50=%.3f p90=%.3f p99=%.3f p99.9=%.3f max=%.3f  bad=%d rej=%d"
           % (res["tag"], res["n"], res["min_ms"], res["p50_ms"], res["p90_ms"],

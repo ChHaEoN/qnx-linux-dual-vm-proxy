@@ -742,7 +742,7 @@ m_require_complete() {  # $1 = out dir, then arm tags
 	[ -n "${CORE_PROBE:-}" ] || die "m_require_complete needs CORE_PROBE to check the probe's affinity"
 	MP_CORE="$CORE_PROBE" MP_FIFO="${FIFO_ARMS:-}" MP_STALL="${STALL_POLICY:-refuse}" MP_UDP="${UDP_ARMS:-}" \
 	MP_SHM="${SHM_ARMS:-}" MP_KICK="${KICK_ARMS:-}" MP_DB="${DB_ARMS:-}" MP_ECHO="${ECHO_ARMS:-}" \
-	MP_KVM="${KVM_STATS:-0}" MP_VLM="${VLM_ARMS:-}" MP_STAMP="${STAMP_ARMS:-}" \
+	MP_KVM="${KVM_STATS:-0}" MP_VLM="${VLM_ARMS:-}" MP_STAMP="${STAMP_ARMS:-}" MP_ARM_PROTOS="${ARM_PROTOS:-}" \
 	MP_TIMEOUT="$PROBE_TIMEOUT_S" \
 	python3 - "$out" "$K" "$N" "$WARMUP" "$@" <<'PY' || die "the run is incomplete or unclean -- do not publish a median from it"
 import json, os, sys
@@ -756,6 +756,9 @@ db_arms = set(os.environ.get("MP_DB", "").split())
 echo_arms = set(os.environ.get("MP_ECHO", "").split())
 vlm_arms = set(os.environ.get("MP_VLM", "").split())
 stamp_arms = set(os.environ.get("MP_STAMP", "").split())
+# 2026-09-27 (the SOME/IP arm): ARM_PROTOS="ARM=PROTO ...", for a transport with no *_ARMS list
+# of its own; it is checked before them.
+arm_protos = dict(x.split("=", 1) for x in os.environ.get("MP_ARM_PROTOS", "").split())
 want_kvm = os.environ.get("MP_KVM") == "1"
 record_stalls = os.environ.get("MP_STALL") == "record"
 timeout_s = float(os.environ["MP_TIMEOUT"])
@@ -774,8 +777,9 @@ def proto_problems(tag, a, s):
     in UDP_ARMS must say udp and every other arm tcp -- a UDP arm silently run
     over TCP would pair two copies of the same path and report a difference of
     zero as a finding. 2026-09-22: likewise shm for an arm in SHM_ARMS."""
-    want = ("udp" if a in udp_arms else "shm" if a in shm_arms else "shmkick" if a in kick_arms
-            else "shmdb" if a in db_arms else "kickecho" if a in echo_arms else "tcp")
+    want = (arm_protos[a] if a in arm_protos else "udp" if a in udp_arms else "shm" if a in shm_arms
+            else "shmkick" if a in kick_arms else "shmdb" if a in db_arms else "kickecho" if a in echo_arms
+            else "tcp")
     if s.get("proto") != want:
         return ["%s: proto=%r, expected %r" % (tag, s.get("proto"), want)]
     return []

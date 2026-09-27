@@ -1644,6 +1644,21 @@ def test_gate_accepts_udp_arms_that_say_udp(tmp_path):
     assert "PASSED" in r.stdout, r.stderr
 
 
+@pytest.mark.parametrize("vu_says,passed", [("vsomeipu", True), ("udp", False)])
+def test_gate_takes_a_transport_per_arm_from_arm_protos(tmp_path, vu_says, passed):
+    """2026-09-27 (the SOME/IP arm): ARM_PROTOS names the transport of an arm that has
+    no *_ARMS list of its own, and an arm it does not name must still say tcp."""
+    arms = ["T", "ST", "VU"]
+    says = {"T": "tcp", "ST": "someip", "VU": vu_says}
+    d = _proto_dir(tmp_path, arms, lambda a: says[a])
+    r = _run(tmp_path, 'K=2; N=1000; WARMUP=200; CORE_PROBE=4; FIFO_ARMS=""; ARM_PROTOS="ST=someip VU=vsomeipu"; '
+             'm_require_complete "%s" %s; echo PASSED' % (_posix(d), " ".join(arms)))
+    if passed:
+        assert "PASSED" in r.stdout, r.stderr
+    else:
+        assert "PASSED" not in r.stdout and "VU_r1: proto='udp', expected 'vsomeipu'" in r.stderr, r.stderr
+
+
 @pytest.mark.parametrize("proto_of,udp_arms,why", [
     (lambda a: "tcp", "A-udp", "A-udp_r1: proto='tcp', expected 'udp'"),
     (lambda a: "udp", "A-udp", "A-loopback_r1: proto='udp', expected 'tcp'"),
