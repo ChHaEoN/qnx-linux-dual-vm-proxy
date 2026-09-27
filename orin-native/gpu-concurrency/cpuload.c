@@ -6,14 +6,13 @@
  * the pipeline pressure a real FP workload creates. The arm was designed as a
  * faithful CPU twin of fma.cu's driver thread, so it must stay in normal range.
  *
- * THAT DESIGN PREMISE IS FALSE (measured 2026-09-21). fma.cu's host thread does
- * not keep a core busy: it blocks in cudaDeviceSynchronize, and during all 12
- * interference gpu arms no core exceeded 1% CPU while the GPU sat at 99%. So
- * this program is not a twin of anything in the gpu arm -- it is "one busy core",
- * a legitimate arm in its own right but not a control that separates "GPU busy"
- * from "system busy". The burn loop below is unchanged from v2 and still correct
- * for what it does; the argument handling and the pinning around it were added
- * on 2026-09-21 (next paragraph).
+ * That design premise was checked on 2026-09-21 against the interference
+ * records `20260921T-a6-orin` and `20260921T-a6-orin-c7off` (held locally).
+ * fma.cu's host thread blocks in cudaDeviceSynchronize, so this program is
+ * treated as "one busy core", a legitimate arm in its own right, not as a
+ * control that separates "GPU busy" from "system busy". The burn loop below is
+ * unchanged from v2 and still correct for what it does; the argument handling
+ * and the pinning around it were added on 2026-09-21 (next paragraph).
  *
  * This keeps the value bounded by construction: an FMA chain that decays back
  * toward a fixed point instead of growing. Verified by printing the sink, which
@@ -22,14 +21,11 @@
  * usage: cpuload SECS NTHREADS [CORES]
  *
  * CORES (added 2026-09-21) pins thread i to the i-th core of a comma-separated
- * list, e.g. "0,1". An independent analysis of the first Orin campaign found
- * that WHERE the scheduler put unpinned threads decided the result more than how
- * many there were: one thread cost ~0 on core 3 and up to ~+50 us on core 2, and
- * four threads with two of them on QEMU's cores cost more than six on all six in
- * most such rounds (12 of 17, across both idle-state runs). Placement was read
- * from one sample before each probe, so that is a correlation. An arm named by
- * thread count alone was a placement lottery. With CORES, placement is the
- * variable, fixed and stated.
+ * list, e.g. "0,1". It was added after an independent analysis of the first
+ * Orin campaign (records `20260921T-a6-orin` and `20260921T-a6-orin-c7off`,
+ * held locally) looked at WHERE the scheduler put unpinned threads. An arm named
+ * by thread count alone leaves placement to the scheduler. With CORES,
+ * placement is the variable, fixed and stated.
  *
  * The affinity is set at CREATION (pthread_attr_setaffinity_np), so a thread
  * never runs anywhere else even for its first instructions, and then READ BACK

@@ -5,8 +5,8 @@
  * HOST userspace process (qnx-qhv running this as a plain program, not
  * itself a qvm guest) call the libhyp.a Virtualization API (hyp_shm.h) to
  * create/attach a named shared-memory region and get a mapped pointer at
- * all? See docs/findings.md (2026-07-28) and
- * docs/phase2-topology-decision.md (RQ-2) for what this result resolves.
+ * all? See docs/phase2-topology-decision.md (RQ-2) for the question this
+ * probe addresses.
  */
 #include <stdio.h>
 #include <string.h>

@@ -9,13 +9,17 @@ name: measure
 #     that exists on a GitHub-hosted runner, and the QNX Everywhere licence is
 #     non-commercial, so QNX may not be installed on one.
 #
-#   * Timing on shared public hardware would be meaningless for a TCG-emulated
-#     target, and a meaningless number that looks official is worse than none.
+#   * Timing on shared public hardware would be meaningless for this target,
+#     and a meaningless number that looks official is worse than none.
 #
 #   * Measurement on this project has a physical cost: the CPU governor must be
-#     pinned (schedutil makes an idle baseline ~40% slower than a loaded arm and
-#     inverts the result), the board heats, and a hung guest can need a power
-#     pull. That is not something a push event should trigger.
+#     pinned (on schedutil the board clocks down when idle, so an unpinned idle
+#     baseline runs on a slower machine than the loaded arm it is compared
+#     against), the board heats, and a hung guest can need a power pull. That
+#     is not something a push event should trigger.
+#
+#   * Its output is licensed evaluation output: under NC QDL v7 4.6(i) a result
+#     is kept locally, never committed or published.
 #
 # IF NO SELF-HOSTED RUNNER IS REGISTERED, this workflow simply never runs: it is
 # workflow_dispatch-only, so nothing queues it, and it is not a required check
@@ -67,8 +71,8 @@ jobs:
           for c in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
             printf '  %s = %s\n' "$c" "$(cat "$c")"
           done
-          echo "NOTE: an unpinned schedutil governor makes an idle baseline ~40%"
-          echo "      slower than a loaded arm and inverts the comparison."
+          echo "NOTE: an unpinned schedutil governor clocks the board down when idle,"
+          echo "      so an idle baseline would run on a slower machine than a loaded arm."
 
       - name: Run the arms
         env:

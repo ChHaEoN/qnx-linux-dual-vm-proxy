@@ -62,10 +62,10 @@ M64 = 1 << 64
 
 # Printed subtype name -> Class-10 event ID: m4dry-count.awk's table (§13 D-a, D-b).
 # The constants are sys/trace.h:286-293. GUEST_ENTER, GUEST_EXIT, CREATE_VCPU_THREAD
-# and CYCLES printed as their suffixes (VERIFIED, attempt 1). The interrupt events
-# printed as INTR_RAISE/INTR_LOWER, the reverse word order of RAISE_INTR/LOWER_INTR;
-# mapping them to 3 and 4 is HYPOTHESIS. No timer event appeared, so both word
-# orders are accepted for 5 and 6 (HYPOTHESIS).
+# and CYCLES are read as their suffixes. The interrupt events are accepted as
+# INTR_RAISE/INTR_LOWER or in the constants' order, RAISE_INTR/LOWER_INTR; mapping
+# them to 3 and 4 is HYPOTHESIS. Both word orders are accepted for 5 and 6
+# (HYPOTHESIS).
 ID = {"GUEST_ENTER": 0, "GUEST_EXIT": 1, "CREATE_VCPU_THREAD": 2,
       "INTR_RAISE": 3, "RAISE_INTR": 3, "INTR_LOWER": 4, "LOWER_INTR": 4,
       "TIMER_CREATE": 5, "CREATE_TIMER": 5, "TIMER_FIRE": 6, "FIRE_TIMER": 6,
@@ -423,7 +423,7 @@ class Records:
                 self.qvm_rc = int(m.group(1))
             # echo_up is the guest echo server announcing /dev/vcon2
             # (ipc-test/qnx-server/server.c:61), the endpoint the client's /dev/ttyp0
-            # reaches. Attempt 1 printed it; ipc_after_guest_ready needs it.
+            # reaches; ipc_after_guest_ready needs it.
             for key, needle in (("qvm_launch", "=== launching qvm @g2.conf"),
                                 ("echo_up", "server: echo endpoint up"),
                                 ("guest_banner", "QNX qnx-guest")):
@@ -657,10 +657,10 @@ def thread_of(args):
 class Clock64:
     """64-bit host cycles per CPU, rebuilt from traceprinter's CONTROL TIME events (§13 D-c).
 
-    The host traceprinter.exe prints t: as the low 32 bits of the cycle count; its
-    -p '%016c' prints the same value zero-padded (checked on this PC against
-    attempt 1's w2.kev), although the target binary's use text calls %c the
-    64-bit cycle count. Every CONTROL TIME event carries its CPU's high word as
+    t: and -p '%016c' are read as the low 32 bits of the cycle count,
+    zero-padded in the -p form, and the 64-bit count is rebuilt from them
+    (§13 D-c), whatever the target binary's use text calls %c.
+    Every CONTROL TIME event carries its CPU's high word as
     msb:, and traceprinter emits one when the low word wraps. As a safety net, a
     drop of more than half the 32-bit range between two events on one CPU is also
     taken as a wrap; a smaller drop is only counted, as a backstep.
@@ -826,8 +826,8 @@ class Analysis:
                         self._close(c, cyc)
             return
 
-        # INTERRUPT events, matched by class (D-d): attempt 1's only subtype,
-        # INT_DELIVER, missed the design's subtype pattern. Every subtype is reported.
+        # INTERRUPT events, matched by class (D-d), not by the design's subtype
+        # pattern. Every subtype is reported.
         if cls.upper() == "INTERRUPT":
             self.intr_sub[st] = self.intr_sub.get(st, 0) + 1
             run = self.cur.get(cpu)
@@ -1082,7 +1082,7 @@ def emit_analysis(name, pcw, rec, cps, emit):
 
     if name == "w2":
         # §13.3: the span the ring kept against W2 tracelogger's own run, so a wrap
-        # shows even when both IPC markers were overwritten (attempt 1).
+        # shows even when both IPC markers were overwritten.
         tl = next((b for b in rec.bwait if b["prog"] == "tracelogger" and b["state"] == "w2_stop"), None)
         kept = (a.tmax - a.tmin) * 1000 // cps if (cps and a.tmin is not None) else "unknown"
         emit("ring_w2_kept", f"span_ms:{kept},tracelogger_ms:{tl['ms'] if tl else 'unknown'}", shape=True)

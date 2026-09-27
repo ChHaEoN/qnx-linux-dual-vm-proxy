@@ -6,21 +6,19 @@
 #
 # It auto-starts the QNX guest under QVM with a NO-NETWORK config, because:
 #   - the stock /data/hypervisor/start_guest wires a virtio-net peer that needs
-#     the host io-sock stack, which does not come up under the launch line
-#     launch-qhv-tcg.ps1 uses by default ("network stack down" / "Address
-#     family not supported"). That is a LAUNCH-LINE omission, not an image
-#     property: the image expects virtio-net + virtio-rng at fixed virtio-mmio
-#     slots (ADR-002 RQ-4; findings.md 2026-07-28), and with -WithRng /
-#     WITH_RNG=1 the host stack does initialise. This snippet keeps the guest
-#     no-net regardless, because the benchmark does not need it; and
-#   - driving `qvm` interactively over the slow TCG serial console drops chars.
+#     the host io-sock stack, and the image expects virtio-net + virtio-rng at
+#     fixed virtio-mmio slots (ADR-002 RQ-4; findings.md 2026-07-28), which the
+#     launch line launch-qhv-tcg.ps1 uses by default does not present
+#     (-WithRng / WITH_RNG=1 does). This snippet keeps the guest no-net
+#     regardless, because the benchmark does not need it; and
+#   - it runs unattended, rather than driving `qvm` interactively over the slow
+#     TCG serial console.
 # Networking is not needed to demonstrate QHV hosting a guest; console + blk are.
 #
-# RUNTIME-SPIKE (resolved 2026-07-28, ipc-test/qnx-host-client/README.md): the
-# virtio-console vdev needs a `hostdev` binding or qvm fails to arm it
-# ("Failed to arm a resource manager: Function not implemented", g2.conf line
-# for the vdev). /dev/ptyp0 is a devc-pty master (devc-pty is already running
-# on this image); qvm opens that end itself, so the paired slave /dev/ttyp0 is
+# (2026-07-28, ipc-test/qnx-host-client/README.md) The virtio-console vdev is
+# given a `hostdev` binding. /dev/ptyp0 is a devc-pty master (devc-pty is
+# already running on this image); qvm opens that end itself, so the paired
+# slave /dev/ttyp0 is
 # the endpoint the HOST-side qnx-host-client opens below. qvm is launched in
 # the background (not foreground) so this script can go on to run the client
 # after a fixed boot-grace sleep -- there is no ready signal from the guest,
@@ -39,16 +37,10 @@ echo "=== boot-grace sleep for guest devc-virtio + qnx-echo-server startup ==="
 sleep 90
 if [ -x /data/hypervisor/qnx-host-client ]; then
   echo "=== running qnx-host-client (mechanism-alive IPC benchmark, TCG-bound) ==="
-  # NOT the DEFAULT_ITERS=100000/DEFAULT_WARMUP=1000 the binary otherwise
-  # uses with no args. RUNTIME-SPIKE finding (2026-07-28, unresolved): a
-  # non-deterministic qvm/TCG stall can hit anywhere from single-digit to
-  # several-dozen iterations in (see client.c and
-  # ipc-test/qnx-host-client/README.md) -- larger iteration counts and
-  # longer per-iteration pacing gaps were tried and did NOT reliably avoid
-  # it. 15/5 is the smallest configuration that has reproducibly completed
-  # cleanly end to end with real, verified P50/P99/Max; treat a larger count
-  # as a deliberate choice to accept a real risk of an incomplete run, not
-  # as "the real number would need more".
+  # 15 iterations after 5 warm-up, NOT the DEFAULT_ITERS=100000/
+  # DEFAULT_WARMUP=1000 the binary otherwise uses with no args: a deliberate
+  # choice for this leg (2026-07-28; the reasons are held locally, NC QDL v7
+  # 4.6(i)). Change it only as a deliberate, reviewed choice.
   /data/hypervisor/qnx-host-client 15 /dev/ttyp0 5
   echo "=== qnx-host-client exit=$? ==="
 else

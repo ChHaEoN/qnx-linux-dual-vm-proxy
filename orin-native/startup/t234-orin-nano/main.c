@@ -173,7 +173,7 @@ main(int argc, char **argv, char **envv)
 		case 'W':
 			/* -W: keep | disable, see wdt.c. keep is the default for
 			 * parity; the watchdog does not fire after kexec
-			 * (m0-hang-watchdog.md). */
+			 * (`m0-hang-watchdog.md`, held locally). */
 			wdt_policy = optarg;
 			break;
 		case 't':
@@ -248,7 +248,7 @@ main(int argc, char **argv, char **envv)
 	/*
 	 * Report both watchdogs. WDT0 arrives configured, but it did not fire after
 	 * the kexec hand-over in the M0 hang test
-	 * (results/orin-native-port/20260909T1100Z/m0-hang-watchdog.md).
+	 * (`m0-hang-watchdog.md`, held locally).
 	 */
 	t234_wdt_report();
 	t234_wdt_apply(wdt_policy);

@@ -2,8 +2,9 @@
 #
 # Phase 3
 # launch-qnx-on-orin.sh — start the QNX guest under QEMU on Orin Nano L4T.
-# Defaults to TCG: -enable-kvm boots only with a startup-qemu-virt we rebuilt
-# (-fno-auto-inc-dec), never with the SDP's shipped one, and took no timing.
+# Defaults to TCG. -enable-kvm is used only with a startup-qemu-virt we rebuilt
+# (-fno-auto-inc-dec), never with the SDP's shipped one, and no timing is taken
+# under it here.
 #
 # Run on:  Orin Nano L4T, after:
 #   1. ./bootstrap-orin-l4t.sh                (and re-login for kvm group)

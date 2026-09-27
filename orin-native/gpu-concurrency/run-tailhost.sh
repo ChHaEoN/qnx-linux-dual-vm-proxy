@@ -3,22 +3,20 @@
 # again, with a second trace of what the host itself runs on QEMU's cores, charged
 # exchange by exchange. Phase 3b / A6, 2026-09-24; follows 20260924T-a6-orin-tailpath.
 #
-# WHAT IS KNOWN. In the tail (the slowest 1% at 2 ms spacing, the A6 default) the
-# guest's work and QEMU's receive and transmit processing all run slower at once,
-# and the scheduling waits barely move (20260924T-a6-orin-tailpath). QEMU's main
-# thread is never switched in more often in a tail exchange than in any other (2.00
-# switch-ins per exchange in both), so it is not preempted and resumed. Moving
-# every device interrupt off QEMU's cores changed nothing (20260924T-a6-orin-tail).
+# WHAT IS KNOWN. How the guest's work, QEMU's receive and transmit processing, the
+# scheduling waits and QEMU's main thread's switch-ins behave in the tail (the
+# slowest 1% at 2 ms spacing, the A6 default): record 20260924T-a6-orin-tailpath
+# (held locally). What moving every device interrupt off QEMU's cores does: record
+# 20260924T-a6-orin-tail (held locally).
 #
 # WHERE THE PREDICTION COMES FROM. Exploratory, and stated so it is not mistaken for
 # a blind test:
-#   - in the tailpath record's own data the tail exchanges are phase-locked at
-#     32 ms (R 0.456 against a random-subset p99 of 0.118) and at 16 ms, and they
-#     cluster: 79 of 264 are followed by another tail exchange, where ~3 would be
-#     by chance;
-#   - a 10 s trace of the idle host in the same boot put the timer wheel's batched
-#     callbacks (delayed_work_timer_fn), the function-call IPIs and vmstat's work
-#     at 29-31 ms of the same 32 ms phase; the tail sat at 30.8 ms.
+#   - the tailpath record's own data, looked at for the tail exchanges' phase at
+#     32 ms and 16 ms and for their clustering;
+#   - a 10 s trace of the idle host in the same boot, looked at for the phase of
+#     the timer wheel's batched callbacks (delayed_work_timer_fn), the
+#     function-call IPIs and vmstat's work.
+# What both showed is held locally.
 # At HZ=250 the timer wheel's second level has a granularity of 8 jiffies, 32 ms:
 # every timer set 256 ms to 2 s ahead fires at a jiffy that is a multiple of 8, in
 # one batch, and the work it queues follows. So P1 is a replication on new data,

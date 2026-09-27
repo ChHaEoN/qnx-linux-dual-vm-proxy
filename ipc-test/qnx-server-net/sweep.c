@@ -5,7 +5,7 @@
  * existing endpoint is fixed at FRAME_TOTAL_BYTES = 64, which must stay 64: the
  * shared-memory slot copies that many bytes with no bound check (shm_chan.h).
  * So the monitor is not touched, server.c (qnx-echo-server-net, staged in every
- * published image) is not touched, and this is its own binary,
+ * earlier image) is not touched, and this is its own binary,
  * qnx-echo-server-sweep, built from its own source for the guest (qcc, `make
  * sweep`) and for the host (gcc, by run-sweep.sh). It is pure POSIX, so the two
  * are the same program.
@@ -18,9 +18,10 @@
  * ends the connection: echoing a guess would hand the initiator bytes it did not
  * send.
  *
- * READ MODES (2026-09-26, run-reads.sh). The sweep found a +16 us step from 64 to
- * 96 B on the guest path, and the default mode above makes one read() at 64 B and
- * two above it. Two opt-in modes separate the read count from the frame size:
+ * READ MODES (2026-09-26, run-reads.sh). The default mode above makes one read() at
+ * 64 B and two above it, so in the sweep (record `20260926T-a6-orin-sweep`, held
+ * locally) the read count moves with the frame size. Two opt-in modes separate the
+ * read count from the frame size:
  *   greedy  read as much as is there (up to two frames' room), then only what is
  *           missing: one read() per frame whenever the frame arrived whole;
  *   split   read the first 64 bytes as 32 + 32, then S - 64 as the default does:

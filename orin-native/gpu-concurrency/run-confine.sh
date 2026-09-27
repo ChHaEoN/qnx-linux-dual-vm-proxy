@@ -4,13 +4,11 @@
 # Phase 3b / A6, 2026-09-25; follows 20260924T-a6-orin-caches. The owner chose this test
 # (2026-09-25) knowing it changes systemd settings on the board, at runtime, restored after.
 #
-# WHAT IS KNOWN. tj-thermal's uevents make a slow window; udevd does most of the work, the
-# desktop little (20260924T-a6-orin-uevent, -queue, -headless). None of the generic kinds of
-# work tried on another core makes the window (-bursts, -walks, -caches). The listener
-# test's switch traces (re-analysed in -caches): unpinned, udevd ran on QEMU's cores (+888
-# us of CPU per window) and on the probe's core (+704), and gnome-shell on both; with udevd
-# pinned to core 5, gnome-shell ran on the probe's core (+353); with udevd pinned to core 3,
-# nothing extra ran on those cores, yet that arm's window was +25.8 us against +36.1 free.
+# WHAT IS KNOWN. The window around tj-thermal's uevents, and the parts udevd and the
+# desktop play in it, are in records 20260924T-a6-orin-uevent, -queue and -headless; the
+# generic kinds of work tried on another core, in -bursts, -walks and -caches; where udevd
+# and gnome-shell ran during the windows, from the listener test's switch traces
+# (re-analysed in -caches), in -listeners and -caches (all held locally).
 #
 # THE MANIPULATION. One ARM per round, in the pattern open confined confined open, repeated:
 #   confined  `systemctl set-property --runtime UNIT AllowedCPUs=3,5` for system.slice,
@@ -44,8 +42,9 @@
 #
 # THE PREDICTION, written and committed before any run of this harness, smoke runs
 # included. It is not to be amended. H: keeping udevd and the desktop off the exchange's
-# cores removes the part of the window they cause by running there, but not the rest (the
-# core-3 arm of the listener test kept +25.8 of +36.1 us), and it trims the far tail.
+# cores removes the part of the window they cause by running there, but not the rest (see
+# the core-3 arm of the listener test, record 20260924T-a6-orin-listeners), and it trims the
+# far tail.
 #   P1 the uevent window does not halve: confined U excess >= 0.5x open's. REFUTED below.
 #   P2 neither does the poll's own: confined tj excess >= 0.5x open's. REFUTED below.
 #   P3 the far tail is lower: confined p99.9 <= 0.9x open's. REFUTED above.

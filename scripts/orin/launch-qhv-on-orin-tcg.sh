@@ -29,14 +29,13 @@
 # not provide on A78AE -- so TCG here is a hard architectural requirement, not
 # a workaround. That matters for how the resulting number is read: the Windows
 # side is TCG for the same reason, so for once TCG-on-both is *genuine
-# symmetry* rather than the incidental blockage the plain qnx-safety-vm leg
-# ~~suffers from~~ suffered from until 2026-09-18 (docs/orin-port.md's
-# GICv3/KVM_EXIT_ARM_NISV risk-register row). 2026-09-18: that plain leg boots
-# under KVM with a startup-qemu-virt we rebuilt with -fno-auto-inc-dec (board
-# source orin-native/startup/qemu-virt/); the SDP's shipped startup still hangs.
-# The QHV leg is untouched by that -- it needs EL2/nested virtualisation, which
-# ARM KVM does not provide on A78AE, so TCG here is still a hard requirement.
-# Do not describe this leg as "TCG because KVM is broken" -- it is not.
+# symmetry*, not an incidental choice. The plain qnx-safety-vm leg's KVM route
+# (a startup-qemu-virt we rebuilt with -fno-auto-inc-dec, board source
+# orin-native/startup/qemu-virt/; docs/orin-port.md's GICv3/KVM_EXIT_ARM_NISV
+# risk-register row) leaves the QHV leg untouched -- it needs EL2/nested
+# virtualisation, which ARM KVM does not provide on A78AE, so TCG here is a
+# hard requirement. Do not describe this leg as "TCG because KVM is broken" --
+# it is not.
 #
 # No sudo, no br0, no tap-qnx: this leg does no host networking whatsoever.
 # That is a real difference from launch-qnx-on-orin-tcg.sh, which needs all
@@ -71,11 +70,10 @@ prefix="${3:-qhv-orin-boot}"
 # startup.sh binds ("random ... devr-virtio.so:mem=0xa003a00" is slot 3).
 # The net device is a slot filler; user-mode slirp, no host bridge.
 #
-# This is not cosmetic. On 2026-09-09 presenting the rng device moved the
-# Windows launch->guest-banner time from ~49.2 s to 29.7 s — the 19 s the
-# entropy-less boot spends timing out is 40% of the measurement. A run
-# without it and a run with it are NOT comparable, which is why the device
-# set is stamped into the times file below alongside the QEMU version.
+# This is not cosmetic: without the rng device the host image's startup.sh
+# waits out a timeout for it, so a run without it and a run with it are NOT
+# comparable, which is why the device set is stamped into the times file
+# below alongside the QEMU version.
 # rng-builtin, not rng-random, so the identical line works on Windows.
 with_rng="${WITH_RNG:-0}"
 rng_args=()
@@ -88,14 +86,8 @@ ifs="ifs.bin"
 disk="disk-qemu"
 
 # Progress markers on the shared serial line, in the order they must appear.
-#
-# NOTE, because the obvious guess is wrong: the QHV *host* prints no banner of
-# its own here. logs/sample-boot/qhv-tcg-host-and-guest-boot.log's curation
-# header claims to look for a host banner "QNX qnx-qhv ... QEMU_virt", and the
-# original launch-qhv-tcg.ps1 said the same -- but no such line exists in that
-# log's body, or in any run reproduced since. Only the guest ever prints a
-# banner. Checking for the host one therefore always failed and made healthy
-# runs look broken. These three markers are all genuinely emitted:
+# The first two are printed by this project's post_start.custom, the third is
+# the guest's banner; no marker waits for a banner from the QHV *host*:
 #
 #   1. host reached post_start   -> "=== AUTO-START QNX GUEST UNDER QVM"
 #   2. hypervisor was invoked    -> "=== launching qvm @g2.conf"
@@ -124,7 +116,7 @@ fi
 # WHICH QEMU. The 2026-09-08 confound came from this script silently picking
 # up /usr/bin's distro 6.2.0 while the Windows side ran 11.x -- and 6.2's virt
 # board does not wire the EL2 virtual-timer IRQ at all (added in QEMU 9.0,
-# commit 1ec896fe7c), so a VHE hypervisor host hangs at its first timeout.
+# commit 1ec896fe7c), which a VHE hypervisor host depends on.
 # Selection is therefore explicit and stamped: QEMU_BIN wins; otherwise the
 # from-source build produced by build-qemu-on-orin.sh if present; otherwise
 # PATH, loudly.

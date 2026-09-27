@@ -11,8 +11,8 @@ WHY
 so: `//XXXX: check for never clearing`. It is entered four times on the boot CPU
 during `gic_v3_initialize()` and `gic_v3_gicc_init()`.
 
-On every previous validation in this project that was harmless, because the GIC
-had just come out of reset under QEMU. This board is the first case where the
+Under QEMU that is harmless by construction, because the GIC has just come out
+of reset there. This board is the first case where the
 same code meets a GICv3 that Linux configured, used, and left enabled with
 device interrupts possibly still pending. If the pending bit never clears there,
 the loop never exits.
@@ -22,7 +22,7 @@ outcome, and both halves of that are measured rather than assumed: the watchdog
 does not fire after this kexec hand-over, so a spin needs a human to pull the
 power; and a cold power cycle wipes the DRAM region holding everything printed
 up to that point. A hang therefore costs the board session *and* the evidence
-explaining it. See results/orin-native-port/20260909T1100Z/m0-hang-watchdog.md.
+explaining it. See `m0-hang-watchdog.md` (held locally).
 
 WHAT THIS CHANGES
 

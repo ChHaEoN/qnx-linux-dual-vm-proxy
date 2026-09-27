@@ -2,7 +2,7 @@
 
 Phase 3b. Architect pass, revision 2, 2026-09-11: revision 1 plus the fixes from two design reviews, each listed with its outcome in §12. It follows the structure and claim discipline of [m3-design.md](m3-design.md).
 
-**Revision 3, 2026-09-11.** Revision 2 was built and ran as attempt 1 (§2.3). §13 records the outcome, the defects that run exposed, the fixes to the tooling, the ring finding and what attempts 2 and later test. Sections 1 to 12 keep revision 2's text. Where a fix changed what they describe, they point to §13.
+**Revision 3, 2026-09-11.** Revision 2 was built and ran as attempt 1 (§2.3), and attempts 2 to 4 ran the revision-3 variants. Their records are held locally (NC QDL v7 4.6(i)). §13 records the changes to the tooling and what attempts 2 and later were designed to test. Sections 1 to 12 keep revision 2's text. Where a change altered what they describe, they point to §13.
 
 **Path prefixes used below**
 - `plan` = `docs/orin-native-port-plan.md`
@@ -50,7 +50,7 @@ Checklist 7b (plan:550) asks for one thing before M4 touches the board: run the 
    - A background job may inherit SIGINT as ignored, and `bwait` does not reset it: it spawns with NULL attributes (bwait.c:276).
 5. **Counts on the target, verdict on the PC.**
    - The host script prints per-ID counts, payload checks, the plan's literal filter count, a corrected filter count and a class/subtype histogram.
-   - The counter classifies each event twice, by its printed subtype name and by its numeric event ID, and reports every disagreement (§5.4). Revision 3 classifies by printed name only: `%e` turned out to be an event sequence index (§13, D-a).
+   - The counter classifies each event twice, by its printed subtype name and by its numeric event ID, and reports every disagreement (§5.4). Revision 3 classifies by printed name only (§13, D-a).
    - The PC parser decides the verdict. A zero count is trusted only when the PC recount of the extracted `.kev` agrees. Without that recount a FAIL is `FAIL (unverified)`, which triggers none of the plan's fail actions (§1.2).
 6. **The raw `.kev` also comes out.** After qvm is stopped, it is gzip'd, base64'd and sent over the serial console, capped and md5-checked. The PC decodes it into `run/` and parses it again with the SDP's host `traceprinter.exe`. That:
    - cross-checks the on-target filter;
@@ -272,7 +272,7 @@ Every row assumes the absent IDs' zeros are verified (§1.2). An unverified part
   - The counter reads `%e` as decimal or `0x` hex. It also accepts the class-coded form, with class 10 in bits 10-14 (:237, :370).
   - It counts by name and by number separately, and prints every disagreement (§5.4).
 - **Still HYPOTHESIS:** that the class prints as `QVM`, what `%e` prints for a Class-10 event, and that `-n` combines with `-p`. The histogram shows the actual names and IDs, and the PC cross-check catches a broken on-target counter.
-- **Outcome (attempt 1, VERIFIED).** The class prints as `QVM`, and `-n` combines with `-p`. `%e` prints an event sequence index, one higher for each printed event, not the event ID. The numeric classification produced a false hit and made every histogram key unique. Revision 3 removes it (§13, D-a). The plan's literal filter matched exactly the QVM header lines, and `Class 10` never matched.
+- **Revision 3** removes the numeric classification by `%e`; the counter classifies by printed class and subtype name only (§13, D-a). What attempt 1 printed is in its record, held locally (NC QDL v7 4.6(i)).
 
 **D2: the `-M` path.**
 - **The doc.** [tracelogger] says that with `-M`, the `-f` name is placed under `/dev/shmem`: its example turns `/var/tracebuffer.kev` into `/dev/shmem/var/tracebuffer.kev`.
@@ -333,7 +333,7 @@ Every row assumes the absent IDs' zeros are verified (§1.2). An unverified part
 
 The files of §5 were written and the `plan` variant was built. Where this design was inconsistent or silent, the choice below was made. None of them changes a verdict rule of §1.2 or §1.3.
 
-**Run.** This build ran as attempt 1 (`out/attempt1-*.log`): `VERDICT7B=PASS fields=OK`. The run exposed the defects §13.2 lists. The tooling was fixed after it and is built as the `r3`-tagged variants (§13.3). The table below describes the build that ran.
+**Run.** This build ran as attempt 1 on 2026-09-11; its record (`out/attempt1-*.log`) is held locally (NC QDL v7 4.6(i)). The tooling was changed after it (§13.2) and is built as the `r3`-tagged variants (§13.3). The table below describes the build that ran.
 
 | # | Design text | As built | Why |
 |---|---|---|---|
@@ -427,7 +427,7 @@ If S2 or S5 sets a failure, S6-S14 are skipped and the script goes straight to S
 
 | Canonical host (qhvh/post_startup.sh) | Dry run | Why |
 |---|---|---|
-| An RQ-2 host-half block (:40-44). The binary was never staged: the as-run log prints the skip (`qhv/qhv-guest-boot-rng-snap1.log:15`) | Omitted | The block only prints a skip line. The guest half skipped too (the same log, :36-37) |
+| An RQ-2 host-half block (:40-44), whose binary was never staged into the image | Omitted | Without its binary the block only prints a skip line |
 | `g2.conf` with pl011, virtio-console, virtio-blk and shmem (:50) | The identical text. `vtwfe` adds two `set` lines | It is the as-run configuration, and the board's `orin-native/qhv/g2-m3.conf:27-44` has the same four vdevs |
 | `qvm @g2.conf &` | The same command, in a subshell that records its exit code. stdin is `/dev/null`; stdout is still the console | Exit detection, without moving the guest console off the serial log |
 | `waitfor /dev/ttyp0 10`, then `sleep 90` | A 150 s grace timer from T0 | Tracing slows guest boot by an unknown amount. The parser checks that the echo server's line and the guest banner both come before `M4D STATE ipc` |
@@ -1257,7 +1257,7 @@ parse-m4dry.py --attempt N --serial FILE --launch FILE --run-dir DIR --out-dir D
      - The vCPU threads are the threads that emitted CYCLES.
      - The qvm pid is `M4D QPID` if it was printed; otherwise it is the pid those threads share.
    - **Sequence.** Per vCPU thread, count the triples GUEST_ENTER, CYCLES, GUEST_EXIT that appear in that order, and count the events that are out of order.
-   - **Offset order.** For each triple, apply [tsc]'s conversion: host equals guest minus offset, with 64-bit wrap and the offset read as signed. Check `t(ENTER) ≤ at_entry − offset ≤ at_exit − offset ≤ t(EXIT)`. Report `offset_order ok=<n> violated=<n>`. This directly tests the conversion M4 would use. Revision 3 takes `t(ENTER)` and `t(EXIT)` from the 64-bit host time, rebuilt per CPU from CONTROL TIME events, never from the 32-bit `t:` word (§13, D-c).
+   - **Offset order.** For each triple, apply [tsc]'s conversion: host equals guest minus offset, with 64-bit wrap and the offset read as signed. Check `t(ENTER) ≤ at_entry − offset ≤ at_exit − offset ≤ t(EXIT)`. Report `offset_order ok=<n> violated=<n>`. This directly tests the conversion M4 would use. Revision 3 takes `t(ENTER)` and `t(EXIT)` from a 64-bit host time rebuilt per CPU from CONTROL TIME events, never from the printed `t:` field (§13, D-c).
    - **Pairs.** Consecutive complete triples on the same vCPU thread form a pair. Report:
      - `pairs=<n>`, and `pairs_between_markers=<n>` for W2;
      - for each pair, `dwell_guest_cycles = at_entry(next) − at_exit(this)`;
@@ -1267,7 +1267,7 @@ parse-m4dry.py --attempt N --serial FILE --launch FILE --run-dir DIR --out-dir D
    - **Fallback characterisation** (§1.5). Per vCPU tid:
      - the THRUNNING count;
      - running cycles, from each THRUNNING to the next THREAD-class event for that tid, or to another thread's THRUNNING on the same CPU;
-     - INTERRUPT events on that CPU while the tid runs (subtypes matching `INT_ENTR|INT_EXIT|INTERRUPT`). Revision 3 matches the INTERRUPT class and reports each subtype, because attempt 1's only subtype, `INT_DELIVER`, missed the pattern (§13, D-d).
+     - INTERRUPT events on that CPU while the tid runs (subtypes matching `INT_ENTR|INT_EXIT|INTERRUPT`). Revision 3 matches the INTERRUPT class and reports each subtype (§13, D-d).
 
      Result: `fallback=characterised`, `partial(no-extraction)` or `impossible(<reason>)`.
    - **Transport shape.** `flt_bytes_per_pair`, from W2's corrected-filter bytes and W2's pairs; and `flt_bytes_per_s`, over the span between the W2 markers.
@@ -1363,10 +1363,10 @@ parse-m4dry.py --attempt N --serial FILE --launch FILE --run-dir DIR --out-dir D
 5. **Not a complete trace.**
    - A linear capture can overrun and drop events (VENDOR_CLAIM, the SAT guide's buffer-overrun topic, from the research brief).
    - A ring can overwrite (§3.2).
-   - A PASS says the events exist, not that every exit was recorded.
+   - A PASS would say the events exist, not that every exit was recorded.
 6. **Not the canonical host image** (§4.1), and not an input to the Phase-4 twin diff.
 7. **Not tracing overhead on the board.** `procnto-smp-instr` plus `tracelogger` under TCG says nothing about their cost on silicon (plan §7 item 7).
-8. **Not the IPC benchmark.** The IPC figures come from a variant image with tracing active. They are not Phase-2 results, and they are not comparable with the cloud-leg CSV.
+8. **Not the IPC benchmark.** Any IPC figures from this run come from a variant image with tracing active. They are not Phase-2 results, and they are not comparable with the cloud-leg CSV.
 9. **Out of scope:** the KVM/GICv3 NISV track, a supported QHV platform, NVIDIA DRIVE OS, and any ASIL or isolation property.
 10. **Not publishable** before the supervising professor is consulted (NC QDL v7 4.6(i)).
 
@@ -1381,15 +1381,8 @@ parse-m4dry.py --attempt N --serial FILE --launch FILE --run-dir DIR --out-dir D
 2. **No gawk, no pipes.**
    - The board script rules forbid pipes and command substitution (m3-host.ksh.in:11), and M3's file list has no awk (make-m3-images.sh:120-124).
    - So the §5.4 counter has to become C, or M4 adds gawk plus a pipe-free wrapper. The M4 design decides which.
-   - The rules of §5.4 and §5.7 carry over unchanged, both classifications included. This run's `M4D QVMBY` and `M4D HIST` lines show which forms the class, the subtype and `%e` actually take, so the board's counter is written against observed output.
-   - **Now observed (attempt 1, VERIFIED; §13.2).** The rules carry over as §13 amends them, with classification by printed name only.
-     - The class prints as `QVM`.
-     - GUEST_ENTER, GUEST_EXIT, CREATE_VCPU_THREAD and CYCLES print as trace.h's suffixes.
-     - The interrupt events print as `INTR_RAISE` and `INTR_LOWER`, the reverse word order of trace.h's `RAISE_INTR` and `LOWER_INTR`. Their mapping to IDs 3 and 4 is HYPOTHESIS.
-     - No timer event appeared, so their spelling is UNKNOWN.
-     - `%e` is an event sequence index, not the event ID, so no counter may classify by it.
-     - `-n` combines with `-p`. THRUNNING prints `pid:` and `tid:`, and the kernel's interrupt events print as `INT_DELIVER`.
-     - The target traceprinter probably prints `t:` as the full 64-bit cycle count, while the host build prints its low 32 bits (§13, D-h: HYPOTHESIS until attempt 2's `M4D TPFMT` lines). A PC recount of the board's listing bytes must therefore use the target's format.
+   - The rules of §5.4 and §5.7 carry over as §13 amends them, with classification by printed class and subtype name only. The dry run's `M4D HIST` and `M4D SAMPLE` lines record which forms the class and the subtypes take, so the board's counter is written against printed output. Those records are held locally (NC QDL v7 4.6(i)).
+   - The host `traceprinter.exe` and the target's traceprinter are different builds (§5.7 step 6), so a PC recount of the board's listing bytes is checked against the target's own printed format (§13, D-h).
 3. **TCU transport.**
    - The console callout busy-polls every character (m3-design.md §2 rule 6), and the black box keeps only its first 65,520 B (§2 rule 7).
    - So the filtered listing goes over the live console to COM3, with md5, `cksum` and a line count checked on the PC (plan:400-401). It never goes into the black box.
@@ -1401,11 +1394,8 @@ parse-m4dry.py --attempt N --serial FILE --launch FILE --run-dir DIR --out-dir D
 
    The markers carry over to bracket the board's workload.
 
-   **From attempt 1's records (§13.1, §13.3):**
-   - **Path, VERIFIED.** `probe-literal`: `-M -f /dev/shmem/<name>` writes the literal path, so the plan's `-f /dev/shmem/t.kev` stands.
-   - **Stop, VERIFIED.** `TraceEvent(_NTO_TRACE_STOP)` from a separate process (`trcctl -x`) made tracelogger write the ring and exit, for both the probe and W2 (`by=stop`). SIGINT was never needed.
-   - **Size.** At the plan's flags the ring wrapped. It kept only a short tail per CPU, and both IPC markers and every Class-10 event were overwritten (VERIFIED).
-     - The use text says `-k` sets the kernel buffers per CPU, and `-S` caps the output file. So `-k`, not `-S`, is expected to size the ring (HYPOTHESIS until `k64` runs).
+   **From the dry run's records.** The path, the stop rung and the ring outcome for M4's recipe are read from the attempts' `PROBE`, `W2F`, `STOP` and `ring=` records, which are held locally (NC QDL v7 4.6(i)).
+   - **Size.** The use text says `-k` sets the kernel buffers per CPU, and `-S` caps the output file. So `-k`, not `-S`, is expected to size the ring (HYPOTHESIS; `k64` tests it, §13.3).
      - `k512` tests whether a ring can hold the whole IPC window on this host.
      - The board must size `-k` from its own event rate and within its own RAM (§13.3). A size copied from TCG is not enough.
 5. **Trace settings.** M4 states its `trace-*` settings (D9). If this run needed `vtwfe`, the board's `g2-m3.conf` needs the same two `set` lines.
@@ -1413,7 +1403,7 @@ parse-m4dry.py --attempt N --serial FILE --launch FILE --run-dir DIR --out-dir D
 7. **Clock.**
    - The board's `cycles_per_sec` is K11's. PMCCNTR calibration still prints the actual MHz (plan:401).
    - `clkcmp` runs unchanged on the board as the same self-consistency check. There the cross-CPU mode also covers both clusters.
-8. **The M4 parser.** Its CSV writer (plan:402-405) builds on §5.7's pairing and offset rules, but only if this run shows `offset_order` holding and `fields=OK`. Attempt 1 shows both, once host time is rebuilt to 64 bits from CONTROL TIME events (§13, D-c). That holds on emulated time only (§7 item 1).
+8. **The M4 parser.** Its CSV writer (plan:402-405) builds on §5.7's pairing and offset rules, but only if the dry run shows `offset_order` holding and `fields=OK`, with host time rebuilt to 64 bits from CONTROL TIME events (§13, D-c). Whether it does is in the dry run's records, held locally. Any such result is on emulated time only (§7 item 1).
 
 ---
 
@@ -1462,7 +1452,7 @@ Each row is keyed on the last distinctive line in `out/attempt<N>-*.log`.
 | `BWAIT guard deadline` or `QEMU_STOPPED how=wall-kill` | A bound upstream failed | The last `M4D STATE` line names the state |
 | `canonical_post=CHANGED` | Something wrote to the canonical images | Stop everything and tell the owner |
 | `PARSER_STOPPED how=timeout-kill` | The parser, or a host traceprinter pass under it, hung | No verdict. The inputs stay under `run/attempt<N>/`; rerun the parser by hand under the same bound |
-| `alive_after=yes` on `QEMU_STOPPED` or `PARSER_STOPPED` | A process survived `Stop-Process` | Kill it by the recorded PID, record that, and tell the owner. Revision 3 decides `alive_after` only after a bounded re-check (`gone_wait_ms=`, §13, D-e). Attempt 1's `alive_after=yes` came before that fix, and its `survivors=none` stands |
+| `alive_after=yes` on `QEMU_STOPPED` or `PARSER_STOPPED` | A process survived `Stop-Process` | Kill it by the recorded PID, record that, and tell the owner. Revision 3 decides `alive_after` only after a bounded re-check (`gone_wait_ms=`, §13, D-e) |
 
 ---
 
@@ -1473,7 +1463,7 @@ Each row is keyed on the last distinctive line in `out/attempt<N>-*.log`.
 | R1 | mkqnximage builds from a copied `local/` with only the snippets and `OPT_GUEST` changed, without `--force` | HYPOTHESIS | Build steps 6-7 |
 | R2 | mkqnximage does not write into the `--guest` directory | HYPOTHESIS | §4.4 step 3, every build |
 | R3 | `system_files.custom` lines with absolute sources land under `/system` | HYPOTHESIS. The same form is VERIFIED for data files (qhvh/data.build:82) | Build step 7; the S1 start check |
-| R4 | traceprinter starts with only libtraceparser added, libtracelog already being present | HYPOTHESIS. The four-file set is VERIFIED on the board (m2-runs.md R5) | S1 `tp0.err` |
+| R4 | traceprinter starts with only libtraceparser added, libtracelog already being present | HYPOTHESIS. The four-file set is M2's (m2.build.in:200-203); the M2 run record (`m2-runs.md`) is held locally | S1 `tp0.err` |
 | R5 | `-M` places `-f` under `/dev/shmem` | VENDOR_CLAIM ([tracelogger]) | `PROBE path=` |
 | R6 | `TraceEvent(_NTO_TRACE_STOP)` from another process makes a ring tracelogger write and exit | VENDOR_CLAIM ([tracelogger]) | `STOP p by=stop` with a non-empty probe file |
 | R7 | A background tracelogger has SIGINT ignored | HYPOTHESIS | Only if STOP fails: `by=sigint` or `by=kill` |
@@ -1553,60 +1543,46 @@ Two reviews of revision 1 returned nine issues: two major and four minor from th
 
 ---
 
-## 13. Attempt 1 outcome and fixes
+## 13. Attempt 1 (2026-09-11) and the tooling changes after it
 
 **Revision 3, 2026-09-11.**
 
 **The run.** Attempt 1 ran the `plan` variant, built from the tooling committed at 3dbf0e3.
-- **Records:** `out/attempt1-{build,launch,serial,parse,verify,canonical-recheck}.log`. The verify log is an independent recount by a scratch verifier.
-- **Re-parse:** the fixed parser, run on attempt 1's unchanged inputs, wrote `out/attempt1-reparse.log` (§13.4).
-- **Figures:** every one stays in those logs and under `run/`. This section carries none.
+- **Records:** `out/attempt1-{build,launch,serial,parse,verify,canonical-recheck}.log`, held locally (NC QDL v7 4.6(i)). The verify log is an independent recount by a scratch verifier.
+- **Re-parse:** the revised parser, run on attempt 1's unchanged inputs, wrote `out/attempt1-reparse.log` (§13.4), also held locally.
+- **Figures and outcomes:** every one stays in those logs and under `run/`. This section carries none.
 
 **More use texts** (printed with `sdphost/use.exe`, VERIFIED as text): [use-slay] is `sdp/bin/slay`. [use-tl] and [use-tp] are re-read for §13.2 and §13.3.
 
-### 13.1 Outcome
+### 13.1 Attempt 1 record
 
-| # | Outcome | Evidence |
+Attempt 1's answers to Q1-Q8 (§1.1) are in its records, held locally (NC QDL v7 4.6(i)).
+
+### 13.2 What changed in the tooling
+
+Each change below is in the committed tooling. The observations that prompted them are in attempt 1's records, held locally. None of them changes a verdict rule of §1.2 or §1.3.
+
+| # | Change | Files |
 |---|---|---|
-| Q1 | **VERIFIED.** On SDP 8.0's qvm under this TCG host, GUEST_ENTER (0), GUEST_EXIT (1) and CYCLES (7) are emitted, at the default qvm trace settings and tracelogger's default classes. W1 holds them; W2 holds none (§13.3). CREATE_VCPU_THREAD (2) and the two interrupt events appear too | `VERDICT7B=PASS fields=OK` in `attempt1-parse.log` and `attempt1-reparse.log`, both PC recounts `complete`; `attempt1-verify.log` |
-| Q2 | VERIFIED: the CYCLES events carry non-zero `at_entry` and `at_exit` | `fields_w1`; `xcheck_w1_cycles_both_nonzero=match` |
-| Q3 | VERIFIED: GUEST_EXIT carries `clockcycles_offset`, with one distinct value for the qvm instance | `fields_w1`; `xcheck_w1_offsets_distinct=match` |
-| Q3, the conversion | VERIFIED, on emulated time only. With host time rebuilt to 64 bits, `t(ENTER) ≤ at_entry − offset ≤ at_exit − offset ≤ t(EXIT)` holds for every complete triple, with none violated and none missing. The attempt-1 parse reported every triple violated; that was defect D-c, not qvm | `offset_order_w1` in the re-parse; the verify log's per-CPU check agrees |
-| Q4 | The plan's literal filter matched exactly the QVM header lines, the same lines as the corrected filter, on the target and on the PC. `Class 10` never matched. Without `-n` the payload is on separate lines that neither pattern matches (D1 held) | `PLANFILTER`, `CORRFILTER`; `xcheck_w1_*filter_lines=match` |
-| Q5 | `agree` in all three modes, in each of the `pre`, `load` and `post` runs. The external reference is coarse and recorded | `clock_pre`, `clock_load`, `clock_post`, `clkcmp_selfcheck=ok`, `clock_ext` |
-| Q6 | `fallback=characterised` in both windows. The INTERRUPT counts inside the vCPU thread's running intervals appear only after D-d's fix | `fallback_w1_*`, `fallback_w2_*`, `intr_subtypes_*` in the re-parse |
-| Q7 | Path: `probe-literal`. Stop: `TraceEvent(_NTO_TRACE_STOP)` from `trcctl`, for the probe and for W2. Ring: overwritten at the plan's flags (§13.3). The parser printed `ring=unknown`, because §3.2's marker rule needs at least `m4d-ipc-end`, and that marker was overwritten too | `PROBE`, `W2F`, `STOP p by=stop`, `STOP w2 by=stop`; `ring_w2_kept` and `buffers_w2_cpu<N>` in the re-parse |
-| Q8 | Not reached: W2 held no Class-10 event, so there was no filtered listing to size | `FLT SKIP`; `flt_bytes_per_pair=n/a` |
+| D-a | `%e` is dropped from every `-p` format: the host template, the counter's header and the parser's `P_FORMAT`. Events are classified by printed class and subtype name only. `M4D HIST` is keyed by class and subtype only. `M4D QVMBY` and `M4D DISAGREE` are removed. `ontarget_counter=suspect(classify)` becomes `suspect(xcheck)`, meaning any per-ID count differs from a complete PC recount | `m4dry-count.awk`, `m4dry-host.ksh.in`, `parse-m4dry.py` |
+| D-b | The counter and the parser accept both word orders of the interrupt subtype names, trace.h's `RAISE_INTR` and `LOWER_INTR` (trace.h:289-290) and `INTR_RAISE` and `INTR_LOWER`, as IDs 3 and 4 (the mapping of the reversed forms is HYPOTHESIS, labelled in both files), and both word orders of the timer subtype names. Unrecognised QVM subtypes are listed by name and count, as `M4D QVMOTHER` on the target and `pc_qvm_other_names_<w>` on the PC, never hidden in `qvm_other` | `m4dry-count.awk`, `parse-m4dry.py`, kept in lockstep |
+| D-c | The parser rebuilds 64-bit host cycles per CPU from each CONTROL TIME event's `msb:`, and never compares the printed `t:` field with 64-bit payload values. A low word that drops by more than half its range between two events on one CPU also counts as a wrap, as a safety net. Offset order, running cycles, marker spans and the ring span all use the rebuilt time. `time64_<w>` reports the TIME events, inferred wraps, backsteps and events seen before a CPU's first TIME event | `parse-m4dry.py` |
+| D-d | Interrupts are matched by class, not by the subtype pattern `INT_ENTR\|INT_EXIT\|INTERRUPT`. `intr_subtypes_<w>` gives the window's counts per subtype, and each fallback line gives `intr` plus `intr_subtypes` for its tid. `intr_class_or_subtype` is removed | `parse-m4dry.py` |
+| D-e | `Test-Alive` treats an exited process as not alive, since Windows can keep an exiting process listed briefly. `Wait-Gone` re-checks for up to 15 s, and `QEMU_STOPPED` now carries `alive_after=` with `gone_wait_ms=`. The parser's stop uses the same re-check. `survivors=` stays authoritative | `launch-m4dry-tcg.ps1` |
+| D-f | In `process()`, each pipeline runs under `bwait -k 300` through a nested `ksh -c`, and bwait's SIGKILL reaches only that ksh, so a hung `gawk`, `grep`, `wc` or `traceprinter` could survive its bound. `reap <w> <pass>` now runs after each of the three passes. It sends SIGKILL by name, with `slay -f -Q -s KILL`, to `traceprinter`, `gawk`, `grep`, `wc` and `toybox`, and prints `M4D REAP <w> <pass> left=<name:count,…\|none>` from slay's exit status, the number of processes slain [use-slay]. `toybox` covers an applet that runs under the toybox name (HYPOTHESIS: which name slay matches for a hard link). Nothing else runs these programs during `process()`. `bwait.c` is unchanged. The parser reports `reap_<w>` | `m4dry-host.ksh.in`, `parse-m4dry.py` |
+| D-g | No change to the `echo_up` marker, `server: echo endpoint up`. The guest's echo server prints it for `/dev/vcon2` (ipc-test/qnx-server/server.c:61), the endpoint the client reaches through `/dev/ttyp0`, and M3 stamps the same line (m3-host.ksh.in:97). It is half of `ipc_after_guest_ready`. The launcher and the parser now say in a comment where the line comes from and which check uses it | `launch-m4dry-tcg.ps1`, `parse-m4dry.py` |
+| D-h | The parser also recomputes the PC's byte count for each filter as if `t:` printed the whole 64-bit host time at `%08` minimum width (`xcheck_<w>_{plan,corr}filter_bytes_if_t64`), after the default format `t:0x%08c` and [use-tp]'s `%c`, the 64-bit cycle count. From attempt 2 on, the probe prints its first few default-format event lines as `M4D TPFMT`, and the parser reports `target_tp_time_field` | `m4dry-host.ksh.in`, `parse-m4dry.py` |
 
-### 13.2 Defects, and what changed
+### 13.3 Ring sizing, and the variants that test it
 
-Each defect was VERIFIED by the run agent and by an independent verifier. None changed the verdict.
-
-| # | What attempt 1 showed | Fix (files) |
-|---|---|---|
-| D-a | `%e` in a `-p` format prints an event sequence index, one higher for each printed event, not the event ID (VERIFIED, `run/attempt1/w1.p.txt`). The numeric reading failed for most events and produced a false hit: an `INTR_LOWER` event counted as ID 2 (`M4D SAMPLE w1 id2`). It also made every `M4D HIST` key unique, so the histogram hit its cap and was useless | `%e` is dropped from every `-p` format: the host template, the counter's header and the parser's `P_FORMAT`. Events are classified by printed class and subtype name only. `M4D HIST` is keyed by class and subtype, so it is small and complete. `M4D QVMBY` and `M4D DISAGREE` are removed. `ontarget_counter=suspect(classify)` becomes `suspect(xcheck)`, meaning any per-ID count differs from a complete PC recount. The re-parse flags attempt 1's own counter this way, as it should (`m4dry-count.awk`, `m4dry-host.ksh.in`, `parse-m4dry.py`) |
-| D-b | The interrupt events printed as `INTR_RAISE` and `INTR_LOWER`. trace.h:289-290 names them `RAISE_INTR` and `LOWER_INTR`, so they fell into `qvm_other` unnamed. No timer event appeared at the defaults, so how IDs 5 and 6 print is UNKNOWN | Both interrupt spellings map to IDs 3 and 4 (the mapping is HYPOTHESIS, labelled in both files), and both word orders are accepted for the timer events. Unrecognised QVM subtypes are listed by name and count, as `M4D QVMOTHER` on the target and `pc_qvm_other_names_<w>` on the PC, never hidden in `qvm_other` (`m4dry-count.awk`, `parse-m4dry.py`, kept in lockstep) |
-| D-c | `offset_order` and `running_cycles` compared traceprinter's 32-bit `t:` word with 64-bit payload values, so every triple looked violated. Rebuilding host time from the CONTROL TIME events' `msb:` makes the conversion hold (VERIFIED, verify log and re-parse) | The parser rebuilds 64-bit host cycles per CPU from each CONTROL TIME event's `msb:`. A low word that drops by more than half its range between two events on one CPU also counts as a wrap, as a safety net. Offset order, running cycles, marker spans and the ring span all use the rebuilt time. `time64_<w>` reports the TIME events, inferred wraps, backsteps and events seen before a CPU's first TIME event. No `-p` token helps on the PC: [use-tp] lists `%c` as the 64-bit cycle count, but the host `traceprinter.exe` prints only the low 32 bits, even under `%016c` (VERIFIED on this PC against attempt 1's `w2.kev`; that listing stays under `run/`) |
-| D-d | The parser's INTERRUPT pattern (`INT_ENTR\|INT_EXIT\|INTERRUPT`, matched against the subtype) missed `INT_DELIVER`, the only subtype that appeared, so every fallback line said no interrupts | Interrupts are matched by class. `intr_subtypes_<w>` gives the window's counts per subtype, and each fallback line gives `intr` plus `intr_subtypes` for its tid. `intr_class_or_subtype` is removed (`parse-m4dry.py`) |
-| D-e | The launcher logged `alive_after=yes` straight after QEMU had exited. `Test-Alive` only asked whether the PID was still listed, and an exiting process can stay listed briefly. The later `survivors=none` was authoritative | `Test-Alive` treats an exited process as not alive. `Wait-Gone` re-checks for up to 15 s, and `QEMU_STOPPED` now carries `alive_after=` with `gone_wait_ms=`. The parser's stop uses the same re-check. `survivors=` stays authoritative (`launch-m4dry-tcg.ps1`) |
-| D-f | In `process()`, each pipeline ran under `bwait -k 300` through a nested `ksh -c`. bwait's SIGKILL reaches only that ksh, so a hung `gawk`, `grep`, `wc` or `traceprinter` would have survived its bound | `reap <w> <pass>` runs after each of the three passes. It sends SIGKILL by name, with `slay -f -Q -s KILL`, to `traceprinter`, `gawk`, `grep`, `wc` and `toybox`, and prints `M4D REAP <w> <pass> left=<name:count,…\|none>` from slay's exit status, the number of processes slain [use-slay]. `toybox` covers an applet that runs under the toybox name (HYPOTHESIS: which name slay matches for a hard link). Nothing else runs these programs during `process()`. `bwait.c` is unchanged. The parser reports `reap_<w>` (`m4dry-host.ksh.in`, `parse-m4dry.py`) |
-| D-g | **Not a defect.** The `echo_up` marker, `server: echo endpoint up`, did match in attempt 1: the serial log has the line and the launch log has `MARK echo_up`. The guest's echo server prints it for `/dev/vcon2` (ipc-test/qnx-server/server.c:61), the endpoint the client reaches through `/dev/ttyp0`, and M3 stamps the same line (m3-host.ksh.in:97). It is half of `ipc_after_guest_ready` | Kept. The launcher and the parser now say in a comment where the line comes from and which check uses it |
-| D-h | The target's byte counts for both filters exceed the PC's by the same amount, while the line counts match | **Finding: HYPOTHESIS, exact to the byte.** Recompute the PC's byte count for each filter as if `t:` printed the whole 64-bit host time at `%08` minimum width. Both counts then equal the target's (`xcheck_w1_{plan,corr}filter_bytes_if_t64=match` in the re-parse). That fits the default format `t:0x%08c` and [use-tp]'s `%c`, the 64-bit cycle count: the target build prints the whole value, and the host build its low 32 bits, which is VERIFIED on the host side. **Direct check from attempt 2:** the probe prints its first few default-format event lines as `M4D TPFMT`, and the parser reports `target_tp_time_field` (`m4dry-host.ksh.in`, `parse-m4dry.py`) |
-
-### 13.3 The ring finding, and the variants that test it
-
-**What attempt 1 showed** (VERIFIED from W2's listing and records):
-- W2 ran with exactly the plan's flags, `-r -M -S 8M` with no `-k`. The stop worked, and tracelogger wrote the ring and exited.
-- The ring kept only a short tail, a small fraction of tracelogger's own run in W2 (`ring_w2_kept` in the re-parse). Both IPC markers and every Class-10 event were overwritten. The tail kept is shorter than the pause between `m4d-ipc-end` and the stop.
-- Per CPU, the file held the number of kernel buffers that `-k`'s documented default predicts, plus one short trailing buffer whose sequence number restarts (`buffers_w2_cpu<N>`).
-- The probe's `-S 1M` file and W2's `-S 8M` file came out nearly the same size (`PROBE bytes=`, `KEVFILE w2 bytes=`), so `-S` did not set the ring's size.
+W2 in attempt 1 ran with exactly the plan's flags, `-r -M -S 8M` with no `-k`. What its ring held is in attempt 1's records (`ring_w2_kept` and `buffers_w2_cpu<N>` in the re-parse), held locally (NC QDL v7 4.6(i)).
 
 **What the documentation says:**
 - [use-tl] gives `-k` as the number of buffers allocated in the kernel per CPU, with a default of 8, each of about 16 KB. It gives `-S` as the maximum size of the output file, and says `-M` requires `-S`.
 - [tracelogger] says the same for `-k`, and calls `-S` the maximum size of the log file or memory object.
 - Neither says how the ring is sized in `-r` mode, or what happens when the ring holds more than `-S`.
 
-**Reading (HYPOTHESIS until `k64` runs).** In ring mode, `-k` sets the ring's size per CPU, and `-S` only caps the output. At the default the ring is `-k` × about 16 KB per CPU, far less than the IPC window's trace on this host.
+**Hypothesis (tested by `k64`).** In ring mode, `-k` sets the ring's size per CPU, and `-S` only caps the output. At the default the ring is `-k` × about 16 KB per CPU.
 
 **The variants** (all tagged `r3` and built from the fixed tooling with `build-m4dry-image.ps1 -Variant <v> -Tag r3`):
 
@@ -1618,10 +1594,10 @@ Each defect was VERIFIED by the run agent and by an independent verifier. None c
 | `vtwfe` | as `plan` | Unchanged; only after a PARTIAL or FAIL (O3) |
 
 **Why `k512`, and the memory arithmetic.**
-- **Choice.** 512 exceeds, on both CPUs, the buffer sequence numbers W2 had reached when it stopped (`buffers_w2_cpu<N>`, `seq_max`). That reads the sequence as counting the buffers filled since that tracelogger started. It is HYPOTHESIS, supported by W1's buffers and W2's trailing buffer both restarting at 1.
+- **Choice.** 512 was chosen from attempt 1's W2 buffer sequence numbers (`buffers_w2_cpu<N>`, `seq_max`; record held locally), reading the sequence as counting the buffers filled since that tracelogger started (HYPOTHESIS, R37).
 - **TCG host.** The kernel ring is 512 × 2 CPUs (`-smp 2`, the launch line) × about 16 KB ≈ 16 MB, and the `-M` object is at most `32M`, about 48 MB together. The host has `-m 2G`, and its guest takes `ram 0x80000000,512M` (g2.conf). The processing states run after qvm has stopped and released the guest's RAM. They add W1's file (capped by its own `-S 32M`), the listings, and one gzip copy at a time. That fits, and the `M4D MEM` lines record the actual headroom.
 - **Board, for M4 only; nothing here builds it.** At M3's `-P4` (m3-design.md O2), the same `-k 512` is 512 × 4 × about 16 KB ≈ 32 MB of kernel buffers. Add an `-M` object at least that large, and the total is 64 MB or more inside `-m992M`, beside the same 512M guest. That is more than half of the headroom m3-design.md §3.5 estimates, and the estimate is itself HYPOTHESIS. So the board's `-k` must come from the board's own event rate, with a `k64`-style point on the board, not from this TCG size.
-- **Not built:** a larger TCG point. `k1024` would need about 32 MB of ring plus a `64M` object, past anything the board could reuse. The sequence numbers above do not call for it either.
+- **Not built:** a larger TCG point. `k1024` would need about 32 MB of ring plus a `64M` object, past anything the board could reuse.
 
 ### 13.4 Re-parse of attempt 1
 
@@ -1629,16 +1605,9 @@ Each defect was VERIFIED by the run agent and by an independent verifier. None c
 - Inputs: attempt 1's unchanged `run/attempt1/serial-raw.log` and `out/attempt1-launch.log`.
 - Outputs: `--run-dir run/attempt1-reparse`, `--parse-log attempt1-reparse.log` and `--serial-copy none`.
 - Nothing attempt 1 wrote changed: `out/attempt1-parse.log`, `out/attempt1-serial.log` and `run/attempt1/` keep their files.
+- What the re-parse reports is in its log, held locally (NC QDL v7 4.6(i)).
 
-**What it shows** (VERIFIED, lines in the log):
-- `VERDICT7B=PASS fields=OK`, as before.
-- `offset_order_w1`: ok for every complete triple, with none violated and none missing (D-c).
-- `fallback_w1_*` and `fallback_w2_*`: interrupts are now counted, all of them `INT_DELIVER` (D-d).
-- `xcheck_w1_{plan,corr}filter_bytes_if_t64=match` (D-h).
-- `ontarget_counter=suspect(xcheck)`. It flags attempt 1's revision-2 counter correctly: that counter's ID 2, 3 and 4 counts differ from the PC's, as do its `qvm_other` and `hist_keys` (D-a, D-b).
-- `pc_qvm_other_names_w1=none`: every QVM subtype attempt 1 printed is now known.
-
-The re-parse's `input_launch` sha256 differs from the one in attempt 1's parse log. That is expected: the launcher appended its closing lines after its own parser run had read the file. The parser uses only the `MARK`, `poll_ms`, `qemu_version` and `QEMU_STOPPED` lines, and all of them come before those closing lines.
+The launcher appends its closing lines to the launch log after its own parser run has read the file, so a re-parse records a different `input_launch` sha256 from the original parse. The parser uses only the `MARK`, `poll_ms`, `qemu_version` and `QEMU_STOPPED` lines, and all of them come before those closing lines.
 
 ### 13.5 What attempts 2 and later test
 
@@ -1649,9 +1618,9 @@ The re-parse's `input_launch` sha256 differs from the one in attempt 1's parse l
 - No `M4D QVMOTHER` line, or only names that are then added to both tables.
 - `hist_printed` equal to `hist_keys`.
 - An `M4D REAP` line for every pass. Any `left=` other than `none` is a finding.
-- `target_tp_time_field=64bit` makes D-h VERIFIED. `low32-or-msb0` refutes it, and D-h returns to UNKNOWN.
+- `target_tp_time_field=64bit` makes R39 VERIFIED. `low32-or-msb0` refutes it, and R39 returns to UNKNOWN.
 - `QEMU_STOPPED … alive_after=no gone_wait_ms=…`.
-- W2 is expected to be overwritten again, as at the default ring in attempt 1.
+- W2 may be overwritten at the default ring; that is recorded (`ring=`), not a failure of this attempt.
 
 **Attempt 3, `k64`: question (i).**
 - VERIFIED that `-k` sets the ring's size in ring mode if W2's `buffers_w2_cpu<N>` records follow `-k`, and `KEVFILE w2 bytes` grows by roughly the `-k` ratio over attempt 2's.
@@ -1667,18 +1636,9 @@ If it is overwritten anyway, the buffer sequence numbers say how far short the r
 
 **Unchanged:** O1 to O6, the verdict rules of §1.2 and §1.3, W1, the probe and the stop ladder.
 
-### 13.6 Risks attempt 1 settled, and new ones
+### 13.6 Risks after attempt 1, and new ones
 
-**Settled** (VERIFIED unless stated):
-- R5 (`probe-literal`), R6 (`by=stop`) and R8 (`STOP w1 by=self`). R7 was never exercised, because STOP worked.
-- R9: the class and four of the eight names as trace.h spells them. The interrupt names are reversed, and the timer names are unseen.
-- R10, R11 and R12.
-- R13 is still UNKNOWN. W2's tail held no Class-10 event. Whether an idle guest emits none at the defaults, or only none in so short a tail, is not settled.
-- R14, R15, R16 (at the plan's sizes), R17, R18, R19, R21, R22, R26 and R27.
-- R29 is **REFUTED**: `%e` is a sequence index.
-- R30 holds for the probe (`marker=found`). W2's markers were overwritten.
-- R31, R32, R33.
-- R34 is moot, because revision 3 no longer uses `and()` or `strtonum()`.
+**R1-R34.** Which of them attempt 1 answered is in its records, held locally (NC QDL v7 4.6(i)). R29 and R34 no longer apply: revision 3 reads no `%e` field and uses neither `and()` nor `strtonum()`.
 
 **New:**
 
@@ -1686,37 +1646,19 @@ If it is overwritten anyway, the buffer sequence numbers say how far short the r
 |---|---|---|---|
 | R35 | `INTR_RAISE` and `INTR_LOWER` are IDs 3 and 4 | HYPOTHESIS (the name pairs match with the words reversed) | A source that names the printed form, or `%e`-free class-coded output if one exists |
 | R36 | `slay` matches `grep` or `wc` by the name they run under, or under `toybox` | HYPOTHESIS | `M4D REAP` only if a stage ever survives |
-| R37 | The BUFFER sequence number counts buffers since that tracelogger started | HYPOTHESIS (W1 and W2's trailing buffer start at 1) | `k64`'s and `k512`'s `buffers_w2_cpu<N>` |
+| R37 | The BUFFER sequence number counts buffers since that tracelogger started | HYPOTHESIS (grounds in attempt 1's record, held locally) | `k64`'s and `k512`'s `buffers_w2_cpu<N>` |
 | R38 | A ring larger than `-S` would be cut, not grown or refused | UNKNOWN (no source says) | Not tested: `k512` sizes `-S` above its ring |
-| R39 | The target traceprinter prints `t:` as the full 64-bit count | HYPOTHESIS (exact byte match, D-h) | Attempt 2's `target_tp_time_field` |
+| R39 | The target traceprinter prints `t:` as the full 64-bit count | HYPOTHESIS (D-h) | Attempt 2's `target_tp_time_field` |
 
-### 13.7 Attempts 2 to 4, and verification of the fixes
+### 13.7 Attempts 2 to 4, and review of the fixes
 
-**Outcome.** VERIFIED from the raw serial and parse logs. The figures are only in the git-ignored run logs and the unpublished record.
-- **All three attempts** gave `VERDICT7B=PASS fields=OK` with `ontarget_counter=ok`:
-  - every per-ID target count equals the PC recount in both windows;
-  - there is no `QVMOTHER` line;
-  - every `REAP` line says `left=none`.
-- **Attempt 2 (`plan`):** W2 wrapped again at the default ring, as expected, and both IPC markers were overwritten.
-- **Attempt 3 (`k64`):** the buffers kept per CPU followed `-k` (k plus one trailing buffer), and with `-S` unchanged the file grew by about the `-k` ratio. **Question (i) is answered: `-k` sizes the ring in ring mode** (TCG). The IPC window was still overwritten.
-- **Attempt 4 (`k512`):**
-  - The ring never filled. Both IPC markers are inside W2 (`ring=held`), with guest entry, exit and CYCLES triples between them.
-  - The FLT block arrived with a matching md5.
-  - **Question (ii): only this setting kept the window on this host.**
-  - R37 is supported: the first kept buffer is sequence 1. R38 stays untested, because the ring stayed below `-S`.
-- **R39 / D-h is VERIFIED.** The target traceprinter prints `t:` as the full 64-bit count (`target_tp_time_field=64bit`). Every remaining byte difference reconciles at that width (`_if_t64=match`).
-- **Still open:** R35 (the interrupt names as IDs 3 and 4) stays HYPOTHESIS, and IDs 5 and 6 were not seen.
-- **Offsets:** `offset_order` holds on every in-sequence triple in both windows, and an independent 64-bit check agrees.
+**The runs.** Attempts 2 (`plan`), 3 (`k64`) and 4 (`k512`) ran the `r3` variants in §13.5's order. Their raw serial and parse logs and the unpublished record are held locally (NC QDL v7 4.6(i)).
 
-**What it means for M4 (§8 item 4).**
-- Do not copy `k512` to the board.
-- The ring must hold every buffer from tracelogger's start to its stop, and non-QVM kernel events dominate that count.
-- The fixed sleeps around the markers cost buffers too.
-- The board sizes `-k` from its own event rate at `-P4`, starting with a `k64`-style point, or it uses a linear window bounded by the markers.
+**For M4 (§8 item 4).** A TCG ring size is not copied to the board (§13.3). The board sizes `-k` from its own event rate at `-P4`, starting with a `k64`-style point, or it uses a linear window bounded by the markers.
 
-**Verification of the fixes.**
-- **Evidence recount: confirmed.** One note: the `CONFIG` line's `plan_w2=` field quotes the plan's text, not the variant's flags. Those are in `w2_k=` and `w2_s=`. The field is kept and noted here.
+**Review of the fixes.**
+- **Evidence recount.** One note on the tooling: the `CONFIG` line's `plan_w2=` field quotes the plan's text, not the variant's flags. Those are in `w2_k=` and `w2_s=`. The field is kept and noted here.
 - **Code review: confirmed with corrections.**
-  - *Rejected (major):* "the plain-pass `Clock64` can never see `msb:`". The host traceprinter's plain listing does print `msb:` on its CONTROL TIME lines (attempt 2's `w1.txt` and `w2.txt`), and the `_if_t64` reconciliations matched in attempts 2 to 4.
-  - *Known, cosmetic:* the state-summary `grep` in `m4dry-host.ksh.in` still names `QVMBY`, which no longer exists. The same lines reach the log through `process()`, so no record is lost. It is left as run, so the template matches the images built from it.
+  - *Rejected (major):* "the plain-pass `Clock64` can never see `msb:`". Rejected on attempt 2's host listings (held locally).
+  - *Known, cosmetic:* the state-summary `grep` in `m4dry-host.ksh.in` still names `QVMBY`, which no longer exists. The same lines reach the log through `process()`, so no record is lost. It is left as it is, so the template matches the images built from it.
   - D-a to D-f are fixed in lockstep between the awk counter and the parser. The verdict rules are unchanged, and no identifier leaked.

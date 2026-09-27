@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
-# run-listeners.sh -- which listener makes tj-thermal's slow window, and does it
-# matter where it runs? Phase 3b / A6, 2026-09-24; follows 20260924T-a6-orin-uevent.
+# run-listeners.sh -- which uevent listener, if any, slows the guest around
+# tj-thermal's uevents, and does it matter where it runs? Phase 3b / A6, 2026-09-24; follows 20260924T-a6-orin-uevent.
 #
-# WHAT IS KNOWN. Three uevents on tj-thermal, with no temperature read, make a slow
-# window of ~5 ms (37.4% of exchanges in it are in the tail, against 0.56%); three
-# reads with no uevent do not (2.2%) (20260924T-a6-orin-uevent, all three held).
-# Host code on QEMU's own cores is not it (20260924T-a6-orin-tailhost).
+# WHAT IS KNOWN. What three uevents on tj-thermal, and three temperature reads,
+# do to the exchanges around them: record 20260924T-a6-orin-uevent (held
+# locally). Host code on QEMU's own cores: record 20260924T-a6-orin-tailhost
+# (held locally).
 #
 # WHERE THE PREDICTION COMES FROM (looked at on the board before this was written,
 # and stated so it is not mistaken for a blind test):
 #   - with no guest running, a trace of every core's switches after three uevent
-#     bursts on tj-thermal: systemd-udevd ran 13.7 ms of CPU in the 8 ms after
-#     them (on cores 4 and 5 there), gnome-shell 1.9 ms, and nothing else of note;
-#     after three read bursts, nothing but the injector;
+#     bursts, and after three read bursts, on tj-thermal (an exploration; what it
+#     showed is held locally);
 #   - udevd's affinity is 0-5, so it can run beside QEMU;
 #   - cores 0-3 share one 2 MB L3 (QEMU runs on 0-2), cores 4-5 another (the
 #     probe runs on 4, the aux core is 5).

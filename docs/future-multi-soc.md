@@ -84,12 +84,12 @@ TCG-bound) number for the ADAS domain on Orin is deferred pending either
 DRIVE AGX SDK Developer Program, not self-serve for an individual — or
 (b) further investigation on AWS `c7g.metal` (~$2.32/hr, bounded-cost,
 same Graviton3 family as the existing cloud leg) to determine whether
-the KVM/GICv3-NISV hang found on Orin (`docs/orin-port.md`'s risk
-register) is Tegra234-specific or a general real-hardware/KVM
-limitation. This is a resourcing decision, not an abandonment.
+the KVM outcome recorded on Orin (`docs/orin-port.md`'s risk register;
+held locally under NC QDL v7 4.6(i)) is Tegra234-specific or general.
+This is a resourcing decision, not an abandonment.
 
-> **2026-09-11: superseded.** The `a1.metal` run on 2026-07-29 reproduced
-> the hang on a second vendor's silicon ([findings.md](findings.md)), and
+> **2026-09-11: superseded.** An `a1.metal` run on 2026-07-29 put the same
+> question to a second vendor's silicon (outcome held locally), and
 > [ADR-003](adr-003-hardware-timed-qhv.md) (2026-09-09) chose a native QNX
 > port to the Orin Nano for the hardware-timed number. Its numbers come
 > from the v1 measurement campaign
@@ -180,10 +180,10 @@ the nesting path before committing to QHV-as-cockpit-HV. If nesting
 turns out unstable, the fallback is KVM-on-host directly (simpler,
 honest framing notes the QHV gap).
 
-> **2026-09-11 (as built):** QHV already runs inside QEMU TCG with no KVM,
-> on the Windows PC and on the Orin, and natively on the Orin
+> **2026-09-11 (as built):** QHV has been set up inside QEMU TCG with no
+> KVM, on the Windows PC and on the Orin, and natively on the Orin
 > ([orin-native-port-plan.md](orin-native-port-plan.md), architectures
-> A1, A3 and A4). Non-metal Graviton has no `/dev/kvm`
+> A1, A3 and A4; outcomes held locally). Non-metal Graviton has no `/dev/kvm`
 > ([ADR-002](phase2-topology-decision.md)), so the Graviton nesting path
 > above and the KVM-on-Graviton question below are design-time, not as
 > built.
@@ -202,9 +202,9 @@ Phase 7 research items (added):
 |---|---|
 | Two co-resident VM clusters representing two SoCs | ✅ structurally correct |
 | Virtio-net inter-SoC link as Ethernet proxy | ✅ shape; not RT/TSN guarantees |
-| SOME/IP-SD service discovery between SoCs | ✅ runs end-to-end on Linux + QNX |
+| SOME/IP-SD service discovery between SoCs | ✅ expected on Linux + QNX (open question below) |
 | AUTOSAR Adaptive (ara::com) frames | ✅ if you build a small adapter |
-| DDS pub/sub (RTI / Eclipse Cyclone) | ✅ both sides can run a DDS stack |
+| DDS pub/sub (RTI / Eclipse Cyclone) | ✅ expected on both sides (a DDS stack builds for both) |
 | Boot-order dependency (cockpit waits for ADAS heartbeat) | ✅ orchestrate via launch scripts |
 | Workload separation (IVI on cockpit, perception proxy on ADAS) | ✅ shape only |
 

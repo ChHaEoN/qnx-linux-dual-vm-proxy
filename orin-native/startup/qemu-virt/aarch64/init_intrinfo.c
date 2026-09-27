@@ -7,19 +7,19 @@
  *
  * GICv3 setup for the QEMU virt machine.
  *
- * This is the function the whole board exists to reach. The KVM boot of the
- * QNX-shipped startup-qemu-virt dies inside gic_v3_initialize(), and the trace
- * captured on 2026-09-18 names the instruction:
+ * This is the function the whole board exists to reach. Compiled with the
+ * BSP's default flags, the library's gic_v3.c sets distributor priorities
+ * with a writeback-form store into GICD+0x420, IPRIORITYR:
  *
- *   kvm_guest_fault: ipa 0x8000000 hsr 0x92000045 hxfar 0x8000420 pc 0x40085978
- *   kvm_userspace_exit: reason KVM_EXIT_ARM_NISV (28)
+ *   str  w3, [x0], #4
  *
- * hsr 0x92000045 has ISV=0 — the hardware gave KVM no instruction syndrome, so
- * KVM cannot emulate the access and bails out to userspace, which cannot either.
- * The faulting store is a writeback form (`str w3,[x0],#4`) into GICD+0x420,
- * IPRIORITYR. The neighbouring accesses at the same IPA carry ISV=1 and are
- * handled normally, which is why the guest gets as far as printing its banner
- * before stopping here.
+ * A trapped writeback access reports no instruction syndrome (ISV=0;
+ * VENDOR_CLAIM, Arm ARM, the data-abort ISS), so KVM cannot emulate it and
+ * exits to userspace with KVM_EXIT_ARM_NISV, which QEMU cannot handle either.
+ * Plain offset-form accesses carry ISV=1 and are emulated normally. What the
+ * SDP's shipped startup-qemu-virt does under KVM on this board is a board
+ * result, held locally (NC QDL v7 4.6(i)); nothing here depends on it being
+ * stated.
  *
  * The fix is not in this file: it is the -fno-auto-inc-dec flag applied to the
  * library's own gic_v3.c (patches/gic-no-auto-inc-dec.patch), which turns the
@@ -42,12 +42,12 @@ init_intrinfo(void)
 	 * the real region size is what lets it find CPU 1's frame at all.
 	 *
 	 * The ITS is deliberately NOT passed, although the virt machine has one
-	 * at 0x08080000 and the shipped startup evidently finds it (`FOUND GICv3
-	 * ITS` is the last line before the hang). LPI support needs ITS tables in
-	 * guest memory and adds failure surface this board has no use for yet,
-	 * and the fault under investigation is in distributor priority setup,
-	 * which runs either way. If an LPI-using device is ever wanted here, this
-	 * is the line that changes.
+	 * at 0x08080000 in the device tree QEMU generates. LPI support needs ITS
+	 * tables in guest memory and adds failure surface this board has no use
+	 * for yet, and the distributor priority setup this board exists for runs
+	 * either way. If an LPI-using device is ever wanted here, this is the
+	 * line that changes: the last argument below becomes the ITS base in
+	 * place of NULL_PADDR.
 	 */
 	gic_v3_set_paddr_range(QV_GICD_BASE, QV_GICR_BASE, QV_GICR_SIZE,
 	                       NULL_PADDR);

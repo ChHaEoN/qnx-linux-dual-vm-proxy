@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 # run-uevent.sh -- is it the uevents? Inject tj-thermal's uevents without its read,
-# and its read without the uevents, and see which one brings the slow window.
+# and its read without the uevents, and see which one, if either, brings a slow window.
 # Phase 3b / A6, 2026-09-24; follows 20260924T-a6-orin-tjphase.
 #
-# WHAT IS KNOWN. Moving tj-thermal's 1024 ms poll moves a ~6 ms slow window with it
-# (20260924T-a6-orin-tjphase, all three held): 56% of exchanges starting within
-# -0.5..+6 ms of a tj read are in the tail, against 0.60% elsewhere. The host's
-# handlers on QEMU's cores are not it (20260924T-a6-orin-tailhost).
+# WHAT IS KNOWN. What moving tj-thermal's 1024 ms poll does to the exchanges starting
+# within -0.5..+6 ms of a tj read: record 20260924T-a6-orin-tjphase (held locally).
+# The host's handlers on QEMU's cores: record 20260924T-a6-orin-tailhost (held
+# locally).
 #
 # WHERE THE PREDICTION COMES FROM (looked at on the board before this was written,
 # and stated so it is not mistaken for a blind test):
 #   - tj-thermal is the only zone under the user_space governor (the others are
 #     step_wise). On every update it emits one uevent per trip: three (TRIP=0,1,2),
-#     within ~0.1 ms of the read;
-#   - udevd runs its rules for each in turn; `udevadm monitor` saw the three
-#     finish at +1.9, +3.2 and +4.5 ms, which is about the slow window;
+#     right after the read;
+#   - udevd runs its rules for each in turn (`udevadm monitor` timed them; held
+#     locally);
 #   - about twenty processes listen for udev events (a desktop image: gnome-shell,
 #     Xorg, NetworkManager, systemd, ...);
 #   - writing "change" to the zone's uevent file emits one uevent per write (the
@@ -57,9 +57,9 @@
 #   P3 the poll itself still does, in this run (the control): the tj class's tail
 #      rate is >= 25%. PARTIAL at 10-25%. REFUTED below 10%.
 #   Why absolute rates and not multiples of the out rate: a ~190-exchange class at
-#   the ~0.6% base rate reaches 5x with three chance tail exchanges, as the
-#   synthetic test showed before any run; the hot window's rate was 55-68%
-#   (tailhost, tailpath, tjphase).
+#   the low base rate of the earlier records (tailhost, tailpath, tjphase; held
+#   locally) reaches 5x with three chance tail exchanges, as the synthetic test
+#   showed before any run.
 # THE CHECKS (a prediction resting on a failed one prints VOID):
 #   M1 >= 90% of rounds align -> P1 P2 P3
 #   M2 the manipulation did what it says: >= 90% of U injections raised the uevent

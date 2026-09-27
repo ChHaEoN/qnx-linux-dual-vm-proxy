@@ -1,9 +1,9 @@
 /* Phase 3b / A6 (2026-09-26): qnx-ipcbench -- what one guest call costs, by kind of call
  * (orin-native/gpu-concurrency/run-ipcbench.sh).
  *
- * WHY. Inside the guest, a socket read() that finds its 32 bytes already there takes ~17 us
- * (20260926T-a6-orin-readtime), 7.5x the native one, with no VM exit behind it. A QNX read()
- * is a message to the server behind the fd, so the cost could be the message pass itself, the
+ * WHY. What a guest socket read() that finds its 32 bytes already there costs, against the
+ * native one, is in record `20260926T-a6-orin-readtime` (held locally). A QNX read() is a
+ * message to the server behind the fd, so its cost could be the message pass itself, the
  * kernel entry, or io-sock's own socket code. This program times one call of each kind,
  * in the guest and natively, so they can be told apart.
  *

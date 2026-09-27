@@ -46,9 +46,10 @@ REM above it is NOT built by ipc-test's make -- it links against a Cyclone DDS
 REM static library cross-built separately (see the middleware notes), so it is
 REM staged only if it is already present. A missing binary is not an error here.
 set "DDSMON_BIN_FWD=%REPO_ROOT_FWD%/ipc-test/qnx-dds-monitor/qnx-dds-monitor"
-REM The DDS monitor cannot use Cyclone's default interface selection: with br0
-REM present it picks the wireless interface and then never discovers the
-REM Compute side, with no error. The config is staged beside the binary and
+REM The DDS monitor does not rely on Cyclone's default interface selection,
+REM which picks ONE interface by priority, not necessarily the one facing the
+REM Compute side; a participant on the wrong one never discovers its peer and
+REM reports no error. The config is staged beside the binary and
 REM post_start.custom points CYCLONEDDS_URI at it.
 set "DDSCFG_FWD=%REPO_ROOT_FWD%/ipc-test/qnx-dds-monitor/cyclonedds-qnx.xml"
 
@@ -104,12 +105,12 @@ if exist "%DDSMON_BIN_FWD:/=\%" (
 REM ---------------------------------------------------------------------------
 REM KNOWN LIMITATION, read before trusting a rebuild from this script.
 REM
-REM Two things this script CANNOT do, both verified on 2026-09-20:
+REM Two things this script CANNOT do:
 REM
 REM 1. AUTO-START. The staged binaries land at /proc/boot/, but nothing starts
 REM    them. post_start.custom lives in the system partition on disk-qemu, and
-REM    the pinned disk this project boots contains no reference to either
-REM    monitor. The working image starts them from a line inserted into the
+REM    the pinned disk this project uses contains no reference to either
+REM    monitor. The project's images start them from a line inserted into the
 REM    [+script] startup-script block of output/build/ifs.build, AFTER
 REM    /proc/boot/startup.sh -- startup.sh is what brings up io-sock and the
 REM    static vtnet0 address, so binding a socket before it fails. The
@@ -118,11 +119,10 @@ REM    therefore cannot host those lines. mkqnximage regenerates ifs.build from
 REM    templates on every run, so that hand-inserted line is LOST each time.
 REM
 REM 2. THE STARTUP BINARY. mkqnximage takes startup-qemu-virt from the SDP --
-REM    the shipped one, which hangs under KVM after 17 bytes ("FOUND GICv3
-REM    ITS"). A KVM-bootable image needs our rebuilt startup first on
-REM    MKFS_PATH.
+REM    the shipped one, not ours. The project's KVM guest images put our
+REM    rebuilt startup first on MKFS_PATH.
 REM
-REM For a KVM-bootable image with the monitors started, use the IFS-only route
+REM For an image with our startup and the monitors started, use the IFS-only route
 REM in ipc-test/qnx-dds-monitor/rebuild-ifs-with-dds.sh instead, which also
 REM avoids regenerating disk-qemu.
 REM ---------------------------------------------------------------------------

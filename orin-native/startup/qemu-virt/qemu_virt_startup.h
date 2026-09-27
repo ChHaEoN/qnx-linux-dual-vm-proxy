@@ -8,7 +8,7 @@
  * Board constants for the QEMU `virt` machine, aarch64, as a KVM guest.
  *
  * Every address below was read from the device tree QEMU itself generates for
- * the exact failing invocation, not taken from documentation or from the ARMv8
+ * the exact launch invocation, not taken from documentation or from the ARMv8
  * Foundation Model board this directory is skeletoned from:
  *
  *   qemu-system-aarch64 -machine virt,gic-version=3,dumpdtb=... \
@@ -19,7 +19,7 @@
  * every case (its PL011 is at 0x1c090000, its GICD at 0x2f000000), so nothing
  * here may be inherited from that skeleton.
  *
- * Cross-check that the numbers are the right ones: the image that boots today
+ * Cross-check that the numbers are the right ones: the guest image's script
  * starts its console with `devc-serpl011 -e -F 0x9000000,33`, and the device
  * tree gives pl011@9000000 with `interrupts = <0 1 4>` — SPI 1, so INTID
  * 32 + 1 = 33. The two agree.

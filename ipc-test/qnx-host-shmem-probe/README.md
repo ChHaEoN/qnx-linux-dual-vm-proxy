@@ -8,48 +8,26 @@ or attach to a named shared-memory region via the QNX Hypervisor
 Virtualization API (`hyp_shm.h` / `libhyp.a`), the way QNX's own vendor
 docs say a host "may"?
 
-## Result — RESOLVED YES, empirically, on the live host (2026-07-28)
+## What it does
 
-`hyp_shm_attach_ext()` succeeded on the first live boot tried, with
-**no** `vdev shmem` line anywhere in any `g2.conf` and **no** guest
-involvement at all:
+`probe.c` calls `hyp_shm_attach_ext()` to create or attach the named region
+`phase2-rq2-probe` (4096 bytes), writes the `"hyp-shm-host-ok"` test pattern,
+calls `hyp_shm_poke()`, and detaches — with **no** `vdev shmem` line in any
+`g2.conf` and **no** guest involvement. It prints each call's `rc` and
+`errno`; `rc` is the authoritative result, since the library does not clear
+`errno` on success.
 
-```
-=== RQ-2 SPIKE: running hyp-shm-probe (host-only, no qvm/guest involved) ===
-probe: hyp_shm_attach_ext rc=0 errno=2 (n/a)
-probe: attached 'phase2-rq2-probe' idx=0 size=4096 data=4c194fb000
-probe: wrote test pattern to shared region
-probe: hyp_shm_poke rc=0 errno=2
-probe: detached cleanly
-=== hyp-shm-probe exit=0 ===
-```
-
-(curated log:
-[../../logs/sample-boot/qhv-tcg-rq2-hyp-shm-host-probe.log](../../logs/sample-boot/qhv-tcg-rq2-hyp-shm-host-probe.log))
-
-`errno=2` (ENOENT) alongside `rc=0` is expected noise, not a failure —
-`hyp_shm_attach_ext`/`hyp_shm_poke` do not clear `errno` on success and
-this program does not otherwise touch a file; `rc` is the authoritative
-result.
-
-This confirms the shared-memory-region registry the shmem vdev uses is a
-**host-OS/kernel-level facility**, not something scoped to a specific
-`qvm` VM instance — the host attached to (and, being first, created) a
-named region entirely on its own. This is the load-bearing half of RQ-2's
-"is shmem usable from `qnx-qhv`'s own process space, or is it guest<->guest
-only by construction" question, and it resolves **usable**, not
-guest-only.
+It was run on 2026-07-28 on the QHV host image; the outcome and its curated
+log (`qhv-tcg-rq2-hyp-shm-host-probe.log`) are held locally under NC QDL v7
+4.6(i).
 
 ## What this does NOT demonstrate
 
-- **The guest-side half is untested.** No `vdev shmem` line was added to
-  the guest's `g2.conf`, and no guest-side program using
-  `qvm/guest_shm.h`'s raw-MMIO factory-page protocol was written or run.
-  Whether a `qnx-guest` process can attach to the *same* named region
-  (`phase2-rq2-probe`) the host created, and see the host's
-  `"hyp-shm-host-ok"` test pattern, is the concrete next step — not
-  attempted in this session (see `docs/findings.md`, 2026-07-28, for the
-  honest time-box accounting).
+- **The guest-side half is not in this program.** `probe.c` adds no
+  `vdev shmem` line to the guest's `g2.conf` and runs no guest-side code.
+  The guest-side half is a separate program,
+  [../qnx-guest-shmem-probe/](../qnx-guest-shmem-probe/), paired with this
+  directory's `roundtrip.c`.
 - No latency/throughput measurement of any kind — this is a pure
   create/attach/poke/detach existence check.
 - No IPC protocol — a real transport would still need an application-level
@@ -97,10 +75,9 @@ directly so it picks up the manual edits.
 
 ## Status
 
-Host-side RQ-2: **RESOLVED, proven live.** Guest-side RQ-2 (the true
-host<->guest round trip): **RESOLVED, proven live, 2026-07-28 continuation
-session** — see
+Both halves of the RQ-2 spike were run on 2026-07-28 — this host-only
+probe, then the two-way exchange of
 [../qnx-guest-shmem-probe/README.md](../qnx-guest-shmem-probe/README.md)
-and this directory's `roundtrip.c`, the host-side half of that later
-session's two-way exchange (this original `probe.c` is left unchanged as
-the historical record of the first, host-only result).
+with this directory's `roundtrip.c` as its host side (this original
+`probe.c` is left unchanged). Their outcomes are held locally under NC QDL
+v7 4.6(i).

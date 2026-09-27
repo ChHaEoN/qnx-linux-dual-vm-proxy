@@ -313,17 +313,17 @@ pair-review at the gate.
 >
 > - **Date:** 2026-06-11
 > - **Reviewer(s):** self-review (FuSa-Analysis Agent; pair-review with Cyber-Analysis at the Phase-1 gate)
-> - **Evidence:** [`logs/sample-boot/qhv-tcg-host-and-guest-boot.log`](../../logs/sample-boot/qhv-tcg-host-and-guest-boot.log); [`docs/findings.md`](../findings.md) entries 2026-06-11 (QHV pull-forward) and 2026-06-10 (IFS build).
+> - **As-built capture:** `qhv-tcg-host-and-guest-boot.log` (held locally under NC QDL v7 4.6(i); no outcome from it is cited here); [`docs/findings.md`](../findings.md) entries 2026-06-11 (QHV pull-forward) and 2026-06-10 (IFS build).
 
 ## A.1 Item re-definition delta (as-built vs. assumed)
 
-| Dimension | Body of worksheet assumed | As-built (Phase-1 evidence) |
+| Dimension | Body of worksheet assumed | As-built (Phase-1 configuration) |
 |---|---|---|
 | Host platform | AWS Graviton c7g.large, Ubuntu host kernel | **Local Windows build host**, no AWS in this leg |
 | Acceleration | QEMU/**KVM** on arm64 (`-enable-kvm`, `-cpu host`) | QEMU/**TCG** pure emulation (`-accel tcg`, `-cpu max`); non-metal Graviton exposes **no `/dev/kvm`** (EL2 not passed through by Nitro) — falsified |
 | Partition mechanism | Host Linux kernel + KVM hosting two independent guests | **QHV `qvm` (Type-1 hypervisor)** on a QNX host (`qnx-qhv`, machine `QEMU_virt`) hosting **one** QNX guest (`qnx-guest`, synthetic machine `ARMv8_Foundation_Model`). The synthetic platform IS the partition boundary |
-| Number/kind of guests | QNX guest **and** Linux guest, co-equal | **One QNX guest only.** No Linux/Compute guest booted in this leg |
-| IPC / network data path | virtio-net front/back over `br0` + tap devices | **Inert.** Host io-sock stack failed (`network stack down: Bad file descriptor`, `Address family not supported`); `qvm` run **no-network**; guest `if_up: tries exhausted`, `no valid interfaces found` |
+| Number/kind of guests | QNX guest **and** Linux guest, co-equal | **One QNX guest only.** No Linux/Compute guest in this leg |
+| IPC / network data path | virtio-net front/back over `br0` + tap devices | **Not configured.** `qvm` run **no-network**; the host and guest network outcomes are held locally |
 | Cross-VM transport SPOF | Linux bridge `br0` | Not instantiated this leg; the only realised boundary is the `qvm`/synthetic-platform one |
 
 **Net effect on scope:** the cloud leg is no longer a *dual-VM cross-partition IPC* item; it is a **single-host-hypervisor-hosts-single-guest** item with no live data path. KVM, `br0`/tap, the Linux guest, and the entire virtio-net data path move out of the cloud-leg item. In exchange, the project gains its **first concrete partition-isolation boundary** (the `qvm` synthetic platform), which the original KVM framing never claimed.
@@ -344,12 +344,12 @@ pair-review at the gate.
 | **B1–B6** all `br0`/tap rows | Moot — bridge/taps not instantiated | **Phase 3** (Orin host net) / Phase 2 |
 | **N1–N4** virtio-net data path | Deferred — no frames flow | **Phase 2** (IPC) / Phase 3 |
 | **L1–L5** Linux guest rows | Moot — no Linux guest in this leg | **Phase 3** (L4T-as-host carries Linux) / whenever a Linux guest is added |
-| **K1–K3** virtio-blk | Partially live — guest **does** boot from a raw virtio-blk disk (`disk-qemu`), and the 2026-06-10 split-VMDK finding is a real config-integrity hazard. K2 (wrong/cached IFS) and K1 (image corruption in transfer) **remain live** | Stay live; see also NF-8 build-config angle |
+| **K1–K3** virtio-blk | Partially live — the guest is configured to boot from a raw virtio-blk disk (`disk-qemu`), and the 2026-06-10 split-VMDK packaging issue is a real config-integrity hazard. K2 (wrong/cached IFS) and K1 (image corruption in transfer) **remain live** | Stay live; see also NF-8 build-config angle |
 | **HE-02/03/04/15** cross-VM IPC liveness/staleness/integrity | Moot **this leg** (no IPC), but they are the reason Phase 2 exists | **Phase 2** IPC HARA |
 | **HE-05** Linux guest panic | Moot — no Linux guest | Phase 3 |
 | **HE-07/13** KVM scheduling / trap FFI | Moot — no KVM | **Phase 3**; FFI question re-opened against `qvm` in A.3 |
 | **HE-08/11/14** `br0` QoS / MAC / cloud-init | Moot — no bridge, no Linux cloud-init | Phase 3 / Phase 2 |
-| **HE-01 / Q1 / SG-01** boot-to-prompt FTTI | **Still live** — both host and guest must reach `Startup complete`; the log shows they do, but also shows degraded init (A.3, NF-5/NF-6) | Stays live (cloud leg) |
+| **HE-01 / Q1 / SG-01** boot-to-prompt FTTI | **Still live** — both host and guest must reach `Startup complete`; see A.3 (NF-4/NF-5/NF-6/NF-9) for degraded-init failure modes | Stays live (cloud leg) |
 | **HE-10 / K2 / SG-10** wrong IFS at runtime | **Still live** — IFS identity matters regardless of host | Stays live |
 
 **Count:** of the existing catalogue, **~20 rows are moot or deferred for the cloud leg** (all H1–H3, B1–B6, N1–N4, L1–L5, Q3/Q4); ~5 stay live (Q1, K1, K2, plus HE-01/HE-10 and SG-01/SG-10). Nothing is discarded — the moot rows are correct again on their proper substrate.
@@ -360,22 +360,22 @@ New scope, new Elements: **`qvm` (the Type-1 hypervisor process)**, its **config
 
 ### A.3.1 QHV host + `qvm` hypervisor (new Element group)
 
-| # | Function | Failure Mode | Effect | Cause (evidence) | S | O | D | RPN | Linked |
+| # | Function | Failure Mode | Effect | Cause | S | O | D | RPN | Linked |
 |---|---|---|---|---|---|---|---|---|---|
-| **NF-1** | Parse `g2.conf` and build the guest | `qvm` config parse / validation fails or partially applies | Guest does not start, **or** starts with a silently different resource set than intended | Malformed/edited `g2.conf`; option not supported on this build. Evidenced indirectly: `[g2.conf:9] Failed to arm a resource manager: Function not implemented` — a config directive that did **not** take effect, yet boot proceeded | 4 | 3 | 2 | **24** | new SG-A1; HE-01 analogue |
-| **NF-2** | Instantiate vdevs for the guest | vdev instantiation failure (a virtual device the guest expects is absent/half-built) | Guest boots into a degraded platform; missing device surfaces only when guest uses it. Evidenced: guest `vtnet0` never exists (`ifconfig: interface vtnet0 does not exist`) — the net vdev was intentionally dropped, but the *same failure surface* applies to any vdev | 4 | 3 | 3 | **36** | new SG-A2 |
+| **NF-1** | Parse `g2.conf` and build the guest | `qvm` config parse / validation fails or partially applies | Guest does not start, **or** starts with a silently different resource set than intended | Malformed/edited `g2.conf`; option not supported on a given build; a start-up that proceeds past a directive that did not take effect | 4 | 3 | 2 | **24** | new SG-A1; HE-01 analogue |
+| **NF-2** | Instantiate vdevs for the guest | vdev instantiation failure (a virtual device the guest expects is absent/half-built) | Guest boots into a degraded platform; missing device surfaces only when guest uses it. This leg drops the net vdev by configuration; the *same failure surface* applies to any vdev dropped unintentionally | 4 | 3 | 3 | **36** | new SG-A2 |
 | **NF-3** | Maintain guest within the synthetic-platform partition boundary | **Guest escapes / influences the host or another partition** (freedom-from-interference breach) | Loss of the project's only partition-isolation claim; a fault in `qnx-guest` reaches `qnx-qhv` or its siblings | `qvm`/`libhyp` defect; shared EL2 host (VHE `el2-host`); shared physical CPU under TCG. **Cannot be exercised on one host under TCG** — see A.4 | **5** | 1 | **5** | **25** | new SG-A3; DFA (A.4) |
-| **NF-4** | `qnx-qhv` host resource managers arm and serve | Host resource manager fails to arm but host continues | Host advertises a service it cannot back; guest or host components silently lose a capability | **Direct evidence:** `Failed to arm a resource manager: Function not implemented`; also host `setfacl ... /dev/bpf: No such file`, `socketpair: Address family not supported`. The host came up **partly degraded** and proceeded | **4** | **4** | 3 | **48** | new SG-A4 |
-| **NF-9** | Host io-sock / networking stack init | Host network stack does not initialise; any QHV feature depending on it is silently unavailable | No host-mediated guest networking; any future health/heartbeat/telemetry channel that assumes host net is dead on arrival | **Direct evidence:** host `if_up: network stack down: Bad file descriptor`, repeated `Address family not supported by protocol family`. Worked around by running `qvm` no-network — i.e. the failure was *avoided*, not *fixed* | 4 | 4 | 2 | **32** | new SG-A2 |
+| **NF-4** | `qnx-qhv` host resource managers arm and serve | Host resource manager fails to arm but host continues | Host advertises a service it cannot back; guest or host components silently lose a capability | A resource manager, or something it depends on, not implemented or not packaged on a given build; a host start-up that does not check arm success | **4** | **4** | 3 | **48** | new SG-A4 |
+| **NF-9** | Host io-sock / networking stack init | Host network stack does not initialise; any QHV feature depending on it is silently unavailable | No host-mediated guest networking; any future health/heartbeat/telemetry channel that assumes host net is dead on arrival | Host network stack, or something it depends on, missing or failing on a given build; a start-up that does not check it. Running `qvm` no-network, as this leg is configured, *avoids* the dependency rather than exercising it | 4 | 4 | 2 | **32** | new SG-A2 |
 
 ### A.3.2 Platform / integrity / determinism (new)
 
-| # | Function | Failure Mode | Effect | Cause (evidence) | S | O | D | RPN | Linked |
+| # | Function | Failure Mode | Effect | Cause | S | O | D | RPN | Linked |
 |---|---|---|---|---|---|---|---|---|---|
-| **NF-5** | Provide cryptographic-quality entropy to host **and** guest | **PRNG never seeded** on both host and guest | Any current/future integrity or freshness mechanism that relies on randomness (nonces, session keys, anti-replay counters, signed-counter freshness for SG-03/SG-04) is **born weak or deterministic** | **Direct evidence, BOTH instances:** host `random: Could not initialize entropy`, `Unable to access /dev/random`, `PRNG is not seeded`; guest inherits the same synthetic platform with no entropy source. Cross-cutting FuSa↔Cyber: this undermines integrity mechanisms FuSa-Design may later mandate (SG-04) | **5** | **5** | 4 | **100** | new SG-A5; SG-04 dependency; cyber-FuSa |
-| **NF-6** | Bring all configured PEs (cores) online | **SMP processing elements not awake** — degraded core availability | Guest/host run on fewer cores than provisioned (`-smp 2`); any deadline budget or load assumption made against N cores is invalid; silent capacity loss | **Direct evidence:** `** CPU 0 PE is not awake`, `** CPU 1 PE is not awake` at host boot. Whether `qvm` then presents working vCPUs to the guest is **unverified** | **4** | **4** | 3 | **48** | new SG-A6; SG-07 dependency |
+| **NF-5** | Provide cryptographic-quality entropy to host **and** guest | **PRNG not seeded** on host and/or guest | Any current/future integrity or freshness mechanism that relies on randomness (nonces, session keys, anti-replay counters, signed-counter freshness for SG-03/SG-04) is **born weak or deterministic** | No entropy source provisioned on the virtual platform; host and guest share the same synthetic-platform model, so the cause is common to both. Cross-cutting FuSa↔Cyber: this undermines integrity mechanisms FuSa-Design may later mandate (SG-04) | **5** | **5** | 4 | **100** | new SG-A5; SG-04 dependency; cyber-FuSa |
+| **NF-6** | Bring all configured PEs (cores) online | **SMP processing elements not awake** — degraded core availability | Guest/host run on fewer cores than provisioned (`-smp 2`); any deadline budget or load assumption made against N cores is invalid; silent capacity loss | Secondary-core bring-up failing on the (emulated) platform; a start-up that does not verify online PEs. Whether `qvm` then presents working vCPUs to the guest is a separate question | **4** | **4** | 3 | **48** | new SG-A6; SG-07 dependency |
 | **NF-7** | Execution substrate represents target timing faithfully enough to *find* timing faults | **TCG-only execution masks a whole class of timing / scheduling / acceleration failure modes** that real silicon (KVM on Orin, or metal) would expose | Boot "passing" under TCG gives **false confidence**: instruction timing, cache effects, vIRQ injection latency, real EL2 trap costs, scheduler jitter under load are all unrepresented. The original Q6/H1/N3 timing hazards are not *gone* — they are **invisible** here | TCG is a functional emulator, not a cycle/timing model; no `/dev/kvm` on this host forced TCG. **By construction**, a timing fault present on metal would not appear in this leg | **5** | **5** | **5** | **125** | new SG-A7; supersedes-visibility-of Q6/H1/N3 |
-| **NF-8** | Boot the *intended* image with a complete package set | Host/guest built from an **incomplete or split artefact** boots wrong or not at all | Wrong-image / missing-startup hazard at build→runtime boundary, distinct from K2's "stale blob" | **Evidence (2026-06-10):** build failed for missing `target.qemuvirt` (`startup-qemu-virt` absent); and the **split VMDK** (169-byte descriptor vs. 150 MB extent) would have shipped a non-bootable disk. Config-management hazard on the new `qvm` packaging path | **5** | 3 | 2 | **30** | extends K2 / SG-10 |
+| **NF-8** | Boot the *intended* image with a complete package set | Host/guest built from an **incomplete or split artefact** boots wrong or not at all | Wrong-image / missing-startup hazard at build→runtime boundary, distinct from K2's "stale blob" | **Build history (2026-06-10):** the build needs the `target.qemuvirt` package (`startup-qemu-virt`); and the **split VMDK** (169-byte descriptor vs. 150 MB extent) must travel as a pair or the disk is incomplete. Config-management hazard on the new `qvm` packaging path | **5** | 3 | 2 | **30** | extends K2 / SG-10 |
 
 ### A.3.3 New illustrative Safety Goals raised by the addendum (statements only — `how` is FuSa-Design's)
 
@@ -394,7 +394,7 @@ New scope, new Elements: **`qvm` (the Type-1 hypervisor process)**, its **config
 | Rank | ID | Description | RPN |
 |---|---|---|---|
 | 1 | NF-7 | TCG-only execution masks timing/scheduling/acceleration failure class | 125 |
-| 2 | NF-5 | PRNG never seeded (host + guest) — integrity mechanisms born weak | 100 |
+| 2 | NF-5 | PRNG not seeded (host + guest) — integrity mechanisms born weak | 100 |
 | 3 | NF-4 | Host resource manager fails to arm yet host proceeds | 48 |
 | 4 | NF-6 | SMP PEs not awake — silent degraded core availability | 48 |
 | 5 | NF-2 | vdev instantiation failure — guest degraded silently | 36 |
@@ -417,13 +417,13 @@ resources** the partition boundary sits on top of:
   the shared base is no longer a Linux kernel — it is `qnx-qhv` + `qvm`.)
 - **Shared physical CPU under TCG:** every partition's vCPU is multiplexed onto
   the same emulated PEs by one host scheduler — a cascading-failure and
-  resource-exhaustion channel (and note NF-6: some PEs were not even awake).
-- **Shared `qnx-qhv` resource managers:** NF-4 shows a host resource manager can
+  resource-exhaustion channel (see also NF-6).
+- **Shared `qnx-qhv` resource managers:** NF-4 — a host resource manager can
   fail to arm while the host proceeds; a guest depending on a host-served
   resource has a **dependent-failure** path through the host, not an isolated one.
-- **Shared (absent) entropy source:** NF-5 — both instances share the same
-  non-seeded PRNG; a single common-cause weakens integrity mechanisms on **both**
-  sides simultaneously.
+- **Shared entropy provisioning:** NF-5 — both instances draw on the same
+  synthetic platform's entropy provisioning; a single common-cause weakens
+  integrity mechanisms on **both** sides simultaneously.
 
 **What TCG-on-one-host CANNOT demonstrate about FFI (honest framing):**
 
@@ -432,8 +432,8 @@ resources** the partition boundary sits on top of:
   no-load boot says nothing about behaviour under load.
 - It cannot show **spatial** isolation holds on real hardware: a TCG run does not
   exercise real MMU/SMMU stage-2 translation, real cache partitioning, or real
-  EL2 trap costs. The synthetic `ARMv8_Foundation_Model` proves the *software*
-  partition model exists, not that silicon enforces it.
+  EL2 trap costs. The synthetic `ARMv8_Foundation_Model` reflects the *software*
+  partition model, not that silicon enforces it.
 - It cannot demonstrate **NF-3 (guest escape)** in either direction: a single
   guest under emulation with no adversarial load is not an isolation *test*, only
   an isolation *architecture demo*.
@@ -447,19 +447,17 @@ structurally cannot provide.
 
 ## A.5 Honest framing (per the project's honest-framing rule — every claim paired with what it does NOT show)
 
-- The as-built leg **proves the QHV software architecture**: `qvm` parses a
-  config, synthesises a virtual platform, and boots a *distinct* QNX guest
-  (different machine banner) to `Startup complete`. It does **NOT** prove
-  hardware timing, acceleration, or real partition isolation under load.
-- Two distinct machine banners (`QEMU_virt` host vs. `ARMv8_Foundation_Model`
-  guest) are **load-bearing evidence of a real partition boundary in software**.
-  They are **NOT** evidence that a fault in one partition is contained from the
-  other (NF-3 untested).
-- The guest reaching `Startup complete` is a **functional** bring-up result. It
-  is **NOT** a timing, FTTI, or availability result — both instances booted
-  **degraded** (no entropy NF-5, PEs not awake NF-6, host net down NF-9, a
-  resource manager unarmed NF-4), and TCG hides whatever timing faults exist
-  (NF-7).
+- The as-built configuration **exercises the QHV software architecture**:
+  `qvm` parses a config, synthesises a virtual platform, and hosts a *distinct*
+  QNX guest (a different synthetic machine). What it did on this leg is held
+  locally (NC QDL v7 4.6(i)). Whatever it did, it does **NOT** prove hardware
+  timing, acceleration, or real partition isolation under load.
+- A distinct guest machine (`ARMv8_Foundation_Model` against the host's
+  `QEMU_virt`) is a partition boundary in software by design. It is **NOT**
+  evidence that a fault in one partition is contained from the other (NF-3
+  untested).
+- Any functional bring-up result on this leg is **NOT** a timing, FTTI, or
+  availability result, and TCG hides whatever timing faults exist (NF-7).
 - KVM-specific and bridge/data-path failure modes being "moot" here means **only
   that this leg cannot exercise them** — they are not retired; they are live
   again on Phase 3 (KVM/Orin) and Phase 2 (IPC data path).
@@ -469,12 +467,12 @@ structurally cannot provide.
 FuSa-Analysis finds; FuSa-Design decides the `how`. These are **decisions
 FuSa-Design owns**, not proposed mitigations:
 
-1. **OQ-A1 (SG-A4, NF-4 / NF-9):** A host resource manager / network stack came
-   up unarmed yet boot proceeded. Does the Safety Concept require boot to **fail
+1. **OQ-A1 (SG-A4, NF-4 / NF-9):** A host resource manager / network stack may
+   come up unarmed while boot proceeds. Does the Safety Concept require boot to **fail
    loud** on a missing host service, or is silent degradation acceptable for a
    dev twin? Define the policy and the FTTI for detecting it.
-2. **OQ-A2 (SG-A5, NF-5):** PRNG is unseeded on host **and** guest. This directly
-   undermines any integrity/freshness mechanism FuSa-Design may mandate for SG-03
+2. **OQ-A2 (SG-A5, NF-5):** An unseeded PRNG on host **and** guest would directly
+   undermine any integrity/freshness mechanism FuSa-Design may mandate for SG-03
    / SG-04. What is the entropy-source requirement, and is it a TSR that no
    integrity mechanism may be claimed until a seeded PRNG is demonstrated?
    (Cross-cutting with Cyber-Design.)
@@ -487,13 +485,12 @@ FuSa-Design owns**, not proposed mitigations:
    state explicitly that hardware-enforced isolation is **out of reach on the
    cloud leg** and deferred to Phase 3. (Replaces the cloud-leg portion of OQ-4 /
    H4; H4's shared-host common-cause is recharacterised onto `qnx-qhv`/`qvm`.)
-5. **OQ-A5 (SG-A6, NF-6):** Cores reported "not awake". Does any Safety Concept
-   capacity/deadline argument require an online PE-count check before the claim is
-   asserted?
+5. **OQ-A5 (SG-A6, NF-6):** Cores may fail to come online. Does any Safety
+   Concept capacity/deadline argument require an online PE-count check before the
+   claim is asserted?
 6. **OQ-A6 (SG-A1 / SG-A2, NF-1 / NF-2):** What is the required `qvm` config and
-   vdev validation gate — i.e. must a config that fails validation (`Function not
-   implemented`) **block** guest start rather than proceed with a divergent
-   resource set?
+   vdev validation gate — i.e. must a config that fails validation **block** guest
+   start rather than proceed with a divergent resource set?
 7. **OQ-A7 (SG-10, NF-8 / K2):** Extends OQ-7. The build path now produces a
    **split VMDK** and depends on package completeness (`target.qemuvirt`). Is a
    build→runtime integrity + completeness check (checksum of *every* extent, plus

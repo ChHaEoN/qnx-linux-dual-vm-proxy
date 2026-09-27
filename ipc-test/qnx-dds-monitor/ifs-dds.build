@@ -1,4 +1,4 @@
-# NOT PORTABLE -- committed as the exact input that produced the working image.
+# NOT PORTABLE -- committed as the exact input of the image the 2026-09-20 DDS run used.
 #
 # The four [perms=...] lines near the end carry ABSOLUTE, host-specific paths
 # (E:/Project/...). That matches the existing convention: mkqnximage's
@@ -70,12 +70,12 @@
 # returns, because startup.sh is what brings up io-sock and the static vtnet0
 # address -- binding a socket before that would fail. Kept in the IFS on
 # purpose: post_startup.sh lives in the system partition, and editing it would
-# mean rewriting disk-qemu, which published results depend on.
+# mean rewriting disk-qemu, which earlier records depend on.
 /proc/boot/qnx-safety-monitor &
 # Phase 3b (2026-09-20): the same judgement carried over DDS. CYCLONEDDS_URI is
-# required -- Cyclone's default picks ONE interface by priority and chose the
-# wireless one on this host, so the participant would never find the Compute
-# side and would report no error.
+# required -- Cyclone's default picks ONE interface by priority, which need not
+# be the one facing the Compute side, and a participant on the wrong one never
+# finds its peer and reports no error.
 CYCLONEDDS_URI=file:///proc/boot/cyclonedds-qnx.xml /proc/boot/qnx-dds-monitor &
     #~80.builtin
 

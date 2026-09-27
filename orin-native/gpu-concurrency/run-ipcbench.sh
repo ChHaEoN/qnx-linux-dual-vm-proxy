@@ -3,11 +3,11 @@
 # pass, a read of /dev/zero, and an io-sock loopback read. Phase 3b / A6, 2026-09-26; follows
 # 20260926T-a6-orin-readtime. The owner asked for this run (2026-09-26).
 #
-# WHAT IS KNOWN. A socket read() that finds its 32 bytes already there takes ~17 us inside the
-# guest (the readtime record), 7.5x the native one, with no VM exit behind it (the readpath
-# record: +14 us of vCPU run time on one vCPU, +0.1 exits). A QNX read() is a message to the
-# server behind the fd, so the ~17 us could be the kernel's message pass, the kernel entry, or
-# the server's -- io-sock's -- own code.
+# WHAT IS KNOWN. What a socket read() that finds its 32 bytes already there takes inside the
+# guest, against the native one, is in record 20260926T-a6-orin-readtime; its vCPU run time and
+# VM exits on one vCPU, in 20260926T-a6-orin-readpath (both held locally). A QNX read() is a
+# message to the server behind the fd, so its time could be the kernel's message pass, the
+# kernel entry, or the server's -- io-sock's -- own code.
 #
 # THE INSTRUMENT. ipc-test/qnx-ipcbench (qnx-ipcbench in ifs-bench.bin, a TCP-triggered service
 # on :7130; the same source built natively with gcc, without the QNX-only ops). Each op is a
@@ -24,7 +24,7 @@
 # THE RUN. K=12 rounds; per round the guest's run (G) and the native run (N), in an order
 # alternating by round; the ops' order rotated by round. QEMU pinned to cores 0-2, the governor
 # pinned, c7 off, no load. One guest boot. Before this was written, the bench's "check" command
-# ran once natively and once in the guest: every op answered "ok"; it prints no timing.
+# (it prints no timing) was run once natively and once in the guest.
 #
 # THE RULE, fixed here before any run (ipcbench_report.py applies it). Per side, op, regime and
 # round, the run's p50; per side, op and regime, the median over rounds with the distribution-
@@ -32,8 +32,8 @@
 # includes the cost of one clock read, which the clock op measures.
 #
 # THE PREDICTION, written and committed before any run of this harness, smoke runs included.
-# It is not to be amended. H: the ~17 us is io-sock's own socket-read path; the kernel's
-# message pass and its entry are cheap in the guest.
+# It is not to be amended. H: the read's time in the guest is io-sock's own socket-read path;
+# the kernel's message pass and its entry are cheap in the guest.
 #   P1 the guest's message pass is cheap: msg, spaced, <= 5 us.
 #   P2 a read served by procnto is cheap: zero, spaced, <= 5 us.
 #   P3 an io-sock read is not: sock, spaced, >= 10 us.
@@ -45,7 +45,7 @@
 #   M1 every round has both sides' results for every op and regime, n = 500, and no "fail"
 #
 # What this does NOT test: what inside io-sock takes the time, if it does; whether a loopback
-# read costs what a read of network-delivered data costs (the readtime record's 17 us was the
+# read costs what a read of network-delivered data costs (the readtime record timed the
 # latter); any guest but this one; the monitor.
 #
 # NEEDS: the guest running ifs-bench.bin under launch-qnx-kvm-bridged.sh; gcc. CSTATE=shallow

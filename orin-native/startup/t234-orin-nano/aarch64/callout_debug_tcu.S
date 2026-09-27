@@ -198,10 +198,10 @@ CALLOUT_END(poll_key_tcu)
  * rewrites two four-instruction address sequences starting wherever it is
  * pointed: eight instructions, into a routine of two. That turned the return
  * value into part of the mailbox address, turned the ret into some other
- * instruction, and wrote six more words past the end of the routine. M1 got away
- * with it only because this is the last callout the library copies, so the
- * overrun fell past the callout area rather than onto another callout, and
- * nothing visibly called it. The library's own dummy debug device declares its
+ * instruction, and wrote six more words past the end of the routine. Only its
+ * place, the last callout the library copies, kept the overrun off another
+ * callout: it fell past the callout area instead. That is luck, not design.
+ * The library's own dummy debug device declares its
  * break_detect the same way as here, with a null patcher, which the copy loop
  * skips.
  */

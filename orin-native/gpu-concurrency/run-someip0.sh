@@ -3,9 +3,9 @@
 # 2026-09-27; follows 20260927T-a6-orin-someip.
 # The owner asked for this run (2026-09-27: the SOME/IP arm, "剩下都可以直接預設進行").
 #
-# WHAT IS KNOWN. Through vsomeip 3.4.10 as configured in run-someip.sh, a request's round trip
-# is +5064.5 us (TCP) and +5065.7 us (UDP) longer than the same C++ client's on a plain socket,
-# in all 16 rounds (20260927T-a6-orin-someip). vsomeip's source explains it: outgoing messages
+# WHAT IS KNOWN. What vsomeip 3.4.10, as configured in run-someip.sh, adds to a request's round
+# trip against the same C++ client on a plain socket: record 20260927T-a6-orin-someip (held
+# locally). vsomeip's source: outgoing messages
 # ride "trains" (nPDU); a lone request boards an empty train that departs at now + the maximum
 # retention time, by a timer; the default is 5 ms (VSOMEIP_DEFAULT_NPDU_MAXIMUM_RETENTION_NANO,
 # with VSOMEIP_DEFAULT_NPDU_DEBOUNCING_NANO 2 ms, internal.hpp.in at 3.4.10). That run's

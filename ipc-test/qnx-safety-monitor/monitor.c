@@ -193,21 +193,22 @@
 
 /* Acceptance threshold, percent. Chosen for the demo, not derived from any
  * hazard analysis -- see "WHAT THIS IS NOT" above. It applies to both kinds;
- * the lowest honest vlm confidence measured was 0.897. */
+ * the vlm confidences it was set against are in record
+ * `20260923T-a6-orin-vlm-characterize` (held locally). */
 #define CONF_MIN     60u
 
-/* An mnist engine on this GPU runs ~0.07 ms; anything over 100 ms did not come
- * from that engine on that device, so the claim is not plausible. Generous on
- * purpose: this rejects nonsense, it does not police performance. */
+/* The mnist bound: a claim over 100 ms is taken as not from that engine on
+ * that device, so it is not plausible. Generous on purpose: this rejects
+ * nonsense, it does not police performance. */
 #define INFER_US_MAX 100000u
 
-/* The vlm bound (OD13). SmolVLM-500M's model time over 990 warm requests on
- * this board, with the QNX guest running beside it and the GPU otherwise idle,
- * had a largest observed value of 284.7 ms (record 20260923T-a6-orin-vlm-
- * characterize). 1 s is about 3.5 times that. It is a PLAUSIBILITY bound taken
- * from that record -- a claim slower than this did not come from that model in
- * that configuration -- not a deadline, and it holds for that model only,
- * which is why a model without a measured bound is rejected outright. */
+/* The vlm bound (OD13): 1 s, set from SmolVLM-500M's model times on this
+ * board, taken with the QNX guest running beside it and the GPU otherwise idle
+ * (record `20260923T-a6-orin-vlm-characterize`, held locally). It is a
+ * PLAUSIBILITY bound taken from that record -- a claim slower than this is
+ * taken as not from that model in that configuration -- not a deadline, and it
+ * holds for that model only, which is why a model without a measured bound is
+ * rejected outright. */
 #define VLM_INFER_US_MAX 1000000u
 
 static volatile sig_atomic_t g_stop = 0;

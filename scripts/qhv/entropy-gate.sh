@@ -28,9 +28,9 @@
 #   study-only ceiling: a real programme roots entropy in a hardware TRNG / RoT
 #   (Tegra hardware RNG on Orin, Phase 3) and provisions sshd host keys from an
 #   HSM / fused key slot. This gate implements the IMPLEMENTABLE FLOOR only:
-#   refuse-when-unseeded. On the as-built TCG image the precondition is UNMET
-#   (devr-virtio.so rejected, /dev/random inaccessible), so a run against that
-#   state MUST correctly REFUSE — that is the right outcome, not a regression.
+#   refuse-when-unseeded. Wherever the precondition is UNMET (no usable random
+#   device), a run against that state MUST correctly REFUSE — that is the
+#   right outcome, not a regression.
 #
 # FLAG CONTRACT (consumed by FuSa AoU-ENTROPY + Cyber/FuSa Verification):
 #   - On PASS: writes the token `prng-seeded=1` to the flag file

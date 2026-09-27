@@ -90,17 +90,17 @@ def build_frame(seq):
 
 # OD13 (2026-09-23): a pre-built kind-1 (vlm) claim, so the verdict round trip
 # of a VLM claim can be paired against the mnist claim's with nothing else
-# changed. Its values are one honest SmolVLM-500M answer as the 2026-09-23
-# characterisation measured it (digit 3, P = 0.9998, 269.484 + 12.548 ms), so
-# the monitor ACCEPTs it -- a run whose frames were rejected could not pass the
+# changed. Its values are synthetic, shaped like a SmolVLM-500M answer (prompt
+# time, generation time, token counts) and under the vlm kind's 1 s bound,
+# fixed so the monitor ACCEPTs it -- a run whose frames were rejected could not pass the
 # completeness gate, and choosing only images that pass would be selection
 # bias; a fixed frame needs no choosing. Layout: monitor.c's header.
 P_KIND = 24
-VLM_PROMPT_US, VLM_GEN_US = 269484, 12548
+VLM_PROMPT_US, VLM_GEN_US = 250000, 10000
 
 
 def build_vlm_frame(seq):
-    """A kind-1 claim the monitor will ACCEPT: digit 3, 100%, 282032 us in two parts."""
+    """A kind-1 claim the monitor will ACCEPT, built from the fixed values above."""
     hdr = struct.pack("<QQ", seq, 0)
     pay = bytearray(PAYLOAD)
     pay[P_CLASS] = 3
@@ -108,7 +108,7 @@ def build_vlm_frame(seq):
     pay[P_INFER_US:P_INFER_US + 4] = struct.pack("<I", VLM_PROMPT_US + VLM_GEN_US)
     pay[P_KIND] = 1                                   # kind: vlm
     pay[P_KIND + 1] = 1                               # model 1: SmolVLM-500M-Instruct Q8_0
-    struct.pack_into("<HHIIII", pay, P_KIND + 2, 162, 2, VLM_PROMPT_US, VLM_GEN_US, 309900, 999999)
+    struct.pack_into("<HHIIII", pay, P_KIND + 2, 150, 2, VLM_PROMPT_US, VLM_GEN_US, 300000, 999999)
     return hdr + bytes(pay)
 
 
@@ -203,9 +203,9 @@ def _abort(a, why, at, bad, rejected, kind, before):
     ADDED 2026-09-21: with --stall-out, the stall itself is written down as an
     OUTCOME, in a file of its own that no reader can take for a result: where
     it happened, what kind it was, the timed samples that came before it in
-    arrival order, and the probe's own scheduling report. A board dry run found
-    the guest can stop answering for more than the timeout under one load
-    placement; that is a finding to record, not only a reason to stop. Only a
+    arrival order, and the probe's own scheduling report. A stall is a finding
+    to record, not only a reason to stop (the board dry run behind this change
+    is in record `20260921T-a6-orin-pinned`, held locally). Only a
     timeout is a stall -- on a reply ("timeout") or on the connect itself
     ("connect": the guest stopped answering before the arm's first frame).
     """
@@ -838,9 +838,10 @@ def main():
         return 1
 
     # Keep the TIME ORDER before sorting. Until 2026-09-21 only the sorted list
-    # was saved, and an idle-state slow mode (~11% of samples, +0.29 ms) could
-    # then not be examined for periodicity, bursts or a tick: the order it
-    # arrived in was gone. `samples_ms` stays sorted, because existing tools
+    # was saved, and a feature of the idle-state distribution (record
+    # `20260921T-a6-orin`, held locally) could then not be examined for
+    # periodicity, bursts or a tick: the order the samples arrived in was gone.
+    # `samples_ms` stays sorted, because existing tools
     # read it that way; `samples_in_order` is the same values in arrival order.
     in_order = list(rtts)
     rtts.sort()

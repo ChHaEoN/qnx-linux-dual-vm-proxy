@@ -100,7 +100,6 @@ External quotes are kept under 15 words each.
 | 3.9 | Whether the block is Arm GIC-600: no public NVIDIA page or DT string says so (the DT is generic `arm,gic-v3`); the 64 KiB GICD + 128 KiB GICR frames + 960 SPIs are consistent with a GIC-600 configured without ITS/VLPI but that is not proof | web search, no hit | UNKNOWN |
 | 3.10 | MB2 programs the GIC before handing off: firmware log task `I> Task: Program GICv3 registers (0x50029034)` (after `SMMU init`) — i.e. security/group configuration is done by firmware; the startup only needs the non-secure-visible init (as QEMU `virt`) | https://github.com/orgs/OE4T/discussions/1714 (R35.5.0 Orin NX log) | VENDOR_CLAIM |
 | 3.11 | Secondary `nvidia,tegra234-agic` (GIC-400-class, `0x2a41000`/`0x2a42000`) serves the audio processor only — not the CPU GIC | `raw/orin-devicetree.txt` | VERIFIED |
-| 3.12 | The NISV writeback-store hazard in QNX `gic_v3.c` (repo's Phase-3 finding) is a **KVM-trap** artefact; it cannot occur on bare metal, so it is not a blocker for a native port | `docs/orin-port.md` risk register | VERIFIED (repo) |
 
 ## 4. Generic timer and Tegra TKE
 

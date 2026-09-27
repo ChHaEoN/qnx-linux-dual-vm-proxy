@@ -4,19 +4,15 @@
 # follows 20260925T-a6-orin-tick and -partition. The owner asked for this test (2026-09-25)
 # knowing it changes systemd settings on the board, at runtime, restored after.
 #
-# WHAT IS KNOWN. With the host's userspace confined to cores 3 and 5, a quarter of the tail
-# is the host's tick (the TICK BIN: requests leaving [3850, 4000) us mod 4000, the host
-# tick's 4 ms grid in the trace clock; 20260925T-a6-orin-tick). Outside that bin, tail
-# exchanges carry only +3 us more host work on QEMU's and the probe's cores. Looking
-# afterwards at that record's heavy rounds -- an exploration, not a test -- the guest's own
-# timer shows up in two host events: the hard IRQ "kvm guest vtimer" (the guest's virtual
-# timer firing while its vCPU is loaded) and the hrtimer kvm_bg_timer_expire (the same
-# timer for a blocked vCPU). Their intervals cluster at whole milliseconds (2, 3, 4, 7 ms),
-# at one phase of a 1 ms grid within a round, a phase that drifts ~150 us from round to
-# round against the host's NTP-slewed clock. Outside the tick bin, 41.3% of the tail
-# exchanges had such an event in [t0, t0 + 250 us] against 6.8% of the others; when the
-# first one fell 50-125 us after t0 the tail share was 10-16%, against 0.50% with none;
-# after 150 us it was 0.0-0.7%. Those windows were chosen after looking at that record:
+# WHAT IS KNOWN. With the host's userspace confined to cores 3 and 5, the host tick's part
+# in the tail, and the host work that tail exchanges outside it carry on QEMU's and the
+# probe's cores, are in record 20260925T-a6-orin-tick (held locally). Its TICK BIN is
+# requests leaving [3850, 4000) us mod 4000, the host tick's 4 ms grid in the trace clock.
+# Looking afterwards at that record's heavy rounds -- an exploration, not a test -- the
+# guest's own timer shows up in two host events: the hard IRQ "kvm guest vtimer" (the
+# guest's virtual timer firing while its vCPU is loaded) and the hrtimer kvm_bg_timer_expire
+# (the same timer for a blocked vCPU). What that exploration saw is held locally with the
+# record. The windows below were chosen after looking at that record:
 # this run tests them on new data.
 #
 # THE RUN. One boot of the stamping guest, t2ms (the A6 default: two vCPUs, halt_poll_ns

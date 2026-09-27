@@ -19,7 +19,7 @@
 
   Variants (§11.2, §11.4):
     r0    MODE=trace: clock, fixtures, probe, L0, format, count, block v over the console
-    k512  MODE=full: 15 IPC iterations in a ring of 512 buffers per CPU (the size that held under TCG)
+    k512  MODE=full: 15 IPC iterations in a ring of 512 buffers per CPU (the TCG ring size, §11.2)
     k16   MODE=full: the same in a ring of 16 buffers per CPU, built to wrap
     lin   MODE=full: the same as a linear window (-c -S, D1(b)), sized by §2.4 step 3's
           linear rule (I37) from a TCG buffer budget, so the linear stop path and the
@@ -234,7 +234,7 @@ try {
     'k16'  { $mode = 'full';  $rung = 'r1'; $kind = 'ring';  $tlArgs = '-r -k 16 -M -S 4M';   $traceNeed = 36;  $fmtNeed = 324; $cntNeed = 304
              $capV = 1048576; $capC = 524288; $forms = 'v c'; $cntOut = '-v /dev/shmem/flt.v -V 1048576 -c /dev/shmem/flt.c -C 524288' }
     # I38 (m4-design.md 11.2, 14.22): a linear window sized by §2.4 step 3's linear form (I37), each CPU's
-    # buffers plus 2. The TCG per-CPU budget is the k512 ring that held under TCG, so bufs = 2 x (512 + 2):
+    # buffers plus 2. The TCG per-CPU budget is the k512 ring, so bufs = 2 x (512 + 2):
     # -S = ceil(1028 x 16 / 1024) + 4 = 21 MiB; the need = max(ring_mb(8), probe cost 0) + 21 + 32 = 54 MiB;
     # FMT_NEED = 5 x 21 + 270 + 2 + 32 = 409. TCG-only values, never a board image's.
     'lin'  { $mode = 'full';  $rung = 'r1'; $kind = 'linear'; $tlArgs = '-c -S 21M';          $traceNeed = 54;  $fmtNeed = 409; $cntNeed = 304

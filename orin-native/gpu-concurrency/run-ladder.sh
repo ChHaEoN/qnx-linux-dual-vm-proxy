@@ -14,8 +14,8 @@
 #
 # ARM C IS OPT-IN (ARM_C_PORT=7000). Without it, D-B is reported as "the
 # crossing" when it is really the crossing PLUS the monitor's own read, verdict
-# and write inside the guest. On a1.metal on 2026-09-21, C and D landed 0.04 us
-# apart: the monitor's own work is not measurable against the transport.
+# and write inside the guest. Arm C was run on a1.metal on 2026-09-21 (record
+# 20260921T-ladder-a1metal, held locally).
 #
 # B USES A NETWORK NAMESPACE ON PURPOSE. Sending to br0's own address
 # (192.168.100.1) does NOT cross the bridge: Linux routes a local address via
@@ -23,9 +23,9 @@
 # same thing as A while looking like it measured the bridge. A veth peer inside
 # a namespace is on the far side of br0, so the traffic is really bridged.
 #
-# WHY k, NOT n (OD11). Within one run of 3000 samples the median is pinned to
-# +/-0.2%, but between two runs of the same arm it moves 13.3%. So n is 1000 and
-# the budget goes to k interleaved rounds. These arms carry no load, so unlike
+# WHY k, NOT n (OD11). n is 1000 and the budget goes to k interleaved rounds, as
+# OD11 decided; the run-to-run figures behind that choice are held locally
+# (NC QDL v7 4.6(i)). These arms carry no load, so unlike
 # run-interference.sh and run-saturation.sh they need no counterbalancing.
 #
 # A LEFTOVER SERVER IS REFUSED. Arm A reaches 127.0.0.1:7100 by address, so an

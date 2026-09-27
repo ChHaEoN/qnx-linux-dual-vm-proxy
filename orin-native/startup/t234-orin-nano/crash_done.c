@@ -14,7 +14,7 @@
  *
  * The reason is measured rather than assumed. This board's watchdog does not
  * fire after the kexec hand-over — tested, see
- * results/orin-native-port/20260909T1100Z/m0-hang-watchdog.md — so a parked CPU
+ * `m0-hang-watchdog.md`, held locally — so a parked CPU
  * needs a human to pull the power, and a cold power cycle wipes the DRAM region
  * the crash message was just written into. So the library's ending turns a
  * loud, diagnosed failure into a silent one: the message is composed, printed

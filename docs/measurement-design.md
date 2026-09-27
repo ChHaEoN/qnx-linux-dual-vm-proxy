@@ -1,52 +1,43 @@
 # Measurement design — how the numbers in this repo are produced
 
-> **Status (2026-09-21): ADOPTED as owner decision OD11, run in part.** This is
-> the answer to one open question — *what sample size should A6 use?* — and the
-> answer turned out to be that sample size was the wrong knob. The design below
-> is now A6's, and settling it closed A6's last gate item
-> ([the plan](orin-native-port-plan.md#architecture-versions), OD11). **Run** on
-> 2026-09-21: the attribution ladder of §3.2 with all four arms, interference
-> and saturation at k = 12, and the §3.5 pinning and governor controls — records
-> under `results/orin-native-port/20260921T-a6-*`. **Not yet run:** §3.3, §3.4,
-> the offered-rate sweep of §3.5, and §3.7. The figures published before OD11
-> were taken under the **previous** design (n = 3000, k = 2), described and
-> criticised here as the starting point; they keep that label and are not
-> re-derived.
+> **Status (2026-09-21): ADOPTED as owner decision OD11.** This is the answer to
+> one open question — *what sample size should A6 use?* — and the answer this
+> design gives is that the budget belongs to repetitions (k), not to samples per
+> run (n). The design below is now A6's, and settling it closed A6's last gate
+> item ([the plan](orin-native-port-plan.md#architecture-versions), OD11).
+> **Run:** on 2026-09-21 the attribution ladder of §3.2 with all four arms,
+> interference and saturation at k = 12, and the §3.5 pinning and governor
+> controls (records `20260921T-a6-*`); later §3.3 for TCP (2026-09-23), the
+> offered-rate sweep of §3.5 (2026-09-24), §3.4 and §3.7 (2026-09-26). Every
+> record is held locally under NC QDL v7 4.6(i). Figures taken before OD11 used
+> the **previous** design (n = 3000, k = 2), described and criticised here as the
+> starting point; they keep that label and are not re-derived.
 
 ## 1. The question, and why it was the wrong one
 
-A6's gate had one item left: sample sizes. The current design is **n = 3000**
-timed samples per arm, 200 warm-up discarded, 2 ms spacing, and **k = 2**
-repetitions of each arm.
+A6's gate had one item left: sample sizes. The design at the time was
+**n = 3000** timed samples per arm, 200 warm-up discarded, 2 ms spacing, and
+**k = 2** repetitions of each arm.
 
-Measured from the committed data in
-[`results/orin-native-port/20260919T-native-cmp/`](../results/orin-native-port/20260919T-native-cmp/):
+The premise of this design is that **run-to-run variation, not sampling noise,
+limits what a figure can resolve**: a run's median can be internally certain
+while the next run of the same arm lands somewhere else. The within-run and
+between-run spreads that motivated it were computed from the data of record
+`20260919T-native-cmp` (held locally).
 
-| | within one run (n = 3000) | between two runs of the same arm |
+So the knob is **k**, not **n**. The options considered:
+
+| design | arms | wall clock |
 |---|---|---|
-| p50 | ±0.2% | **13.3%** |
-| p99 | ±2.1% | **12.6%** |
+| previous (k=2, n=3000) | 2 | 0.3 min |
+| k=5, n=1000 | 5 | 0.4 min |
+| **k=12, n=1000** | 12 | **1.0 min** |
+| k=50, n=1000 | 50 | 4.2 min |
 
-**Run-to-run variation is ~69× the sampling noise at p50 and ~3.4× at p99.**
-Adding samples buys almost nothing: 3000 samples pin a run's median to ±0.2%,
-and the next run lands 13% away. The `guest_cpu6` arm moved 0.247 → 0.291 ms
-between two runs while each run's median was internally certain to ±0.2%.
-
-So the knob is **k**, not **n**:
-
-| design | arms | wall clock | p50 uncertainty | resolves a difference of |
-|---|---|---|---|---|
-| current (k=2, n=3000) | 2 | 0.3 min | ±9.4% | ~26% |
-| k=5, n=1000 | 5 | 0.4 min | ±5.9% | ~17% |
-| **k=12, n=1000** | 12 | **1.0 min** | **±3.8%** | **~11%** |
-| k=50, n=1000 | 50 | 4.2 min | ±1.9% | ~5% |
-
-Every effect this project currently publishes is far larger than the current
-design's ~26% resolution — guest-vs-native p50 is 282%, the load effect 54%, the
-two-host first-byte segment 145%. The one exception is the two-host **total**
-boot time at 5%, which is the one figure already flagged as ~89% fixed timeout
-and not quotable as a host comparison. So the current design is not producing
-wrong results; it is producing results with an error bar nobody has stated.
+The uncertainty and resolvable difference each option gives were estimated
+from the same record and are held locally. The previous design's weakness is
+not that it produces wrong results; it is that it produces results with an
+error bar nobody has stated.
 
 ## 2. What the reference papers do
 
@@ -72,17 +63,17 @@ confidence, standard deviation, error bar, warm-up*.
    50 job releases inside *one* 10-second run (T = 200 ms, 10 s / 200 ms = 50),
    not 50 runs; its phrase "several experiment runs" is never resolved into a
    number. So none of them can say whether a headline number reproduces. This
-   project measured exactly that axis and found it dominates.
+   project measures exactly that axis, in k interleaved rounds.
 2. **No frequency control.** None mentions DVFS, a governor or thermal
-   throttling — on a Pi 4B, which throttles. This project found that ~40% of an
-   unpinned idle figure was the governor (idle p50 0.319 ms on `schedutil`
-   against 0.192 ms pinned), pins it for every arm and restores it after.
+   throttling — on a Pi 4B, which throttles. This project pins the governor for
+   every arm and restores it after; the unpinned-against-pinned comparison that
+   motivated it is in record `20260919T-saturation` (held locally).
 3. **No warm-up.** This project discards 200 samples.
 4. **Isolation asserted rather than measured.** RTAS 2023: *"Other threads'
    execution does not affect the presented results thanks to the provided timing
    isolation between partitions."* The mechanism is trusted to provide the
-   control. This project refused that move and caught a real confound by
-   measuring instead.
+   control. This project refuses that move and measures its controls
+   instead.
 
 **This is not a claim to be better work.** Their measurement is *subordinate to
 analysis*: the bound comes from a proof, and measurement only checks it is not
@@ -115,9 +106,10 @@ discipline has to be stricter than theirs, not looser.
 ### 3.1 Budget allocation
 
 **n = 1000 timed samples per run, 200 warm-up discarded, 2 ms spacing, k ≥ 12
-interleaved rounds.** At n = 1000 the within-run p50 precision is ±0.4%, still
-30× finer than the run-to-run motion it sits inside, so the samples it gives up
-cost nothing measurable. Rounds are **interleaved** — every round runs the whole
+interleaved rounds.** n = 1000 was chosen on the premise that the within-run p50
+precision at that n stays well inside the run-to-run motion, so the samples it
+gives up cost little; the estimate behind it is in record `20260919T-native-cmp`
+(held locally). Rounds are **interleaved** — every round runs the whole
 arm set back to back — so a drift in the machine hits all arms equally instead
 of only the arms that happened to run late.
 
@@ -126,7 +118,7 @@ highest quantile the arm reports; everything left in the budget goes to k.*
 
 ### 3.2 The attribution ladder
 
-The present figure is a single blended number: 0.172 ms covers the Linux stack,
+A single round-trip figure is a blended number: it covers the Linux stack,
 virtio-net, the bridge, the tap, the guest's `io-sock`, the guest scheduler and
 the monitor's own work, with no way to attribute any of it. The papers can
 decompose because they use QNX kernel tracing. This project can decompose more
@@ -176,8 +168,9 @@ that ignores the new fields sees no change.
 ### 3.4 Frame size sweep
 
 `results/*/header.csv` has carried a **`payload_bytes` column since the schema
-was written**, and every run to date has recorded the same value, 48. The schema
-anticipated a sweep that was never done.
+was written**, and every run before this design was configured with the same
+value, 48. The schema anticipated a sweep that had not been done when this design
+was written.
 
 Sweep **64, 96, 256, 512, 768, 1024, 1280, 1536, 1792, 2048 B** — RTAS 2023's
 grid, extended down to the current frame. The project's 64-byte frame sits
@@ -208,8 +201,8 @@ only the buffer size and the echo length change.
 - **Headline: the median of the k run-medians, with the observed min–max band
   across the k runs.** The within-run quantile table stays, below it, as detail.
   A single-run quantile table must not stand as the result.
-- **Never print a tail statistic without k beside it.** p99.9 is ±13.6% unstable
-  even within a run at n = 3000; publish the per-run maximum as a k-sample set
+- **Never print a tail statistic without k beside it.** A single run's p99.9
+  carries no estimate of its own spread; publish the per-run maximum as a k-sample set
   — min, median and max *of the k maxima* — rather than a single p99.9 number.
 - **"Largest observed value", never "worst case".** Nothing here bounds a tail.
 - **A per-arm configuration table** in every run record: frame size, interval, n,
@@ -218,10 +211,10 @@ only the buffer size and the echo length change.
 
 ### 3.7 One falsification to run
 
-The 2026-09-20 finding that ~89% of the boot metric is a fixed 5-second
-`waitfor /dev/hd0` timeout currently rests on the wait being identical to within
-1 ms on two vendors' silicon. That is strong, but it is a coincidence argument.
-**The direct test is to change the constant**: rebuild with the timeout at two
+The 2026-09-20 two-host boot comparison (record `20260920T-kvm-twin`, held
+locally) raised the question of how much of the boot metric is the fixed 5-second
+`waitfor /dev/hd0` timeout. Answering it from two vendors' silicon is a
+coincidence argument. **The direct test is to change the constant**: rebuild with the timeout at two
 other values, boot twice at each, and show the metric moves by the predicted
 amount. Measurement should falsify a claim, not accumulate agreement with it.
 
@@ -236,7 +229,6 @@ amount. Measurement should falsify a claim, not accumulate agreement with it.
   crossing itself — virtio-net against the vhost thread against the guest's
   `io-sock` — needs kernel tracing on both sides and is not proposed here.
 - **It cannot speak to isolation.** Measuring interference reaching the guest is
-  not a freedom-from-interference result; if anything the saturation arm is
-  evidence in the opposite direction.
+  not a freedom-from-interference result.
 - **It is one board and one AWS instance type.** k fixes run-to-run uncertainty,
   not platform generality.

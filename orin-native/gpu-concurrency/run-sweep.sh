@@ -13,9 +13,9 @@
 #
 # THE ENDPOINT IS AN ECHO, NOT THE MONITOR. FRAME_TOTAL_BYTES stays 64 (the shm slot's copy
 # is unchecked), so the sweep uses its own program, ipc-test/qnx-server-net/sweep.c: the
-# frame's length in payload[46..47], S bytes read and S echoed. The monitor's own time is
-# 0.21% of the round trip on this host (the stamp record), so an echo loses nothing
-# measurable and leaves every monitor constraint untouched.
+# frame's length in payload[46..47], S bytes read and S echoed. The monitor's own share of
+# the round trip on this host is in the stamp record (20260923T-a6-orin-stamp, held
+# locally); an echo leaves every monitor constraint untouched.
 #
 # TWENTY ARMS: ten sizes, S = 64 96 256 512 768 1024 1280 1536 1792 2048 B, on two paths:
 #   G<S>  client -> br0 -> tap-qnx -> QEMU -> the guest's sweep endpoint :7120 (ifs-sweep.bin)
@@ -40,16 +40,16 @@
 # segment; a residual is a size's median d_X(S) minus the line. Per-round slopes are the
 # same fit to one round's d_X(S).
 #
-# CONFIGURATION, read before the prediction was written (2026-09-26): ifs-sweep.bin booted
-# once, the offloads read and one frame of each size echoed and compared -- no timing and
-# no counter was read. tap-qnx and br0: MTU 1500; tcp-segmentation-offload on
+# CONFIGURATION, read before the prediction was written (2026-09-26): ifs-sweep.bin was
+# booted once to read the offloads and check the endpoint -- no timing and no counter was
+# read. tap-qnx and br0: MTU 1500; tcp-segmentation-offload on
 # (tx-tcp-segmentation on), generic-segmentation-offload on, tx-checksumming on. A tap's
 # offloads are what QEMU set from the guest's negotiated virtio-net features, so the guest
 # accepts large (TSO) packets: a request over one MSS can reach it as one packet. Whether
 # the guest SENDS large packets (its own TSO) cannot be read from the host side. The
-# endpoint echoed 64..4096 B, every byte identical. Also found: the endpoint's banner
-# interleaves on the guest console with the UDP echo server's, started at the same moment,
-# so the harness checks the guest endpoint by a 2048-byte echo, not by its banner.
+# endpoint's banner shares the guest console with the UDP echo server's, started at the
+# same moment, so the harness checks the guest endpoint by a 2048-byte echo, not by its
+# banner.
 #
 # THE PREDICTION, written and committed before any run of this harness, smoke runs
 # included. It is not to be amended. H: below one segment the round trip grows linearly
@@ -167,8 +167,8 @@ offloads() {   # $1 before|after
 	done
 }
 
-# The guest's banner is not grepped: it interleaves on the console with the UDP echo
-# server's (see CONFIGURATION). Only a sweep endpoint echoes a 2048-byte frame whole.
+# The guest's banner is not grepped: it shares the console with the UDP echo server's
+# (see CONFIGURATION). Only a sweep endpoint echoes a 2048-byte frame whole.
 echo_check() {   # $1 host  $2 label
 	taskset -c "$CORE_PROBE" python3 "$PROBE" --host "$1" --port "$PORT" --n 3 --warmup 0 --interval-ms 0 \
 		--timeout-s 3 --frame-bytes 2048 --tag "check-$2" --out "$OUT/check-$2.json" >> "$OUT/check.log" 2>&1 \

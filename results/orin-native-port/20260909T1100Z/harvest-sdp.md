@@ -358,7 +358,7 @@ startup-$(BOARD)`, `LIBS_aarch64 = fdt`, `LIBS += startup lzo2 ucl drvr`,
 -fno-inline-small-functions`, `LDFLAGS ... --undefined=__ssp_fail`, `NEEDS_FDT = yes`
 in `pinfo.mk`. `lib/common.mk`: `-O2 -fomit-frame-pointer -fno-PIE`,
 `CCFLAGS_aarch64 += -mgeneral-regs-only -mstrict-align -fno-store-merging` — **no
-`-fno-auto-inc-dec`**, consistent with the repo's GICv3/NISV finding. All four extra
+`-fno-auto-inc-dec`**. All four extra
 link inputs exist in the SDP: `libfdt.a` 375,770 B, `libdrvr.a` 392,140 B,
 `liblzo2.a` 1,474,022 B, `libucl.a` 354,686 B.
 

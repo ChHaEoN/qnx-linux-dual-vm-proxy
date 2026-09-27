@@ -5,24 +5,24 @@
 # (2026-09-26), including the new guest image it needs; it changes systemd settings at
 # runtime, restored after, and never touches the board's own boot.
 #
-# WHAT IS KNOWN. With the host's userspace confined, the guest's own timer firing 25-150 us
-# into an exchange makes it 16.7x as likely to be in the tail and +12.8 us slower, and with
-# the host's tick it covers about half the confined tail (20260925T-a6-orin-guesttick). That
-# was observed, not intervened on. QNX OS 8.0 cannot change its clock period at run time
-# (ClockPeriod() returns ENOTSUP when asked to set it; checked on this guest 2026-09-26); the
-# tick is fixed at boot by procnto -C, and it is the granularity of every ordinary timer.
+# WHAT IS KNOWN. With the host's userspace confined, the association between the guest's
+# own timer firing 25-150 us into an exchange and the tail is in record
+# 20260925T-a6-orin-guesttick (held locally). That was observed, not intervened on. The
+# tick is set at boot by procnto -C, and it is the granularity of every ordinary timer; this
+# test sets it there, not at run time: QNX OS 8.0's ClockPeriod() returns ENOTSUP when its
+# new argument is not NULL (SDP 8.0 library reference, ClockPeriod()).
 # So there are two images, identical but for procnto's -C (compare-ifs.py, 2026-09-26):
 #   A  ifs-clock.bin     1 kHz, the default (ifs-stamp.bin plus qnx-clockctl, which reads
 #                        the period back)
 #   B  ifs-clock100.bin  -C 100: a 10 ms tick
-# FEASIBILITY, before this was written (not a test, four guest boots, no confinement): with
-# the governor pinned and c7 off, the probe at 2 ms saw 422-888 guest-timer events/s with A
-# and 0-77 with B -- the manipulation takes -- but B was also SLOWER for the typical exchange:
-# p50 254-270 us against 186-190 us. The likely reason, not verified: the 1 kHz tick keeps
-# waking the vCPUs, so a request more often finds one still in KVM's halt-poll window; at
-# 100 Hz every exchange pays the wake from a blocked halt (32-36 us of p50 on this host,
-# 20260924T-a6-orin-haltpoll). So the tick has two effects, and P2 and P3 below were written
-# after seeing that feasibility run: they are not blind.
+# FEASIBILITY, before this was written (not a test, four guest boots, no confinement; its
+# readings are held locally): with the governor pinned and c7 off, the probe at 2 ms looked
+# at guest-timer events per second with A and B, and at the typical exchange. The reasoning
+# behind P2 and P3, not verified: the 1 kHz tick keeps waking the vCPUs, so a request more
+# often finds one still in KVM's halt-poll window; at 100 Hz more exchanges would pay the
+# wake from a blocked halt (record 20260924T-a6-orin-haltpoll, held locally). So the tick
+# may have two effects, and P2 and P3 below were written after seeing that feasibility run:
+# they are not blind.
 #
 # THE RUN. One board boot. The harness boots the guest itself (launch-qnx-kvm-bridged.sh,
 # in its own session scope), eight guest boots in the pattern A B B A A B B A, K_PER_GUEST
@@ -65,8 +65,8 @@
 #   M5 eight guest boots in the pattern, 20 rounds per arm -> all
 # Scored only at k = 40.
 #
-# CHANGED AFTER THE FIRST RECORDED ATTEMPT (2026-09-26). The smoke run (k = 8) passed its
-# gate (M2, M4). The first recorded run stopped at round 14 with "could not pin QEMU back":
+# CHANGED AFTER THE FIRST RECORDED ATTEMPT (2026-09-26). A smoke run (k = 8) came first.
+# The first recorded run stopped at round 14 with "could not pin QEMU back":
 # a freshly booted guest makes QEMU start and end worker threads, and repin_qemu gave up on
 # one that exited between its listing and taskset. repin_qemu now skips a thread that is
 # gone, as run-partition.sh's pin_threads already did. The rule, the checks and the

@@ -60,8 +60,8 @@ The research that located J14 also undercut the case for J12:
   its clock alive after Linux is gone, which is untested.
 - **J14 carries the TCU**, the board's real console (`console=ttyTCU0,115200`).
   It needs none of our code to verify — reboot, and the firmware and Linux boot log
-  comes out of it. And the path is already proven end to end: the M0 shim wrote
-  roughly 330 characters to the TCU mailbox with `TCUDROPS=0`.
+  comes out of it. And the M0 shim already writes its output to the TCU mailbox
+  (the M0 records are held locally).
 
 Both earlier objections to J14 are now settled by the carrier specification
 (Table 3-4, read in full from the primary PDF):

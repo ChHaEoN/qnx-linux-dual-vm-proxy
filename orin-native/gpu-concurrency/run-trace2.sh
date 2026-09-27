@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # run-trace2.sh -- the kernel-trace test, second question: where, inside the guest, does a TCP
-# claim exchange spend the ~20 us it costs more than a UDP one? Phase 3b / A6, 2026-09-27; follows
+# claim exchange spend any time it costs over a UDP one? Phase 3b / A6, 2026-09-27; follows
 # 20260927T-a6-orin-trace. The owner asked for this run (2026-09-27: "照你建議的做").
 #
-# WHAT IS KNOWN. The monitor's claim round trip is ~19-20 us longer over TCP (:7100) than over UDP
-# (:7101) at 2 ms spacing: 178.9 against 159.8 us at p50 in 20260927T-a6-orin-someip, and the
-# same on a1.metal. The monitor's own calls are one read and one write per TCP frame, one recvfrom
-# and one sendto per datagram: two messages to io-sock per exchange either way. Whether the
-# difference is spent in the guest, or on the host (Linux's TCP, QEMU), is unknown.
+# WHAT IS KNOWN. The monitor's claim round trip over TCP (:7100) and over UDP (:7101) at 2 ms
+# spacing: record 20260927T-a6-orin-someip, and on a1.metal record 20260927T-a6-a1metal-someip
+# (both held locally). The monitor's own calls are one read and one write per TCP frame, one recvfrom
+# and one sendto per datagram: two messages to io-sock per exchange either way. Whether any
+# difference is spent in the guest, or on the host (Linux's TCP, QEMU), is the question.
 #
 # THE INSTRUMENT. The guest's kernel event trace, as in run-trace.sh: ifs-trace.bin, qnx-tracectl
 # on :7140, guesttrace.py. Per window, over the span from the monitor's first message to io-sock
@@ -28,7 +28,7 @@
 #
 # THE PREDICTION, written and committed before any run of this harness, smoke runs included.
 # It is not to be amended. No format trace was taken for this harness: it counts messages and
-# running time, which the first kernel-trace test's format trace already showed.
+# running time, which the first kernel-trace test's format trace already covered.
 #   H  the TCP exchange's extra time is guest CPU, spent in io-sock's TCP processing.
 #   P1 the guest's busy time per exchange is >= 10 us longer for TCP than for UDP.
 #   P2 io-sock's time per exchange accounts for >= 70% of that difference.
@@ -178,8 +178,8 @@ run_window() {   # $1 kind (T|U)  $2 pair
 	local tag="$1_r$2" f="$OUT/started-$1_r$2" cp i
 	rm -f "$f"
 	# FIXED after the first run (2026-09-27): the reading takes ~2 s (tegrastats), and taken
-	# after "started" it pushed the load to 2.6 s into a 3 s trace -- 127-165 reads per
-	# window, M1 failed. It is taken before the trace starts now; nothing else changed.
+	# after "started" it pushed the load late into the trace window. It is taken before the
+	# trace starts now; nothing else changed.
 	m_thermal "$tag before" >> "$OUT/thermal.log"
 	taskset -c "$CORE_AUX" python3 "$CLIENT" "$GUEST" 7140 "$TRACE_S" "$OUT/trace-$tag.txt" "$f" \
 		2>> "$OUT/tracectl.err" &

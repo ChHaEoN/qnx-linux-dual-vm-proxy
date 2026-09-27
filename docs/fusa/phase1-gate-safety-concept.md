@@ -17,7 +17,7 @@
 - **Role:** FuSa-Design (ISO 26262 Part 3/4/5/6 architect, study-level)
 - **Date:** 2026-06-11
 - **Input artefact:** [`phase1-cloud-bringup-fmea.md`](phase1-cloud-bringup-fmea.md) — **Phase-1 Gate Addendum (2026-06-11)**, failure modes NF-1…NF-9, Safety Goals SG-A1…SG-A7, DFA §A.4, hand-off §A.6 (OQ-A1…OQ-A7)
-- **Evidence:** [`logs/sample-boot/qhv-tcg-host-and-guest-boot.log`](../../logs/sample-boot/qhv-tcg-host-and-guest-boot.log)
+- **As-built capture:** `qhv-tcg-host-and-guest-boot.log` (held locally under NC QDL v7 4.6(i); no outcome from it is cited here)
 - **Architecture context:** [`docs/findings.md`](../findings.md) 2026-06-11 (QHV/TCG) + 2026-06-10 (IFS build / split VMDK)
 - **Downstream consumers:** Implementation agent (briefs in §6), FuSa-Verification (evidence asks in §7), Cyber-Design (interaction items in §8)
 
@@ -31,15 +31,15 @@ The Phase-1 cloud leg is, **as built**, a single QNX host (`qnx-qhv`, machine
 `QEMU_virt`) running the QHV `qvm` Type-1 hypervisor, which hosts **one** QNX
 guest (`qnx-guest`, synthetic machine `ARMv8_Foundation_Model`) under
 **QEMU-TCG** pure emulation. There is **no KVM**, **no Linux guest**, and the
-**network/IPC data path is inert** (host io-sock stack down, `qvm` run
-no-network). The only realised partition boundary is the `qvm` synthetic
+**network/IPC data path is not configured** (`qvm` run no-network). The only
+realised partition boundary is the `qvm` synthetic
 platform. This concept therefore designs mechanisms for the `qvm`/host-resource
 boundary and the build→runtime artefact path — not for the (deferred) cross-VM
 IPC data path.
 
-### 1.2 Findings this concept addresses
+### 1.2 Failure modes this concept addresses
 
-| Finding | Short name | Safety Goal | Designed here? |
+| Failure mode | Short name | Safety Goal | Designed here? |
 |---|---|---|---|
 | **NF-1** | `qvm` config parse/validation failure → silently divergent guest | SG-A1 | Yes — TSR-CFG-001 |
 | **NF-2** | vdev instantiation failure → guest degraded silently | SG-A2 | Yes — TSR-VDEV-001 |
@@ -47,11 +47,11 @@ IPC data path.
 | **NF-6** | SMP PEs not awake → silent degraded core availability | SG-A6 | Yes — TSR-PE-001 |
 | **NF-8** | Incomplete / split build artefact boots wrong image | SG-10 (extends K2) | Yes — TSR-PKG-001 |
 | **NF-9** | Host net stack down → host-mediated channels dead on arrival | SG-A2 | Yes — TSR-NET-001 (degradation-annunciation only) |
-| **NF-5** | PRNG never seeded (host + guest) | SG-A5 | **Assumption-of-use only** — owned by Cyber-Design (§3.3, §8); referenced as a precondition, not re-specified |
+| **NF-5** | PRNG not seeded (host + guest) | SG-A5 | **Assumption-of-use only** — owned by Cyber-Design (§3.3, §8); referenced as a precondition, not re-specified |
 
-### 1.3 Findings explicitly deferred (no TCG evidence path)
+### 1.3 Failure modes explicitly deferred (no TCG evidence path)
 
-| Finding | Short name | Safety Goal | Why deferred |
+| Failure mode | Short name | Safety Goal | Why deferred |
 |---|---|---|---|
 | **NF-3** | Guest escape / FFI breach across the synthetic-platform boundary | SG-A3 | Cannot be exercised on one host under TCG (FMEA §A.4). A single guest under emulation with no adversarial load is an isolation *architecture demo*, not an isolation *test*. Mechanism designed at concept level (§4, TSR-FFI-001) but **residual risk stays open**; closure routed to Phase 3 (Orin, real EL2/SMMU). |
 | **NF-7** | TCG-only execution masks the timing/scheduling/acceleration failure class | SG-A7 | TCG is a functional emulator, not a timing model. **No** timing / FTTI / FFI claim may be asserted on TCG evidence. The concept's response is a *prohibition* (TSR-TIM-001), not a detector — see §4 and §5. |
@@ -65,8 +65,8 @@ as discharged. This concept does not pretend TCG evidence can close them.
 ## 2. Functional Safety Concept (concept level)
 
 The safety strategy for the QHV/`qvm` boundary in this leg is **fail-loud,
-fail-safe bring-up**: every place where the Phase-1 evidence shows the system
-came up **degraded but proceeded silently** is converted into an explicit,
+fail-safe bring-up**: every place where the bring-up could come up
+**degraded but proceed silently** is converted into an explicit,
 detectable, annunciated condition that either blocks the next bring-up step or
 transitions to a defined safe state, rather than continuing into a silently
 divergent configuration. The boundary is not yet asked to deliver any timing or
@@ -94,8 +94,9 @@ forward from the FuSa-Analysis worksheet:
 A fifth, cross-cutting pillar is **integrity-mechanism honesty**: any safety
 mechanism that relies on cryptographic freshness or integrity (relevant to
 SG-03 / SG-04 when the IPC data path arrives in Phase 2) must declare an
-explicit dependency on a **seeded PRNG**, which is **not** provided in this leg
-(NF-5) and is **owned by Cyber-Design** as an entropy-before-use control. This
+explicit dependency on a **seeded PRNG**, which this concept does **not**
+provision (NF-5) and which is **owned by Cyber-Design** as an entropy-before-use
+control. This
 concept treats a seeded PRNG as a precondition (assumption of use), not as
 something it provisions.
 
@@ -117,7 +118,7 @@ argument written in §4/§5 and its *verification* deferred to Phase 3.
 | **SM-RMGR** | Resource-manager arm-success gate + fail-loud boot policy | SG-A4 | Yes (parse host startup, assert each RM armed) |
 | **SM-PE** | Online PE-count check vs. configured core count | SG-A6 | Yes (`pidin`/syspage PE-awake probe at host + guest) |
 | **SM-PKG** | Build-time package-completeness + per-extent checksum/integrity gate | SG-10 | Yes (build-host script, already partly exists for Orin) |
-| **SM-NET** | Host-service degradation annunciation (not provisioning) | SG-A2 | Yes (annunciate-only; cannot fix io-sock here) |
+| **SM-NET** | Host-service degradation annunciation (not provisioning) | SG-A2 | Yes (annunciate-only; provisions nothing) |
 | **SM-FFI** | Partition-boundary residual-risk argument + assumption-of-use | SG-A3 | **Architecture only** — verification deferred to Phase 3 |
 | **SM-TIM** | Prohibition control: forbid timing/FFI claims on TCG | SG-A7 | Yes as a *process/gate* control; not a runtime mechanism |
 
@@ -148,10 +149,9 @@ use**:
 > **not** re-specify this control; it references it as a precondition and flags
 > it as a cyber-FuSa interaction item (§8).
 
-The Phase-1 evidence shows this precondition is **currently unmet** on both
-instances (`PRNG is not seeded`, `Could not initialize entropy`), so any SG-04-
-class integrity mechanism is, today, **born weak** — which is exactly why it is
-gated behind AoU-ENTROPY rather than claimed.
+Until the precondition is demonstrated met on both instances, any SG-04-class
+integrity mechanism would be **born weak** — which is exactly why it is gated
+behind AoU-ENTROPY rather than claimed.
 
 ---
 
@@ -179,7 +179,7 @@ gated behind AoU-ENTROPY rather than claimed.
 - **Requirement text:** The host launch path shall validate the `qvm`
   configuration (`g2.conf`) against an expected schema/resource manifest, and a
   configuration that fails validation — including any directive reported as
-  unapplied (e.g. `Failed to arm a resource manager: Function not implemented`)
+  unapplied (e.g. a `Failed to arm a resource manager` line)
   — shall **block guest start** rather than proceed with a silently divergent
   resource set. The block shall be logged with the failing directive.
 - **Mitigates:** NF-1.
@@ -211,14 +211,14 @@ gated behind AoU-ENTROPY rather than claimed.
 - **When it triggers:** guest-init checkpoint.
 - **DC assumption:** detection of a missing manifested vdev at bring-up.
 - **What it does NOT demonstrate:** it does not exercise the vdev under traffic
-  (the net path is inert this leg), so it proves *presence*, not *correct
+  (no net path is configured this leg), so it proves *presence*, not *correct
   function*. Function-under-load coverage is Phase 2.
 
 ### TSR-RMGR-001 — Resource-manager arm-success gate + fail-loud policy
 
 - **Requirement text:** Each host resource manager the bring-up depends on shall
-  report successful arming; a resource manager that fails to arm (e.g. `Failed to
-  arm a resource manager: Function not implemented`) shall cause the host to
+  report successful arming; a resource manager that fails to arm (e.g. a `Failed
+  to arm a resource manager` line) shall cause the host to
   **annunciate the lost capability and apply a defined boot policy** (fail-loud /
   enter a restricted safe-state for the dev twin), and shall **not** leave the
   host advertising a capability it cannot provide.
@@ -229,9 +229,8 @@ gated behind AoU-ENTROPY rather than claimed.
   reviewed exception (the dev-twin allowance).
 - **When it triggers:** host-init checkpoint, before guest auto-start.
 - **DC assumption:** detection of the unarmed-RM cause at host bring-up.
-- **What it does NOT demonstrate:** it does not repair the missing RM (e.g. it
-  cannot make io-sock initialise on this build); it makes the degradation
-  *loud*, not *absent*. The OQ-A1 policy decision — whether the dev twin is
+- **What it does NOT demonstrate:** it does not repair a missing RM; it makes
+  the degradation *loud*, not *absent*. The OQ-A1 policy decision — whether the dev twin is
   *allowed* to proceed degraded — is recorded here as **annunciate-and-allow for
   the dev twin only**, with the same condition treated as **block** on any leg
   that asserts a safety claim.
@@ -241,8 +240,8 @@ gated behind AoU-ENTROPY rather than claimed.
 - **Requirement text:** The number of processing elements (cores) actually
   online shall be verified at host and guest init and compared against the
   configured count (`-smp`); any capacity or deadline argument shall be predicated
-  on the **online** PE count, never the configured count. A shortfall (e.g.
-  `CPU 0/1 PE is not awake`) shall be annunciated and shall invalidate any
+  on the **online** PE count, never the configured count. A shortfall (e.g. a
+  `CPU N PE is not awake` line) shall be annunciated and shall invalidate any
   capacity claim that assumed the configured count.
 - **Mitigates:** NF-6.
 - **SafMech (SM-PE):** syspage / `pidin` PE-awake probe at both instances;
@@ -260,16 +259,16 @@ gated behind AoU-ENTROPY rather than claimed.
 - **Requirement text:** Failure of the host network stack to initialise shall be
   **annunciated** so that any host-mediated channel (future health / heartbeat /
   telemetry) that assumes host networking is known to be dead on arrival rather
-  than silently absent. A bring-up worked around by running `qvm` no-network
-  shall be recorded as **net-degraded**, not nominal.
+  than silently absent. A bring-up that runs `qvm` no-network shall be recorded
+  as **net-degraded**, not nominal.
 - **Mitigates:** NF-9.
 - **SafMech (SM-NET):** annunciation-only — parse host startup for
   `network stack down` / `Address family not supported`; set a `net-degraded`
   bring-up flag consumed by any later channel-availability assumption.
 - **When it triggers:** host-init checkpoint.
 - **DC assumption:** detection of host-net-down at bring-up.
-- **What it does NOT demonstrate:** it does **not** fix io-sock and does not
-  provision a working channel; it makes the absence explicit. Any safety
+- **What it does NOT demonstrate:** it does **not** repair the host network
+  stack and does not provision a working channel; it makes the absence explicit. Any safety
   mechanism that would ride host networking is therefore **gated** on clearing
   this flag (an assumption of use for Phase 2/3).
 
@@ -310,9 +309,10 @@ gated behind AoU-ENTROPY rather than claimed.
   **assumption of use** is that hardware-enforced stage-2 isolation backs it on
   real silicon. No diagnostic is claimed on this leg.
 - **DC assumption:** none claimed on TCG (explicitly).
-- **What it does NOT demonstrate:** the two distinct machine banners prove a
-  software partition *architecture*, **not** containment of a fault from one
-  partition to another (NF-3 untested). This is the project's only FFI claim and
+- **What it does NOT demonstrate:** the guest's distinct synthetic machine
+  (`ARMv8_Foundation_Model` against the host's `QEMU_virt`) reflects a software
+  partition *architecture*, **not** containment of a fault from one partition
+  to another (NF-3 untested). This is the project's only FFI claim and
   it is **not discharged** here.
 
 ### TSR-TIM-001 — Prohibition: no timing/FFI claim on TCG evidence
@@ -340,22 +340,17 @@ The following are **not discharged** by this concept and remain open residual
 risk, carried as assumptions of use to Phase 3 (Orin, real EL2/KVM/SMMU):
 
 > **2026-09-11 note.** The Phase-3 route named here, in §4 (TSR-FFI-001,
-> TSR-TIM-001) and in §7, does not exist as written. KVM boot of QNX on the
-> Orin is blocked by the GICv3/NISV defect
-> ([orin-port.md](../orin-port.md) risk register), and the Orin IPC leg ran
-> under TCG. Phase 3b now runs native `qvm` on the Orin, with real EL2 and
+> TSR-TIM-001) and in §7, does not exist as written. The Orin IPC leg ran
+> under TCG. Phase 3b places native `qvm` on the Orin, with real EL2 and
 > stage-2 translation for one guest
-> ([findings.md](../findings.md) 2026-09-10 M3;
-> [orin-native-port-plan.md](../orin-native-port-plan.md), architecture
-> A4). That plan does no SMMU work (its §7 item 3). When FFI or timing
-> closure evidence will exist is UNKNOWN. TSR-TIM-001's prohibition stays
-> in force.
+> ([orin-native-port-plan.md](../orin-native-port-plan.md), architecture
+> A4; its records are held locally under NC QDL v7 4.6(i)). That plan does
+> no SMMU work (its §7 item 3). When FFI or timing closure evidence will
+> exist is UNKNOWN. TSR-TIM-001's prohibition stays in force.
 >
-> **2026-09-18 update to that note.** The blockage holds for the SDP's
-> *shipped* `startup-qemu-virt`, which still stops after `FOUND GICv3 ITS`.
-> An IFS carrying a `startup-qemu-virt` rebuilt with `-fno-auto-inc-dec`,
-> from board source written in this repo, boots under `-enable-kvm` on the
-> Orin ([findings.md](../findings.md) 2026-09-18). This **discharges nothing
+> **2026-09-18 update to that note.** A6 starts QNX under `-enable-kvm` on
+> the Orin with a `startup-qemu-virt` rebuilt from board source written in
+> this repo; its outcome is held locally. This **discharges nothing
 > below**: no timing, no isolation or freedom-from-interference evidence,
 > and it is not a QNX-supported configuration. TSR-TIM-001's prohibition
 > stays in force.
@@ -440,7 +435,7 @@ would be invalid.
 Flagged at the phase boundary per the honest-framing rule (any safety mechanism whose
 failure mode introduces, or depends on, an attack-surface item):
 
-1. **NF-5 / AoU-ENTROPY → Cyber `TCR-ENT-001` (ownership: Cyber-Design).** The unseeded PRNG on host
+1. **NF-5 / AoU-ENTROPY → Cyber `TCR-ENT-001` (ownership: Cyber-Design).** PRNG seeding on host
    **and** guest is owned by Cyber-Design as an entropy-before-use control (`TCR-ENT-001`).
    FuSa-Design's SG-04-class integrity mechanisms (Phase 2) **depend** on it.
    Interaction: a FuSa integrity mechanism built before this control is in place
@@ -464,7 +459,7 @@ failure mode introduces, or depends on, an attack-surface item):
 
 ## 9. Traceability summary
 
-| Finding | Safety Goal | TSR | SafMech | Status |
+| Failure mode | Safety Goal | TSR | SafMech | Status |
 |---|---|---|---|---|
 | NF-1 | SG-A1 | TSR-CFG-001 | SM-CFG | Designed (closeable on TCG) |
 | NF-2 | SG-A2 | TSR-VDEV-001 | SM-VDEV | Designed (presence-only on TCG) |

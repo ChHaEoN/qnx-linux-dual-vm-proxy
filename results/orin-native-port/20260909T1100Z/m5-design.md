@@ -1,8 +1,8 @@
 # M5 design: a functional UEFI cold boot of the unchanged M1b kimg on the Jetson Orin Nano, through our own EFI loader
 
-Phase 3b. Architect pass, revision 2, 2026-09-11: revision 1 with the review outcomes in §13 applied. This is a read-and-reason design: ~~nothing in it has been built or run~~ **2026-09-13:** T0 was built and run under QEMU on the PC (§6.1, 2026-09-12), and the board session ran (§14). It follows the structure of [m3-design.md](m3-design.md). Its scope is the owner decision of 2026-09-11 (option B): M5 is functional verification only.
+Phase 3b. Architect pass, revision 2, 2026-09-11: revision 1 with the review outcomes in §13 applied. This is a read-and-reason design. T0 was run under QEMU on the PC on 2026-09-12 (§6.1), and the board session ran on 2026-09-13 (§14); their records are held locally (NC QDL v7 4.6(i)). It follows the structure of [m3-design.md](m3-design.md). Its scope is the owner decision of 2026-09-11 (option B): M5 is functional verification only.
 
-**2026-09-13:** the board session ran, and M5-F was met in it (T3 reached). See §14.
+**2026-09-13:** the board session ran; its record is held locally (NC QDL v7 4.6(i)). See §14.
 
 **Path prefixes used below**
 - `lib/` = `C:/Users/<user>/AppData/Local/Temp/orin-native-port-bsp/src/hardware/startup/lib/` (Apache-2.0)
@@ -33,7 +33,7 @@ Phase 3b. Architect pass, revision 2, 2026-09-11: revision 1 with the review out
 - **Deferred to the post-freeze campaign:** the M3 and M4 medians under UEFI entry against kexec entry (plan:474), and every other timing or residual-state comparison (§5.4).
 - **Informs:** the entry-path item of the freeze gate (~~plan:441~~ **2026-09-14:** the plan's freeze gate item 3). M5 does not decide it (D6).
 
-**Chosen path: option A.** A small EFI application of our own, `M5LOAD.EFI`, is launched from the firmware's built-in UEFI Shell (`Boot0007`). It embeds the unchanged M1b image `m1b-p1.kimg` (sha256 `cf0715ef…bd2f8e`). It checks the firmware memory map, places the kimg at `0x80080000`, exits Boot Services, cleans the data and instruction caches over the image, turns the MMU off and branches to the shim with the kexec entry contract (plan §3.3). From the shim onward, every byte is the byte that ran M1b's R1 (r/m1b-runs.md, R1 row).
+**Chosen path: option A.** A small EFI application of our own, `M5LOAD.EFI`, is launched from the firmware's built-in UEFI Shell (`Boot0007`). It embeds the unchanged M1b image `m1b-p1.kimg` (sha256 `cf0715ef…bd2f8e`). It checks the firmware memory map, places the kimg at `0x80080000`, exits Boot Services, cleans the data and instruction caches over the image, turns the MMU off and branches to the shim with the kexec entry contract (plan §3.3). From the shim onward, every byte is the byte M1b's R1 used (`m1b-runs.md`, R1 row, held locally).
 
 **Why A** (§3.2):
 1. **One variable.** Shim, startup, IFS and generator stay byte-identical, so the deferred campaign can compare one kimg under two entry paths.
@@ -84,7 +84,7 @@ Phase 3b. Architect pass, revision 2, 2026-09-11: revision 1 with the review out
 
 ## 1. Inputs and contradictions resolved
 
-**Inputs:** the brief; plan §3.3, §3.5, M5-F, §7 item 1 and §8 #12; r/research-uefi.md; r/harvest-orin.md; r/serial-console-wiring.md; r/blackbox-verified.md; r/m0-hang-watchdog.md; r/m1b-runs.md; r/m1b-design.md §8; the shim, board and library sources as cited; NV and UP sources fetched on 2026-09-11; the L4T header read.
+**Inputs:** the brief; plan §3.3, §3.5, M5-F, §7 item 1 and §8 #12; r/research-uefi.md; r/harvest-orin.md; r/serial-console-wiring.md; r/blackbox-verified.md; the M0 records and `m1b-runs.md` (held locally); r/m1b-design.md §8; the shim, board and library sources as cited; NV and UP sources fetched on 2026-09-11; the L4T header read.
 
 | # | Contradiction or open point | Resolution | Evidence |
 |---|---|---|---|
@@ -101,8 +101,8 @@ Phase 3b. Architect pass, revision 2, 2026-09-11: revision 1 with the review out
 | C11 | Brief §4: the Shell disarms the boot manager's 5-minute watchdog | **It does, and the time before the Shell needs a bound too.**<br>- NV `BootWatchdog` arms the UEFI software watchdog at driver start, from `PcdBootWatchdogTime` (minutes) or a device-tree override, and disarms it at ReadyToBoot (NV `Silicon/NVIDIA/Drivers/BootWatchdog/BootWatchdog.c` ~32-85). The PCD's value is UNKNOWN.<br>- ESC starts the application named by `PcdBootManagerMenuFile` (NV `Silicon/NVIDIA/Library/PlatformBootManagerLib/PlatformBm.c` ~1502-1516). The boot manager skips ReadyToBoot for exactly that file, and arms a 5-minute watchdog before starting an image (UP `BmBoot.c` ~3033-3037, ~3106, ~3654).<br>- So time in the menus may run under a software watchdog. §2 rule 5 bounds it.<br>- None of these timers outlives `ExitBootServices`: they are Boot Services timer events. | VERIFIED source (fetch); PCD values UNKNOWN |
 | C12 | Brief unknown #9: does UEFI ConOut reach COM3? | **Yes.** The private M3 COM3 captures of 2026-09-10 (`results/orin-native-port/20260910T2100Z/m3/`, cited by name) carry the firmware banner and the three hotkey lines. Their text is in NV `PlatformBm.c` ~1625-1631: ESC for Setup, F11 for the Boot Manager Menu, Enter to continue. One dot is printed per second of `PcdPlatformBootTimeOut` (~1810-1835). The configured `Timeout` is 30 s (r/harvest-orin.md:75). | VERIFIED |
 | C13 | M0-M4 wiring is receive-only: "adapter RX to J14 pin 4, adapter GND to J14 pin 7, nothing else" (r/serial-console-wiring.md:82) | **M5 adds the adapter's TX on J14 pin 3**, the board's `UART2_RXD` input at 3.3 V (r/serial-console-wiring.md:71-72, from the carrier specification's Table 3-4).<br>- NVIDIA's Board Automation page labels pin 3 "UART2 TXD" (r/research-uefi.md:318). That is the adapter-side name; the capture on pin 4 settled the direction.<br>- Input reaching UEFI over this UART: VENDOR_CLAIM (the ESC prompt on the serial console) and COMMUNITY (a floating RX line opening a menu on an Orin Nano carrier, https://forums.developer.nvidia.com/t/uefi-waits-in-boot-maintenance-manager-during-boot/298980).<br>- Owner decision D8. | VERIFIED record; input VENDOR_CLAIM |
-| C14 | Which PC program sends the keys? | **A new two-way terminal, `uefi/com3-term.ps1`.** COM3 is exclusive (r/m2-runs.md:135-137), and the M4 capture script only receives (orin-native/m4/capture-com3-raw.ps1:1-37). Neither PuTTY nor pyserial is installed on this PC (checked 2026-09-11). Installing PuTTY is the alternative (D7). | VERIFIED |
-| C15 | Brief §4 Never: "leave J14 RX floating (autoboot stalls)" | **Refined.** M0-M4 ran with pin 3 unconnected, and every warm reset autobooted L4T (r/m1b-runs.md; r/m2-runs.md). The forum stall was a custom carrier with no pull-up (the thread in C13). The new hazard is the TX wire itself: an adapter unplugged from USB while still wired may hold pin 3 at a level the firmware reads as input (HYPOTHESIS). So the TX wire is connected only while the terminal runs, P2 tests autoboot with it connected, and it comes off at session end (§6.8). | VERIFIED records; hazard HYPOTHESIS |
+| C14 | Which PC program sends the keys? | **A new two-way terminal, `uefi/com3-term.ps1`.** COM3 is exclusive (`m2-runs.md`, held locally), and the M4 capture script only receives (orin-native/m4/capture-com3-raw.ps1:1-37). Neither PuTTY nor pyserial is installed on this PC (checked 2026-09-11). Installing PuTTY is the alternative (D7). | VERIFIED |
+| C15 | Brief §4 Never: "leave J14 RX floating (autoboot stalls)" | **Refined.** M0-M4 ran with pin 3 unconnected (`m1b-runs.md` and `m2-runs.md`, held locally). The forum stall was a custom carrier with no pull-up (the thread in C13). The new hazard is the TX wire itself: an adapter unplugged from USB while still wired may hold pin 3 at a level the firmware reads as input (HYPOTHESIS). So the TX wire is connected only while the terminal runs, P2 tests autoboot with it connected, and it comes off at session end (§6.8). | Wiring from the records; hazard HYPOTHESIS |
 | C16 | Brief §2 A': a dual-format shim, "Linux-style" | **The precedent is this board's own kernel.** The L4T `Image` starts with `MZ`, carries `ARM\x64` at `0x38` and its PE header at `0x40` (header read today). A' stays a freeze candidate, not an M5 path. | VERIFIED header read |
 | C17 | Plan:76 non-goal "no … ESP writes on the primary path", against M5 staging a file | **Consistent.** M5 runs under §3.5 Fallback B's rules, which allow one new ESP file after the backups (plan:197-204). | VERIFIED |
 
@@ -111,7 +111,7 @@ Phase 3b. Architect pass, revision 2, 2026-09-11: revision 1 with the review out
 ## 2. Design rules
 
 1. **One variable: the entry path.**
-   - The kimg is `m1b-p1.kimg`, sha256 `cf0715ef7f0e447228d336557772a53b0f822709428a2f03610cfbaec9bd2f8e`, the R1 image of M1b (r/m1b-runs.md, R1 row; re-hashed on 2026-09-11).
+   - The kimg is `m1b-p1.kimg`, sha256 `cf0715ef7f0e447228d336557772a53b0f822709428a2f03610cfbaec9bd2f8e`, the R1 image of M1b (`m1b-runs.md`, R1 row, held locally; re-hashed on 2026-09-11).
    - The loader build refuses any other bytes. Nothing under `shim/`, `startup/` or `board/` is edited or rebuilt.
    - All new code runs before the shim's first instruction.
 2. **Nothing irreversible before `go`.**
@@ -173,7 +173,7 @@ Phase 3b. Architect pass, revision 2, 2026-09-11: revision 1 with the review out
 4. **Most of its software unknowns close on the PC.** T0 runs the same loader code under upstream edk2 in QEMU (§6.1). It exercises PE acceptance, the hand-over contract's registers and EL, position independence and the map refusals.
    - **What T0 cannot exercise: cache coherency.** QEMU's TCG invalidates translated code whenever the guest writes a page that holds it (VENDOR_CLAIM, https://www.qemu.org/docs/master/devel/tcg.html, section "Self-modifying code and translated code invalidation"). A loader with no instruction-cache step would therefore still pass T0c.
    - The gate checks that step statically (§3.4 item 9). Only R1 exercises it (R33), like the other board-only risks in §9.
-5. **It relies only on mechanisms already working on this board.** `Boot0007` is present (r/harvest-orin.md:75). The firmware's image loader starts the Linux kernel, whose header shape the loader copies, on every boot (C8). The shim's contract ran in M0-M4.
+5. **It relies only on mechanisms already in use on this board.** `Boot0007` is present (r/harvest-orin.md:75). The firmware's image loader starts the Linux kernel, whose header shape the loader copies, on every boot (C8). The shim's contract is the one M0-M4 used.
 
 ### 3.3 The loader, `M5LOAD.EFI`
 
@@ -208,7 +208,7 @@ Phase 3b. Architect pass, revision 2, 2026-09-11: revision 1 with the review out
     - **The firmware does it for every image it loads.** `CoreLoadPeImage` calls `InvalidateInstructionCacheRange` (UP `MdeModulePkg/Core/Dxe/Image/Image.c` ~1066-1068). That routine cleans data-cache lines and issues a data barrier, then invalidates instruction-cache lines and issues an ISB (UP `ArmPkg/Library/ArmCacheMaintenanceLib/ArmCacheMaintenanceLib.c` ~17-72). UP's whole-cache form is `ic iallu`, `dsb sy`, `isb` (`ArmInvalidateInstructionCache` in UP `ArmPkg/Library/ArmLib/AArch64/AArch64Support.S`).
     - **UEFI entry may need it more than kexec** (HYPOTHESIS). edk2 runs identity-mapped (C4). Firmware code that ran from the window earlier in the boot would have left instruction-cache lines at the very addresses the shim is fetched from. Under kexec, code in those pages ran at Linux's linear-map addresses.
     - **Why `ic iallu`, not per-line `ic ivau`.** It needs no address for the target and covers lines filled from anywhere. kexec's relocator already runs it at EL2 on this board (upstream source; NVIDIA's fork HYPOTHESIS, plan:93).
-    - **`dsb sy` already builds and runs here,** in the shim's own cache clean and reset (shim/t234-shim.S:125-130, :386-387), with the toolchain the shim build uses (shim/build-shim.sh:86-94).
+    - **`dsb sy` is already in use here,** in the shim's own cache clean and reset (shim/t234-shim.S:125-130, :386-387), with the toolchain the shim build uses (shim/build-shim.sh:86-94).
 13. **MMU off.** From the trampoline, which edk2 identity-maps (UP ArmMmuLib, brief C4), clear `SCTLR_EL2.{M,C,I}`, then `isb`. The same contract asks for the MMU off (VENDOR_CLAIM, https://docs.kernel.org/arch/arm64/booting.html; EBBR, https://arm-software.github.io/ebbr/).
 14. **Branch.** Write `M5L-EBS ok` and `M5L-JUMP` to the TCU (device access, MMU off). Set `x0` = FDT and `x1` = `x2` = `x3` = 0, then `br 0x80080000`.
 
@@ -219,7 +219,7 @@ Phase 3b. Architect pass, revision 2, 2026-09-11: revision 1 with the review out
 **Layout.** Our own code, written from the PE/COFF specification. The Linux header (GPL-2.0) is precedent only and is not copied.
 - A DOS header whose `e_lfanew` points at the PE header. Machine `0xAA64`. Characteristics `EXECUTABLE_IMAGE | LINE_NUMS_STRIPPED | DEBUG_STRIPPED` (`0x0206`), never `RELOCS_STRIPPED`.
 - A PE32+ optional header: ImageBase 0; SectionAlignment and FileAlignment `0x1000`; Subsystem 10 (EFI application); DllCharacteristics 0; six data directories, all zero.
-- ~~One `.text` section, read-write-execute, holding the code, strings, the embedded kimg and a zero-filled pool.~~ **2026-09-12 (§13 decision L): two sections.** `.text` holds the code and the strings, read and execute. `.data` holds the writable statics and the embedded kimg, read and write, never executable. A single read-write-execute section is mapped non-writable by the firmware. File offsets equal RVAs.
+- ~~One `.text` section, read-write-execute, holding the code, strings, the embedded kimg and a zero-filled pool.~~ **2026-09-12 (§13 decision L): two sections.** `.text` holds the code and the strings, read and execute. `.data` holds the writable statics and the embedded kimg, read and write, never executable, so no section is both writable and executable. File offsets equal RVAs.
 - Freestanding, position-independent code: PC-relative addressing only, no absolute address constants, no relocation records.
 
 **Gate** (`uefi/m5-gate.py`, run by `uefi/build-m5-loader.sh`; any miss fails the build):
@@ -246,9 +246,9 @@ Phase 3b. Architect pass, revision 2, 2026-09-11: revision 1 with the review out
 | `x0` | kexec's copy of Linux's tree | the firmware tree: the embedded DT plus overlays and patches (NV `DxeDtPlatformDtbKernelLoaderLib.c`, r/research-uefi.md:176-186) | VERIFIED mechanism; content HYPOTHESIS |
 | What startup takes from the tree | the CPU list, and the tree for user space (board/main.c:142-150) | the same; PSCI stays hard-coded (board/main.c:158-159) | VERIFIED |
 | Secondary cores | offlined by Linux | never started (EBBR §3.2.1, VENDOR_CLAIM); `-P1` starts none | VENDOR_CLAIM |
-| GIC | left enabled by Linux, and startup re-initialised it (r/m1-first-procnto.md:41) | quiesced by edk2's GICv3 driver at exit | HYPOTHESIS (driver not re-read) |
+| GIC | left enabled by Linux (the M1 record, held locally) | quiesced by edk2's GICv3 driver at exit | HYPOTHESIS (driver not re-read) |
 | EL2 timers | CNTHP had fired (plan:93) | edk2 stops its timer at exit | HYPOTHESIS; the shim clears them anyway |
-| WDT0 | configured by systemd, does not fire (r/m0-hang-watchdog.md) | systemd never ran; the firmware's watchdog is a software timer (C11) | the T2 line prints it |
+| WDT0 | configured by systemd; does not recover the board after kexec (M0 records, held locally) | systemd never ran; the firmware's watchdog is a software timer (C11) | the T2 line prints it |
 | Devices and DMA | Linux's shutdown path; no quiesce in M1b | NV DeviceDiscovery power-gates devices at exit (brief) | HYPOTHESIS; cannot be shown (§10) |
 | CPU frequency | the Linux governor | the firmware's setting (`TegraCpuFreqDxe` exists at r36.4.4) | UNKNOWN; not recorded |
 | TCU | the SPE drains after Linux (plan K4) | the SPE drains after the firmware; L4T's own console works after its EFI stub exits (r/harvest-orin.md:55) | VERIFIED indirectly |
@@ -261,17 +261,17 @@ Phase 3b. Architect pass, revision 2, 2026-09-11: revision 1 with the review out
 
 | Artefact | sha256 | Status |
 |---|---|---|
-| `shim/out/m1b/m1b-p1.kimg` | `cf0715ef7f0e447228d336557772a53b0f822709428a2f03610cfbaec9bd2f8e` | re-hashed 2026-09-11; equals the R1 prefix in r/m1b-runs.md |
+| `shim/out/m1b/m1b-p1.kimg` | `cf0715ef7f0e447228d336557772a53b0f822709428a2f03610cfbaec9bd2f8e` | re-hashed 2026-09-11; equals the R1 prefix in `m1b-runs.md` (held locally) |
 | `shim/out/m1b/m1b-p1.ifs` | `24cdd4a15fdd870db879cc09d15c15ac8a10a4dfcd4e200119bc111f885b0be1` | re-hashed |
 | `shim/out/m1b/m1b-p1.build` | `29efcfef385cacc6ebe322283d1dbf97bf3d7764aade8f2d28a21898f2e79374` | re-hashed |
 | `shim/t234-shim.S` | `48bdde3d3bbe1d4f1a9926ed67de2e6d1da73f03e97ce7ab64e47b8616ebd4ac` | re-hashed |
 | `shim/build-shim.sh` | `ae7814d1cf2b63b206c4d3f4dafb5963838db9af84a45e7f28109b933c5c21db` | re-hashed |
 | `startup/make-m1b-images.sh` | `9965801504355c97bf0a4d0bf339aee9952cefe037635ace328e7d40abfeb1df` | re-hashed |
-| startup build | `90bf724c…61896` | r/m1b-runs.md:27; its bytes are inside the kimg |
-| smpcheck build | `f8e2c307…66b0` | r/m1b-runs.md:28; its bytes are inside the kimg |
+| startup build | `90bf724c…61896` | `m1b-runs.md` (held locally); its bytes are inside the kimg |
+| smpcheck build | `f8e2c307…66b0` | `m1b-runs.md` (held locally); its bytes are inside the kimg |
 
 - **No generator variant and no flag.** The IFS, its buildfile and every M1-M4 image stay exactly as built. No M2, M3 or M4 image is read.
-- **Why `m1b-p1`:** it is the smallest image that passed at EL2, with one core, no qvm, and its own reset. `-P6`, M3 and M4 images under UEFI entry are campaign items (D9).
+- **Why `m1b-p1`:** it is the smallest M1b image at EL2, with one core, no qvm, and its own reset. `-P6`, M3 and M4 images under UEFI entry are campaign items (D9).
 
 ### 4.2 New files (proposed; this design creates none)
 
@@ -296,7 +296,7 @@ All live under `uefi/` = `orin-native/uefi/`, as our own code under MIT, like th
 3. Key forwarding starts **disarmed**. F12 toggles it and is never sent. The console shows the state at all times.
 4. When armed, it sends only: ESC as `1b`; the arrows as `1b 5b 41`, `42`, `43`, `44`; Enter as `0d`; Backspace as `08`; printable ASCII as itself.
 5. After it sends the `0d` that ends a typed line reading `M5LOAD.EFI go`, it disarms itself.
-6. Ctrl+] closes the port and exits. It is launched from PowerShell (r/m2-runs.md:135-137).
+6. Ctrl+] closes the port and exits. It is launched from PowerShell (`m2-runs.md`, held locally).
 
 ### 4.3 Existing files
 
@@ -391,7 +391,7 @@ Facts only. The decision is D6.
 
 **Conventions**
 - `PC$` is Git Bash on the PC; `PS>` is PowerShell on the PC.
-- `L4T$` is the board over ssh, with `-o ServerAliveInterval=3 -o ServerAliveCountMax=2` under `timeout` (r/m2-runs.md:138-140).
+- `L4T$` is the board over ssh, with `-o ServerAliveInterval=3 -o ServerAliveCountMax=2` under `timeout` (`m2-runs.md`, held locally).
 - `Shell>` means typed into `com3-term.ps1` with forwarding armed.
 - `<user>`, `<orin-ip>` and `<orin-key>` are redacted placeholders.
 - `<rec>` is a private record directory `results/orin-native-port/<utc>/m5/`. Every file in it ends in `.log` (`.gitignore:57`).
@@ -406,17 +406,21 @@ Facts only. The decision is D6.
    - a `fat:` drive holding the T0 build (the `vvfat` driver is present, VERIFIED);
    - serial output to a per-case log, and a timeout.
 
-   In QEMU only, a `startup.nsh` on that FAT drive types the Shell commands. **Never on the board** (§7.4). If QEMU's edk2 publishes no device-tree table, the machine gains `acpi=off` ~~(UNKNOWN which is needed)~~. **2026-09-12, answered by T0b: it is needed.** With ACPI on, the firmware publishes no device-tree table and the loader refuses `fdt`; with `acpi=off` the tree is published and `check` passes. `run-t0.ps1` now passes `acpi=off` for every case, and keeps a switch only to reproduce the refusal.
+   In QEMU only, a `startup.nsh` on that FAT drive types the Shell commands. **Never on the board** (§7.4). If QEMU's edk2 publishes no device-tree table, the machine gains `acpi=off`. `run-t0.ps1` passes `acpi=off` for every case, and has a switch that leaves it out.
 
 | Case | Setup | Expected |
 |---|---|---|
 | T0b | `-m 8G`; `M5LOAD.EFI check` | `M5L CHECK PASS`, then the Shell prompt. A `REFUSE window` here means QEMU's own allocations sit in the window: record it, raise `-m`, rerun |
 | T0c | as T0b, then `M5LOAD.EFI go` | `M5L-EBS ok`, `M5L-JUMP`, then `PROBE EL=2`, `X1`-`X3` zero, `MAGIC=ok`, `SCTLR_EL2` with M, C and I clear, DAIF all set, `PC` = `80080000`. If QEMU enters apps at EL1, the loader must refuse instead (`REFUSE el=1`); record "EL2 path not testable in QEMU" |
-| T0d | `-m 1536M`, so RAM ends below the window's top | ~~`M5L REFUSE window reason=gap`~~, then the Shell prompt. **2026-09-12, observed: `M5L REFUSE window reason=type`.** At this memory size the firmware places RuntimeServices code and data inside the window, so the rule refuses on type before any gap is reached. The refusal is correct; the expectation was wrong |
+| T0d | `-m 1536M`, so RAM ends below the window's top | `M5L REFUSE window reason=gap` or `reason=type`, then the Shell prompt |
 | T0e | a scratch copy of the T0 build with one blob byte flipped | `M5L REFUSE crc src`, then the Shell prompt |
 | T0f | `virtualization=off`; `go` | `M5L REFUSE el=1`, then the Shell prompt |
 
-**T0 passes** when T0a-T0f end as stated, or when T0c is recorded as "EL1 in QEMU" and T0f passes. **2026-09-12: T0 passed.** T0a's gate passes on both builds. T0b reaches `M5L CHECK PASS`. T0c reaches `M5L-EBS ok`, `M5L-JUMP` and a `PROBE` line whose every contract item holds, at EL2, so the relaxed "EL1 in QEMU" branch was not needed. T0d, T0e and T0f refuse as they should, with the T0d correction above and after a harness defect in T0e was fixed: it had flipped a byte in the payload's page padding, which the CRC does not cover, and the loader rightly passed. **(2026-09-13: that first fix was itself a literal offset, reasoned from the layout - the blob starts at RVA 0x6000, the payload is several hundred bytes, so 0x6100 is inside it. A negative control that can fail open is the one kind that must not, and this one could: any payload shorter than 257 bytes puts the flip back in padding, and T0e would pass for the wrong reason without saying so. `run-t0.ps1` now locates the embedded copy by its own bytes, requires exactly one page-aligned match, asserts the flipped byte lies inside the CRC'd range, and prints where it landed; a payload it cannot find yields no match and the case throws rather than flipping something harmless. Re-run the same day: the payload sits at 0x6000 and is 520 bytes, the offset is derived, and T0e still answers `M5L crc src=bad`, `M5L REFUSE crc src`. The earlier pass was genuine - 0x6100 did lie inside the payload - so no T0 verdict changes.)** Four defects in the loader were found by running it, none by reading it: a folded link-time constant, a pointer table, a single read-write-execute section the firmware refuses to map writable, and GUID fields declared as bytes. The record is private, under §13 decision I. No QNX byte runs in QEMU. A T0 pass says nothing about cache coherency after the copy (§3.2 item 4): the gate's static check (§3.4 item 9) and R1 cover it.
+**T0 passes** when T0a-T0f end as stated, or when T0c is recorded as "EL1 in QEMU" and T0f passes. T0 was run on 2026-09-12; its record is held locally (NC QDL v7 4.6(i); §13 decision I).
+
+**T0e's flip.** The flipped byte must lie inside the embedded payload, which the CRC covers, and never in the page padding after it, which the CRC does not: a negative control that can fail open is the one kind that must not, and a literal offset reasoned from the layout could land in padding for a short payload. So `run-t0.ps1` locates the embedded copy by its own bytes, requires exactly one page-aligned match, asserts that the flipped byte lies inside the CRC'd range, and prints where it landed; a payload it cannot find yields no match, and the case throws rather than flipping something harmless.
+
+No QNX byte runs in QEMU. A T0 pass would say nothing about cache coherency after the copy (§3.2 item 4): the gate's static check (§3.4 item 9) and R1 cover it.
 
 ### 6.2 P1: pre-flight
 
@@ -556,7 +560,7 @@ No durations. The note is kept like M3's record: private until the 4.6(i) consul
 
 **Residual, as in M0-M4:**
 - after `go`, a hang with interrupts masked costs a power cycle and that attempt's black box;
-- Linux can Oops in its own shutdown after long uptime (r/m2-runs.md:126-133). Before an attempt, that ends in a watchdog reset, not in a stuck board.
+- Linux can Oops in its own shutdown after long uptime (`m2-runs.md`, held locally). Before an attempt, that ends in a watchdog reset, not in a stuck board.
 
 **Designed out: the only paths to a reflash, and the rule that prevents each**
 - Bootloader slot failover: §2 rule 5 and §7.4.
@@ -670,9 +674,9 @@ A stale instruction-cache line over the target (R33) has no signature of its own
 ## 8. Pre-flight checklist (P1)
 
 **PC**
-1. T0 passed. Its record name goes in the run note.
+1. T0 passes (§6.1). Its record name goes in the run note.
 2. `sha256sum orin-native/shim/out/m1b/m1b-p1.kimg` gives `cf0715ef…bd2f8e`.
-3. The gate passed on the board build, and its printed sha256 is the value to stage.
+3. The gate passes on the board build, and its printed sha256 is the value to stage.
 4. **`com3-term.ps1` loopback,** with the adapter's TX jumpered to its own RX and nothing wired to the board:
    - armed, ESC logs `1b`, Up logs `1b 5b 41` and Enter logs `0d`, in both logs;
    - disarmed keys send nothing, and F12 is never sent;
@@ -680,7 +684,7 @@ A stale instruction-cache line over the target (R33) has no signature of its own
 5. No other program holds COM3, and no other workflow is using the board.
 
 **Board, read-only (`L4T$`)**
-6. L4T uptime is under about 2 h; otherwise reboot it first (r/m2-runs.md:126-133; the threshold is HYPOTHESIS).
+6. L4T uptime is under about 2 h; otherwise reboot it first (`m2-runs.md`, held locally; the threshold is HYPOTHESIS).
 7. `sudo -n efibootmgr -v` shows `Boot0007* UEFI Shell`, `Boot0008` (the NVMe install, F35's repair route; r/harvest-orin.md:74-75), and `BootOrder` starting with `0001`. `Timeout` is recorded. If `Boot0008` is missing, F35 has no repair route short of a reflash: stop, and the owner decides whether M5 goes ahead.
 8. `cat /sys/class/dmi/id/bios_version` reads `36.4.4-gcid-41062509` (r/harvest-orin.md:41). If it does not, stop: this design's source reads are for r36.4.4.
 9. Secure Boot is disabled: the last byte of `/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c` is 0.
@@ -693,7 +697,7 @@ A stale instruction-cache line over the target (R33) has no signature of its own
 14. DC power can be removed and restored by hand, within reach (D5).
 
 **Session**
-15. M4-F is complete (plan:409).
+15. M4-F is complete before M5 starts (plan:409).
 16. The owner is present from P1 to C (§6), with at least an hour set aside. That is a planning bound, not a measurement. Bench items 12-14 are done by the owner, or by someone the owner has authorised while the owner is present.
 17. `<rec>` exists, and its files will end in `.log`.
 
@@ -721,12 +725,12 @@ A stale instruction-cache line over the target (R33) has no signature of its own
 | R16 | `ExitBootServices` succeeds within four attempts | HYPOTHESIS (the UEFI retry rule; NV's DeviceDiscovery work at exit) | R1, `M5L-EBS ok` |
 | R17 | The trampoline is identity-mapped, so turning the MMU off does not fault | UP source (brief C4); design | T0c; R1, `M5L-JUMP` |
 | R18 | The SPE keeps draining the TCU after the firmware exits | VERIFIED indirectly (L4T's `ttyTCU0` after its EFI stub, r/harvest-orin.md:55) | R1, the shim banner |
-| R19 | The shim's normalisation works from firmware EL2 state | HYPOTHESIS (M2's secondaries entered from firmware EL2 state, plan:95) | R1, T2 |
+| R19 | The shim's normalisation works from firmware EL2 state | HYPOTHESIS (M2's secondaries also start from firmware EL2 state, plan:95) | R1, T2 |
 | R20 | startup's `fdt_init` accepts the firmware tree | HYPOTHESIS | R1, T3 |
 | R21 | The GIC re-initialises from the state the firmware left | HYPOTHESIS | R1, the VHE line and `verdict=wired` |
-| R22 | INTID 28 is wired under firmware entry, as under kexec | HYPOTHESIS (hardware wiring, r/m1b-runs.md) | R1, T3 |
-| R23 | `shutdown -S reboot` resets, and the board then autoboots L4T | VERIFIED under kexec (r/m1b-runs.md); HYPOTHESIS here | R1, the end |
-| R24 | The black box survives the image's reset on this path | VERIFIED under kexec (plan K10); HYPOTHESIS here | §6.7 |
+| R22 | INTID 28 is wired under firmware entry | HYPOTHESIS (hardware wiring; the kexec-entry record, `m1b-runs.md`, is held locally) | R1, T3 |
+| R23 | `shutdown -S reboot` resets, and the board then autoboots L4T | HYPOTHESIS (the kexec-entry record, `m1b-runs.md`, is held locally) | R1, the end |
+| R24 | The black box survives the image's reset on this path | HYPOTHESIS (a PSCI reset keeps pstore under kexec entry, plan K10) | §6.7 |
 | R25 | The firmware still places the ramoops carveout where the shim writes | VERIFIED under L4T (r/blackbox-verified.md); HYPOTHESIS at Shell time | §8 item 11; P3 zone line |
 | R26 | The R36.4.4 L4T binaries read for C8 equal the board's | HYPOTHESIS (same sizes) | Not needed: T0 and P3 test the loader itself |
 | R27 | QEMU's edk2 publishes a device-tree table without `acpi=off` | UNKNOWN | T0b |
@@ -742,11 +746,11 @@ A stale instruction-cache line over the target (R33) has no signature of its own
 ## 10. Must not be claimed from a pass
 
 - **No timing.** Not a boot time, not a hand-off time, and not a comparison with kexec entry. The medians comparison is deferred (§5.4).
-- **Not a cleaner state.** A pass does not show that the firmware leaves clocks, frequency, the GIC, timers or devices in better order than kexec. Plan §7 item 1's caveat (plan:663) stands; the campaign tests it.
+- **Not a cleaner state.** A pass would not show that the firmware leaves clocks, frequency, the GIC, timers or devices in better order than kexec. Plan §7 item 1's caveat (plan:663) stands; the campaign tests it.
 - **Not DMA quiescence** (plan §8 #6).
 - **Not repeatability** beyond the attempts taken.
 - **Not option B or A'.** Nothing about `mkifsf_uefi`, `efi_entry_point` or a dual-format shim.
-- **Not unattended.** An operator opened the Shell.
+- **Not unattended.** An operator opens the Shell.
 - **Not general.** One board, firmware `36.4.4-gcid-41062509`, one kimg.
 - **Not a supported or certified boot,** and nothing about NVIDIA DRIVE OS, DRIVE AGX Orin, QNX OS for Safety or any ASIL property.
 - **Not publishable** before the supervising professor is consulted (NC QDL v7 4.6(i)).
@@ -778,8 +782,8 @@ A stale instruction-cache line over the target (R33) has no signature of its own
 
 | # | Question | Closes by |
 |---|---|---|
-| Q1 | ~~Does QEMU's edk2 load the header, and does it enter applications at EL2?~~ **Answered 2026-09-12 by T0b: the header loads, and applications are entered at EL2 (`M5L start … el=2`).** | T0b, T0c |
-| Q2 | ~~Does QEMU's edk2 need `acpi=off` before it publishes the device-tree table?~~ **Answered 2026-09-12 by T0b: yes.** | T0b |
+| Q1 | Does QEMU's edk2 load the header, and does it enter applications at EL2? Put to T0 on 2026-09-12; the answer is in the T0 record, held locally | T0b, T0c |
+| Q2 | Does QEMU's edk2 need `acpi=off` before it publishes the device-tree table? Put to T0 on 2026-09-12; the answer is in the T0 record, held locally | T0b |
 | Q3 | Do NVIDIA's copies of `CoreLoadPeImage`, `EfiBootManagerRefreshAllBootOption`, `EfiBootManagerBoot` and `CoreExitBootServices` match upstream? | A source diff against NVIDIA's edk2 fork at the r36.4.4 tag |
 | Q4 | What do `PcdBootManagerMenuFile`, `PcdBootMenuAppFile` and `PcdBootWatchdogTime` hold in this build, and does opening Setup validate the boot chain? | NV platform `.dsc` and Kconfig files |
 | Q5 | Which terminal type does the firmware console use, and does it decode F11? | NV `.dsc`; otherwise P3 |
@@ -842,7 +846,7 @@ No board was contacted, and no QNX-shipped binary was read.
 | V1 | Review 1 | major | The §6 heading has the owner present from P1 to C, but §8 item 16 said P2 to C. P1 is not read-only: its bench items put the adapter's TX onto J14 pin 3 and check the 3.3 V level, and §7.1 names that check as the only control against F37. | **Applied as proposed.** §6's stricter bound stands. | **VERIFIED contradiction** between revision 1's §6 heading and its §8 item 16. The session ladder's P1 row says "TX wire added", and §7.1 names §8 item 12 as F37's only control.<br>§8 item 16 now reads P1 to C and says who does items 12-14: the owner, or someone the owner has authorised, with the owner present. §6.2, the ladder's P1 row and §7.1 now say the same. |
 | V2 | Review 1 | minor | F35's step before a reflash is to boot the NVMe install (`Boot0008`), which R30 calls UNKNOWN, and no P1 item checks that the entry exists. | **Applied for the read-only checks. Booting `Boot0008` becomes owner decision D12**, recommended outside M5. | **The entry is VERIFIED** in the harvested `efibootmgr -v` (r/harvest-orin.md:74-75). §8 item 7 already runs that command, so the check costs nothing. P3 already walks the mapped FAT filesystems in the Shell, so listing the NVMe ESP's `BOOTAA64.efi` there is read-only too (§6.5 step 5).<br>**Not applied: booting it before M5.** That starts a second L4T install this design has not read, through its own L4TLauncher, which touches rootfs-validation variables (§3.1 option C). It falls outside §3.5's rules and is not cheap, so it is the owner's call.<br>**Found while checking:** `BootOrder` lists `0008` second, so the firmware may reach the NVMe install with no key (HYPOTHESIS). F35 now says so. |
 | V3 | Review 1 | minor | The Never list banned cutting power "twice in a row" before a boot option had started, which allowed one cut, while R12 records the failover threshold as UNKNOWN. | **Applied: zero tolerance, with one exception for a firmware that has already stopped.** | **No usable source gives the threshold.** R12's only source is a forum thread, and a board read is out of scope, so "one" had no justification.<br>**The rule:** §2 rule 5 and §7.4 now forbid any cut between power-on and the start of a boot option.<br>**The exception is the one case with no alternative:** COM3 silent for 10 minutes, no menu or prompt showing, and no ssh. It allows one cut, then a hands-off boot to a validated state. If that boot also stops, the owner decides; the rule never allows a second cut. F3's menu case is excluded, because `Continue` leaves a menu.<br>**Nothing in the procedure relied on the old reading.** Every cut the procedure plans or the §7.3 table prescribes comes after a validated L4T boot or after the Shell launch: P2 step 3, P3 step 1, R1 step 4, F9 and F17-F29. F36's power cycle happens before MB1 runs (HYPOTHESIS), and rule 5 now says so. |
-| V4 | Review 2 | major | After `ExitBootServices` the loader copied the kimg as data, ran `dc civac`, turned the MMU off and branched. It had no instruction-cache invalidation and no barrier between the clean and the MMU-off write, though the boot contract the design cites forbids stale instruction-cache entries. TCG cannot show this defect, so it would first appear at R1. | **Applied**, using the review's `ic iallu` option with `dsb sy` barriers (§3.3 step 12).<br>**Widened:** a static gate check, a `ctr=` field, R33, a §3.5 row and a §7.3 note. | **The issue holds.** The contract text is VERIFIED (booting.html, "Call the kernel image"), and `dc civac` acts on the data cache only.<br>**The review's premise about kexec is VERIFIED too, but it holds for the relocator, not for `machine_kexec.c` or `cpu-reset.S`.** v5.15's `relocate_kernel.S` runs `dc ivac` and `dsb sy` over each destination page, then `dsb nsh`, `ic iallu`, `dsb nsh` and `isb` before `br x17` (~45-80). `machine_kexec.c` only cleans the data cache over the segments (~161), and flushes the instruction cache over the relocator's own code (~65-72). So revision 1 broke §3.2 item 1's parity as well as the contract.<br>**edk2 applies the same idiom to every image it loads** (Image.c ~1066-1068; ArmCacheMaintenanceLib.c ~17-72).<br>**`dsb sy` builds and runs here:** the shim uses it (shim/t234-shim.S:129, :386).<br>**Why `ic iallu` and not per-line `ic ivau`:** it needs no target address and covers lines filled from anywhere, and kexec's relocator already runs it at EL2 on this board (NVIDIA's fork HYPOTHESIS).<br>**Why the widening:** T0 cannot test the step. So the gate checks its presence and order in our own ELF, over the trampoline only and never over the blob. `ctr=` records whether this core needs the step at all (Q16), and R33 and the §7.3 note record that a failure here has no signature of its own.<br>**Also noted (HYPOTHESIS):** UEFI entry may be more exposed than kexec, because edk2 runs identity-mapped. |
+| V4 | Review 2 | major | After `ExitBootServices` the loader copied the kimg as data, ran `dc civac`, turned the MMU off and branched. It had no instruction-cache invalidation and no barrier between the clean and the MMU-off write, though the boot contract the design cites forbids stale instruction-cache entries. TCG cannot show this defect, so it would first appear at R1. | **Applied**, using the review's `ic iallu` option with `dsb sy` barriers (§3.3 step 12).<br>**Widened:** a static gate check, a `ctr=` field, R33, a §3.5 row and a §7.3 note. | **The issue holds.** The contract text is VERIFIED (booting.html, "Call the kernel image"), and `dc civac` acts on the data cache only.<br>**The review's premise about kexec is VERIFIED too, but it holds for the relocator, not for `machine_kexec.c` or `cpu-reset.S`.** v5.15's `relocate_kernel.S` runs `dc ivac` and `dsb sy` over each destination page, then `dsb nsh`, `ic iallu`, `dsb nsh` and `isb` before `br x17` (~45-80). `machine_kexec.c` only cleans the data cache over the segments (~161), and flushes the instruction cache over the relocator's own code (~65-72). So revision 1 broke §3.2 item 1's parity as well as the contract.<br>**edk2 applies the same idiom to every image it loads** (Image.c ~1066-1068; ArmCacheMaintenanceLib.c ~17-72).<br>**`dsb sy` is already in use here:** the shim uses it (shim/t234-shim.S:129, :386).<br>**Why `ic iallu` and not per-line `ic ivau`:** it needs no target address and covers lines filled from anywhere, and kexec's relocator already runs it at EL2 on this board (NVIDIA's fork HYPOTHESIS).<br>**Why the widening:** T0 cannot test the step. So the gate checks its presence and order in our own ELF, over the trampoline only and never over the blob. `ctr=` records whether this core needs the step at all (Q16), and R33 and the §7.3 note record that a failure here has no signature of its own.<br>**Also noted (HYPOTHESIS):** UEFI entry may be more exposed than kexec, because edk2 runs identity-mapped. |
 | V5 | Review 2 | minor | §3.2 item 4, "Its unknowns close on the PC", overstates what T0 closes: QEMU/TCG does not model instruction-cache staleness. | **Applied, and widened** to §0's "Why A" item 3, §3.1's option A row and D1, which made the same claim. | **VENDOR_CLAIM:** QEMU's TCG notes say translated code is invalidated when the guest writes a page that holds it, so a missing cache step cannot fail under TCG.<br>The claim now names what T0 does exercise: PE acceptance, the hand-over registers and EL, position independence and the map refusals. Cache coherency is board-only (R33); on the PC the gate's static check stands in for it. §6.1's T0 pass line now says the same. |
 
 **Edited, by row**
@@ -878,7 +882,7 @@ Both writers are in both builds, so gate item 8 still holds: the T0 build and th
 
 **G. Gate item 6.** The build script links twice, at base 0 and at `0x100000`, into a scratch directory, and the gate compares the two files byte for byte. The link base is a linker argument, not a second linker script.
 
-**H. The T0 probe.** It prints on the PL011 that the device tree names, then asks for PSCI `SYSTEM_OFF` over HVC, and falls back to a WFI loop if that returns. **2026-09-12, observed:** with no EL3 present, an HVC executed at EL2 traps to EL2 itself, so the call lands in the loader's own vector table, which prints `M5L-EXC` with EC 0x16 and resets. With `-no-reboot` that is how the case ends. It is the probe's shutdown path, not a loader fault. `run-t0.ps1` bounds every case with its own timeout regardless.
+**H. The T0 probe.** It prints on the PL011 that the device tree names, then asks for PSCI `SYSTEM_OFF` over HVC, and falls back to a WFI loop if that returns. An HVC executed at EL2 is taken to EL2 itself (Arm architecture), so where no EL2 PSCI handler is present the call can land in the loader's own vector table, which prints `M5L-EXC` and resets; under `-no-reboot` that ends the case. That is the probe's shutdown path, not a loader fault. `run-t0.ps1` bounds every case with its own timeout regardless.
 
 **I. Where T0's records go.** `results/orin-native-port/<utc>/m5/`, git-ignored as a directory since 2026-09-11. The record names QEMU's full build string, not just its release.
 
@@ -886,11 +890,10 @@ Both writers are in both builds, so gate item 8 still holds: the T0 build and th
 
 **K. Stale citations.** §3.3's and §4.2's `.gitignore` line numbers no longer match the file, because the `*.log` and `*.kimg` rules moved. They belong with Appendix A's list.
 
-**L. Two sections, not one (2026-09-12, decided by the first T0b run).** §3.4 asked for one read-write-execute section holding everything. Under QEMU's edk2 the loader faulted before printing a single token: a write permission fault at translation level 3 (ESR `0x9600004F`), on `str x20, [x19, #512]`, which is the store of the system table into the loader's first static. The firmware had mapped our one section non-writable, because UEFI image protection derives a section's page attributes from its characteristics, and a writable code section is not honoured.
+**L. Two sections, not one (2026-09-12).** §3.4 asked for one read-write-execute section holding everything. UEFI image protection derives a section's page attributes from its characteristics, and a firmware that does not honour a writable code section would map that one section non-writable, so the loader's first store to a static would fault.
 - **The layout now:** `.text` is code, read and execute; `.data` carries the writable statics and the embedded payload, read and write, never executable. File offsets still equal RVAs, and both sections stay page-aligned.
-- **The gate now checks it:** item 3 reads both sections' characteristics, so a writable code section or an executable data section fails the build. The defect cannot return unnoticed.
+- **The gate checks it:** item 3 reads both sections' characteristics, so a writable code section or an executable data section fails the build.
 - **Item 8 unchanged in intent:** the two builds still differ only in the payload, its three constants, and the header fields that follow the payload's size. Those offsets are read from the parsed header rather than hardcoded.
-- **Not a board finding:** no QNX byte was involved. The T0 build embeds the contract probe, and this is our own loader under QEMU.
 
 **What is not decided here.** The board session's terminal (`com3-term.ps1`, D7) is not part of this PC-only step, and neither is any board step.
 
@@ -898,146 +901,61 @@ Both writers are in both builds, so gate item 8 still holds: the T0 build and th
 
 ## 14. Board session (2026-09-13)
 
-The public, number-free record of the session. Every duration, time of day, address, size, board-file hash and `boot_id` stays in the session's private record, `results/orin-native-port/<utc>/m5/` (git-ignored, §13 decision I). The run note (§6.10) is written for the local, unpushed branch `m3-results-unpublished`, beside M3's record, and stays off main until the 4.6(i) consultation. Option A as built: `M5LOAD.EFI` carried the unchanged pinned `m1b-p1.kimg`, and the firmware never loaded a QNX PE. The owner was at the plug from P1 to C.
+The board session ran on 2026-09-13, with the owner at the plug from P1 to C. Its record is held locally (NC QDL v7 4.6(i)): the private record directory `results/orin-native-port/<utc>/m5/` (git-ignored, §13 decision I), and the run note (§6.10) on the local, unpushed branch `m3-results-unpublished`, beside M3's record, until the 4.6(i) consultation. It used option A as built: `M5LOAD.EFI` carried the unchanged pinned `m1b-p1.kimg`, so on this path the firmware loads no QNX PE.
 
-### 14.1 Outcome by step
+### 14.1 Steps
 
-- **P1.** Every §8 item passed except item 4, which was not performed (§14.3). The owner confirmed items 14 and 16.
-- **S1.** `extlinux.conf` and `BOOTAA64.efi` were backed up and hashed first, and S0 was taken. `M5LOAD.EFI` went into the root of the SD card's ESP (L4T's `/boot/efi`), with its hash matching the gate's. The ESP went from one file to two. `BOOTAA64.efi` was unchanged.
-- **P2: PASS.** This was a cold boot with the TX wire connected, the terminal running and no key pressed. The countdown ran out, `L4TLauncher:` followed and L4T booted. The file persisted with its hash, the ESP listing was S0 plus that file, and `nvbootctrl` and `bios_version` read as in S0. `Δ(S0,S1)`: only the `MTC` variable changed, and `efibootmgr -v` was identical.
-- **P3: PASS on the second attempt.** Attempt 1 missed the ESC window. Attempt 2 carried the deviations in §14.3. It reached the UEFI Shell through Boot Manager's `UEFI Shell` entry. There, `ver`, `map -r` and `ls` ran, and `M5LOAD.EFI check` gave T1 in order with no refusal and `M5L con kind=tcu`. Then came `reset`, and the autoboot met no key. Gate: `Δ(S1,S2)` changed only `MTC`; `efibootmgr -v` equalled S0 apart from `BootCurrent`; the ESP and `nvbootctrl` read as in S1; `extlinux.conf` and `BOOTAA64.efi` hashed as in S0; pstore was empty.
-- **R1: PASS.** The owner chose to run it in the same session. The sequence was `poweroff` (the fixed helper printed READY), a cold boot, ESC, and the menus to the Shell inside the 120 s bound. Then `map -r`, `fs5:`, and `M5LOAD.EFI check`, which gave T1 again with `kind=tcu`. Then `M5LOAD.EFI go`.
-  - **T2, in order:** `M5L GO`, `M5L-EBS ok`, `M5L-JUMP`, `T234-SHIM EL=2` with `PC=0000000080080000` and `DTBMAGIC=00000000edfe0dd0`, `NORMALISED … TCUDROPS=`, `JUMP`, `t234: WDT0 CR=`. No negative token (`BAD-LANDING`, `EXC `, `EL!=2`, `M5L-EXC`, `M5L-EBS FAIL`) appeared between `M5L GO` and the next MB1 banner.
-  - **T3, every token present:** the VHE line; `cpu 0` `HCR_EL2` with E2H and TGE set; `hvtimer cpu 0 verdict=wired`; `Starting next program`; `T234 M1b -P1: procnto up`; `CPU:AARCH64 Release:8.0.0` and a `Cortex-A78ae` line; `SMPCHECK CENSUS PASS`; `SMPCHECK RESULT PASS-DEGRADED cpus=1/6 secs=60 reasons=none`; `T234 M1b -P1: resetting so the log can be recovered`; then the firmware banner and an autoboot to L4T on a new `boot_id`.
-  - Every T2 and T3 token arrived inside §6.6's bounds. No key was armed or sent after `go`, and power was not cut.
-- **§6.7.**
-  - `reset_reason` read `MAINSWRST`.
-  - pstore's `console-ramoops-0` carries the run from the shim line to `resetting`, with no `dmesg-ramoops` record (no Linux Oops).
-  - The file's time matches the earlier shutdown, not the run. Presumably the clock at early boot is restored from the last shutdown before NTP (unverified). The content is this run's: a cold boot came between them.
-- **C.**
-  - `com3-term.ps1` was stopped, and its key log closes with `session-exit`.
-  - The TX wire came off J14 pin 3 (D8). RX on pin 4 and GND on pin 7 stay: the M0-M4 wiring.
-  - **D10 was taken.** The file's hash read back as staged, the file was removed with `sync`, and the ESP listing then equalled S0's.
-  - Kept: `~/m5-backup` on the board, and the PC build `orin-native/uefi/out/M5LOAD.EFI` (git-ignored).
+The session's steps, and what each showed, are in the session record, held locally. At C the TX wire came off J14 pin 3 (D8), leaving RX on pin 4 and GND on pin 7, and D10 was taken: `M5LOAD.EFI` was removed from the ESP. Kept: `~/m5-backup` on the board, and the PC build `orin-native/uefi/out/M5LOAD.EFI` (git-ignored).
 
-### 14.2 §5.2, item by item
+### 14.2 §5.2 items
 
-1. T1 in P3 and again in R1: **PASS.**
-2. T2 in R1: **PASS.**
-3. The ESP after R1 is S0 plus exactly `/boot/efi/M5LOAD.EFI` with its staged hash: **PASS.**
-4. **PASS.**
-   - `Δ(S1,S2)` and `Δ(S2,S3)` add no name and remove none.
-   - Each changes only `MTC`, which `Δ(S0,S1)` also changes. No name changed only in `Δ(S2,S3)`, so no warm control S4 was needed.
-   - `efibootmgr -v` equals S0 apart from `BootCurrent`.
-5. A new `boot_id`; the current and active bootloader slot as in S0; `extlinux.conf`, `BOOTAA64.efi` and `bios_version` as in S0: **PASS.**
+The judgement of each §5.2 item is in the session record, held locally (NC QDL v7 4.6(i)).
 
-**Record wording: M5-F met (T3 reached), in one session (P2, P3, R1).** Under the owner's decision of 2026-09-11, the M path ends at this functional pass. README PR #1 is the owner's to merge.
+### 14.3 Deviations
 
-### 14.3 Deviations, and how each was handled
+Deviations from §6 and §8, and how each was handled, are in the session record, held locally. One was an owner decision: §8 item 4, the loopback, was not performed. The owner decided this at P1, with the TX wire already on J14 pin 3, because refitting pin 3 carries its own risk: R29 is unmeasured, and a miswired pin is F36. `com3-term.ps1 -SelfTest` was run instead; it covers the key logic, not the wire.
 
-- **§8 item 4, the loopback, was not performed.** The owner decided this at P1, with the TX wire already on J14 pin 3. Refitting pin 3 carries its own risk: R29 is unmeasured, and a miswired pin is F36.
-  - `com3-term.ps1 -SelfTest` ran instead and passed. It covers the key logic, not the wire.
-  - The two residuals were the TX framing on the adapter pin and a stray byte when COM3 opens. P2 was the stated control, and it held. It shows that autoboot survives the running terminal. The terminal was opened while L4T was up, before P2's `poweroff`, so P2 does not test a byte sent at the moment COM3 opens.
-  - P3 then showed typed input reaching the firmware. That settles framing in use, not at the byte level.
-- **P3 attempt 1 missed the ESC window.** Its key log holds only `session-start`, not even an `armed` line, so the keys went to another window.
-  - L4T was let boot fully (§6.5 step 2), no power was cut while the firmware ran, and P3 was repeated from step 1.
-  - No `go` was involved, so §5.3's retry rule applies.
-- **In P3 attempt 2, DC power was cut before the kernel's power-down line** and before the go-ahead to cut was given. COM3 shows no L4T shutdown output, then MB1 reporting a cold boot.
-  - This was an unclean L4T shutdown. It was not a §2 rule 5 event, because that rule covers a cut between power-on and the start of a boot option.
-  - The P3 gate found no state change beyond `MTC`.
-  - The helper's false READY that followed is in §14.6. No second cut was made.
-- **Extra ESCs.** §6.5 step 2 asks for one ESC. Attempt 2 sent several, and R1 sent more than one. Keys pressed before F12, including auto-repeat from a held key, were dropped and logged. The snapshots show no variable change beyond `MTC`.
-- **The 120 s operator bound was exceeded in P3 attempt 2.** The response was to launch a boot option (UEFI Shell, through Boot Manager), never to cut power. The launch itself came well after the bound: until the terminal was armed, the key log holds only dropped keys. R1 reached the Shell inside the bound.
-- **R10 is a datum, not a bound.** In attempt 2, the menu time past the bound drew no watchdog reset on this firmware (r36.4.4): one MB1 banner from the cold boot to `Shell>`, and no `L4TLauncher:`. F5 did not occur. `PcdBootWatchdogTime` itself stays unread (§12 Q4).
-- **Smaller departures from §6.5:**
-  - Step 5.3 went straight to `fs5:` rather than searching upward, because both Shell maps put the SD ESP there.
-  - Step 5.6's optional `memmap` was skipped.
-  - Step 6 was not followed as written (§14.4).
-  - The `reset` line carried a stray trailing backslash (R32, §14.4).
-- **§8 item 6 at P2.** L4T's uptime at P2's `poweroff` was above the item's threshold, because the session paused between S1 and P2 on S0's boot. It was not treated as a stop: the item guards kexec from a long-running L4T, and P2 is a `poweroff` and a DC cold boot. No Oops appeared.
-
-### 14.4 What the session taught, for the campaign's UEFI sessions
+### 14.4 Operating notes for the campaign's UEFI sessions
 
 - **`com3-term.ps1` arms per line.**
   - Every F12 that arms marks the typed line untrusted, so that line's Enter disarms the terminal. Every Shell line needs its own F12.
-  - The script's header says a straight-typed line leaves it armed. That held for no line in this session. The behaviour is conservative, not dangerous.
-- **After the Enter on `reset` or `go`, the terminal is already disarmed.** §6.5 step 6's "press F12 at once to disarm" would arm it just as the firmware autoboots, the hazard §2 rule 6 exists for. Operated instead: read the terminal's state line, and press F12 only if it reads ARMED.
-- **Keys typed while disarmed are dropped and logged** as `dropped-disarmed`, including keys pressed before arming. The terminal also needs window focus for the whole hotkey window: P3 attempt 1 shows how that fails.
-- **Before commit 7c2e87d the key log recorded nothing.**
-  - `Write-Key` applied `-f` inside a .NET method call's parentheses, where PowerShell reads the commas as argument separators. The format threw, and an empty catch discarded the error. The send path was unaffected.
-  - The defect was fixed before P3, and P3's gate shows the key log working end to end.
-  - P2's no-key verdict rests on COM3: the countdown completed, no menu text appeared, and `L4TLauncher:` followed.
-- **The Shell ran `reset\` as `reset`.** It did not reject this trailing backslash; other stray characters were not tried. Read each line on screen before its Enter, and match helper patterns loosely.
-- **The Shell's filesystem map was stable.** The Shell's startup map, P3's `map -r` and R1's `map -r` all agree:
-  - FS0 is the firmware volume and FS1 a memory-mapped region.
-  - FS2 and FS3 are NVMe partitions 1 and 10; FS4 and FS5 are SD partitions 1 and 10.
-  - FS5 is the SD card's ESP. FS3 is the NVMe install's ESP, and its `EFI\BOOT\BOOTAA64.efi` is present, so F35's repair route has its file (R30). Whether that route boots stays untested (D12).
-  - This is one board with no added device; a USB device would change the map (C9).
-- **The Shell counts down for a `startup.nsh`.** The countdown ran out with no key, and there is no such file on the SD card's ESP. §7.4 keeps it that way.
-- **Autoboot survives the connected TX wire while the terminal runs** (R15). P2's control boot and the autoboots after P3's `reset` and R1's image reset all met no key and reached L4T. An unplugged adapter with the wire still on was never tried (§7.4).
-- **`nvbootctrl` reports `Capsule update status: 1` in S0 and in every later snapshot.** On this board that is the steady state, not a capsule M5 caused. What the value means was not read.
-- **The `MTC` variable changed in every snapshot interval, and no other variable did.** That is the `Δ(S0,S1)` allowance at work. The snapshots do not bracket each boot: `Δ(S1,S2)` spans several. `BootChainFwCurrent` and `BootCurrent` exist, but their contents did not change across the snapshots, whatever C10's per-boot writes do.
+  - The script's header, which says a straight-typed line leaves it armed, is stale (§14.8).
+- **After the Enter on `reset` or `go`, the terminal is already disarmed.** §6.5 step 6's "press F12 at once to disarm" would arm it just as the firmware autoboots, the hazard §2 rule 6 exists for. Instead: read the terminal's state line, and press F12 only if it reads ARMED.
+- **Keys typed while disarmed are dropped and logged** as `dropped-disarmed`, including keys pressed before arming. The terminal needs window focus for the whole hotkey window, or the keys go to another window.
+- **The key log (commit 7c2e87d).** `Write-Key` applies `-f` outside a .NET method call's parentheses. Inside them PowerShell reads the commas as argument separators, the format throws, and an empty catch would discard the error, leaving the key log empty while the send path still works.
+- **Read each Shell line on screen before its Enter,** and match helper patterns loosely: a stray trailing character can reach the Shell.
 
-### 14.5 Risks the session answered
+### 14.5 Risks (§9)
 
-- **At P3:**
-  - R2: the firmware loads the loader outside the window (`self=`).
-  - R4: applications are entered at EL2 (`el=2`).
-  - R5: the device-tree table is present at Shell time.
-  - R6: the window, the target and the zone passed the map rules.
-  - R7: ESC, the arrows and typed text reach the firmware through pin 3 and the TCU.
-  - R8: the menus are named Boot Manager and UEFI Shell.
-  - R9: `ver`, `map -r`, `ls` and `reset` work. `memmap` was skipped and `connect` was not needed.
-  - R13: Setup, Boot Manager, the Shell, `check` and `reset` wrote nothing beyond `MTC`.
-- **At P2:** R14 (L4T left the ESP-root file alone) and R15.
-- **At R1 and §6.7:**
-  - R16 (`M5L-EBS ok`) and R17 (`M5L-JUMP`).
-  - R18 and R19 (the shim banner and T2).
-  - R20 (startup accepted the firmware tree: T3 was reached), R21 (the VHE line and `verdict=wired`) and R22 (`verdict=wired`).
-  - R23 (the image's reset, then the autoboot) and R24 (the black box survived).
-  - R11 (the bootloader slot as in S0 after each return).
-- **Across the session:**
-  - R25: §8 item 11 at P1 read the carveout where the shim writes; T1's zone rule passed with no refusal in P3 and R1; and §6.7 read the run back from it.
-  - R31: no Oops or panic line in the `poweroff`s of P2, P3 attempt 1 and R1. It was not observed in P3 attempt 2, where power was cut before the kernel's power-down line.
-- **R10:** a datum only (§14.3).
-- **R33, exercised once.** After §3.3 step 12, the shim's first instruction was fetched and its banner printed. Q16's `ctr=` reading is in the private record.
-- **Still open:**
-  - R12 (never tested, by rule 5).
-  - R29 (unmeasured, though the adapter's TX worked).
-  - R30 (the file is present; the route is not booted).
-  - R32: the operator made stray inputs, but the key logs and snapshots show none changed state.
+Which §9 risks the session answered, and how, is in the session record, held locally. By design, R12 is never tested (§2 rule 5), R29 is not measured (owner decision, 2026-09-12), and the NVMe route in R30 is not booted (D12).
 
-### 14.6 Session helpers, and the defects running them found
+### 14.6 Session helpers
 
-- **Not committed.** The watch and judge helpers were session scripts: `m5-poweroff.sh`, `m5-watch-shell.sh`, `m5-t1.sh`, `p2-gate.sh`, `p3-gate.sh`, `m5-tail.sh`, `m5-watch-l4t.sh`, `m5-after-reset.sh`, `m5-t2t3.sh`, `m5-watch-go.sh` and `r1-gate.sh`. Copies of each helper's final version, with checksums, are kept, git-ignored, in the private record's `tools/`. The notes also name the earlier versions P3 used, of `m5-poweroff.sh` and `m5-after-reset.sh`, but those copies were not kept. The two gate scripts `p2-gate.sh` and `r1-gate.sh` are identified only by `tools/SHA256SUMS`. They are not reviewed code.
-- **`m5-poweroff.sh`** printed READY on COM3 silence with ssh gone. In P3 attempt 2 that silence was the Setup menu idling after a firmware boot.
-  - **Fixed before R1:** READY now requires the kernel's power-down line, and any firmware output after the `poweroff` stops the script with ANOMALY and no offset.
-  - It was validated against real shutdown segments (P2's and P3 attempt 1's, and attempt 2's firmware output), then used in R1.
+- **Not committed.** The watch and judge helpers are session scripts: `m5-poweroff.sh`, `m5-watch-shell.sh`, `m5-t1.sh`, `p2-gate.sh`, `p3-gate.sh`, `m5-tail.sh`, `m5-watch-l4t.sh`, `m5-after-reset.sh`, `m5-t2t3.sh`, `m5-watch-go.sh` and `r1-gate.sh`. Copies of each helper's final version, with checksums, are kept, git-ignored, in the private record's `tools/`. Earlier versions of `m5-poweroff.sh` and `m5-after-reset.sh` were not kept. The two gate scripts `p2-gate.sh` and `r1-gate.sh` are identified only by `tools/SHA256SUMS`. They are not reviewed code.
+- **`m5-poweroff.sh`** prints READY only after the kernel's power-down line, and any firmware output after the `poweroff` stops it with ANOMALY and no offset. COM3 silence with ssh gone is not enough, because an idle firmware menu is silent too.
   - §6.4 step 3 and §6.5 step 1 still ask only for 30 s of COM3 silence before the power cut. A helper that times a power cut needs a positive marker.
-- **`m5-after-reset.sh`**'s pattern `^reset( .*)?$` rejected the line actually sent, `reset\`. The L4T watch was started by hand over the capture, retroactively, and missed nothing. The pattern was widened to `reset` followed by any non-alphanumeric character.
-- **`m5-t2t3.sh`** passed an escaped parenthesis through `awk -v`, which unescapes it. The unbalanced parenthesis killed awk, and the judging window would have run past the next MB1.
-  - It was found by replay before R1 and replaced by a bracket expression.
-  - Re-tested positively on M4 r1's kexec capture, and negatively on T0c, where the probe's exit must not yield T2.
-- **Cosmetic:** `m5-t1.sh`'s loader summary greps `el=` without an anchor. The `M5L start` line itself read `el=2`, and the order check was unaffected.
+- **`m5-after-reset.sh`** accepts `reset` followed by any non-alphanumeric character, so a stray trailing character on the `reset` line still starts the L4T watch.
+- **`m5-t2t3.sh`** matches a parenthesis with a bracket expression. `awk -v` unescapes an escaped parenthesis, and an unbalanced one kills awk, which would let the judging window run past the next MB1.
+- **Cosmetic:** `m5-t1.sh`'s loader summary greps `el=` without an anchor.
 
-### 14.7 What the pass does not show (§10, §5.4)
+### 14.7 What a pass would not show (§10, §5.4)
 
-- **Not repeatability.** One session, one `go`, one board, firmware `36.4.4-gcid-41062509`, one kimg.
-- **No timing.** §6.6's bounds were met, and that is all. No boot, hand-off or firmware duration is reported, and there is no comparison with kexec entry. The medians comparison is deferred to the campaign.
-- **No residual-state comparison.** Nothing shows that the firmware leaves clocks, frequency, the GIC, timers or devices in better order than kexec. Nothing shows DMA quiescence.
-- **T3 was recorded, not required.** M5-F rests on T1, T2 and the state checks. T3's `cpus=1/6` is M1b's one-core `-P1` result. It says nothing about `-P4`, `-P6`, qvm, or M3 and M4 images under UEFI entry.
-- **Cache coherency passing once is not proof of necessity.** R33's pass shows step 12 was enough this time. It does not show the step is needed on this core, or that it always suffices.
-- **The variable check covers only the paths this session took.** It is not a proof that no menu writes a variable.
-- **Not unattended.** An operator opened the Shell, once over the 120 s bound.
-- **R10 is one observation,** not a watchdog bound.
+- **Not repeatability** beyond the attempts taken: one board, firmware `36.4.4-gcid-41062509`, one kimg.
+- **No timing.** §6.6's bounds are wait bounds, not durations. No boot, hand-off or firmware duration is reported, and there is no comparison with kexec entry. The medians comparison is deferred to the campaign.
+- **No residual-state comparison.** A pass would not show that the firmware leaves clocks, frequency, the GIC, timers or devices in better order than kexec, nor DMA quiescence.
+- **T3 is recorded, not required.** M5-F rests on T1, T2 and the state checks. T3's criteria are M1b's one-core `-P1` criteria, so T3 would say nothing about `-P4`, `-P6`, qvm, or M3 and M4 images under UEFI entry.
+- **R33 is not proof of necessity.** A pass would not show that step 12 is needed on this core, or that it always suffices.
+- **The variable check covers only the paths a session takes.** It is not a proof that no menu writes a variable.
+- **Not unattended.** An operator opens the Shell.
+- **R10 would be one observation,** not a watchdog bound.
 - **Not option B or A',** not a supported or certified boot, and nothing about DRIVE OS, QNX OS for Safety or any ASIL property.
 - **No figure is published** before the 4.6(i) consultation.
 
 ### 14.8 What M5 hands the freeze (§5.5)
 
-- **The highest tier reached under UEFI entry: T3,** in one session.
-- **The path as built needs an operator at the menus,** and this session showed how that step drifts: a missed window, extra ESCs, the bound exceeded once, and a stray character in a Shell line. Making it unattended needs a persistent `Boot####` or a `startup.nsh`, both on §7.4's Never list. The freeze would have to accept one explicitly.
-- **A' stays the one-artefact candidate (C16).** Because T3 was reached, D6's proposal to evaluate A' for v1 applies. The entry-path decision remains the owner's (D6).
+- **The highest tier reached under UEFI entry** is in the session record, held locally.
+- **The path as built needs an operator at the menus.** Making it unattended needs a persistent `Boot####` or a `startup.nsh`, both on §7.4's Never list. The freeze would have to accept one explicitly.
+- **A' stays the one-artefact candidate (C16).** The entry-path decision remains the owner's (D6).
 - **The kexec path's costs are unchanged** (plan §3.4).
 - **Next on the path:** S1-F (a Linux guest without a GPU under native qvm, with the qvm `dryrun` gate first), then the v1 freeze, then one campaign.
 - **Stale text, to correct later (list only):**

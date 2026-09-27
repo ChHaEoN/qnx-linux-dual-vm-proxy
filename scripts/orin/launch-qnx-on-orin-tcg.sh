@@ -10,27 +10,18 @@
 #   2. scp output/{ifs.bin,disk-qemu,disk-qemu.vmdk,SHA256SUMS} here
 #   3. sha256sum -c SHA256SUMS                  (twin-sync invariant; do NOT skip)
 #
-# TCG, not KVM: docs/orin-port.md's risk register root-causes a real KVM
-# boot hang on this hardware (GICv3 distributor bring-up takes a
-# KVM_EXIT_ARM_NISV that QNX's startup has no handler for) and records the
-# 2026-07-28 decision to accept TCG as the interim transport. The KVM
+# TCG, not KVM: docs/orin-port.md's risk register records the 2026-07-28
+# decision to accept TCG as the interim transport for this leg. The KVM
 # invocation this mirrors (-cpu host -enable-kvm) is left as a documented,
-# NOT-deleted intent in launch-qnx-on-orin.sh -- swap -accel tcg for
-# -enable-kvm there ~~once/if a QNX-side fix lands~~.
-# 2026-09-18: a fix now exists, but it is OURS, not QNX's -- board source at
-# orin-native/startup/qemu-virt/ plus the startup library rebuilt with
-# -fno-auto-inc-dec boots this board under -enable-kvm (procnto, "Startup
-# complete", guest banner; logs/sample-boot/orin-kvm-*.log). The SDP's shipped
-# startup-qemu-virt still hangs after "FOUND GICv3 ITS" on the same launch
-# line, so this is NOT a QNX-supported configuration, and no timing has been
-# measured under KVM.
+# NOT-deleted intent in launch-qnx-on-orin.sh. A KVM guest on this board uses
+# OUR startup, not QNX's -- board source at orin-native/startup/qemu-virt/
+# plus the startup library rebuilt with -fno-auto-inc-dec -- so it is NOT a
+# QNX-supported configuration, and this script takes no timing under KVM.
 #
 # rng device: startup.sh's devb-virtio/random hardcode fixed virtio-mmio
 # slot offsets that only line up if -device args appear in exactly the
-# order disk, net, rng (see docs/findings.md's 2026-07-28 "Orin TCG
-# networking root-caused and fixed" entry) -- omitting the rng device
-# starves io-sock of entropy and it refuses to start at all, which looks
-# like a virtio-net bug until you check what's actually running.
+# order disk, net, rng (see docs/findings.md, 2026-07-28) -- so present all
+# three, in that order.
 
 set -euo pipefail
 

@@ -2,25 +2,23 @@
 # run-caches.sh -- do cache-missing memory walks, or cross-core wake-ups, make the slow
 # window? Phase 3b / A6, 2026-09-24; follows 20260924T-a6-orin-walks.
 #
-# WHAT IS KNOWN. Most of tj-thermal's slow window (~75%) is udevd processing the uevents
-# (20260924T-a6-orin-queue). Its file syscalls, replayed without a uevent, make no window
-# (20260924T-a6-orin-walks); neither do compute, broadcast TLB flushes or bare syscalls,
-# and memcpy through 64 MB makes a third of one (20260924T-a6-orin-bursts). Where udevd
-# runs does not matter: pinned to core 3 (QEMU's L3) or core 5 (the probe's L3) it makes
-# the same window (20260924T-a6-orin-listeners). Left: its rule evaluation in user space,
-# and the wake-ups an event causes between processes on different cores.
+# WHAT IS KNOWN. How much of tj-thermal's slow window needs udevd to process the uevents
+# is in record 20260924T-a6-orin-queue; udevd's file syscalls replayed without a uevent,
+# in 20260924T-a6-orin-walks; compute, broadcast TLB flushes, bare syscalls and memcpy
+# through 64 MB, in 20260924T-a6-orin-bursts; udevd pinned to core 3 (QEMU's L3) or core 5
+# (the probe's L3), in 20260924T-a6-orin-listeners (all held locally). Not yet tried: its
+# rule evaluation in user space, and the wake-ups an event causes between processes on
+# different cores.
 #
 # WHERE THE PREDICTION COMES FROM (looked at on the board before this was written, and
-# stated so it is not mistaken for a blind test): udevd's heap is 1.9 MB (RSS 6.6 MB),
-# about one cluster's 2 MB L3 (cores 0-3 share one, 4-5 another). A rule evaluation that
-# walks that heap would evict the L3 of whichever cluster udevd runs on, and slow that
+# stated so it is not mistaken for a blind test): udevd's heap size, set against one
+# cluster's 2 MB L3 (cores 0-3 share one, 4-5 another). A rule evaluation that walks a
+# heap of that size would evict the L3 of whichever cluster udevd runs on, and slow that
 # cluster's part of the exchange: QEMU's and the guest's on core 3, the probe's on core 5.
-# That would explain why its placement did not matter. Built and run by hand on the
-# board, burst_inject.c's 2 MB random walk takes ~290 ns a step (it misses the caches),
-# its 128 KB walk ~17 ns (it stays in L2), and its wake-up ping-pong makes ~146 round
-# trips (~290 wake-ups) in 3 ms. The EMC clock stayed at 2133 MHz through uevent bursts
-# sampled every 1.1 ms, and the over-current throttle counters stayed at 0: neither is
-# the mechanism.
+# burst_inject.c's 2 MB walk (meant to miss the caches), its 128 KB walk (meant to stay
+# in L2) and its wake-up ping-pong were built and timed by hand on the board, and the EMC
+# clock and the over-current throttle counters were read through uevent bursts; those
+# readings are held locally.
 #
 # THE MANIPULATION (burst_inject.c, built on the board, run as root on the aux core,
 # CORE_AUX 5, during each round). Six injections per round in a seeded order, at 0.75 +

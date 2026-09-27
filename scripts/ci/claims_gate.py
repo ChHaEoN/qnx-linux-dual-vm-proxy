@@ -1,72 +1,54 @@
 #!/usr/bin/env python3
-"""claims_gate.py -- re-derive every number README.md quotes, from committed data.
+"""claims_gate.py -- check README.md against committed data, and the repo's prose.
 
     usage: python scripts/ci/claims_gate.py [--readme README.md] [--repo .]
 
-Exit 0 if every claim reproduces, 1 otherwise. Always prints a claimed-vs-
+Exit 0 if every check passes, 1 otherwise. Always prints a claimed-vs-
 recomputed table so a human can read the check, not just its exit code.
 
 WHAT THIS GATE IS FOR. This repo's central rule is "never write 'it works'
 without a log, a number, or a diff". The risk it does not address is a number
 that was true when written and drifted afterwards -- a figure edited in prose,
 a data file appended to, a claim carried forward past the run it came from.
-Two published numbers in this repo were already found wrong that way. This gate
-makes that class of error fail the build.
+Two published numbers in this repo were once found wrong that way, by hand.
+This gate makes that class of error fail the build.
 
-THREE KINDS OF FAILURE, all hard:
-  1. VALUE    -- README's figure does not match the recomputation, at README's
-                 own stated precision.
-  2. UNIT     -- README's unit does not match the unit of the source data.
-                 "33 ms" against a source in seconds is wrong even if the digits
-                 agree. This is a failure, never a warning.
-  3. DENYLIST -- an ASSERTED claim string the data does not support.
+WHAT README QUOTES NOW: NO RESULTS. Clause 4.6(i) of the QNX Development
+License Agreement (Non-Commercial/Academic Licence Class, v7) bars making the
+results of any performance or functional evaluation of the software available
+to a third party without BlackBerry's prior written approval. On 2026-09-27 the
+owner withdrew every measured and functional result from the public tree: the
+run records, CSVs and logs that README's figures used to be re-derived from are
+held locally and are no longer committed. build_claims() is therefore empty,
+and the FIGURES check below makes that state enforceable rather than hoped for:
+a number with a unit in README fails the build unless a claim re-derives it
+from committed data -- which today means any figure at all. The claim machinery
+(Claim, run_claims) is kept, and unit-tested against synthetic fixtures, so a
+figure published later with written approval comes back under the same check.
 
-WHAT IT CANNOT DO is documented in the epilogue it prints, and in the PR. In
-particular, roughly four-fifths of this project's run records are not committed
-at all (licensed evaluation output, .gitignore lines 58-63), so the headline
-milestone claims have nothing to re-derive from and are reported as UNBACKED
-rather than silently passed.
+FAILURES, all hard:
+  1. VALUE     -- README's figure does not match the recomputation, at README's
+                  own stated precision.
+  2. UNIT      -- README's unit does not match the unit of the source data.
+                  "40 ms" against a source in seconds is wrong even if the digits
+                  agree. This is a failure, never a warning.
+  3. FIGURE    -- a number with a unit in README that no claim re-derives.
+  4. DENYLIST  -- an ASSERTED claim string the committed record does not support.
+  5. OVERWRITE -- a strike-through in a current-state file.
+  6. DESCRIPTION -- the pinned GitHub "About" text fails the denylist, quotes a
+                  figure, or (outside --no-network) differs from the live value.
+
+WHAT IT CANNOT DO is printed in the NOT CHECKED section of every run: a result
+held locally has nothing in the tree to be checked against.
 """
 import argparse
 import os
 import re
-import subprocess
 import sys
 from re import error
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import claims_lib as C  # noqa: E402
-
-LOGS = "logs/sample-boot"
-
-# The attribution ladder's committed evidence (A6, 2026-09-21). Twelve rounds
-# per arm: OD11 puts the budget in k, not n, because between-round variation on
-# this board is ~69x the within-run sampling noise at p50.
-LADDER_RAW_REL = "results/orin-native-port/20260921T-ladder/raw"
-LADDER_K = 12
-# The pinned-load campaign (A6, 2026-09-21): interference and saturation at
-# k = 12 with every load thread pinned. README quotes three PAIRED effects from
-# it; each is re-derived here from the arm files, round by round.
-PINNED_REL = "results/orin-native-port/20260921T-a6-orin-pinned"
-PINNED_K = 12
-# The UDP ladder (A6, OD12, 2026-09-22): the four rungs over UDP beside the four
-# over TCP, same run, k = 12. README quotes two paired differences from it.
-UDP_LADDER_RAW_REL = "results/orin-native-port/20260922T-a6-orin-udp/ladder/raw"
-UDP_LADDER_K = 12
-# The shared-memory ladder (A6, OD12, 2026-09-22): TCP, UDP and a polled
-# ivshmem slot in one run, k = 12. README quotes one level and two paired
-# differences from it.
-SHM_LADDER_RAW_REL = "results/orin-native-port/20260922T-a6-orin-shm/ladder/raw"
-SHM_LADDER_K = 12
-# The notified shared-memory ladder (A6, OD12, 2026-09-22): TCP, D-udp, the polled
-# slot, and the kick/doorbell arms, k = 12. README quotes two levels and two paired
-# differences from it.
-KICK_LADDER_RAW_REL = "results/orin-native-port/20260922T-a6-orin-kick/ladder/raw"
-KICK_LADDER_K = 12
-# The same ladder on AWS a1.metal (A6, OD12, 2026-09-22). README quotes one paired
-# difference from it.
-A1_KICK_LADDER_RAW_REL = "results/orin-native-port/20260922T-a6-a1metal-kick/ladder/raw"
-DELTA_AWK = os.path.join("scripts", "twin", "delta.awk")
 
 # Current-state files: they say what is true now, and nothing else. Adding a
 # file here is a commitment to rewrite it rather than annotate it.
@@ -105,7 +87,7 @@ class Claim(object):
 
     `expect_unit` is the unit README is required to use; `source_unit` is the
     unit the data file is measured in. Both are checked. A claim that says
-    "33 s" over data measured in ms is wrong even though the digits match.
+    "40 s" over data measured in ms is wrong even though the digits match.
     """
 
     def __init__(self, cid, what, anchor, decimals, expect_unit, source_unit, sources, fn, note=""):
@@ -143,388 +125,43 @@ class Claim(object):
         return float(raw), (unit.strip() if unit else None)
 
 
-def _ipc_delta_via_shared_awk(repo, cloud_csv, hw_csv):
-    """Re-derive the IPC deltas through scripts/twin/delta.awk.
-
-    Deliberately NOT a second implementation of the formula. The shared
-    measurement toolchain owns it; CI calls the same file. If someone edits the
-    formula, both the published report and this gate move together.
-    """
-    cloud = C.last_row(C.parse_ipc_csv(os.path.join(repo, cloud_csv)))
-    hw = C.last_row(C.parse_ipc_csv(os.path.join(repo, hw_csv)))
-    out = subprocess.check_output(
-        [
-            "awk",
-            "-v", "cp50=%d" % cloud["p50_ns"], "-v", "hp50=%d" % hw["p50_ns"],
-            "-v", "cp99=%d" % cloud["p99_ns"], "-v", "hp99=%d" % hw["p99_ns"],
-            "-v", "cmax=%d" % cloud["max_ns"], "-v", "hmax=%d" % hw["max_ns"],
-            "-v", "MODE=csv",
-            "-f", os.path.join(repo, DELTA_AWK),
-        ],
-        stdin=subprocess.DEVNULL,
-    ).decode("utf-8")
-    pct = {}
-    for line in out.strip().splitlines():
-        label, _c, _h, _d, p = line.split(",")
-        pct[label] = float(p)
-    return pct, cloud, hw
-
-
 def build_claims(repo):
-    """The claims that CAN be re-derived from committed data."""
+    """The README figures that CAN be re-derived from committed data: none.
 
-    def boot(rel):
-        return C.parse_boot_times(os.path.join(repo, LOGS, rel))
-
-    # --- the attribution ladder (A6, 2026-09-21) --------------------------
-    def arm(name):
-        """One arm's median-of-round-medians, asserting the round count.
-
-        K is asserted because a missing arm file would silently change the
-        median rather than fail: at k=12 the arms differ by up to 6.4% between
-        rounds, so eleven files still produce a plausible-looking number. OD11
-        fixed k >= 12, and a figure taken at a different k is a different
-        measurement.
-        """
-        value, k = C.ladder_arm_p50_us(os.path.join(repo, LADDER_RAW_REL), name)
-        assert k == LADDER_K, "arm %s has k=%d, expected %d" % (name, k, LADDER_K)
-        return value
-
-    def ladder_total():
-        return arm("D-guest"), "us"
-
-    def ladder_instrument():
-        return arm("A-loopback"), "us"
-
-    def ladder_bridge():
-        return arm("B-bridge") - arm("A-loopback"), "us"
-
-    def pinned(exp, arm, ref):
-        value, k = C.paired_p50_us(os.path.join(repo, PINNED_REL, exp, "raw"), arm, ref)
-        assert k == PINNED_K, "%s %s-%s has k=%d, expected %d" % (exp, arm, ref, k, PINNED_K)
-        return value, "us"
-
-    def udp_contrast(plus, minus):
-        value, k = C.paired_contrast_us(os.path.join(repo, UDP_LADDER_RAW_REL), plus, minus)
-        assert k == UDP_LADDER_K, "udp ladder %s-%s has k=%d, expected %d" % (plus, minus, k, UDP_LADDER_K)
-        return value, "us"
-
-    def shm_contrast(plus, minus):
-        value, k = C.paired_contrast_us(os.path.join(repo, SHM_LADDER_RAW_REL), plus, minus)
-        assert k == SHM_LADDER_K, "shm ladder %s-%s has k=%d, expected %d" % (plus, minus, k, SHM_LADDER_K)
-        return value, "us"
-
-    def shm_level(name):
-        value, k = C.ladder_arm_p50_us(os.path.join(repo, SHM_LADDER_RAW_REL), name)
-        assert k == SHM_LADDER_K, "shm ladder %s has k=%d, expected %d" % (name, k, SHM_LADDER_K)
-        return value, "us"
-
-    def kick_contrast(plus, minus):
-        value, k = C.paired_contrast_us(os.path.join(repo, KICK_LADDER_RAW_REL), plus, minus)
-        assert k == KICK_LADDER_K, "kick ladder %s-%s has k=%d, expected %d" % (plus, minus, k, KICK_LADDER_K)
-        return value, "us"
-
-    def a1_kick_contrast(plus, minus):
-        value, k = C.paired_contrast_us(os.path.join(repo, A1_KICK_LADDER_RAW_REL), plus, minus)
-        assert k == KICK_LADDER_K, "a1 kick ladder %s-%s has k=%d, expected %d" % (plus, minus, k, KICK_LADDER_K)
-        return value, "us"
-
-    def kick_level(name):
-        value, k = C.ladder_arm_p50_us(os.path.join(repo, KICK_LADDER_RAW_REL), name)
-        assert k == KICK_LADDER_K, "kick ladder %s has k=%d, expected %d" % (name, k, KICK_LADDER_K)
-        return value, "us"
-
-    def ladder_crossing():
-        return arm("D-guest") - arm("B-bridge"), "us"
-
-    # --- A2 plain-IFS boot, Windows vs Orin -------------------------------
-    def a2_median_delta():
-        w, wu = boot("windows-tcg-qnx-boot-times-n5.txt")
-        o, ou = boot("orin-tcg-qnx-boot-times-n5.txt")
-        assert wu == ou, "unit mismatch between the two A2 series"
-        return C.pct_delta(C.median(w), C.median(o)), wu
-
-    def a2_mean_vs_median_pp():
-        w, wu = boot("windows-tcg-qnx-boot-times-n5.txt")
-        o, _ = boot("orin-tcg-qnx-boot-times-n5.txt")
-        med = C.pct_delta(C.median(w), C.median(o))
-        avg = C.pct_delta(C.mean(w), C.mean(o))
-        return abs(med - avg), wu
-
-    def a2_windows_span_without_outlier():
-        w, wu = boot("windows-tcg-qnx-boot-times-n5.txt")
-        rest = sorted(w)[:-1]  # drop the single cold-start outlier
-        return C.span(rest), wu
-
-    # --- A3 QHV leg, release-aligned pair only -----------------------------
-    # Six of the eight boot-times files are superseded; pairing them naively
-    # produces a wrong ratio. These two filenames are pinned on purpose.
-    def a3_ratio():
-        w, wu = boot("windows-qhv-tcg-q111-rng-snapshot-segments-boot-times-n5.txt")
-        o, ou = boot("orin-qhv-tcg-q111-rng-snapshot-segments-boot-times-n5.txt")
-        assert wu == ou, "unit mismatch between the two A3 series"
-        return C.ratio(C.median(w), C.median(o)), wu
-
-    def a3_same_host_control():
-        ctl, cu = boot("windows-qhv-tcg-rng-snapshot-segments-boot-times-n5.txt")
-        q111, qu = boot("windows-qhv-tcg-q111-rng-snapshot-segments-boot-times-n5.txt")
-        assert cu == qu
-        return C.pct_delta(C.median(ctl), C.median(q111)), cu
-
-    # --- IPC, through the shared awk --------------------------------------
-    def ipc(label):
-        def f():
-            pct, _c, _h = _ipc_delta_via_shared_awk(
-                repo, "results/cloud/cloud-ipc-latest.csv", "results/hw/orin-ipc-latest.csv"
-            )
-            return pct[label], "ns"
-        return f
-
-    def ipc_samples_per_side():
-        cloud = C.last_row(C.parse_ipc_csv(os.path.join(repo, "results/cloud/cloud-ipc-latest.csv")))
-        hw = C.last_row(C.parse_ipc_csv(os.path.join(repo, "results/hw/orin-ipc-latest.csv")))
-        assert cloud["samples"] == hw["samples"], "the compared rows are not the same size"
-        return cloud["samples"], "samples"
-
-    def hw_100k_runs():
-        rows = C.parse_ipc_csv(os.path.join(repo, "results/hw/orin-ipc-latest.csv"))
-        return C.count_rows_with_samples(rows, 100000), "runs"
-
-    # --- KVM control/test serial byte counts ------------------------------
-    def control_bytes():
-        # Counted on the wire (CRLF), NOT os.path.getsize: git normalises this
-        # capture's line endings on checkout, so a file size answers 17 on
-        # Windows and 16 on Linux for the same commit. See claims_lib.
-        return C.serial_bytes_on_the_wire(
-            os.path.join(repo, LOGS, "orin-kvm-nisv-control-shipped-startup.log")
-        ), "bytes"
-
-    def fix_bytes():
-        markers = C.serial_byte_markers(os.path.join(repo, LOGS, "aws-a1-metal-kvm-fix-crossvendor.log"))
-        assert len(markers) == 2, "expected one control and one fix marker, got %r" % markers
-        return markers[1], "bytes"
-
-    def control_bytes_marker():
-        markers = C.serial_byte_markers(os.path.join(repo, LOGS, "aws-a1-metal-kvm-fix-crossvendor.log"))
-        return markers[0], "bytes"
-
-    # --- sentinel recovery ------------------------------------------------
-    def sentinel_recoveries():
-        total_rec, total_bounce = 0, 0
-        for rel in (
-            "qhv-tcg-sentinel-recovery-diag300-run1.log",
-            "qhv-tcg-sentinel-recovery-diag300-run2.log",
-            "qhv-tcg-sentinel-recovery-diag300-run3.log",
-            "qhv-tcg-rq2-shmem-roundtrip-success.log",
-        ):
-            rec, bounce = C.sentinel_counts(os.path.join(repo, LOGS, rel))
-            total_rec += rec
-            total_bounce += bounce
-        assert total_bounce == 0, "sentinel_bounces should be 0, got %d" % total_bounce
-        return total_rec, "stalls"
-
-    # Each anchor is matched against README.md verbatim. group(1) is the number;
-    # a named (?P<unit>...) group, where README writes a unit, is compared with
-    # expect_unit so that changing "33 ms" to "33 s" is a hard failure.
-    return [
-        Claim("C11", "A2 boot, Orin vs Windows, median",
-              r"Orin \*\*\+([0-9.]+)(?P<unit>%)\*\* median", 1, "%", "ms",
-              ["windows-tcg-qnx-boot-times-n5.txt", "orin-tcg-qnx-boot-times-n5.txt"], a2_median_delta),
-        Claim("C11b", "A2 mean delta agrees with median to",
-              r"mean delta agrees to ([0-9.]+)\s*(?P<unit>pp)", 1, "pp", "ms",
-              ["windows-tcg-qnx-boot-times-n5.txt", "orin-tcg-qnx-boot-times-n5.txt"], a2_mean_vs_median_pp),
-        Claim("C12", "A2 Windows span, cold-start outlier dropped",
-              r"other four runs span ([0-9]+)\s*(?P<unit>ms|s|us|ns)\b", 0, "ms", "ms",
-              ["windows-tcg-qnx-boot-times-n5.txt"], a2_windows_span_without_outlier),
-        Claim("C16", "A3 QHV leg, Orin / Windows median ratio",
-              r"Orin \*\*([0-9.]+)(?P<unit>×)\*\* slower", 2, "×", "ms",
-              ["windows-qhv-tcg-q111-...-n5.txt", "orin-qhv-tcg-q111-...-n5.txt"], a3_ratio),
-        Claim("C17", "A3 same-host control bounds build component at",
-              r"bounds the build component at \+([0-9.]+)(?P<unit>%)", 1, "%", "ms",
-              ["windows-qhv-tcg-rng-snapshot-segments-...", "windows-qhv-tcg-q111-..."], a3_same_host_control),
-        Claim("C13a", "IPC P50, cloud -> hw",
-              r"P50 \+([0-9.]+)(?P<unit>%), P99", 1, "%", "ns",
-              ["results/cloud/cloud-ipc-latest.csv", "results/hw/orin-ipc-latest.csv"], ipc("P50"),
-              note="via scripts/twin/delta.awk"),
-        Claim("C13b", "IPC P99, cloud -> hw",
-              r"P99 \+([0-9.]+)(?P<unit>%)", 1, "%", "ns",
-              ["results/cloud/cloud-ipc-latest.csv", "results/hw/orin-ipc-latest.csv"], ipc("P99"),
-              note="via scripts/twin/delta.awk"),
-        Claim("C13c", "IPC samples per side (the compared row)",
-              r"IPC round-trip\*\*, n=([0-9]+)/(?P<unit>side)", 0, "side", "samples",
-              ["results/cloud/cloud-ipc-latest.csv", "results/hw/orin-ipc-latest.csv"], ipc_samples_per_side),
-        Claim("C7", "hw leg 100,000-iteration runs",
-              r"HW leg: ([0-9]+) × 100,000 (?P<unit>iterations)", 0, "iterations", "runs",
-              ["results/hw/orin-ipc-latest.csv"], hw_100k_runs),
-        Claim("C8", "KVM control arm, shipped startup, serial bytes",
-              r"shipped startup, ([0-9,]+) (?P<unit>bytes)", 0, "bytes", "bytes",
-              ["orin-kvm-nisv-control-shipped-startup.log"], control_bytes),
-        Claim("C8b", "a1.metal control arm marker, serial bytes",
-              r"shipped startup, ([0-9,]+) (?P<unit>bytes)", 0, "bytes", "bytes",
-              ["aws-a1-metal-kvm-fix-crossvendor.log"], control_bytes_marker),
-        Claim("C9", "a1.metal fix arm, rebuilt startup, serial bytes",
-              r"rebuilt startup, ([0-9,]+) (?P<unit>bytes)", 0, "bytes", "bytes",
-              ["aws-a1-metal-kvm-fix-crossvendor.log"], fix_bytes),
-        Claim("C20", "sentinel recoveries, zero bounces",
-              r"recovered ([0-9]+)/19 real (?P<unit>stalls)", 0, "stalls", "stalls",
-              ["qhv-tcg-sentinel-recovery-diag300-run{1,2,3}.log", "qhv-tcg-rq2-shmem-roundtrip-success.log"],
-              sentinel_recoveries),
-        # The attribution ladder, added 2026-09-21. These four were published in
-        # README and docs/architecture.md with NO committed evidence and no entry
-        # on the UNBACKED list, so nothing checked them -- the 36 arm files were
-        # sitting in Windows TEMP. Each of the four is now re-derived from those
-        # files, and the two DERIVED ones are the point: "bridge" and "crossing"
-        # are differences between arms, never measured directly, and a reader has
-        # no way to see that from the number alone.
-        Claim("C21", "ladder total, D-guest arm",
-              r"splits the ([0-9]+) (?P<unit>µs) cross-partition round trip", 0, "µs", "us",
-              [LADDER_RAW_REL + "/lat-D-guest_r*.json"], ladder_total),
-        Claim("C22", "ladder instrument floor, A-loopback arm",
-              r"into ([0-9]+) (?P<unit>µs) of instrument", 0, "µs", "us",
-              [LADDER_RAW_REL + "/lat-A-loopback_r*.json"], ladder_instrument),
-        Claim("C23", "ladder bridge cost, DERIVED B minus A",
-              r"([0-9]+) (?P<unit>µs) of bridge", 0, "µs", "us",
-              [LADDER_RAW_REL + "/lat-{A-loopback,B-bridge}_r*.json"], ladder_bridge,
-              note="derived: B-bridge minus A-loopback"),
-        Claim("C24", "ladder guest crossing, DERIVED D minus B",
-              r"\*\*([0-9]+) (?P<unit>µs) of guest crossing\*\*", 0, "µs", "us",
-              [LADDER_RAW_REL + "/lat-{B-bridge,D-guest}_r*.json"], ladder_crossing,
-              note="derived: D-guest minus B-bridge"),
-        # The pinned-load campaign, added 2026-09-21. All three are PAIRED: the
-        # median over rounds of a within-round difference, never a difference of
-        # medians. C25 names core 0 and core 5 rather than "on and off QEMU's
-        # cores" because that is all this design separates.
-        Claim("C25", "one pinned thread, core 0 minus core 5, PAIRED",
-              r"costs \*\*([0-9]+) (?P<unit>µs)\*\* more at p50 on QEMU's core 0 than on core 5", 0, "µs", "us",
-              [PINNED_REL + "/interference/raw/lat-{cpu_q,cpu_nq}_r*.json"],
-              lambda: pinned("interference", "cpu_q", "cpu_nq"),
-              note="paired: cpu_q minus cpu_nq in the same round"),
-        Claim("C26", "QEMU's cores 0 and 1 loaded, PAIRED vs idle",
-              r"loading QEMU's cores 0 and 1 costs \*\*([0-9]+) (?P<unit>µs)\*\* over idle", 0, "µs", "us",
-              [PINNED_REL + "/saturation/raw/lat-{cpu2_q,idle}_r*.json"],
-              lambda: pinned("saturation", "cpu2_q", "idle"),
-              note="paired: cpu2_q minus idle in the same round"),
-        Claim("C27", "all six cores loaded, PAIRED vs idle",
-              r"or all six cores \(\*\*([0-9]+) (?P<unit>µs)\*\*\)", 0, "µs", "us",
-              [PINNED_REL + "/saturation/raw/lat-{cpu6,idle}_r*.json"],
-              lambda: pinned("saturation", "cpu6", "idle"),
-              note="paired: cpu6 minus idle in the same round"),
-        Claim("C28", "all three of QEMU's cores loaded, PAIRED vs idle",
-              r"all three of its cores \(\*\*([0-9]+) (?P<unit>µs)\*\*\)", 0, "µs", "us",
-              [PINNED_REL + "/saturation/raw/lat-{cpu3_q,idle}_r*.json"],
-              lambda: pinned("saturation", "cpu3_q", "idle"),
-              note="paired: cpu3_q minus idle in the same round"),
-        # The UDP ladder, added 2026-09-22. Both PAIRED within rounds, and both
-        # stated as "faster", so the recomputed value is TCP minus UDP. C30 is a
-        # difference of differences -- the crossing over TCP minus the crossing
-        # over UDP -- taken round by round, never from two separate medians.
-        Claim("C29", "UDP vs TCP to the guest monitor, D-guest minus D-udp, PAIRED",
-              r"round trip to the guest's monitor is \*\*([0-9]+) (?P<unit>µs)\*\* faster", 0, "µs", "us",
-              [UDP_LADDER_RAW_REL + "/lat-{D-guest,D-udp}_r*.json"],
-              lambda: udp_contrast(["D-guest"], ["D-udp"]),
-              note="paired: D-guest minus D-udp in the same round"),
-        Claim("C30", "the guest crossing, TCP minus UDP, a PAIRED difference of differences",
-              r"the guest crossing itself \*\*([0-9]+) (?P<unit>µs)\*\* faster", 0, "µs", "us",
-              [UDP_LADDER_RAW_REL + "/lat-{B-bridge,D-guest,B-udp,D-udp}_r*.json"],
-              lambda: udp_contrast(["D-guest", "B-udp"], ["B-bridge", "D-udp"]),
-              note="paired: (D-guest - B-bridge) - (D-udp - B-udp) in the same round"),
-        # The shared-memory ladder, added 2026-09-22. C31 is a LEVEL -- the median
-        # of the round p50s, as every ladder level is -- and C32/C33 are PAIRED.
-        # C33 is a zero: README says the crossing adds nothing measurable, and the
-        # gate holds that to the nearest microsecond, so a run where it did add
-        # one would fail here rather than read as the same sentence.
-        Claim("C31", "polled shared memory to the guest monitor, D-shm p50 level",
-              r"round trip to the guest's monitor takes \*\*([0-9]+) (?P<unit>µs)\*\* at p50", 0, "µs", "us",
-              [SHM_LADDER_RAW_REL + "/lat-D-shm_r*.json"],
-              lambda: shm_level("D-shm"),
-              note="median of the 12 round p50s"),
-        Claim("C32", "TCP minus polled shared memory to the guest monitor, PAIRED",
-              r"\*\*([0-9]+) (?P<unit>µs)\*\* less than over TCP in the same run", 0, "µs", "us",
-              [SHM_LADDER_RAW_REL + "/lat-{D-guest,D-shm}_r*.json"],
-              lambda: shm_contrast(["D-guest"], ["D-shm"]),
-              note="paired: D-guest minus D-shm in the same round"),
-        Claim("C33", "what crossing into the guest adds to the polled slot, D-shm minus A-shm, PAIRED",
-              r"between two host processes: \*\*([0-9]+) (?P<unit>µs)\*\*", 0, "µs", "us",
-              [SHM_LADDER_RAW_REL + "/lat-{D-shm,A-shm}_r*.json"],
-              lambda: shm_contrast(["D-shm"], ["A-shm"]),
-              note="paired: D-shm minus A-shm in the same round; a zero to the nearest us"),
-        # The notified ladder, added 2026-09-22. Two LEVELS (medians of the round
-        # p50s) and two PAIRED differences, each from its own anchor.
-        Claim("C34", "notified shm, guest answers by doorbell, D-db p50 level",
-              r"takes \*\*([0-9]+) (?P<unit>µs)\*\* when the guest answers through", 0, "µs", "us",
-              [KICK_LADDER_RAW_REL + "/lat-D-db_r*.json"],
-              lambda: kick_level("D-db"),
-              note="median of the 12 round p50s"),
-        Claim("C35", "TCP minus the doorbell arm, D-guest minus D-db, PAIRED",
-              r"\*\*([0-9]+) (?P<unit>µs)\*\* less than TCP's", 0, "µs", "us",
-              [KICK_LADDER_RAW_REL + "/lat-{D-guest,D-db}_r*.json"],
-              lambda: kick_contrast(["D-guest"], ["D-db"]),
-              note="paired: D-guest minus D-db in the same round"),
-        Claim("C38", "a1.metal: TCP minus the doorbell arm, D-guest minus D-db, PAIRED",
-              r"puts the doorbell arm \*\*([0-9]+) (?P<unit>µs)\*\* under", 0, "µs", "us",
-              [A1_KICK_LADDER_RAW_REL + "/lat-{D-guest,D-db}_r*.json"],
-              lambda: a1_kick_contrast(["D-guest"], ["D-db"]),
-              note="paired: D-guest minus D-db in the same round, on a1.metal"),
-        Claim("C36", "TCP level on the notified ladder's boot, D-guest p50 level",
-              r"less than TCP's ([0-9]+) (?P<unit>µs) on that boot", 0, "µs", "us",
-              [KICK_LADDER_RAW_REL + "/lat-D-guest_r*.json"],
-              lambda: kick_level("D-guest"),
-              note="median of the 12 round p50s"),
-        Claim("C37", "console reply minus doorbell reply, D-kick minus D-db, PAIRED",
-              r"the doorbell is \*\*([0-9]+) (?P<unit>µs)\*\* faster than answering over the console", 0, "µs", "us",
-              [KICK_LADDER_RAW_REL + "/lat-{D-kick,D-db}_r*.json"],
-              lambda: kick_contrast(["D-kick"], ["D-db"]),
-              note="paired: D-kick minus D-db in the same round"),
-    ]
+    Every claim that used to live here -- boot-time deltas, IPC percentiles, the
+    attribution ladder, the pinned-load and shared-memory contrasts, serial byte
+    counts, recovery counts -- was re-derived from run records that are now held
+    locally (NC QDL v7 4.6(i); see the module docstring), and README quotes none
+    of them. A claim is added back here only together with committed data that
+    backs it. Each entry is a Claim: an anchor regex over README, the decimals
+    README quotes, README's unit, the data's unit, the source files, and a
+    zero-argument function returning (recomputed value, source unit); `repo` is
+    what a claim's data paths resolve against.
+    """
+    return []
 
 
-# Claims that are real but have NO committed backing, because the run records
-# are licensed evaluation output excluded by .gitignore lines 58-63. Listed so
-# the gate reports them rather than leaving a reader to assume they were checked.
+# Claims README makes with NO committed backing. Listed so the gate reports them
+# rather than leaving a reader to assume they were checked.
 UNBACKED = [
-    ("ten-minute Linux-guest hold (S1-F/B4)", "results/orin-native-port/*/s1/ is gitignored"),
-    ("two-guest rung B5 ran and passed", "results/orin-native-port/*/s1/ is gitignored"),
-    ("M5-F UEFI cold boot, one attended session", "results/orin-native-port/*/m5/ is gitignored"),
-    ("M4-F two runs under frozen instruments", "results/orin-native-port/*/m4/ is gitignored"),
-    ("M3 native qvm boots the cloud-leg guest", "results/orin-native-port/*/m3/ is gitignored"),
-    ("~50 GB free disk prerequisite", "environment prerequisite, no artefact"),
+    ("every measured and functional result", "held locally, not in the tree: NC QDL v7 4.6(i) (2026-09-27)"),
     ("3.3 V USB-TTL on J14", "hardware prerequisite, no artefact"),
-    ("cloud-leg stall rate, now quoted as 0.98-2.62%",
-     "derivable but not anchored: 3/8/7 recoveries in 305 attempts across three diag300 logs"),
-    ("100k runs: no mismatch or I/O error reported",
-     "the CSV schema carries no error field; the evidence is one sentence in "
-     "orin-tcg-qnx-ipc-client1.log plus sentinel_bounces=0, and that single capture backs both 100k rows"),
 ]
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--repo", default=".")
-    ap.add_argument("--readme", default="README.md")
-    ap.add_argument("--denylist", default=os.path.join("scripts", "ci", "claim-denylist.txt"))
-    ap.add_argument("--description", default=os.path.join("docs", "repo-description.md"),
-                    help="the pinned About text (a ```text fenced block)")
-    ap.add_argument("--no-network", action="store_true",
-                    help="skip the live GitHub comparison. Pull requests run with this: a PR "
-                         "must never fail for a repository-settings change it did not make.")
-    a = ap.parse_args()
+def run_claims(claims, readme):
+    """Check each claim against README, print one table row per claim.
 
-    repo = os.path.abspath(a.repo)
-    readme_path = os.path.join(repo, a.readme)
-    readme = C._read(readme_path)
-
+    Returns (failures, unit_rows, derived): failure messages; (cid, README unit,
+    source unit, ok) for the unit summary; and (value, unit) for every figure
+    successfully re-derived, which the FIGURES and description checks accept.
+    Kept apart from main() so the tests can drive it with synthetic claims over
+    tests/fixtures -- the committed README quotes none to drive it with.
+    """
     failures = []
-
-    print("=" * 100)
-    print("CLAIMS GATE -- every figure below is recomputed from committed data in this repo")
-    print("=" * 100)
-    print()
-    print("%-6s %-44s %10s %12s %-11s %s" % ("id", "claim", "README", "recomputed", "unit", "verdict"))
-    print("-" * 100)
-
     unit_rows = []
     derived = []
-    for claim in build_claims(repo):
+    for claim in claims:
         # 1. What does README actually say, right now?
         try:
             claimed, claimed_unit = claim.read_claim(readme)
@@ -567,24 +204,88 @@ def main():
             print("%-6s   %s" % ("", claim.note))
         unit_rows.append((claim.cid, claimed_unit or claim.expect_unit, claim.source_unit,
                           readme_unit_ok and source_unit_ok))
-        # Every value this gate successfully re-derived, with its unit. The
-        # repository description is checked against this set: a number there is
-        # a claim, exactly as in README, and must come from committed data.
+        # Every value this gate successfully re-derived, with its unit. README's
+        # FIGURES check and the repository description are both checked against
+        # this set: a number there is a claim and must come from committed data.
         derived.append((round(recomputed, claim.decimals), claim.expect_unit))
+    return failures, unit_rows, derived
+
+
+def unbacked_figures(text, derived):
+    """[(value, unit)] for every number-with-unit in `text` that no claim re-derived.
+
+    A figure is what C.extract_figures finds: a number followed by a unit
+    (ms, us, %, x, GB, ...). Versions carry no unit and are never figures. Link
+    targets and bare URLs are dropped first, as they are for the denylist: an
+    href is not a claim.
+    """
+    out = []
+    for value, unit in C.extract_figures(C.strip_link_targets(text)):
+        if not any(C.close_enough(value, dv, 2) and unit.lower() == (du or "").lower()
+                   for dv, du in derived):
+            out.append((value, unit))
+    return out
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--repo", default=".")
+    ap.add_argument("--readme", default="README.md")
+    ap.add_argument("--denylist", default=os.path.join("scripts", "ci", "claim-denylist.txt"))
+    ap.add_argument("--description", default=os.path.join("docs", "repo-description.md"),
+                    help="the pinned About text (a ```text fenced block)")
+    ap.add_argument("--no-network", action="store_true",
+                    help="skip the live GitHub comparison. Pull requests run with this: a PR "
+                         "must never fail for a repository-settings change it did not make.")
+    a = ap.parse_args()
+
+    repo = os.path.abspath(a.repo)
+    readme_path = os.path.join(repo, a.readme)
+    readme = C._read(readme_path)
+
+    print("=" * 100)
+    print("CLAIMS GATE -- every README figure must be recomputed from committed data in this repo")
+    print("=" * 100)
+    print()
+    print("%-6s %-44s %10s %12s %-11s %s" % ("id", "claim", "README", "recomputed", "unit", "verdict"))
+    print("-" * 100)
+
+    claims = build_claims(repo)
+    if not claims:
+        print("  (no claims: README quotes no results -- they are held locally under NC QDL v7 4.6(i))")
+    failures, unit_rows, derived = run_claims(claims, readme)
 
     # --- unit summary ------------------------------------------------------
     print()
     print("-" * 100)
     print("UNIT CHECK -- the unit README writes vs the unit the data is measured in")
     print("-" * 100)
+    if not unit_rows:
+        print("  (no claims to check)")
     for cid, readme_unit, source_unit, ok in unit_rows:
         print("  %-6s README writes %-11s source measured in %-9s %s"
               % (cid, readme_unit, source_unit, "ok" if ok else "FAIL"))
 
+    # --- figures -----------------------------------------------------------
+    # A number with a unit in README is a claim, exactly as in the pinned
+    # description below. Anchored claims above re-derive theirs; anything else
+    # has nothing in the tree behind it. Since 2026-09-27 that is every figure:
+    # results are held locally, so README must quote none.
+    print()
+    print("-" * 100)
+    print("FIGURES -- every number with a unit in README must be re-derived by a claim above")
+    print("-" * 100)
+    loose = unbacked_figures(readme, derived)
+    if not loose:
+        print("  ok     no figure in README without a claim")
+    for value, unit in loose:
+        print("  FAIL   figure %s %s in README cannot be re-derived from committed data" % (value, unit))
+        failures.append("README figure %s %s not re-derivable" % (value, unit))
+
     # --- denylist ----------------------------------------------------------
     print()
     print("-" * 100)
-    print("DENYLIST -- asserted claim strings the data does not support")
+    print("DENYLIST -- asserted claim strings the committed record does not support")
     print("-" * 100)
     rules = C.load_denylist(os.path.join(repo, a.denylist))
     # Exemptions are sentences inspected and found already correct -- an
@@ -640,12 +341,11 @@ def main():
             # claims, and were never scanned until 2026-09-21. README said "docs/**"
             # while the gate read "docs/*" -- the README was the accurate one.
             ("docs/", ["docs/**/*.md"], False),
-            # results/ was the last unscanned prose surface. A run record that
-            # misstates what was measured is as misleading as a doc that does,
-            # and results/cloud/ is the standing example: a directory named
-            # "cloud" whose one CSV was recorded on a Windows PC. Warn, not
-            # fail -- these are dated records, and correcting one is an edit to
-            # history that wants a human deciding it.
+            # results/ was the last unscanned prose surface. A record that
+            # misstates what was done is as misleading as a doc that does --
+            # results/cloud/ is named "cloud" although its runs were recorded on
+            # a Windows PC. Warn, not fail -- these are dated records, and
+            # correcting one is an edit to history that wants a human deciding it.
             ("results/", ["results/**/*.md"], False)):
         files = C.prose_files(repo, globs, exclude=skip)
         found = []
@@ -708,11 +408,11 @@ def main():
     # failure too, but only where it can be acted on -- see --no-network.
     #
     # Matching is the same SENTENCE-level classifier used everywhere else, not a
-    # substring scan. A substring deny on "Graviton" would fail the current,
-    # correct description, whose Graviton clause is the project's cross-vendor
-    # defect evidence ("the one QNX ships hangs under KVM ... on AWS Graviton
-    # alike"). The distinction between that and a Graviton *leg* is the whole
-    # point, and only a classifier can express it.
+    # substring scan. A substring deny on "Graviton" would also fail a correct
+    # sentence that merely names the hardware -- an a1.metal instance IS
+    # Graviton1 -- where what is banned is a Graviton *leg* or runtime host. The
+    # distinction between the two is the whole point, and only a classifier can
+    # express it.
     print()
     print("-" * 100)
     print("REPO DESCRIPTION -- the highest-exposure text, pinned and verified")
@@ -800,7 +500,7 @@ def main():
             print("  - %s" % f)
         print("=" * 100)
         return 1
-    print("RESULT: PASS -- every re-derivable README figure matches the committed data")
+    print("RESULT: PASS -- README's figures, prose and description all check out against the tree")
     print("=" * 100)
     return 0
 

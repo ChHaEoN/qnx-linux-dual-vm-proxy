@@ -219,3 +219,14 @@ AGENTS.md
 # machine. Removed from the public repo 2026-09-21 with agents/ and CLAUDE.md.
 .codex/
 skills/
+
+# 2026-09-27 (owner): measurement results stay local (NC QDL v7 4.6(i)). These are
+# the paths the tooling writes evaluation output to; they are ignored so nothing a
+# run produces reaches the public tree by accident. Records go to the unpushed
+# branches only, with `git add -f` there.
+results/cloud/*-latest.csv
+results/hw/*-latest.csv
+results/gicv3-nisv-debug/
+results/orin-native-port/2026*T-*/
+logs/sample-boot/*.log
+logs/sample-boot/*.txt

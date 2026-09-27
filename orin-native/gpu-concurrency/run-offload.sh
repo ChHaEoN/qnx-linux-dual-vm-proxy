@@ -4,9 +4,10 @@
 # Phase 3b / A6, 2026-09-27; follows 20260927T-a6-orin-spin.
 # The owner asked for this run (2026-09-26, to go on overnight unattended: KVM guests only).
 #
-# WHAT IS KNOWN. On one vCPU, the endpoint's second read() of a network-delivered 64-byte frame
-# takes ~12.3 us in the guest, and waiting up to 50 us before it changes nothing (the spin
-# record); a read of loopback data already in a socket takes ~7.1 us (the pin record). The
+# WHAT IS KNOWN. On one vCPU, what the endpoint's second read() of a network-delivered 64-byte
+# frame costs in the guest, with and without a wait before it: record 20260927T-a6-orin-spin
+# (held locally); what a read of loopback data already in a socket costs: record
+# 20260927T-a6-orin-pin (held locally). The
 # guest's vtnet0 negotiates receive offloads with QEMU: LRO (the host may hand it aggregated,
 # unsegmented TCP data: tap-qnx's TSO) and receive checksum offload (the host may hand it data
 # with the checksum unverified or partial: tap-qnx's tx-checksumming).
@@ -15,14 +16,11 @@
 # startup script, build/ifs.build and build.date differ):
 #   ifs-offon.bin   ifs-pina.bin plus `ifconfig vtnet0` (prints the options; nothing changed)
 #   ifs-offoff.bin  ifs-pina.bin plus `ifconfig vtnet0 -lro -rxcsum`, then the same print
-# Both boot with ONE vCPU (the ~5 us to explain is a one-vCPU figure):
+# Both boot with ONE vCPU (the difference to explain is a one-vCPU figure: the spin record):
 #   N1  ifs-offon.bin    receive offloads on (the A6 default)
 #   F1  ifs-offoff.bin   LRO and receive checksum offload off
-# Before this was written each booted once, nothing timed: every endpoint echoed, every benchmark
-# op answered ok; N1's vtnet0 listed RXCSUM and LRO with tap-qnx's TSO and tx-checksumming on;
-# F1's listed neither, and tap-qnx's TSO and tx-checksumming were off -- the guest renegotiated,
-# and QEMU changed the tap's offloads with it (so in F1 the host checksums every frame before
-# the guest sees it, and the guest verifies it again).
+# Before this was written each image was booted once, nothing timed, to check the endpoints,
+# the benchmark and the offloads each configuration lists; what that showed is held locally.
 #
 # THE RUN. Per boot two probe arms, 64-byte frames at 2 ms, n=1000 after 200 warm-up: d64 on
 # :7120 (one read per frame) and s64 on :7122 (two), in an order alternating by round, then one

@@ -3,10 +3,11 @@
 # serves it from the other vCPU? Phase 3b / A6, 2026-09-27; follows 20260926T-a6-orin-ipcbench.
 # The owner asked for this run (2026-09-26, to go on overnight unattended: KVM guests only).
 #
-# WHAT IS KNOWN. Inside the guest the endpoint's second read() takes ~17 us on two vCPUs (the
-# readtime record); on one vCPU the same extra read costs the round trip +12 us (readpath). A
-# message pass to a process on the other vCPU costs 15.7 us, +13 over the same vCPU (ipcbench).
-# So on two vCPUs part of the read may be io-sock serving it from the other vCPU.
+# WHAT IS KNOWN. What the endpoint's second read() costs inside the guest on two vCPUs: record
+# 20260926T-a6-orin-readtime; what the same extra read costs the round trip on one vCPU: record
+# 20260926T-a6-orin-readpath; what a message pass to a process on the other vCPU costs against
+# the same vCPU: record 20260926T-a6-orin-ipcbench (all held locally). The question is whether,
+# on two vCPUs, part of the read is io-sock serving it from the other vCPU.
 #
 # THE MANIPULATION. Two images that differ in one line (compare-ifs.py: B against A, only
 # startup.sh, build/ifs.build and build.date differ):
@@ -19,9 +20,8 @@
 #   U2  ifs-pina.bin, two vCPUs    (io-sock free)
 #   P2  ifs-pinb.bin, two vCPUs    (io-sock on the endpoint's vCPU)
 #   U1  ifs-pina.bin, one vCPU     (nothing to cross)
-# Before this was written each configuration booted once: both endpoints echoed one frame of
-# each size whole, every benchmark op answered "ok", and the vCPU threads numbered the -smp.
-# Nothing was timed.
+# Before this was written each configuration was booted once to check it; what that showed is
+# held locally. Nothing was timed.
 #
 # THE RUN. Per boot two probe arms, 64-byte frames at 2 ms, n=1000 after 200 warm-up: d64 on :7120
 # and s64 on :7122, in an order alternating by round; then one benchmark run (n=300 per op and
@@ -56,7 +56,7 @@
 # A boot whose vCPU threads do not number its -smp, or whose QEMU was given another image, is
 # refused.
 #
-# What this does NOT test: what the one-vCPU read spends its ~12 us on; where io-sock's threads
+# What this does NOT test: what the one-vCPU read spends its time on; where io-sock's threads
 # ran in U2 (the host cannot see guest threads); another boot pattern; the tail.
 #
 # NEEDS: no QEMU running; IMG_A (ifs-pina.bin), IMG_B (ifs-pinb.bin), DISK; gcc not needed.

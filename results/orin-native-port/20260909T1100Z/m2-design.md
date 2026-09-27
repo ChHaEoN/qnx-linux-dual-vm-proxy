@@ -25,7 +25,7 @@ The library plus the board directory already contain the six-core happy path, an
 
 None of it has executed yet, because at `-P1` `init_smp()` skips its whole body (lib/init_smp.c:106).
 
-**The risk is failure handling, not geometry.** Walking the AP timeline turns up four places where a plausible failure is a silent hang today. On this board a hang costs a power cycle, and a power cycle wipes the black box.
+**The risk is failure handling, not geometry.** Walking the AP timeline turns up four places where a plausible failure is a silent hang today. On this board a hang costs a power cycle, and a power cycle wipes the black box (M0 records, held locally).
 
 1. **AP faults before the handshake.** Every AP runs with `VBAR_EL1 = vbar_default`, a branch-to-self (lib/aarch64/smp_start.S:44-45), and `VBAR_EL2` is never set. The fault stays silent until an uncalibrated 2^32-iteration counter wraps (lib/init_smp.c:73-76). Only then does `CPU N start failure` print, and that text is identical to a refused CPU_ON (lib/common_arm/psci_smp.c:37-41, lib/ap_fail.c:27-31). All VERIFIED.
 2. **AP dies after the handshake.** A death in `cpu_startnext`, `vstart` or `smp_spin` leaves CPU0 in `transfer_aps`, which has no bound and prints nothing (lib/init_smp.c:39-58). VERIFIED.
@@ -43,7 +43,7 @@ None of it has executed yet, because at `-P1` `init_smp()` skips its whole body 
 
 | Step | Image | Purpose |
 |---|---|---|
-| R0 | `-P1` | Regression: the new board code on the path M1 verified |
+| R0 | `-P1` | Regression: the new board code on M1's single-CPU path |
 | R1 | `-P2` | First AP |
 | R2 | `-P4` | All of cluster 0 |
 | R3 | `-P5` | First cluster-1 core; first read of GICR frames 4 and 5 |
@@ -61,15 +61,15 @@ Each run's result gates the next.
 |---|---|---|---|
 | C1 | gicv3-percpu says frames 4/5 are first touched at `-P6`; ap-entry, board-audit and firmware-handoff say `-P5`. | **`-P5`.** At `-P5`, `start_aps` starts CPU index 4 (affinity 0x10200), whose walk reads frames 0-6. gicv3-percpu's own per-CPU list ("cpu4 frames 0-6") agrees; only its conclusion is wrong. | lib/init_smp.c:69; lib/aarch64/gic_v3.c:1343-1354; board/psci_cpu_id.c. VERIFIED |
 | C2 | A test-payload failure mode derives the GICR limit from the CPU count (6), which would make frame 7 unreachable. | **The limit is 16.** The board calls the `_range` form with 0x200000. | board/aarch64/init_intrinfo.c:41-42; board/t234_startup.h:44-46; lib/aarch64/gic_v3.c:324-333. VERIFIED |
-| C3 | The plan's GICR bases (0x0F440000…) differ from the library's `cpuN: Core GICR SGI address` values (0x0F450000…). | **Both are right.** The library prints frame base + 0x10000; the board line prints the frame base, so the plan's numbers are what gets compared. | lib/aarch64/gic_v3.c:1478-1482; M1 log:40. VERIFIED |
+| C3 | The plan's GICR bases (0x0F440000…) differ from the library's `cpuN: Core GICR SGI address` values (0x0F450000…). | **Both are right.** The library prints frame base + 0x10000; the board line prints the frame base, so the plan's numbers are what gets compared. | lib/aarch64/gic_v3.c:1478-1482. VERIFIED |
 | C4 | Where to install EL1 vectors on APs: a `cpu_startup` override (firmware-handoff) or `board_smp_adjust_num` (ap-entry, timer, board-audit). | **`board_smp_adjust_num`.** It already exists and runs on every AP at the entry EL, after smp_start writes VBAR_EL1 and before `hypervisor_init` drops to EL1. main() already does the same VBAR_EL1-at-EL2 write for CPU0. | lib/aarch64/smp_start.S:44-45, :66, :73, :78; board/main.c:174; board/aarch64/vectors_el1.S:47-52. VERIFIED |
-| C5 | Where to normalise AP EL2 state: in `board_smp_adjust_num` after `at_el2` (ap-entry, timer), or in an entry trampoline before `at_el2` (board-audit, firmware-handoff). | **Trampoline before `at_el2`, reusing the shim's exact write sequence.** This gives each AP the same ordering CPU0 has (shim writes, then `at_el2`). It captures firmware HCR_EL2 before `at_el2` overwrites it, installs VBAR_EL2 before any other EL2 code runs, and does any E2H flip with an ISB, which `at_el2` lacks. The write sequence is VERIFIED only from CPU0's Linux-dirty kexec state; the AP starting state comes from a CPU_OFF/CPU_ON cycle and has never been measured (see A3). | t234-shim.S:291-304; lib/aarch64/_start_el1.S:156 (no ISB); timer report |
-| C6 | AP MDCR_EL2: 0, as the shim writes, or HPMN = PMCR_EL0.N (timer report). | **0 for M2**, matching CPU0's M1 state. HPMN belongs to M4's PMU calibration. | t234-shim.S:301. VERIFIED |
+| C5 | Where to normalise AP EL2 state: in `board_smp_adjust_num` after `at_el2` (ap-entry, timer), or in an entry trampoline before `at_el2` (board-audit, firmware-handoff). | **Trampoline before `at_el2`, reusing the shim's exact write sequence.** This gives each AP the same ordering CPU0 has (shim writes, then `at_el2`). It captures firmware HCR_EL2 before `at_el2` overwrites it, installs VBAR_EL2 before any other EL2 code runs, and does any E2H flip with an ISB, which `at_el2` lacks. The write sequence was written for CPU0's Linux-dirty kexec state; the AP starting state comes from a CPU_OFF/CPU_ON cycle and has never been measured (see A3). | t234-shim.S:291-304; lib/aarch64/_start_el1.S:156 (no ISB); timer report |
+| C6 | AP MDCR_EL2: 0, as the shim writes, or HPMN = PMCR_EL0.N (timer report). | **0 for M2**, matching what the shim writes for CPU0. HPMN belongs to M4's PMU calibration. | t234-shim.S:301. VERIFIED |
 | C7 | test-payload runs six backgrounded printers at once, while board-audit shows `display_char_tcu` is unlocked. | **One printer at a time.** Busy processes write result files silently, and a single collector prints them. | board/aarch64/callout_debug_tcu.S:116-141; procnto serialisation UNKNOWN |
 | C8 | test-payload classes the per-AP `Core GICR SGI address` print as HYPOTHESIS. | **VERIFIED.** It sits under `debug_flag > 1` in `gic_v3_gicc_init`, which each AP runs itself. | lib/aarch64/gic_v3.c:1480-1482 |
 | C9 | Whether to use the script's internal `waitfor` as a timer. | **Do not use it.** The two QNX documents disagree on its argument order; bounded waits come from `smpcheck` instead. | nto_script.html vs mkifs.html (test-payload, VERIFIED conflict) |
 | C10 | Plan claim K7: "a CPU that never starts ends in ap_fail(), not a silent hang". | **Narrowed.** It holds only up to the `cpu_starting` handshake, and only after an uncalibrated wait. The board bounds below replace it. | lib/init_smp.c:39-58, :73-76. VERIFIED |
-| C11 | Where AP startup lines appear in the log. | After cpu0's GIC lines and `Loading IFS...done`, and before `Header size=`. | lib/init_system_private.c:163, :305; M1 log:40-43. VERIFIED |
+| C11 | Where AP startup lines appear in the log. | After cpu0's GIC lines and `Loading IFS...done`, and before `Header size=`. | lib/init_system_private.c:163, :305. VERIFIED |
 | C12 | board-audit lists the `break_detect_tcu` patcher overrun as a pending fix. Two reviews found it already fixed. | **Already fixed.** Line 208 reads `CALLOUT_START(break_detect_tcu, 0, 0)` with a past-tense comment (commit 1f7a8ac), so M2 carries no change to that file. | board/aarch64/callout_debug_tcu.S:190-211; `git log` on that file. VERIFIED |
 
 ---
@@ -78,7 +78,7 @@ Each run's result gates the next.
 
 1. **No library patch.** Everything is a board hook, a board override of a global (`smp_hook_rtn`, `gic_cpu_init`), or a board replacement of the CPU_ON entry point. The only library change remains the existing bounded `wait_for_rwp` in gic.h.
 2. **One variable per run.** The startup binary and all startup options are identical across R0-R5 except `-P`. The script differs only in N-dependent lines, plus the trace lines in R5.
-3. **Every startup-time wait has a real-time deadline.** Deadlines use CNTVCT_EL0 against `lsp.qtime.p->cycles_per_sec`: CPU0's CNTFRQ, 0x1dcd650, set by init_qtime before any AP starts (lib/aarch64/init_qtime_v8gt.c:55; shim bank). If that value is 0, the constant 0x1dcd650 is used. An AP's own CNTFRQ_EL0 is never trusted for a deadline, because its warm-boot value is UNKNOWN; it is only printed.
+3. **Every startup-time wait has a real-time deadline.** Deadlines use CNTVCT_EL0 against `lsp.qtime.p->cycles_per_sec`: CPU0's CNTFRQ, 0x1dcd650, set by init_qtime before any AP starts (lib/aarch64/init_qtime_v8gt.c:55; dmesg `arch_timer`, raw/orin-firmware-el.txt). If that value is 0, the constant 0x1dcd650 is used. An AP's own CNTFRQ_EL0 is never trusted for a deadline, because its warm-boot value is UNKNOWN; it is only printed.
 4. **APs print only while CPU0 is provably silent.** The window runs from CPU_ON until CPU0 sees `cpu_starting == 0`. CPU0 prints only on a timeout, which is a crash path anyway.
 5. **Every fault ends in a warm reset, even when it cannot print.** A nesting guard and an MMU-on guard send the fault straight to PSCI SYSTEM_RESET using constants only, with no memory access.
 6. **Fail closed on unverifiable state.** If an AP's EL2 state cannot be checked or normalised (the AP entered at EL1), the run stops by name. It does not continue on guesses.
@@ -130,7 +130,7 @@ Apply them in this order; each builds on the previous ones. All files are in the
 **Rationale:**
 - The GICR indices come from the Linux dmesg frame bases (board facts) and the 0x20000 stride (lib/aarch64/gic_v3.c:324).
 - The SGI1R values follow the library's own formula (gic_v3.c:1523-1542).
-- cpu0's idx 0 and SGI1R 0x1 are VERIFIED at M1 log:41 and :102-103. The other five are HYPOTHESIS until R1-R4 print them.
+- cpu0's idx 0 and SGI1R 0x1 are checked against the M1 run log (held locally, NC QDL v7 4.6(i)). The other five are HYPOTHESIS until R1-R4 print them.
 
 ### 3.2 NEW `board/aarch64/ap_entry.S`: `t234_ap_entry`, the CPU_ON entry point
 
@@ -280,7 +280,7 @@ if (lsp.syspage.p->num_cpu > 1) smp_hook_rtn = t234_transfer_aps;
   | `-P6` | 0-7 |
 
 - **What it settles:**
-  - From R1 on: whether the 32-bit TYPER-high read returns the affinity at all. M1 could not tell, because cpu0's affinity 0 also matches a register that reads as zero (gicv3-percpu, VERIFIED).
+  - From R1 on: whether the 32-bit TYPER-high read returns the affinity at all. cpu0 alone cannot tell, because its affinity 0 also matches a register that reads as zero (gicv3-percpu, VERIFIED).
   - At R3: unknown #10.
   - The WAKER state firmware leaves on offlined cores, seen before CPU_ON.
 - **What it does not settle:** an asynchronous SError from frames 4/5 would stay pending under DAIF and would not be reported here (residual A5).
@@ -349,7 +349,7 @@ In `docs/orin-native-port-plan.md`:
 - Narrow K7 (C10).
 - Add `-P5` to the M2 ladder.
 - Note that the library prints SGI base = frame + 0x10000 (C3).
-- Replace "an un-kicked soak resets at ~2 min" (plan :331-332), and board/wdt.c:49-51, which says the same wrong thing: WDT0 does not fire after kexec.
+- Replace "an un-kicked soak resets at ~2 min" (plan :331-332), and board/wdt.c:49-51, which says the same wrong thing: WDT0 does not fire after kexec (M0 records, held locally).
 - Update unknown #10 with the R3 result.
 - Record the measured AP firmware EL2 values against K3, with the caveat that their provenance (CPU_OFF/CPU_ON) differs from CPU0's (kexec).
 - Record the QNX library's WAKER sequence against the Linux and TF-A order (§3.7(b) step 1).
@@ -361,7 +361,7 @@ In `docs/orin-native-port-plan.md`:
 - **No black-box cap raise.** It stays 64 KiB. R0/R1 measure real sizes, and gate G1 (§6) checks them before R4.
 - **No change to `init_qtime`, `QTIME_FLAG_GLOBAL_CLOCKCYCLES`, HPMN or `-Q`.** Each is a separate variable.
 - **No library `gic_v3.c` patch.** The walk and its WAKER branch stay as they are; the board wake step runs before them and the wrapper observes the result.
-- **No change to the `-P1` send_ipi write in init_intrinfo.c.** At `-P1` it is still M1's verified behaviour; images at `-P2` and up take the valid path (board-audit).
+- **No change to the `-P1` send_ipi write in init_intrinfo.c.** At `-P1` it keeps M1's behaviour; images at `-P2` and up take the valid path (board-audit).
 
 ---
 
@@ -369,7 +369,7 @@ In `docs/orin-native-port-plan.md`:
 
 Startup binary: one build of `startup-t234-orin-nano` with §3.1-§3.8, used for every image.
 
-Startup options for all images are identical to M1 except `-P`: `startup-t234-orin-nano -vvv -P<N> -Q disable -m992M -Wkeep -Dtcu`. `-Wkeep` has no effect after kexec, because WDT0 does not fire; it stays only for parity with M1.
+Startup options for all images are identical to M1 except `-P`: `startup-t234-orin-nano -vvv -P<N> -Q disable -m992M -Wkeep -Dtcu`. `-Wkeep` has no effect after kexec, because WDT0 does not fire (M0 records, held locally); it stays only for parity with M1.
 
 | Image | -P | Purpose |
 |---|---|---|
@@ -424,7 +424,7 @@ Its file list adds `tracelogger traceprinter libtracelog.so.1 libtraceparser.so.
 - Only one printer at a time; busy processes print nothing (C7).
 - No foreground command can block forever; every wait is `smpcheck` with a `-T` bound.
 - tracelogger and traceprinter write only to `/dev/shmem`; only counts reach the console, which protects the black-box budget.
-- No `tcu-cat`: its output bypasses the black box (M1 blackbox log:9-11).
+- No `tcu-cat`: it writes the TCU mailbox register directly (repo/orin-native/tools/tcu-cat.c), so its output bypasses the black box.
 - No internal `waitfor` (C9).
 - The last command is `shutdown -S reboot` (m1.build:89-94).
 - The trace lives in a separate image, so a hang caused by tracelogger cannot cost the core M2 evidence.
@@ -573,11 +573,11 @@ For `-P6`, all of the following in one run (R4); R4b repeats them.
 |---|---|---|---|
 | A1 | A CPU_ON issued by QNX from NS-EL1 enters the AP at EL2 | HYPOTHESIS: PSCI Table 14 and upstream TF-A `psci_get_ns_ep_info` VERIFIED; Linux-issued ones did; T234 fork not read | R1 `entry EL` line. EL1 entry stops the run by name (§3.5(c)) |
 | A2 | Firmware EL2 register values on an AP | UNKNOWN | R1 `fw` line; normalised regardless |
-| A3 | The shim's write sequence (VERIFIED from CPU0's Linux-dirty kexec state) is safe from an AP's CPU_OFF/CPU_ON starting state, which has never been measured. Whether T234 CPU_OFF power-gates, and whether firmware restores EL2 context, is UNKNOWN | HYPOTHESIS | R1 raw pre-normalisation dump is the first real test; a trap prints via EL2 vectors; a hang leaves stage 0x20 |
-| A4 | The 32-bit read of GICR_TYPER+0xC returns the affinity | HYPOTHESIS (untested in M1) | R1 probe frame 1, on CPU0 |
+| A3 | The shim's write sequence (written for CPU0's Linux-dirty kexec state) is safe from an AP's CPU_OFF/CPU_ON starting state, which has never been measured. Whether T234 CPU_OFF power-gates, and whether firmware restores EL2 context, is UNKNOWN | HYPOTHESIS | R1 raw pre-normalisation dump is the first real test; a trap prints via EL2 vectors; a hang leaves stage 0x20 |
+| A4 | The 32-bit read of GICR_TYPER+0xC returns the affinity | HYPOTHESIS (cpu0's affinity 0 cannot test it) | R1 probe frame 1, on CPU0 |
 | A5 | Frames 4/5 readable at +0x8/+0xC without an abort | HYPOTHESIS (Linux 64-bit walk evidence; NVIDIA irq-gic-v3.c not read) | R3 probe; an async SError would surface only at kernel time (residual) |
 | A6 | AP redistributors awake with no leftover active state after CPU_ON | UNKNOWN | Probe WAKER, wake step (`fw=`), wrapper readbacks; bounded wake and clear |
-| A7 | CNTVCT_EL0 readable at EL1 on CPU0 and on APs, without traps | HYPOTHESIS: CNTHCTL_EL2=3 via at_el2 VERIFIED; ECV absent per MMFR0 reading | R0 probe `cntvct=` on CPU0; R1 AP deadlines (a trap prints via EL1 vectors) |
+| A7 | CNTVCT_EL0 readable at EL1 on CPU0 and on APs, without traps | HYPOTHESIS: CNTHCTL_EL2=3 via at_el2 VERIFIED; ECV per ID_AA64MMFR0 (M1 run log, held locally) | R0 probe `cntvct=` on CPU0; R1 AP deadlines (a trap prints via EL1 vectors) |
 | A8 | AP and CPU0 see each other's MMU-off stores (`diag`, `cpu_starting`) | VERIFIED: the library relies on the same pattern | R1 stage progression |
 | A9 | Identity map after `vstart` excludes console MMIO, so the MMU-on guard is needed | HYPOTHESIS | Guard is conservative either way |
 | A10 | PSCI SYSTEM_RESET from a secondary resets the board | UNKNOWN | CPU0 backstop; observed if any AP crash happens |
@@ -601,17 +601,17 @@ For `-P6`, all of the following in one run (R4); R4b repeats them.
 ## 10. Must not be claimed from a pass
 
 - Not isolation, not a hypervisor, no ASIL property: this is `-Q disable`, EL1 only.
-- Nothing about `-Q enable` with `-P>1` (M1b/M3). Entry EL and EL2 state were observed only for CPU_ON issued from EL1 under `-Q disable`.
+- Nothing about `-Q enable` with `-P>1` (M1b/M3). Entry EL and EL2 state would be observed only for CPU_ON issued from EL1 under `-Q disable`.
 - Not reliability or a soak result: one 60 s load per run, n=2 at `-P6`.
-- Not that ClockCycles is synchronised across CPUs. Only per-CPU monotonicity and pinning were checked; CNTVOFF=0 comes from source, not measurement.
-- Not that IPIs were verified directly: scheduling and pinning imply them, and no per-IPI count exists.
+- Not that ClockCycles is synchronised across CPUs. Only per-CPU monotonicity and pinning are checked; CNTVOFF=0 comes from source, not measurement.
+- Not that IPIs are verified directly: scheduling and pinning imply them, and no per-IPI count exists.
 - Not per-CPU performance parity: rates are informational and DVFS is uncontrolled.
 - Not that the kernel-time console is SMP-safe.
-- Not that tracelogger content is correct: only that capture and print completed with events on every CPU.
+- Not that tracelogger content is correct: a pass would show only that capture and print completed with events on every CPU.
 - Not that unknown #10 is closed beyond this SKU, this firmware (L4T R36.4.7) and this access width.
-- Not that T234 TF-A matches upstream in general: only the register values, entry EL and return codes observed.
-- Not that the AP EL2 normalisation was verified from a known starting state: the raw AP values were first measured in these runs.
-- Not that the QNX library's WAKER sequence is wrong on this hardware: the board wake step runs first, so the library branch was not exercised.
+- Not that T234 TF-A matches upstream in general: only the register values, entry EL and return codes a run observes.
+- Not that the AP EL2 normalisation was verified from a known starting state: the raw AP values are first measured in these runs.
+- Not that the QNX library's WAKER sequence is wrong on this hardware: the board wake step runs first, so the library branch is not exercised.
 - Not that the startup library runs unmodified. The board overrides the CPU_ON entry point, `transfer_aps` (via `smp_hook_rtn`) and `gic_cpu_init` (with a wake step before it), and the gic.h RWP patch remains.
 - Not that the kexec round trip is watchdog-recoverable.
 - `-P4` alone is not M2; it is M2 degraded.

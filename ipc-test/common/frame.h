@@ -8,8 +8,9 @@
  * at Phase 3 / Orin).
  *
  * Honest framing: this is a study-level mechanism-alive proxy across a
- * TCG-emulated qvm EL2/EL1 boundary, not a transport benchmark. The on-wire
- * RTT is dominated by TCG emulation overhead, not a meaningful transport cost.
+ * TCG-emulated qvm EL2/EL1 boundary, not a transport benchmark. Any on-wire
+ * RTT on this leg includes TCG emulation overhead, so it is not a meaningful
+ * transport cost.
  *
  * The format is defined once here and shared by both translation units so the
  * two ends cannot drift. Multi-byte fields are serialised little-endian on the
@@ -46,7 +47,7 @@ typedef struct {
  * echoes every frame verbatim regardless of seq, so a sentinel bounces back
  * unmodified for free. Only an INITIATOR needs to recognise this value: use
  * it (not a resend of the real in-flight frame) as the write-side "kick" that
- * recovers from a missed read-ready notification, since a stale sentinel
+ * recovers from a read timeout, since a stale sentinel
  * echo is safe to discard whereas a stale duplicate of a REAL frame corrupts
  * the next iteration's alignment (see ipc-test/qnx-host-client/README.md). */
 #define FRAME_SENTINEL_SEQ  UINT64_MAX

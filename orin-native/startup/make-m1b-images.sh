@@ -41,7 +41,7 @@
 #   2. PO-1: m2.build.in and make-m2-images.sh match git HEAD (step 2);
 #   3. PO-2: m2.build.in re-expands, for all six M2 images, into out/m1b/gate/
 #      byte for byte as the buildfiles M2 ran, by pinned sha256 (step 3);
-#   4. PO-3: any out/m2/*.kimg still present is the one m2-runs.md records
+#   4. PO-3: any out/m2/*.kimg still present is the one `m2-runs.md` (held locally) records
 #      (step 4; read only).
 # Then, for each named image,
 #   5. reg-pN is copied from the gate and its sha256 re-checked (step 5), or
@@ -111,7 +111,7 @@ done
 
 # PO-2 pins (design §5.3 step 3): the sha256 of each buildfile make-m2-images.sh
 # generated for the M2 ladder, computed from out/m2/*.build, whose kimgs are the
-# ones m2-runs.md records.
+# ones `m2-runs.md` (held locally) records.
 m2_build_sha() {
 	case "$1" in
 	m2-p1)  echo 040824e3272e7f18b25e7153ff0042d0f5314eb1981efb3d3176a2f0a999443a ;;
@@ -125,7 +125,7 @@ m2_build_sha() {
 }
 
 # PO-3 pins (design §5.3 step 4): the first 24 hex digits of the sha256 of each
-# kimg M2 ran, as m2-runs.md:23-30 records them.
+# kimg M2 ran, as `m2-runs.md` (held locally) records them.
 m2_kimg_sha24() {
 	case "$1" in
 	m2-p1)  echo 1f5f1331bd2dd11d5799e82d ;;
@@ -273,7 +273,7 @@ po3() {
 		got=$(sha "$f" | cut -c1-24)
 		want=$(m2_kimg_sha24 "$img")
 		[ "$got" = "$want" ] \
-			|| die "PO-3: $f sha256 begins $got, but the $img.kimg M2 ran begins $want (m2-runs.md); something rebuilt M2's images"
+			|| die "PO-3: $f sha256 begins $got, but the $img.kimg M2 ran begins $want (M2 records, held locally); something rebuilt M2's images"
 		echo "   PO-3 $img.kimg sha256 begins $got, the image M2 ran: ok"
 	done
 }

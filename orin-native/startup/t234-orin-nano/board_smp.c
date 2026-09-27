@@ -31,8 +31,8 @@
  * is safe. The part that is not failure handling is psci_cpu_id.c next door:
  * the affinities are not the linear indices.
  *
- * M2 ran this file on six cores under -Q disable; nothing here has run with
- * CPU_ON issued from EL2.
+ * M2's board runs used this file under -Q disable; their records are held
+ * locally (NC QDL v7 4.6(i)). CPU_ON issued from EL2 is M1b's case.
  */
 
 #include "t234_startup.h"
@@ -58,16 +58,16 @@ const _Uint64t t234_cpu_mpidr[T234_NUM_CPU] = {
  * Redistributor frame index per CPU: Linux's own frame bases (0x0f440000 for
  * CPU0, then 0x20000 apart, with cluster 1 at 0x0f500000 and 0x0f520000)
  * divided by the library's stride (lib/aarch64/gic_v3.c:325, shift 17 on a v3.0
- * GIC). CPU0's index 0 is what M1 recorded (M1 black-box log:103); the other
- * five are what this port expects and have not been observed yet.
+ * GIC). All six are what this port expects from those bases; what a board
+ * run printed is held locally (NC QDL v7 4.6(i)).
  */
 const unsigned t234_cpu_gicr_idx[T234_NUM_CPU] = { 0, 1, 2, 3, 6, 7 };
 
 /*
  * ICC_SGI1R_EL1 value per CPU, as the library builds it for its IPI callout
  * (lib/aarch64/gic_v3.c:1523-1531): target-list bit Aff0, Aff1 at 16, Aff2 at
- * 32. CPU0's 0x1 is M1's recorded gic_map (M1 black-box log:101); the rest are
- * the formula applied to the table above, not yet observed.
+ * 32. All six are the formula applied to the table above; what a board run
+ * printed is held locally (NC QDL v7 4.6(i)).
  */
 const _Uint64t t234_cpu_sgi1r[T234_NUM_CPU] = {
 	0x000000001ull, 0x000010001ull, 0x000020001ull, 0x000030001ull,
@@ -249,8 +249,8 @@ board_smp_adjust_num(unsigned cpu)
 	 * (lib/aarch64/hypervisor.c:38-44, :80-87); under -Q enable it would crash
 	 * with a message that does not name the core (:41-43). Whatever HCR_EL2
 	 * routing, trap bits and VBAR_EL2 firmware left would persist unseen. Linux
-	 * on this board reports all CPUs starting at EL2, and M2 saw all five
-	 * secondaries enter at EL2 for a CPU_ON issued from EL1, so EL1 here would
+	 * on this board reports all CPUs starting at EL2, and firmware is expected
+	 * to start secondaries the same way for a CPU_ON issued from EL1, so EL1 here would
 	 * itself be the finding; allowing it would first need NVIDIA's T234 TF-A
 	 * read, and a rebuild.
 	 */

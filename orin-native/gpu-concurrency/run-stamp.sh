@@ -24,8 +24,8 @@
 # percentile. The probe records both; this script prints their medians over
 # rounds, and the record's analysis takes them further.
 #
-# c7 OFF ON THE ORIN (OD15): CSTATE defaults to shallow, so the tail is not the
-# 2026-09-21 idle-state slow mode. A host with no cpuidle has nothing to disable
+# c7 OFF ON THE ORIN (OD15): CSTATE defaults to shallow (why: record
+# 20260921T-a6-orin-c7off, held locally). A host with no cpuidle has nothing to disable
 # (recorded as absent). CSTATE="" asks for idle states as found, explicitly.
 #
 # NO LOAD, checked as run-live-cost.sh checks it: GR3D on a Tegra, not

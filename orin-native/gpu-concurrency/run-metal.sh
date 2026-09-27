@@ -5,14 +5,12 @@
 # the host's userspace change the tail there? Phase 3b / A6, 2026-09-25; follows
 # 20260925T-a6-orin-natural and -tick. The owner asked for this session (2026-09-25).
 #
-# WHAT IS KNOWN, ON THE ORIN. Confining the host's userspace to cores 3 and 5 cut the p99 of
-# every exchange from 229.1 to 207.8 us and the p99.9 from 331.6 to 274.9, mostly by moving
-# the handling of tj-thermal's uevents (udevd, the desktop) off the exchange's cores
-# (20260925T-a6-orin-natural). With everything confined, exchanges whose request left 150
-# to 0 us before the host's tick (HZ=250, every core at once) held a quarter of the tail and
-# were +11.2 us slower at the median; the tick brings its interrupt and a load-balancing
-# softirq to each QEMU core (20260925T-a6-orin-tick). On a1.metal the tail has been far
-# quieter than the Orin's (20260923T-a6-a1metal-liveness: the cost resolved through p99.9).
+# WHAT IS KNOWN, ON THE ORIN. What confining the host's userspace to cores 3 and 5 does to
+# every exchange: record 20260925T-a6-orin-natural (held locally). What exchanges whose
+# request left 150 to 0 us before the host's tick (HZ=250, every core at once) show, with
+# everything confined, and what the tick brings to each QEMU core: record
+# 20260925T-a6-orin-tick (held locally). The tail on a1.metal: record
+# 20260923T-a6-a1metal-liveness (held locally).
 #
 # THE MANIPULATION. run-natural.sh's, on this host's cores: one ARM per round, in the pattern
 # open confined confined open, repeated;

@@ -5,15 +5,15 @@
  * device, reads a full fixed-width frame, echoes the payload back unmodified,
  * and loops. The transport is the qvm virtio-console vdev that mediates the
  * EL2 host <-> EL1 guest partition boundary; it does NOT route through host
- * io-sock (down on this leg).
+ * io-sock (not used on this leg).
  *
  * Honest framing: study-level mechanism-alive proxy across a TCG-emulated qvm
  * boundary, not a transport benchmark.
  *
- * RUNTIME-SPIKE (resolved 2026-07-28): the guest sees no device node for the
- * virtio-console vdev until it starts the devc-virtio driver itself, matching
- * the vdev's loc/intr from g2.conf: `devc-virtio 0x20000000,42 &`. That
- * creates /dev/vcon2 (vcon1 is already taken by the guest's pl011 console).
+ * (2026-07-28) The guest starts the devc-virtio driver for the virtio-console
+ * vdev itself, matching the vdev's loc/intr from g2.conf:
+ * `devc-virtio 0x20000000,42 &`. That creates /dev/vcon2 (vcon1 is the
+ * guest's pl011 console).
  * See ../qnx-host-client/README.md and ../../scripts/qhv/guest-post_start.custom
  * (which starts devc-virtio before this server).
  */

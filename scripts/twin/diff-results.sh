@@ -27,11 +27,9 @@
 # Per docs/digital-twin-design.md §4 (already written, not new guidance):
 # the cloud and HW legs do NOT currently run the same IPC topology —
 # cloud is single-OS QNX<->QNX over a qvm virtio-console vdev under TCG;
-# HW is heterogeneous QNX<->Linux over virtio-net/br0 under TCG (~~KVM is
-# separately blocked — see docs/orin-port.md's risk register~~; 2026-09-18: a
-# startup-qemu-virt we rebuilt with -fno-auto-inc-dec boots that board under
-# -enable-kvm -- the shipped SDP startup still hangs -- but every CSV this
-# script compares was recorded under TCG, so the caveat below is unchanged). A raw
+# HW is heterogeneous QNX<->Linux over virtio-net/br0 under TCG (every CSV
+# this script compares was recorded under TCG; the later KVM route, with a
+# startup-qemu-virt we rebuilt, leaves the caveat below unchanged). A raw
 # latency delta therefore confounds host, acceleration, AND
 # transport+OS-pair — it is "mechanism-alive vs. heterogeneity", not a
 # clean host-only comparison. This script prints the delta (it is still
@@ -105,9 +103,8 @@ fi
 
 echo
 echo "[3/3] Latency deltas (cloud -> hw), nanoseconds:"
-# The delta formula lives in delta.awk, not here: scripts/ci/claims_gate.py
-# re-derives the published numbers from the same file, so the two cannot drift.
-# Output below is byte-for-byte what this script has always printed.
+# The delta formula lives in delta.awk, not here, so there is one copy of it.
+# The CSVs it reads are held locally (NC QDL v7 4.6(i)); the public repo has none.
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 awk -v cp50="${c_p50}" -v hp50="${h_p50}" -v cp99="${c_p99}" -v hp99="${h_p99}" \
     -v cmax="${c_max}" -v hmax="${h_max}" -f "${script_dir}/delta.awk"
@@ -125,19 +122,14 @@ at once, not one:
                     cloud-leg figure was ever taken on AWS.
   2. acceleration  TCG            vs.  TCG   <- this one MATCHES
                     Both CSVs were recorded under TCG, so acceleration is not a
-                    confound here. It is not matched by design: the hw board's
-                    KVM path works as of 2026-09-18 (an IFS with a
-                    startup-qemu-virt we rebuilt with -fno-auto-inc-dec boots
-                    under -enable-kvm; the shipped SDP startup still hangs), but
-                    no KVM run of this benchmark exists and no KVM timing was
-                    ever taken, so this diff stays TCG-vs-TCG.
+                    confound here. It is not matched by design: no KVM run of
+                    this benchmark exists, so this diff stays TCG-vs-TCG.
   3. transport+OS  single-OS QNX<->QNX console     vs.  heterogeneous
                     QNX<->Linux virtio-net/br0
-The cloud number is a
-mechanism-alive sanity figure (15 samples, capped by an unresolved
-qvm/TCG virtio-queue stall); the HW number is a real, stable 100k-sample
-run. Read this as "mechanism-alive vs. heterogeneity", not as evidence
-about host CPU speed — that comparison does not exist yet in this repo.
+The two sides differ in sample count and in what limited each run; both
+records are held locally. Read this as "mechanism-alive vs. heterogeneity",
+not as evidence about host CPU speed — that comparison does not exist in
+this repo.
 EOF
 
 echo

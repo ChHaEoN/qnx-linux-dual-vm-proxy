@@ -3,20 +3,25 @@
 
 Every function here is deliberately free of I/O side effects beyond reading a
 path that is handed to it, so the unit tests in tests/ can exercise the real
-logic against small fixtures instead of the committed corpus.
+logic against small fixtures instead of a data corpus.
 
-UNITS ARE NOT UNIFORM IN THIS REPO and that is the whole point of the gate:
+Since 2026-09-27 no run data is committed (its results are held locally under
+NC QDL v7 4.6(i)), so README quotes no figure and the parsers below have no
+committed input. They are kept, and tested against tests/fixtures, because a
+figure published later with written approval has to come back under them.
 
-    results/{cloud,hw}/*.csv          p50_ns / p99_ns / max_ns   NANOSECONDS
-    logs/sample-boot/*-boot-times-*   "run N: 12345 ms"          MILLISECONDS
-    results/.../lat-*.json            p50_ms etc.                MILLISECONDS
+UNITS ARE NOT UNIFORM ACROSS THESE FORMATS and that is the whole point of the gate:
+
+    IPC results CSV (header.csv)      p50_ns / p99_ns / max_ns   NANOSECONDS
+    boot-times series                 "run N: 12345 ms"          MILLISECONDS
+    latency-probe lat-*.json          p50_ms etc.                MILLISECONDS
     monitor console "us="                                        MICROSECONDS
 
-A claim that quotes "33 ms" against a source measured in seconds is wrong even
+A claim that quotes "40 ms" against a source measured in seconds is wrong even
 if the digits match, so unit identity is checked separately from value equality.
 
-One trap encoded here on purpose: `cycles_per_sec` in the IPC CSVs is a
-hardcoded 1000000000 placeholder on the hw leg (its own notes field says
+One trap encoded here on purpose: `cycles_per_sec` in the IPC CSV schema was a
+hardcoded 1000000000 placeholder on the hw leg (its notes field said
 "clock_gettime-ns-not-cycles"). It is NEVER a cycles->time conversion factor.
 """
 import difflib
@@ -79,7 +84,7 @@ def pct_delta(base, other):
 
 
 def ratio(base, other):
-    """other / base -- the "2.15x slower" shape."""
+    """other / base -- the "N x slower" shape."""
     base = float(base)
     if base == 0:
         raise ZeroDivisionError("ratio against a zero base")
@@ -87,7 +92,7 @@ def ratio(base, other):
 
 
 def span(values):
-    """max - min. Used for the "span 33 ms" claim."""
+    """max - min. The "the runs span N ms" shape."""
     if not values:
         raise ValueError("span of empty sequence")
     return max(values) - min(values)
@@ -96,7 +101,7 @@ def span(values):
 def close_enough(claimed, recomputed, decimals):
     """Does `recomputed`, rounded to the precision README quotes, equal `claimed`?
 
-    README quotes "+24.9%", not "+24.9012%". Demanding exact equality would fail
+    A claim quotes "+12.3%", not "+12.3012%". Demanding exact equality would fail
     on every correctly rounded figure, so the comparison is made at the claim's
     own stated precision. round() here is Python's banker's rounding; for the
     one-decimal comparisons in use that is not a practical difference, and the
@@ -113,7 +118,7 @@ _RUN_RE = re.compile(r"^run\s+(\d+):\s*(\d+)\s*(ms|s|us|ns)\b", re.M)
 
 
 def parse_boot_times(path):
-    """Parse a logs/sample-boot/*-boot-times-n5.txt series.
+    """Parse a boot-times series ("run N: <value> <unit>" lines).
 
     Returns (values, unit). Comment lines beginning '#' are skipped, which
     matters because those headers quote *other* runs' medians in prose and a
@@ -147,8 +152,8 @@ IPC_HEADER = ",".join(IPC_FIELDS)
 def parse_ipc_csv(path):
     """Parse an IPC results CSV into a list of dicts.
 
-    Handles the structural asymmetry between the two committed files: the cloud
-    CSV carries a header row, the hw CSV does not (its header lives in a sibling
+    Handles the structural asymmetry between the two shapes the schema came in:
+    one carries a header row, the other does not (its header lives in a sibling
     header.csv). A header row is detected and dropped rather than assumed.
     """
     rows = []
@@ -173,9 +178,9 @@ def parse_ipc_csv(path):
 def last_row(rows):
     """The row scripts/twin/diff-results.sh compares: the last one.
 
-    Kept as a named function because "which row" is a real decision -- the hw
-    CSV holds two 100,000-sample rows and one 15-sample row, and picking a
-    different one changes the published delta.
+    Kept as a named function because "which row" is a real decision -- a CSV
+    can hold rows of different sample counts, and picking a different one
+    changes the delta computed from it.
     """
     return rows[-1]
 
@@ -208,15 +213,14 @@ def ladder_arm_p50_us(raw_dir, arm):
     """Median of the per-round p50s for one attribution-ladder arm, in MICROSECONDS.
 
     The ladder writes one JSON per (arm, round), so an arm at k=12 is twelve
-    files. The published figure is the MEDIAN OF THE ROUND MEDIANS, not the p50
-    of all samples pooled: pooling would let a single slow round pull the figure
-    while hiding that it was one round, and the whole reason OD11 spends the
-    budget on k is that between-round variation is ~69x the within-round noise
-    at p50. Reducing across rounds is therefore the measurement, not a summary
-    of it.
+    files. The figure is the MEDIAN OF THE ROUND MEDIANS, not the p50 of all
+    samples pooled: pooling would let a single slow round pull the figure while
+    hiding that it was one round, and OD11 spends the measurement budget on k,
+    not n, for the same reason. Reducing across rounds is therefore the
+    measurement, not a summary of it.
 
-    The files record milliseconds (`p50_ms`); this returns microseconds, because
-    that is the unit README quotes. The conversion is here rather than at the
+    The files record milliseconds (`p50_ms`); this returns microseconds, the
+    unit a ladder figure is quoted in. The conversion is here rather than at the
     call site so the gate's unit check has one place to disagree with.
     """
     paths = sorted(glob.glob(os.path.join(raw_dir, "lat-%s_r*.json" % arm)))
@@ -235,11 +239,10 @@ def ladder_arm_p50_us(raw_dir, arm):
 def paired_p50_us(raw_dir, arm, ref):
     """Median over rounds of (arm p50 - ref p50) in the SAME round, in MICROSECONDS.
 
-    The A6 campaign records publish effects this way: arms are interleaved in
-    rounds, and between-round drift is ~69x the within-round noise at p50, so
-    only a difference taken inside one round cancels it. The median of those
-    per-round differences is not the difference of the two arms' medians, and
-    it is the one the records cite.
+    The A6 campaign design states effects this way: arms are interleaved in
+    rounds, and only a difference taken inside one round cancels between-round
+    drift. The median of those per-round differences is not the difference of
+    the two arms' medians, and it is the one the design calls for.
 
     Returns (median, k). The two arms must hold the same rounds: a round present
     for one arm only -- a stall, a missing file -- is an error rather than being
@@ -308,10 +311,10 @@ def serial_bytes_on_the_wire(path):
     WHY NOT os.path.getsize(). A file size is not admissible evidence for a
     serial-byte claim in this repo, and CI proved it: .gitattributes declares
     `* text=auto eol=lf`, so a capture whose bytes left the board as CRLF is
-    normalised to LF in the git object and on any Linux checkout. The control
-    capture is 17 bytes in a Windows worktree and 16 on the runner -- the same
-    commit, two different "measurements". The gate passed locally and failed in
-    CI for exactly that reason (2026-09-19).
+    normalised to LF in the git object and on any Linux checkout. A one-line
+    capture then reads one byte more in a Windows worktree than on the runner --
+    the same commit, two different "measurements". The gate passed locally and
+    failed in CI for exactly that reason (2026-09-19).
 
     What the claim actually means is what the board emitted: a UART sends CRLF.
     So the line endings are normalised back to CRLF before counting, which
@@ -427,8 +430,15 @@ PINNED_BLOCK = re.compile(r"```text\n(.*?)```", re.S)
 # A figure is a number with a UNIT. Version strings -- "SDP 8.0", "R36.4.7" --
 # carry no unit and are not claims about measurement, so they must not trip the
 # check. Anything here has to be re-derivable from committed data.
+#
+# The unit ends where no word character follows, not at \b. Until 2026-09-27
+# this read `\b`, which needs a word character on one side, so "%" and the
+# multiplication sign (U+00D7) -- both non-word -- only matched when a LETTER
+# followed them: "+12.3%" ending a phrase, or a ratio written with that sign,
+# was never a figure at all. (?!\w) keeps what \b was for ("5 msg" and "0x5A"
+# are not figures) without that blind spot.
 FIGURE = re.compile(
-    r"(\d+(?:\.\d+)?)\s*(ms|us|\u00b5s|ns|s|%|x|\u00d7|MB|GB|KB|MHz|GHz)\b",
+    r"(\d+(?:\.\d+)?)\s*(ms|us|\u00b5s|ns|s|%|x|\u00d7|MB|GB|KB|MHz|GHz)(?!\w)",
     re.I,
 )
 

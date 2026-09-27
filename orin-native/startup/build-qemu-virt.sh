@@ -19,10 +19,10 @@
 # instruction KVM cannot emulate. This builds a replacement from qemu-virt/
 # against a library rebuilt with that flag.
 #
-# 2026-09-18: the product of this script boots under KVM on the Orin Nano,
-# where the shipped startup hangs on the same launch line. See the findings
-# log entry of that date; this script still only builds and checks, and the
-# boot evidence comes from the board, not from here.
+# This script only builds and checks. What its product does under KVM is
+# a board result, held locally (NC QDL v7 4.6(i)); no evidence of it comes
+# from here, and none is printed by it.
+#
 set -euo pipefail
 
 BOARD=qemu-virt
@@ -66,7 +66,7 @@ fi
 #     stur w3, [x0, #-4]       <- ISV=1, KVM's vgic MMIO path can decode it
 #
 # with the same addresses, values and iteration count. Recorded in
-# docs/findings.md (2026-09-08, compile-verified: writeback-store count 4 -> 0).
+# docs/findings.md (2026-09-08).
 #
 # Applied as an edit rather than a patch file because it appends to a variable
 # the BSP already uses for exactly this class of thing — the neighbouring
@@ -145,13 +145,13 @@ echo "== reusing the installed startup library ($(stat -c %s "$LIBA") bytes)"
 
 # ------------------------------------------------- did the flag actually work
 #
-# A flag that is accepted but ineffective would leave the fault in place and the
-# boot would fail exactly as before, with nothing to say why. So count the
-# writeback MMIO stores in the object this build just produced and require zero.
+# A flag that is accepted but ineffective would leave the writeback store in
+# place, with nothing to say why. So count the writeback MMIO stores in the
+# object this build just produced and require zero.
 #
 # This disassembles an artifact built here from the BSP's Apache-2.0 source, not
 # a QNX-shipped binary, so NC QDL v7 4.6(c) is not engaged. It is the same
-# measurement docs/findings.md recorded on 2026-09-08 (4 -> 0).
+# check docs/findings.md recorded on 2026-09-08.
 GICO="$(find "$STARTUP/lib" -name 'gic_v3.o' 2>/dev/null | head -1)"
 if [ -z "$GICO" ]; then
 	echo "  gic_v3.o not found: cannot verify the flag took effect" >&2
@@ -174,7 +174,7 @@ fi
 # What counts is a writeback store through a register that is NOT the stack
 # pointer: that is an MMIO access whose syndrome comes back ISV=0. Frame
 # pushes (str x30,[sp,#-16]!) and restores (ldp ...,[sp],#160) are writebacks
-# too and are entirely normal; counting them says nothing. findings.md's 4 -> 0
+# too and are entirely normal; counting them says nothing. findings.md's count
 # was over exactly this narrower set.
 n=$(ntoaarch64-objdump -d "$GICO" 2>/dev/null \
     | grep -E '\b(str|strh|strb)\b\s+[wx][0-9]+,\s*\[x[0-9]+\](,\s*#-?[0-9]+)?!|\b(str|strh|strb)\b\s+[wx][0-9]+,\s*\[x[0-9]+\],\s*#-?[0-9]+' \

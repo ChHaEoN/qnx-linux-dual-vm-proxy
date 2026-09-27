@@ -1,9 +1,8 @@
 <!-- L4T (Compute) side. Bind to br0 and use unicast peers.
 
-     WHY NOT THE DEFAULT. Cyclone picks ONE interface by priority. Measured on
-     this board 2026-09-20, with br0 up, it enumerated lo / wlP1p1s0 / docker0 /
-     br0 and selected wlP1p1s0 -- the wireless interface. DDS traffic would
-     never have reached the QNX guest, and nothing would have said so.
+     WHY NOT THE DEFAULT. Cyclone picks ONE interface by priority, and on a
+     board with lo, a wireless interface, docker0 and br0 that need not be br0.
+     DDS traffic would then never reach the QNX guest, and nothing would say so.
 
      WHY UNICAST. Default SPDP is multicast 239.255.0.1. A Linux bridge enables
      IGMP snooping with mcast_querier disabled by default, so group state over
@@ -18,12 +17,11 @@
       <AllowMulticast>false</AllowMulticast>
     </General>
     <Discovery>
-      <!-- auto, NOT a fixed index. Measured 2026-09-20: with a fixed
-           ParticipantIndex, a second process on this host collides with the
-           first and silently fails to communicate - a publisher and a verdict
-           subscriber running together received 0 samples. With auto they
-           received all 5. The Compute side normally runs more than one
-           process, so a fixed index is a latent trap, not a simplification. -->
+      <!-- auto, NOT a fixed index. With a fixed ParticipantIndex, a second
+           process on this host takes the same index as the first, and the two
+           can fail to communicate without an error. The Compute side normally
+           runs more than one process, so a fixed index is a latent trap, not a
+           simplification. -->
       <ParticipantIndex>auto</ParticipantIndex>
       <MaxAutoParticipantIndex>10</MaxAutoParticipantIndex>
       <Peers>

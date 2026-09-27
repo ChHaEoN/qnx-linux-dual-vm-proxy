@@ -66,11 +66,11 @@
  * board_init, and their page lies outside the only low mapping once vstart
  * turns the MMU on (lib/aarch64/init_mmu.c:159-161).
  *
- * What has run on the board: M1 and M2 installed the EL1 table on every core
- * they used and the EL2 table on the five secondaries, all under -Q disable.
- * No fault reached either handler in any of those runs, so the handlers
- * themselves have not run. t234_install_el2_vectors is new for M1b and has not
- * run.
+ * M1 and M2 install the EL1 table on every core they use and the EL2 table
+ * on the secondaries, all under -Q disable; what those board runs showed is
+ * held locally (NC QDL v7 4.6(i)). t234_install_el2_vectors is new for
+ * M1b.
+ *
  */
 
 #include <aarch64/callout.ah>

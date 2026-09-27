@@ -6,16 +6,16 @@
 
 .DESCRIPTION
   launch-qhv-tcg.ps1 is capture-only (file-backed serial): fine for a clean
-  pass/fail run, useless for catching the qvm/virtio-console stall
-  (docs/findings.md, ipc-test/qnx-host-client/README.md) IN THE ACT, because
-  the stalled qnx-host-client blocks post_startup.sh and the console never
-  reaches an interactive shell. This script assumes a build where
+  pass/fail run, but no use for inspecting a qvm/virtio-console stall
+  (docs/findings.md, ipc-test/qnx-host-client/README.md) as it happens,
+  because a stalled qnx-host-client would block post_startup.sh and the
+  console would never reach an interactive shell. This script assumes a build where
   scripts/qhv/post_start.custom instead BACKGROUNDS the client run (so the
   login-less root shell comes up regardless of whether the client is still
   running or has stalled), then repeatedly sends diagnostic commands
   (default: alternating `pidin -p qvm` and a `cat` of the client's
   background log) at a fixed interval so at least some snapshots land
-  during a stall, whenever one occurs.
+  during a stall, if one occurs.
 
 .NOTES
   Needs QEMU for Windows and a QHV host image already built via

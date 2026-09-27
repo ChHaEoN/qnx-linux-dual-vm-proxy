@@ -11,7 +11,7 @@
 # The verdict is the parser's (orin-native/m4/parse-m4.py run, step 8b).
 #
 # RUNS ON the PC. It reaches the board over ssh and scp only. It never opens
-# COM3: a capture started from Git Bash receives nothing (m2-runs.md:135-137),
+# COM3: a capture started from Git Bash receives nothing (`m2-runs.md`, held locally),
 # so orin-native/m4/capture-com3-raw.ps1 is started from PowerShell before
 # `run` and named here.
 #

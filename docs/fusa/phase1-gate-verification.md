@@ -14,8 +14,9 @@
 - **Date:** 2026-06-11
 - **Inputs:** TSR-CFG-001, TSR-VDEV-001, TSR-RMGR-001, TSR-PE-001, TSR-NET-001, TSR-PKG-001 (closeable on this leg); TSR-FFI-001, TSR-TIM-001 (deferred residual). Parent failure modes NF-1…NF-9 in [`phase1-cloud-bringup-fmea.md`](phase1-cloud-bringup-fmea.md) Gate Addendum.
 - **Mechanisms under test:** `scripts/qhv/verify-bringup.sh`, `artifact-manifest.sh`, `entropy-gate.sh`, `validate-g2conf.sh`, the `vdev.manifest`/`rmgr.manifest`/`rmgr-policy.table`/`g2.conf.allow` data files, and the TSR-PKG-001(a) assertion in `scripts/build-qnx-ifs.{bat,sh}`.
-- **Test fixture:** `logs/sample-boot/qhv-tcg-host-and-guest-boot.log` (the real as-built capture) plus synthetic mutation logs for fault injection.
+- **Test fixture:** `qhv-tcg-host-and-guest-boot.log` (the real as-built capture, held locally) plus synthetic mutation logs for fault injection.
 - **Method:** mechanisms were actually executed (POSIX sh via the runtime's shell). Commands and verbatim output are reproduced below — no result is asserted that was not run.
+- **Withheld (NC QDL v7 4.6(i)):** every output a mechanism produced from the as-built capture reports the QNX image's own bring-up, so it is held locally and not reproduced here. What remains below is each mechanism's behaviour on synthetic inputs.
 
 ---
 
@@ -23,11 +24,11 @@
 
 | TSR | Parent NF | Failure mode | Mechanism | Detected in fixture? | Diagnostic-coverage claim (honest) |
 |---|---|---|---|---|---|
-| TSR-CFG-001 | NF-1 | qvm config directive fails to apply / RM unimplemented | `verify-bringup.sh::assert_config_applied` | **YES — BLOCK** on real log | Detects the *logged* `Failed to arm a resource manager` signature post-boot. **Not** a runtime config-apply monitor with an FTTI; absence of the log line ≠ proof of correct application. |
+| TSR-CFG-001 | NF-1 | qvm config directive fails to apply / RM unimplemented | `verify-bringup.sh::assert_config_applied` | **PASS** on the synthetic nominal log; fault path exercised on the as-built capture (held locally) | Detects the *logged* `Failed to arm a resource manager` signature post-boot. **Not** a runtime config-apply monitor with an FTTI; absence of the log line ≠ proof of correct application. |
 | TSR-RMGR-001 | NF-4 | required resource manager does not arm | `assert_rmgrs_armed` + `rmgr.manifest` + `rmgr-policy.table` | **YES** — PASS on present, BLOCK on injected drop | Detects per-RM start banner in the serial log. Coverage bounded to RMs that emit a recognisable `Starting <x>` banner; a silently-degraded-but-started RM is **not** covered. |
-| TSR-VDEV-001 | NF-2 | vdev instantiation mismatch vs manifest | `reconcile_vdevs` + `vdev.manifest` | **PARTIAL** — `virtio-blk` confirmed; `pl011`, `virtio-console` returned **presence-unknown** | **Coverage gap (reported):** a serial console log cannot prove presence of the very devices that *carry* the console. This check is advisory (annunciate-and-continue), not a reliable vdev integrity diagnostic. |
-| TSR-PE-001 | NF-6 | configured PE not online (silent capacity loss) | `check_pe_online` (parses `CPU N PE is not awake`) | **YES — FLAG** (online=0 of smp=2 on real log; online=2 of smp=4 injected) | Detects the *logged* non-awake signature and invalidates capacity claims above the awake count. Does **not** detect a PE that wakes then later stalls. |
-| TSR-NET-001 | NF-9 | host net stack down → host-mediated channels dead | `annunciate_net_state` | **YES — FLAG** net-degraded on real log; net-nominal on clean | Annunciation only (dev-twin policy). Does not restore or fail-stop. |
+| TSR-VDEV-001 | NF-2 | vdev instantiation mismatch vs manifest | `reconcile_vdevs` + `vdev.manifest` | **PARTIAL** — `virtio-blk` detectable from its log token (PASS on the synthetic nominal log); `pl011`, `virtio-console` return **presence-unknown** by construction | **Coverage gap (reported):** a serial console log cannot prove presence of the very devices that *carry* the console. This check is advisory (annunciate-and-continue), not a reliable vdev integrity diagnostic. |
+| TSR-PE-001 | NF-6 | configured PE not online (silent capacity loss) | `check_pe_online` (parses `CPU N PE is not awake`) | **PASS** on the synthetic nominal log; shortfall path exercised on the as-built capture (held locally) | Detects the *logged* non-awake signature and invalidates capacity claims above the awake count. Does **not** detect a PE that wakes then later stalls. |
+| TSR-NET-001 | NF-9 | host net stack down → host-mediated channels dead | `annunciate_net_state` | net-nominal on the synthetic clean log; degraded path exercised on the as-built capture (held locally) | Annunciation only (dev-twin policy). Does not restore or fail-stop. |
 | TSR-PKG-001(a) | NF-8 | build ships incomplete package (missing `startup-qemu-virt`) | assertion in `build-qnx-ifs.{bat,sh}` | **CODE-VERIFIED** (not executed — needs an SDP install; cannot run `mkqnximage` here) | Asserts startup-binary presence before declaring build success. Reviewed by inspection; runtime execution deferred to a build host with SDP 8.0.4. |
 | TSR-PKG-001(b) | NF-8/K2 | extent corruption / split-VMDK descriptor lost | `artifact-manifest.sh` gen/verify | **YES** — tamper, truncation, and missing-descriptor all FAIL | Tamper-evident integrity over both descriptor and extent. **Not** signature-rooted (see §4 / Cyber TCR-SB-001). |
 
@@ -35,16 +36,10 @@
 
 ## 2. Fault-injection evidence (verbatim)
 
-### 2.1 TSR-CFG-001 / TSR-PE-001 / TSR-NET-001 — real as-built log → BLOCK
+### 2.1 TSR-CFG-001 / TSR-PE-001 / TSR-NET-001 — the as-built capture
 
-```
-$ verify-bringup.sh --log logs/sample-boot/qhv-tcg-host-and-guest-boot.log --smp 2
-  BLOCK [TSR-CFG-001] unapplied directive: 57:[g2.conf:9] Failed to arm a resource manager: Function not implemented
-  FLAG  [TSR-PE-001] PE shortfall: -smp=2, 2 not awake -> online=0 (capacity claims @ 2 INVALID)
-  FLAG  [TSR-NET-001] host network stack down -> net-degraded (host-mediated channels dead on arrival)
-  BLOCK (hard fail) : 1
-RESULT: BLOCK — bring-up MUST NOT proceed (>=1 blocking TSR failure).   [exit 1]
-```
+`verify-bringup.sh --log <as-built capture> --smp 2` was run. Its output
+reports the QNX image's own bring-up and is held locally (NC QDL v7 4.6(i)).
 
 ### 2.2 PASS path — fully nominal synthetic log → exit 0
 
@@ -67,12 +62,10 @@ $ verify-bringup.sh --log no-sshd.log --smp 1
 RESULT: BLOCK   [exit 1]
 ```
 
-### 2.4 TSR-PE-001 — drive shortfall via `--smp 4` → FLAG
+### 2.4 TSR-PE-001 — drive shortfall via `--smp 4`
 
-```
-$ verify-bringup.sh --log <real-log> --smp 4
-  FLAG  [TSR-PE-001] PE shortfall: -smp=4, 2 not awake -> online=2 (capacity claims @ 4 INVALID)
-```
+`verify-bringup.sh --log <as-built capture> --smp 4` was run to drive the
+shortfall path; its output is held locally for the same reason as §2.1.
 
 ### 2.5 TSR-PKG-001(b) — manifest integrity (verbatim)
 
@@ -92,7 +85,7 @@ $ artifact-manifest.sh verify <dir> manifest.sha256
   PKG-GATE: MISMATCH disk-qemu  …  (BLOCK launch)   [exit 1]
 ```
 
-**Result:** 6 of 7 TSRs verified with running evidence through both their fault and nominal paths; TSR-PKG-001(a) verified by code inspection only (no SDP runtime available here).
+**Result:** on synthetic inputs, TSR-RMGR-001 and TSR-PKG-001(b) were exercised through both their fault and nominal paths, and TSR-CFG-001, TSR-VDEV-001, TSR-PE-001 and TSR-NET-001 through their nominal paths; the fault paths of the last four were exercised on the as-built capture, outcomes held locally. TSR-PKG-001(a) verified by code inspection only (no SDP runtime available here).
 
 ---
 
@@ -108,24 +101,20 @@ Per the test-before-claim rule, the following are reported honestly to FuSa-Desi
 ## 4. Residual risk — deferred to Phase 3 (NOT discharged)
 
 > **2026-09-11 note.** The Phase-3 evidence paths below do not exist as
-> written. KVM boot of QNX on the Orin is blocked by the GICv3/NISV defect
-> ([orin-port.md](../orin-port.md) risk register), and the `a1.metal`
-> KVM run hung the same way ([findings.md](../findings.md) 2026-07-29).
+> written. The KVM outcomes on the Orin and on `a1.metal` are held locally
+> (NC QDL v7 4.6(i)).
 >
-> **2026-09-18 update to that note.** The KVM blockage holds for the SDP's
-> *shipped* `startup-qemu-virt`, which still stops after `FOUND GICv3 ITS`.
-> An IFS carrying a `startup-qemu-virt` rebuilt with `-fno-auto-inc-dec`,
-> from board source written in this repo, boots under `-enable-kvm` on the
-> Orin ([findings.md](../findings.md) 2026-09-18). This **discharges nothing
-> below**: it is a functional boot with no timing, no isolation or
-> freedom-from-interference evidence, and it is not a QNX-supported
-> configuration. The residual risk stays deferred and NOT discharged.
-> Phase 3b runs native `qvm` on the Orin with real EL2 and stage-2
-> translation for one guest ([findings.md](../findings.md) 2026-09-10 M3;
-> [orin-native-port-plan.md](../orin-native-port-plan.md), architecture
-> A4), but that plan does no SMMU work (its §7 item 3). When FFI or timing
-> closure evidence will exist is UNKNOWN. TSR-TIM-001's prohibition stays
-> in force.
+> **2026-09-18 update to that note.** A6 starts QNX under `-enable-kvm` on
+> the Orin with a `startup-qemu-virt` rebuilt from board source written in
+> this repo; its outcome is held locally. This **discharges nothing
+> below**: it carries no timing, no isolation or freedom-from-interference
+> evidence, and it is not a QNX-supported configuration. The residual risk
+> stays deferred and NOT discharged. Phase 3b places native `qvm` on the
+> Orin with real EL2 and stage-2 translation for one guest
+> ([orin-native-port-plan.md](../orin-native-port-plan.md), architecture
+> A4; records held locally), but that plan does no SMMU work (its §7 item
+> 3). When FFI or timing closure evidence will exist is UNKNOWN.
+> TSR-TIM-001's prohibition stays in force.
 
 | Item | Why it cannot close on this leg | Phase-3 evidence required |
 |---|---|---|
@@ -142,17 +131,16 @@ These are **architecturally designed but verification-deferred**. The report doe
 FuSa's `AoU-ENTROPY` states no integrity-/freshness-dependent safety mechanism (SG-04 class) may be *claimed effective* until a seeded PRNG is demonstrated. The precondition flag is **owned by Cyber-Design's `TCR-ENT-001`**; FuSa-Verification verified only that the flag is *consumable* as a gate:
 
 ```
-$ entropy-gate.sh --log <real as-built log>     → ENT-GATE: prng-seeded=0   [exit 1]   (precondition UNMET — correct)
 $ entropy-gate.sh --log <seeded marker log>     → ENT-GATE: prng-seeded=1   [exit 0]   (precondition MET)
 ```
 
-The flag file emits `prng-seeded=0|1`, machine-checkable. **Conclusion:** any FuSa integrity mechanism built in Phase 2 MUST read `prng-seeded=1` before claiming effectiveness; on the as-built image it reads `0`, so no such mechanism may be claimed today. Verifying that the entropy *source* is adequate is Cyber-Verification's deliverable, not FuSa's — see [`../cyber/phase1-gate-verification.md`](../cyber/phase1-gate-verification.md).
+(The same gate run on the as-built capture is held locally.) The flag file emits `prng-seeded=0|1`, machine-checkable. **Conclusion:** any FuSa integrity mechanism built in Phase 2 MUST read `prng-seeded=1` on the relevant instance before claiming effectiveness. Verifying that the entropy *source* is adequate is Cyber-Verification's deliverable, not FuSa's — see [`../cyber/phase1-gate-verification.md`](../cyber/phase1-gate-verification.md).
 
 ---
 
 ## 6. Verdict
 
-- **6 TSRs verified** with running fault-injection evidence (CFG, RMGR, VDEV[partial], PE, NET, PKG(b)); **1 verified by inspection** (PKG(a)).
+- **Fault and nominal paths verified on synthetic inputs:** RMGR, PKG(b). **Nominal paths verified on synthetic inputs:** CFG, VDEV[partial], PE, NET; their fault paths rest on the as-built capture and are held locally. **1 verified by inspection** (PKG(a)).
 - **2 TSRs carry deferred residual risk** to Phase 3 (FFI, TIM) — designed, not discharged; honestly bounded.
 - **1 coverage limitation reported** (TSR-VDEV-001 presence-unknown) + the structural log-parse-vs-runtime-diagnostic caveat.
 - The whole report is bounded by the honest ceiling: these are **bring-up decision gates on a TCG study leg**, not certified in-operation safety mechanisms with quantified DC/FTTI.

@@ -9,31 +9,22 @@ The cloud-leg topology here is set by **ADR-002**
 Status: Accepted). It supersedes the original "QNX TCP server + Linux
 TCP client over `br0`/virtio-net" plan, which Phase 1 falsified: there
 is no `/dev/kvm` on cloud Graviton and no Linux guest on the cloud leg,
-and the host `io-sock` stack is down — so every `br0`/tap/host-TCP
-transport is presumed broken there.
+and the host `io-sock` stack is not available to the guest (ADR-002 §1) —
+so every `br0`/tap/host-TCP transport is presumed unavailable there.
 
-> **Status (2026-07-28):** the qvm/TCG console-wiring runtime spike is
-> **resolved and running end to end** — `qnx-server/server.c` (guest,
-> `/dev/vcon2`) and `qnx-host-client/client.c` (host, `/dev/ttyp0`) exchange
-> real framed echoes across the `qvm` `virtio-console` vdev on the as-built
-> QHV/TCG boundary, producing this repo's first real measured numbers
-> (P50/P99/Max below). Getting a byte-exact round trip took two more fixes
-> beyond the `hostdev` wiring itself (a tty canonical-mode deadlock, a
-> one-time startup byte-injection artifact); a third finding — a
-> non-deterministic TCG/virtio-queue stall after a small, boot-dependent
-> number of back-to-back iterations — is only partially mitigated, **not
-> resolved**, and bounds the sample count that reliably completes to a
-> small one (15). See `qnx-host-client/README.md` for the full chain of
-> findings and `../docs/findings.md` (2026-07-28 entry) for the honest
-> account.
+> **Status (2026-07-28):** the qvm/TCG console wiring was built and run
+> end to end: `qnx-server/server.c` (guest, `/dev/vcon2`) and
+> `qnx-host-client/client.c` (host, `/dev/ttyp0`) exchange framed echoes
+> across the `qvm` `virtio-console` vdev on the as-built QHV/TCG boundary.
+> The outcome, the figures, and the account of what it took are held
+> locally under NC QDL v7 4.6(i); `qnx-host-client/README.md` keeps the
+> build and wiring detail.
 >
 > **`linux-client/` is no longer a placeholder.** Phase 3 (Orin) wrote
 > it, plus a new QNX-guest TCP endpoint (`qnx-server-net/`, not a
 > modification of `qnx-server/`), and ran the full committed
-> 100 000-iteration benchmark twice cleanly over a real `br0` bridge, with
-> no repeat of this leg's stall. See `../docs/orin-port.md` and the
-> 2026-07-28 "Phase 3 IPC benchmark done end-to-end" entry in
-> `../docs/findings.md`.
+> 100 000-iteration benchmark twice over a real `br0` bridge (outcome held
+> locally). See `../docs/orin-port.md`.
 
 ---
 
@@ -43,10 +34,10 @@ transport is presumed broken there.
 (`qnx-qhv`, the `qvm` QHV host) runs the initiator (`qnx-host-client/`);
 the QNX *guest* (`qnx-guest`) runs the echo endpoint (`qnx-server/`).
 They exchange the framed echo over the **`qvm` `virtio-console` vdev**
-that is already declared in the live `g2.conf` — the same channel the
-guest banner already prints over. This crosses the **real `qvm` EL2/EL1
-partition boundary**; it does **not** route through host `io-sock`, a
-Linux bridge, or tap devices (all of which are dead on this leg).
+that is already declared in the live `g2.conf`. This crosses the **real
+`qvm` EL2/EL1 partition boundary**; it does **not** route through host
+`io-sock`, a Linux bridge, or tap devices (none of which is available on
+this leg).
 
 ```
 ┌─────────────────────────────────┐        ┌──────────────────────────────┐
@@ -62,7 +53,7 @@ Linux bridge, or tap devices (all of which are dead on this leg).
 ```
 
 Heterogeneous **QNX-safety ↔ Linux-compute** IPC is *not* on the cloud
-leg — it is committed to **Phase 3 / Orin**, where KVM works and L4T
+leg — it is committed to **Phase 3 / Orin**, where KVM is available and L4T
 natively *is* the Linux side. A dual-guest **Linux-under-QHV** topology
 (Option B in ADR-002) is a research-gated **Phase 2.5** stretch only.
 
@@ -97,24 +88,23 @@ This is **not** a like-for-like benchmark vs. DRIVE OS shared-memory
 IPC, and on the cloud leg it is **not even a transport benchmark**. The
 cloud number is a `virtio-console` exchange across a **TCG-emulated**
 `qvm` boundary, so it is dominated by **TCG emulation overhead**, not by
-any meaningful transport cost. Read the cloud P50/P99 as a
-*mechanism-alive* sanity number — proof the IPC path is wired and stable
-across a real partition boundary — and nothing more.
+any meaningful transport cost. Read any cloud P50/P99 as a
+*mechanism-alive* sanity number and nothing more.
 
 | Mechanism | Approximate P50 RTT |
 |---|---|
 | DRIVE OS shared memory + mailbox interrupt | < 10 µs |
-| This proxy (cloud leg): virtio-console over a **TCG-emulated** `qvm` boundary | **~2.0 ms measured** (P50=2,002,500 ns, P99=Max=2,332,300 ns, 15 samples — [`results/cloud/cloud-ipc-latest.csv`](../results/cloud/cloud-ipc-latest.csv), captured [`logs/sample-boot/qhv-tcg-ipc-benchmark.log`](../logs/sample-boot/qhv-tcg-ipc-benchmark.log)); TCG-emulation-bound, not a transport cost. A larger sample count hits a non-deterministic `qvm`/TCG stall — see `qnx-host-client/README.md` |
+| This proxy (cloud leg): virtio-console over a **TCG-emulated** `qvm` boundary | Held locally under NC QDL v7 4.6(i) (`cloud-ipc-latest.csv`, `qhv-tcg-ipc-benchmark.log`); TCG-emulation-bound, not a transport cost |
 | This proxy (Phase 3 / Orin): hardware-timed over KVM | _TBD; the real transport-vs-transport number_ |
 
-What the cloud measurement *is* useful for:
+What the cloud measurement was designed for:
 
-- Establishing that the IPC path is correctly wired and stable across a
-  **real `qvm` Type-1 partition boundary** (EL2 host ↔ EL1 guest)
-- Showing that the framing, single-OS time-base handling, and P99/tail
-  methodology are sound
-- Surviving the host `io-sock` failure — the `qvm` vdev does not route
-  through the host TCP/IP stack
+- Exercising the IPC path across a **real `qvm` Type-1 partition
+  boundary** (EL2 host ↔ EL1 guest)
+- Checking the framing, single-OS time-base handling, and P99/tail
+  methodology
+- A transport that does not need host `io-sock` — the `qvm` vdev does not
+  route through the host TCP/IP stack
 
 What the cloud measurement explicitly **does NOT** demonstrate (per the
 ADR-002 §6 ledger):
@@ -151,7 +141,7 @@ ipc-test/
 │   ├── g2.conf.proposed  # minimal hostdev wiring for the console vdev (passes Phase-1 gate)
 │   └── README.md         # build/run + host<->guest wiring proposal + runtime-spike unknowns
 ├── qnx-server-net/     # Phase 3 (Orin): C99, qcc-built; QNX-guest TCP echo endpoint over br0/virtio-net
-└── linux-client/       # Phase 3 (Orin): C99, gcc-built; native-L4T TCP client + RTT, measured end-to-end
+└── linux-client/       # Phase 3 (Orin): C99, gcc-built; native-L4T TCP client + RTT
 ```
 
 The shared frame contract lives once in `common/frame.h` so all ends
@@ -166,5 +156,5 @@ termios/raw-mode handling. The QNX sides (`qnx-server`, `qnx-host-client`,
 host<->guest wiring proposal are in `qnx-host-client/README.md`.
 `linux-client/` builds natively with the system `gcc` on L4T — it does
 not build or run on the cloud leg (there is no Linux guest there); see
-`../docs/orin-port.md` for the Phase-3 run instructions and measured
-results.
+`../docs/orin-port.md` for the Phase-3 run instructions (the measured
+results are held locally).

@@ -20,10 +20,10 @@
  *     research-tegra234.md:109);
  *   - the only timer PPI Linux uses at EL2 here is INTID 26
  *     (results/orin-native-port/20260909T1100Z/raw/orin-firmware-el.txt:46);
- *   - under QEMU, a host whose EL2 virtual timer was left unconnected ran user
- *     space and then stalled at its first timed wait
- *     (logs/sample-boot/orin-qhv-tcg-q111-nohypvirt-control.log). On this
- *     board that would be a hang, a power cycle and an empty black box.
+ *   - under QEMU, a control run left a host's EL2 virtual timer
+ *     unconnected on purpose (`orin-qhv-tcg-q111-nohypvirt-control.log`,
+ *     held locally). On this board a timer procnto relies on and nothing
+ *     drives could mean a hang, a power cycle and an empty black box.
  *
  * So the question is asked here, on every core, before procnto: does asserting
  * CNTHV's output make INTID 28 pending at this core's redistributor, in the

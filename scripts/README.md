@@ -224,33 +224,14 @@ guest banner, with every controllable setting stamped into the times file.
 |---|---|---|
 | Build the images | `build-qhv.bat` | — (same images, copied) |
 | Stage to the Orin | `twin/sync-qhv.sh` (scp, checksum-verified on arrival, resumable; `SSH_OPTS` for a non-default key) | — |
-| QEMU ≥ 9.0 on the Orin | — | `orin/build-qemu-on-orin.sh` (the distro 6.2.0 hangs the QHV host on an EL2-timer defect; builds a tagged release into its own prefix, 6.2.0 untouched) |
+| QEMU ≥ 9.0 on the Orin | — | `orin/build-qemu-on-orin.sh` (the distro 6.2.0 lacks the NS-EL2 virtual-timer IRQ wiring QEMU added in 9.0 — see `docs/digital-twin-design.md` §1a; builds a tagged release into its own prefix, 6.2.0 untouched) |
 | Measure n=5 | `launch-qhv-tcg.ps1 -Runs 5 -StopOnGuestBanner -WithRng [-QemuPath …]` | `WITH_RNG=1 orin/launch-qhv-on-orin-tcg.sh 5` (picks `~/qemu-v11.1.0`, or `QEMU_BIN`) |
 
 Both instruments write `# qemu:` / `# devices:` / `# disk:` stamps and
 per-marker segment lines; two series are comparable only if those stamps
 match. `twin/diff-results.sh` parses the IPC CSVs, not these files — compare
-them directly. Background and numbers: `docs/digital-twin-design.md` §1a.
-
-## Diagnostic — KVM/NISV boot-hang evidence collector (Phase 3/4)
-
-`diagnose-gicv3-nisv.sh` — **read-only**. Collects host / repo / boot-log
-evidence, decodes an `ESR_EL2` value (`--esr`), composes and range-checks a
-fault IPA (`--hpfar` / `--far` / `--ipa`), classifies the faulting opcode
-around `--guest-pc` in `--elf`, and writes
-`results/gicv3-nisv-debug/<UTC>/summary.md` + `raw/` with a
-PASS / FAIL / BLOCKED / NOT APPLICABLE / NOT RUN matrix and the exact
-next commands. It never boots a guest, sshes, installs anything or copies a
-QNX binary; missing tools degrade rows instead of aborting. Runs under
-Linux (L4T) and Git Bash. The committed report was produced by:
-
-```bash
-bash scripts/diagnose-gicv3-nisv.sh --esr 0x92000045 --boot-log logs/sample-boot/aws-a1-metal-kvm-nisv-repro.log
-```
-
-It is **not** for the QHV/TCG QEMU-6.2 timer hang above — those logs are
-excluded automatically. Background: `docs/orin-port.md` risk register,
-`docs/findings.md` 2026-07-28/29, 2026-09-08 and 2026-09-09.
+them directly. Background: `docs/digital-twin-design.md` §1a (the numbers are
+held locally under NC QDL v7 4.6(i)).
 
 ## Idempotency notes
 

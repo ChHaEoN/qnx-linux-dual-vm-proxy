@@ -1,10 +1,10 @@
 # delta.awk -- the ONE place the cloud->hw percentage delta is computed.
 #
 # Extracted from diff-results.sh (2026-09-19) so that CI can re-derive the
-# published IPC deltas without a second copy of the formula. Per the project's
+# IPC deltas without a second copy of the formula. Per the project's
 # CI constraint: extract a function, never fork the toolchain per runner.
-# diff-results.sh and scripts/ci/claims_gate.py now call THIS file, so a change
-# to the formula moves both at once and cannot silently diverge.
+# diff-results.sh calls THIS file (scripts/ci/claims_lib.py can too), so the
+# formula has one copy.
 #
 # Inputs (awk -v): cp50 hp50 cp99 hp99 cmax hmax   -- cloud/hw values, ns.
 # MODE (awk -v):   unset -> the human report diff-results.sh has always printed,

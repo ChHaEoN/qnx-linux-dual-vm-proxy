@@ -8,11 +8,11 @@
 # WHY
 # ---
 # The QHV twin leg (docs/digital-twin-design.md §1a) compared a Windows host
-# running QEMU 11.0.50 against this board running Ubuntu 22.04's stock 6.2.0
-# and hung deterministically at "random: Could not initialize entropy". Five
-# major releases apart, on the TCG EL2-emulation path (`virt,virtualization=on`)
-# that QHV exists to use. Until both sides run the same QEMU, that hang cannot
-# be attributed to the host and no timing number from the pair means anything.
+# running QEMU 11.0.50 against this board running Ubuntu 22.04's stock 6.2.0:
+# five major releases apart, on the TCG EL2-emulation path
+# (`virt,virtualization=on`) that QHV exists to use. Until both sides run the
+# same QEMU, no difference between the pair can be attributed to the host, and
+# no timing number from the pair means anything.
 #
 # This script closes the version gap from the side that is behind.
 #
@@ -28,9 +28,9 @@
 #
 # WHY ITS OWN PREFIX
 # ------------------
-# The distro's 6.2.0 stays exactly where it is. Every existing result on the
-# qnx-safety-vm leg — the TCG boot logs, the 100k-iteration IPC runs, the
-# GICv3/NISV KVM reproduction — was produced against 6.2.0. Replacing the
+# The distro's 6.2.0 stays exactly where it is. Every existing record on the
+# qnx-safety-vm leg — the TCG boot logs, the IPC runs, the GICv3/NISV KVM
+# investigation — was produced against 6.2.0. Replacing the
 # system QEMU would quietly invalidate the reproducibility of all of it, and
 # rolling back would stop being a path change.
 #
@@ -108,10 +108,9 @@ mkdir -p "${build}"
 cd "${build}"
 # aarch64-softmmu only: this is the sole target either twin leg boots, and
 # building every target would multiply the compile time on this board for no
-# benefit. --enable-kvm is kept because it works on this board as of 2026-09-18
-# with a startup-qemu-virt we rebuilt (-fno-auto-inc-dec); the SDP's shipped one
-# still hangs. That was a boot, not a timing run: no KVM figure was taken for the
-# qnx-safety-vm leg, and its published A2 numbers are TCG.
+# benefit. --enable-kvm is kept for the KVM guest, which uses a startup-qemu-virt
+# we rebuilt (-fno-auto-inc-dec), not the SDP's shipped one. No KVM figure was
+# taken for the qnx-safety-vm leg; its A2 figures (held locally) are TCG.
 "${src}/configure" \
   --target-list=aarch64-softmmu \
   --prefix="${prefix}" \

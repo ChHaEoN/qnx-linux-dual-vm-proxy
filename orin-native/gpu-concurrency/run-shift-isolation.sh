@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# run-shift-isolation.sh -- which change raised the guest's socket rungs?
+# run-shift-isolation.sh -- which change moves the guest's socket rungs?
 #
-# WHY. Between the Orin's UDP run and its notified-shm run (both 2026-09-22) the
-# guest's TCP rungs rose 32-38 us while the host-only rungs moved a few us; on
-# AWS a1.metal the same kind of change raised them ~76 us. Several things
-# changed at once, so the notified-shm records could only state it. This
-# separates three of them, on one host, in one session:
+# WHY. Between the Orin's UDP run and its notified-shm run (both 2026-09-22;
+# records 20260922T-a6-orin-udp and 20260922T-a6-orin-kick) and on AWS a1.metal
+# (record 20260922T-a6-a1metal-kick), all held locally, several things changed
+# at once, so the notified-shm records cannot attribute a shift in the guest's
+# rungs to any one of them. This separates three of them, on one host, in one
+# session:
 #
 #   A  ifs-udp.bin, no extra devices                  (the UDP run's guest)
 #   B  ifs-udp.bin + ivshmem-doorbell + virtio console (+ the ivshmem server):
@@ -19,7 +20,7 @@
 # A B C C B A by default: a linear drift over the session cancels in each
 # difference.
 #
-# and, to split C - B once it was known to be the image (the second session):
+# and, to split C - B further (the second session):
 #
 #   S  ifs-shm.bin + the same devices                  (the polled monitor only)
 #   N  ifs-kick-nomon.bin + the same devices           (ifs-kick minus the shmkick
@@ -31,8 +32,8 @@
 # The ladder is the TCP group with D-udp in it (UDP_IN_TCP=1) and arm C
 # (ARM_C_PORT=7000): no shm arm. The guest's shm monitors are never asked
 # anything, but they are not silent: the polled monitor, 50 ms after its last
-# request, sleeps in 10 ms steps -- a ~100 Hz wake-up source in every S, N and C
-# guest, visible in the KVM counters of each boot's kvm-A-loopback files.
+# request, sleeps in 10 ms steps -- by design a ~100 Hz wake-up source in every
+# S, N and C guest.
 #
 # EACH BOOT IS CHECKED for the services its image should run (from the guest's
 # console), so a monitor that failed to start cannot pass as a condition:
@@ -46,8 +47,9 @@
 # condition; and K=4 by default is a diagnostic, not OD11's k >= 12.
 #
 #   OUTBASE=<dir> [IMG=~/output] [K=4] [SEQ="A B C C B A"] [SNAP=both|1] bash run-shift-isolation.sh
-#   SNAP=1 runs only the KVM_STATS=1 ladder in each boot (the snapshots were shown
-#   not to matter, and they record the idle guest's KVM activity).
+#   SNAP=1 runs only the KVM_STATS=1 ladder in each boot (why: record
+#   20260922T-a6-orin-shift, held locally; the snapshots record the idle guest's
+#   KVM activity).
 #   DRY=1 ... prints the plan and exits (what the tests check)
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"

@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# run-free.sh -- the last-byte test: is the guest's costly read of network data the one that takes
-# the frame's last byte? Phase 3b / A6, 2026-09-27; follows 20260927T-a6-orin-offload.
+# run-free.sh -- the last-byte test: does what the guest's read of network data costs depend on
+# whether it takes the frame's last byte? Phase 3b / A6, 2026-09-27; follows
+# 20260927T-a6-orin-offload.
 # The owner asked for this run (2026-09-26, to go on overnight unattended: KVM guests only).
 #
-# WHAT IS KNOWN. On one vCPU the guest's second read() of a network-delivered 64-byte frame takes
-# ~12.8 us, against ~7.0 us for a read of loopback data; not the other vCPU (pin), not a wait for
-# left-over work (spin), not the receive offloads (offload). In every timed case so far the second
-# read took the frame's last bytes, so it may also have released the received buffer: a cluster
-# from vtnet's receive ring for network data, a small buffer for loopback data.
+# WHAT IS KNOWN. On one vCPU, the guest's second read() of a network-delivered 64-byte frame
+# against a read of loopback data, and three candidate causes -- the other vCPU, a wait for
+# left-over work, the receive offloads -- are in records 20260927T-a6-orin-pin, -spin and
+# -offload (held locally). In every timed case so far the second read took the frame's last
+# bytes, so it may also have released the received buffer: a cluster from vtnet's receive ring
+# for network data, a small buffer for loopback data.
 #
 # THE MANIPULATION. The frame's size, with the endpoint's read pattern fixed per port
 # (ifs-pina.bin's timed endpoint on vCPU 0; one vCPU):

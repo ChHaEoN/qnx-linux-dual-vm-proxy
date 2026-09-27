@@ -6,10 +6,10 @@
 # WHY. The Linux kernel's halt-polling documentation says its adaptive window
 # settles well only for wake-ups that come at an approximately constant rate. Every
 # A6 run so far spaced its requests evenly: the probe slept the same time after
-# every reply. Real traffic is not even. The rate record showed the poll window
-# decides ~40 us of the guest's p50, and on this host (halt_poll_ns 500000,
-# shrink 0) one idle span longer than the window resets it to zero, after which it
-# must grow back from 10 us by doubling.
+# every reply. Real traffic is not even. The poll window's part in the guest's p50
+# is in record `20260924T-a6-orin-rate` (held locally), and on this host
+# (halt_poll_ns 500000, shrink 0) one idle span longer than the window resets it to
+# zero, after which it must grow back from 10 us by doubling.
 #
 # Six arms, on one boot of the stamping guest (ifs-stamp.bin, :7103) and the same
 # monitor.c built natively (:7203), as run-rate.sh:

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""readtime_report.py OUT -- run-readtime.sh's test: is the extra read()'s cost spent inside the call?
+"""readtime_report.py OUT -- run-readtime.sh's test: is what the extra read() adds to the round trip
+spent inside the call? (The question comes from record `20260926T-a6-orin-reads`, held locally.)
 By the rule the harness's header fixed before any run (Phase 3b / A6, 2026-09-26).
 
 Per arm and round: the probe's p50, and the endpoint's printed medians (`sweep: timing :PORT MODE

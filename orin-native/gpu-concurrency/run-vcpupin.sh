@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-# run-vcpupin.sh -- why the guest monitor's own time halves at 0.2 ms spacing:
-# a test of KVM's per-core TLB and I-cache flush, made by pinning each vCPU to its
-# own core. Phase 3b / A6, 2026-09-24; follows 20260924T-a6-orin-rate, section 5.
+# run-vcpupin.sh -- does the guest monitor's own time at 0.2 ms spacing, against
+# 2 ms, come from KVM's per-core TLB and I-cache flush? A test made by pinning each
+# vCPU to its own core. Phase 3b / A6, 2026-09-24; follows 20260924T-a6-orin-rate, section 5.
 #
-# THE OBSERVATION. In the offered-rate sweep the stamping monitor's userspace span
-# in the guest was 6 ticks (32 ns each) at p50 at 0.2 ms spacing, and 12 at every
-# spacing from 0.5 ms. Natively it never moved. At 0.2 ms the vCPUs almost never
-# block (KVM halt polling). From 0.5 ms they block, and are woken on nearly every
-# exchange.
+# THE OBSERVATION. How the stamping monitor's userspace span (in counter ticks,
+# 32 ns each), in the guest and natively, and how often the vCPUs block (KVM halt
+# polling), vary with the spacing in the offered-rate sweep: record
+# 20260924T-a6-orin-rate, section 5 (held locally).
 #
 # THE HYPOTHESIS UNDER TEST. Linux 5.15's kvm_arch_vcpu_load() keeps, per
 # physical core, the id of this VM's vCPU that last ran there (last_vcpu_ran).

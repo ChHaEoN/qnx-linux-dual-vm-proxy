@@ -11,27 +11,27 @@
  * WHY THIS EXISTS
  *
  * The SDP ships a startup-qemu-virt binary but not its board source, so the
- * shipped one cannot be relinked. It dies under KVM inside gic_v3_initialize()
- * on a writeback MMIO store that reports no instruction syndrome (ISV=0), which
- * KVM cannot emulate; the guest stops with KVM_EXIT_ARM_NISV. Rebuilding the
- * library with -fno-auto-inc-dec removes that instruction form, and rebuilding
- * needs a board to link against — this one. See aarch64/init_intrinfo.c for the
- * captured fault and patches/gic-no-auto-inc-dec.patch for the fix itself.
+ * shipped one cannot be relinked. Built with the BSP's default flags, the
+ * library's gic_v3.c carries a writeback MMIO store that reports no
+ * instruction syndrome (ISV=0), which KVM cannot emulate (KVM_EXIT_ARM_NISV).
+ * Rebuilding the library with -fno-auto-inc-dec removes that instruction form,
+ * and rebuilding needs a board to link against — this one. See
+ * aarch64/init_intrinfo.c and patches/gic-no-auto-inc-dec.patch for the fix.
  *
- * WHAT IT HAS DONE, AND WHAT IT HAS NOT
+ * WHAT IT HAS BEEN USED FOR, AND WHAT IT DOES NOT ESTABLISH
  *
- * 2026-09-18: it boots. Under KVM on a Jetson Orin Nano, an IFS carrying this
- * startup reached procnto and printed the banner below, on QEMU 6.2.0 and
- * 11.1.0 alike (byte-identical serial output, so the QEMU version is not a
- * factor). The control -- the SDP's own startup-qemu-virt, same launch line,
- * same host, same hour -- still dies after "FOUND GICv3 ITS" with 17 bytes of
- * output. So the chain "remove the writeback store -> no NISV exit -> the guest
- * boots" now has its last link measured, not argued.
+ * It has been built and run under KVM on a Jetson Orin Nano since
+ * 2026-09-18, with the SDP's own startup-qemu-virt run on the same launch
+ * line as the control, under QEMU 6.2.0 and 11.1.0. What those runs showed
+ * is held locally (NC QDL v7 4.6(i)); no outcome of them is stated here.
+ * The chain this board is built on -- remove the writeback store, and that
+ * instruction can raise no NISV exit -- rests on the compiler flag and the
+ * disassembly gate in build-qemu-virt.sh, not on those runs.
  *
- * What that does not establish: nothing about timing, latency or throughput;
- * nothing about running two guests; nothing about the GPU. And the fix lives in
- * a startup WE rebuilt -- QNX ships no such binary, so this is evidence for a
- * defect report, not a supported configuration.
+ * Whatever they showed, this establishes nothing about timing, latency or
+ * throughput; nothing about running two guests; nothing about the GPU. And
+ * the fix lives in a startup WE rebuilt -- QNX ships no such binary, so this
+ * is not a QNX-supported configuration.
  *
  * WHY IT IS NOT A COPY OF t234-orin-nano
  *

@@ -1,21 +1,20 @@
 #!/usr/bin/env bash
-# run-readpath.sh -- where one guest read() goes: the read-count test's ~16 us, traced, on two
-# vCPUs against one. Phase 3b / A6, 2026-09-26; follows 20260926T-a6-orin-reads.
+# run-readpath.sh -- where one extra guest read() goes, traced, on two vCPUs against one. Phase 3b / A6, 2026-09-26; follows 20260926T-a6-orin-reads.
 # The owner asked for this run (2026-09-26).
 #
-# WHAT IS KNOWN. One extra socket read() in the guest costs the round trip +16.2 us (64 B read
-# as 32 + 32 against 64 in one), natively +1.2 us (the reads record). The second read() finds
-# its data already there, so its cost is the call: in QNX a message to io-sock and its reply.
-# The block-path record found that a 2 ms exchange wakes a blocked vCPU three times (QEMU wakes
-# vCPU 0 for the interrupt, then the guest wakes its other vCPU twice), ~8.3 us each, and the
-# SMP record that one vCPU removes the guest's two.
+# WHAT IS KNOWN. What one extra socket read() costs the round trip in the guest and natively
+# (64 B read as 32 + 32 against 64 in one): record 20260926T-a6-orin-reads (held locally). The
+# second read() finds its data already there, so its cost is the call: in QNX a message to
+# io-sock and its reply. How often, and at what cost, a 2 ms exchange wakes a blocked vCPU:
+# record 20260924T-a6-orin-blockpath; what one vCPU changes about that: record
+# 20260924T-a6-orin-smp (both held locally).
 #
 # THE INTERVENTION AND THE TRACE. ifs-reads.bin, booted with two vCPUs (the A6 default) and
 # with one (-smp 1), halt_poll_ns at its default 500000 throughout. Per boot two arms, both
 # 64-byte frames at 2 ms spacing: d64 on :7120 (one read per frame) and s64 on :7122 (two).
 # Tags: 2d64 2s64 1d64 1s64. run-blockpath.sh's trace (blockpath_trace.py, the same events and
-# segments as the SMP record) is on for every arm alike; it costs ~9-11 us per exchange, the
-# same in every arm. Two boots per round in a Williams order over the two configurations
+# segments as the SMP record) is on for every arm alike, so its own cost is common to every
+# arm. Two boots per round in a Williams order over the two configurations
 # (period 2); the arms in the same order for both boots of a round, alternating by round.
 # n=500, 100 warm-up (the SMP record's, for the trace), K=12. About 16 min.
 #
@@ -180,8 +179,8 @@ pin_vm() {   # every QEMU thread on QEMU_CORES, read back per thread
 	done
 }
 
-# Only an endpoint of sweep.c echoes a 2048-byte frame whole (the guest's banners interleave on
-# its console, as the sweep found).
+# Only an endpoint of sweep.c echoes a 2048-byte frame whole, so an endpoint is checked by an
+# exchange, never by its banner on the guest's console.
 echo_check() {   # $1 port  $2 label
 	taskset -c "$CORE_PROBE" python3 "$PROBE" --host "$GUEST" --port "$1" --n 3 --warmup 0 --interval-ms 0 \
 		--timeout-s 3 --frame-bytes 2048 --tag "check-$2" --out "$OUT/check-$2.json" >> "$OUT/check.log" 2>&1

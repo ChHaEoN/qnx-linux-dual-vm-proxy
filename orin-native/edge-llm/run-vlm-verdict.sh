@@ -117,7 +117,7 @@ m_write_stamp "$OUT/stamp.json" \
 	"\"pin\": {\"qemu\": \"$QEMU_CORES\", \"probe\": $CORE_PROBE}" \
 	"\"service_port\": $PORT" \
 	"\"nvpmodel\": \"$(sudo -n nvpmodel -q 2>/dev/null | tr '\n' ' ' | sed 's/  */ /g')\"" \
-	'"claims": {"mnist": "latency_probe.build_frame: class 3, conf 95, 124 us, kind 0", "vlm": "latency_probe.build_vlm_frame: class 3, conf 100, 282032 us = 269484 + 12548, kind 1, model 1"}' \
+	'"claims": {"mnist": "latency_probe.build_frame: class 3, conf 95, 124 us, kind 0", "vlm": "latency_probe.build_vlm_frame: class 3, conf 100, 260000 us = 250000 + 10000, kind 1, model 1"}' \
 	'"order": "AB/BA crossover: odd rounds mnist then vlm, even rounds vlm then mnist"' \
 	"\"gpu_load\": \"none: no $LOADS resident at preflight, GR3D 0% at preflight and on every tegrastats line of every window\"" \
 	'"arms": ["mnist", "vlm"]'

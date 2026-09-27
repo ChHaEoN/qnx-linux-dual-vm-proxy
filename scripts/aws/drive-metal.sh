@@ -14,7 +14,7 @@
 #   drive-metal.sh clear         empty the session state -- only after verify-vol passed
 #
 # An earlier form of this script drove the 2026-09-22 a1.metal session
-# (results/orin-native-port/20260922T-a6-a1metal-kick); see README.md for what changed.
+# (record `20260922T-a6-a1metal-kick`, held locally); see README.md for what changed.
 #
 # FAILURE POLICY. From the moment an instance id exists until the safety net is
 # proven armed (launch, wait), ANY failure terminates the instance and confirms the

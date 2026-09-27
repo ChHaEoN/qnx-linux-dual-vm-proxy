@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-# run-edge.sh -- where exactly the guest path's fast path begins, between 1449 and 1472 B.
+# run-edge.sh -- a fine map of the guest path from 1448 to 1472 B.
 # Phase 3b / A6, 2026-09-26; follows 20260926T-a6-orin-mss.
 # The owner asked for this run (2026-09-26).
 #
-# WHAT IS KNOWN. With one read() per frame, the guest path is +4.9 us slower at 1449 B than at
-# 1448 B (the host path +4.1: both carry two packets each way from 1449 B), then 22.6 us faster
-# at 1472 B than at 1449 B, in every round, with two packets each way on both sides (the mss
-# record). The MSS is 1448 B. 1460 -- the MSS the SYN advertises for MTU 1500 before the 12-byte
-# timestamp option is taken off -- lies in that range. So does every size whose second segment
+# WHAT IS KNOWN. With one read() per frame, the guest and host paths at 1448, 1449 and 1472 B,
+# and their packets each way, are in record 20260926T-a6-orin-mss (held locally). The MSS is
+# 1448 B. 1460 -- the MSS the SYN advertises for MTU 1500 before the 12-byte timestamp option
+# is taken off -- lies between 1449 and 1472 B. So does every size whose second segment
 # (S - 1448) is between 2 and 23 bytes: this map cannot tell "the frame exceeds 1460" from "the
 # second segment exceeds 12 bytes", because one determines the other at this MSS.
 #

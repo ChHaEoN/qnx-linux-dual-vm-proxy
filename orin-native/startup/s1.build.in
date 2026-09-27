@@ -110,12 +110,12 @@ libslog2.so.1
 libslog2parse.so.1
 libslog2shim.so.1
 libjson.so.1
-# R0 (2026-09-10T21:11Z) stopped at md5_pre: toybox and slog2info printed
-# 'ldd:FATAL: Could not load library libz.so.2'. The loader names only the
-# first missing library, so the rest of the cloud host IFS's [-autolink] set
-# comes too (qhv/host/output/build/ifs.build), with its qcrypto.conf. That
-# host's CONFIG_PATH is not copied: on this bootstrap line mkifs prefixes it to
-# every script command, which the generator's exact-line checks reject.
+# libz.so.2 onward: the loader names only the first missing library, so
+# rather than add them one at a time, the rest of the cloud host IFS's
+# [-autolink] set comes too (qhv/host/output/build/ifs.build), with its
+# qcrypto.conf. That host's CONFIG_PATH is not copied: on this bootstrap
+# line mkifs prefixes it to every script command, which the generator's
+# exact-line checks reject.
 libz.so.2
 libcrypto.so.3
 libqcrypto.so.1.0

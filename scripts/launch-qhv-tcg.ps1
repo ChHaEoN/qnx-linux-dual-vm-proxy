@@ -24,15 +24,12 @@
   Run after scripts\build-qhv.bat. This is intentionally TCG (pure emulation).
   On the Orin side TCG is a hard requirement -- QHV needs EL2 for its guest,
   i.e. nested virtualisation, which ARM KVM does not offer on A78AE -- so
-  TCG-on-both is genuine symmetry here, unlike the plain qnx-safety-vm leg
-  where Orin ~~runs TCG only because KVM boot is blocked~~ (docs/orin-port.md).
-  2026-09-18: on that plain leg, an IFS carrying a startup-qemu-virt WE rebuilt
-  with -fno-auto-inc-dec (board source orin-native/startup/qemu-virt/) does boot
-  under KVM; the SDP's shipped startup still hangs after "FOUND GICv3 ITS".
-  Nothing changes for THIS script: QHV still needs EL2/nested virtualisation,
-  which ARM KVM does not provide on A78AE, so TCG here remains a hard
-  requirement.
-  See docs/findings.md (2026-06-11) and the curated log under logs/sample-boot/.
+  TCG-on-both is genuine symmetry here. The plain qnx-safety-vm leg's KVM route
+  (an IFS carrying a startup-qemu-virt WE rebuilt with -fno-auto-inc-dec, board
+  source orin-native/startup/qemu-virt/; docs/orin-port.md) changes nothing for
+  THIS script: QHV still needs EL2/nested virtualisation, which ARM KVM does
+  not provide on A78AE, so TCG here remains a hard requirement.
+  See docs/findings.md (2026-06-11).
 
 .EXAMPLE
   .\launch-qhv-tcg.ps1
@@ -83,13 +80,8 @@ $ifsF  = $ifs  -replace '\\','/'
 $diskF = $disk -replace '\\','/'
 
 # Progress markers on the shared serial line, in the order they must appear.
-#
-# NOTE, because the obvious guess is wrong: the QHV *host* prints no banner of
-# its own here. This script previously told the reader to look for a host
-# banner "QNX qnx-qhv ... QEMU_virt", as does the curation header of
-# logs/sample-boot/qhv-tcg-host-and-guest-boot.log -- but no such line exists
-# in that log's body or in any run reproduced since. Only the guest prints a
-# banner. All three markers below are genuinely emitted.
+# The first two are printed by this project's post_start.custom, the third is
+# the guest's banner. No marker waits for a banner from the QHV *host*.
 $markerHost  = '=== AUTO-START QNX GUEST UNDER QVM'   # host reached post_start
 $markerQvm   = '=== launching qvm @g2.conf'           # hypervisor invoked
 $markerGuest = 'QNX qnx-guest'                        # guest crossed EL2/EL1
@@ -143,10 +135,9 @@ for ($run = 1; $run -le $Runs; $run++) {
 
   # -WithRng: virtio-net (slot filler, user-mode slirp) + virtio-rng in the
   # slot order mkqnximage's runimage assembles and the image's startup.sh
-  # binds (rng = slot 3, mem=0xa003a00). Presenting it moved the guest-banner
-  # time from ~49.2 s to 29.7 s on this host (2026-09-09): the entropy-less
-  # boot spends ~19 s timing out. Runs with and without it are not
-  # comparable, so the device set is stamped into the times file.
+  # binds (rng = slot 3, mem=0xa003a00). Without it the image's startup.sh
+  # waits out a timeout for the rng device, so runs with and without it are
+  # not comparable, and the device set is stamped into the times file.
   $rngArgs = @()
   if ($WithRng) {
     $rngArgs = @('-netdev','user,id=n0','-device','virtio-net-device,netdev=n0',

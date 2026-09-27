@@ -8,7 +8,7 @@
 #   launch    boot the guest with the ivshmem server and the kick console, and check
 #             that its shm services came up
 #   ladder    run-ladder.sh with LADDER_ENV (default: the notified-shm ladder of
-#             results/orin-native-port/20260922T-a6-orin-kick) and K=12
+#             record `20260922T-a6-orin-kick`, held locally) and K=12
 #   capture   redact on THIS host into pub/, then pack pub.tgz (see capture.py)
 #   stop      stop QEMU (a rehearsal on the Orin uses this)
 #

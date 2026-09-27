@@ -1,8 +1,9 @@
 """Unit tests for the claims-gate helpers.
 
-These test the LOGIC, against small synthetic fixtures, not the committed
-corpus. A test that asserted "the A2 delta is 24.9%" would fail the day a new
-run is appended, which is the gate's job, not a unit test's.
+These test the LOGIC, against small synthetic fixtures, never against run
+data. A test that asserted a real run's delta would fail the day a new run is
+appended, which is the gate's job, not a unit test's -- and since 2026-09-27 no
+run data is committed at all (NC QDL v7 4.6(i)). Every value below is invented.
 """
 import os
 
@@ -58,12 +59,12 @@ def test_span():
 
 
 def test_close_enough_respects_claim_precision():
-    # README quotes +24.9%; the recomputation is 24.8992...
-    assert C.close_enough(24.9, 24.89923, 1)
+    # A claim quotes +12.3%; the recomputation is 12.2992...
+    assert C.close_enough(12.3, 12.29923, 1)
     # ... but a genuinely different number must not pass at that precision.
-    assert not C.close_enough(24.9, 25.4, 1)
-    assert C.close_enough(2.15, 2.1526, 2)
-    assert not C.close_enough(2.15, 2.19, 2)
+    assert not C.close_enough(12.3, 12.8, 1)
+    assert C.close_enough(1.25, 1.2526, 2)
+    assert not C.close_enough(1.25, 1.29, 2)
 
 
 # --------------------------------------------------------------------------
@@ -128,8 +129,8 @@ def test_parse_ipc_csv_without_header_row(fixtures_dir):
 def test_last_row_is_the_compared_row(fixtures_dir):
     """Row selection changes the answer, so it is pinned by a test.
 
-    The headerless fixture mirrors the real hw CSV: two 100,000-sample rows
-    followed by a 15-sample row. diff-results.sh compares the LAST one.
+    The headerless fixture has the shape the hw CSV had: two large rows
+    followed by a small one. diff-results.sh compares the LAST one.
     """
     rows = C.parse_ipc_csv(os.path.join(fixtures_dir, "ipc-headerless.csv"))
     assert C.last_row(rows)["samples"] == 15
@@ -244,28 +245,28 @@ def test_load_denylist_skips_comments_and_blanks(tmp_path):
 def test_serial_byte_markers(tmp_path):
     p = tmp_path / "cap.txt"
     p.write_text(
-        "### ARM: control\n### serial bytes: 17\nnoise 999\n### ARM: fix\n### serial bytes: 1301\n",
+        "### ARM: control\n### serial bytes: 12\nnoise 999\n### ARM: fix\n### serial bytes: 3456\n",
         encoding="utf-8",
     )
-    assert C.serial_byte_markers(str(p)) == [17, 1301]
+    assert C.serial_byte_markers(str(p)) == [12, 3456]
 
 
 def test_serial_bytes_are_platform_independent(tmp_path):
     """A serial-byte count must not depend on the checkout's line endings.
 
     This is a regression test for a real CI failure (2026-09-19): the gate
-    derived the "17 bytes" control-arm claim from os.path.getsize(), which
-    reads 17 in a CRLF worktree and 16 on a Linux runner for the same commit,
-    because .gitattributes normalises the capture to LF. Both spellings below
-    must produce the same answer.
+    derived a serial-byte claim from os.path.getsize(), which reads one byte
+    more in a CRLF worktree than on a Linux runner for the same commit, because
+    .gitattributes normalises the capture to LF. Both spellings below must
+    produce the same answer. The capture line is synthetic.
     """
     crlf = tmp_path / "crlf.txt"
-    crlf.write_bytes(b"FOUND GICv3 ITS\r\n")
+    crlf.write_bytes(b"fixture line\r\n")
     lf = tmp_path / "lf.txt"
-    lf.write_bytes(b"FOUND GICv3 ITS\n")
+    lf.write_bytes(b"fixture line\n")
 
-    assert C.serial_bytes_on_the_wire(str(crlf)) == 17
-    assert C.serial_bytes_on_the_wire(str(lf)) == 17
+    assert C.serial_bytes_on_the_wire(str(crlf)) == 14
+    assert C.serial_bytes_on_the_wire(str(lf)) == 14
     # The naive measure is exactly the trap this replaced.
     assert C.file_size(str(crlf)) != C.file_size(str(lf))
 
@@ -281,6 +282,18 @@ def test_sentinel_counts(tmp_path):
     p = tmp_path / "s.txt"
     p.write_text("sentinel_recoveries=3 sentinel_bounces=0\n", encoding="utf-8")
     assert C.sentinel_counts(str(p)) == (3, 0)
+
+
+def test_a_figure_ends_where_no_word_character_follows():
+    """FOUND 2026-09-27: the unit used to end at \\b, and "%" and the
+    multiplication sign are non-word characters, so a percentage or a ratio
+    followed by a space, "**" or a full stop was never a figure. Synthetic text."""
+    assert C.extract_figures("B is **+12.3%** slower, 2.5\u00d7 at most.") == [
+        ("12.3", "%"), ("2.5", "\u00d7")]
+    assert C.extract_figures("a 40 ms span, then 7 s.") == [("40", "ms"), ("7", "s")]
+    # ... and what the boundary was for still holds: a unit glued to more
+    # letters or digits is not a unit.
+    assert C.extract_figures("5 msg, 3 samples, 0x5A, SDP 8.0") == []
 
 
 def test_read_is_utf8_regardless_of_platform_default(tmp_path):
@@ -336,9 +349,8 @@ def test_denylist_catches_a_bad_description():
     assert any("Graviton" in pattern for pattern, _why, _s in hits)
 
     good = ("Digital Twin design of NVIDIA DRIVE OS dual-VM partitioning: QNX SDP 8.0 "
-            "beside Linux on a Jetson Orin Nano. The QNX Hypervisor runs natively at "
-            "EL2 on the board's own Cortex-A78AE cores, hosting a QNX guest and a "
-            "stock Linux guest. Nothing is certified; every limit is documented.")
+            "beside Linux on a Jetson Orin Nano, with QNX as a KVM guest. Nothing is "
+            "certified; every limit is documented.")
     assert C.scan_denylist(good, rules) == []
 
 

@@ -12,12 +12,11 @@ and leaves the backing file untouched, so the same bytes are measured on every
 run and on every host. The hash is recorded in the stamp; check it matches on
 both sides before comparing anything.
 
-Without --disk the boot still completes, but `waitfor /dev/hd0` in the stock
-mkqnximage startup.sh has no timeout argument and so takes QNX's 5 s default
-EVERY time. Measured 2026-09-20: that wait is 5001.3 ms on a Cortex-A78AE and
-5000.3 ms on a Cortex-A72 -- a software timeout does not care how fast the CPU
-is, which is exactly why it swamps the metric. A diskless run is therefore
-about 92% artefact and is kept only as the control for that finding.
+Without --disk, `waitfor /dev/hd0` in the stock mkqnximage startup.sh has no
+timeout argument and so waits QNX's 5 s default EVERY time -- a software
+timeout does not care how fast the CPU is, so it can swamp the metric (record
+`20260920T-kvm-twin`, held locally). A diskless run is kept only as the
+control for that question.
 
 WHAT THIS IS NOT. Not a hypervisor number: the QNX Hypervisor cannot run under
 KVM at all (it needs EL2, and ARM KVM does not nest on A78AE). The startup
@@ -39,10 +38,10 @@ import time
 
 MARK = b"Startup complete"
 
-# Segment boundaries. A single end-to-end number is easy to dilute: the
-# 2026-09-20 run found three separate fixed waits hiding inside one, each of
-# which made the two hosts look closer than they are. Recording the boundaries
-# lets a reader see WHICH segment differs instead of trusting one total.
+# Segment boundaries. A single end-to-end number is easy to dilute: fixed waits
+# hiding inside it make two hosts look closer than they are (record
+# `20260920T-kvm-twin`, held locally). Recording the boundaries lets a reader
+# see WHICH segment differs instead of trusting one total.
 MARKS = [
     ("fsevmgr",     b"---> Starting fsevmgr"),
     ("mount_fs",    b"---> Mounting file systems"),
@@ -56,9 +55,9 @@ MARKS = [
 def _read_cpu_state():
     """Governor and current frequency per CPU, so an unpinned run is visible.
 
-    On this board ~40% of an unpinned idle latency figure is the governor
-    (schedutil idle p50 0.319 ms against performance 0.192 ms, measured
-    directly). A run that does not record this is not interpretable.
+    On schedutil this board clocks down when idle, so an unpinned idle latency
+    figure is taken on a slower machine. A run that does not record this is
+    not interpretable.
     """
     out = []
     base = "/sys/devices/system/cpu"
@@ -110,10 +109,9 @@ def one_run(qemu, ifs, smp, mem, timeout_s, disk=None, full_devices=False):
         # startup.sh binds absolute addresses: devb-virtio at smem=0xa003e00
         # (slot 1) and devr-virtio.so at mem=0xa003a00 (slot 3). blk, then net,
         # then rng. Presenting them in any other order, or omitting one, leaves
-        # the rng slot empty, entropy never initialises, and io-sock refuses to
-        # start -- which looks exactly like a virtio-net bug (findings.md
-        # 2026-07-28). SLIRP rather than tap, and a fixed MAC, so the device set
-        # is identical on every host instead of depending on a local bridge.
+        # the rng slot empty (findings.md 2026-07-28). SLIRP rather than tap,
+        # and a fixed MAC, so the device set is identical on every host
+        # instead of depending on a local bridge.
         cmd += ["-netdev", "user,id=n0",
                 "-device", "virtio-net-device,netdev=n0,mac=52:54:00:11:11:11",
                 "-object", "rng-random,filename=/dev/urandom,id=rng0",

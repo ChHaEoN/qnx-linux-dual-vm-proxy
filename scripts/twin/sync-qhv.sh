@@ -89,9 +89,9 @@ echo "[3/4] Copying images + launcher ..."
 # first and send only what is actually missing or wrong. A retry after a
 # failure then costs only the unfinished file.
 #
-# -C compresses on the wire: the raw disk image measured ~40% of its size
-# under gzip -1, so this roughly halves time-on-wire and with it the exposure
-# to another drop. The keepalives make a stalled link fail in ~1 min instead
+# -C compresses on the wire: the raw disk image compresses well, so this cuts
+# time-on-wire and with it the exposure to another drop. The keepalives make
+# a stalled link fail in ~1 min instead
 # of hanging until the TCP timeout.
 xfer_opts=(-C -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
 

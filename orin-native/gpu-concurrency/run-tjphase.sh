@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
-# run-tjphase.sh -- does the slow window move with tj-thermal's poll? Move the poll
-# to a new phase before every round, and see whether the tail follows it.
+# run-tjphase.sh -- does a slow window, if any, move with tj-thermal's poll? Move the
+# poll to a new phase before every round, and see whether the tail follows it.
 # Phase 3b / A6, 2026-09-24; follows 20260924T-a6-orin-tailhost.
 #
 # WHAT IS KNOWN. Exploratory, from 20260924T-a6-orin-tailhost and the tailpath
-# record (the same boot): an exchange that starts in the ~6 ms after jiffy 8 (mod
-# 256) is slow 55-68% of the time, against 0.7% elsewhere, and that window holds
-# 29-37% of the tail (>= the round's p99). The one thermal zone read at that jiffy
-# is tj-thermal, every 1024 ms. The other zones are read together elsewhere in the
-# cycle, where the tail is normal. The host's handlers on QEMU's cores are not what
-# makes it slow (P2 there refuted). That is a coincidence in time; this run is the
-# test of it.
+# record 20260924T-a6-orin-tailpath (the same boot; both held locally): how often an
+# exchange that starts in the ~6 ms after jiffy 8 (mod 256) is slow, against
+# elsewhere, and what share of the tail (>= the round's p99) that window holds. The
+# one thermal zone read at that jiffy is tj-thermal, polled every 1024 ms; the other
+# zones are read together elsewhere in the cycle. Any link between the two is a
+# coincidence in time until tested; this run is the test of it.
 #
 # THE MANIPULATION. Writing "disabled" then "enabled" to the zone's mode cancels its
 # poll and re-arms it from that moment, so the next read comes ~1 s after the write
@@ -50,9 +49,9 @@
 #      rate is below 10%. REFUTED at 10% or more -- then something at the old
 #      phase, not the read, makes the window.
 #   Why 10% and not a multiple of the out rate: each of these classes holds only
-#   ~140 exchanges at a ~0.7% base rate, so one or two chance tail exchanges
-#   would double it; the hot window's rate was 55-68%. (Set before any run,
-#   when the synthetic test showed a 2x bound failing by chance.)
+#   ~140 exchanges at a low base rate (the tailhost record, held locally), so one
+#   or two chance tail exchanges would double it. (Set before any run, when the
+#   synthetic test showed a 2x bound failing by chance.)
 # THE CHECKS (a prediction resting on a failed one prints VOID):
 #   M1 >= 90% of rounds align -> P1 P2 P3
 #   M2 a tj-thermal read falls inside the timed span in >= 90% of aligned rounds,

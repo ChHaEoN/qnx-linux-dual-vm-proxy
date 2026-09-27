@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# run-smp.sh -- remove the guest's two IPI wake-ups: the same image on one vCPU
-# against two, blocked and polled, traced. Phase 3b / A6, 2026-09-24; follows
+# run-smp.sh -- the guest's IPI wake-ups: the same image on one vCPU against two,
+# blocked and polled, traced. Phase 3b / A6, 2026-09-24; follows
 # 20260924T-a6-orin-blockpath and the literature pass behind its first suggestion.
 #
-# WHAT IS KNOWN. With two vCPUs, a blocked exchange at 2 ms wakes a blocked vCPU
-# three times in 83-85% of exchanges: QEMU wakes vCPU 0 for the interrupt, then
-# vCPU 0 wakes vCPU 1 twice (the guest's own IPIs). Each wake-up costs ~8.3 us.
-# With polling (halt_poll_ns 5000000) none of them blocks, and the round trip is
-# ~34 us shorter at 2 ms.
+# WHAT IS KNOWN. With two vCPUs, how often a blocked exchange at 2 ms wakes a
+# blocked vCPU, by whom (QEMU waking vCPU 0 for the interrupt, vCPU 0 waking
+# vCPU 1 by the guest's own IPIs), and at what cost: record
+# 20260924T-a6-orin-blockpath (held locally). What polling (halt_poll_ns 5000000)
+# changes at 2 ms: record 20260924T-a6-orin-haltpoll (held locally).
 #
 # THE INTERVENTION. The same image booted with one vCPU (-smp 1) has no other vCPU
 # to hand work to. Before this harness was written, one boot with -smp 1 checked
-# that the image boots and answers on :7103; nothing was timed. Four VM
+# the configuration (held locally); nothing was timed. Four VM
 # configurations per round, in a Williams order over them (period 4):
 #   2D  two vCPUs, halt_poll_ns 500000   (the A6 default)
 #   2B  two vCPUs, halt_poll_ns 5000000  (a 2 ms idle ends in a poll)
@@ -19,8 +19,8 @@
 #   1B  one vCPU,  halt_poll_ns 5000000
 # Each is timed at 0.2 and 2 ms, in the same spacing order for every boot of a
 # round, alternating by round: eight arms, 2D200us 2D2ms 2B200us 2B2ms 1D200us
-# 1D2ms 1B200us 1B2ms. run-blockpath.sh's trace is on for every arm alike; it
-# costs ~9-11 us per exchange (the block-path record).
+# 1D2ms 1B200us 1B2ms. run-blockpath.sh's trace is on for every arm alike (its
+# own cost per exchange: the block-path record, held locally).
 #
 # THE PREDICTION, written and committed before any run of this harness, smoke
 # runs included. It is not to be amended. H: the two extra wake-ups are the guest

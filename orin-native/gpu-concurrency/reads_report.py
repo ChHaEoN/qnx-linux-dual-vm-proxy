@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""reads_report.py OUT -- run-reads.sh's test: is the guest path's 64 -> 96 B step the frame's size
-or the endpoint's second read()? By the rule the harness's header fixed before any run (Phase 3b /
-A6, 2026-09-26).
+"""reads_report.py OUT -- run-reads.sh's test: does the guest path's change from 64 to 96 B follow the
+frame's size or the endpoint's second read()? (The question comes from record
+`20260926T-a6-orin-sweep`, held locally.) By the rule the harness's header fixed before any run
+(Phase 3b / A6, 2026-09-26).
 
 Per round, the p50 of each arm; a difference is two arms' p50s in the same round, and per
 difference the median over rounds with the distribution-free interval of widest coverage >= 95%.

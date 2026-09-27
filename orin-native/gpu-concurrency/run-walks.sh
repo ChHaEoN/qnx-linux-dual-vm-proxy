@@ -1,28 +1,29 @@
 #!/usr/bin/env bash
-# run-walks.sh -- is udevd's path walking in sysfs what makes the slow window? Bursts that
-# do what udevd does per uevent, without a uevent. Phase 3b / A6, 2026-09-24; follows
+# run-walks.sh -- does udevd's path walking in sysfs make a slow window? Bursts that do
+# what udevd does per uevent, without a uevent. Phase 3b / A6, 2026-09-24; follows
 # 20260924T-a6-orin-queue.
 #
-# WHAT IS KNOWN. Holding udevd's exec queue removes ~75% of the uevents' slow window
-# (20260924T-a6-orin-queue), so most of it is udevd processing the events. Generic
-# compute, broadcast TLB flushes and getppid() on another core make no window; memcpy
-# through 64 MB makes a third of one (20260924T-a6-orin-bursts).
+# WHAT IS KNOWN. What holding udevd's exec queue does to the exchanges around the
+# uevents: record 20260924T-a6-orin-queue (held locally). What generic compute,
+# broadcast TLB flushes, getppid() and memcpy through 64 MB on another core do: record
+# 20260924T-a6-orin-bursts (held locally).
 #
 # WHERE THE PREDICTION COMES FROM (looked at on the board before this was written, with
 # no guest running, and stated so it is not mistaken for a blind test):
 #   - an ftrace of every core's syscalls, forks, page allocations, block I/O, journal
 #     commits and work items, in the 8 ms after three uevents against after an empty
-#     marker: udevd makes ~400 syscalls per burst of three (114 openat, 111 close, 108
-#     newfstatat, 33 faccessat, a few reads, writes and unlinks), and forks nothing,
-#     allocates no pages and does no block I/O;
+#     marker: udevd's syscalls per burst of three are openat, close, newfstatat,
+#     faccessat and a few reads, writes and unlinks, and it forks nothing, allocates no
+#     pages and does no block I/O (the counts are held locally);
 #   - uprobes on libc's openat, open64, fstatat, faccessat and readlinkat (no kprobe
 #     events on this kernel): the opens are systemd's component-by-component path walk
 #     (openat(fd, "sys"), "devices", "virtual", "dmi", "id", ... each O_PATH, each
 #     followed by fstatat(fd, "", AT_EMPTY_PATH)), and the files are
 #     /sys/devices/virtual/dmi/id/sys_vendor (gdm's rules, twice per event), the
 #     device's uevent and driver link, and udevd's own files in /run/udev;
-#   - built and run by hand on the board, burst_inject.c's P makes 59 such sysfs walks
-#     in 3 ms, F 61 through tmpfs, and A 202 reads of sys_vendor.
+#   - burst_inject.c's P (sysfs walks), F (walks through tmpfs) and A (reads of
+#     sys_vendor) were built and run by hand on the board to size their 3 ms bursts
+#     (held locally).
 #
 # THE MANIPULATION (burst_inject.c, built on the board, run as root on the aux core,
 # CORE_AUX 5, during each round). Five injections per round in a seeded order, at 0.75

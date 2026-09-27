@@ -41,7 +41,7 @@ filter() {
 	# `num` (optional): the token is a NUMBER, and a digit run is not a
 	# standalone number if it is part of a decimal. FOUND 2026-09-21 by
 	# corrupting real data: the account mask took the 12 fraction digits of a
-	# latency sample, "0.178123456789," -- "." before, "," after, neither a
+	# latency sample, "0.100123456789," -- "." before, "," after, neither a
 	# word character -- and wrote "0.<account>,", which is no longer JSON.
 	#
 	# The rule is deliberately NOT "a dot on either side blocks". That first
@@ -159,14 +159,14 @@ if [ "${1:-}" = "selftest" ]; then
 	check "loopback"      "arm A 127.0.0.1:7100"               "127.0.0.1" 1
 	check "guest mac"     "mac=52:54:00:11:11:11 set"          "52:54:00:11:11:11" 1
 	check "ami id"        "booted ami-0abcdef1234567890"       "ami-0abcdef1234567890" 1
-	check "the figures"   "p50 181.8 us crossing 126.0 us"     "181.8" 1
+	check "the figures"   "p50 111.1 us crossing 22.2 us"       "111.1" 1
 	check "kernel ver"    "kernel 6.8.0-1063-aws"              "6.8.0-1063-aws" 1
 	check "sha256"        "sha256 26170cd7dc74c216181db71c5"   "26170cd7dc74c216181db71c5" 1
 	# 2026-09-21: the account mask corrupted a real latency sample. Both
 	# directions pinned -- the data must survive AND a real id must not.
-	check "12-digit fraction" "0.0058861896, 0.178123456789, 0.5888" "0.178123456789" 1
+	check "12-digit fraction" "0.0012345678, 0.100123456789, 0.5000" "0.100123456789" 1
 	check "decimal integer"   "value 123456789012.75 ms"            "123456789012.75" 1
-	check "fraction, EOL"     "p50 0.178123456789"                  "0.178123456789" 1
+	check "fraction, EOL"     "p50 0.100123456789"                  "0.100123456789" 1
 
 	echo "masked direction, numeric edge cases:"
 	check "id then period"    "the account is 111122223333."        "111122223333" 0

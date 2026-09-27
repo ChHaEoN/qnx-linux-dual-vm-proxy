@@ -1,8 +1,8 @@
 ###############################################################################
 # ifs-stamp.build -- the A6 guest image for guest-side timestamps (OD15, 2026-09-23).
 #
-# NOT PORTABLE, and not generated: it is ifs-udp.build (the plain socket image the
-# published TCP/UDP ladders ran, sha256 853de923...) with only these changes
+# NOT PORTABLE, and not generated: it is ifs-udp.build (the plain socket image of
+# the TCP/UDP ladders, sha256 853de923...) with only these changes
 # (search "OD15"):
 #   the monitor      -> staged from qnx-safety-monitor-stamp, built by `make stamp`
 #                       from the monitor.c that has the stamp mode; named
@@ -90,7 +90,7 @@
 # returns, because startup.sh is what brings up io-sock and the static
 # vtnet0 address -- binding :7100 before that would fail. Kept in the IFS
 # on purpose: post_startup.sh lives in the system partition, and editing
-# it would mean rewriting disk-qemu, which published results depend on.
+# it would mean rewriting disk-qemu, which earlier records depend on.
 /proc/boot/qnx-safety-monitor &
 # OD12 (2026-09-21): the UDP rungs -- the same two binaries in UDP mode, on
 # their own ports so a TCP/UDP mix-up fails instead of answering. Started here,

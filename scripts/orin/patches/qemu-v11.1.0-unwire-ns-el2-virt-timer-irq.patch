@@ -6,9 +6,9 @@ GIC. In v6.2.0 hw/arm/virt.c the timer_irq[] table has no GTIMER_HYPVIRT entry
 at all (git grep on the tag: 0 matches); the wiring arrived in QEMU 9.0 with
 commit 1ec896fe7c "hw/arm/virt: Wire up non-secure EL2 virtual timer IRQ".
 
-Purpose: test the hypothesis that this missing wiring is what makes the QNX
-Hypervisor host (which runs at EL2 with VHE, so its CNTV_* accesses land on the
-EL2 virtual timer) hang at its first timeout-wait under 6.2 -- see
+Purpose: test whether this missing wiring decides what the QNX Hypervisor host
+(which runs at EL2 with VHE, so its CNTV_* accesses land on the EL2 virtual
+timer) does at its first timeout-wait under 6.2 -- see
 docs/digital-twin-design.md section 1a and docs/findings.md 2026-09-09.
 Everything else in 11.1.0 stays, including the target/arm CNTVOFF_EL2 fix
 (5709038aa8) and the device-tree description of the IRQ, so the variable is

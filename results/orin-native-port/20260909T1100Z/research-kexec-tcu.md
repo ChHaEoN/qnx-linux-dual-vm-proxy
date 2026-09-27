@@ -318,10 +318,10 @@ H2's inventory (`harvest-sdp.md` §0.4) found both shipped startups expect `x0 =
 which matches the kexec contract; whether `startup`'s EL2 handling (`lib/aarch64/
 hypervisor_enable.S`, `lib/hypervisor_setup.c` in the BSP zip, names only from
 `raw/bsp-startup-lib-files.txt:73-74,221`) tolerates arriving with `HCR_EL2.E2H=1` is
-UNKNOWN and is the first thing a native-port attempt must establish. The QHV host image
-already boots when QEMU enters it at EL2 (`-machine virt,virtualization=on`,
-`scripts/launch-qhv-tcg.ps1:150`, VERIFIED), but QEMU/TCG enters with `E2H=0`, so that
-is not evidence for the VHE case.
+UNKNOWN and is the first thing a native-port attempt must establish. The repo's TCG
+launcher enters the QHV host image at EL2 (`-machine virt,virtualization=on`,
+`scripts/launch-qhv-tcg.ps1:150`, VERIFIED), but QEMU/TCG enters with `E2H=0`, so no TCG
+run is evidence for the VHE case.
 
 ---
 

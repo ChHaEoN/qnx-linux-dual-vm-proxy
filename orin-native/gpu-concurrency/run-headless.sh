@@ -3,12 +3,10 @@
 # desktop? The same rounds with the board's desktop running and stopped.
 # Phase 3b / A6, 2026-09-24; follows 20260924T-a6-orin-listeners.
 #
-# WHAT IS KNOWN. Three uevents on tj-thermal make a slow window of a few ms
-# (20260924T-a6-orin-uevent). In it, systemd-udevd does ~87% of the extra CPU work and
-# gnome-shell ~13%, and where udevd runs does not matter
-# (20260924T-a6-orin-listeners; the 87% is unscored, after leaving out three windows
-# the operator's SSH logins had filled). The L4T image on this board runs a full
-# desktop: gdm, gnome-shell, Xorg, and services that stop with it.
+# WHAT IS KNOWN. The window around three uevents on tj-thermal is in record
+# 20260924T-a6-orin-uevent; the extra CPU work in it by process, and whether it matters
+# where udevd runs, in 20260924T-a6-orin-listeners (both held locally). The L4T image on
+# this board runs a full desktop: gdm, gnome-shell, Xorg, and services that stop with it.
 #
 # THE MANIPULATION. `systemctl isolate multi-user.target` stops the desktop and the
 # services only graphical.target wants (listed on the board before this was written:

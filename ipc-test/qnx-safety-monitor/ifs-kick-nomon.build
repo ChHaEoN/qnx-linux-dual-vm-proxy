@@ -1,11 +1,12 @@
 ###############################################################################
 # ifs-kick-nomon.build -- ifs-kick.build WITHOUT the notified monitor's start line
-# (2026-09-22, the level-shift isolation). Diagnostic, not a measurement image.
+# (2026-09-22, an isolation image). Diagnostic, not a measurement image.
 #
-# WHY. Guests booted from ifs-kick.bin ran their TCP rungs ~38 us slower than
-# guests booted from ifs-udp.bin with the same devices, and woke ~5x as often
-# while idle. ifs-kick adds three things to ifs-shm (shmcfg, devc-virtio, the
-# shmkick monitor reading /dev/vcon2). This image keeps devc-virtio and shmcfg
+# WHY. To attribute any difference between the TCP rungs of guests booted from
+# ifs-kick.bin and from ifs-udp.bin with the same devices (record
+# `20260922T-a6-orin-shift`, held locally). ifs-kick adds three things to
+# ifs-shm (shmcfg, devc-virtio, the shmkick monitor reading /dev/vcon2).
+# This image keeps devc-virtio and shmcfg
 # and drops ONLY the shmkick start line, so against ifs-shm.bin it isolates
 # devc-virtio (plus the one-shot shmcfg) and against ifs-kick.bin the monitor.
 # Everything else, including the embedded monitor binary, is as in ifs-kick.build;
@@ -84,7 +85,7 @@
 # returns, because startup.sh is what brings up io-sock and the static
 # vtnet0 address -- binding :7100 before that would fail. Kept in the IFS
 # on purpose: post_startup.sh lives in the system partition, and editing
-# it would mean rewriting disk-qemu, which published results depend on.
+# it would mean rewriting disk-qemu, which earlier records depend on.
 /proc/boot/qnx-safety-monitor &
 # OD12 (2026-09-21): the UDP rungs -- the same two binaries in UDP mode, on
 # their own ports so a TCP/UDP mix-up fails instead of answering. Started here,

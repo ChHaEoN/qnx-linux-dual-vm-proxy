@@ -12,7 +12,7 @@
        capture-com3-raw.ps1; COM3 is exclusive) and confirm it gone
     2. start capture-com3-raw.ps1 from PowerShell, -Seconds set to capture_s
        from orin-native/shim/out/m4/<Image>.params (a Git Bash capture receives
-       nothing, m2-runs.md:135-137)
+       nothing: `m2-runs.md`, held locally)
     3. wait up to 20 s for its '--- raw capture started' header
     4. run 'bash orin-native/startup/m4-board.sh run <Image>' with
        M4_RUN_ID=t<i>, M4_COM3_LOG, M4_RECORD_DIR, M4_QUIESCE=1 and

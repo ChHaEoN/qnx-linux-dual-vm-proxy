@@ -3,10 +3,11 @@
 # boot-timeout falsification (measurement-design.md section 3.7; Phase 3b / A6, 2026-09-26;
 # run-waitfor.sh).
 #
-# The 2026-09-20 finding: a diskless boot's metric is ~89-92% a fixed wait, `waitfor
-# /dev/hd0` in the stock mkqnximage startup.sh, which passes no timeout and so takes QNX's
-# 5 s default (5001.3 ms on the Orin, 5000.3 ms on a1.metal). The direct test is to change
-# the constant. The ONE change from ifs-stamp.build (search "wait2"): startup.sh is
+# The question (from the 2026-09-20 boot-time comparison, record `20260920T-kvm-twin`, held
+# locally): how much of a diskless boot's metric is the fixed wait `waitfor /dev/hd0` in the
+# stock mkqnximage startup.sh, which passes no timeout and so takes QNX's 5 s default. The
+# direct test is to change the constant.
+# The ONE change from ifs-stamp.build (search "wait2"): startup.sh is
 # output/build/startup-wait2.sh, the stock startup.sh with `waitfor /dev/hd0` given an
 # explicit 2 s timeout (make_waitfor.py writes it; the build tree is git-ignored,
 # QNX-generated). Plus this file's own build/ifs.build path and build.date.
@@ -83,7 +84,7 @@
 # returns, because startup.sh is what brings up io-sock and the static
 # vtnet0 address -- binding :7100 before that would fail. Kept in the IFS
 # on purpose: post_startup.sh lives in the system partition, and editing
-# it would mean rewriting disk-qemu, which published results depend on.
+# it would mean rewriting disk-qemu, which earlier records depend on.
 /proc/boot/qnx-safety-monitor &
 # OD12 (2026-09-21): the UDP rungs -- the same two binaries in UDP mode, on
 # their own ports so a TCP/UDP mix-up fails instead of answering. Started here,

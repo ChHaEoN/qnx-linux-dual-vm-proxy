@@ -37,7 +37,7 @@
 
   COM3 is exclusive: stop any capture first. Launch from PowerShell, never from
   a Git Bash background job, which opens the port and receives nothing
-  (m2-runs.md:135-137).
+  (`m2-runs.md`, held locally).
 
 .PARAMETER SelfTest
   Runs the encoder, the tracker and the go-line detector against a table of

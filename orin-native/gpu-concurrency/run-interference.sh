@@ -11,11 +11,10 @@
 #   idle2   no load                               -- drift bracket
 #
 # cpu_q AND cpu_nq REPLACE AN UNPINNED "cpu" ARM (2026-09-21). An independent
-# analysis of the first runs found the single unpinned thread's cost followed
-# the core the scheduler happened to pick, read from one sample before each
-# probe. With c7 enabled: ~0 on core 3, +2 to +14 us on cores 0-1, +35 to +53
-# us on core 2. With c7 disabled: +18 to +22 us on any of QEMU's cores 0-2, and
-# -2 to +3 us on cores 3-5. An arm named by count alone was a placement lottery.
+# analysis of the first runs (records 20260921T-a6-orin and 20260921T-a6-orin-c7off,
+# held locally) looked at the core the scheduler happened to pick for the single
+# unpinned thread, read from one sample before each probe. An arm named by count
+# alone leaves placement to the scheduler.
 # Same count, stated placement, one pair: if the cost follows QEMU's cores,
 # cpu_q - cpu_nq is where it shows. cpuload pins each thread at creation, reads
 # it back, and exits non-zero if the pin did not take; the harness then checks
@@ -25,28 +24,29 @@
 # controller's utilisation and clock (tegrastats EMC_FREQ, as root), both debugfs
 # EMC readings and the GPU clock, every 500 ms across each probe -- so placement
 # is observed during the measurement rather than once before it, and the memory
-# system, the open hypothesis for the gpu arm's speed-up, is finally recorded.
+# system, an open hypothesis for the gpu arm, is finally recorded.
 #
 # k ROUNDS (owner decision OD11, 2026-09-21). The first run of this experiment
-# measured each arm once. On this board the between-run spread of a p50 is ~69x
-# its within-run sampling noise, so a single pass could not tell a load effect
-# from run-to-run motion. Every figure is now the median of k round-medians with
+# measured each arm once. A single pass cannot tell a load effect from run-to-run
+# motion when the between-run spread of a p50 is large against its within-run
+# sampling noise, as it was on this board (record 20260921T-ladder, held locally).
+# Every figure is now the median of k round-medians with
 # its band, and the effect to cite is the PAIRED column: the median over rounds
 # of (arm - idle) measured in the same round.
 #
 # THE cpu ARMS, AND WHAT THEY ARE NOT. The one-thread CPU load was designed as a
 # "faithful CPU twin of fma.cu's driver thread", so that gpu - cpu would
-# separate "GPU busy" from "system busy". That premise is false: during all 12
-# gpu arms on 2026-09-21 no core exceeded 1% CPU -- fma's host thread blocks in
-# cudaDeviceSynchronize. So the gpu arm adds a GPU load and essentially no CPU,
-# while cpu_q and cpu_nq each add one full busy core, and gpu - cpu mixes two
-# different things. Read cpu_q and cpu_nq as "one busy core, here", not as a
-# control for the gpu arm.
+# separate "GPU busy" from "system busy". That premise was checked against the
+# 2026-09-21 gpu arms (records 20260921T-a6-orin and 20260921T-a6-orin-c7off, held
+# locally); fma's host thread blocks in cudaDeviceSynchronize, while cpu_q and
+# cpu_nq each add one full busy core, so gpu - cpu mixes two different things.
+# Read cpu_q and cpu_nq as "one busy core, here", not as a control for the gpu
+# arm.
 #
-# STALLS ARE RECORDED, NOT FATAL (owner decision, 2026-09-21). A board dry run
-# of this tooling found that with two of QEMU's three cores loaded the guest can
-# stop answering for longer than the probe's 10 s timeout, then
-# recover. So STALL_POLICY=record: a stalled round leaves stall-<tag>.json (the
+# STALLS ARE RECORDED, NOT FATAL (owner decision, 2026-09-21, after a board dry
+# run of this tooling; record 20260921T-a6-orin-pinned, held locally). A stall is
+# the guest not answering within the probe's 10 s timeout. So
+# STALL_POLICY=record: a stalled round leaves stall-<tag>.json (the
 # samples before it, where it happened, the probe's own scheduling report) in
 # place of lat-<tag>.json, the load is stopped, the time until the guest answers
 # again goes to recovery-<tag>.json, and the run goes on. Every other failure
@@ -76,7 +76,7 @@
 #
 # PINNING. QEMU on 0-2 and the probe on 4, per measurement-design §3.5, and each
 # cpuload thread on the core its arm names. fma is not pinned: its host thread
-# was measured at <=1% CPU, so there is no busy thread to place. Orin only:
+# blocks in cudaDeviceSynchronize, so there is no busy thread to place. Orin only:
 # needs the GPU, tegrastats and the CUDA load generator.
 set -u
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -158,7 +158,7 @@ m_reachable "$GUEST" "$PORT" "guest monitor"
 
 m_write_stamp "$OUT/stamp.json" \
 	'"experiment": "interference"' \
-	"\"pin\": {\"qemu\": \"$QEMU_CORES\", \"probe\": $CORE_PROBE, \"loads\": \"cpuload pinned per thread and read back; fma unpinned (host thread measured <=1% CPU)\"}" \
+	"\"pin\": {\"qemu\": \"$QEMU_CORES\", \"probe\": $CORE_PROBE, \"loads\": \"cpuload pinned per thread and read back; fma unpinned (its host thread blocks in cudaDeviceSynchronize)\"}" \
 	"\"fma_sha256\": \"$(_sha "$FMA")\"" \
 	"\"cpuload_sha256\": \"$(_sha "$CPULOAD")\"" \
 	"\"cpuload_c_sha256\": \"$(_sha "$here/cpuload.c")\"" \

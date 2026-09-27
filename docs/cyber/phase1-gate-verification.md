@@ -13,23 +13,19 @@
 - **Date:** 2026-06-11
 - **Inputs:** TCR-ENT-001 (load-bearing), TCR-CFG-001/002, TCR-IMG-001, TCR-AVL-001, TCR-HYP-001, TCR-SB-001. Parent threats T29–T34 in [`../tara/phase1-cloud-tara.md`](../tara/phase1-cloud-tara.md) Gate Addendum.
 - **Mechanisms under test:** `scripts/qhv/entropy-gate.sh`, `validate-g2conf.sh`, `artifact-manifest.sh`, `verify-bringup.sh`, `g2.conf.allow`.
-- **Test fixture:** `logs/sample-boot/qhv-tcg-host-and-guest-boot.log` + synthetic adversarial inputs.
+- **Test fixture:** `qhv-tcg-host-and-guest-boot.log` (the as-built capture, held locally) + synthetic adversarial inputs.
 - **Method:** mechanisms actually executed; commands + verbatim output below. A small g2.conf fuzz harness was run. No result asserted that was not run.
+- **Withheld (NC QDL v7 4.6(i)):** every output a mechanism produced from the as-built capture reports the QNX image's own behaviour, so it is held locally and not reproduced here. What remains below is each mechanism's behaviour on synthetic inputs.
 
 ---
 
 ## 1. TCR-ENT-001 — seeded-PRNG fail-secure gate (LOAD-BEARING, threat T31)
 
-T31 is the only *concretely evidenced* defect from the gate analysis: the as-built
-log shows `PRNG is not seeded` yet `sshd` starts. TCR-ENT-001 requires that no
-key-using service start against an unseeded PRNG (fail-secure). Verified through
-both states:
+T31 is the gate analysis's boot-time entropy threat. TCR-ENT-001 requires that
+no key-using service start against an unseeded PRNG (fail-secure). The permit
+path, on a synthetic seeded-marker log and on this host:
 
 ```
-$ entropy-gate.sh --log <real as-built log>
-  ENT-GATE: PRNG unseeded - sshd withheld (fail-secure)
-  ENT-GATE: prng-seeded=0   [exit 1]          ← REFUSE: correct, the defect state withholds sshd
-
 $ entropy-gate.sh --log <seeded-marker log>
   ENT-GATE: prng-seeded=1
   ENT-GATE: entropy precondition MET - key-using services may start   [exit 0]
@@ -38,17 +34,17 @@ $ entropy-gate.sh --live          (this host)
   ENT-GATE: prng-seeded=1   [exit 0]          ← live /dev/random readable + entropy_avail ok
 ```
 
-**Verdict: PASS.** The gate fails secure on the evidenced defect (would withhold
-sshd, preventing the predictable-host-key / Debian-OpenSSL damage class) and
-permits only on positive seeded evidence. The `prng-seeded=0|1` flag is the
+**Verdict:** the permit path behaves as specified (permits only on positive
+seeded evidence). The refuse path was exercised against the as-built capture;
+that output is held locally. The `prng-seeded=0|1` flag is the
 machine-checkable precondition that FuSa's `AoU-ENTROPY` consumes
 (cross-ref [`../fusa/phase1-gate-verification.md`](../fusa/phase1-gate-verification.md) §5).
 
 **Honest gap:** the gate *withholds* services; it does **not** *provision*
-entropy. On the as-built image the precondition stays UNMET — the correct fix
-(a real entropy source: virtio-rng wired through, or the Tegra hardware TRNG on
-Orin) is Phase-2/Phase-3 work. Until then the safe posture is "sshd withheld",
-which is availability-reducing by design.
+entropy. Provisioning a real entropy source (virtio-rng wired through, or the
+Tegra hardware TRNG on Orin) is Phase-2/Phase-3 work. Wherever the precondition
+is unmet, the safe posture is "sshd withheld", which is availability-reducing
+by design.
 
 ---
 
@@ -62,7 +58,7 @@ against the locked `g2.conf.allow`:
 | `g2.good.conf` (as-built no-net config) | legitimate | **ACCEPT** | 0 |
 | `g2.passthru.conf` (`vdev passthru`) | DMA/passthrough escape surface | **REJECT** — `forbidden vdev type 'passthru'` | 1 |
 | `g2.exec.conf` (`exec /bin/sh`) | arbitrary host command | **REJECT** — `forbidden directive 'exec'` | 1 |
-| `g2.net.conf` (`vdev virtio-net`) | reintroduce inert/forbidden net path (least-vdev) | **REJECT** — `forbidden vdev type 'virtio-net'` | 1 |
+| `g2.net.conf` (`vdev virtio-net`) | reintroduce the forbidden net path (least-vdev) | **REJECT** — `forbidden vdev type 'virtio-net'` | 1 |
 | `g2.garbage.conf` (4 KB of `A`) | malformed/oversized line | **REJECT** — `forbidden directive 'AAAA…'` | 1 |
 | `nonexistent path` | input error | **REJECT** | 2 |
 | **`g2.empty.conf` (zero bytes)** | contentless config | **REJECT** *(initial run ACCEPTed — see CV-1, now fixed)* | 1 |
@@ -141,20 +137,14 @@ study-only (TCR-SB-001)`.
 
 ## 4. TCR-AVL-001 — deterministic handling of qvm arm failure (threat T34)
 
-T34 is the availability/DoS surface evidenced by
-`Failed to arm a resource manager: Function not implemented`. TCR-AVL-001
-requires this resolve to a deterministic, signalled state rather than an
-ambiguous continue. Verified via `verify-bringup.sh` on the real log:
-
-```
-  BLOCK [TSR-CFG-001] unapplied directive: 57:[g2.conf:9] Failed to arm a resource manager: Function not implemented
-  RESULT: BLOCK — bring-up MUST NOT proceed.   [exit 1]
-```
-
-**Verdict: PASS** — the arm failure is resolved to a deterministic BLOCK, not
-silently ignored. (Honest scope: this gates the *bring-up decision*; it is not
-an in-operation watchdog with a reaction time. Shared boundary with FuSa
-TSR-CFG-001 — same evidence, safety + availability lenses.)
+T34 is the qvm host bring-up availability/DoS surface (a resource manager that
+fails to arm). TCR-AVL-001 requires such a failure to resolve to a
+deterministic, signalled state rather than an ambiguous continue. It was
+exercised with `verify-bringup.sh` against the as-built capture; the output and
+verdict are held locally (NC QDL v7 4.6(i)). (Honest scope: this gates the
+*bring-up decision*; it is not an in-operation watchdog with a reaction time.
+Shared boundary with FuSa TSR-CFG-001 — same mechanism, safety + availability
+lenses.)
 
 ---
 
@@ -198,8 +188,8 @@ the implementable floor, signing deferred).
 
 ## 8. Verdict summary
 
-- **5 TCRs verified** with running evidence (ENT-001, CFG-001, IMG-001, AVL-001, HYP-001[config-layer]); **TCR-CFG-002 / TCR-SB-001** deferred to the runtime host / Phase 3.
+- **Verified on synthetic inputs:** CFG-001, IMG-001, HYP-001[config-layer], and the permit path of ENT-001. **Exercised against the as-built capture, outcome held locally:** the refuse path of ENT-001, and AVL-001. **TCR-CFG-002 / TCR-SB-001** deferred to the runtime host / Phase 3.
 - **1 fail-open finding raised & closed: CV-1** — empty `g2.conf` was accepted (required-presence not asserted); fixed via a required-directive floor in `validate-g2conf.sh` and re-verified (regression-clean).
 - **Residuals honestly open:** T30 hardware isolation, RoT-rooted signing — Phase 3 / Orin.
 - **NCEULA + supply-chain audit: PASS.**
-- **Cyber-FuSa interaction items confirmed:** TCR-ENT-001 (≡ FuSa NF-5/AoU-ENTROPY) verified fail-secure and its flag confirmed consumable by FuSa; TCR-AVL-001 shares evidence with FuSa TSR-CFG-001 (availability + safety lenses on the same arm-failure).
+- **Cyber-FuSa interaction items:** TCR-ENT-001 (≡ FuSa NF-5/AoU-ENTROPY) emits a flag FuSa consumes; TCR-AVL-001 shares its mechanism with FuSa TSR-CFG-001 (availability + safety lenses on the same arm-failure class).

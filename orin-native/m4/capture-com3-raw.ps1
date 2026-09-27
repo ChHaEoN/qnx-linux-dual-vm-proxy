@@ -24,7 +24,7 @@
   as a capture that did not run to its deadline.
 
   Launch it from PowerShell, never from a Git Bash background job, which opens
-  the port and receives nothing (m2-runs.md:135-137). The port is exclusive:
+  the port and receives nothing (`m2-runs.md`, held locally). The port is exclusive:
   stop any older capture first. It is stopped after m4-board.sh run returns, by
   hand or by m4-tloop.ps1; -Seconds is a safety net the harness's own wait
   cannot outlast (§3.3: capture_s = return_bound_s + 3000).

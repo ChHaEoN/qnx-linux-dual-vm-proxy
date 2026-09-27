@@ -433,9 +433,9 @@ LAUNCH_MODES = ("boot", "hold", "q2")
 
 # C3 as tightened after T1 attempt 1 (s1-design.md §14.9): a dryrun is accepted only
 # with rc=0, saved=yes, logger_errors=0, a decoded qvmlog export, and no line of that
-# export in qvm's configuration-diagnostic form '[file:line] message' at the line start
-# (attempt 1's was "[/data/s1/s1-linux.conf:14] Unable to open ..."). The host script
-# counts the same lines into logger_errors; the PC counts them again from the export.
+# export in qvm's configuration-diagnostic form '[file:line] message' at the line start.
+# The host script counts the same lines into logger_errors; the PC counts them again
+# from the export.
 QVM_DIAG_RE = re.compile(r"^\[[^\]]+:[0-9]+\] ")
 DRYRUN_ACCEPT = ("dryrun", "dryrun_rc", "dryrun_rc_not_0", "dryrun_saved", "dryrun_logger_errors",
                  "qvmlog_export", "dryrun_qvm_diagnostics")
@@ -3685,7 +3685,7 @@ SYN_HEX = {k: c * 64 for k, c in (("image_sha256", "1"), ("initrd_sha256", "2"),
                                   ("s1con_sha256", "4"), ("memcanary_sha256", "5"), ("stamp_sha256", "6"),
                                   ("bwait_sha256", "7"))}
 SYN_KEXEC = "9" * 64
-SYN_QVMLOG = b"FDT saved to '/dev/shmem/s1-fdt.dtb'\r\n"   # a clean dryrun's text, CRLF as T1 attempt 1's export
+SYN_QVMLOG = b"FDT saved to '/dev/shmem/s1-fdt.dtb'\r\n"   # a clean dryrun's text, with CRLF line ends
 
 
 def syn_stamp(label):

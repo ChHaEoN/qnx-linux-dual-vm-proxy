@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # run-saturation.sh -- where does interference actually start?
 #
-# The 2026-09-19 null result had one busy core out of six. Four idle cores is not
-# a contended system, so it said nothing about saturation. This escalates the CPU
-# load and looks for the point where the QNX guest's round trip degrades.
+# The 2026-09-19 interference run (record 20260919T-interference, held locally)
+# had one busy core out of six. Four idle cores is not a contended system, so it
+# could say nothing about saturation. This escalates the CPU load and looks for
+# the point, if any, where the QNX guest's round trip degrades.
 #
 # The guest has 2 vCPUs, which QEMU runs as host threads. As L4T's own load
 # approaches the core count, those vCPU threads must compete -- so if
@@ -20,14 +21,11 @@
 #   idle2       no load                               drift bracket
 #
 # PLACEMENT IS THE VARIABLE NOW, NOT COUNT (2026-09-21). The arms used to be
-# cpu2/cpu4/cpu6 with the threads unpinned, and an independent analysis of the
-# first runs found where the scheduler put them went with the cost. cpu4 had two
-# regimes, ~+35 us and ~+165 us -- the second MORE than cpu6 -- and 12 of the
-# 13 high rounds had two of QEMU's cores loaded in the one tegrastats sample
-# taken before the probe. But 5 of the 17 rounds sampled that way were low, and
-# one high round sampled one QEMU core. So one sample before the probe could
-# not decide it; the window sampler now traces the whole probe. The count sweep
-# was a placement lottery. So:
+# cpu2/cpu4/cpu6 with the threads unpinned, so where the scheduler put them was
+# left uncontrolled. After an independent analysis of the first runs (held
+# locally), the load threads are pinned, the arms are named by placement, and the
+# window sampler traces the whole probe instead of relying on one tegrastats
+# sample taken before it. So:
 #   cpu2_q vs cpu2_nq   same count, on vs off QEMU's cores -- does the cost
 #                       follow QEMU's cores at all?
 #   cpu2_q vs cpu3_q    two of three QEMU cores loaded vs all three -- the
@@ -47,17 +45,17 @@
 # competing for a core, so a plain cpu6 number mixes probe-side scheduling delay
 # with anything happening to the guest. The same arm with the probe at elevated
 # priority removes most of the probe-side component: if cpu6_prio comes back
-# near idle, the cpu6 degradation was mostly the PROBE waiting, not the guest.
+# near idle, any cpu6 degradation was mostly the PROBE waiting, not the guest.
 #
 # cpu6_prio REFUSES RATHER THAN DOWNGRADES. It used to fall back to normal
 # priority when sudo was refused. Under k rounds that could flip part-way through
 # and leave an arm that is half a priority control and half not, under one label.
 # Real-time priority is checked once, before round 1, and the run stops without it.
 #
-# STALLS ARE RECORDED, NOT FATAL (owner decision, 2026-09-21). A board dry run
-# of this tooling found that with two of QEMU's three cores loaded the guest can
-# stop answering for longer than the probe's 10 s timeout, then
-# recover. So STALL_POLICY=record: a stalled round leaves stall-<tag>.json (the
+# STALLS ARE RECORDED, NOT FATAL (owner decision, 2026-09-21, after a board dry
+# run of this tooling; held locally). A stall is the guest not answering for
+# longer than the probe's 10 s timeout. So STALL_POLICY=record: a stalled round
+# leaves stall-<tag>.json (the
 # samples before it, where it happened, the probe's own scheduling report) in
 # place of lat-<tag>.json, the load is stopped, the time until the guest answers
 # again goes to recovery-<tag>.json, and the run goes on. Every other failure
@@ -78,20 +76,20 @@
 # result or stall record -- reports the probe's own scheduling policy and core.
 # The load stops the moment the probe does.
 #
-# gpu_cpu6 IS CLOSE TO A MATCHED-FOOTPRINT CONTROL FOR cpu6 -- the opposite of
+# gpu_cpu6 IS MEANT AS A MATCHED-FOOTPRINT CONTROL FOR cpu6 -- the opposite of
 # what this header said until 2026-09-21. It claimed fma's driver thread keeps a
-# core busy, making gpu_cpu6 seven busy threads against six. Measured: during
-# all 12 interference gpu arms no core exceeded 1% CPU while GR3D sat at 99%;
-# fma's host thread blocks in cudaDeviceSynchronize. So gpu_cpu6 - cpu6 isolates
-# the GPU load about as well as this design can. The claim came from a review
-# finding repeated here without being checked against the data. Stamps written
+# core busy, making gpu_cpu6 seven busy threads against six. fma's host thread
+# blocks in cudaDeviceSynchronize; the per-core CPU and GR3D readings of the
+# 2026-09-21 interference gpu arms that corrected the claim are held locally. The
+# claim came from a review finding repeated here without being checked against
+# the data. Stamps written
 # before the correction still carry the false "known_confound" line.
 #
 # COMPARABILITY -- none of these arms pairs with an earlier run. 2026-09-19 used
 # n=3000, k=1 and unpinned everything; the first 2026-09-21 runs pinned QEMU and
 # the probe but let the load threads float, and named arms by count (cpu2, cpu4).
 # Here every cpuload thread is pinned too and arms are named by placement (fma,
-# in gpu_cpu6, is not pinned: its host thread was measured at <=1% CPU). Only cpu6,
+# in gpu_cpu6, is not pinned: its host thread blocks on the GPU). Only cpu6,
 # cpu6_prio and gpu_cpu6 keep their names, and even they now place exactly one
 # thread per core instead of leaving six threads to the scheduler. The window
 # sampler also runs during every probe here, idle arms included, which no
@@ -202,7 +200,7 @@ m_reachable "$GUEST" "$PORT" "guest monitor"
 
 m_write_stamp "$OUT/stamp.json" \
 	'"experiment": "saturation"' \
-	"\"pin\": {\"qemu\": \"$QEMU_CORES\", \"probe\": $CORE_PROBE, \"loads\": \"cpuload pinned per thread and read back; fma unpinned (host thread measured <=1% CPU)\"}" \
+	"\"pin\": {\"qemu\": \"$QEMU_CORES\", \"probe\": $CORE_PROBE, \"loads\": \"cpuload pinned per thread and read back; fma unpinned (its host thread blocks in cudaDeviceSynchronize)\"}" \
 	'"load_placement": {"cpu2_q": [0,1], "cpu2_nq": [3,5], "cpu3_q": [0,1,2], "cpu6": [0,1,2,3,4,5], "cpu6_prio": [0,1,2,3,4,5], "gpu_cpu6": [0,1,2,3,4,5]}' \
 	"\"fma_sha256\": \"$(_sha "$FMA")\"" \
 	"\"cpuload_sha256\": \"$(_sha "$CPULOAD")\"" \
@@ -211,7 +209,7 @@ m_write_stamp "$OUT/stamp.json" \
 	'"probe_priority": "SCHED_FIFO 50 in cpu6_prio only; reported by the probe itself in every arm file and checked by the gate"' \
 	"\"load_policy\": \"started, verified alive after 3 s and at probe end, stopped at probe end; ceiling ${SECS}s\"" \
 	'"order": "Williams over the six loaded arms (period 6); idle first and idle2 last every round"' \
-	'"gpu_footprint": "fma host thread measured at <=1% CPU (it blocks in cudaDeviceSynchronize); gpu_cpu6 vs cpu6 is close to matched"' \
+	'"gpu_footprint": "fma host thread blocks in cudaDeviceSynchronize; its CPU use is recorded locally"' \
 	'"sampler": "root tegrastats (per-core CPU, EMC_FREQ, GR3D) + EMC rate (bpmp and ccf debugfs) + GPU devfreq, every 500 ms nominal across each probe window; at least half that rate required per window"' \
 	'"arms": ["idle", "cpu2_q", "cpu2_nq", "cpu3_q", "cpu6", "cpu6_prio", "gpu_cpu6", "idle2"]'
 

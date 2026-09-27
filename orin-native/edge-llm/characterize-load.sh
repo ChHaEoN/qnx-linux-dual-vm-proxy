@@ -7,10 +7,10 @@
 # decide whether an `llm` arm would stress something the existing `gpu` arm does
 # not, before a board session is spent on it.
 #
-# WHY IT MIGHT. fma.cu burns FP32 ALUs out of registers: in the A6 records its
-# arms never moved the memory controller. LLM decode is memory-bandwidth-bound by
+# WHY IT MIGHT. fma.cu burns FP32 ALUs out of registers, so by construction it
+# asks little of the memory controller. LLM decode is memory-bandwidth-bound by
 # construction -- every generated token streams the whole weight matrix past the
-# ALUs -- so it should show up as EMC utilisation where fma shows none.
+# ALUs -- so it may show up as EMC utilisation where fma need not.
 #
 # EACH WINDOW IS TRACED ALONE. tegrastats runs across one load at a time, so the
 # statistics describe that load rather than the idle time around it. Even so the
@@ -108,8 +108,8 @@ echo
 window idle "$((SECS / 2))"
 window fma "$((SECS + 5))" "$FMA" "$SECS" characterize
 
-# Decode only (-p 0). Token counts are sized to roughly SECS at the rates this
-# board gives: ~17 tok/s for the 4B, ~97 for the 500M.
+# Decode only (-p 0). Token counts are sized to roughly SECS at the decode rates of
+# an earlier run on this board (record `20260923T-a6-orin-llm-prep`, held locally).
 window llm-big "$((SECS * 3))" "$BIN/llama-bench" -m "$MODELS/$BIG" -ngl 99 -p 0 -n "$((SECS * 17))" -r 1
 require_rate llm-big '^\| .*\| *tg'
 window llm-small "$((SECS * 3))" "$BIN/llama-bench" -m "$MODELS/$SMALL" -ngl 99 -p 0 -n "$((SECS * 97))" -r 1

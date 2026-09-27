@@ -29,8 +29,8 @@
  * M2 adds two things, both there to turn a silent secondary-core failure into a
  * named one: a probe of the redistributor frames on CPU0 before any core
  * depends on them, and a wrapper around the library's per-CPU GIC routine that
- * wakes the redistributor first and checks the result afterwards. M2 ran both
- * on six cores under -Q disable.
+ * wakes the redistributor first and checks the result afterwards. M2's board
+ * runs used both under -Q disable; their records are held locally.
  *
  * M1b adds a step 8 to the wrapper, under -Q enable,el2-host only: a check that
  * the core is the VHE host procnto will run on, and the INTID 28 probe
@@ -42,7 +42,7 @@
 
 /*
  * Frame base from a frame index. Shift 17 is the library's stride on a v3.0
- * GIC (lib/aarch64/gic_v3.c:325-326); M1 logged "arch v3.0" on this part.
+ * GIC (lib/aarch64/gic_v3.c:325-326); t234_startup.h names this part GICv3.
  */
 #define T234_GICR_FRAME(idx)    ((paddr_t)T234_GICR_BASE + ((paddr_t)(idx) << 17))
 
@@ -76,7 +76,7 @@ t234_frame_owner(unsigned const f)
  * here: frame 0 at -P1, 0-1 at -P2, 0-3 at -P4, 0-6 at -P5, 0-7 at -P6.
  *
  * It settles whether the 32-bit read of TYPER's upper half returns the affinity
- * at all — M1 could not tell, because CPU0's affinity 0 also matches a register
+ * at all — CPU0's affinity 0 alone cannot tell, because it also matches a register
  * that reads as zero — and shows the WAKER state firmware leaves on offlined
  * cores before any CPU_ON. What it cannot settle: an asynchronous SError from
  * frames 4 or 5 would stay pending under DAIF and not be reported here.
@@ -256,7 +256,7 @@ t234_gic_cpu_init(unsigned const cpu)
 	/*
 	 * 6. The board's expectation against the library's result. MPIDR is
 	 * compared on its affinity fields only: bits 31 (RES1) and 24 (MT) are set
-	 * on this part (M1 black-box log:32) and are not in the table.
+	 * on this part (VENDOR_CLAIM, A78AE MPIDR_EL1) and are not in the table.
 	 */
 	isen = in32(sgi + ARM_GICR_ISENABLER0);
 	if ((mpidr & 0xff00ffffffull) != t234_cpu_mpidr[cpu] ||

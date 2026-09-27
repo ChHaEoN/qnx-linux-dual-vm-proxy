@@ -1423,8 +1423,8 @@ def xcheck_pairs_record(L, c_lines, limit, c_capped):
     # that is what the forward walk bounds a pair by. A row whose entry is
     # inside the range and whose exit is past it is skipped going forward,
     # correctly - the PC holds no exit event to pair with - so counting it
-    # coming back would report the truncation as a disagreement. The r1 board
-    # record holds exactly one such row (m4-design.md 14.11). A row whose dwell
+    # coming back would report the truncation as a disagreement (m4-design.md
+    # 14.11). A row whose dwell
     # is not a number gives no exit to bound, so it is left alone rather than
     # compared past the PC's data.
     orphan = 0
@@ -1483,9 +1483,9 @@ def guest_phase_bad(stamps):
     A missing `g_ifup`, `g_sshd` or `g_misc` is an anomaly the run note records
     and not a failure, so only the phases that are present are ordered. `g_srv`
     is recorded and never gated, which item 6 states outright: the guest starts
-    the server in the background and never waits for its line, one TCG run lost
-    that line to interleaving while its IPC completed cleanly, and item 8 is the
-    evidence the server was up.
+    the server in the background and never waits for its line, so the line can
+    be lost to interleaving while the IPC completes, and item 8 is the evidence
+    the server was up.
     """
     why = []
     for name in GUEST_PHASES_REQUIRED:
@@ -1563,7 +1563,7 @@ def run_lines_bad(src, *, rung, p_cpus, board, cps_want):
     """§2.2 item 1's remaining D3 §8 items, read in one ordered source (I32;
     m4-design.md 14.9 item 3, 14.14, 14.16). Returns the reasons crit_1 fails for.
 
-    Items 5, 7 and 8 hold under TCG too: the banner in the guest stream printed in
+    Items 5, 7 and 8 apply under TCG too: the banner in the guest stream printed in
     `diag`, not anywhere in the texts; no `rc=` line and no `QVM ended before
     teardown` before `M4 STATE teardown`; a `pidin` listing in `report` and in
     `report_ipc`, counted by its column header, because the host script never
@@ -2398,9 +2398,9 @@ def cmd_run(a):
         src = [t for _, t in bb_all] if bb_all is not None else [t for off, t in com3_all if not excluded(off)]
         # The counter's fixture records carry wrapped rings and order violations on purpose (§4.5.9).
         src = [t for t in src if not (t.startswith("M4C ") and " w=fix " in t + " ")]
-        # Under TCG the host boots through QNX's startup-qemu-virt, which prints "** CPU <n> PE is not awake"
-        # on every boot: the canonical QHV host and every 7b attempt show it, and no board capture does. The
-        # token stays negative on the board, where only our startup could print it (m4-design.md 14.5, I21).
+        # Under TCG the host boots through QNX's startup-qemu-virt, not ours, so a "** CPU <n> PE is not awake"
+        # line there is not ours and is left out of the negative tokens. The token stays negative on the
+        # board, where only our startup could print it (m4-design.md 14.5, I21).
         if a.com3_format == "qemu-serial":
             rx_awake = re.compile(r"^\*\* CPU [0-9]+ PE is not awake$")
             before = len(src)
@@ -2542,8 +2542,8 @@ def cmd_run(a):
                     why1.append(f"config-{ck}-absent")
             # Item 6, the guest's phases. `g_srv` is recorded and never gated,
             # which item 6 states outright: the guest starts the server in the
-            # background and one TCG run lost the line to interleaving while its
-            # IPC completed cleanly. Item 8 is the evidence the server was up.
+            # background, so the line can be lost to interleaving while the IPC
+            # completes. Item 8 is the evidence the server was up.
             why1 += guest_phase_bad(R.stamps)
         for c in ("md5_pre guest", "md5_pre disk", "md5_pre conf", "disk_copy", "md5_post guest", "md5_post disk"):
             if c not in R.checks:
@@ -2560,7 +2560,7 @@ def cmd_run(a):
         # I40 (m4-design.md 14.25): a recovered iteration yields no sample, warm-up
         # or timed (client.c:342-345, :376), and sentinel_recoveries counts both, so
         # D3 §8 item 8's samples + recoveries = iters misfires when a stall hits a
-        # warm-up iteration (the §11 lin rehearsal did). The timed run completed when
+        # warm-up iteration. The timed run completed when
         # samples <= iters <= samples + recoveries <= iters + the host script's warm-up.
         if (client is None or client["rc"] != 0 or client["sig"] != 0 or client["killed"] != 0
                 or R.samples is None or R.sentinel is None
@@ -3421,8 +3421,8 @@ def cmd_selftest(a):
                  ("empty", XL.start_t - 1, index, False, "empty compared=0")]
         # I28's regression guard. A row whose entry is inside the range and whose
         # exit is past it is the truncation, not a disagreement: the first form
-        # of the reverse walk called it an orphan and failed a board record that
-        # had passed. The bound is set at such a row's entry, with at least one
+        # of the reverse walk called it an orphan and failed a board record on
+        # it. The bound is set at such a row's entry, with at least one
         # whole pair below it so the comparison is not empty.
         straddle = None
         for p in sorted((q for q in XL.pairs if q["list"] and q["a"] is not None and q["b"] is not None

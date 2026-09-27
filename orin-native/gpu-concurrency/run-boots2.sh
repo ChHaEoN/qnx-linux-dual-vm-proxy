@@ -4,15 +4,14 @@
 # 2026-09-25; follows 20260925T-a6-orin-boots. The owner asked for this test (2026-09-25); it
 # only reboots the board, changing no setting.
 #
-# WHAT IS KNOWN. Over six fresh boots of the shipped entry, the boot set the p50 level:
-# ICC(p50) 0.95, the boots' medians spanning 9.6 us, while p99 and p99.9 varied round to
-# round (ICC 0.18 and 0.00) (20260925T-a6-orin-boots). That record ASSUMED the boot shifts
+# WHAT IS KNOWN. Six fresh boots of the shipped entry were compared at p50, p99 and p99.9
+# (record 20260925T-a6-orin-boots, held locally). That record ASSUMED the boot shifts
 # every arm of a run equally, so that the interleaved within-boot comparisons of the A6
 # records keep their bands; it did not test it. Its P4 (the tick's cost does not move with
-# the boot) was VOID: its guard counted tail exchanges. At 0.2 ms spacing a vCPU polls
-# instead of blocking in a halt, and the guest is ~41 us faster at p50 than at 2 ms
-# (20260924T-a6-orin-rate, -haltpoll): the two spacings take different wake-up paths, so if
-# the boot's effect lives in one path only, the difference between them moves with the boot.
+# the boot) had a guard that counted tail exchanges. At 0.2 ms spacing a vCPU can poll
+# instead of blocking in a halt (halt_poll_ns 500000; records 20260924T-a6-orin-rate and
+# -haltpoll, held locally): the two spacings take different wake-up paths, so if the
+# boot's effect lives in one path only, the difference between them moves with the boot.
 #
 # THE DESIGN. Six fresh boots b1..b6 of the default entry, in a row, rebooted into by the
 # orchestrator (no boot entry or setting touched), each settled SETTLE_S (600) s before its

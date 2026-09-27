@@ -4,8 +4,9 @@
 # The owner asked for this run (2026-09-27: "把read收尾然後做some/ip").
 #
 # WHAT IS KNOWN. The monitor's claim round trip across the partition, TCP and UDP, 2 ms spacing,
-# is ~170-190 us at p50 on this board (the ladder, stamp and free records). OD12 proposed a
-# SOME/IP arm through vsomeip; nothing SOME/IP has run here before.
+# at p50 on this board: the ladder records, 20260923T-a6-orin-stamp and 20260927T-a6-orin-free
+# (held locally). OD12 proposed a SOME/IP arm through vsomeip; nothing SOME/IP has run here
+# before.
 #
 # THE INSTRUMENTS.
 #   guest  ifs-someip.bin: ifs-stamp.bin plus qnx-someip-monitor on TCP and UDP 30509

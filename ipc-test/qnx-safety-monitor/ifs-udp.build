@@ -2,7 +2,7 @@
 # ifs-udp.build -- the A6 guest image with the UDP rungs (OD12, 2026-09-21).
 #
 # NOT PORTABLE, and not generated: it is the build file EMBEDDED in the image the
-# 2026-09-21 campaigns booted (ifs-demo2.bin, sha256 df071c4f...), extracted with
+# 2026-09-21 campaigns used (ifs-demo2.bin, sha256 df071c4f...), extracted with
 #   dumpifs -x -f proc/boot/build/ifs.build ifs-demo2.bin
 # plus, and only plus: two start lines for the UDP servers (search "OD12"), this
 # header, and four embed paths changed so the image describes itself truthfully:
@@ -86,7 +86,7 @@
 # returns, because startup.sh is what brings up io-sock and the static
 # vtnet0 address -- binding :7100 before that would fail. Kept in the IFS
 # on purpose: post_startup.sh lives in the system partition, and editing
-# it would mean rewriting disk-qemu, which published results depend on.
+# it would mean rewriting disk-qemu, which earlier records depend on.
 /proc/boot/qnx-safety-monitor &
 # OD12 (2026-09-21): the UDP rungs -- the same two binaries in UDP mode, on
 # their own ports so a TCP/UDP mix-up fails instead of answering. Started here,

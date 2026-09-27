@@ -13,11 +13,13 @@
   `mkqnximage` source, QHV help docs) + primary-source web research.
 - **Bottom line:** Option B (dual-guest, QNX + Linux under QHV) is **not blocked**
   on feasibility — both gating unknowns (RQ-1 Linux guest, RQ-3 inter-guest
-  channel) resolve positive. The cloud `io-sock` failure (RQ-4) is a fixable
-  launch-line omission, not a missing package. Orin KVM (RQ-5) is achievable but
-  needs a DTB patch and is unconfirmed on the Orin *Nano* SKU specifically.
-  **(2026-07-28 outcome, noted 2026-09-11: no patch was needed on the Nano,
-  but the QNX IFS hangs under KVM; see the RQ-5 note.)**
+  channel) resolve positive. The cloud host's network stack and entropy
+  source (RQ-4) depend on virtio devices the QHV-host launch line does not
+  present — a launch-line omission, not a missing package. Orin KVM (RQ-5) is
+  achievable but needs a DTB patch and is unconfirmed on the Orin *Nano* SKU
+  specifically. **(2026-07-28, noted 2026-09-11: no DTB patch was needed for
+  vGIC creation on the Nano; the QNX IFS outcome under KVM is held locally.
+  See the RQ-5 note.)**
 
 ---
 
@@ -52,13 +54,13 @@ reviewed config-surface change, per the Phase-1 gate).
 
 ---
 
-## RQ-3 — Inter-**guest** channel with host `io-sock` **down**? — **FEASIBLE** (shmem; vdevpeer needs a spike)
+## RQ-3 — Inter-**guest** channel **without** host `io-sock`? — **FEASIBLE** (shmem; vdevpeer needs a spike)
 
 | Claim | Tag | Evidence |
 |---|---|---|
 | `vdev-shmem` is explicitly **guest↔guest** ("all connections … are peers; first attach creates the region"); doorbell fires "when another guest notifies this one" — needs only `qvm` + the shmem vdev in each `g2.conf`, **io-sock-independent** | [EMPIRICAL]+[VENDOR] | shmem vdev help |
 | virtio-net between guests rides `qvm_vdevpeer` (`/dev/vdevpeers/vp0`, a native QNX `ConnectAttach` channel) | [EMPIRICAL] | `target/qnx/usr/include/qvm/vdevpeer.h`, `mods-vdevpeer-net.so` |
-| …but mkqnximage's `start_guest` wires `vp0` via `ifconfig vp0 create` + `vpctl` — i.e. through the **host io-sock NIC**, exactly what's down on this leg. Whether back-to-back guest↔guest virtio-net can bind peer-to-peer without io-sock is unproven | [SPIKE] | `start_guest`; boot-log `network stack down` |
+| …but mkqnximage's `start_guest` wires `vp0` via `ifconfig vp0 create` + `vpctl` — i.e. through the **host io-sock NIC**, which this leg's launch line does not provide (RQ-4). Whether back-to-back guest↔guest virtio-net can bind peer-to-peer without io-sock is unproven | [SPIKE] | `start_guest` |
 
 **Verdict:** **the RQ-3 blocker is removed** — `vdev-shmem` is an io-sock-free
 inter-guest channel. So **Option B is gated only by RQ-1's hand-rolled
@@ -66,20 +68,20 @@ Linux-guest build effort, not by any missing channel.**
 
 ---
 
-## RQ-4 — Can the host `io-sock` / network-stack failure be fixed? — **FIXABLE-CONFIG** (launch-line omission, not a missing package)
+## RQ-4 — Does the QHV-host launch line present what the host IFS expects? — **NO, FIXABLE-CONFIG** (launch-line omission, not a missing package)
 
-The host boot log's `network stack down: Bad file descriptor`,
-`vtnet0 does not exist`, `Address family not supported`, **and** the entropy
-failure (`Could not initialize entropy` / `PRNG is not seeded`) share **one
-root cause**: the QHV-host QEMU command line does not present the virtio devices
-the host IFS (built by `mkqnximage --type=qemu`) was provisioned to discover.
+The host's network stack and its entropy source both depend on virtio devices
+the host IFS (built by `mkqnximage --type=qemu`) was provisioned to discover,
+and the QHV-host QEMU command line does not present them. What the as-built
+host did without them is held locally (NC QDL v7 4.6(i)); this section rests
+on static inspection only.
 
 | Claim | Tag | Evidence |
 |---|---|---|
 | The launch line presents only `virtio-blk` — no NIC, no RNG | [EMPIRICAL] | `scripts/launch-qhv-tcg.ps1:38-45` (no `-netdev`/`virtio-net-device`/`virtio-rng`) |
 | The host IFS starts `io-sock … -m fdt -d vtnet_mmio`, expecting a virtio-net MMIO NIC discovered via FDT; driver `devs-vtnet_mmio.so` **is present** | [EMPIRICAL] | `…/mkqnximage/inputs/startup.sh:106-108`; `…/snippets/definitions.type_qemu`; driver at `target/qnx/aarch64le/lib/dll/` |
-| No virtio-net node in QEMU's FDT → io-sock comes up but finds no interface → the exact logged symptoms | [EMPIRICAL] | symptom-cause match |
-| Entropy is a **parallel, independent** failure: `startup.sh:92` runs `random … -l devr-virtio.so:mem=0xa003a00` (a virtio-entropy device at fixed MMIO); the launch presents none → `/dev/random` never appears. **io-sock does NOT depend on the PRNG** (*superseded 2026-07-28: measured on the Orin, `io-sock` hard-requires `/dev/random` — see findings.md "Orin TCG networking root-caused and fixed"*) — both are the same "missing virtio device" class | [EMPIRICAL] | `startup.sh:92`; `qemu/opt_scripts/qemu:35` |
+| No virtio-net node in QEMU's FDT → io-sock has no interface to find | [EMPIRICAL] | launch line vs. `startup.sh` |
+| Entropy is the same class: `startup.sh:92` runs `random … -l devr-virtio.so:mem=0xa003a00` (a virtio-entropy device at fixed MMIO); the launch presents none, so that source has nothing to bind. (Whether io-sock depends on the PRNG was settled on 2026-07-28; that record is held locally.) Both are the same "missing virtio device" class | [EMPIRICAL] | `startup.sh:92`; `qemu/opt_scripts/qemu:35` |
 
 **Concrete fix:** add `-netdev user,id=n0 -device virtio-net-device,netdev=n0`
 and a virtio-rng/virtio-entropy device (at the expected MMIO `loc`) to the
@@ -90,11 +92,11 @@ QHV-host QEMU args, matching what `mkqnximage --type=qemu` baked in.
 finding (provisioning), but here nothing is missing from the install — it is a
 launch-script omission.
 
-> **Cross-link — this re-frames the Phase-1 gate entropy finding (FuSa NF-5 /
-> Cyber T31 / `TCR-ENT-001`).** The unseeded PRNG is *not* an inherent QNX/TCG
-> limitation; it is the absence of a virtio-entropy device on the launch line.
+> **Cross-link — this bears on the Phase-1 gate entropy threat (FuSa NF-5 /
+> Cyber T31 / `TCR-ENT-001`).** This build's entropy source is a virtio-entropy
+> device, which the launch line has to present.
 > The fail-secure `entropy-gate.sh` posture remains correct, but the *remediation*
-> is now known and cheap (present the RNG device), which should be noted when
+> is known and cheap (present the RNG device), which should be noted when
 > Cyber-Design revisits `TCR-ENT-001`'s provisioning side. This does **not** change
 > the ADR-002 topology decision — the `qvm` vdev path is preferred regardless —
 > but it re-opens host-routed transports as a Phase-2 comparison point and is
@@ -128,12 +130,10 @@ surfaces on schedule, not mid-Phase-3.
 > **2026-07-28 outcome (noted 2026-09-11).** On the Orin Nano, vGIC
 > creation with `gic-version=3` works on the stock JetPack 6 kernel with no
 > DTB patch, so the AGX `Error(19)` failure did not reproduce
-> ([orin-port.md](orin-port.md) step 2 and risk register). The real QNX IFS
-> still hangs under KVM after `FOUND GICv3 ITS`: a GICv3 distributor write
-> takes a `KVM_EXIT_ARM_NISV` exit that neither KVM nor QEMU emulates
-> (orin-port.md risk register). The heterogeneous IPC therefore ran under
-> TCG. The kernel-rebuild and DTB-patch correction above did not apply to
-> the Nano. The research record above is kept as written.
+> ([orin-port.md](orin-port.md) step 2 and risk register). The real QNX IFS's
+> outcome under KVM is held locally (NC QDL v7 4.6(i)); the heterogeneous IPC
+> ran under TCG. The kernel-rebuild and DTB-patch correction above did not
+> apply to the Nano. The research record above is kept as written.
 
 ---
 

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# run-readtime.sh -- time the extra read() inside the guest: is its ~14 us spent in the call?
+# run-readtime.sh -- time the extra read() inside the guest: is its cost spent in the call?
 # Phase 3b / A6, 2026-09-26; follows 20260926T-a6-orin-readpath.
 # The owner asked for this run (2026-09-26).
 #
-# WHAT IS KNOWN. One extra socket read() in the guest costs the round trip +16.2 us (the reads
-# record) and, on one vCPU, +12.2 us with the vCPU thread running +14.2 us longer per exchange
-# and no extra VM exits (the readpath record): guest instructions, not wake-ups and not traps.
-# The host cannot see which guest code runs. The endpoint can time its own calls.
+# WHAT IS KNOWN. What one extra socket read() in the guest costs the round trip: record
+# 20260926T-a6-orin-reads; on one vCPU, with the vCPU thread's run time and the VM's exits per
+# exchange: record 20260926T-a6-orin-readpath (both held locally). The host cannot see which
+# guest code runs. The endpoint can time its own calls.
 #
 # THE INSTRUMENT. sweep.c built with -DSWEEP_TIMING (qnx-echo-server-timed, in ifs-timed.bin;
 # natively in a namespace as before). Per connection it prints the medians, on its own OS's
@@ -39,7 +39,7 @@
 #   P4 the round trip replicates: Gs64 - Gd64 >= +10 us.
 # Not predicted, reported: the native arms' r2, w and svc -- a functional check of the timed
 # build on the board's loopback printed native medians before this was written (11 frames,
-# governor unpinned: second reads of 1.7-2.9 us), so a native prediction would not be blind;
+# governor unpinned; held locally), so a native prediction would not be blind;
 # how much of the round trip's difference svc accounts for; Gg64 and Gd96's svc.
 #
 # THE CHECKS (a prediction resting on a failed one prints VOID; none counts an outcome a
@@ -135,8 +135,8 @@ counters() {   # $1 tag  $2 device  $3 before|after
 	echo "$1 $2 $3$v" >> "$OUT/counters.log"
 }
 
-# Only an endpoint of this source echoes a 2048-byte frame whole (the guest's banners
-# interleave on its console, as the sweep found).
+# Only an endpoint of this source echoes a 2048-byte frame whole, so an endpoint is checked by
+# an exchange, never by its banner on the guest's console.
 echo_check() {   # $1 host  $2 port  $3 label
 	taskset -c "$CORE_PROBE" python3 "$PROBE" --host "$1" --port "$2" --n 3 --warmup 0 --interval-ms 0 \
 		--timeout-s 3 --frame-bytes 2048 --tag "check-$3" --out "$OUT/check-$3.json" >> "$OUT/check.log" 2>&1 \

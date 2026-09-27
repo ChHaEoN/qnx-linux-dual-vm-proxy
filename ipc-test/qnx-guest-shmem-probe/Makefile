@@ -1,5 +1,5 @@
 # Phase 2.5 (cloud, RQ-2 guest-side shmem-viability spike, continuing
-# ../qnx-host-shmem-probe/'s host-side result).
+# ../qnx-host-shmem-probe/'s host-side spike).
 # qcc cross-build for aarch64le (SDP 8.0). Source the SDP env first:
 #   Windows: qnxsdp-env.bat   |   Linux/macOS: . qnxsdp-env.sh
 # then: make

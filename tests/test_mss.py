@@ -1,4 +1,4 @@
-"""The guest path's bump and fast path mapped (Phase 3b / A6, 2026-09-26): the report on synthetic
+"""The MSS test (Phase 3b / A6, 2026-09-26): the report on synthetic
 rounds where the fast path begins at one MSS, where it begins elsewhere, and where a read count or
 a counter is missing; and the harness's header."""
 import json

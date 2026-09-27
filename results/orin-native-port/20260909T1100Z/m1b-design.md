@@ -1,6 +1,6 @@
 # M1b design: the QNX host at EL2 with VHE on the Jetson Orin Nano (`-Q enable,el2-host`)
 
-Phase 3b. Architect pass, revision 2, 2026-09-10: revision 1 with the review outcomes in §12 applied. This is a read-and-reason design: nothing in it has been built or run. It follows the structure and failure-handling rules of [m2-design.md](m2-design.md), whose ladder passed with no failure signature ([m2-runs.md](m2-runs.md)).
+Phase 3b. Architect pass, revision 2, 2026-09-10: revision 1 with the review outcomes in §12 applied. This is a read-and-reason design: nothing in it has been built or run. It follows the structure and failure-handling rules of [m2-design.md](m2-design.md). M2's run record, `m2-runs.md`, is held locally (NC QDL v7 4.6(i)).
 
 **Path prefixes used below**
 - `lib/` = `C:/Users/<user>/AppData/Local/Temp/orin-native-port-bsp/src/hardware/startup/lib/` (Apache-2.0; the tree carries the repo's `patches/gic-bounded-rwp.patch`)
@@ -8,7 +8,7 @@ Phase 3b. Architect pass, revision 2, 2026-09-10: revision 1 with the review out
 - `startup/` = `orin-native/startup/`, `tools/` = `orin-native/tools/`, `shim/` = `orin-native/shim/`
 - `bsp-le/` = `C:/Users/<user>/AppData/Local/Temp/orin-native-port-bsp/src/hardware/startup/boards/t234-orin-nano/aarch64/le/`, where build-board.sh stages the board (:71-74) and builds it (:102-104). Board objects, the linked startup and its map live here; the repo's `board/aarch64/le/` holds only a Makefile.
 - `sdp/` = `C:/Users/<user>/qnx800/target/qnx/usr/include/`
-- `m2log` = `logs/sample-boot/orin-native-m2-six-cores.log` (run R4)
+- `m2log` = the M2 run log (held locally)
 - `plan` = `docs/orin-native-port-plan.md`
 - Reader reports: LIBRARY (library under el2-host), BOARD (board audit), PROBE (INTID 28 probe). All three were supplied; none was null.
 
@@ -27,12 +27,12 @@ M1b re-runs the M2 payload with `-Q enable,el2-host`, so that QNX never leaves E
 1. **CPU0 has no working EL2 fault handler under el2-host.** VERIFIED; this is the orchestrator's seed observation, confirmed and widened.
    - The shim installs its own vectors in VBAR_EL2 (shim/t234-shim.S:146-150), and nothing on CPU0 replaces them. The library writes VBAR_EL2 only on the el1-host path (lib/aarch64/hypervisor_enable.S:43, reached from lib/aarch64/hypervisor.c:94-110).
    - The shim handler prints through x21, x22 and x23 (t234-shim.S:404-435). The library assembly from `cstart` to `_main` leaves them alone, but `_main`, the first C code, overwrites x22 and x21 before it calls `board_init`. Our objdump of `_main.o` shows `adrp x22, boot_args` at 0x14, `add x21, x22` at 0x18 and `bl board_init` at 0x70 (§1 C5). Our own `main()` then reuses all three (objdump of our `main.o`: `stp x21,x22` at +0x10, `mov x21,x1` at +0x14, `adrp x22` at +0x5c, `adrp/ldr x23` at +0x6c/+0x70).
-   - Once `vstart` turns the MMU on (lib/aarch64/vstart.S:86-90, redirected to SCTLR_EL2 under E2H=1), the shim page 0x80080000-0x80081fff lies outside the only low mapping. That mapping is the startup image [0x80082000, 0x800af000) (lib/aarch64/init_mmu.c:159-161; `shim/out/m2/m2-p6.dumpifs.txt:8-9` gives `image_paddr=0x80082fa0 startup_size=0x2b148`). The vector fetch itself would fault, again and again.
+   - Once `vstart` turns the MMU on (lib/aarch64/vstart.S:86-90, redirected to SCTLR_EL2 under E2H=1), the shim page 0x80080000-0x80081fff lies outside the only low mapping. That mapping is the startup image (lib/aarch64/init_mmu.c:159-161), which begins after the shim page, at `_shim_end` 0x80082000 (`nm` of our `shim/out/t234-shim.elf`). The vector fetch itself would fault, again and again.
    - Under `-Q disable` this window closed when CPU0 dropped to EL1 in `hypervisor_init`. Under el2-host it runs from `_main` to procnto.
 2. **Nothing checks INTID 28 before procnto is handed its clock on it.**
    - Under el2-host, `qtime->intr` becomes 28 unconditionally (lib/aarch64/init_qtime_v8gt.c:56-57). The Tegra234 device tree lists no hyp-virt timer PPI (research-tegra234.md:40, :109).
    - The `-t` probe is a stub that only prints (board/wdt.c:97-113).
-   - The only in-project evidence of what an unwired EL2 virtual timer does to this procnto is from QEMU. A QHV el2-host image ran user space and then stalled at its first timed wait (`logs/sample-boot/orin-qhv-tcg-q111-nohypvirt-control.log:1-7`; docs/findings.md:203-212). On the board that means a hang, a power cycle and an empty black box.
+   - If the EL2 virtual timer is unwired, procnto may still reach user space and stall only at its first timed wait (HYPOTHESIS). The only in-project evidence on it is a QEMU TCG control run, whose record is held locally (NC QDL v7 4.6(i)). On the board such a stall means a hang, a power cycle and an empty black box.
 
 **What changes** (all board-side or tool-side; no library patch beyond the existing RWP bound, no shim change):
 - **CPU0 EL2 vectors from the first board hook.** A board `board_init()` override installs `t234_el2_vectors` on CPU0 in every `-Q` mode. `_main` calls `board_init` before anything else (lib/_main.c:126), with cstart's stack already set (lib/aarch64/cstart.S:88-90).
@@ -57,7 +57,7 @@ M1b re-runs the M2 payload with `-Q enable,el2-host`, so that QNX never leaves E
 
 | Step | Image | Purpose |
 |---|---|---|
-| R0 | `reg-p6` (`-Q disable -P6`, buildfile byte-identical to `m2-p6`) | Regression: the new startup and smpcheck on M2's proven path |
+| R0 | `reg-p6` (`-Q disable -P6`, buildfile byte-identical to `m2-p6`) | Regression: the new startup and smpcheck on M2's `-Q disable` path |
 | R1 | `m1b-p1` (`-Q enable,el2-host -P1`) | The plan's M1b: VHE line, INTID 28 on CPU0, procnto and user space at EL2 on one core |
 | R2 | `m1b-p6` (`-Q enable,el2-host -P6`) | Six cores at EL2 with VHE: probe per core, CPU_ON issued from EL2, per-core timers under the host |
 | R2b | `m1b-p6` | Repeat, ruling out a first-run fluke |
@@ -85,17 +85,17 @@ All three reader reports arrived. Every item this design uses was checked agains
 | C2 | Probe placement. BOARD B2: CPU0 only, in `main()` after `init_cpuinfo`. PROBE E3: in the GIC wrapper on every core. PROBE E4: an optional report-only prep run under `-Q disable -t` at E2H=0. | **The GIC wrapper, on every core, under el2-host only; no prep run.** The wrapper runs after each core's own `hypervisor_init` and after the library's per-CPU GIC init. CPU0 reaches it before any CPU_ON, and each AP while CPU0 is silent. PPI wiring is per-core, and this SKU splits its cores across two clusters and non-contiguous frames. The prep run rests on PROBE A4, that CNTHV asserts with E2H=0 (HYPOTHESIS), and it costs a run; the fail-closed E2H=1 probe answers the same question and ends in a warm reset either way. | lib/aarch64/smp_start.S:73, :84; lib/aarch64/init_cpuinfo.c:306-308; main.c:210, :217, :222; board/board_smp.c:186-198 (CPU0 silent wait). VERIFIED |
 | C3 | BOARD B2 expects `GICR_IGROUPR0` bits 26 and 28 to read 1 after the library's write. PROBE C1: `IGROUPR0` is RAZ/WI to Non-secure software when `GICD_CTLR.DS=0`. | **Print it raw; never judge on it.** Security is told apart by the priority readback rule (§4.4), with 26 as the reference. Neither reader measured it. | lib/aarch64/gic_v3.c:1484-1486; GICv3 spec §12.11.12 (PROBE). VENDOR_CLAIM |
 | C4 | BOARD B3(a): replace the sleeps in smpcheck's `wait_files`, `drain_sleep` and the worker watchdog with a `ClockCycles()` poll plus `sched_yield()`, so waits hold with no tick. | **Rejected for the collectors.** A collector pinned to cpu 0 at priority 10 that never blocks starves worker 0, which is pinned to cpu 0 at priority 9; at `-P1` every worker is on cpu 0. `sched_yield` yields only to equal priority (VENDOR_CLAIM, POSIX). **Replaced by** a bounded tick check inside the census, which runs before any worker starts, and a reboot if the tick is dead. Once cpu 0's tick is proven, M2's watchdog thread already bounds a dead timer on an AP. | tools/smpcheck.c:100-101, :214-224, :941-947, :811-862, :1014-1043; startup/m2.build.in:112, :118. VERIFIED |
-| C5 | Where CPU0's shim fault printer stops working. LIBRARY Q1-03: intact at least through the library assembly. BOARD B1 and the seed: from `_main` or `main()` onward. | **Inside `_main`, before `board_init` runs.** LIBRARY Q1-03 holds for the assembly: cstart writes x19, x0 and sp and nothing else. `_start_el2_or_el1`/`at_el2` keeps LR in x20 and otherwise writes x0, x1 and, through `is_pauth_supported`, x9. `aarch64_cache_flush` writes x0-x5, x7-x11, x16 and x17. None of them writes x21-x23. `_start_el1`, whose `mov x21, x30` is at :225, has no caller in the library or the board (grep); it is linked only because it shares an object with `_start_el2_or_el1` (map :131-132). The C code is where they go: `_main` writes x22 at object offset 0x14 and x21 at 0x18, both before `bl board_init` at 0x70; x23 is not written there. The mkifs preboot stub (`*.boot`, 0xfa0 B at 0x80082000) is a QNX binary, so whether it preserves them is UNKNOWN. **Consequence, derived from source and not observed:** a fault in `_main` after 0x18 and before `board_init` reaches the shim's `putc` with x22 below x23, so the unsigned bound skips the black box. Its mailbox poll then reads, and may overwrite, `boot_args` instead of the TCU. Nothing appears on either channel before the shim's reset. This assumes x23 survived the stub. Separately, the shim's cursor is stale once `select_debug` has run, even with intact registers: `put_tcu` appends through its own `bb_len`, while the shim's `putc` rewrites start and size from x22. | lib/aarch64/cstart.S:53-90; lib/aarch64/_start_el1.S:52-66, :125-197, :223-232, :247-260; lib/aarch64/aarch64_cache_flush.S:34-75; objdump of `lib/aarch64/a.le/_main.o` (byte-identical to the linked member, sha256 f09f6557…); `bsp-le/startup-t234-orin-nano.map:3`, :27, :131-132; `shim/out/m2/m2-p6.dumpifs.txt:2`; shim/t234-shim.S:47-54, :404-413, :424-434; board/hw_sertcu.c:72-83, :121-131. VERIFIED, except the stub (UNKNOWN) |
+| C5 | Where CPU0's shim fault printer stops working. LIBRARY Q1-03: intact at least through the library assembly. BOARD B1 and the seed: from `_main` or `main()` onward. | **Inside `_main`, before `board_init` runs.** LIBRARY Q1-03 holds for the assembly: cstart writes x19, x0 and sp and nothing else. `_start_el2_or_el1`/`at_el2` keeps LR in x20 and otherwise writes x0, x1 and, through `is_pauth_supported`, x9. `aarch64_cache_flush` writes x0-x5, x7-x11, x16 and x17. None of them writes x21-x23. `_start_el1`, whose `mov x21, x30` is at :225, has no caller in the library or the board (grep); it is linked only because it shares an object with `_start_el2_or_el1` (map :131-132). The C code is where they go: `_main` writes x22 at object offset 0x14 and x21 at 0x18, both before `bl board_init` at 0x70; x23 is not written there. The mkifs preboot stub (`*.boot`, at the start of the image) is a QNX binary, so whether it preserves them is UNKNOWN. **Consequence, derived from source and not observed:** a fault in `_main` after 0x18 and before `board_init` reaches the shim's `putc` with x22 below x23, so the unsigned bound skips the black box. Its mailbox poll then reads, and may overwrite, `boot_args` instead of the TCU. Nothing appears on either channel before the shim's reset. This assumes x23 survived the stub. Separately, the shim's cursor is stale once `select_debug` has run, even with intact registers: `put_tcu` appends through its own `bb_len`, while the shim's `putc` rewrites start and size from x22. | lib/aarch64/cstart.S:53-90; lib/aarch64/_start_el1.S:52-66, :125-197, :223-232, :247-260; lib/aarch64/aarch64_cache_flush.S:34-75; objdump of `lib/aarch64/a.le/_main.o` (byte-identical to the linked member, sha256 f09f6557…); `bsp-le/startup-t234-orin-nano.map:3`, :27, :131-132; shim/t234-shim.S:47-54, :404-413, :424-434; board/hw_sertcu.c:72-83, :121-131. VERIFIED, except the stub (UNKNOWN) |
 | C6 | Outcome of a CPU0 fault through the shim vectors. LIBRARY Q1-05: probably a warm reset with no text, possibly recursion. BOARD B1 and PROBE E1: a silent loop. | **Before `vstart`, either can happen (HYPOTHESIS: it depends on what the registers hold). After `vstart`, a re-fault loop is certain (VERIFIED).** C5 narrows one slice: in `_main` before `board_init` the registers are known, and the handler resets without text (derived). The design treats the whole window as a power-cycle hazard and closes it. | t234-shim.S:385-392, :528-547; `shim/out/t234-shim.elf` (nm): `vectors` 0x80080800, `exc_common` 0x80081000, `_shim_end` 0x80082000; lib/aarch64/init_mmu.c:159-161. VERIFIED |
-| C7 | BOARD m11: a per-AP pre-check of `ID_AA64MMFR1_EL1.VH`, because the library's mismatch crash prints a garbage CPU number. | **Not added.** All six cores report the same `AA64MMFR1:0000000010212122`. The AP's own `t234: cpu N entry EL2` lines print just before its `hypervisor_init`, so they already name the core. | m2log:210, :219, :228, :237, :246, :255; lib/hypervisor_setup.c:60-62; board/board_smp.c:226-234. VERIFIED |
+| C7 | BOARD m11: a per-AP pre-check of `ID_AA64MMFR1_EL1.VH`, because the library's mismatch crash prints a garbage CPU number. | **Not added.** The AP's own `t234: cpu N entry EL2` lines print just before its `hypervisor_init`, so they already name the core. | lib/hypervisor_setup.c:60-62; board/board_smp.c:226-234. VERIFIED |
 | C8 | BOARD m2: guard `t234_install_el1_vectors` against E2H=1. | **Not added.** Both call sites precede `hypervisor_init` by construction; comments state the ordering. | board/main.c:174 vs :202; lib/aarch64/smp_start.S:66 vs :73. VERIFIED |
 | C9 | Name of the probe override. PROBE G2 leaves it open but says not `-T`. BOARD M4 says drop `-t` or make it a no-op. | **`-t` takes an argument: `stop` (default), `continue`, `off`.** `t` is not in the common set, and `T` is. | lib/public/startup.h:163; lib/public/aarch64/cpu_startup.h:55; board/main.c:134. VERIFIED |
 | C10 | PROBE cites `t234_startup.h:299`, `:363-372`, `:380-390`, `:191-197`, `:215-230`, `:290`; `ap_entry.S:370`, `:382-384`, `:463-472`; `crash_done.c:134-158`. None exist at those lines. | **The claims hold; the line numbers do not.** Correct lines: `t234_startup.h` has 304 lines, with the CNTFRQ fallback at :186, `t234_cps` at :250-259 and the deadlines at :267-277. `ap_entry.S` has 171 lines, with VBAR_EL2 at :58-64 and the normalisation at :143-156. `crash_done.c` resets at :46-50. This design cites only lines re-read. | the files. VERIFIED |
-| C11 | Expected HCR_EL2 under el2-host. BOARD M2: `00000004a8000000`, or `00000304a8000000` with pauth. LIBRARY Q2-02: `0x304A8000000`. | **`00000304a8000000`.** `is_pauth_supported` tests `ID_AA64ISAR1_EL1 & 0xff0`, which is 0x030 on this part, so API and APK are set. Only E2H (bit 34) and TGE (bit 27) are criteria; the value is recorded. | lib/aarch64/_start_el1.S:151-156, :248-250; m2log:208; lib/aarch64/hypervisor_enable.S:29-33. VERIFIED computation, value HYPOTHESIS until printed |
+| C11 | Expected HCR_EL2 under el2-host. BOARD M2: `00000004a8000000`, or `00000304a8000000` with pauth. LIBRARY Q2-02: `0x304A8000000`. | **`00000304a8000000` if the part reports pointer authentication.** `is_pauth_supported` tests `ID_AA64ISAR1_EL1 & 0xff0`; when that is non-zero, API and APK are set. Only E2H (bit 34) and TGE (bit 27) are criteria; the value is recorded. | lib/aarch64/_start_el1.S:151-156, :248-250; lib/aarch64/hypervisor_enable.S:29-33. VERIFIED computation, value HYPOTHESIS until printed |
 | C12 | BOARD m1 lists seven SDP `libc.a` routines in the startup link. | **The link holds more.** Twenty distinct members: `memchr`, `memcmp`, `memset`, `strchr`, `strcmp`, `strlcpy`, `strlen`, `strnlen`, `strrchr`, `strtoull`, `strncmp`, `getsubopt`, `xstoint`, `xctype`, `__progname` and three `hwi_*`, plus the stack-protector objects `_ssp` and `__stack_chk_guard`. Whether any uses FP/SIMD stays UNKNOWN (no inspection); an EC 0x07 trap is named (§7). | `bsp-le/startup-t234-orin-nano.map:251-290`. VERIFIED |
-| C13 | LIBRARY Q7-02: test `-F0x10000` (`AARCH64_CPU_FLAG_VHE`), which the library never sets. | **Not in any ladder image.** It stays a failure-branch decision for the owner. The cloud-leg QHV host ran procnto at el2-host without `-F`: its startup line is `startup-qemu-virt -Q enable` on `-cpu max`, and plain `enable` resolves to el2-host when VH≠0. Whether `startup-qemu-virt`'s own board code sets the flag is UNKNOWN; it is a shipped binary with no board source. | `qhv/host/output/build/ifs.build:17` (a local, git-ignored build output, .gitignore:16); scripts/launch-qhv-tcg.ps1:150-151; lib/aarch64/hypervisor.c:47-58; sdp/aarch64/syspage.h:57; lib/init_system_private.c:116-140. VERIFIED |
-| C14 | CPU0's `GICR_ISPENDR0` address: plan K8 and synthesis-plan.md say `0xF450220`. | **`0x0F450200`** (frame 0x0F440000 + SGI base 0x10000 + 0x200). Code derives it from the frame the library bound, never from a literal. | plan:91; synthesis-plan.md:209; lib/public/aarch64/gic_v3.h:74, :95; m2log:52. VERIFIED |
-| C15 | `board/wdt.c:108-110` and `startup/README.md:58-63` say "if the hypervisor comes up and its timeouts work, INTID 28 is wired", the same answer by a slower route. BOARD B2 calls this wrong. | **Wrong as a plan.** The QEMU evidence shows a host whose EL2 virtual timer is unwired still runs user space, then stalls at its first timed wait. "Comes up" proves nothing, and "timeouts work" is observed only when it does not hang; a hang costs the power cycle and the black box. | orin-qhv-tcg-q111-nohypvirt-control.log:1-7, :9-20; docs/findings.md:203-212 (TCG, not hardware). VERIFIED under emulation |
+| C13 | LIBRARY Q7-02: test `-F0x10000` (`AARCH64_CPU_FLAG_VHE`), which the library never sets. | **Not in any ladder image.** It stays a failure-branch decision for the owner. The cloud-leg QHV host's startup line is `startup-qemu-virt -Q enable` on `-cpu max`, with no `-F`, and plain `enable` resolves to el2-host when VH≠0. Whether `startup-qemu-virt`'s own board code sets the flag is UNKNOWN; it is a shipped binary with no board source. | `qhv/host/output/build/ifs.build:17` (a local, git-ignored build output, .gitignore:16); scripts/launch-qhv-tcg.ps1:150-151; lib/aarch64/hypervisor.c:47-58; sdp/aarch64/syspage.h:57; lib/init_system_private.c:116-140. VERIFIED |
+| C14 | CPU0's `GICR_ISPENDR0` address: plan K8 and synthesis-plan.md say `0xF450220`. | **`0x0F450200`** (frame 0x0F440000 + SGI base 0x10000 + 0x200). Code derives it from the frame the library bound, never from a literal. | plan:91; synthesis-plan.md:209; lib/public/aarch64/gic_v3.h:74, :95. VERIFIED |
+| C15 | `board/wdt.c:108-110` and `startup/README.md:58-63` say "if the hypervisor comes up and its timeouts work, INTID 28 is wired", the same answer by a slower route. BOARD B2 calls this wrong. | **Wrong as a plan.** A host whose EL2 virtual timer is unwired may still run user space and stall only at its first timed wait. "Comes up" proves nothing, and "timeouts work" is observed only when it does not hang; a hang costs the power cycle and the black box. | A QEMU TCG control run (TCG, not hardware; record held locally, NC QDL v7 4.6(i)). HYPOTHESIS |
 
 **Reader items applied** (with corrected citations where C10 applies): LIBRARY Q1-01..Q1-09, Q2-01..Q2-09, Q3-01..Q3-04, Q4-01..Q4-03, Q5-01, Q5-02 (as HYPOTHESIS), Q6-01..Q6-06, Q7-01, Q7-03, Q7-04, Q8-01, Q8-02, Q9-01..Q9-06; BOARD B1, B2, B3(b), M1, M2, M4, m1 (partly), m3, m5, m6, m7, m8, m9, m10; PROBE A1-A3, A5, B1, B2, C1-C3, D1, E1, E3, E5, F1, G1-G3, H1, I1 (formats adjusted), X1, X2. BOARD M3 is applied in a different shape (a new generator rather than markers in the M2 template; §5 gives the reason).
 
@@ -109,7 +109,7 @@ All three reader reports arrived. Every item this design uses was checked agains
    - One startup build and one smpcheck build serve every M1b image; the generator records both sha256 values and fails if either changes during a build (as make-m2-images.sh:334-351 does).
    - `reg-pN.build` is byte-identical to the `m2-pN.build` that ran.
    - `m1b-pN.build` differs from `reg-pN.build` only in the `-Q` token of the startup line and the label inside the two `display_msg` strings. `el1h-pN.build` differs the same way.
-   - Comment lines are removed from derived buildfiles. mkifs does not compile comments into the script: `shim/out/m2/m2-p6.dumpifs.txt` shows the two `display_msg` lines and none of the template's `#` lines. VERIFIED.
+   - Comment lines are removed from derived buildfiles. In buildfile syntax a line beginning with `#` is a comment, which mkifs does not compile into the script (VENDOR_CLAIM, QNX buildfile documentation).
    - Between rungs of the same `-Q` mode, only `-P` differs.
 4. **M2's record is immutable.**
    - Nothing writes under `shim/out/m2/`.
@@ -126,7 +126,7 @@ All three reader reports arrived. Every item this design uses was checked agains
 
 | Phase | EL / E2H / MMU | Today: fault | Today: hang | With design: fault | With design: hang |
 |---|---|---|---|---|---|
-| kexec jump → mkifs preboot stub (`*.boot`) → `cstart` → `_start_el2_or_el1`/`at_el2` → `_main` before its x22/x21 writes | EL2, E2H=0, off | shim vectors. x21-x23 hold the shim's values at the jump (t234-shim.S:107-113, :138, :358-366), and the library assembly writes none of them; the stub is UNKNOWN (§1 C5). If they survive, the shim prints `EXC …` and resets | unbounded | **Unchanged (residual).** The same code and state as every M1/M2 run, which never faulted here. | unbounded (residual, same as M2) |
+| kexec jump → mkifs preboot stub (`*.boot`) → `cstart` → `_start_el2_or_el1`/`at_el2` → `_main` before its x22/x21 writes | EL2, E2H=0, off | shim vectors. x21-x23 hold the shim's values at the jump (t234-shim.S:107-113, :138, :358-366), and the library assembly writes none of them; the stub is UNKNOWN (§1 C5). If they survive, the shim prints `EXC …` and resets | unbounded | **Unchanged (residual).** The same code and state as every M1/M2 image. | unbounded (residual, same as M2) |
 | `_main` from its x22/x21 writes (object offsets 0x14/0x18) up to `board_init` | EL2, 0, off | shim vectors with x21 = `&boot_args` and x22 = its page (VERIFIED, §1 C5): no text on either channel, then the shim's reset (derived) | unbounded | **Unchanged (residual)**, as in the row above | unbounded (residual, same as M2) |
 | `board_init` → `setup_cmdline`, `cpu_startup`, `init_syspage_memory`, `main` options, `select_debug` | EL2, 0, off | shim vectors with clobbered registers: stray stores or a loop | unbounded | `t234_el2_vectors`: reset **without text** (`print_char` is still the dummy) | unbounded (no loops here in source) |
 | `select_debug` → `hypervisor_init` | EL2, 0, off | same as above | — | board EL2 line with stage 0x02/0x03, then reset | — |
@@ -134,7 +134,7 @@ All three reader reports arrived. Every item this design uses was checked agains
 | `write_syspage_memory`, `t234_transfer_aps` (N>1), `startnext` → `cpu_startnext` → `vstart` before `SCTLR.M` | EL2, 1, off | same | M2's 5 s park deadline | board EL2 line, reset | unchanged |
 | `vstart` after `SCTLR_EL2.M=1` → procnto installs its own VBAR_EL2 | EL2, 1, **on** | **vector fetch at 0x8008xxxx faults (unmapped) → endless re-entry → power cycle** | — | `t234_el2_vectors` is in the identity-mapped startup image; the guard sees `SCTLR_EL2.M` and resets with no memory access, no text | — |
 | procnto, before its own EL2 vectors if it removes the identity map first | EL2, 1, on | UNKNOWN (binary) | unbounded | **residual**: a fault cannot fetch the board vector either | **residual**; COM3 is the evidence |
-| user space with a dead clock interrupt | EL0/EL2, on | — | stall at the first timed wait (QEMU evidence, C15) | — | census tick check: `tick=dead`, then `sysmgr_reboot()`, **if** the script reaches `smpcheck -i` (after `devc-pty` and `pidin info`) |
+| user space with a dead clock interrupt | EL0/EL2, on | — | stall at the first timed wait (HYPOTHESIS, C15) | — | census tick check: `tick=dead`, then `sysmgr_reboot()`, **if** the script reaches `smpcheck -i` (after `devc-pty` and `pidin info`) |
 
 ### Secondary-core timeline under el2-host (only what differs from M2's AP table, m2-design.md §2)
 
@@ -187,7 +187,7 @@ Rewrite the comment above the stage list (:159-160): cpu 0 writes 0x01-0x0a and 
 **Remove** the `t234_probe_hv_timer` prototype (:283).
 
 **Comment corrections** (text only):
-- **:78-84, watchdog.** "WDT0 is configured by systemd at two minutes when Linux hands over, but the M0 hang test showed it does not fire after the kexec hand-over (results/orin-native-port/20260909T1100Z/m0-hang-watchdog.md): a hang needs a power cycle, which also empties the black box. -W stays as insurance and for parity."
+- **:78-84, watchdog.** "WDT0 is configured by systemd at two minutes when Linux hands over, but it does not recover the board after the kexec hand-over (M0 records, held locally): a hang needs a power cycle, which also empties the black box. -W stays as insurance and for parity."
 - **:106-109.** The black box survives "a PSCI reset, which every board fault handler ends in", not "an exception the shim's vectors turn into one".
 - **:119-121.** "kexec places our 8 KiB page here. Its EL2 vectors are live on CPU0 from the jump until board_init replaces them (main.c), so the range must never be handed to the RAM allocator."
 - **:261-266.** "at_el2 zeroes CNTVOFF_EL2 (lib/aarch64/_start_el1.S:180), so this reads the physical count. At EL1 (-Q disable) CNTHCTL_EL2=3 (:167-168) lets it through; at EL2 (el2-host) the counter never traps. That holds on CPU0 and on every secondary."
@@ -220,7 +220,7 @@ t234_install_el2_vectors:
 1:	ret
 ```
 
-`t234_el2_vectors` is in the startup's `.text`, 2 KiB aligned. `objdump -t` of our linked startup gives `.text 0x3000` for it and `.text 0x0` for `t234_ap_entry`, and `.text` is aligned 2**11. M2 printed `t234_ap_entry` at PA 0x80083800 (m2log:56), so the table sat at 0x80086800, inside [0x80082000, 0x800af000). VERIFIED for the M2 build; the property, not the address, carries to the new build. The generator's `nm` gate (§3.10) confirms the symbol is linked.
+`t234_el2_vectors` is in the startup's `.text`, 2 KiB aligned. `objdump -t` of our linked startup gives `.text 0x3000` for it and `.text 0x0` for `t234_ap_entry`, and `.text` is aligned 2**11, so the table lies inside the startup image that `init_mmu` identity-maps (lib/aarch64/init_mmu.c:159-161). VERIFIED for the M2 build from its symbol table; the property, not the address, carries to the new build. The generator's `nm` gate (§3.10) confirms the symbol is linked.
 
 **No code change** to the guards, the nesting word or `t234_fault_reset`.
 
@@ -285,9 +285,9 @@ if (hvt_arg != NULL &&
 
 **(f) Comment corrections:**
 - **:16.** "M1 and M2 ran this file on the board under -Q disable; nothing here has run under -Q enable."
-- **:146-147.** "-W: keep | disable. keep is the default for parity; the watchdog does not fire after kexec (m0-hang-watchdog.md)."
+- **:146-147.** "-W: keep | disable. keep is the default for parity; the watchdog does not recover the board after kexec (M0 records, held locally)."
 - **:161-174.** State that the EL1 table matters under `-Q disable` and el1-host only. Under el2-host CPU0 never reaches EL1, and faults land in the EL2 table from `board_init`.
-- **:176-180.** "Report both watchdogs. WDT0 arrives configured, but it did not fire after the kexec hand-over in the M0 hang test."
+- **:176-180.** "Report both watchdogs. WDT0 arrives configured, but it does not recover the board after the kexec hand-over (M0 records, held locally)."
 - **:186-194.** "Keep the shim's page: its vectors are live on CPU0 from the kexec jump until board_init replaces them. Under -Q disable CPU0 leaves EL2 inside hypervisor_init; under el2-host it never does, which is why board_init installs the board EL2 table rather than relying on the shim's."
 
 ### 3.5 `board/aarch64/init_intrinfo.c`: el2-host check and probe gate in the wrapper
@@ -355,8 +355,8 @@ Specified in §4. It includes `t234_startup.h` and `<aarch64/gic_v3.h>`, like in
   `kprintf("t234: WDT0 is configured, but it did not fire after the kexec hand-over (M0 hang test): a hang from here needs a power cycle\n");`
 - **Rewrite the header** (:10-21):
   - systemd configures WDT0 at two minutes.
-  - The M0 hang test (m0-hang-watchdog.md) showed it does not fire after `systemctl kexec`, most likely because systemd hands the device back on its way out (HYPOTHESIS, from that note).
-  - `-W` is kept as insurance against the opposite finding on another hand-over path, and for parity.
+  - It does not recover the board after `systemctl kexec` (M0 records, held locally), perhaps because systemd hands the device back on its way out (HYPOTHESIS).
+  - `-W` is kept as insurance in case another hand-over path leaves WDT0 armed, and for parity.
 - Keep the `-W` logic unchanged (:54-81).
 
 ### 3.8 `board/board_smp.c` and `board/aarch64/ap_entry.S`: comments only
@@ -364,11 +364,11 @@ Specified in §4. It includes `t234_startup.h` and `<aarch64/gic_v3.h>`, like in
 **No code change.** Each AP's el2-host check and probe run inside the GIC wrapper (§3.5), and the existing trampoline, entry-EL check and deadlines are EL-agnostic (BOARD m5, re-read: ap_entry.S:50-64, :143-156; board_smp.c:186-198, :245-248, :303-315).
 
 **board_smp.c:**
-- **:34.** "M2 ran this file on six cores under -Q disable; nothing here has run with CPU_ON issued from EL2."
+- **:34.** "M2 used this file under -Q disable; nothing here has run with CPU_ON issued from EL2."
 - **:204-207, :214-218, :236-244.** Name both modes. Under -Q disable this core drops to EL1 in its own `hypervisor_init`. Under el2-host it stays at EL2, VBAR_EL1 is unused, and its fault path is the EL2 table `t234_ap_entry` installed.
 
 **ap_entry.S:**
-- **:34.** "Ran on every secondary in M2 (CPU_ON issued from EL1); not yet with CPU_ON issued from EL2."
+- **:34.** "Used by M2 (CPU_ON issued from EL1); not yet used with CPU_ON issued from EL2."
 
 ### 3.9 `startup/build-board.sh`: symbol gate
 
@@ -401,9 +401,9 @@ Specified in §4. It includes `t234_startup.h` and `<aarch64/gic_v3.h>`, like in
    - flag set but out of range: `tick=bad ms=... rc=...`, census FAIL, script continues.
    - bound expired: print `SMPCHECK census tick=dead ms>2000: the kernel clock on cpu 0 did not fire`, then `SMPCHECK CENSUS FAIL`, then `SMPCHECK tick dead: calling sysmgr_reboot so the log can be recovered`, then call `sysmgr_reboot()`.
    - if `sysmgr_reboot()` returns: print `SMPCHECK sysmgr_reboot returned %d errno=%d` and exit 1.
-   - thread creation fails: `tick=error errno=%d`, census FAIL, script continues. M2 created threads without error.
+   - thread creation fails: `tick=error errno=%d`, census FAIL, script continues.
 
-**(c) Header comment** (:31-39). "cpu 0 is the only core QNX has run on so far (M1)" becomes: "cpu 0's clock is the one qtime names; the census proves it ticks before any waiter relies on it (-i)".
+**(c) Header comment** (:31-39). The M1-era sentence about cpu 0 becomes: "cpu 0's clock is the one qtime names; the census proves it ticks before any waiter relies on it (-i)".
 
 **(d) Usage text** (:1233). "census: kernel system page against the board tables, the hypervisor fields, and a bounded cpu 0 tick check".
 
@@ -571,7 +571,7 @@ Verdict tokens: `wired`, `absent`, `inconclusive`; none is a prefix of another. 
 | policy `continue`, verdict not `wired` | `t234: hvtimer cpu %d continuing despite verdict=%s (-tcontinue)` (from the wrapper, §3.5) |
 | policy `off` | `t234: hvtimer cpu %d probe off (-toff): clock INTID %d not checked` (from the wrapper) |
 
-**Size.** About 550 bytes per core at `-vvv`, plus the 50-byte `el2-host` line, which is ~3.6 KB at `-P6`. M2's R4 black box was 19,239 B (m2-runs.md:28) against the 65,520 B limit (t234_startup.h:116-117). Gate G1 in §6 re-checks it from R0.
+**Size.** About 550 bytes per core at `-vvv`, plus the 50-byte `el2-host` line, which is ~3.6 KB at `-P6`, against the 65,520 B limit (t234_startup.h:116-117). Gate G1 in §6 checks the budget from R0's black box.
 
 **Greps** on `console-ramoops-0`:
 - `t234: hvtimer cpu [0-5] verdict=` for results;
@@ -625,7 +625,7 @@ Notes on the table:
 - **The el1-host contingency.**
   - `Enabling EL1 host hypervisor support` is printed. An asinfo `hypervisor_vector` entry is added. Every core drops to EL1 after writing VBAR_EL2 to a RAM table the library allocated (lib/aarch64/hypervisor.c:94-110), and `qtime->intr` is 27 (init_qtime_v8gt.c:58-59).
   - It is **labelled el1-host everywhere, never "VHE"**.
-- **`-P5`.** Not built: M2 closed frames 4 and 5 and cluster-1 CPU_ON (m2-runs.md:90-93), and nothing in M1b touches that geometry.
+- **`-P5`.** Not built: frames 4 and 5 and cluster-1 CPU_ON were M2's questions (its record, `m2-runs.md`, is held locally), and nothing in M1b touches that geometry.
 
 ### 5.3 `startup/make-m1b-images.sh`: steps, checks and proof obligations
 
@@ -635,7 +635,7 @@ Notes on the table:
 2. **PO-1, M2 source unchanged.** `git diff --quiet -- orin-native/startup/m2.build.in orin-native/startup/make-m2-images.sh` must succeed. It is read-only; die otherwise.
 3. **PO-2, M2 expansion reproduces byte for byte.**
    - Expand `m2.build.in` for `m2-p1 m2-p2 m2-p4 m2-p5 m2-p6 m2-p6t` into `$OUT/gate/`, with the awk copied verbatim from make-m2-images.sh:88-99, with `n` and `trace` set as `cpus_of`/`trace_of` at :69-70.
-   - sha256 of each must equal the pinned value below (computed 2026-09-10 from `shim/out/m2/*.build`, generated 12:28, whose kimgs match m2-runs.md; VERIFIED). Die on any mismatch.
+   - sha256 of each must equal the pinned value below (computed 2026-09-10 from `shim/out/m2/*.build`, generated 12:28, whose kimgs match the hashes recorded in `m2-runs.md`, held locally; VERIFIED). Die on any mismatch.
 
      | Buildfile | sha256 |
      |---|---|
@@ -646,7 +646,7 @@ Notes on the table:
      | `m2-p6.build` | `1830b690ce2722d27c319a2357f5189c3819250f84def58ae2fd610bd3acc7a8` |
      | `m2-p6t.build` | `9cfe1653aeee829ffaf4b100a23b618fc9793662d4d1aca3ca8a233694cb5dff` |
 
-4. **PO-3, the M2 kimgs that ran are still in place (read-only).** If `shim/out/m2/<img>.kimg` exists, the first 24 hex characters of its sha256 must equal m2-runs.md:23-30:
+4. **PO-3, the M2 kimgs that ran are still in place (read-only).** If `shim/out/m2/<img>.kimg` exists, the first 24 hex characters of its sha256 must equal the prefix recorded in `m2-runs.md` (held locally):
 
    | kimg | sha256 prefix |
    |---|---|
@@ -699,12 +699,12 @@ Notes on the table:
 
 ### 6.2 Each run (one image), the loop M2 used
 
-1. **PC.** Stop any previous COM3 capture, because COM3 is exclusive. Start a new capture **from PowerShell** (115200 8N1, J14 debug header) into `com3-<image>-<utc>.log` before kexec, and keep it running until L4T is back. A Git Bash background capture received nothing during M2 (m2-runs.md:135-137).
+1. **PC.** Stop any previous COM3 capture, because COM3 is exclusive. Start a new capture **from PowerShell** (115200 8N1, J14 debug header) into `com3-<image>-<utc>.log` before kexec, and keep it running until L4T is back. Do not use a Git Bash background capture (the reason is in the M2 records, held locally).
 2. **PC.** `scp shim/out/m1b/<image>.kimg <user>@<orin-ip>:~/` with `~/.ssh/<orin-key>`. The IP is DHCP; scan the /24 if it has moved.
 3. **Board, before kexec:**
    - `sha256sum ~/<image>.kimg` must equal the PC value.
    - Record `cat /proc/sys/kernel/random/boot_id`.
-   - Record `uptime`. If L4T has been up for about two hours or more, reboot it first: Linux faulted in its own kexec shutdown at 2 h 25 min during M2 (m2-runs.md:126-133). The threshold is a HYPOTHESIS from one event.
+   - Record `uptime`. If L4T has been up for about two hours or more, reboot it first: Linux faulted in its own kexec shutdown after a long uptime during M2 (M2 records, held locally). The threshold is a HYPOTHESIS from one event.
 4. **Board.** `sudo -n kexec -s -l ~/<image>.kimg && sudo -n systemctl kexec`.
 5. **PC.** Poll ssh with `-o ServerAliveInterval=3 -o ServerAliveCountMax=2` under `timeout`, until it answers **and** `boot_id` differs from step 3. Give up 10 minutes after kexec.
 6. **Board, after return:**
@@ -723,7 +723,7 @@ Notes on the table:
 
 | Run | Image | Pass means | Then | On fail |
 |---|---|---|---|---|
-| **R0** | `reg-p6` | **`-Q disable` regression.** M2's §8 criteria 1-8 as in R4 (m2-runs.md:40-60), plus: `SMPCHECK census hyp qtime_intr=27 hypinfo_flags=0x0`; `SMPCHECK census tick=ok ms=` in [90, 2000]; `t234: WDT0 is configured, but it did not fire …`; **no** `t234: hvtimer` line and **no** `el2-host` line; L4T returns with `MAINSWRST`. | G1 | Regression in the new board or smpcheck code. Run `reg-p1` to bisect -P, fix, rebuild all images. No el2-host run until R0 passes. |
+| **R0** | `reg-p6` | **`-Q disable` regression.** M2's §8 criteria 1-8 (m2-design.md §8), plus: `SMPCHECK census hyp qtime_intr=27 hypinfo_flags=0x0`; `SMPCHECK census tick=ok ms=` in [90, 2000]; `t234: WDT0 is configured, but it did not fire …`; **no** `t234: hvtimer` line and **no** `el2-host` line; L4T returns with `MAINSWRST`. | G1 | Regression in the new board or smpcheck code. Run `reg-p1` to bisect -P, fix, rebuild all images. No el2-host run until R0 passes. |
 | **G1** | desk | `size(R0) + 6 × 700 + 1,000 < 60,000` bytes (cap 65,520, t234_startup.h:116-117). | R1 | Rebuild the M1b images at `-vv` and record the deviation (a second variable; owner decision). |
 | **R1** | `m1b-p1` | §8 for N=1. This is the plan's M1b: VHE line, `hvtimer cpu 0 verdict=wired`, `intr:28`, procnto and user space at EL2, `tick=ok`, one worker's timer checks. | R2 | §7. An `absent` or `secure-group` verdict on cpu 0 settles unknown #3 as not usable: record it, then run **C1**. `inconclusive`: §7 row, owner decision on a `-tcontinue` run. A hang after `Starting next program`: COM3, then §7. |
 | **R2** | `m1b-p6` | §8 for N=6 (§8 criterion 2 adds five `entry EL2` pairs; the first CPU_ON issued from EL2). | R2b | §7. A named secondary: its row. A `STOP` on cpu 4 or 5 only: run **C4**, `m1b-p4`. A procnto-time hang with no CPU named: run **C3**, `m1b-p2`. |
@@ -739,7 +739,7 @@ Notes on the table:
 | C4 | `m1b-p4` | R2 stops on cluster 1 only (cpu 4 or 5) | §8 for N=4 | "M1b degraded (4 cores, el2-host)": owner decision against C2 |
 | C5 | `reg-p1` | R0 fails | M2's R0 criteria (m2-design.md §6) plus R0's new lines for N=1 | Bisect result only |
 
-Each run takes about 150 s from kexec to L4T (m2-runs.md:24-30). The required ladder is four runs.
+The required ladder is four runs.
 
 ---
 
@@ -752,12 +752,12 @@ Each row is keyed on the last distinctive line in the black box or on COM3. M2's
 | Observable | Meaning | Next step |
 |---|---|---|
 | Black box ends at the shim's `JUMP`, then a warm reset (PMC `MAINSWRST`), with no startup text | A fault between `board_init` and `select_debug`: the board EL2 table reset without printing. Or a fault in `_main` before `board_init`, where the shim's handler runs with x21 and x22 overwritten and prints to neither channel (§1 C5, derived). Or a fault in the preboot stub, `cstart` or `at_el2`, if the stub did not preserve x21-x23 (UNKNOWN) | The path up to `board_init` is identical to M1/M2; reproduce with `reg-p1`. If `reg-p1` passes, suspect the new `board_init` or option parsing (`-t` crash text cannot print that early either). addr2line is impossible without an ELR, so bisect by removing the stage writes |
-| Black box ends at `JUMP`, then the shim's `EXC 000000000000000N ESR=… ELR=… FAR=…`, then a warm reset | A fault after the jump and before `_main` overwrote x21/x22: in `cstart`, `_start_el2_or_el1`/`at_el2` or `aarch64_cache_flush`, or in the preboot stub, which then preserved x21-x23 (§1 C5) | The same code as every M1/M2 run; reproduce with `reg-p1`. An ELR inside the startup: addr2line on the keeplinked startup. An ELR inside the image's `*.boot` preboot stub (M2: [0x80082000, 0x80082fa0), `shim/out/m2/m2-p6.dumpifs.txt:2`; an M1b image's own dumpifs gives its range): record the address only, because the stub is a QNX binary and is never disassembled |
-| Black box ends at `JUMP`, no reset, power cycle needed | Hang before `board_init` (shim vectors live). A fault loop there needs the preboot stub to have left x21-x23 pointing somewhere that faults (UNKNOWN); with `_main`'s values the handler resets (§1 C5) | Residual R19. COM3's last bytes; compare with M2 R4's first startup lines |
+| Black box ends at `JUMP`, then the shim's `EXC 000000000000000N ESR=… ELR=… FAR=…`, then a warm reset | A fault after the jump and before `_main` overwrote x21/x22: in `cstart`, `_start_el2_or_el1`/`at_el2` or `aarch64_cache_flush`, or in the preboot stub, which then preserved x21-x23 (§1 C5) | The same code as every M1/M2 run; reproduce with `reg-p1`. An ELR inside the startup: addr2line on the keeplinked startup. An ELR inside the image's `*.boot` preboot stub (the M1b image's own dumpifs gives its range): record the address only, because the stub is a QNX binary and is never disassembled |
+| Black box ends at `JUMP`, no reset, power cycle needed | Hang before `board_init` (shim vectors live). A fault loop there needs the preboot stub to have left x21-x23 pointing somewhere that faults (UNKNOWN); with `_main`'s values the handler resets (§1 C5) | Residual R19. COM3's last bytes; compare with the first startup lines of M2's R4 log (held locally) |
 | `t234: -tX is not stop, continue or off` | Buildfile typo in `-t` | Fix the buildfile; no ladder image passes `-t` |
 | `Unrecognized hypervisor option flag` | `-Q` string not one of the four the library knows (lib/aarch64/cpu_common_options.c:107-118) | Generator step 8 should have caught it; check the image's startup arguments |
 | `Hypervisor support requested but CPU has no EL2 support` | CPU0 not at EL2 at `hypervisor_init` | Compare the shim bank `EL=` and the stage (0x03); something between the jump and `hypervisor_init` dropped EL, which no source path does |
-| `Hypervisor EL2 Host requested but CPU does not support this` | `ID_AA64MMFR1_EL1.VH` read 0 on CPU0 | Contradicts M2's `MMFR1=0000000010212122` (m2log:21, :210); record the bank; C1 |
+| `Hypervisor EL2 Host requested but CPU does not support this` | `ID_AA64MMFR1_EL1.VH` read 0 on CPU0 | Record the bank and compare it with the MMFR1 value in `m2log`; C1 |
 | `t234: EL2 FP/SIMD access trap on MPIDR=0000000081000000 … EC=00000007 … HCR_EL2=00000304a8000000 stage=0000000N` | FP/SIMD instruction at EL2 after E2H=1 (CPTR_EL2.FPEN=00): most likely an SDP `libc.a` routine (§1 C12) | addr2line ELR on the keeplinked startup and name the function from the map. Enabling FPEN would be a new state variable, so that is an owner decision. Never disassemble the libc routine |
 | `t234: EL2 system register trap … EC=00000018 … stage=…` (CPU0) | A system-register access trapped to EL2, or from EL2 to EL3, in startup at E2H=1 | addr2line ELR; the stage names the step. Compare with the same step under `-Q disable` (R0) |
 | `t234: EL2 data abort … HCR_EL2=…4a8000000 stage=0000000N` | Startup C fault in the VHE host; stage 0x04-0x0a names the step | addr2line ELR; FAR names the address |
@@ -787,7 +787,7 @@ Each row is keyed on the last distinctive line in the black box or on COM3. M2's
 
 | Observable | Meaning | Next step |
 |---|---|---|
-| `t234: cpu N entry EL2 … HCR_EL2=` value other than `0000000080000000`, or `SCTLR_EL2`/`MDCR_EL2` differing from M2 (m2log:57-58) | Firmware entry state for a CPU_ON **issued from EL2** differs from one issued from EL1 | Record as data; `ap_entry.S` normalises anyway. Stop only if a later row fails |
+| `t234: cpu N entry EL2 …` with `HCR_EL2`, `SCTLR_EL2` or `MDCR_EL2` differing from the entry state `m2log` records for a CPU_ON issued from EL1 | Firmware entry state for a CPU_ON **issued from EL2** differs from one issued from EL1 | Record as data; `ap_entry.S` normalises anyway. Stop only if a later row fails |
 | `t234: cpu N entered at EL1 …` | Firmware entered a CPU_ON issued from EL2 at EL1 | As M2's row: stop, record, read T234 TF-A before allowing it |
 | `t234: EL2 … on MPIDR=0x810xxxxx … HCR_EL2=…4a8000000 stage=0000004x` | Secondary EL2 fault in the VHE host during the GIC wrapper or probe | addr2line ELR; the stage names the step |
 | `t234: cpu N released but smp.pending still set after 5 s` | Secondary died in `cpu_startnext`/`vstart`/`smp_spin` at EL2 (EL2&0 MMU enabled through E2H redirection) | Compare with M2 (EL1); suspect the SCTLR_EL2/TCR_EL2 layout under E2H (LIBRARY Q4-02, VENDOR_CLAIM) |
@@ -807,7 +807,7 @@ Each row is keyed on the last distinctive line in the black box or on COM3. M2's
 | `SMPCHECK ready cpu=i … timer0_ms=` missing or over 2000, for a secondary i only | Per-core timer not delivered on that core under the VHE host, with CPU0's clock fine | Suspect the PPI unmask path (TPIDR_EL1-indexed callouts, R5). Record which cores; C3/C4 |
 | `SMPCHECK RESULT FAIL …` then a clean reset | A criterion failed, fully recorded | Per its reasons, as in M2 |
 | `shutdown -S reboot` printed, then no reset | Reboot callout at EL2 did not reach PSCI | COM3; power cycle; `reboot_psci_smc` issues an SMC that EL2 cannot trap (lib/aarch64/callout_reboot_psci.S:42-58), so suspect procnto's path to the callout |
-| R0 (`-Q disable`) differs from M2 R4 anywhere except the lines listed in §6.3 | A regression in the new code on the proven path | Fix before any el2-host run; C5 |
+| R0 (`-Q disable`) differs from M2's R4 log (`m2log`) anywhere except the lines listed in §6.3 | A regression in the new code on M2's `-Q disable` path | Fix before any el2-host run; C5 |
 
 ---
 
@@ -826,11 +826,11 @@ Each row is keyed on the last distinctive line in the black box or on COM3. M2's
 4. **Syspage dump:**
    - qtime section `… intr:28` (lib/print_sysp.c:211-216);
    - hypinfo section `flags:0000000000000001` (lib/print_sysp.c:351; lib/hypervisor_setup.c:86-87);
-   - cpuinfo `flg:` recorded; it is expected to equal M2's `c0f08c7a` (m2log:141), since nothing sets `AARCH64_CPU_FLAG_VHE`.
+   - cpuinfo `flg:` recorded; it is expected to equal the value in `m2log`, since nothing sets `AARCH64_CPU_FLAG_VHE`.
 5. **Hand-off.**
    - For N=6: `t234: all 6 cpus parked in smp_spin`.
    - For every N: `System page at phys:`, then `Starting next program`.
-   - Corroboration, not a criterion: `syspage::hypinfo::flags=0x00000001`. It is printed between `Starting next program` and the script and is not in the library or board source (grep), so it is HYPOTHESIS that procnto prints it.
+   - Corroboration, not a criterion: `syspage::hypinfo::flags=0x00000001`, expected between `Starting next program` and the script. It is not in the library or board source (grep), so it is HYPOTHESIS that procnto prints it.
 6. **Kernel and user space up.** `T234 M1b -PN: procnto up`; `pidin info` with N Processor lines.
 7. **Census:**
    - `SMPCHECK census hyp qtime_intr=28 hypinfo_flags=0x1`;
@@ -839,7 +839,7 @@ Each row is keyed on the last distinctive line in the black box or on COM3. M2's
    - `SMPCHECK CENSUS PASS`.
 8. **Load.**
    - N=6: `SMPCHECK RESULT PASS cpus=6/6 secs=60 reasons=none`.
-   - N=1: `SMPCHECK RESULT PASS-DEGRADED cpus=1/6 secs=60 reasons=none`, the same shape as M2's R0.
+   - N=1: `SMPCHECK RESULT PASS-DEGRADED cpus=1/6 secs=60 reasons=none`, the shape M2's R0 criterion names (m2-design.md §6).
    - Every `SMPCHECK ready` line shows `timer0_ms` within [90, 2000] on the worker's own core.
 9. **Reset.** `T234 M1b -PN: resetting so the log can be recovered`, then L4T answers with a new `boot_id`, PMC `reset_reason` is `MAINSWRST`, and the black box is intact.
 10. **None of these tokens:**
@@ -854,7 +854,7 @@ Each row is keyed on the last distinctive line in the black box or on COM3. M2's
 - INTID 28 is not usable on CPU0 and C1/C2 pass: **M1b degraded: el1-host, not VHE**.
 - Neither records as M1b.
 
-**R0 passes** on M2's §8 criteria 1-8 (as in R4) plus exactly the lines in §6.3's R0 row. Any other difference from `m2log` is a regression. Timestamps, counters, addresses that depend on the startup's size, and the new WDT0 wording are expected.
+**R0 passes** on M2's §8 criteria 1-8 plus exactly the lines in §6.3's R0 row. Any other difference from `m2log` is a regression. Timestamps, counters, addresses that depend on the startup's size, and the new WDT0 wording are expected.
 
 ---
 
@@ -867,48 +867,48 @@ Each row is keyed on the last distinctive line in the black box or on COM3. M2's
 | R3 | NS priority readback of 0 means Group 0 or Secure Group 1 | VENDOR_CLAIM (§12.11.19) | Printed `prio26`/`prio28`; the rule is applied only when `prio26 ≠ 0` |
 | R4 | CNTHV and CNTHP count and assert at EL2 with E2H=1 against CNTPCT with offset 0 | VENDOR_CLAIM (Arm register XML; PROBE A2, A3, D1) | CNTHP `istatus`/`t_ms` in the probe; `hv-istatus` otherwise |
 | R5 | procnto at EL2 keeps the per-CPU GICR index encoding in TPIDR_EL1, which the PPI mask/unmask callouts read | UNKNOWN (lib/aarch64/callout_interrupt_gic_v3.S:187, :238; procnto is a binary) | R2's per-worker `timer0_ms` on cpus 1-5; the §7 row names it |
-| R6 | procnto attaches its clock through `qtime->intr` and programs the timer through the `CNTV_*` names (so CNTHV at EL2) | HYPOTHESIS (the library's 27/28 pairing, init_qtime_v8gt.c:56-66; QEMU reverted-wiring evidence, docs/findings.md:203-212) | Census `tick=ok` in R1; `tick=dead` with `wired` refutes it |
-| R7 | procnto at el2-host needs no `AARCH64_CPU_FLAG_VHE` (`-F0x10000`) | HYPOTHESIS (cloud QHV host ran `-Q enable` on `-cpu max` without `-F`; whether `startup-qemu-virt` sets the flag itself is UNKNOWN) | R1 reaching user space; failure branch in §7 |
+| R6 | procnto attaches its clock through `qtime->intr` and programs the timer through the `CNTV_*` names (so CNTHV at EL2) | HYPOTHESIS (the library's 27/28 pairing, init_qtime_v8gt.c:56-66; a QEMU TCG control run bears on it, record held locally) | Census `tick=ok` in R1; `tick=dead` with `wired` refutes it |
+| R7 | procnto at el2-host needs no `AARCH64_CPU_FLAG_VHE` (`-F0x10000`) | HYPOTHESIS (the cloud QHV host's startup line is `-Q enable` on `-cpu max` without `-F`, §1 C13; whether `startup-qemu-virt` sets the flag itself is UNKNOWN) | R1 reaching user space; failure branch in §7 |
 | R8 | No SDP `libc.a` routine linked into startup uses FP/SIMD while FPEN=00 at EL2 | UNKNOWN (not inspectable; C12) | R1/R2 run through; EC 0x07 is named |
-| R9 | With a dead tick, the script still reaches `smpcheck -i` (after `devc-pty`, `pidin info`) | HYPOTHESIS (QEMU: user space ran until its first timed wait, nohypvirt log:9-20) | Only observable if the tick is dead; COM3 otherwise |
+| R9 | With a dead tick, the script still reaches `smpcheck -i` (after `devc-pty`, `pidin info`) | HYPOTHESIS (a QEMU TCG control run bears on it, record held locally) | Only observable if the tick is dead; COM3 otherwise |
 | R10 | `sysmgr_reboot()` resets without a working tick | UNKNOWN | Only if `tick=dead`; power cycle otherwise |
-| R11 | PSCI SYSTEM_RESET issued from a secondary resets the board | UNKNOWN (m2-design A10, still unobserved) | Any secondary `STOP`; CPU0's 15 s backstop covers it |
+| R11 | PSCI SYSTEM_RESET issued from a secondary resets the board | UNKNOWN (m2-design A10) | Any secondary `STOP`; CPU0's 15 s backstop covers it |
 | R12 | A CPU_ON issued from EL2 with E2H=1 enters the secondary at EL2 with the M2 register state | HYPOTHESIS (upstream TF-A picks the entry EL from SCR_EL3, not the caller; T234 fork unread) | R2 `entry EL2`/`fw` lines; EL1 entry stops by name |
-| R13 | Under E2H=1, vstart's EL1-named writes produce a working EL2&0 MMU from the same values | VENDOR_CLAIM (Arm ARM redirection; LIBRARY Q4-02); prior art: the cloud QHV host with the same library under TCG | R1 `Starting next program` followed by procnto output; the MMU-on guard resets otherwise |
+| R13 | Under E2H=1, vstart's EL1-named writes produce a working EL2&0 MMU from the same values | VENDOR_CLAIM (Arm ARM redirection; LIBRARY Q4-02) | R1 `Starting next program` followed by procnto output; the MMU-on guard resets otherwise |
 | R14 | The library's GIC CPU-interface writes (`ICC_*_EL1`) configure the physical interface used by NS EL2, including EOImode and group enable | VENDOR_CLAIM (LIBRARY Q6-03) | R1 tick and IPIs (R2 load) |
 | R15 | procnto installs its own VBAR_EL2 before it removes the TTBR0 identity map | UNKNOWN (binary) | Not observable except as a reset-without-text after `Starting next program`; residual |
 | R16 | `shutdown -S reboot` reaches the reboot callout at EL2 | HYPOTHESIS (SMC from EL2 always reaches EL3, VENDOR_CLAIM; callout source VERIFIED) | R1 criterion 9 |
-| R17 | Black-box budget at `-vvv -P6` with the probe lines | HYPOTHESIS (~24 KB estimate) | Gate G1 from R0 |
+| R17 | Black-box budget at `-vvv -P6` with the probe lines | HYPOTHESIS (estimate, §4.5) | Gate G1 from R0 |
 | R18 | EL0 `CNTVCT_EL0` stays readable under E2H=1: `cntkctl_el1=2` lands in CNTHCTL_EL2 as EL0VCTEN (lib/aarch64/init_cpuinfo.c:225) | VENDOR_CLAIM (field layout, LIBRARY Q2-05) | R1: smpcheck uses `ClockCycles()` from its first line |
-| R19 | The mkifs preboot stub and `_main` before `board_init` do not fault or loop | HYPOTHESIS: the same code and entry state ran in every M1 and M2 run that reached QNX without a fault here; the stub is a QNX binary and is never inspected. If one does fault, §1 C5 predicts the black box: the shim's `EXC …` before `_main`'s x22/x21 writes (if the stub preserved them), no text after | Residual; §7's first three rows |
-| R20 | `t234_el2_vectors` stays inside the startup identity map in the new build | VERIFIED for M2's build (§3.2); the new build keeps it in `.text` | build-board.sh presence gate; nothing more is needed |
+| R19 | The mkifs preboot stub and `_main` before `board_init` do not fault or loop | HYPOTHESIS: the same code and entry state were in every M1 and M2 image (their outcomes are held locally); the stub is a QNX binary and is never inspected. If one does fault, §1 C5 predicts the black box: the shim's `EXC …` before `_main`'s x22/x21 writes (if the stub preserved them), no text after | Residual; §7's first three rows |
+| R20 | `t234_el2_vectors` stays inside the startup identity map in the new build | VERIFIED for M2's build from its symbol table (§3.2); the new build keeps it in `.text` | build-board.sh presence gate; nothing more is needed |
 | R21 | Under el1-host (C1/C2), no EL2 exception occurs between `hyp_enable_el1_host` (VBAR_EL2 set to uninitialised RAM, lib/aarch64/hypervisor.c:101-108) and procnto | HYPOTHESIS (no HVC in any board or library path used; `psci_smc` only) | C1 only; a silent hang would name it |
 | R22 | The 2 h uptime precaution avoids Linux's kexec-shutdown panic | HYPOTHESIS (one event) | Shim text absent plus a new Oops, per §6.2 step 6 |
-| R23 | A generated M1b buildfile without comments compiles to the same script as the M2 one, apart from the labels | VERIFIED for comments (`m2-p6.dumpifs.txt` shows no `#` lines); the label change is checked by generator step 8 | Build time |
+| R23 | A generated M1b buildfile without comments compiles to the same script as the M2 one, apart from the labels | VENDOR_CLAIM for comments (buildfile syntax, §2 rule 3); the label change is checked by generator step 8 | Build time |
 
 ---
 
 ## 10. Must not be claimed from a pass
 
-**What did not run or was not observed**
+**What the ladder does not run or observe**
 - **No hypervisor workload.** Nothing about qvm, a guest, stage-2 translation, a virtual GIC, guest timers, HVC or world switches. `HCR_EL2.HCD` stays set and `VTTBR_EL2` stays 0 (lib/aarch64/_start_el1.S:152, :181). All of that is M3.
 - **No safety property.** Not isolation, not an ASIL property, not a certified or production configuration.
-- **Not which PPI served each secondary's timer.** A pass shows `qtime->intr = 28`, CPU0's kernel clock ticking, and 100 ms sleeps returning on each worker's own core. That procnto uses INTID 28 on cpus 1-5 is inferred, not observed.
+- **Not which PPI served each secondary's timer.** A pass would show `qtime->intr = 28`, CPU0's kernel clock ticking, and 100 ms sleeps returning on each worker's own core. That procnto uses INTID 28 on cpus 1-5 is inferred, not observed.
 - **Not SMP-safety of the kernel-time console.**
 
-**Limits of the INTID 28 result**
+**Limits of an INTID 28 verdict**
 - **Only the NS view, this SKU, this firmware.** Not that INTID 28 is wired in the Secure view, on other Tegra234 SKUs, or on firmware other than L4T R36.4.7.
-- **Only bits 0-31 were watched.** Not that CNTHV reaches no other interrupt: only SGI/PPI bits 0-31 of this core's `ISPENDR0` were watched.
+- **Only bits 0-31 are watched.** Not that CNTHV reaches no other interrupt: only SGI/PPI bits 0-31 of this core's `ISPENDR0` are watched.
 
 **Measurement limits**
-- **No timing or performance figure.** The tick `ms`, `t_ms` and busy rates are uncontrolled (DVFS, and the cluster-1 rate open since M2).
+- **No timing or performance figure.** The tick `ms`, `t_ms` and busy rates are uncontrolled (DVFS, among other factors).
 - **Not reliability or a soak.** One 60 s load per run, n=2 at `-P6`.
 - **Not that the CPU_ON entry state generalises.** The state for a CPU_ON issued from EL2 holds only for this firmware and this path.
 
 **What the startup is, and what it changed**
 - **Not that the library runs unmodified.** The board overrides `board_init`, the CPU_ON entry point, `transfer_aps` (through `smp_hook_rtn`) and `gic_cpu_init`, and the RWP patch remains.
 - **Not that startup leaves the EL2 timers untouched.** The probe arms and disarms both EL2 timers on every core. It restores both CVALs and leaves both controls 0, but procnto inherits a system that ran the probe.
-- **Not that `AARCH64_CPU_FLAG_VHE` is unnecessary in general.** A pass shows only that this workload ran without it.
+- **Not that `AARCH64_CPU_FLAG_VHE` is unnecessary in general.** A pass would show only that this workload ran without it.
 - **Not VHE if the el1-host contingency was used.** Every number from `el1h-*` is an el1-host number.
 
 **Recovery coverage**

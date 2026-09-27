@@ -5,21 +5,17 @@
 # test (2026-09-25) knowing it changes systemd settings on the board, at runtime, restored
 # after.
 #
-# WHAT IS KNOWN. Confining the host's userspace to cores 3 and 5 removes most of
-# tj-thermal's window, but confined, 194 of the 220 exchanges at or above their round's p99
-# start away from every thermal read, and that record does not say what slows them
-# (20260925T-a6-orin-natural). Looking at that record afterwards -- an exploration, not a
-# test -- every thermal read falls in the first 250 us of a 4 ms grid of the trace's
-# monotonic clock: the host's tick (HZ=250). CONFIG_NO_HZ_FULL is not set, so a busy core
-# always takes the tick, and without skew_tick every core takes it at the same moment
-# (tick_sched_timer fires ~3.5 us after the grid). In 50 us bins of the request's phase the
-# slow exchanges are those leaving 150 to 0 us before a tick (+8 to +13 us at the median; the
-# bins either side lie within -3..+5 us). That bin, [3850, 4000) us mod 4000, held 62 of the
-# confined arm's 194 out-class tail exchanges (32%) against 4.1% of all out-class exchanges
-# (7.7x), and was +11.2 us slower at the median. The bin and its edges were chosen after
-# looking at that record: this run tests it on new data. Without confinement, the
-# host's handlers on QEMU's threads were 12.7% of the tail's excess
-# (20260924T-a6-orin-tailhost).
+# WHAT IS KNOWN. What confining the host's userspace to cores 3 and 5 does to tj-thermal's
+# window, and where the confined arm's tail exchanges start relative to the thermal reads:
+# record 20260925T-a6-orin-natural (held locally); that record does not say what slows
+# them. Looking at that record afterwards -- an exploration, not a test -- at the thermal
+# reads' and the requests' phase on a 4 ms grid of the trace's monotonic clock: the host's
+# tick (HZ=250). CONFIG_NO_HZ_FULL is not set, so a busy core always takes the tick, and
+# without skew_tick every core takes it at the same moment. The exploration's 50 us bins of
+# the request's phase led to the TICK BIN below, [3850, 4000) us mod 4000 (what the bins
+# showed is held locally). The bin and its edges were chosen after
+# looking at that record: this run tests it on new data. Without confinement, the host's handlers on QEMU's
+# threads: record 20260924T-a6-orin-tailhost (held locally).
 #
 # THE RUN. One boot of the stamping guest, one arm of the probe repeated: t2ms, the A6
 # default (two vCPUs, halt_poll_ns 500000, 2 ms). k = 40 rounds, n = 1000, 200 warm-up. EVERY

@@ -11,15 +11,14 @@
 #          is live (or "-" if presence cannot be confirmed from the serial
 #          log on this leg — recorded as presence-unknown, not failure).
 #
-# NOTE: the net path is INERT on this leg (host io-sock down). virtio-net is
+# NOTE: the net path is INERT on this leg by design. virtio-net is
 # intentionally ABSENT from g2.conf, so it is NOT manifested here — see
 # TCR-HYP-001 least-vdev. If a future build adds it, add it here too.
 
-# pl011 / virtio-console: the guest console is demonstrably live (the guest
-# prints its banner), but the QNX serial log emits no clean per-device token
-# for them, so presence is recorded as UNKNOWN ('-') rather than asserted or
-# false-failed. virtio-blk presence IS evidenced by the guest "Direct-Access
-# ... VIRTIO" devb line, so it carries a real token.
+# pl011 / virtio-console: no per-device token is matched for them in the
+# serial log, so presence is recorded as UNKNOWN ('-') rather than asserted or
+# false-failed. virtio-blk presence is matched on the guest's devb
+# "Direct-Access ... VIRTIO" line, so it carries a real token.
 pl011           -
 virtio-console  -
 virtio-blk      VIRTIO

@@ -13,12 +13,10 @@
 # shm transport (Makefile: monitor.c + shm_map_qnx.c), so it differs from
 # ifs-udp.bin's too.
 #
-# NO PCI SERVER. A first version of this file added pci-server, pci_hw-fdt.so,
-# the generic bus-configuration module and libfdt.so.1, and started
-# "pci-server -c". On QEMU virt pci_hw-fdt.so refused to load (its own log: the
-# ECAM window's size read as zero, no memory window found, EINVAL), so the
-# monitor configures the one ivshmem function itself through ECAM
-# (ipc-test/common/shm_map_qnx.c) and none of those files is in this image.
+# NO PCI SERVER. This image carries no pci-server, pci_hw-fdt.so, generic
+# bus-configuration module or libfdt.so.1: the monitor configures the one
+# ivshmem function itself through ECAM (ipc-test/common/shm_map_qnx.c). Why the
+# PCI server is not used is held locally (NC QDL v7 4.6(i)).
 #
 # Every file is [+optional] as mkqnximage emits it, so a missing input is skipped
 # SILENTLY and mkifs still exits 0 -- verify by dumpifs, never by exit code.
@@ -95,7 +93,7 @@
 # returns, because startup.sh is what brings up io-sock and the static
 # vtnet0 address -- binding :7100 before that would fail. Kept in the IFS
 # on purpose: post_startup.sh lives in the system partition, and editing
-# it would mean rewriting disk-qemu, which published results depend on.
+# it would mean rewriting disk-qemu, which earlier records depend on.
 /proc/boot/qnx-safety-monitor &
 # OD12 (2026-09-21): the UDP rungs -- the same two binaries in UDP mode, on
 # their own ports so a TCP/UDP mix-up fails instead of answering. Started here,

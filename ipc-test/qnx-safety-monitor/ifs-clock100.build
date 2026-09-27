@@ -2,10 +2,10 @@
 # ifs-clock100.build -- ifs-clock.build with the guest's tick at 100 Hz (10 ms) instead of the
 # default 1 kHz (Phase 3b / A6, 2026-09-26; run-clock.sh).
 #
-# QNX OS 8.0 cannot change its clock period at run time (ClockPeriod() returns ENOTSUP when
-# asked to set it; checked on this guest 2026-09-26): the tick frequency is fixed at boot by
-# procnto's -C option, and it is the granularity of every ordinary timer in the guest. So
-# the intervention on the guest's timer is a second image, and run-clock.sh alternates the
+# The tick frequency is set at boot by procnto's -C option, and it is the granularity of
+# every ordinary timer in the guest. This design does not change it at run time with
+# ClockPeriod() (why is in record `20260926T-a6-orin-clock`, held locally). So the
+# intervention on the guest's timer is a second image, and run-clock.sh alternates the
 # two images by guest boot within one board boot.
 #
 # The ONE change from ifs-clock.build (search "-C 100"): procnto-smp-instr gains `-C 100`.
@@ -85,7 +85,7 @@
 # returns, because startup.sh is what brings up io-sock and the static
 # vtnet0 address -- binding :7100 before that would fail. Kept in the IFS
 # on purpose: post_startup.sh lives in the system partition, and editing
-# it would mean rewriting disk-qemu, which published results depend on.
+# it would mean rewriting disk-qemu, which earlier records depend on.
 /proc/boot/qnx-safety-monitor &
 # OD12 (2026-09-21): the UDP rungs -- the same two binaries in UDP mode, on
 # their own ports so a TCP/UDP mix-up fails instead of answering. Started here,

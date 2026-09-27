@@ -4,19 +4,19 @@
 # Prints only M4D lines. parse-m4dry.py's Counter is this file's port; change
 # the two together (m4-dryrun-design.md §5.4, as amended in §13).
 #
-# Revision 3 (§13, D-a and D-b). Attempt 1 showed that traceprinter's %e prints
-# an event sequence index, one higher per printed event, not the event ID. So
-# the -p format no longer carries %e, and every event is classified by its
+# Revision 3 (§13, D-a and D-b). The -p format does not carry %e
+# (§13 D-a says why), and every event is classified by its
 # printed class and subtype name only:
-#  - class: QVM (VERIFIED, attempt 1); HYP and "Class 10" are still accepted;
+#  - class: QVM; HYP and "Class 10" are also accepted;
 #  - subtype: GUEST_ENTER 0, GUEST_EXIT 1, CREATE_VCPU_THREAD 2 and CYCLES 7
-#    printed as the suffixes of the _NTO_TRACE_QVM_* constants
-#    (sys/trace.h:286-293; VERIFIED, attempt 1);
-#  - the interrupt events printed as INTR_RAISE and INTR_LOWER, the reverse
-#    word order of the constants RAISE_INTR (3) and LOWER_INTR (4). Both
+#    read as the suffixes of the _NTO_TRACE_QVM_* constants
+#    (sys/trace.h:286-293);
+#  - the interrupt events as INTR_RAISE and INTR_LOWER, or in the
+#    word order of the constants, RAISE_INTR (3) and LOWER_INTR (4). Both
 #    spellings are accepted, and mapping them to IDs 3 and 4 is HYPOTHESIS;
-#  - no timer event appeared at the default settings, so both word orders are
-#    accepted for TIMER_CREATE (5) and TIMER_FIRE (6) (HYPOTHESIS).
+#  - both word orders are accepted for TIMER_CREATE (5) and
+#    TIMER_FIRE (6), and mapping them to IDs 5 and 6 is
+#    HYPOTHESIS too.
 # A QVM-class event with any other subtype counts in qvm_other and is listed by
 # name and count on an M4D QVMOTHER line. M4D HIST is keyed by class and
 # subtype, so it is small and printed in full.

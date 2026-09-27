@@ -1,15 +1,13 @@
 #!/usr/bin/env bash
-# run-mss.sh -- the guest path's bump at 1280 B and its fast path above one MSS, mapped finely
-# with one read per frame. Phase 3b / A6, 2026-09-26; follows 20260926T-a6-orin-reads.
-# The owner asked for this run (2026-09-26).
+# run-mss.sh -- the guest path and the host path between 1024 and 1536 B, around one MSS,
+# mapped finely with one read per frame. Phase 3b / A6, 2026-09-26; follows
+# 20260926T-a6-orin-reads. The owner asked for this run (2026-09-26).
 #
-# WHAT IS KNOWN. With one read() per frame (the greedy mode), the guest path is +9.3 us slower
-# at 1280 B than at 1024 B, then 19.6 us faster at 1536 B than at 1280 B -- 5.3 us faster than
-# at 64 B -- in every round of the reads record; the sweep saw the same with two reads. At
-# 1280 B each exchange is one packet each way on the tap; at 1536 B two. The host path (a
-# namespace behind br0) instead steps +5.9 us up at one MSS. The MSS is 1448 B (MTU 1500, 32-byte
-# TCP headers: the counters' 66 bytes of header per packet). Neither the bump nor the fast path
-# is explained.
+# WHAT IS KNOWN. How the guest path and the host path (a namespace behind br0) change between
+# 1024 and 1536 B with one read() per frame (the greedy mode): record 20260926T-a6-orin-reads
+# (held locally); with two reads, record 20260926T-a6-orin-sweep (held locally). The MSS is
+# 1448 B (MTU 1500, 32-byte TCP headers: 66 bytes of header per packet), so a 1280 B frame fits
+# one segment and a 1536 B frame needs two.
 #
 # THE MAP. ifs-reads.bin's greedy endpoint (:7121) in the guest, and the same source natively in
 # a namespace behind br0 (:7121, greedy), one read per frame that arrives whole. Sixteen arms:

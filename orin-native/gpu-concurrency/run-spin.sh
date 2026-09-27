@@ -3,11 +3,11 @@
 # the frame's arrival? Phase 3b / A6, 2026-09-27; follows 20260927T-a6-orin-pin.
 # The owner asked for this run (2026-09-26, to go on overnight unattended: KVM guests only).
 #
-# WHAT IS KNOWN. Inside the guest the endpoint's second read() of a network-delivered frame costs
-# ~13 us wherever io-sock runs, one vCPU included (the pin record). In the same boots a same-CPU
-# message pass costs 2.5 us and a read of loopback data already in the socket 7.1 us. So reading
-# network-delivered data costs ~6 us more than reading loopback data. One reading: the read waits
-# for io-sock work left over from delivering the frame.
+# WHAT IS KNOWN. What the endpoint's second read() of a network-delivered frame costs inside the
+# guest, with io-sock free, pinned, or on one vCPU, and what a same-CPU message pass and a read of
+# loopback data already in the socket cost in the same boots: record 20260927T-a6-orin-pin (held
+# locally). The question is whether reading network-delivered data costs more than reading
+# loopback data because the read waits for io-sock work left over from delivering the frame.
 #
 # THE MANIPULATION. ifs-spin.bin (compare-ifs.py: against ifs-stamp.bin only the startup script,
 # build/ifs.build and build.date differ, and qnx-echo-server-spin is added): the timed endpoint on
@@ -19,8 +19,8 @@
 #   s50  :7125  ... 50 us
 # The wait spins on CLOCK_MONOTONIC (the thread stays runnable), and the endpoint prints the
 # waits' median (M3). Two configurations, one guest boot each per round: U1 (one vCPU) and U2 (two
-# vCPUs; io-sock free), in a Williams order (period 2). Before this was written the image booted
-# once with each: every instance echoed a frame of each size whole and read each frame as designed.
+# vCPUs; io-sock free), in a Williams order (period 2). Before this was written the image was
+# booted once with each to check the instances (held locally).
 # No read was timed by anyone looking.
 #
 # THE RUN. Per boot the five arms, 64-byte frames at 2 ms, n=1000 after 200 warm-up, in a Williams

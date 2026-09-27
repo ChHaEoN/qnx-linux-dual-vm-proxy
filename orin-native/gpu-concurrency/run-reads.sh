@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-# run-reads.sh -- the read-count test: is the frame-size sweep's 64 -> 96 B step on the guest
-# path the frame's size, or the endpoint's second read()? Phase 3b / A6, 2026-09-26.
+# run-reads.sh -- the read-count test: on the guest path between 64 and 96 B, what does the
+# frame's size cost, and what does the endpoint's second read()? Phase 3b / A6, 2026-09-26.
 # The owner asked for this run (2026-09-26).
 #
-# WHERE THIS STARTS. The sweep (record 20260926T-a6-orin-sweep) found the guest path +15.9 us
-# slower at 96 B than at 64 B, in 20/20 rounds, where the host path was +1.7 us. Its endpoint
-# reads 64 bytes, then the rest: one read() at 64 B, two above. So that step compares one read
-# with two as well as 64 bytes with 96. The same record found an unexplained +10.4 us bump at
-# 1280 B on the guest path, gone at 1536 B.
+# WHERE THIS STARTS. The guest path and the host path at 64 and 96 B, and the guest path
+# around 1280 B: the sweep, record 20260926T-a6-orin-sweep (held locally). Its endpoint reads
+# 64 bytes, then the rest: one read() at 64 B, two above. So 64 against 96 B compares one read
+# with two as well as 64 bytes with 96.
 #
 # THE MANIPULATION. The same endpoint source (ipc-test/qnx-server-net/sweep.c) in three read
 # modes, one instance per mode and port, in the guest (qnx-echo-server-reads in
@@ -23,7 +22,7 @@
 #
 # SIXTEEN ARMS, tag = path, mode, size:
 #   Gd64 Gd96 Gg64 Gg96 Gs64            the step, three ways, through the guest
-#   Gd1024 Gd1280 Gd1536 Gg1024 Gg1280 Gg1536   the 1280 B bump, with two reads and one
+#   Gd1024 Gd1280 Gd1536 Gg1024 Gg1280 Gg1536   around 1280 B, with two reads and one
 #   Bd64 Bd96 Bg64 Bg96 Bs64            the same step on the host path, the control
 # n=1000, 200 warm-up, 2 ms spacing, K=16 rounds in a Williams design over the sixteen arms
 # (period 16). Every echoed byte checked (latency_probe.py --frame-bytes). Packet counters
@@ -144,8 +143,8 @@ counters() {   # $1 tag  $2 device  $3 before|after
 	echo "$1 $2 $3$v" >> "$OUT/counters.log"
 }
 
-# Only an endpoint of this source echoes a 2048-byte frame whole (the guest's banners
-# interleave on its console, as the sweep found).
+# Only an endpoint of this source echoes a 2048-byte frame whole, so an endpoint is checked by
+# an exchange, never by its banner on the guest's console.
 echo_check() {   # $1 host  $2 port  $3 label
 	taskset -c "$CORE_PROBE" python3 "$PROBE" --host "$1" --port "$2" --n 3 --warmup 0 --interval-ms 0 \
 		--timeout-s 3 --frame-bytes 2048 --tag "check-$3" --out "$OUT/check-$3.json" >> "$OUT/check.log" 2>&1 \

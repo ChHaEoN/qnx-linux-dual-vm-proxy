@@ -12,9 +12,9 @@
  * Phase 3 / Orin with the Linux end).
  *
  * Honest framing: study-level mechanism-alive proxy across a TCG-emulated qvm
- * boundary. The RTT is dominated by TCG emulation overhead, NOT a meaningful
- * transport cost — read P50/P99 as proof the IPC path is wired and stable, not
- * as a transport benchmark.
+ * boundary. The RTT includes TCG emulation overhead, so it is NOT a meaningful
+ * transport cost -- P50/P99 here speak to whether the IPC path is wired and
+ * stable, never to transport cost.
  *
  * RUNTIME-SPIKE (resolved 2026-07-28): g2.conf binds the virtio-console vdev
  * to `hostdev /dev/ptyp0` (a QNX devc-pty master); qvm itself opens that
@@ -23,8 +23,8 @@
  *
  * SENTINEL-KICK RECOVERY (2026-07-28, docs/findings.md): a read timeout is
  * recovered by writing a FRAME_SENTINEL_SEQ frame (never a resend of the
- * real in-flight frame -- an earlier resend experiment reliably corrupted
- * the next iteration's alignment, see README) and reading until the real
+ * real in-flight frame -- a resend would corrupt the next iteration's
+ * alignment, see sentinel_recover()) and reading until the real
  * echo (seq match) surfaces or the sentinel's own harmless bounce is seen
  * and discarded. See sentinel_recover() below.
  */
@@ -50,9 +50,8 @@
  * (which must block indefinitely for the next request), the initiator
  * should never hang forever on a stalled link -- a timeout turns a silent
  * hang into a diagnosable error. Layered on top of cio_set_raw() locally
- * (NOT in the shared header: applying this to the server caused it to treat
- * ordinary idle time waiting for the client as EOF, a real regression
- * caught empirically on this spike). */
+ * (NOT in the shared header: applied to the server, it would make it treat
+ * ordinary idle time waiting for the client as EOF). */
 #define CLIENT_READ_TIMEOUT_DS 100
 
 /* Sentinel-kick recovery bounds: a "round" is one sentinel write followed by
@@ -227,16 +226,12 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    /* Prime the link before starting the protocol: on the FIRST write-
-     * triggered exchange, qvm's hostdev pty delivers a short one-time
-     * artifact (a handful of extra bytes, empirically observed and
-     * reproducible across boots) ahead of the real echo -- almost certainly
-     * first-kick vring/queue-negotiation overhead in qvm's virtio-console
-     * bridging, not anything either endpoint's protocol emits. Send one
-     * throwaway frame and drain the fd until it goes quiet, discarding
-     * everything (including the throwaway frame's own echo), so the real
-     * warm-up + timed loop below starts from a clean frame boundary. This
-     * does NOT assume a fixed junk-byte count.
+    /* Prime the link before starting the protocol: send one throwaway
+     * frame and drain the fd until it goes quiet, discarding everything
+     * (including the throwaway frame's own echo), so that no bytes the link
+     * delivers around the first write-triggered exchange can misalign the
+     * real warm-up + timed loop below, which then starts from a clean frame
+     * boundary. This does NOT assume a fixed junk-byte count.
      */
     {
         uint8_t junk[FRAME_TOTAL_BYTES];
@@ -301,19 +296,10 @@ int main(int argc, char **argv)
             fprintf(stderr, "client: WARNING discarded %d stray byte(s) before iter %lu\n", stray, i);
         }
 
-        /* RUNTIME-SPIKE finding (2026-07-28, UNRESOLVED): back-to-back
-         * exchanges with no gap stall within single-digit iterations (a
-         * real hang under the CLIENT_READ_TIMEOUT_DS bound above, not a
-         * framing bug -- every frame up to the stall point was byte-exact).
-         * This pacing gap raised the iteration count reached in SOME runs
-         * but did NOT reliably prevent the stall (a larger gap and a much
-         * larger read timeout both still stalled, at *earlier* iterations
-         * in some runs) -- non-deterministic across boots, most likely
-         * qvm/TCG virtio-queue kick/notify timing, not something fixed
-         * from this side. Left in as an occasionally-helpful mitigation,
-         * NOT a proven fix -- see ipc-test/qnx-host-client/README.md and
-         * docs/findings.md (2026-07-28) for the honest account. Measured
-         * OUTSIDE the RTT sample window below either way. */
+        /* Pacing gap between exchanges (2026-07-28): kept as a mitigation
+         * for read timeouts on this leg, NOT a proven fix; the account is
+         * held locally (NC QDL v7 4.6(i)). It lies OUTSIDE the RTT sample
+         * window below either way. */
         usleep(20000);
 
         f.seq = (uint64_t)i;
@@ -329,8 +315,7 @@ int main(int argc, char **argv)
 
         int r = cio_read_frame(fd, wire);
         if (r == 1) {
-            /* Zero bytes arrived before CLIENT_READ_TIMEOUT_DS elapsed --
-             * the missed-notification stall (docs/findings.md, 2026-07-28).
+            /* Zero bytes arrived before CLIENT_READ_TIMEOUT_DS elapsed.
              * Recover with a sentinel kick instead of aborting or resending
              * the real frame; see sentinel_recover()'s header comment. */
             if (sentinel_recover(fd, f.seq, i, &sentinel_recoveries, &sentinel_bounces) != 0) {

@@ -6,8 +6,7 @@
 #
 # Phase 3 (Orin, docs/orin-port.md): there is no DHCP server on the Orin
 # host's br0 (scripts/orin/setup-bridge-orin.sh), so OPT_IP=dhcp's dhcpcd
-# never gets a lease -- vtnet0 comes up with the driver attached but no
-# address. Force the static IP the Phase-3 IPC benchmark expects, then
+# cannot get a lease. Force the static IP the Phase-3 IPC benchmark expects, then
 # start the TCP echo endpoint staged into the IFS by the build script's
 # generated ifs_files.custom.
 echo "=== Phase 3: static IP for br0/tap-qnx ==="
@@ -39,9 +38,9 @@ fi
 # recorded results talk to, and removing them would invalidate those paths.
 #
 # It needs a Cyclone DDS configuration, because the default picks ONE interface
-# by priority and would not choose the bridge. CYCLONEDDS_URI points at the
-# config staged beside it; without it the participant would come up on the
-# wrong interface and simply never discover the Compute side.
+# by priority, which need not be the bridge. CYCLONEDDS_URI points at the
+# config staged beside it; a participant on the wrong interface would never
+# discover the Compute side.
 echo "=== Phase 3b: starting qnx-dds-monitor (DDS over br0) ==="
 if [ -x /proc/boot/qnx-dds-monitor ]; then
   if [ -r /proc/boot/cyclonedds-qnx.xml ]; then

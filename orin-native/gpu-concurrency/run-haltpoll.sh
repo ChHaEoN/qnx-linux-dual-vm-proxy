@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# run-haltpoll.sh -- does the guest's 0.2 ms speed-up, and its monitor's halved
-# span, follow KVM halt polling or the spacing? An intervention on halt_poll_ns.
+# run-haltpoll.sh -- does the guest's difference between 0.2 ms and 2 ms spacing, in
+# its round trip and in its monitor's span, follow KVM halt polling or the spacing?
+# An intervention on halt_poll_ns.
 # Phase 3b / A6, 2026-09-24; follows 20260924T-a6-orin-rate and -vcpupin.
 #
-# WHAT IS KNOWN. At 0.2 ms spacing the guest's p50 round trip is 41-48 us shorter
-# than at 2 ms, and the stamping monitor's own span is 6 ticks against 12. At
-# 0.2 ms, 99% of vCPU halts end in a successful KVM poll; at 2 ms almost none do,
-# and the vCPU blocks. So far that is CO-VARIATION: the spacing was changed, and
-# the polling changed with it. The vCPU-pinning test ruled out one mechanism for
-# the halving, KVM's last_vcpu_ran flush. The spacing itself (the guest's idle
-# length) was never separated from the polling.
+# WHAT IS KNOWN. The guest's p50 round trip and the stamping monitor's own span at
+# 0.2 ms and at 2 ms spacing, and how often vCPU halts end in a successful KVM poll
+# at each, are in record 20260924T-a6-orin-rate (held locally). So far that is
+# CO-VARIATION: the spacing was changed, and the polling changed with it. The
+# vCPU-pinning test (record 20260924T-a6-orin-vcpupin, held locally) tested one
+# mechanism for the monitor's span, KVM's last_vcpu_ran flush. The spacing itself
+# (the guest's idle length) was never separated from the polling.
 #
 # THE INTERVENTION. halt_poll_ns caps KVM's poll window, and Linux 5.15 copies it
 # into a VM when the VM is created (kvm->max_halt_poll_ns; checked in the v5.15

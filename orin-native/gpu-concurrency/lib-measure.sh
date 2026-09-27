@@ -67,9 +67,9 @@ m_prepare_out() {   # $1 = requested OUT (may be empty)  $2 = base for a fresh o
 }
 
 # ------------------------------------------------------------- the governor
-# DETECT, RECORD, OR FAIL. On the Orin an unpinned idle baseline is measured on
-# a slower machine than a loaded arm (schedutil clocks idle down to 729 MHz),
-# which made ~40% of an "idle" figure the governor and inverted the comparison.
+# DETECT, RECORD, OR FAIL. On the Orin, schedutil clocks an idle core down, so an
+# unpinned idle baseline is measured on a slower machine than a loaded arm (the
+# case that showed it is record `20260919T-saturation`, held locally).
 # On bare-metal EC2 there is no cpufreq at all, and the honest record is
 # "absent", not an empty string.
 #
@@ -138,37 +138,26 @@ m_governor_restore() {
 }
 
 # ------------------------------------------------------------- CPU idle states
-# FOUND IN THE FIRST ORIN CAMPAIGN, 2026-09-21. The governor pin controls
+# ADDED AFTER THE FIRST ORIN CAMPAIGN, 2026-09-21. The governor pin controls
 # FREQUENCY. It never touched IDLE STATES, and the Orin exposes state1 "c7",
 # declared exit latency 5000 us, enabled. The stamp said only "cpuidle":
-# "present", which is how it went unnoticed; it now records every state a run
-# was exposed to.
+# "present"; it now records every state a run was exposed to.
 #
-# WHAT WAS SEEN, THEN TESTED. Unloaded guest arms carried a separate slow mode:
-# a copy of the main distribution shifted about +292 us, holding a median ~11%
-# of samples. Host-native arms never had it; full load removed it; one busy
-# thread on core 0 removed it in 4 of 4 rounds. That made saturation's p99 look
-# ~196 us LOWER than idle's -- the mode disappearing, not load improving a tail.
-# The first version of this comment asserted c7 as the cause before any test.
-# The test was to change the variable: with state1 disabled, the slow mode fell
-# from 12.8% to 0.0% of D-guest samples, and 6.25% to 0.0% of C-null, in every
-# one of 12 rounds. So disabling state1 removes it.
-#
-# WHAT IS NOT SHOWN. The slow mode costs ~0.29 ms per affected sample, far below
-# the 5000 us the state declares -- the declared figure is a bound the idle
-# governor works with, not a measured wake cost, and no sample shows 5 ms. Which
-# core's wake-up is paid (a vCPU, QEMU's I/O thread, the network softirq core)
-# is not shown; core 0 is the leading candidate, a HYPOTHESIS. The probe stored
-# its samples sorted until 2026-09-21, so time order -- periodic, bursty, tied
-# to a tick -- could not be examined in these runs.
+# The unloaded guest arms that raised the question, and the test that disabled
+# state1, are in records `20260921T-a6-orin` and `20260921T-a6-orin-c7off`
+# (held locally). The declared 5000 us is a bound the idle governor works with,
+# not a measured wake cost. Which core's wake-up would be paid (a vCPU, QEMU's
+# I/O thread, the network softirq core) is not shown. The probe stored its
+# samples sorted until 2026-09-21, so time order -- periodic, bursty, tied to a
+# tick -- could not be examined in those runs.
 #
 # Two policies, and both are legitimate measurements of different things:
 #   CSTATE=""        (default) leave idle states as found -- the realistic,
 #                    power-managed system. Recorded, not controlled.
 #   CSTATE=shallow   disable every state whose exit latency exceeds
 #                    CSTATE_MAX_US (default 10) -- isolates load contention.
-# The difference between the two IS the idle-state effect, which is how the c7
-# hypothesis gets tested rather than argued from distribution shapes.
+# The difference between the two IS the idle-state effect, which is how an
+# idle-state hypothesis gets tested rather than argued from distribution shapes.
 CSTATE="${CSTATE:-}"
 CSTATE_MAX_US="${CSTATE_MAX_US:-10}"
 CSTATE_STATE="unknown"; CSTATE_EXPOSED=""; CSTATE_DISABLED=""
@@ -551,11 +540,11 @@ PY
 # desynchronised stream and writes no file (see latency_probe.py), and any
 # non-zero exit here stops the run.
 #
-# ONE EXCEPTION, decided by the owner on 2026-09-21: a STALL. A board dry run
-# found that with QEMU's threads squeezed onto one core, the guest can stop
-# answering for longer than the probe's timeout -- and then recover. Under the
-# rule above that stopped the whole campaign at the first stall, and the finding
-# would have produced no data at all. With STALL_POLICY=record, a probe that
+# ONE EXCEPTION, decided by the owner on 2026-09-21 after a board dry run
+# (record `20260921T-a6-orin-pinned`, held locally): a STALL, the guest not
+# answering within the probe's timeout. Under the rule above the first stall
+# would stop the whole campaign, and a stall would produce no data at all.
+# With STALL_POLICY=record, a probe that
 # exits EXIT_DESYNC (3) AND wrote its stall record is an OUTCOME: m_probe
 # returns 3, the caller stops the load and calls m_await_recovery, and the run
 # goes on. Only a TIMEOUT is a stall -- no reply, or no connect, within
@@ -980,16 +969,14 @@ PY
 # ------------------------------------------------------------- the window sampler
 # ADDED 2026-09-21 to close two gaps an independent analysis named. Load
 # placement was read from ONE tegrastats sample taken before each probe
-# started, and could change once it began -- identical sampled placements gave
-# both cost regimes. And the memory-controller (EMC) clock, the leading
-# hypothesis for why a GPU load speeds the guest up, was never recorded at all.
+# started, and could change once it began. And the memory-controller (EMC)
+# clock, a candidate variable in the GPU arms, was never recorded at all.
 # So each probe window is now traced continuously, every 500 ms:
 #   tegra-<tag>.log  tegrastats AS ROOT: per-core CPU % and MHz, EMC_FREQ
 #                    (memory-controller utilisation % and clock), GR3D % and
 #                    clock, temperatures
-#   clk-<tag>.log    EMC rate from BOTH debugfs sources, which disagree on this
-#                    board -- BPMP said 2133 MHz, the kernel clock framework
-#                    204 MHz; tegrastats' own EMC clock agrees with BPMP -- plus
+#   clk-<tag>.log    EMC rate from BOTH debugfs sources (BPMP and the kernel
+#                    clock framework; they can disagree on this board), plus
 #                    the GPU devfreq clock.
 # tegrastats prints EMC_FREQ and the GR3D clock only when it runs as root. The
 # first draft ran it as the user and concluded "this JetPack build has no EMC
@@ -1212,7 +1199,7 @@ m_load_stop() {
 # FOUND ON THE FIRST REAL RUN, 2026-09-21: the first version piped the match
 # through `grep -oE '[0-9]+'`, which on "GR3D_FREQ 99%" also matches the 3
 # INSIDE "GR3D" -- so it returned "3" and "99" on two lines, the integer test
-# failed, and a GPU loaded to 99% was reported as unreadable. It refused the run,
+# failed, and a busy GPU was reported as unreadable. It refused the run,
 # which is the right direction to fail, but a check that can never pass blocks
 # every run. The number is now taken as the field AFTER the label, and anything
 # that is not a single integer is rejected by name.

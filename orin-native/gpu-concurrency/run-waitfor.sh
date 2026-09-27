@@ -5,12 +5,11 @@
 # (2026-09-26); it boots guests only, changing no setting of the board but the governor and
 # c7 for the run, both restored.
 #
-# WHAT IS KNOWN. On 2026-09-20 (findings.md), a diskless boot of the guest from QEMU exec to
-# "Startup complete" was found to be ~89-92% one fixed wait: `waitfor /dev/hd0` in the stock
-# mkqnximage startup.sh, which passes no timeout and so takes QNX's 5 s default -- 5001.3 ms on
-# the Orin, 5000.3 ms on a1.metal. That rests on the wait agreeing across two vendors'
-# silicon to about a millisecond: strong, but a coincidence argument. The direct test is to
-# change the constant.
+# WHAT IS KNOWN. On 2026-09-20 a diskless boot of the guest from QEMU exec to "Startup
+# complete" was timed on the Orin and on a1.metal (record 20260920T-kvm-twin, held locally).
+# The stock mkqnximage startup.sh runs `waitfor /dev/hd0`, which passes no timeout and so
+# takes QNX's 5 s default. Attributing the boot metric to that wait from two hosts' timings
+# alone is a coincidence argument. The direct test is to change the constant.
 #
 # THE IMAGES (none committed: QNX-derived), each accepted by compare-ifs.py against
 # ifs-stamp.bin with only startup.sh, build/ifs.build and build.date differing:

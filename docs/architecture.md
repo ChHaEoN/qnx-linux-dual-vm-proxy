@@ -71,28 +71,27 @@ Type-1 layer, because QHV needs EL2 and ARM KVM does not nest on A78AE.
  └─────────────────────────────────────────────────────────┘
 ```
 
-**The guest boots only with a `startup-qemu-virt` rebuilt in this repo.** The
-one QNX ships stops after 17 bytes of serial (`FOUND GICv3 ITS`) under
-`-enable-kvm`; a rebuild with `-fno-auto-inc-dec` removes a writeback MMIO
-store at GICD+0x420 that reports ISV=0 and so cannot be emulated. That rebuild
-is **not a QNX-supported configuration**.
+**The guest is started with a `startup-qemu-virt` rebuilt in this repo** from
+the board source in `orin-native/startup/qemu-virt/`, its startup library
+compiled `-fno-auto-inc-dec` so that the compiler emits no writeback
+(auto-increment) stores to MMIO: KVM cannot emulate a trapped store whose
+syndrome reports ISV=0. That rebuild is **not a QNX-supported configuration**.
 
-**Measured, 2026-09-21.** The round trip above is 182 µs at p50, and the
-attribution ladder splits it: 53 µs is rung A, the probe and a host-side server
-over loopback TCP (not the probe alone: through shared memory the same probe's loop
-measures 4.5 µs, 2026-09-22),
-3 µs is `br0`, and **126 µs is the crossing** — tap, virtio-net, the guest's
-`io-sock`, its scheduler and the monitor. Method and sample sizes:
+**Measured on 2026-09-21** with the attribution ladder, which splits the round
+trip above into rung A (the probe and a host-side server over loopback TCP),
+`br0`, and **the crossing** — tap, virtio-net, the guest's `io-sock`, its
+scheduler and the monitor. The figures are in record `20260921T-ladder`, held
+locally (NC QDL v7 4.6(i)). Method and sample sizes:
 [measurement-design.md](measurement-design.md).
 
 ---
 
 ## A4 and A5 — the hypervisor on silicon, and why it is not the direction
 
-The QNX Hypervisor ran **natively at EL2 on the board's own cores, with no
-QEMU**, entered by `kexec` from L4T or, once, by an EFI loader of ours from the
-firmware's UEFI Shell. It hosted the byte-identical cloud-leg QNX guest (M3),
-then a stock Linux kernel (S1-F), then both at once (B5).
+A4 places the QNX Hypervisor **natively at EL2 on the board's own cores, with
+no QEMU**, entered by `kexec` from L4T or by an EFI loader of ours from the
+firmware's UEFI Shell. Its milestones put the byte-identical cloud-leg QNX guest
+under it (M3), then a stock Linux kernel (S1-F), then both at once (B5).
 
 ```
  QNX Hypervisor host — procnto at EL2, VHE (E2H + TGE), no QEMU anywhere
@@ -107,9 +106,8 @@ then a stock Linux kernel (S1-F), then both at once (B5).
  └──────────────────────────────────────────────────────────┘
 ```
 
-**Every rung is a functional pass and none is timed**, and the figures are
-unpublished under NC QDL v7 4.6(i). It is not withdrawn — it stopped being the
-direction because **under it no OS can use the GPU** on Tegra234: the iGPU has
+**Every rung's record is held locally** under NC QDL v7 4.6(i). It is not
+withdrawn — it stopped being the direction because **under it no OS can use the GPU** on Tegra234: the iGPU has
 no SMMU stream ID, and its clock, reset and power go through BPMP, for which
 QNX has no client driver.
 
@@ -135,13 +133,13 @@ It is not a network: no bridge, no tap, no `io-sock`.
                   the EL2 / EL1 partition boundary
 ```
 
-Under A1 and A3 this ran inside QEMU **TCG**, so its latency measures emulation
-cost, not transport cost. Under A4 it ran on silicon, and that run is a
-completion, not a timing. **No hypervisor shared-memory or mailbox figure exists
-on any architecture**: the `vdev shmem` path was functional-only, TCG-only, never
-timed, and its notify half was deliberately skipped. (A6's `ivshmem` figures of
-2026-09-22 are host↔guest under KVM: polled, and notified with a doorbell in the
-guest-to-host direction only.)
+Under A1 and A3 this path sat inside QEMU **TCG**, so any latency on it measures
+emulation cost, not transport cost. Under A4 it sat on silicon; that record is
+held locally. **No hypervisor shared-memory or mailbox figure exists on any
+architecture**: the `vdev shmem` path was TCG-only, never timed, and its notify
+half was deliberately skipped. (A6's `ivshmem` paths of 2026-09-22 are
+host↔guest under KVM: polled, and notified with a doorbell in the guest-to-host
+direction only.)
 
 ---
 
@@ -156,15 +154,10 @@ sources are in [the plan's table](orin-native-port-plan.md#architecture-versions
 | **A2** | Orin plain leg: QEMU TCG beside L4T, QNX↔Linux IPC over `br0`/tap to a native Linux client |
 | **A3** | A1's images unchanged, in TCG on both hosts — the twin comparison on the hypervisor topology |
 
-Closing a phase never meant its target was met: A1's reliable runs never reached
-the 100k-iteration target, A2's IPC run used a **rebuilt** IFS rather than the
-byte-identical image, and KVM-accelerated boot never worked at the time.
-
-Two items stay open on their own. The `qvm`/TCG virtio-queue stall is still not
-root-caused and is only *survivable*, via a kick-safe sentinel frame. The
-GICv3/NISV defect is open in QNX's **shipped** binary only; it was root-caused
-and cleared at the source by the rebuilt startup, and the owner decided not to
-report it.
+Closing a phase never meant its target was met. A2's IPC run used a
+**rebuilt** IFS rather than the byte-identical image. What each phase reached,
+and the investigations still open, are held locally with the rest of the
+functional record (NC QDL v7 4.6(i)).
 
 ---
 
@@ -187,15 +180,13 @@ build-equivalence check was withdrawn on 2026-05-07 and none is planned.
 A test bed, never a runtime host. Non-metal Graviton exposes no `/dev/kvm` at
 all ([ADR-002](phase2-topology-decision.md)), so the `c7g.large` runtime host
 the design called for was never built. Bare metal is different: `a1.metal` has
-`/dev/kvm`, the same rebuilt startup boots a QNX guest under KVM there, and on
-2026-09-20 it was the second host in a two-host boot comparison on a
-byte-identical image.
+`/dev/kvm`, and on 2026-09-20 it was the second host in a two-host boot
+comparison on a byte-identical image (`20260920T-kvm-twin`, held locally).
 
-On 2026-09-21 the attribution ladder of A6 ran on `a1.metal` too, over TCP
-([record](../results/orin-native-port/20260921T-ladder-a1metal/results.md)), and on
-2026-09-22 the Orin's notified-shared-memory ladder ran there: TCP, the D-udp
-rung, and polled and notified shared memory
-([record](../results/orin-native-port/20260922T-a6-a1metal-kick/results.md)). No
+On 2026-09-21 the attribution ladder of A6 was run on `a1.metal` too, over TCP
+(`20260921T-ladder-a1metal`, held locally), and on 2026-09-22 the Orin's
+notified-shared-memory ladder was run there: TCP, the D-udp rung, and polled and
+notified shared memory (`20260922T-a6-a1metal-kick`, held locally). No
 throughput figure has been taken on a cloud host, and no figure on any cloud
 host other than `a1.metal` (a `t4g.small` was only probed for `/dev/kvm`).
 `c7g.metal`, the closer core match, stays quota-blocked at 64 vCPU against a

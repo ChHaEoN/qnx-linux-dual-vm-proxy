@@ -25,7 +25,7 @@ disassembled or dumped for this task.
 |---|---|
 | Firmware is EDK II, version string `36.4.4-gcid-41062509`, build date 06/16/2025; product `NVIDIA Jetson Orin Nano Engineering Reference Developer Kit Super` | `raw/orin-uefi-dmesg.txt:107,118` (`/sys/class/dmi/id`) |
 | Kernel sees `efi: EFI v2.70 by EDK II`; config tables printed: RTPROP, TPMFinalLog, SMBIOS, SMBIOS 3.0, MEMATTR, ESRT, TPMEventLog, RNG, MEMRESERVE — **no `ACPI=`** entry | `raw/orin-firmware-el.txt` `[b]` |
-| `CPU: All CPU(s) started at EL2`; `kvm [1]: VHE mode initialized successfully`; `psci: PSCIv1.1 detected in firmware`, `SMC Calling Convention v1.2` | `raw/orin-firmware-el.txt`; also `logs/sample-boot/orin-l4t-boot-el2-uefi-evidence.txt:27-42` |
+| `CPU: All CPU(s) started at EL2`; `kvm [1]: VHE mode initialized successfully`; `psci: PSCIv1.1 detected in firmware`, `SMC Calling Convention v1.2` | `raw/orin-firmware-el.txt`; also `logs/sample-boot/orin-l4t-boot-el2-uefi-evidence.txt:27-42` (held locally) |
 | ESP = `mmcblk0p10` (vfat, 64 MB, GPT type ESP `c12a7328-…`), mounted `/boot/efi`; contains `EFI/BOOT/BOOTAA64.efi` (110,592 B) and `EFI/UpdateCapsule/` | `raw/orin-bootconfig.txt:196-254` |
 | `efibootmgr -v`: `Boot0000* Enter Setup`, `Boot0001* UEFI SD Device` (= BootCurrent), `Boot0006* BootManagerMenuApp`, `Boot0007* UEFI Shell` (both FV-embedded, FvVol `49a79a15-8f69-4be7-a30c-a172f44abce7`), plus NVMe/PXE/HTTP entries | `raw/orin-bootconfig.txt:266-282`, `raw/orin-boot-config.txt:339-351` |
 | `/boot/extlinux/extlinux.conf`: `LINUX /boot/Image`, `INITRD /boot/initrd`, `APPEND ${cbootargs} … console=ttyTCU0,115200 …` | `raw/orin-bootconfig.txt:7-17` |
@@ -203,7 +203,7 @@ is **UNKNOWN** — the board's `/psci` node compatible was not captured.
 | `Tegra/DefConfigs/t23x_general.defconfig` (`main`): `CONFIG_SOC_T23X=y`, `CONFIG_BUILD_GENERAL=y`, `CONFIG_PLATFORM_GUID="49a79a15-…"` (= the FvVol GUID in this board's boot entries) | VERIFIED (source + board) | https://github.com/NVIDIA/edk2-nvidia/blob/main/Platform/NVIDIA/Tegra/DefConfigs/t23x_general.defconfig |
 | r36.4.x generation: `Platform/NVIDIA/Kconfig` at `r36.4.3` has `ACPI … default y`, `SHELL default y`, `SOC_ORIN selects SOC_JETSON`; `Platform/NVIDIA/Jetson/Jetson.defconfig` at `r36.4.5` sets `CONFIG_SOC_ORIN=y`, `CONFIG_DEVICETREE=y`, `CONFIG_L4T=y`, `CONFIG_SERIAL_PORT_CONSOLE_TEGRA=y` and does **not** disable ACPI (so `default y` applies) | VERIFIED (source) | https://github.com/NVIDIA/edk2-nvidia/blob/r36.4.3/Platform/NVIDIA/Kconfig ; https://github.com/NVIDIA/edk2-nvidia/blob/r36.4.5/Platform/NVIDIA/Jetson/Jetson.defconfig |
 | `NVIDIA.common.dsc.inc` at `r36.4.3`: `!ifdef CONFIG_ACPI` → `AmlGenerationDxe`, `AmlPatchDxe`, `AcpiTableDxe`, `AcpiDtbSsdtGenerator` | VERIFIED (source) | see §2.1 |
-| **Shipped behaviour on this board: DT mode** — ACPI interpreter disabled, `/sys/firmware/acpi/tables` absent, no `ACPI=` config table | VERIFIED (board) | `logs/sample-boot/orin-l4t-boot-el2-uefi-evidence.txt:6-7,22`; §0 |
+| **Shipped behaviour on this board: DT mode** — ACPI interpreter disabled, `/sys/firmware/acpi/tables` absent, no `ACPI=` config table | VERIFIED (board) | `logs/sample-boot/orin-l4t-boot-el2-uefi-evidence.txt:6-7,22` (held locally); §0 |
 | The "Device Manager → O/S Hardware Description Selection" menu is documented for the Xavier-era UEFI; on JetPack 6 AGX Orin the Windows-11 and Fedora reports used it | VENDOR_CLAIM (Xavier readme) + COMMUNITY (AGX Orin) | https://developer.download.nvidia.com/embedded/L4T/UEFI_Readme_side_car.html ; https://forums.developer.nvidia.com/t/nvidia-jetson-orin-agx-can-boot-windows-out-of-the-box-in-the-latest-uefi/246176 |
 | Whether the **Orin Nano** `36.4.4` firmware exposes that menu / ACPI tables | UNKNOWN — no vendor or community page found saying so for P3768; the source says the ACPI drivers are compiled in, the board says DT is selected |  |
 | In ACPI mode the Linux console is `console=ttyAMA0,115200` (nullr0ute, Dec 2023, JetPack 6) — i.e. the firmware's SPCR points at the **SBSA UART** | COMMUNITY | https://nullr0ute.com/2023/12/any-linux-distro-on-nvidia-jetson-orin-with-jetpack-6/ |
@@ -429,4 +429,4 @@ outcome vague). No microkernel/hypervisor/BSD report for Orin was found.
 - https://jetsonhacks.com/nvidia-jetson-orin-nano-gpio-header-pinout/
 - https://proventusnova.com/blog/jetson-uefi-boot-flow-mb1-mb2-tfa-kernel
 - https://docs.sel4.systems/Hardware/
-- Local: `raw/orin-*.txt` (H3 captures), `harvest-sdp.md`, `harvest-repo.md`, `logs/sample-boot/orin-l4t-boot-el2-uefi-evidence.txt`, `docs/orin-port.md`
+- Local: `raw/orin-*.txt` (H3 captures), `harvest-sdp.md`, `harvest-repo.md`, `logs/sample-boot/orin-l4t-boot-el2-uefi-evidence.txt` (held locally), `docs/orin-port.md`

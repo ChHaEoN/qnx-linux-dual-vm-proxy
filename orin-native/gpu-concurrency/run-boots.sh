@@ -5,12 +5,10 @@
 # this test (2026-09-25); it only reboots the board, changing no setting.
 #
 # WHAT IS KNOWN. Every A6 record is one boot of the guest, most of them one boot of the
-# board, and their uncertainty is between-round (20260924T-a6-stats: rounds are the unit,
-# between-round variance dominates sampling 9-500x). In the partition test the two boots of
-# the SAME default entry, 25 minutes apart, differed by 10 us at p50 (175.7 and 185.7) and
-# ~100 us at p99.9 (240.8 and 337.5), while their tick-bin slowdowns agreed (+11.9, +11.0)
-# (20260925T-a6-orin-partition). Nothing says whether that was one odd boot or how boots
-# vary in general.
+# board, and their uncertainty is between-round (record 20260924T-a6-stats, held locally).
+# The partition test ran two boots of the SAME default entry, 25 minutes apart, and
+# compared them at p50, at p99.9 and in their tick-bin slowdowns (record
+# 20260925T-a6-orin-partition, held locally). Nothing says how boots vary in general.
 #
 # THE DESIGN. BOOTS fresh boots of the default entry (the shipped command line), in a
 # row, each rebooted into by the orchestrator (partition_cycle.sh's machinery, no boot
@@ -33,7 +31,7 @@
 #
 # THE PREDICTION, written and committed before any run of this harness, smoke runs
 # included. It is not to be amended. H: the boot is a real factor for the level of the
-# figures -- the partition test's 10 us was not one odd boot -- while the tick's cost, a
+# figures -- the partition test's p50 difference was not one odd boot -- while the tick's cost, a
 # property of the kernel and the hardware, does not move with it.
 #   P1 boots differ at p50: max BOOT P50 - min BOOT P50 >= 5 us.
 #   P2 the boot outweighs the round at p50: ICC(p50) >= 0.5.

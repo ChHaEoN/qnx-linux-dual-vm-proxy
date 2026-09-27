@@ -8,8 +8,7 @@ set(QNX_TOOLCHAIN_ARCH gcc_ntoaarch64le)
 
 # pthread_* and clock_gettime live in libc on QNX 8.0; there is no libpthread.so
 # or librt.so to link. CMake's FindThreads probes libc first and succeeds, so
-# this is belt-and-braces against a stale cache rather than a live bug --
-# verified 2026-09-20: Threads_FOUND=TRUE with CMAKE_THREAD_LIBS_INIT empty.
+# this is belt-and-braces against a stale cache rather than a live bug.
 set(CMAKE_HAVE_LIBC_PTHREAD 1 CACHE INTERNAL "QNX: pthread_* are in libc")
 set(CMAKE_THREAD_LIBS_INIT "" CACHE INTERNAL "QNX: no separate thread library")
 set(CMAKE_USE_PTHREADS_INIT 1 CACHE INTERNAL "QNX: pthreads semantics")

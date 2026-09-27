@@ -96,7 +96,7 @@ def _run_delta(repo_root, cloud, hw):
 @pytest.mark.skipif(AWK is None, reason="awk not available on this host")
 def test_delta_awk_agrees_with_claims_lib(repo_root):
     """The awk and the Python must not drift apart; CI relies on both."""
-    for cloud, hw in [(100, 125), (2002500, 2213370), (500, 400), (7, 7)]:
+    for cloud, hw in [(100, 125), (2000000, 2200000), (500, 400), (7, 7)]:
         assert _run_delta(repo_root, cloud, hw) == pytest.approx(C.pct_delta(cloud, hw), abs=1e-6)
 
 
@@ -106,9 +106,9 @@ def test_delta_awk_default_mode_is_the_human_report(repo_root):
     out = subprocess.check_output(
         [
             AWK,
-            "-v", "cp50=2002500", "-v", "hp50=2213370",
-            "-v", "cp99=2332300", "-v", "hp99=2596291",
-            "-v", "cmax=2332300", "-v", "hmax=2596291",
+            "-v", "cp50=2000000", "-v", "hp50=2200000",
+            "-v", "cp99=2300000", "-v", "hp99=2600000",
+            "-v", "cmax=2300000", "-v", "hmax=2600000",
             "-f", os.path.join(repo_root, "scripts", "twin", "delta.awk"),
         ],
         stdin=subprocess.DEVNULL,
@@ -116,9 +116,9 @@ def test_delta_awk_default_mode_is_the_human_report(repo_root):
     lines = out.strip().splitlines()
     assert len(lines) == 3
     assert lines[0].strip().startswith("P50")
-    assert "cloud=2002500" in lines[0]
-    assert "hw=2213370" in lines[0]
-    assert "+10.5" in lines[0]
+    assert "cloud=2000000" in lines[0]
+    assert "hw=2200000" in lines[0]
+    assert "+10.0" in lines[0]
 
 
 # --------------------------------------------------------------------------

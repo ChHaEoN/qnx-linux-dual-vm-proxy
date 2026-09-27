@@ -1,4 +1,4 @@
-"""Where the guest path's fast path begins (Phase 3b / A6, 2026-09-26): the report on synthetic runs
+"""The edge test (Phase 3b / A6, 2026-09-26): the report on synthetic runs
 with the edge at 1460/1461, with it elsewhere, and with a read count missing; and the harness's
 header."""
 import json

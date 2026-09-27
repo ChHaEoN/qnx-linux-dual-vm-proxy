@@ -62,8 +62,8 @@ mkqnximage \
 # ---- TSR-PKG-001(a): package-completeness assertion --------------------------
 # The aarch64 qemu-virt IFS must include the startup-qemu-virt binary (via the
 # com.qnx.qnx800.target.qemuvirt package). A missing startup binary yields an
-# IFS that boots the WRONG / no image (cf. the 2026-06-10 target.qemuvirt
-# finding). Assert presence before declaring success.
+# IFS without the startup this machine needs (cf. the 2026-06-10
+# target.qemuvirt note). Assert presence before declaring success.
 echo "Asserting package completeness (startup-qemu-virt present) ..."
 startup_found=""
 for cand in \

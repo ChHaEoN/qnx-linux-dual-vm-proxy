@@ -18,9 +18,13 @@ GATE = os.path.join("scripts", "ci", "claims_gate.py")
 
 
 def _run_gate(repo_root, readme_rel):
+    # --no-network: a unit test must not depend on the repository's settings.
+    # The live "About" comparison is the claims-gate workflow's job on push; run
+    # here, a changed pin would fail these tests until someone edited GitHub.
     env = dict(os.environ, PYTHONIOENCODING="utf-8")
     return subprocess.run(
-        [sys.executable, os.path.join(repo_root, GATE), "--repo", repo_root, "--readme", readme_rel],
+        [sys.executable, os.path.join(repo_root, GATE), "--repo", repo_root, "--readme", readme_rel,
+         "--no-network"],
         cwd=repo_root, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         stdin=subprocess.DEVNULL, env=env,
     )
@@ -53,14 +57,17 @@ def test_gate_prints_a_claimed_vs_recomputed_table(repo_root):
     out = _run_gate(repo_root, "README.md").stdout.decode("utf-8", "replace")
     assert "README" in out and "recomputed" in out
     assert "UNIT CHECK" in out
+    assert "FIGURES" in out
     assert "DENYLIST" in out
     assert "NOT CHECKED" in out
 
 
 def test_gate_reports_unbacked_claims_rather_than_silently_passing(repo_root):
+    """Results held locally (NC QDL v7 4.6(i)) are named as unchecked, never
+    implied to have been checked."""
     out = _run_gate(repo_root, "README.md").stdout.decode("utf-8", "replace")
     assert "unbacked" in out
-    assert "gitignored" in out
+    assert "held locally" in out
 
 
 def test_denylist_fires_on_an_asserted_claim(repo_root, tmp_path):

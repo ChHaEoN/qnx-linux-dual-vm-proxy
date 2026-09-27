@@ -3,13 +3,12 @@
 # 3 ms bursts beside the real uevents. Phase 3b / A6, 2026-09-24; follows
 # 20260924T-a6-orin-headless.
 #
-# WHAT IS KNOWN. tj-thermal's three uevents make a slow window of a few ms, and so do
-# three written by hand (20260924T-a6-orin-uevent). udevd does most of the extra work
-# (~2.8 ms of CPU per burst of three; 20260924T-a6-orin-listeners, unscored), the
-# window needs no desktop (20260924T-a6-orin-headless), and it is the same whether
-# udevd runs in QEMU's L3 or the other one (listeners, P2). The host's handlers on
-# QEMU's own cores are not it (20260924T-a6-orin-tailhost). So work on ANOTHER core
-# slows the guest, and how is not known.
+# WHAT IS KNOWN. The window around tj-thermal's three uevents, and around three written
+# by hand, is in record 20260924T-a6-orin-uevent; which process does the extra work, and
+# whether it matters which L3 udevd runs in, in 20260924T-a6-orin-listeners; whether the
+# window needs the desktop, in 20260924T-a6-orin-headless; the host's handlers on QEMU's
+# own cores, in 20260924T-a6-orin-tailhost (all held locally). The question here is how
+# work on ANOTHER core could slow the guest.
 #
 # THE MANIPULATION (burst_inject.c, built on the board, run as root on the aux core,
 # CORE_AUX 5, during each round). Six injections per round in a seeded order, at

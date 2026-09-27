@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# run-queue.sh -- does the slow window need udevd to PROCESS the uevents, or is the kernel
-# emitting them enough? Hold udevd's exec queue through half the rounds.
+# run-queue.sh -- does any slow window around uevents need udevd to PROCESS them, or is the
+# kernel emitting them enough? Hold udevd's exec queue through half the rounds.
 # Phase 3b / A6, 2026-09-24; follows 20260924T-a6-orin-bursts.
 #
-# WHAT IS KNOWN. tj-thermal's uevents make a slow window of a few ms, and three written
-# by hand make one too (20260924T-a6-orin-uevent). Generic compute, broadcast TLB
-# maintenance and syscalls on another core make none, and heavy memory traffic makes a
-# third of one (20260924T-a6-orin-bursts). A uevent's path has two halves: the kernel
+# WHAT IS KNOWN. What tj-thermal's uevents, and three written by hand, do to the exchanges
+# around them: record 20260924T-a6-orin-uevent (held locally). What generic compute,
+# broadcast TLB maintenance, syscalls and heavy memory traffic on another core do: record
+# 20260924T-a6-orin-bursts (held locally). A uevent's path has two halves: the kernel
 # emits it and udevd receives it; then udevd runs its rules in a worker and passes the
-# result on to its listeners. Which half makes the window is not known.
+# result on to its listeners. Which half, if either, matters is the question.
 #
 # THE MANIPULATION. `udevadm control --stop-exec-queue` makes udevd queue the events it
 # receives without processing them, until `--start-exec-queue`. Checked on the board
@@ -61,7 +61,7 @@
 # reply and reported "Connection timed out". Reproduced by hand: after a hold of more
 # than ~3 s, which is when udevd kills its idle workers, the reply never comes, yet the
 # queue IS released (a settle then succeeds and the queue is empty); after a 1 s hold it
-# replies in 21 ms. So the release now waits at most 5 s for the reply and does not trust
+# replies. So the release now waits at most 5 s for the reply and does not trust
 # its exit status: it is verified by `udevadm settle` succeeding and /run/udev/queue being
 # gone, and the run stops otherwise. Whether the reply came goes to queue.log. A side
 # effect this makes visible, not a change: in a hold round udevd's idle workers exit, so

@@ -10,8 +10,8 @@ LDFLAGS := -lsocket
 
 BIN := qnx-echo-server-net
 # `make sweep` builds the frame-size sweep's endpoint (2026-09-26, run-sweep.sh)
-# from its own source under its own name: server.c and the binary every
-# published image stages are not touched.
+# from its own source under its own name: server.c and the binary every earlier
+# image stages are not touched.
 SWEEP := qnx-echo-server-sweep
 # `make reads` builds the same source under its own name for the read-count test
 # (2026-09-26, run-reads.sh; ifs-reads.build), so ifs-sweep.bin's binary keeps its name.

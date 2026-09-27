@@ -11,7 +11,7 @@
 # §8, only the fields the run note needs (§4.6).
 #
 # RUNS ON the PC. It reaches the board over ssh and scp only. It never opens
-# COM3: a capture started from Git Bash receives nothing (m2-runs.md:135-137),
+# COM3: a capture started from Git Bash receives nothing (`m2-runs.md`, held locally),
 # so the capture is started from PowerShell before `run` and named here.
 #
 # USAGE
@@ -79,7 +79,7 @@ ssh_base+=(${SSH_OPTS:-})
 ssh_work=("${ssh_base[@]}" -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
 # The poll options of §6.5 step 6: a connect timeout does not bound an
 # established session, and a poll that connects while Linux shuts down would
-# otherwise hang (m2-runs.md, "An SSH poll hung during R2").
+# otherwise hang (`m2-runs.md`, held locally).
 ssh_poll=("${ssh_base[@]}" -o ServerAliveInterval=3 -o ServerAliveCountMax=2)
 
 need_host() { [ -n "${ORIN_HOST:-}" ] || die "ORIN_HOST is not set (user@address of the board)"; }
@@ -625,7 +625,7 @@ cmd_p1() {
 	wait_new_boot_id "$old" "$t0" 0
 	rc=$?
 	if [ "$rc" != 0 ]; then
-		rec "p1 NO RETURN within ${M3_RETURN_BOUND_S:-1200} s: a Linux shutdown Oops ends in a watchdog reset after about 3 min (m1b-runs.md:54-58); read COM3, then power-cycle"
+		rec "p1 NO RETURN within ${M3_RETURN_BOUND_S:-1200} s: a Linux shutdown Oops ends in a watchdog reset after about 3 min (M1b records, held locally); read COM3, then power-cycle"
 		check_private "$REC" "$RECDIR"/p1-*-"$UTC".log
 		exit 2
 	fi

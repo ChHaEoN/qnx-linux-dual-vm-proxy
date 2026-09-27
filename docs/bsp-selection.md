@@ -39,12 +39,12 @@ build host's CPU does not have to match. Therefore building on x86_64
 and running on Graviton is sound — the empirical "does it actually
 boot under KVM-on-arm64" question is what F5 below tracks.
 
-> **2026-09-11 (as built):** no IFS ever ran on Graviton. Non-metal
+> **2026-09-11 (as built):** no IFS was ever run on Graviton. Non-metal
 > Graviton exposes no `/dev/kvm` (F3 note below). The x86_64-built
-> images booted under QEMU TCG on the Windows PC and on the Orin, and the
-> cloud-leg guest booted under native `qvm` on the Orin (M3,
-> [findings.md](findings.md) 2026-09-10). The cross-build argument held;
-> the Graviton runtime host and its KVM line are design-time only.
+> images were run under QEMU TCG on the Windows PC and on the Orin, and the
+> cloud-leg guest under native `qvm` on the Orin (M3); those outcomes are
+> held locally (NC QDL v7 4.6(i)). The Graviton runtime host and its KVM
+> line are design-time only.
 
 ---
 
@@ -69,9 +69,9 @@ validated the toolchain end-to-end.
 > `/dev/kvm`; EL2 is not passed through (a t4g.small probe;
 > [findings.md](findings.md) 2026-06-11 QHV milestone;
 > [ADR-002](phase2-topology-decision.md) §1). KVM on AWS needs a `*.metal`
-> instance. The `a1.metal` run on 2026-07-29 hangs the QNX IFS
-> under KVM on the GICv3/NISV defect ([findings.md](findings.md)
-> 2026-07-29). The Phase 0 text below is kept as written.
+> instance. An `a1.metal` run on 2026-07-29 put the QNX IFS under KVM;
+> its outcome is held locally (NC QDL v7 4.6(i)). The Phase 0 text below
+> is kept as written.
 
 Graviton instances expose `/dev/kvm` to userspace. The QEMU invocation
 that activates KVM on aarch64 hosts is:
@@ -131,10 +131,10 @@ answered by running the cloud-twin toolchain end-to-end in Phase 1.
 > virtio-mmio slots, assigned in `-device` order
 > ([findings.md](findings.md) 2026-07-28, Orin TCG networking entry).
 > Q2 and Q3 (boot and boot time on Graviton under KVM): moot as asked,
-> since no IFS ran on Graviton (F3). The x86_64-built IFS boots under TCG
-> on the Windows PC and on the Orin, and its boot time was measured under
-> TCG on both ([digital-twin-design.md](digital-twin-design.md) §5, now
-> architecture A2 history). Q4 (community-BSP PCI): UNKNOWN. No recorded
+> since no IFS was run on Graviton (F3). The x86_64-built IFS was run and
+> boot-timed under TCG on the Windows PC and on the Orin
+> ([digital-twin-design.md](digital-twin-design.md) §5, now architecture A2
+> history); the outcomes are held locally. Q4 (community-BSP PCI): UNKNOWN. No recorded
 > run used `joexue/qemu-virt`, and Phase 2 IPC ran over the `qvm`
 > virtio-console vdev instead ([ADR-002](phase2-topology-decision.md) §3.1).
 
@@ -150,8 +150,8 @@ boots. Q2 above already validates that *any* x86_64-built IFS boots
 on Graviton — that question is host-platform-agnostic and covers the
 load-bearing claim. The 2026-05-07 [findings.md](findings.md) caveat
 is corrected in the same commit that drops this question. **(2026-09-11:
-Q2 never ran on Graviton; the evidence that an x86_64-built IFS boots is
-from TCG on the Windows PC and the Orin, per the outcomes note above.)**
+Q2 never ran on Graviton; the x86_64-built IFS was run only under TCG on
+the Windows PC and the Orin, and those outcomes are held locally.)**
 
 ---
 
@@ -164,13 +164,11 @@ plausible — QEMU's `virt` machine model is host-CPU-agnostic so long as
 the host CPU implements the required ARMv8 features (which Cortex-A78AE
 does) — but it has not been validated empirically.
 
-> **2026-09-11 outcome (2026-07-28).** Validated under TCG: the unchanged
-> Phase-1 `ifs.bin` and `disk-qemu` booted on the Orin
-> ([orin-tcg-qnx-boot1.log](../logs/sample-boot/orin-tcg-qnx-boot1.log)),
-> so no fallback below was needed for that boot. Under KVM the same pair
-> hangs after `FOUND GICv3 ITS` on the GICv3/NISV defect
-> ([orin-port.md](orin-port.md) risk register). The Orin IPC run then used
-> a rebuilt IFS ([orin-port.md](orin-port.md) step 4).
+> **2026-09-11 note (2026-07-28).** The unchanged Phase-1 `ifs.bin` and
+> `disk-qemu` were tried on the Orin under TCG and under KVM; the outcomes
+> and the boot log `orin-tcg-qnx-boot1.log` are held locally (NC QDL v7
+> 4.6(i)). The Orin IPC run then used a rebuilt IFS
+> ([orin-port.md](orin-port.md) step 4).
 
 Phase 3 first task is to verify this end-to-end. If it works, Phases
 3 and 4 proceed as planned. If it does not, the fallback options in
@@ -224,16 +222,10 @@ Open empirical questions for Phase 3:
   **Empirical confirmation:** Phase 3 step 5 — `scripts/orin/launch-qnx-on-orin.sh`
   with the cloud-twin `output/ifs.bin`; pass if QNX reaches its
   shell prompt and `pidin sysinfo` reports a sane `cycles_per_sec`.
-  **Outcome (2026-07-28; noted 2026-09-11): not under KVM.** The IFS
-  hangs after `FOUND GICv3 ITS`: a post-indexed store on a GICv3
-  distributor register takes a `KVM_EXIT_ARM_NISV` exit that neither KVM
-  nor QEMU emulates. That is not the MIDR/REVIDR risk named above
-  ([orin-port.md](orin-port.md) risk register), and the same hang
-  reproduced on `a1.metal` ([findings.md](findings.md) 2026-07-29). Under
-  TCG the unchanged IFS boots
-  ([orin-tcg-qnx-boot1.log](../logs/sample-boot/orin-tcg-qnx-boot1.log)).
-  The `pidin sysinfo` check was not done ([orin-port.md](orin-port.md)
-  step 5).
+  **Outcome (2026-07-28; noted 2026-09-11):** held locally (NC QDL v7
+  4.6(i)), for the Orin and for `a1.metal` alike, with the TCG boot log
+  `orin-tcg-qnx-boot1.log` (held locally). The `pidin sysinfo` check was
+  not done ([orin-port.md](orin-port.md) step 5).
 
 - **Q2 — Does JetPack 6 ship `qemu-system-aarch64` with KVM support
   enabled out of the box, or does it need a custom build?**
@@ -256,8 +248,8 @@ Open empirical questions for Phase 3:
   **Outcome (2026-07-28; noted 2026-09-11): yes.** The stock
   `qemu-system-aarch64` is 6.2.0, `/dev/kvm` is usable, and a bare vGIC
   smoke test ran clean ([orin-port.md](orin-port.md) step 2). The later
-  QHV-in-TCG leg needed a from-source QEMU for an unrelated EL2
-  virtual-timer defect ([orin-port.md](orin-port.md) risk register).
+  QHV-in-TCG leg used a from-source QEMU ([orin-port.md](orin-port.md)
+  risk register).
 
 - **Q3 — Does the Orin Nano's 8 GB RAM accommodate L4T (~3 GB) +
   QEMU(QNX, 1 GB) + benchmark workload comfortably?**
@@ -285,9 +277,8 @@ Open empirical questions for Phase 3:
   again with QNX QEMU running and the 100k-iteration benchmark in
   flight (target ≥1 GB free, no swap usage).
   **Outcome (noted 2026-09-11): partly checked.** A `free -h` reading
-  was recorded at Phase 3 step 1 ([orin-port.md](orin-port.md)), and the
-  long Orin IPC runs completed without errors (step 6). A reading with
-  QEMU running and the benchmark in flight was not recorded (UNKNOWN).
+  was recorded at Phase 3 step 1 ([orin-port.md](orin-port.md)). A reading
+  with QEMU running and the benchmark in flight was not recorded (UNKNOWN).
 
 - **Q4 — Is the L4T kernel's `vhost-net` path enabled? (Affects
   virtio-net latency on the hardware twin.)**
@@ -321,9 +312,9 @@ Open empirical questions for Phase 3:
 ### F7. Real-EL2 QNX Hypervisor time — Sweep C for ADR-003 (other credible routes, and the measurement side)
 
 > **Research note (2026-09-09, Sweep C for ADR-003; read-only, no
-> purchases / AWS calls / ssh).** Context: the QHV leg boots only under
-> QEMU TCG (emulated EL2) on two hosts (findings.md 2026-09-09), so it
-> cannot yield a hardware-timed hypervisor number. Sweeps A (Marketplace
+> purchases / AWS calls / ssh).** Context: the QHV leg exists only under
+> QEMU TCG (emulated EL2) on two hosts, so it cannot yield a hardware-timed
+> hypervisor number. Sweeps A (Marketplace
 > AMI / Graviton metal) and B (native Orin port) are covered elsewhere;
 > this section answers "what *else* is credible for an Everywhere-licence
 > user with an Orin Nano and a 32-vCPU AWS account, and how would QNX
@@ -360,9 +351,7 @@ Open empirical questions for Phase 3:
   support ... If the hardware does not support EL2-Host virtualization,
   startup is aborted"; the hypervisor itself occupies hardware EL2 in
   either mode, so a Pi 4 number is a genuine hardware-EL2 number — but of
-  a different topology from the leg measured so far (findings.md
-  2026-09-09 attributes the QEMU 6.2 hang to the VHE timer path, and the
-  `-cpu cortex-a57` non-VHE control behaved differently). The guide boots
+  a different topology from the project's TCG leg. The guide boots
   a QNX 8.0 guest from the `hypervisor_guest_arm` BSP samples
   (`qnx800-guest-1.ifs` + `.qvmconf`, `startup-armv8_fm`) and a Linux
   guest. An independent community repo (EhabMagdyy/QNX-Hypervisor) shows
@@ -379,13 +368,12 @@ Open empirical questions for Phase 3:
   | AWS Graviton2 (c6g / m6g) | On the official QHV 8.0 list | **No Graviton BSP in the public 8.0 BSP catalogue**; the "QNX Software in the Cloud" notes cover the *QNX OS 8.0* AMI only, hypervisor not mentioned | See Sweep A and Q4 |
   | Jetson Orin Nano (Tegra234, A78AE) | Not on the list; no BSP for Everywhere users | — | See Sweep B |
 
-  **Guest-compatibility flag (needs the toolchain):** findings.md
-  2026-09-09 records the `hypervisor_guest_arm` guest aborting with
-  `PE does not support PAUTH feature` under `-cpu cortex-a57` (no PAUTH),
-  yet the QNX Pi 4 guide and the community log boot that same
-  `startup-armv8_fm` guest on Cortex-A72, which also lacks PAUTH. Either
-  the check is specific to the QEMU `cortex-a57` model, or the sample
-  guest build differs from the project’s; unresolved without running it.
+  **Guest-compatibility flag (needs the toolchain):** whether the
+  project's `hypervisor_guest_arm` guest needs PAUTH is open; the
+  project's own observation under QEMU `-cpu cortex-a57` (no PAUTH) is
+  held locally (NC QDL v7 4.6(i)). The QNX Pi 4 guide and the community
+  log boot the `startup-armv8_fm` guest on Cortex-A72, which lacks PAUTH.
+  Unresolved without running it.
   Citations:
   [QNX getting-started: Hypervisor 8.0 on Raspberry Pi 4 (README, rpi4-hypervisor.build)](https://gitlab.com/qnx/hypervisor/getting-started)
   **[verified 2026-09-09 via gitlab.com raw README + build file line 11; quotes above verbatim]**;
@@ -413,8 +401,8 @@ Open empirical questions for Phase 3:
   `com.qnx.qnx800.target.hypervisor.group` + the Pi 4 BSP, build the
   guide’s `rpi4-hypervisor.build`, boot; pass if the host comes up with
   hypervisor features enabled and `qvm` launches the sample guest; then
-  re-point the project’s `qnx-guest` IFS at it and record whether the
-  PAUTH abort reproduces on real A72.
+  re-point the project’s `qnx-guest` IFS at it and record whether it
+  needs PAUTH on real A72.
 
 - **Q2 — Does QNX ship hypervisor *host* packages to Everywhere users at
   all, and under what names?**
@@ -551,8 +539,9 @@ Open empirical questions for Phase 3:
   have no NV. So c7g.metal / c8g.metal could in principle host QHV as an
   L1 hypervisor under a new-enough Linux — but that is a *nested*,
   trapped-EL2 number, needs the quota raise and a kernel that ships the
-  mode, and would inherit the same startup GICv3 / NISV exposure under
-  KVM that ~~blocks the plain guest today~~ **blocked the plain guest as shipped** (findings.md 2026-07-29). **2026-09-18: that exposure is removable — rebuilding the startup library with `-fno-auto-inc-dec` drops the writeback MMIO store, and an IFS carrying such a startup boots under `-enable-kvm` on the Orin Nano ([orin-port.md](orin-port.md) risk register). The SDP's shipped `startup-qemu-virt` still hangs. This says nothing about nested KVM, which remains untried, and no timing number was taken.**
+  mode, and would face whatever the plain guest faces under KVM (the
+  project's KVM outcomes are held locally, NC QDL v7 4.6(i)). Nested KVM
+  remains untried.
   Citations:
   [AWS price feed, EU (Frankfurt), Linux on-demand (JSON, publication 2026-09-09)](https://b0.p.awsstatic.com/pricing/2.0/meteredUnitMaps/ec2/USD/current/ec2-ondemand-without-sec-sel/EU%20(Frankfurt)/Linux/index.json)
   **[verified 2026-09-09 by download + grep; a1 not present]**;

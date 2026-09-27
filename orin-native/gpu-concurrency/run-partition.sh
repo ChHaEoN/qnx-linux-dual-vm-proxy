@@ -5,12 +5,11 @@
 # this test (2026-09-25), which reboots the board into a second boot entry and back
 # (partition-boot.sh) and changes systemd settings at runtime, all restored after.
 #
-# WHAT IS KNOWN. With the host's userspace confined to cores 3 and 5, exchanges whose
-# request leaves 150 to 0 us before the host's tick (a 4 ms grid, every core at once) are
-# +11.2 us slower at the median and hold a quarter of the tail. Per QEMU core the tick brings
-# its timer interrupt (~4 us) and a SCHED softirq, the scheduler's periodic load balancing
-# (2-5 us); tail ones add TIMER softirqs and the kernel work they release
-# (20260925T-a6-orin-tick). This kernel has CPU_ISOLATION but not NO_HZ_FULL or
+# WHAT IS KNOWN. With the host's userspace confined to cores 3 and 5, what exchanges whose
+# request leaves 150 to 0 us before the host's tick (a 4 ms grid, every core at once) show,
+# and what the tick brings to each QEMU core (its timer interrupt, a SCHED softirq -- the
+# scheduler's periodic load balancing -- and TIMER softirqs): record 20260925T-a6-orin-tick
+# (held locally). This kernel has CPU_ISOLATION but not NO_HZ_FULL or
 # RCU_NOCB_CPU: the tick cannot be stopped, but isolcpus=domain takes the isolated cores
 # out of the scheduler's domains, so no load balancing runs there, and gives unbound work
 # queues and init (so all of userspace) the housekeeping cores 0 and 5; managed_irq and
@@ -30,11 +29,12 @@
 #     per thread before and after every round (pin.log). The isolated cores get no load
 #     balancing, so a set pin could leave two threads on one core for good; the default arm
 #     gets the same layout so that only the boot entry differs. This is not the set pin
-#     (0-2) of every earlier A6 record: 20260924T-a6-orin-vcpupin found the two alike;
+#     (0-2) of every earlier A6 record (the two are compared in record
+#     20260924T-a6-orin-vcpupin, held locally);
 #   - the probe on core 4, the light trace (frames into tap-qnx, thermal reads), and
 #     /proc/softirqs and /proc/interrupts read before and after the round (irq-*.txt);
-#   - the rounds start only once the boot is SETTLE_S (600) s old: a freshly started desktop
-#     session is heavy for minutes (20260924T-a6-orin-headless).
+#   - the rounds start only once the boot is SETTLE_S (600) s old, because of what a freshly
+#     started desktop session did in record 20260924T-a6-orin-headless (held locally).
 # k = 16 rounds per boot, n = 1000, 200 warm-up, t2ms (the A6 default: two vCPUs,
 # halt_poll_ns 500000, 2 ms), nothing injected. SSH logins accepted during the rounds are
 # counted from the journal (logins.txt); each boot's run is watched from the one session

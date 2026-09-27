@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 # run-trace.sh -- the kernel-trace test: where, inside the guest, does a read of a
-# network-connected socket spend the ~5 us it costs more than a read of a loopback socket?
+# network-connected socket spend any time it costs over a read of a loopback socket?
 # Phase 3b / A6, 2026-09-27; follows 20260927T-a6-orin-free.
 # The owner asked for this run (2026-09-27: "把read收尾", with the guest's kernel trace).
 #
-# WHAT IS KNOWN. On one vCPU, the guest's second read() of a network-delivered 64-byte frame
-# costs ~12.7 us, a read of loopback data ~7.0 (20260927T-a6-orin-free, -ipcbench). Not the
-# other vCPU (pin), not a wait for left-over work (spin), not the receive offloads (offload),
-# not the frame's last byte (free). No VM exit goes with it (readpath). A QNX read() is a
-# message to io-sock, so the difference is either the kernel's message pass or io-sock's
-# own work, and the host cannot see which.
+# WHAT IS KNOWN. On one vCPU, what the guest's second read() of a network-delivered 64-byte
+# frame costs against a read of loopback data: records 20260927T-a6-orin-free and
+# 20260926T-a6-orin-ipcbench. What the other vCPU, a wait for left-over work, the receive
+# offloads, the frame's last byte and VM exits have to do with it: records
+# 20260927T-a6-orin-pin, -spin, -offload, -free and 20260926T-a6-orin-readpath (all held
+# locally). A QNX read() is a message to io-sock, so any difference is either the kernel's
+# message pass or io-sock's own work, and the host cannot see which.
 #
 # THE INSTRUMENT. The guest's kernel event trace: the image already runs procnto-smp-instr,
 # and ifs-trace.bin adds the SDP's tracelogger and traceprinter behind qnx-tracectl (:7140),
@@ -196,8 +197,8 @@ run_window() {   # $1 kind (N|L)  $2 pair
 	local tag="$1_r$2" f="$OUT/started-$1_r$2" cp i
 	rm -f "$f"
 	# FIXED after the first run (2026-09-27): the reading takes ~2 s (tegrastats), and taken
-	# after "started" it pushed the load to 2.6 s into a 3 s trace -- 127-165 reads per
-	# window, M1 failed. It is taken before the trace starts now; nothing else changed.
+	# after "started" it pushed the load late into the trace window. It is taken before the
+	# trace starts now; nothing else changed.
 	m_thermal "$tag before" >> "$OUT/thermal.log"
 	taskset -c "$CORE_AUX" python3 "$CLIENT" "$GUEST" 7140 "$TRACE_S" "$OUT/trace-$tag.txt" "$f" \
 		2>> "$OUT/tracectl.err" &

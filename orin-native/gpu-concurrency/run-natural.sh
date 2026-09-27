@@ -4,16 +4,13 @@
 # Phase 3b / A6, 2026-09-25; follows 20260925T-a6-orin-confine. The owner chose this test
 # (2026-09-25) knowing it changes systemd settings on the board, at runtime, restored after.
 #
-# WHAT IS KNOWN. With three uevent bursts injected per round, confining the host's userspace
-# to cores 3 and 5 cut the injected window from +31.8 to +4.7 us, tj-thermal's own poll
-# window from +40.6 to +6.8 us, and the p99.9 of every exchange from 684.6 to 285.0 us, with
-# p50 unchanged (20260925T-a6-orin-confine). The injections are far more frequent than the
-# board's own uevents (one poll a second): away from every window, the out class, the gain
-# was p99 222.6 -> 214.0 us and p99.9 296.8 -> 280.1 us. With nothing injected and nothing
-# confined, the poll's window held 37-42% of the exchanges at or above their round's p99
-# (20260924T-a6-orin-tailpath, -tjphase); tailpath's pooled p99 was 242.7 us and its p99.9
-# 348.8 us, under a heavier trace than this one. Those figures set the thresholds below:
-# they are informed by earlier runs, not blind.
+# WHAT IS KNOWN. What confining the host's userspace to cores 3 and 5 does with three uevent
+# bursts injected per round, inside the windows and away from them: record
+# 20260925T-a6-orin-confine (held locally). The injections are far more frequent than the
+# board's own uevents (tj-thermal polls about once a second). With nothing injected and
+# nothing confined, the poll's window and the tail: records 20260924T-a6-orin-tailpath and
+# 20260924T-a6-orin-tjphase (held locally; tailpath ran under a heavier trace than this
+# one). Those records set the thresholds below: they are informed by earlier runs, not blind.
 #
 # THE MANIPULATION. run-confine.sh's, unchanged. One ARM per round, in the pattern open
 # confined confined open, repeated:
@@ -32,8 +29,8 @@
 # on its own are counted.
 #
 # THE RUN. One boot of the stamping guest, one arm of the probe repeated: t2ms, the A6
-# default (two vCPUs, halt_poll_ns 500000, 2 ms). k = 40 rounds (20 per arm; the statistics
-# review found k the lever for a tail), n = 1000, 200 warm-up. The light trace of
+# default (two vCPUs, halt_poll_ns 500000, 2 ms). k = 40 rounds (20 per arm; why k: record
+# 20260924T-a6-stats, held locally), n = 1000, 200 warm-up. The light trace of
 # run-uevent.sh (frames into tap-qnx and every thermal zone read; tjphase_trace.py). SSH
 # logins accepted during the rounds are counted from the journal (logins.txt): the run is
 # watched from the one session that started it.

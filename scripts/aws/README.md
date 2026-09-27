@@ -4,7 +4,7 @@ Tooling for running the A6 ladder on an AWS bare-metal Graviton host, with the
 cost and the leak risk designed out rather than cleaned up afterwards.
 
 An earlier form of these files drove the billed session behind
-[`results/orin-native-port/20260922T-a6-a1metal-kick`](../../results/orin-native-port/20260922T-a6-a1metal-kick/results.md).
+`20260922T-a6-a1metal-kick` (held locally under NC QDL v7 4.6(i)).
 A review then found several failure paths in that form that could have left an
 instance running, and a check the operator had done by hand. The committed
 versions differ in these ways:
@@ -28,8 +28,7 @@ They pass `tests/test_aws_tooling.py`. Those tests drive the real code against
 stub `aws`, `ssh` and `scp` programs. The committed versions have driven three
 billed sessions, all on 2026-09-23 and all rehearsed on the Orin first:
 - a liveness session, about 5 minutes billed;
-- this ladder, again on a new instance, about 10.5 minutes billed. It reproduced
-  2026-09-22's paired figures to within about a microsecond;
+- this ladder, again on a new instance, about 10.5 minutes billed;
 - a guest-side-timestamp session (OD15), about 5 minutes billed.
 
 Teardown was verified each time. Their records are held until the 4.6(i)
@@ -74,8 +73,8 @@ state until it is removed by hand (`clear` will not remove it: it waits on a `ve
 pass, and no volume was recorded).
 
 The image and the disk are QNX-derived, so nothing here builds or holds them; the pair
-that ran on 2026-09-22 is named with its hashes in
-[that record's inputs](../../results/orin-native-port/20260922T-a6-a1metal-kick/results.md).
+used on 2026-09-22 is named with its hashes in the inputs of record
+`20260922T-a6-a1metal-kick` (held locally).
 
 ```bash
 bash scripts/aws/drive-metal.sh launch

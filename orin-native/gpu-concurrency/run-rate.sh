@@ -27,8 +27,8 @@
 # the monitor's own time.
 #
 # What happened next, in order:
-#   - A smoke run (n = 50) put the guest's step between 0.2 and 0.5 ms. It also
-#     showed the monitor's own time falling at 0.2 ms.
+#   - A smoke run (n = 50) was seen; what it showed is held locally, and the
+#     amendment below agrees with it.
 #   - The review, reading only the code, found the first version inconsistent
 #     with its own mechanism. The vCPU idles through the sleep PLUS both transits,
 #     so at 0.5 ms spacing its idle gap is always over 500 us. With
@@ -36,7 +36,7 @@
 #     So halt polling predicts the step between 0.2 and 0.5 ms.
 #
 # The amended prediction below therefore agrees with data already seen. The
-# recorded run REPLICATES it at n = 1000; it does not test it blind.
+# recorded run at n = 1000 can only replicate it; it does not test it blind.
 #
 # AMENDED (before the recorded run): the guest is fast at 0.2 ms and slow at 0.5 ms
 # and above (D500us belongs with D1ms), and the native control shows no step.

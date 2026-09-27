@@ -16,12 +16,11 @@
 # here is "block" (fail-loud). Each "ignore"/"degrade" below is an explicit,
 # reviewed dev-twin exception, NOT a silent allowance.
 #
-# Networking is "degrade": the host io-sock stack does not initialise on this
-# qemu-virt build (NF-9 / TSR-NET-001), the net path is inert by design, and
-# the guest is launched no-network on purpose. Recorded loud, allowed for the
-# dev twin. sshd is "degrade" because TCR-ENT-001 fail-secure may itself
-# withhold sshd (entropy gate) — that is a correct outcome, not a bring-up
-# block. slogger2/PCI/fsevmgr are "block": no diagnostics / no storage / no
+# Networking is "degrade": the net path is inert by design on this leg
+# (NF-9 / TSR-NET-001), and the guest is launched no-network on purpose.
+# Recorded loud, allowed for the dev twin. sshd is "degrade" because
+# TCR-ENT-001 fail-secure may itself withhold sshd (entropy gate) — that is a
+# correct outcome, not a bring-up block. slogger2/PCI/fsevmgr are "block": no diagnostics / no storage / no
 # bus = no trustworthy bring-up.
 
 slogger2      block

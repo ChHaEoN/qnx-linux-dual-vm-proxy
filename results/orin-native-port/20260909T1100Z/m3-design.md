@@ -1,13 +1,13 @@
 # M3 design: the QNX Hypervisor host natively at EL2 on the Jetson Orin Nano, booting the byte-identical cloud-leg guest
 
-Phase 3b. Architect pass, revision 2, 2026-09-10: revision 1 plus three reviews, with the outcomes in §12. This is a read-and-reason design: nothing in it has been built or run. It follows the structure and failure-handling rules of [m1b-design.md](m1b-design.md) and [m2-design.md](m2-design.md). Both ladders passed with no failure signature ([m1b-runs.md](m1b-runs.md), [m2-runs.md](m2-runs.md)).
+Phase 3b. Architect pass, revision 2, 2026-09-10: revision 1 plus three reviews, with the outcomes in §12. This is a read-and-reason design: nothing in it has been built or run. It follows the structure and failure-handling rules of [m1b-design.md](m1b-design.md) and [m2-design.md](m2-design.md). Their run records, `m1b-runs.md` and `m2-runs.md`, are held locally (NC QDL v7 4.6(i)).
 
 **Path prefixes used below**
 - `lib/` = `C:/Users/<user>/AppData/Local/Temp/orin-native-port-bsp/src/hardware/startup/lib/` (Apache-2.0)
 - `board/` = `orin-native/startup/t234-orin-nano/`; `startup/` = `orin-native/startup/`; `tools/` = `orin-native/tools/`; `shim/` = `orin-native/shim/`; `qhvconf/` = `orin-native/qhv/`
 - `qhvg/` = `qhv/guest/output/build/`; `qhvh/` = `qhv/host/output/build/`. These are local, git-ignored, QNX-generated **text** build files (.gitignore:16); only text was read.
 - `sdp/` = `C:/Users/<user>/qnx800/target/qnx/aarch64le/` (file sizes only); `sdpinc/` = `C:/Users/<user>/qnx800/target/qnx/usr/include/`
-- `logs/` = `logs/sample-boot/`; `m1blog` = `logs/sample-boot/orin-native-m1b-el2-host.log`; `plan` = `docs/orin-native-port-plan.md`
+- `logs/` = `logs/sample-boot/` (the TCG and board capture logs this design drew on are held locally, NC QDL v7 4.6(i)); `plan` = `docs/orin-native-port-plan.md`
 - Reader reports: GUEST_CONFIG, NATIVE_QVM_HOST, MEASUREMENT, BOARD_PROCEDURE. All four arrived; none was null.
 
 **Evidence classes:** VERIFIED (read in source, a build file or a log, or computed on this PC; cited), VENDOR_CLAIM (QNX or Arm documentation; URL given), HYPOTHESIS, UNKNOWN.
@@ -34,7 +34,7 @@ M3 runs the QNX Hypervisor host (`qvm`) natively on the board. It uses the M1b s
    - The hostname `qnx-guest` is set from `/data` (qhvg/data.build:72-73, qhvg/start_net.sh:10-12).
    - The echo server is launched only by `/system/etc/startup/post_startup.sh` (qhvg/system.build:35).
    - Without the disk, the guest can print `Startup complete` but never `QNX qnx-guest`, and the IPC pair cannot run.
-2. **The guest configuration is the one the timed TCG series actually ran, with one host-side substitution.** That configuration is the build-tree text (qhvh/post_startup.sh:50): pl011, virtio-console, virtio-blk and an inert shmem vdev. The only change is the load path, `/proc/boot/guest-ifs.bin`. The virtio-blk `hostdev /dev/qvmdisk0` stays unchanged, because devb-loopback keeps its `prefix=qvmdisk` (§3.3).
+2. **The guest configuration is the one the timed TCG series actually used, with one host-side substitution.** That configuration is the build-tree text (qhvh/post_startup.sh:50): pl011, virtio-console, virtio-blk and an inert shmem vdev. The only change is the load path, `/proc/boot/guest-ifs.bin`. The virtio-blk `hostdev /dev/qvmdisk0` stays unchanged, because devb-loopback keeps its `prefix=qvmdisk` (§3.3).
 3. **The disk rides raw in the IFS.** At boot it is copied to `/dev/shmem`, checked with `cmp`, and served by `devb-loopback` with the cloud host's own command line (qhvh/post_startup.sh:48); only the backing path differs. Every boot therefore starts from the same pristine bytes, the native equivalent of QEMU's `-snapshot` (§3.4).
 4. **The banner is read from qvm's stdout, not from `/dev/ttyp0`.** It travels on the guest pl011, which the configuration binds to qvm's stdout (`hostdev >-`); `/dev/ttyp0` is the IPC channel.
    - qvm's stdio goes to pty pair 1. A revised `stamp` reads the master, stamps nine guest markers into a `/dev/shmem` file, and writes nothing to the console while the timed window is open.
@@ -84,27 +84,27 @@ All four reader reports arrived. Every item this design rests on was re-read in 
 | # | Contradiction or defect | Resolution | Evidence |
 |---|---|---|---|
 | C1 | **Does the banner need the disk?** `g2-noblk.conf:9-14`: no. Orchestrator finding 2 and NATIVE_QVM_HOST F3: the banner "probably still appears", only after a timeout. GUEST_CONFIG F2, MEASUREMENT M3-01 and BOARD_PROCEDURE F2: no banner at all. | **No banner without the disk.** The guest IFS script runs `startup.sh`, then `display_msg "Startup complete"` and `uname -a` (qhvg/ifs.build:57-61), with PATH `/proc/boot:/system/bin` (:20). The IFS toybox links are only cat, chmod, dd, echo, ln, ls, rm and grep (:72-80). `uname` is a toybox hlink on the system partition (qhvg/system.build:197). Without `/dev/hd0` (a 5.0 s default `waitfor` [waitfor], qhvg/startup.sh:27), `mount_fs.sh` fails and startup.sh exits 1 at :31-34. What the IFS script prints when `uname` cannot be found is UNKNOWN. The hostname comes from `/data` (qhvg/data.build:72-73; qhvg/start_net.sh:10-12). The echo server is started only from the disk (qhvg/system.build:35; qhvg/post_startup.sh:23-32). **M3 carries the disk.** `g2-noblk.conf` becomes diagnostic image D2 only, with marker `Startup complete`. | Build files as cited. VERIFIED. Runtime text UNKNOWN |
-| C2 | **Which configuration is "the cloud leg's"?** The plan and `g2-noblk.conf:3-7` point to the committed `scripts/qhv/post_start.custom:33` (three vdevs). GUEST_CONFIG F1 and MEASUREMENT M3-02: the timed series ran a fourth vdev, `vdev shmem`. | **The timed series ran four vdevs.** The build-tree `qhvh/post_startup.sh:50` adds `vdev shmem / loc 0x1c0f0000 / intr gic:43 / allow phase2-rq2-probe`. That script's unique skip line (:44) appears in `logs/windows-qhv-tcg-boot-timed1.log:75` and `logs/orin-qhv-tcg-q111-rng-snapshot-boot1.log:21`. The guest never attaches to the shmem vdev: `gshm-probe` is not in its IFS (qhvg/ifs.build:164-169), and the log prints the skip line (`windows-qhv-tcg-boot-timed1.log:115`). Checklist 7 (plan:538) diffed against the committed file. **The M3 configuration is the as-run text** (§3.3). Using the three-vdev text instead is owner decision O1. | VERIFIED |
+| C2 | **Which configuration is "the cloud leg's"?** The plan and `g2-noblk.conf:3-7` point to the committed `scripts/qhv/post_start.custom:33` (three vdevs). GUEST_CONFIG F1 and MEASUREMENT M3-02: the timed series used a fourth vdev, `vdev shmem`. | **The timed series used four vdevs.** The build-tree `qhvh/post_startup.sh:50` adds `vdev shmem / loc 0x1c0f0000 / intr gic:43 / allow phase2-rq2-probe`. That script's unique skip line (:44) identifies it in the TCG boot logs (held locally). The guest never attaches to the shmem vdev: `gshm-probe` is not in its IFS (qhvg/ifs.build:164-169). Checklist 7 (plan:538) diffed against the committed file. **The M3 configuration is the as-run text** (§3.3). Using the three-vdev text instead is owner decision O1. | VERIFIED (build files); logs held locally |
 | C3 | BOARD_PROCEDURE rec 1 and MEASUREMENT rec 1: two host-side substitutions, the load path and the virtio-blk hostdev. | **One substitution.** `devb-loopback … prefix=qvmdisk` creates `/dev/qvmdisk0` on both legs, so `hostdev /dev/qvmdisk0` is unchanged. Only `load /data/hypervisor/guest/ifs.bin` becomes `load /proc/boot/guest-ifs.bin`. | qhvh/post_startup.sh:48-50. VERIFIED |
 | C4 | The plan's M3 contradicts itself: the image is "minus virtio-blk" (plan:369), yet the pass needs "the IPC pair completes its 15 timed iterations" (plan:377-379). | Resolved by C1. The plan text is stale (Appendix A). | VERIFIED |
-| C5 | **Where the banner travels.** `stamp.c:17,22` shows `stamp -s 'QNX qnx-guest' < /dev/ttyp0`. | **pl011 to qvm stdout, not the pty.** The guest prints `uname -a` before `reopen /dev/vcon1` (qhvg/ifs.build:61-63). The QNX-generated stock guest.conf binds the PL011 to qvm stdout with the comment "startup uses the PL011" (qhvh/data.build:113-116). On TCG the banner reached the serial capture while nothing held `/dev/ttyp0` open: `windows-qhv-tcg-boot-timed1.log:78-121` falls inside the host's `sleep 90`. **The stamp reads qvm's stdout** (§4.1). | VERIFIED |
-| C6 | **How to get qvm's stdout to the stamp.** NATIVE_QVM_HOST: `ksh -c 'qvm … \| stamp'`, which needs the pipe manager and has an UNKNOWN buffering risk. GUEST_CONFIG: `hostdev >/dev/ptyp1`, which changes the configuration. BOARD_PROCEDURE: `on -t /dev/ttyp1 qvm`. | **A ksh subshell redirects stdio to `/dev/ttyp1`, and the revised stamp reads `/dev/ptyp1`.** The configuration keeps `hostdev >-` byte for byte, stdout is a tty, and no pipe is involved. qvm's output was not held back on TCG: `Startup complete` and the banner were timed within 0-110 ms of each other while qvm kept running (`logs/windows-qhv-tcg-q111-rng-snapshot-segments-boot-times-n5.txt:15-24`), with about 900 B of guest text before the banner. Whether that holds on a pty is still HYPOTHESIS; R0 and R1 test it. | [pl011] (hostdev forms, `batch` with no stated default); [devc-pty] (8 pairs by default). VERIFIED TCG observation |
-| C7 | **How long the guest's `if_up -p -r 20 vtnet0` takes** (qhvg/start_net.sh:3). The docs: 20 walks of the interface list, 1000 ms apart by default, so about 19-20 s. `docs/findings.md:266-274`: it must be short, inferred from TCG ratios, "not measured directly". | **Unresolved; M3 measures it.** Stamps `g_net` (`---> Starting Networking`), `g_ifup` (`if_up: tries exhausted`) and `g_sshd` bracket the burn (§4.1). If the documented defaults hold, the TCG guest compute would be about 2.5 s on Windows against about 28.5 s on Orin (11×), while their host-boot ratio is 2.2× (`findings.md:259-264`). That tension is recorded, not resolved here. | [if_up]: `-r` "default is 5", `-m` "default is 1000 ms", `-p` waits "only until the specified interfaces are present". VENDOR_CLAIM vs VERIFIED arithmetic |
+| C5 | **Where the banner travels.** `stamp.c:17,22` shows `stamp -s 'QNX qnx-guest' < /dev/ttyp0`. | **pl011 to qvm stdout, not the pty.** The guest prints `uname -a` before `reopen /dev/vcon1` (qhvg/ifs.build:61-63). The QNX-generated stock guest.conf binds the PL011 to qvm stdout with the comment "startup uses the PL011" (qhvh/data.build:113-116). **The stamp reads qvm's stdout** (§4.1). | VERIFIED (build files) |
+| C6 | **How to get qvm's stdout to the stamp.** NATIVE_QVM_HOST: `ksh -c 'qvm … \| stamp'`, which needs the pipe manager and has an UNKNOWN buffering risk. GUEST_CONFIG: `hostdev >/dev/ptyp1`, which changes the configuration. BOARD_PROCEDURE: `on -t /dev/ttyp1 qvm`. | **A ksh subshell redirects stdio to `/dev/ttyp1`, and the revised stamp reads `/dev/ptyp1`.** The configuration keeps `hostdev >-` byte for byte, stdout is a tty, and no pipe is involved. Whether qvm holds its output back on a pty is HYPOTHESIS; R0 and R1 test it. | [pl011] (hostdev forms, `batch` with no stated default); [devc-pty] (8 pairs by default) |
+| C7 | **How long the guest's `if_up -p -r 20 vtnet0` takes** (qhvg/start_net.sh:3). The docs: 20 walks of the interface list, 1000 ms apart by default, so about 19-20 s. The TCG legs never measured it directly; an inference about it from their timings (`docs/findings.md`) rests on results held locally. | **Unresolved; M3 measures it.** Stamps `g_net` (`---> Starting Networking`), `g_ifup` (`if_up: tries exhausted`) and `g_sshd` bracket the burn (§4.1). How the documented defaults compare with the TCG timings is held locally (NC QDL v7 4.6(i)). | [if_up]: `-r` "default is 5", `-m` "default is 1000 ms", `-p` waits "only until the specified interfaces are present". VENDOR_CLAIM |
 | C8 | MEASUREMENT M3-08: the guest's `/data` ships no ssh host keys, so they are generated every boot at a random duration. | **Refuted.** The guest `data.build:84-85` stages both host keys, `OPT_SSHD_PREGEN='yes'` (qhv/guest/local/options:89), and `startup.sh:51-58` skips `ssh-keygen` when the keys exist. | VERIFIED |
-| C9 | `ipc-test/qnx-server/server.c:15-16` and `ipc-test/qnx-host-client/README.md:80` say `/dev/vcon1` is the guest's pl011 console. | **Wrong.** `/dev/vcon1` is `devc-virtio -e 0x20000000,42` with a login `ksh -l` on it (qhvg/startup.sh:16,18). The echo server's `/dev/vcon2` is a **second** `devc-virtio -E` on the same virtio-console (qhvg/post_startup.sh:24). Two drivers on one device is a concrete, untested candidate for the first-exchange stray bytes and the stall (HYPOTHESIS). The guest stays byte-identical, so M3 inherits this and records sentinel counts. | VERIFIED build files; cause HYPOTHESIS |
-| C10 | **Host CPUs.** MEASUREMENT: `-P4`. BOARD_PROCEDURE: `-P6` with qvm under `on -R 0xf`. NATIVE_QVM_HOST: `-P6`, recording placement. | **`-P4` (owner decision O2).** At `-P6` the vCPU can land on the cluster-1 cores, which ran at a fixed 57.0-57.1 M it/s against 363-666 M on cluster 0 (m1b-runs.md:157-162; m2-runs.md:102-112). The 8.0 `cpu` page documents only `cluster` and `sched`, and whether qvm's vCPU inherits an `on -R` runmask is UNKNOWN. `-P4` removes cluster 1 from QNX with the configuration untouched. `m1b-p4` was built and never run (§6.6 C1). | [cpu]: "no restriction to a particular cluster". VERIFIED rates |
+| C9 | `ipc-test/qnx-server/server.c:15-16` and `ipc-test/qnx-host-client/README.md:80` say `/dev/vcon1` is the guest's pl011 console. | **Wrong.** `/dev/vcon1` is `devc-virtio -e 0x20000000,42` with a login `ksh -l` on it (qhvg/startup.sh:16,18). The echo server's `/dev/vcon2` is a **second** `devc-virtio -E` on the same virtio-console (qhvg/post_startup.sh:24). Two drivers on one device is a concrete, untested candidate cause of stray bytes or stalls on the IPC channel (HYPOTHESIS). The guest stays byte-identical, so M3 inherits this and records sentinel counts. | VERIFIED build files; cause HYPOTHESIS |
+| C10 | **Host CPUs.** MEASUREMENT: `-P4`. BOARD_PROCEDURE: `-P6` with qvm under `on -R 0xf`. NATIVE_QVM_HOST: `-P6`, recording placement. | **`-P4` (owner decision O2).** At `-P6` the vCPU can land on the cluster-1 cores, a second clock domain with its own cpufreq policy (`policy4`). The 8.0 `cpu` page documents only `cluster` and `sched`, and whether qvm's vCPU inherits an `on -R` runmask is UNKNOWN. `-P4` removes cluster 1 from QNX with the configuration untouched. `m1b-p4` was built and never run (§6.6 C1). | [cpu]: "no restriction to a particular cluster" |
 | C11 | `stamp.c` takes its reading only after forwarding the chunk (:117-133), supports one needle, and has no file output. | **Revised backward-compatibly** (§3.8). The reading is taken as soon as `read()` returns; up to 12 needles; output to files; `-x` exec. | VERIFIED |
 | C12 | The plan's M3 image lists `tracelogger`/`traceprinter` (plan:366-367). | **Not in M3.** They belong to M4, which stays blocked on the K11 dry run (plan:94, :381-401). Leaving them out keeps the black box and the IFS smaller. | VERIFIED |
-| C13 | The plan says the IPC client's "CSV row printed over the TCU" (plan:373). | **The client appends the CSV itself, and that fails without a filesystem.** It prints only the stdout summary (`client.c:390-420`); every cloud QHV run hit the same failure (`logs/qhv-tcg-ipc-benchmark.log:55`). The pass evidence is the stdout summary. The CSV row is transcribed off the board into a private path (§4.4). | VERIFIED |
+| C13 | The plan says the IPC client's "CSV row printed over the TCU" (plan:373). | **The client appends the CSV itself, and that fails without a filesystem.** It prints only the stdout summary (`client.c:390-420`). The pass evidence is the stdout summary. The CSV row is transcribed off the board into a private path (§4.4). | VERIFIED |
 | C14 | **RAM.** GUEST_CONFIG: widen, or set `blk cache=`. NATIVE_QVM_HOST: `blk cache=2m`. BOARD_PROCEDURE: it fits. | **Keep `-m992M` and the cloud's devb-loopback line (default cache).** The estimated headroom is about 111 MiB (§3.5); R0 measures before any qvm run. The fallback order is owner decision O7. | Arithmetic §3.5; [io-blk] cache default "2 MB plus 2% of system RAM" |
 | C15 | Should the M3 startup line gain `-A`? BOARD_PROCEDURE: add it. The other readers are silent. | **Recommended (O3).** `A` is a common option (lib/public/startup.h:163) that sets `SYSTEM_PRIVATE_FLAG_ABNORMAL_REBOOT` (lib/init_system_private.c:229-230). The board's reboot callout is `reboot_psci_smc` (board/main.c:104-106). On an abnormal reboot without the flag it masks DAIF and spins (lib/aarch64/callout_reboot_psci.S:42-58). A normal `shutdown` or `sysmgr_reboot()` ignores the flag. No code changes; one startup token. | VERIFIED lib; [callout_reset], [startup_options] |
 | C16 | BOARD_PROCEDURE: bound commands with toybox `timeout`. | **Replaced by our own `bwait -k`** (§3.8), whose kill and exit behaviour is VERIFIED by our source. The QNX page leaves `timeout`'s expiry exit code undocumented (BOARD_PROCEDURE S1). | Our source to be written |
 | C17 | **Where the ~169 MB kimg lands.** NATIVE_QVM_HOST K3: on the memblock free list (HYPOTHESIS). BOARD_PROCEDURE K1: below the kernel image (VERIFIED arithmetic). | **Both hold.** `image_size` is page-rounded with no cap (`shim/build-shim.sh:71-83`). The image ends near 0x8A17_5000, below `Kernel code 9b290000` (`raw/orin-iomem.txt:181`). Whether the whole span is free in memblock is HYPOTHESIS. A wrong landing prints `BAD-LANDING` and warm-resets (plan:154-156). | VERIFIED arithmetic; HYPOTHESIS placement |
 | C18 | `shim/build-shim.sh:12` and plan:124 say `image_size` is "rounded to 2 MiB". | **Page rounding** (`build-shim.sh:71-83`). The comments are stale (Appendix A). | VERIFIED |
-| C19 | Plan M3: "`-Wdisable` or a `wdtkick` kicker". | **`-Wkeep`, as M1b ran it.** WDT0 does not fire after the kexec hand-over (m0-hang-watchdog.md:9-10), so `-W` has no effect either way. | VERIFIED |
-| C20 | Does qvm need `/dev/random` on the host? | **No.** In `logs/windows-qhv-tcg-boot-timed1.log` the host ran with no rng (:2-3), `random` failed with `Unable to access /dev/random` (:60-62), and qvm still booted the guest to its banner (:121). The M3 host starts no `random`. | VERIFIED |
+| C19 | Plan M3: "`-Wdisable` or a `wdtkick` kicker". | **`-Wkeep`, as in M1b.** Rule: the watchdog does not recover the board after the kexec hand-over (M0 records, held locally), so `-W` has no effect either way. | M0 records (held locally) |
+| C20 | Does qvm need `/dev/random` on the host? | **The M3 host starts no `random`.** The TCG evidence behind that choice is held locally (NC QDL v7 4.6(i)). If qvm does depend on it, R1 exposes that. | TCG boot log (held locally) |
 | C21 | **When the IPC client starts.** MEASUREMENT: as soon as the banner and echo-server stamps fire. The cloud leg: `sleep 90` after launching qvm. | **At qvm launch + 90 s, as on the cloud leg (owner decision O6).** The cloud's `waitfor /dev/ttyp0 10` is satisfied at once, because `devc-pty` is already running (qhvh/startup.sh:43), then `sleep 90` (post_start.custom:37-39). | VERIFIED |
-| C22 | Which guest-disk bytes should M3 boot? GUEST_CONFIG F8: the TCG series booted a copy already mutated by earlier snapshot-less boots. | **The pristine `cf5b06d0…`, restored every boot.** `disk-qemu` changed after its build (mtime 2026-09-09 00:57; `results/qhv-images-SHA256SUMS.txt:6-8` records the earlier `c71b9499…` pin). The embedded guest disk probably changed with it (HYPOTHESIS). Reading it would mean opening the host disk image, so it is not done. O8. | VERIFIED mtimes and pins |
+| C22 | Which guest-disk bytes should M3 boot? GUEST_CONFIG F8: the TCG series used a copy already mutated by earlier snapshot-less runs. | **The pristine `cf5b06d0…`, restored every boot.** `disk-qemu` changed after its build (mtime 2026-09-09 00:57; `results/qhv-images-SHA256SUMS.txt:6-8` records the earlier `c71b9499…` pin). The embedded guest disk probably changed with it (HYPOTHESIS). Reading it would mean opening the host disk image, so it is not done. O8. | VERIFIED mtimes and pins |
 | C23 | NATIVE_QVM_HOST P1: the cloud's procnto `-mr -d 0777 -u 0777` (qhvh/ifs.build:22). | **Keep M1b's `procnto-smp-instr -v`.** No hypervisor page names those options; they only set ASLR and `/proc` file masks. Recorded as a host-bundle difference. | VENDOR_CLAIM (NATIVE_QVM_HOST P1 citations) |
 
 **Reader items rejected or changed:** C1 (NATIVE_QVM_HOST F3), C6 (the pipe and `hostdev >/dev/ptyp1` routes), C3 (both "two substitution" recommendations), C8 (MEASUREMENT M3-08), C14 (the `blk cache=` settings), C16 (toybox `timeout`), NATIVE_QVM_HOST rec 1 (conf = committed text; now O1), NATIVE_QVM_HOST rec 5 (`smpcheck -z 90` grace; replaced by a launch-relative timer). **Applied, with citations re-read:** GUEST_CONFIG F1-F18, NATIVE_QVM_HOST F1-F2, F4-F6, S1-S8, H1-H9, R1-R7, K1-K4, MEASUREMENT M3-02-M3-07, M3-09-M3-20, BOARD_PROCEDURE F1, F3, P1-P5, K1-K4, S2-S11, G1-G2.
@@ -116,7 +116,7 @@ All four reader reports arrived. Every item this design rests on was re-read in 
 1. **Every wait is bounded, and every path ends in a warm reset.**
    - No `waitfor` and no unbounded foreground command anywhere; m2.build.in:88-98 gives the rules learned so far.
    - The IFS script's first program is a 900 s guard (`bwait -g 900`). Every wait in the ksh state machine is a `bwait` with a bound, and every child that could block is run under `bwait -k`.
-   - The script ends in `smpcheck -z 3` then `shutdown -S reboot`, which warm-reset the board in every M1/M2/M1b run.
+   - The script ends in `smpcheck -z 3` then `shutdown -S reboot`, as in M1, M2 and M1b.
    - With `-A` (O3), a host-kernel abnormal termination also resets.
    - Only a lock-up with interrupts masked, or a hang before the IFS script starts, needs a power cycle. Those are residual, as in M1b.
 2. **One variable per rung.**
@@ -133,7 +133,7 @@ All four reader reports arrived. Every item this design rests on was re-read in 
 
    The guest's configuration differs from the TCG as-run text only in its load path (§3.3). The guest disk is the pristine image, restored every boot (§3.4).
 4. **The M1b startup is unchanged.**
-   - The generator refuses any startup binary other than sha256 `90bf724c222b61f9791ad3bcaff60c6516be7180012333be9186a58d06d61896`, and any smpcheck other than `f8e2c3078f12ac8ef27f1c482e77bd98d2188293195721d8168892a605c666b0` (both VERIFIED today; m1b-runs.md:27-28).
+   - The generator refuses any startup binary other than sha256 `90bf724c222b61f9791ad3bcaff60c6516be7180012333be9186a58d06d61896`, and any smpcheck other than `f8e2c3078f12ac8ef27f1c482e77bd98d2188293195721d8168892a605c666b0` (both VERIFIED today on the PC; `m1b-runs.md`, held locally, carries the same pins).
    - The shim is not edited. Only its `image_size` changes with the payload, which is `build-shim.sh`'s normal job.
    - Against M1b, the startup *line* changes in `-P6` → `-P4` (O2) and gains `-A` (O3). A RAM-widening startup change is admissible only under §6.6 M-fallback, after R0 or R1 shows a shortage, and it has its own verification (§6.6).
 5. **M1b's and M2's records stay untouched.**
@@ -155,7 +155,7 @@ All four reader reports arrived. Every item this design rests on was re-read in 
 
 | Phase | Where | Fault | Hang |
 |---|---|---|---|
-| Linux pre-kexec: governor, quiesce, `kexec -s -l`, `systemctl kexec` | L4T | A Linux oops in its own shutdown: `panic_on_oops=1` → the watchdog resets (PMC `BCCPLEXWDT`), and pstore keeps the Oops (m2-runs.md:126-133) | Watchdog-recovered while Linux still runs, as above |
+| Linux pre-kexec: governor, quiesce, `kexec -s -l`, `systemctl kexec` | L4T | A Linux oops in its own shutdown: `panic_on_oops=1` → the watchdog resets (PMC `BCCPLEXWDT`), and pstore keeps the Oops (M2 records, held locally) | Watchdog-recovered while Linux still runs, as above |
 | Relocation, then the shim | EL2, MMU off | The shim's vectors print `EXC …` and reset. A wrong placement prints `BAD-LANDING` and resets | Unbounded (residual, as in M0-M1b) |
 | Startup (the M1b build) at `-P4` | EL2, E2H/TGE | The board EL2 vectors from `board_init` print and reset. The INTID 28 probe `STOP` is a named crash (m1b-design §2) | The M1b bounds (15 s AP start, 5 s park) |
 | procnto → the IFS script before `bwait -g` | EL2&0 | procnto's own handling; with `-A`, an abnormal termination resets | Unbounded (residual); COM3 is the evidence |
@@ -203,7 +203,7 @@ All files land in `/proc/boot`, the whole of PATH and LD_LIBRARY_PATH in the boo
 
 **Deliberately absent:**
 - `vpctl`, `vdev-virtio-net`, `mods-vdevpeer-net`, `vdev-pci-dummy`, `vdev-progress`, `vdev-ser8250`, `devr-virtio`, `io-usb-otg`: nothing in the configuration uses them.
-- `random`: qvm does not need it (C20).
+- `random`: not started on the host (C20).
 - `io-sock`.
 - `fs-qnx6.so`: its absence guarantees the host can never mount the guest's partitions. io-blk enumerates partitions by default ([io-blk] `auto=partition`), but that is not a mount.
 - `tracelogger` and `traceprinter` (C12).
@@ -275,12 +275,12 @@ Compared with the committed three-vdev text (`scripts/qhv/post_start.custom:33`)
 
 1. It is carried as `/proc/boot/disk-qvm`, `[+raw perms=0444]`: the pristine `qhv/guest/output/disk-qvm`, sha256 `cf5b06d0…216b`, md5 `cca9570326f42115f91e595d02e489d1` (VERIFIED today).
 2. The state machine copies it to `/dev/shmem/disk-qvm` with toybox `cp` (bound 30 s), then `cmp`s it against the IFS copy (bound 30 s; any difference is `FAIL disk_copy`).
-3. It runs `devb-loopback loopback blksz=512,prefix=qvmdisk,fd=/dev/shmem/disk-qvm`. That is the cloud host's line (qhvh/post_startup.sh:48) with only the backing path changed, and in particular with no `blk cache=`. devb-loopback returns to the shell by itself on TCG (post_start.custom:31-32 runs it in the foreground and continues), so it is called plainly, not under `bwait -k`, which would kill a daemon that had not detached.
+3. It runs `devb-loopback loopback blksz=512,prefix=qvmdisk,fd=/dev/shmem/disk-qvm`. That is the cloud host's line (qhvh/post_startup.sh:48) with only the backing path changed, and in particular with no `blk cache=`. The cloud host's script runs devb-loopback in the foreground and continues (post_start.custom:31-32), so it is expected to return to the shell by itself (R7) and is called plainly, not under `bwait -k`, which would kill a daemon that had not detached.
 4. It waits for `/dev/qvmdisk0` with `bwait -p … -t 10`, the cloud's 10 s bound (post_start.custom:32).
 
 **Why this route:**
 - **Why not `/proc/boot` directly.** The IFS is read-only. devb-loopback opens its backing file O_RDWR by default, and `ro` would present a read-only disk ([devb-loopback]). The guest mounts `/system` and `/data` read-write (qhvg/mount_fs.sh:48, :52).
-- **Why a copy per boot.** It restores the same bytes every run, the native equivalent of `-snapshot` (`launch-qhv-tcg.ps1:152`). The TCG timed series booted identical bytes each run, but bytes already written by earlier boots (C22).
+- **Why a copy per boot.** It restores the same bytes every run, the native equivalent of `-snapshot` (`launch-qhv-tcg.ps1:152`). The TCG timed series used identical bytes each run, but bytes already written by earlier runs (C22).
 - **Why not `hostdev /dev/shmem/disk-qvm` in the vdev.** It would change the configuration text and remove the io-blk layer the cloud leg had.
 - **Recorded host difference.** The backing store is RAM, not qnx6 on emulated virtio-blk. The io-blk cache default scales with RAM: about 21.8 MiB here against about 43 MiB on the 2 GiB TCG host.
 
@@ -289,7 +289,7 @@ Compared with the committed three-vdev text (`scripts/qhv/post_start.custom:33`)
 | Item | MiB | Class | Source |
 |---|---|---|---|
 | Window | 992.0 | VERIFIED | board/init_raminfo.c:39-43, `-m992M` |
-| Kernel, syspage, startup, early processes (M1b: 992 − 974 FreeMem with a 2.61 MiB IFS) | 15.4 | VERIFIED (±1 MiB rounding) | m1blog:305; `shim/out/m1b/m1b-p6.ifs` 2,740,292 B |
+| Kernel, syspage, startup, early processes | 16 | HYPOTHESIS (budget) | sized from the M1b run record (held locally) |
 | IFS kept out of the allocator: `avoid_ram(full_imagefs_paddr, shdr->stored_size)`. The size is the M1b IFS plus about 2.81 MB of additions plus the guest pair | 161.0 | VERIFIED rule (lib/_main.c:141-142); size arithmetic from §3.1 | sum of §3.1 |
 | slogger2, pipe, devb-loopback, bwait, stamp, ksh | 4 | HYPOTHESIS (budget) | — |
 | `/dev/shmem/disk-qvm` | 146.3 | VERIFIED size | §3.4 |
@@ -297,7 +297,7 @@ Compared with the committed three-vdev text (`scripts/qhv/post_start.custom:33`)
 | Guest RAM | 512.0 | VERIFIED (configuration) | §3.3. Need not be contiguous in host-physical memory ([ram]) |
 | qvm process: heap, vdev buffers, stage-2 tables | 16 | UNKNOWN (budget; 512 MiB at 4 KiB granularity is about 1 MiB of leaf tables) | — |
 | slogger2 buffers | 4 | UNKNOWN (budget) | — |
-| **Committed** | **880.5** | HYPOTHESIS | — |
+| **Committed** | **881.1** | HYPOTHESIS | — |
 | **Headroom** | **~111** | HYPOTHESIS | — |
 
 **Gates, printed as `M3 MEM <tag> <free>MB/992MB`:**
@@ -406,11 +406,11 @@ toybox
 
 **Notes on the template:**
 - **Autolink.** `[-autolink]` with explicit links follows the QNX-generated host IFS (qhvh/ifs.build:130-159), so no automatic link can collide with an explicit one. Whether M1b's image carried automatic `.so` links is not needed: programs name sonames. The generator's dumpifs check confirms both names of every linked library (§5.3).
-- **Order.** `slogger2`, `pipe` and `devc-pty` return by daemonising, as their unbracketed use on TCG shows (qhvh/startup.sh:10, :41, :43; m2.build.in:104). The guard starts before anything that could block. The census, including M1b's bounded tick check with `sysmgr_reboot` on a dead tick (m1b-design §3.10), proves CPU0's clock before any `bwait` relies on it.
+- **Order.** `slogger2`, `pipe` and `devc-pty` return by daemonising, as their unbracketed use in the QNX-generated host script and in M2's buildfile implies (qhvh/startup.sh:10, :41, :43; m2.build.in:104). The guard starts before anything that could block. The census, including M1b's bounded tick check with `sysmgr_reboot` on a dead tick (m1b-design §3.10), proves CPU0's clock before any `bwait` relies on it.
 
 ### 3.7 The host state machine (`startup/m3-host.ksh.in`)
 
-Run in the foreground by the IFS script, the IFS script waits for it. ksh output goes to the kernel console and so reaches the black box (M2: smpcheck output recovered from pstore, m2-runs.md:40-60).
+Run in the foreground by the IFS script, the IFS script waits for it. ksh output goes to the kernel console and so reaches the black box.
 
 **Markers:**
 - `@RUNG@`, `@P@`;
@@ -623,7 +623,7 @@ state end
   - After the ksh: `smpcheck -z 3` (3 s, smpcheck.c:1354-1355), then `shutdown`.
   - That leaves 900 − 772 − 3 = 125 s for those steps, the prints and the poll overruns.
 - **Caveat 1: commands outside `bwait`.** 772 s assumes that each of them returns promptly:
-  - devb-loopback (R7, VERIFIED on TCG only);
+  - devb-loopback (R7);
   - the six `pidin` calls and up to three `slay` calls;
   - the two `stamp -n` writes;
   - the short `cat`, `grep`, `head`, `tail` and `wc` prints of `/dev/shmem` files.
@@ -733,7 +733,7 @@ bwait -g SECS
 
 ### 4.1 The stamps, and why they match the TCG markers
 
-Every reading is the host's `ClockCycles()` at 31,250,000 cycles/s (32 ns). The census confirms the value on the board (`SMPCHECK census cps=31250000`, m1blog:313), and it is printed in every STAMP line. The TCG QNX hosts reported `cps=1000000000` (`logs/qhv-tcg-ipc-benchmark.log:50`).
+Every reading is the host's `ClockCycles()` at 31,250,000 cycles/s (32 ns), the board's configured counter frequency. The census prints the value on the board, and it is printed in every STAMP line. The TCG QNX hosts ran on QEMU's emulated counter, at a different frequency.
 
 | Label | Taken when | Source of the text | TCG counterpart |
 |---|---|---|---|
@@ -741,7 +741,7 @@ Every reading is the host's `ClockCycles()` at 31,250,000 cycles/s (32 ns). The 
 | `g_first` | `---> Starting slogger2` | qhvg/startup.sh:9, the first guest line | not stamped |
 | `g_devb` | `---> Starting devb` | qhvg/startup.sh:25 | not stamped |
 | `g_net` | `---> Starting Networking` | qhvg/startup.sh:46 | not stamped (the host prints the same text before qvm starts) |
-| `g_ifup` | `if_up: tries exhausted` | the message from qhvg/start_net.sh:3 (`windows-qhv-tcg-boot-timed1.log:97`) | counted (`if_up_exhausted=1`), not timed |
+| `g_ifup` | `if_up: tries exhausted` | the message of the `if_up` at qhvg/start_net.sh:3 (the text the TCG launchers count, `launch-qhv-tcg.ps1:201`) | counted (`if_up_exhausted=`), not timed |
 | `g_sshd` | `---> Starting sshd` | qhvg/startup.sh:50 | not stamped |
 | `g_misc` | `---> Starting misc` | qhvg/startup.sh:63 | not stamped |
 | `g_srv` | `server: echo endpoint up` | ipc-test/qnx-server/server.c:61-62 | not stamped |
@@ -750,21 +750,15 @@ Every reading is the host's `ClockCycles()` at 31,250,000 cycles/s (32 ns). The 
 | `eof` | the reader's input ended | — | — |
 | `ipc_start`, `ipc_end` | around the client run | — | — |
 
-None of the needles occurs in the guest stream before its own line: `windows-qhv-tcg-boot-timed1.log:79-121` contains no `qnx-guest` before the banner. The reader sees only qvm's stdio, never host lines.
+The reader sees only qvm's stdio, never host lines, so the host's own copies of the `--->` lines cannot fire a needle.
 
-**The quantity.** The headline is `banner − qvm_launch`. The only comparable TCG quantity is each leg's `guest_banner − qvm_launched` segment, computed here from the segment lines (VERIFIED arithmetic):
-
-| TCG leg (rng, `-snapshot`, disk `95849168…`) | Runs (ms) | Median | Range |
-|---|---|---|---|
-| Windows, QEMU 11.1.0 (`windows-qhv-tcg-q111-rng-snapshot-segments-boot-times-n5.txt:15-24`) | 22,556 / 22,526 / 22,633 / 22,669 / 22,613 | 22,613 | 143 |
-| Windows, QEMU 11.0.50 (`windows-qhv-tcg-rng-snapshot-segments-boot-times-n5.txt:16-25`) | 22,541 / 22,520 / 22,460 / 22,514 / 22,507 | 22,514 | 81 |
-| Orin, QEMU 11.1.0 (`orin-qhv-tcg-q111-rng-snapshot-segments-boot-times-n5.txt:14-23`) | 48,452 / 48,264 / 48,727 / 48,854 / 47,623 | 48,452 | 1,231 |
+**The quantity.** The headline is `banner − qvm_launch`. The only comparable TCG quantity is each leg's `guest_banner − qvm_launched` segment, which the TCG launchers print per run (`launch-qhv-tcg.ps1:202`; `launch-qhv-on-orin-tcg.sh:218`). The TCG series that carry it are three five-run legs with rng, `-snapshot` and disk `95849168…`: Windows under QEMU 11.1.0, Windows under QEMU 11.0.50, and Orin under QEMU 11.1.0. Their segment files (`windows-qhv-tcg-q111-rng-snapshot-segments-boot-times-n5.txt`, `windows-qhv-tcg-rng-snapshot-segments-boot-times-n5.txt`, `orin-qhv-tcg-q111-rng-snapshot-segments-boot-times-n5.txt`) are held locally (NC QDL v7 4.6(i)).
 
 **Resolution and latency.**
 - Each TCG end is quantised by a 100 ms poll, so a TCG segment carries up to ±100 ms. Both TCG markers crossed the same emulated serial path, so their path latency largely cancels (HYPOTHESIS).
 - Natively, the `qvm_launch` reading has no I/O in front of it. The `banner` reading includes the path from the guest's pl011 write, through qvm's pl011 vdev and the pty, to the reader's `read()` returning. That latency is UNKNOWN and expected to be far below 100 ms (HYPOTHESIS).
 - The pl011 `batch` option is not set, and its default is not documented ([pl011]). Batching shows as several needles sharing one `cycles=` and one `bytes=`.
-- **Cross-checks per run:** `mono_ns` deltas against cycle deltas, and the `cpu=` of every line. The cores should read one counter: M1b printed `cntvoff=0000000000000000` on every core (m1b-runs.md:111), and with E2H and TGE set the host's virtual count ignores `CNTVOFF_EL2` (VENDOR_CLAIM, Arm ARM).
+- **Cross-checks per run:** `mono_ns` deltas against cycle deltas, and the `cpu=` of every line. The cores should read one counter: with E2H and TGE set the host's virtual count ignores `CNTVOFF_EL2` (VENDOR_CLAIM, Arm ARM).
 
 **Segments computed on the PC**, in cycles and ms, and reported beside the headline:
 
@@ -773,7 +767,7 @@ None of the needles occurs in the guest stream before its own line: `windows-qhv
 | `g_first − qvm_launch` | qvm start: configuration, vdev loading, 512 MiB of guest RAM, loading the 9.3 MiB guest ELF from `/proc/boot`; guest startup and kernel up to startup.sh's first echo | none known |
 | `g_devb − g_first` | slogger2, the first `devc-virtio`, `ksh -l` on vcon1, fsevmgr | the `waitfor /dev/slog` default of 5 s, only if it times out ([waitfor]) |
 | `g_net − g_devb` | devb-virtio, mounts, random, pipe, devc-pty, dumper | the `waitfor /dev/hd0`, `/dev/random` and `/dev/pipe` defaults (5 s each), only if they time out |
-| `g_ifup − g_net` | io-sock start, then `if_up -p -r 20 vtnet0` walking an interface that never appears | **the if_up burn**: 20 walks, 1,000 ms apart by default, about 19-20 s by the docs ([if_up]), against "short" in findings.md (C7) |
+| `g_ifup − g_net` | io-sock start, then `if_up -p -r 20 vtnet0` walking an interface that never appears | **the if_up burn**: 20 walks, 1,000 ms apart by default, about 19-20 s by the docs ([if_up]); never measured directly on TCG (C7) |
 | `g_sshd − g_ifup` | ifconfig, setconf hostname, sysctl, setfacl, `dhcpcd -b` | none known |
 | `g_misc − g_sshd` | host-key checks (keys present, C8), sshd, qconn | none known |
 | `g_startup_complete − g_misc` | mqueue; then post_startup.sh: the second `devc-virtio`, `waitfor /dev/vcon2 10`, the echo server started in the background, `sleep 1`, the RQ-2 skip, `io-usb-otg` in the foreground, `pidin arg \| wc -l` | `waitfor /dev/vcon2 10`, only if it times out (qhvg/post_startup.sh:25); **`sleep 1`** (:41) |
@@ -787,13 +781,8 @@ None of the needles occurs in the guest stream before its own line: `windows-qhv
   - The server prints its line only after its `open` and `cio_set_raw` (ipc-test/qnx-server/server.c:51-62).
 
   VERIFIED from the build files and source.
-- **What TCG showed.** Twelve captures in `logs/` start this server.
-  - In 11 of them, its line came before `Process count` and `Startup complete` (for example `windows-qhv-tcg-boot-timed1.log:111, :117, :119`).
-  - In `qhv-tcg-rq2-shmem-roundtrip-attempt1-bus-error.log`, it came only after the post-`sleep 1` echo (:49-51), interleaved byte by byte with `gshm-probe`'s output. The needle occurs nowhere in that file. The run's client still printed `samples=15` and `sentinel_recoveries=0`, and exited 0 (:61, :64, :66). VERIFIED.
-  - That guest staged `gshm-probe`; the 968029 guest does not (C2). Its concurrent console writers are the post_startup.sh shell, `io-usb-otg` and the background daemons.
-- **The chain needles held.** All seven chain needles and the banner were intact, and in chain order, in all 12 captures. VERIFIED by line numbers:
-  - the six `--->` and `if_up` lines at their last occurrence before the guest-only `=== starting devc-virtio` line (the host prints several of the same `--->` lines);
-  - `Startup complete` directly before the banner line.
+- **TCG captures.** The TCG captures that start this server bear on where its line lands; that evidence is held locally (NC QDL v7 4.6(i)). Nothing in the guest orders the line against `Startup complete`, and another console writer can interleave with it. The 968029 guest's concurrent console writers are the post_startup.sh shell, `io-usb-otg` and the background daemons; it does not stage `gshm-probe` (C2).
+- **The chain needles.** The seven chain needles and the banner come from foreground steps of one script chain, so the guest fixes their order (§8 item 6).
 - **Recorded, not gated.** When `g_srv` exists, the run note records `g_srv − g_misc`, `g_srv − g_startup_complete` and `ipc_start − g_srv`, all signed; otherwise it records `g_srv absent`. None of them is a pass criterion (§8 item 6, R37).
 
 The write-up must say whether the headline is dominated by the fixed waits. If the if_up burn really is about 19-20 s natively, any native-to-TCG ratio of the whole segment is meaningless (§10).
@@ -807,8 +796,8 @@ The write-up must say whether the headline is dominated by the fixed waits. If t
 - **Evidence.** `pidin -p qvm -f abNli` is printed after the banner (S7) and after IPC (S8), recording pid, tid, name, last CPU and runmask for each qvm thread. The format codes are as M2 used them (m2.build.in:130-135).
 - **Not chosen:**
   - `-P6` with the vCPU pinned to a cluster: that changes both the startup line and the configuration, and still leaves the I/O threads floating.
-  - `-P6` unpinned: that mixes two clock domains, with cluster 1 at 57 M it/s (m1b-runs.md:157-162).
-  - A `-P6` diagnostic run with `cpu cluster` on cluster 1 could measure the cluster-1 factor on a real guest boot. It is outside M3.
+  - `-P6` unpinned: that mixes two clock domains, one per cpufreq policy.
+  - A `-P6` diagnostic run with `cpu cluster` on cluster 1 could measure cluster 1's effect on a real guest boot. It is outside M3.
 
 ### 4.3 CPU frequency: what is done and what is recorded
 
@@ -817,17 +806,9 @@ The write-up must say whether the headline is dominated by the fixed waits. If t
 2. Just before `systemctl kexec`, record for each policy: `affected_cpus`, `scaling_governor`, `scaling_cur_freq`, `cpuinfo_cur_freq` (sudo), `scaling_min_freq`, `scaling_max_freq`.
 3. Once per session, also record `scaling_available_frequencies`, every `thermal_zone*/type` and `temp`, and `nvpmodel -q` (read-only).
 
-**Why the Linux reading is not the frequency.** Just before M2's R4, `schedutil` had cluster 0 at 1,267,200 kHz (m2-runs.md:116-118), yet cluster 0 then ran the busy loop at 477 M it/s. Every cluster-0 rate recorded so far divides by a frequency on the 115.2 + k × 76.8 MHz grid at 0.4955-0.4975 M it/s per MHz, and the cluster-1 rate at 115.2 MHz gives 0.4952:
-- 363 ↔ 729.6
-- 401 ↔ 806.4
-- 439 ↔ 883.2
-- 477 ↔ 960.0
-- 630 ↔ 1,267.2
-- 666 ↔ 1,344.0
+**Why the Linux reading is not the frequency.** The sysfs reading is taken under Linux, before its shutdown and the kexec path, and nothing guarantees that QNX then runs at the frequency it reports. The M1b and M2 rate records that bear on this, and a frequency fit to them (HYPOTHESIS, never adopted), are held locally (NC QDL v7 4.6(i)). The pre-kexec reading therefore cannot fill a MHz field.
 
-The rates are m2-runs.md:106-112 and m1b-runs.md:159-162; the fit is HYPOTHESIS. Under that fit, R4 ran at about 960 MHz, not 1,267. So something changed the frequency between the read and QNX, and the pre-kexec reading cannot fill a MHz field (VERIFIED mismatch, HYPOTHESIS cause).
-
-**On QNX, every run.** S2 and S11 run a 3 s busy worker on each of cpus 0-3 (`smpcheck -b 3`) and print their `rate=`. The prediction, HYPOTHESIS: if the `performance` pin at `scaling_max_freq` = 1,344,000 kHz survives the kexec path, cpus 0-3 read about 666 M it/s; about 363 M would mean Linux dropped to its minimum on the way out.
+**On QNX, every run.** S2 and S11 run a 3 s busy worker on each of cpus 0-3 (`smpcheck -b 3`) and print their `rate=`. The prediction, HYPOTHESIS: if the `performance` pin at `scaling_max_freq` = 1,344,000 kHz survives the kexec path, cpus 0-3 read the rate the M1b and M2 records (held locally) associate with that frequency; a rate near the one they associate with the minimum frequency would mean Linux dropped to its minimum on the way out.
 
 **The field, exactly:**
 `cpu_mhz: clock not verified [qnx rate pre c0..c3=<M,M,M,M> post=<M,M,M,M>; linux pre-kexec policy0 gov=<g> cur=<kHz> hw=<kHz> min=<kHz> max=<kHz>; policy4 gov=<g> cur=<kHz> hw=<kHz>; thermal=<zone:mC,…>; nvpmodel=<mode>]`
@@ -846,10 +827,10 @@ Flag a run if any core's |post − pre| / pre exceeds 2 %. A MHz value may be wr
 - **Bounds (VERIFIED from source):**
   - Read timeout 10 s (client.c:56, :72-73); up to 5 sentinel rounds, each ending at its first timed-out read (:63-64, :131-138); so a dead link ends in about 61 s including the 1 s priming drain (:249-265).
   - The write loop has no timeout (common/console_io.h:139-153). Hence the outer 240 s kill.
-- **Completion rule:** `rc=0 killed=0` and `samples + sentinel_recoveries = 15`. Clean when `sentinel_recoveries=0`, completed-with-recovery otherwise. This is the cloud leg's precedent: its committed 15/5 regression run recovered one stall and still counted as a clean run with real P50/P99/Max (ipc-test/qnx-host-client/README.md:189).
+- **Completion rule:** `rc=0 killed=0` and `samples + sentinel_recoveries = 15`. Clean when `sentinel_recoveries=0`, completed-with-recovery otherwise.
 - **Reading the numbers:**
   - Nearest rank at n=15 makes P50 `sorted[7]` and **P99 `sorted[14]` = Max** (client.c:84-95).
-  - Native RTT is quantised to 32 ns and is not comparable in absolute terms with TCG's emulation-dominated 2.0-2.3 ms (`qhv-tcg-ipc-benchmark.log:53`).
+  - Native RTT is quantised to 32 ns and is not comparable in absolute terms with TCG's emulated round trips (the TCG IPC record is held locally).
   - **No same-image baseline exists.** The 968029 guest has never run the client: every IPC capture predates its 2026-07-28 22:55 build, and every later TCG run used `-StopOnGuestBanner` (GUEST_CONFIG F9, mtimes VERIFIED). A zero-board-cost TCG run could provide one (O9).
 - **Transcription, off the board:**
   1. Strip CR from the black box.
@@ -858,25 +839,25 @@ Flag a run if any core's |post − pre| / pre exceeds 2 %. A MHz value may be wr
 
 ### 4.5 Black-box budget and gates
 
-The cap is 65,520 B, head kept (callout_debug_tcu.S:122-124). M1b sizes: `-P1` 7,936 B; `-P6` 23,031 B, about 3,019 B per extra core including about 420 B of busy-worker lines (m1b-runs.md:46-49).
+The cap is 65,520 B, head kept (callout_debug_tcu.S:122-124). The black-box sizes of the M1b runs, which the first row is sized from, are in `m1b-runs.md` (held locally).
 
 | Part | Typical (B) | Capped worst (B) | Class |
 |---|---|---|---|
-| Shim, startup, syspage, census, two `pidin info` at `-P4`: 7,936 + 3 × ~2,600, less M1b's workers | ~14,700 | ~14,700 | HYPOTHESIS (from VERIFIED sizes) |
+| Shim, startup, syspage, census, two `pidin info` at `-P4` | ~14,700 | ~14,700 | estimate (sized from the M1b records, held locally) |
 | Guard, CONFIG, STATE, BWAIT, MEM lines | ~2,100 | ~2,300 | estimate |
-| Two rate probes (4 `done` lines and a RESULT line each) | ~2,300 | ~2,300 | M1b line length (m1blog:372-377) |
+| Two rate probes (4 `done` lines and a RESULT line each) | ~2,300 | ~2,300 | estimate |
 | md5 and CHECK lines, twice | ~800 | ~800 | estimate |
 | qvm-check output | ~100 | ~2,000 | cap |
 | STAMP lines (12 × ~110), printed twice | ~2,600 | ~2,600 | estimate |
 | `pidin -p qvm -f abNli`, twice, 30 lines each | ~1,500 | ~4,200 | cap |
 | IPC stdout, stderr, re-print | ~700 | ~2,600 | cap |
-| Guest stream (about 900 B before the banner on TCG, `windows-qhv-tcg-boot-timed1.log:79-121`; CRs possible) | ~1,600 | ~4,100 | cap |
+| Guest stream (CRs possible) | ~1,600 | ~4,100 | estimate; cap |
 | slog2info | ~500 | ~2,050 (diag: ~8,200 plus a 1,024 guest tail) | cap |
 | **Total** | **~27,000** | **~38,000 (diag ~45,000)** | HYPOTHESIS |
 
 - **G1 (on R0's black box).** If R0's size is 60,000 B or more (m1b-design.md:727 used the same threshold), rebuild **every later image** at `-vv` before R1, and record that as a startup-line deviation.
 - **G2 (on Q's black box).** The same threshold, before T1. The verbosity never changes between Q and T5.
-- **COM3 is a mandatory co-record** on every run, started from PowerShell (m2-runs.md:135-137). It is the only record of a hang and of anything past the cap. STAMP and IPC lines must match byte for byte between the two records, CR-stripped; otherwise the run note flags the difference. Drops are silent on both sides (callout_debug_tcu.S:131-136; board/hw_sertcu.c:107).
+- **COM3 is a mandatory co-record** on every run, started from PowerShell (`m2-runs.md`, held locally). It is the only record of a hang and of anything past the cap. STAMP and IPC lines must match byte for byte between the two records, CR-stripped; otherwise the run note flags the difference. Drops are silent on both sides (callout_debug_tcu.S:131-136; board/hw_sertcu.c:107).
 
 ### 4.6 Per-run record (the run note)
 
@@ -890,7 +871,7 @@ The cap is 65,520 B, head kept (callout_debug_tcu.S:122-124). M1b sizes: `-P1` 7
 3. **Guest:**
    - guest IFS sha256 `968029…7cf4f`, disk sha256 `cf5b06d0…216b`, and the board md5 results before and after;
    - the configuration name and sha256, with a note that its diff against qhvh/post_startup.sh:50 is the load line only;
-   - the TCG series' guest disk marked "bytes written by earlier TCG boots, not hashed" (C22).
+   - the TCG series' guest disk marked "bytes written by earlier TCG runs, not hashed" (C22).
 4. **Host:** qvm and vdev `.so` sha256 values, from the generator table; FreeMem at `boot`, `disk`, `banner`, `end`; the qvm-check line; `rc=` of qvm.
 5. **Linux side:** quiesce steps and their results (§6.4); governor and frequency lines; the `cpu_mhz` field (§4.3).
 6. **Stamps:**
@@ -905,7 +886,7 @@ The cap is 65,520 B, head kept (callout_debug_tcu.S:122-124). M1b sizes: `-P1` 7
 ### 4.7 Reporting rules
 
 - Give all five T values, the median and the min-max range, and the same for every segment. No mean ± SD, no confidence interval, no outlier removal. Q is reported separately and never folded in.
-- Compare only with the TCG `qvm_launched → guest_banner` medians in §4.1. Always state the ±100 ms TCG resolution, the bundle differences (§3.2, §3.4, §4.1) and the if_up burn beside the headline.
+- Compare only with the TCG `qvm_launched → guest_banner` medians of the three legs named in §4.1 (held locally). Always state the ±100 ms TCG resolution, the bundle differences (§3.2, §3.4, §4.1) and the if_up burn beside the headline.
 - Read the spread as repeatability of this bundle on one board, under uncontrolled DVFS, thermal state and kexec residue.
 
 ---
@@ -946,11 +927,11 @@ Usage: `BSP=… QNX_BASE=… ./make-m3-images.sh [--generate-only] [image …]`,
 
    | kimg | sha256 prefix | Record |
    |---|---|---|
-   | `out/m1b/reg-p6.kimg` | `c391551a8e4b16bbc6f0e626` | m1b-runs.md:46-49 |
-   | `out/m1b/m1b-p1.kimg` | `cf0715ef7f0e447228d33655` | m1b-runs.md:46-49 |
-   | `out/m1b/m1b-p6.kimg` | `85970fe84cb5ed644e2cced6` | m1b-runs.md:46-49; recomputed today |
-   | `out/m2/m2-p6.kimg` | `5cae65e821edcdb9c2355310` | m2-runs.md:28 |
-6. **PO-D: guest pair.** *(2026-09-17, OD7: the guest and host were regenerated from clean sources, so both hashes below moved -- ifs.bin to `434647a7…a83bd`, disk-qvm to `55571618…e31477`, and the md5 values to `093ef787…` and `2b2fcb13…`. The gate itself is unchanged; the generators carry the new values. The figures below are what M3 ran against and are kept as recorded.)*
+   | `out/m1b/reg-p6.kimg` | `c391551a8e4b16bbc6f0e626` | `m1b-runs.md` (held locally) |
+   | `out/m1b/m1b-p1.kimg` | `cf0715ef7f0e447228d33655` | `m1b-runs.md` (held locally) |
+   | `out/m1b/m1b-p6.kimg` | `85970fe84cb5ed644e2cced6` | `m1b-runs.md` (held locally); recomputed today |
+   | `out/m2/m2-p6.kimg` | `5cae65e821edcdb9c2355310` | `m2-runs.md` (held locally) |
+6. **PO-D: guest pair.** *(2026-09-17, OD7: the guest and host were regenerated from clean sources, so both hashes below moved -- ifs.bin to `434647a7…a83bd`, disk-qvm to `55571618…e31477`, and the md5 values to `093ef787…` and `2b2fcb13…`. The gate itself is unchanged; the generators carry the new values. The values below are the pins M3 was built against and are kept as recorded.)*
    - `sha256(qhv/guest/output/ifs.bin)` = `968029316b940f53580228f44e393877e032e251d78f3c752600cae726a7cf4f`.
    - `sha256(qhv/guest/output/disk-qvm)` = `cf5b06d0b3cb524201c71440fdda42a18d2636d45938acd8ec95cfa21314216b`.
    - Die otherwise. Compute md5 values for baking; today they are `0e3a2e9bcf4ccf99d4f9ce49a35c55d2` and `cca9570326f42115f91e595d02e489d1`.
@@ -1006,7 +987,7 @@ Usage: `BSP=… QNX_BASE=… ./make-m3-images.sh [--generate-only] [image …]`,
 1. **Frequency:** read `affected_cpus`, `scaling_available_frequencies`, `scaling_min_freq`, `scaling_max_freq` and `scaling_governor` from `/sys/devices/system/cpu/cpufreq/policy0/` and `policy4/`; record `nvpmodel -q` and every thermal zone. This settles the frequency grid of §4.3.
 2. **Modules and memory:** record `lsmod`, and `sudo -n cat /proc/iomem`, keeping the 80000000-ffffffff lines to compare with raw/orin-iomem.txt:180-186.
 3. **Dynamic debug:** `sudo -n test -e /sys/kernel/debug/dynamic_debug/control && echo dyndbg=yes`.
-4. **Acceptance test of the ~169 MB kimg:** `sudo -n kexec -s -l ~/m3-r0.kimg; echo rc=$?; cat /sys/kernel/kexec_loaded; sudo -n kexec -u; cat /sys/kernel/kexec_loaded`. Pass is `rc=0`, then `1`, then `0`. The M0 test ran the same sequence on the shim alone (m0-kexec-acceptance.md:12-21).
+4. **Acceptance test of the ~169 MB kimg:** `sudo -n kexec -s -l ~/m3-r0.kimg; echo rc=$?; cat /sys/kernel/kexec_loaded; sudo -n kexec -u; cat /sys/kernel/kexec_loaded`. Pass is `rc=0`, then `1`, then `0`. The M0 acceptance test used the same sequence on the shim alone (M0 records, held locally).
 5. **Placement, only if `dyndbg=yes`:**
    1. `echo 'file kexec_image.c +p' | sudo -n tee /sys/kernel/debug/dynamic_debug/control`
    2. Repeat step 4.
@@ -1029,21 +1010,21 @@ Usage: `BSP=… QNX_BASE=… ./make-m3-images.sh [--generate-only] [image …]`,
 **Gate and outcomes:**
 - All four `rc=0`, no Oops, no SMMU or EMEM lines: the quiesce steps join §6.5 step 4 for every run.
 - An `rmmod` fails: record it, and O4 falls back to no quiesce (as M0-M1b), with "not quiesced" in every run note.
-- An Oops: the watchdog recovers it (m2-runs.md:126-133). Record it, and the owner decides.
+- An Oops: the watchdog recovers it (M2 records, held locally). Record it, and the owner decides.
 
 ### 6.5 Each run (one kimg): M1b's loop plus three steps
 
-1. **PC:** stop any previous COM3 capture (the port is exclusive). Start a new one **from PowerShell** at 115200 8N1 into `com3-<img>-<utc>.log`, and keep it running until L4T is back (m2-runs.md:135-137).
+1. **PC:** stop any previous COM3 capture (the port is exclusive). Start a new one **from PowerShell** at 115200 8N1 into `com3-<img>-<utc>.log`, and keep it running until L4T is back (`m2-runs.md`, held locally).
 2. **Board:**
    - `sha256sum ~/<img>.kimg` equals the PC value;
    - record `boot_id` and `uptime`;
-   - if uptime is about 2 h or more, reboot L4T first. Linux oopsed in its own shutdown twice after hours of uptime (m2-runs.md:126-133; m1b-runs.md:54-58); the threshold is a HYPOTHESIS.
+   - if uptime is about 2 h or more, reboot L4T first. Linux oopsed in its own shutdown twice after hours of uptime (M1b and M2 records, held locally); the threshold is a HYPOTHESIS.
 3. **Board (O5):**
    1. `for p in policy0 policy4; do echo performance | sudo -n tee /sys/devices/system/cpu/cpufreq/$p/scaling_governor >/dev/null; done; sleep 2`
    2. Record the §4.3 fields.
 4. **Board (O4):** P1 steps 1-3 and the `/proc/iomem` read, identical on every run, with every `rc` recorded.
 5. **Board:** `sudo -n kexec -s -l ~/<img>.kimg && cat /sys/kernel/kexec_loaded && sudo -n systemctl kexec`.
-6. **PC:** poll ssh with `-o ServerAliveInterval=3 -o ServerAliveCountMax=2` under `timeout`, until it answers **and** `boot_id` has changed. Give up 20 minutes after the kexec: the 900 s guard, plus Linux shutdown and relocation of about 169 MB (duration UNKNOWN), plus an L4T boot of about 80 s (m1-first-procnto.md, "about 80 s after the launch").
+6. **PC:** poll ssh with `-o ServerAliveInterval=3 -o ServerAliveCountMax=2` under `timeout`, until it answers **and** `boot_id` has changed. Give up 20 minutes after the kexec: the 900 s guard, plus Linux shutdown and relocation of about 169 MB (duration UNKNOWN), plus an L4T boot of about 80 s (estimate; M1 records, held locally).
 7. **Board after the return:**
    - `sudo -n cat /sys/fs/pstore/console-ramoops-0 > ~/<img>-<utc>-blackbox.log`, and record its size.
    - `cat /sys/devices/platform/bus@0/c360000.pmc/reset_reason`: `MAINSWRST` is the image's own reset, `BCCPLEXWDT` the watchdog.
@@ -1082,7 +1063,7 @@ That is roughly 5-6 minutes per run, and the required ladder (R0, R1, R2, T1-T5)
 | C2 | `m3-r0-p6`, then `m3-r1-p6` (built on demand) | `-P4` unusable | As R0/R1 at N=6 | Placement becomes "`-P6`, vCPU unpinned, last CPU recorded". Owner decision before any T-run |
 | D1 | `m3-d1` | R1: qvm alive with no guest output, or output that stops with no qvm message | qvm prints the unsupported instruction or register and the guest state, then exits ([unsupported] `abort`) | Diagnostic, never timed. The finding answers plan §8 #5 |
 | D2 | `m3-d2` | R1 fails in the disk path: `No system file system`, `Unable to access /dev/hd0`, or a virtio-blk message | `g_startup_complete` stamped; no banner expected (C1) | Diagnostic: separates qvm, guest kernel, virtual GIC and timer from the disk path |
-| K1 | the same kimg through `sudo -n kexec -c -l ~/<img>.kimg -i` | `BAD-LANDING` on the `-s` path, or P0 step 5 shows another address | The shim's landing check passes | "kexec_load path, purgatory checks skipped (`-i`)". The DTB then lands right after the image, inside the window (m0-kexec-acceptance.md:45-51), where startup's `avoid_ram` covers it (board/main.c:247-249) |
+| K1 | the same kimg through `sudo -n kexec -c -l ~/<img>.kimg -i` | `BAD-LANDING` on the `-s` path, or P0 step 5 shows another address | The shim's landing check passes | "kexec_load path, purgatory checks skipped (`-i`)". The DTB is then expected right after the image, inside the window (HYPOTHESIS here; the M0 records, held locally, bear on it), where startup's `avoid_ram` covers it (board/main.c:247-249) |
 | M1 (O7) | `m3z-*` (the disk carried gzip'd, gunzipped into `/dev/shmem`), or a RAM-window startup change | G-MEM fails, or qvm `rc=64` | As R0 with the gzip'd disk | See O7 and the verification below |
 
 **If a RAM-window startup change is ever chosen** (O7, second option), none of it is designed or needed now:
@@ -1111,7 +1092,7 @@ Each row is keyed on the last distinctive line in the black box, `/dev/shmem`-de
 
 | Observable | Meaning | Next step |
 |---|---|---|
-| `Unable to start "<tool>" (83)` | A shared library that tool needs is missing (ELIBACC; format at m1-first-procnto.md:56-62) | Add the library from the qhvh lists; rebuild; rerun from R0 |
+| `Unable to start "<tool>" (83)` | A shared library that tool needs is missing (ELIBACC is 83, sdpinc/errno.h:142) | Add the library from the qhvh lists; rebuild; rerun from R0 |
 | No `BWAIT guard armed` line | This run is unguarded | Finish, then fix before the next run |
 | `SMPCHECK census tick=dead …` | CPU0's clock is dead (M1b row) | M1b §7 |
 | `M3 FAIL preflight /dev/ptyp1` or `/dev/ttyp0` | devc-pty is not up | Look for `Unable to start "devc-pty"` (libsecpol, m2.build.in:179-182) |
@@ -1131,14 +1112,14 @@ Each row is keyed on the last distinctive line in the black box, `/dev/shmem`-de
 |---|---|---|
 | `rc=127` with `STAMP exec-failed errno=…` in the stamps file | qvm could not be executed (path, permissions, interpreter) | Check the image list |
 | Guest stream holds a runtime-linker failure (text containing `Could not load library`, exact text HYPOTHESIS) and a non-zero `rc=` | A library qvm needs is missing | Add from the qhvh lists; rebuild |
-| `[g2.conf:<n>] …` in the guest stream and `rc=65` | Fatal configuration error at line n ([errcodes]), e.g. a vdev not found or a hostdev refused (the form of `logs/qhv-tcg-host-and-guest-boot.log:60`) | Check the vdev `.so` names, `/dev/ptyp0`, `/dev/qvmdisk0` |
+| `[g2.conf:<n>] …` in the guest stream and `rc=65` | Fatal configuration error at line n ([errcodes]), e.g. a vdev not found or a hostdev refused | Check the vdev `.so` names, `/dev/ptyp0`, `/dev/qvmdisk0` |
 | `rc=64` | Fatal before the guest started, e.g. out of memory ([errcodes]) | `M3 MEM`; O7 |
 | `rc=96`, `5`, `6` or `7` | Fatal after the guest started; unsupported operation; vdev error; unexpected ([errcodes]) | Record guest text and slog; D1 |
 | Only `qvm_launch` stamped, empty guest stream, `BWAIT path timeout secs=240`, no `rc=`, `M3 STATE diag` | qvm is alive, but no guest console byte ever arrived: stage-2 entry, guest vector or timer, or pl011 emulation (plan §8 #5) | slog, the pidin listing (a vCPU thread's state and CPU); D1 |
 | Guest text stops, and the last stamp names the phase: before `g_first`, or between `g_first` and `g_devb` | Guest kernel or early driver stall: interrupt or virtual-timer delivery under qvm (EL1 virtual timer INTID 27; GIC maintenance interrupt INTID 25, UNKNOWN whether used) | D1 |
 | `Unable to access /dev/hd0`, `No system file system, giving up.` | virtio-blk path (vdev, loopback, IRQ 41) | Check the `md5_pre` and `disk_copy` lines; D2 |
 | `Startup complete` with no `QNX qnx-guest` | `uname` not runnable: `/system` not mounted (C1) | As the previous row |
-| `Unable to access /dev/random` in guest text | The guest's `random`, which has no `-l` source (qhvg/startup.sh:39-40), was not up within 5 s. Never seen on TCG | Record. It adds up to 5 s inside `g_net − g_devb`; not an M3 failure if the banner follows |
+| `Unable to access /dev/random` in guest text | The guest's `random`, which has no `-l` source (qhvg/startup.sh:39-40), was not up within 5 s | Record. It adds up to 5 s inside `g_net − g_devb`; not an M3 failure if the banner follows |
 | `g_ifup − g_net` far beyond about 20 s, or no `g_ifup` | io-sock or if_up behaves differently natively | Record; the headline is still valid if the banner follows |
 | Guest kernel shutdown or exception text in the guest stream | The default `register fail` or `instruction fail` delivered an exception ([unsupported]) | D1 (`abort` names the register) |
 | STAMP lines with identical `cycles=` and `bytes=` for two labels | The markers arrived in one chunk (pl011 batching or pty chunking) | Not a failure. The later label's time is an upper bound shared with the earlier one; record |
@@ -1149,10 +1130,10 @@ Each row is keyed on the last distinctive line in the black box, `/dev/shmem`-de
 | Observable | Meaning | Next step |
 |---|---|---|
 | Banner present, no `g_srv`, and the guest text holds `server: open(/dev/vcon2): …`, `server: cio_set_raw(…)`, or no vcon2 | The second `devc-virtio` failed natively (C9) | IPC will fail; record; owner decision before the next rung (R2 after R1, T1 after Q) |
-| Banner present, no `g_srv`, and no server error line; the readiness line is absent or interleaved with another guest line | The server's unsynchronised print was broken or not yet written (§4.1; seen once on TCG) | Not a failure: §8 item 8 decides. Record the guest text around `=== starting qnx-echo-server` |
+| Banner present, no `g_srv`, and no server error line; the readiness line is absent or interleaved with another guest line | The server's unsynchronised print was broken or not yet written (§4.1) | Not a failure: §8 item 8 decides. Record the guest text around `=== starting qnx-echo-server` |
 | `g_srv` stamped after `g_startup_complete`, after `banner`, or after `ipc_start` | The background server reached its print late (R37) | Not a failure. Record the signed offsets (§4.6). If it came after `ipc_start`, read it alongside the client's first-exchange lines |
 | `client: open(/dev/ttyp0): …` or `cio_set_raw` error | Problem with pty pair 0 | As the preflight row |
-| `client: iter N: read timeout; sentinel-kick round` then `recovered real echo`, and `rc=0` | The known stall occurred and was recovered | Completed with recovery (§4.4); record the counts |
+| `client: iter N: read timeout; sentinel-kick round` then `recovered real echo`, and `rc=0` | A stall occurred and was recovered | Completed with recovery (§4.4); record the counts |
 | `client: unrecoverable stall at iter N` or `sentinel-recovery exhausted`, `rc=1` | The link stalled beyond recovery | IPC criterion fails for this run |
 | `BWAIT run prog=qnx-host-client … killed=1` | The client outlived 240 s, most likely in its unbounded write | IPC fails; record |
 | `client: echo seq mismatch at iter N` with both frame dumps | Alignment corruption (client.c:357-370) | IPC fails; record the bytes |
@@ -1192,13 +1173,13 @@ Each row is keyed on the last distinctive line in the black box, `/dev/shmem`-de
 4. **Integrity and disk:** `M3 CHECK md5_pre guest ok`, `M3 CHECK md5_pre disk ok`, `M3 CHECK md5_pre conf ok`, `M3 CHECK disk_copy ok`, `BWAIT path hit=/dev/qvmdisk0`.
 5. **The number:**
    - `STAMP qvm_launch cycles=<a> cps=31250000 cpu=<c> …` and `STAMP banner cycles=<b> cps=31250000 cpu=<c> …` with b > a;
-   - the guest stream printed in S12 contains a line matching `QNX qnx-guest 8[.]0[.]0 .*ARMv8_Foundation_Model aarch64le`, the TCG banner (`windows-qhv-tcg-boot-timed1.log:121`).
+   - the guest stream printed in S12 contains a line matching `QNX qnx-guest 8[.]0[.]0 .*ARMv8_Foundation_Model aarch64le`.
 6. **Guest phases:** `g_first`, `g_devb`, `g_net`, `g_ifup`, `g_sshd`, `g_misc`, `g_startup_complete` stamped with non-decreasing `cycles=` in that order, each at or below `banner`.
-   - **Why the order is safe to check.** The guest fixes it: each of these lines comes from a foreground step of one script chain (qhvg/ifs.build:57-61; qhvg/startup.sh:9-69; qhvg/start_net.sh:3). Needles first found in the same chunk share that chunk's reading (§3.8.1). The chain held in all 12 TCG captures (§4.1).
+   - **Why the order is safe to check.** The guest fixes it: each of these lines comes from a foreground step of one script chain (qhvg/ifs.build:57-61; qhvg/startup.sh:9-69; qhvg/start_net.sh:3). Needles first found in the same chunk share that chunk's reading (§3.8.1).
    - A missing `g_ifup`, `g_sshd` or `g_misc` is recorded as an anomaly with the guest text. The headline stands, provided criterion 5 holds.
    - **`g_srv` is recorded, never gated** (revision 2). This covers both its presence and its order.
      - The guest starts the server in the background and never waits for its line.
-     - One TCG run lost the line to interleaving while its IPC completed cleanly (§4.1, R37).
+     - Another console writer can interleave with the line (§4.1, R37).
      - In Q and T1-T5, item 8 is the evidence that the server was up.
      - The offsets, or `g_srv absent`, go in the run note (§4.6).
 7. **qvm alive through IPC:**
@@ -1238,29 +1219,29 @@ Each row is keyed on the last distinctive line in the black box, `/dev/shmem`-de
 
 | # | Assumption | Class | Answered by |
 |---|---|---|---|
-| R1 | `kexec_file_load` places the ~169 MB kimg at 0x80080000, the span being free in memblock | HYPOTHESIS (upstream v5.15 walk, NATIVE_QVM_HOST K3; placement VERIFIED only for 2.7 MB images) | P0 step 5 if dynamic debug exists; R0 (no `BAD-LANDING`); K1 otherwise |
+| R1 | `kexec_file_load` places the ~169 MB kimg at 0x80080000, the span being free in memblock | HYPOTHESIS (upstream v5.15 walk, NATIVE_QVM_HOST K3; the placement of earlier, much smaller kimgs is in the M0-M2 records, held locally) | P0 step 5 if dynamic debug exists; R0 (no `BAD-LANDING`); K1 otherwise |
 | R2 | Linux shutdown and relocation of ~169 MB finish in reasonable time | UNKNOWN | R0 return time |
 | R3 | M3 fits `-m992M` with ~111 MiB of headroom | HYPOTHESIS (§3.5) | R0 `M3 MEM disk` (G-MEM); R1 `M3 MEM banner`, no `rc=64` |
-| R4 | `-P4` under el2-host boots: a subset of M1b R2's six cores, never run as such | HYPOTHESIS | R0; C1 |
+| R4 | `-P4` under el2-host starts correctly: a CPU set never run as such (M1b used `-P1` and `-P6`) | HYPOTHESIS | R0; C1 |
 | R5 | `[+raw]` keeps the guest IFS and disk byte-identical inside our IFS | VENDOR_CLAIM ([mkifs]) | Generator step 14 (VERIFIED at build time) |
 | R6 | Runtime libraries needed by qvm, the vdevs, devb-loopback, slogger2 and our tools are in the image | UNKNOWN (not readable under the licence) | R0 (devb-loopback, slogger2, tools); R1 (qvm, vdevs) |
-| R7 | devb-loopback returns to the shell, as on TCG | VERIFIED on TCG (post_start.custom:31-32); native HYPOTHESIS | R0. If not, only the 900 s guard bounds it |
+| R7 | devb-loopback returns to the shell | HYPOTHESIS (the cloud host's script runs it in the foreground and continues, post_start.custom:31-32) | R0. If not, only the 900 s guard bounds it |
 | R8 | QNX 8 ksh supports the §3.7 constructs: functions, `read -r`, `${x#…}` and `${x%%…}`, subshell redirection, `&`, `!`, `\|\|` groups | HYPOTHESIS | R0 |
 | R9 | toybox `cp`, `cmp`, `md5sum`, `head -c`, `tail -c`, `wc -c`, `grep -q` and `grep -E` behave as standard toybox | VENDOR_CLAIM (applets listed in the QNX-generated build, qhvh/system.build:131-204) | R0 |
 | R10 | devc-pty provides pair 1, and a master `read` returns EOF once the slave's writers close | VENDOR_CLAIM (8 pairs, [devc-pty]); EOF UNKNOWN | R0 (`STAMP eof` after `cat` exits); R1 teardown |
-| R11 | qvm's pl011 output to a tty stdout arrives without batching | HYPOTHESIS (TCG observation, C6) | R1: distinct `cycles=` and `bytes=` per label |
-| R12 | The reader's latency is small against the interval | HYPOTHESIS | R1/Q: `banner − g_startup_complete` (one `uname`) against TCG's 0-110 ms; the `mono_ns` cross-check |
-| R13 | Host `ClockCycles()` reads one counter on every core while qvm programs guest offsets | VENDOR_CLAIM (Arm ARM, E2H and TGE); `cntvoff` 0 at M1b (m1b-runs.md:111) | `cpu=` and `mono_ns` on every STAMP line |
-| R14 | qvm arms stage-2, the virtual GIC (list registers, maintenance INTID 25) and the guest's EL1 virtual timer (INTID 27, which ticked natively under `-Q disable`, m1b-runs.md R0) on A78AE under our startup | HYPOTHESIS / UNKNOWN (plan §8 #5) | R1; D1 |
+| R11 | qvm's pl011 output to a tty stdout arrives without batching | HYPOTHESIS (C6) | R1: distinct `cycles=` and `bytes=` per label |
+| R12 | The reader's latency is small against the interval | HYPOTHESIS | R1/Q: `banner − g_startup_complete` (one `uname`) against the TCG segment (held locally); the `mono_ns` cross-check |
+| R13 | Host `ClockCycles()` reads one counter on every core while qvm programs guest offsets | VENDOR_CLAIM (Arm ARM, E2H and TGE) | `cpu=` and `mono_ns` on every STAMP line |
+| R14 | qvm arms stage-2, the virtual GIC (list registers, maintenance INTID 25) and the guest's EL1 virtual timer (INTID 27) on A78AE under our startup | HYPOTHESIS / UNKNOWN (plan §8 #5) | R1; D1 |
 | R15 | Every A78AE system register the guest touches is handled, given the default `register fail` | UNKNOWN ([unsupported]) | R1; D1 |
 | R16 | The shmem vdev is inert for this guest | HYPOTHESIS (C2) | Not tested; O1 |
 | R17 | The guest's `random`, with no `-l` source, is up within 5 s natively | HYPOTHESIS | R1 guest text |
-| R18 | The if_up burn is about 19-20 s by the documented defaults, or short as findings.md infers | CONFLICT (C7) | R1: `g_ifup − g_net` |
+| R18 | The if_up burn is about 19-20 s, by the documented defaults | VENDOR_CLAIM; never measured directly (C7) | R1: `g_ifup − g_net` |
 | R19 | The guest's foreground `io-usb-otg` returns promptly | HYPOTHESIS | R1: `g_startup_complete − g_misc`, less its `sleep 1` |
-| R20 | The two `devc-virtio` instances on one virtio-console cause the stray bytes or stalls | HYPOTHESIS (C9) | Sentinel counts in Q and T1-T5; not settled by M3 |
+| R20 | The two `devc-virtio` instances on one virtio-console cause stray bytes or stalls on the IPC channel | HYPOTHESIS (C9) | Sentinel counts in Q and T1-T5; not settled by M3 |
 | R21 | No stale DMA writer corrupts the window after kexec | HYPOTHESIS (plan §8 #6) | `md5_pre`, `disk_copy` and `md5_post` every run; P1 |
 | R22 | rmmod of the four NVIDIA modules succeeds without an Oops | UNKNOWN | P1 |
-| R23 | The `performance` pin survives the kexec path on cluster 0; the 76.8 MHz grid fit | HYPOTHESIS (§4.3) | P0 step 1 (grid); R0 rate lines (~666 M it/s predicted) |
+| R23 | The `performance` pin survives the kexec path on cluster 0 | HYPOTHESIS (§4.3) | P0 step 1 (available frequencies); R0 rate lines (§4.3 prediction) |
 | R24 | With `-A`, a host-kernel abnormal termination resets | VERIFIED (library) plus VENDOR_CLAIM ([callout_reset]) | Only on a crash |
 | R25 | `sysmgr_reboot()` from the guard resets, even with qvm wedged | UNKNOWN | Only on expiry |
 | R26 | `shutdown -S reboot` resets with devb-loopback running and qvm stopped | HYPOTHESIS | R0 (devb-loopback running); R1 |
@@ -1274,7 +1255,7 @@ Each row is keyed on the last distinctive line in the black box, `/dev/shmem`-de
 | R34 | Pristine against TCG-mutated guest-disk state does not change timing | UNKNOWN | Not tested (O8) |
 | R35 | io-blk's default cache stays within budget | VENDOR_CLAIM ([io-blk]) | R0/R1 MEM lines |
 | R36 | The IPC outer bound of 240 s is enough for a run that recovers | VERIFIED arithmetic (§4.4: ≥10 s per stall; about 61 s for a dead link) | Q, T1-T5 `ms=` |
-| R37 | The echo server's readiness line reaches the host intact, before `Startup complete` | HYPOTHESIS. It held in 11 of 12 TCG captures. The guest does not synchronise it (qhvg/post_startup.sh:29), and `qhv-tcg-rq2-shmem-roundtrip-attempt1-bus-error.log:49-51` lost it to interleaving (§4.1) | Recorded in R1, Q and T1-T5 as the §4.6 offsets; gates nothing (§8 item 6) |
+| R37 | The echo server's readiness line reaches the host intact, before `Startup complete` | HYPOTHESIS. The guest does not synchronise it (qhvg/post_startup.sh:29); the TCG captures that bear on it are held locally (§4.1) | Recorded in R1, Q and T1-T5 as the §4.6 offsets; gates nothing (§8 item 6) |
 
 ---
 
@@ -1302,7 +1283,7 @@ Each row is keyed on the last distinctive line in the black box, `/dev/shmem`-de
 
 **What the IPC result is not**
 - **Not a transport benchmark.** It is 15 timed iterations per run over a pty and virtio-console, quantised to 32 ns.
-- **Not a verdict that the ~1-2 % stall is or is not a TCG artefact.** Only the sentinel counts are evidence, and five runs of 15 iterations cannot settle a hazard of that size.
+- **Not a verdict on the stall hazard that the client's sentinel recovery exists for,** on either leg. Only the sentinel counts are evidence, and five runs of 15 iterations cannot settle a low-rate hazard.
 
 **What the host is not**
 - **Not a supported QNX Hypervisor platform,** and not NVIDIA DRIVE OS, the NVIDIA hypervisor stack, QNX OS for Safety or any ASIL or isolation property.
@@ -1322,8 +1303,8 @@ Each row is keyed on the last distinctive line in the black box, `/dev/shmem`-de
 
 | # | Decision | Options | Recommendation and reason |
 |---|---|---|---|
-| O1 | Guest configuration | (a) the as-run four-vdev text with the load path substituted; (b) the committed three-vdev text | **(a).** It is what every timed TCG `qvm_launched → guest_banner` segment ran (C2), and the shmem vdev is inert for this guest. If (b): record "differs from every timed TCG segment by the shmem vdev" |
-| O2 | Host CPUs | (a) `-P4`, cluster 0 only; (b) `-P6` with qvm under `on -R 0xf`; (c) `-P6` unpinned, placement recorded | **(a).** One cpufreq policy, no cluster-1 factor, configuration untouched. (b) depends on UNKNOWN vCPU runmask inheritance ([cpu] documents only `cluster` and `sched`); (c) mixes a roughly 8-12× slower cluster into the spread (C10) |
+| O1 | Guest configuration | (a) the as-run four-vdev text with the load path substituted; (b) the committed three-vdev text | **(a).** It is what every timed TCG `qvm_launched → guest_banner` segment used (C2), and the shmem vdev is inert for this guest. If (b): record "differs from every timed TCG segment by the shmem vdev" |
+| O2 | Host CPUs | (a) `-P4`, cluster 0 only; (b) `-P6` with qvm under `on -R 0xf`; (c) `-P6` unpinned, placement recorded | **(a).** One cpufreq policy, no cluster-1 factor, configuration untouched. (b) depends on UNKNOWN vCPU runmask inheritance ([cpu] documents only `cluster` and `sched`); (c) mixes a second clock domain into the spread (C10) |
 | O3 | `-A` on the startup line | (a) add it to every M3 image; (b) keep M1b's option set | **(a).** A host-kernel abnormal termination under qvm is a new failure class at M3. Without `-A` the reboot callout spins with interrupts masked (lib/aarch64/callout_reboot_psci.S:42-58), which costs a power cycle and the black box. The normal path ignores the flag ([startup_options]) |
 | O4 | DMA quiesce before every kexec | (a) `isolate multi-user.target` plus rmmod of `nvidia_drm nvidia_modeset nvidia nvgpu`, identical every run, after the P1 rehearsal; (b) the M0-M1b hand-over unchanged | **(a).** M3 is the first run that fills most of the window (~~plan:169~~ **2026-09-14:** plan §3.4, K5; forum precedent in research-kexec-tcu.md). The md5 canaries detect corruption but do not prevent it. If P1 shows rmmod failing: (b), recorded on every run |
 | O5 | Governor | (a) `performance` on both policies before kexec; (b) `schedutil` as in M1b | **(a).** Run-to-run consistency, runtime-only; the QNX rate proxy tells whether it held (§4.3) |
@@ -1353,7 +1334,7 @@ Each row is keyed on the last distinctive line in the black box, `/dev/shmem`-de
 - **`orin-native/tools/stamp.c:16-22`.** `/dev/ttyp0` usage examples (C5; §3.8.1).
 - **`ipc-test/qnx-server/server.c:15-16` and `ipc-test/qnx-host-client/README.md:80`.** `/dev/vcon1` is not the guest's pl011 console (C9).
 - **`orin-native/startup/m2.build.in:208-209`.** "cat, ls, echo and cksum are ksh built-ins in QNX 8": unverified, and the QNX-generated guest IFS links `cat` to toybox (qhvg/ifs.build:73).
-- **`docs/findings.md:266-274`.** "the `if_up` burn is short": conflicts with the documented defaults (C7). Update after R1 measures it.
+- **`docs/findings.md`.** Its inference about the `if_up` burn (C7): update after R1 measures it.
 - **`scripts/qhv/extract-ipc-result.sh:52`.** TCG-only notes (§3.9).
 
 ---
@@ -1365,7 +1346,7 @@ Three reviews read revision 1, and all three approved it with changes: one major
 - `orin-native/tools/smpcheck.c`;
 - the guest build files and `ipc-test/qnx-server/server.c`;
 - the plan;
-- the TCG serial captures in `logs/sample-boot/`.
+- the TCG serial captures (held locally).
 
 What did not change:
 - No image, generator step, `bwait` bound, gate or rung.
@@ -1376,7 +1357,7 @@ What did not change:
 |---|---|---|---|---|---|
 | V1 | Review 1 | minor | The §3.7 worst-case terms do not derive from the States table: S2 and S11 are 23 s against "collector 20 s", and S12 is 20 s against 15 s. The banner-plus-IPC block should be 240 + 2 + 240 = 482 s, because the grace wait resolves at once. The corrected total is about 747 s. | **Applied, with a different total.** The 482 s block and the 747 s total are **rejected**. | **The issue holds.** Revision 1's sum could not be traced to the table. S2 and S11 are 20 s: the `rates` workers are started with `&` (§3.7), and the collector returns at its `-T 20` deadline whatever they do (smpcheck.c:1161, :1174). The grace term is 0, as the review says; revision 1 already carried no grace term.<br>**The 245 s term is right.** At its deadline `bwait -k` sends SIGKILL, then polls for up to 5 s more (§3.8.2). So the client costs 240 + 5, and S12's 20 is slog2info's 15 + 5. Revision 1 added that 5 s to those two terms but not to the other four `-k` bounds (S3, S4 twice, S5, S10).<br>**Counted consistently, the sum is 772 s,** against revision 1's written 755 (its terms add to 753) and the review's 747. The Bound column now shows every +5, the settle and the unbounded commands, and a term table derives 772 from it. The margin under the guard is 128 s, or 125 s after `smpcheck -z 3`, against revision 1's 145 s. |
 | V2 | Review 2 | minor | The worst case omits devb-loopback, which runs outside `bwait` and is bounded only by the guard (R7). | **Applied, widened.** | **VERIFIED:** devb-loopback is called plainly (§3.7 script; §3.4 item 3), and R7 already said only the guard bounds it.<br>**Widened:** the same holds for the six `pidin` calls, up to three `slay` calls, the two `stamp -n` writes and the short prints, so caveat 1 names them all.<br>**Found while recomputing V1:** if the grace timer never ran, the grace wait runs to its own 100 s bound, for 872 s in all (caveat 2).<br>The §2 timeline row and the §7 guard row now say the same. §6.5 step 6 already sized its 20-minute give-up from the 900 s guard, so no procedure changed. |
-| V3 | Review 3 | major | §8 item 6 requires `g_srv` and orders it before `g_startup_complete` and `banner`, but the guest starts the server in the background with no synchronisation. A run that delivers the banner and the 15 IPC iterations could fail item 6 and, under "a failed T-run is never replaced", cost the milestone. The plan requires no such order. | **Applied, going beyond the review's first option:** `g_srv` is recorded and never gated, for presence and order alike. | **VERIFIED:**<br>1. The server is started with `&` (qhvg/post_startup.sh:29).<br>2. post_startup.sh is startup.sh's last, synchronous step (qhvg/startup.sh:69).<br>3. The IFS script prints `Startup complete` and runs `uname -a` as soon as that returns (qhvg/ifs.build:57-61).<br>4. The server prints its line only after `open` and `cio_set_raw` (server.c:51-62).<br>5. The plan's pass list names only the banner, the fields and the 15 iterations (plan:377-379).<br>**The evidence goes further than the review.** In 11 of the 12 TCG captures that start this server, its line came before `Process count` and `Startup complete`. In `logs/sample-boot/qhv-tcg-rq2-shmem-roundtrip-attempt1-bus-error.log` it arrived after the post-`sleep 1` echo (:49-51), interleaved byte by byte with `gshm-probe`, so the needle occurs nowhere in the file. That run's client still printed `samples=15` and `sentinel_recoveries=0`, and exited 0 (:61, :64, :66). Revision 1 would have failed that run on presence alone, so moving `g_srv` out of the order check would not have been enough.<br>**What stays checked.** The seven chain needles keep their order check, because the guest fixes their order, and the chain held in all 12 captures (§4.1). §4.1's two `g_srv` segments became one chain segment plus recorded offsets, and R37 records the race. |
+| V3 | Review 3 | major | §8 item 6 requires `g_srv` and orders it before `g_startup_complete` and `banner`, but the guest starts the server in the background with no synchronisation. A run that delivers the banner and the 15 IPC iterations could fail item 6 and, under "a failed T-run is never replaced", cost the milestone. The plan requires no such order. | **Applied, going beyond the review's first option:** `g_srv` is recorded and never gated, for presence and order alike. | **VERIFIED:**<br>1. The server is started with `&` (qhvg/post_startup.sh:29).<br>2. post_startup.sh is startup.sh's last, synchronous step (qhvg/startup.sh:69).<br>3. The IFS script prints `Startup complete` and runs `uname -a` as soon as that returns (qhvg/ifs.build:57-61).<br>4. The server prints its line only after `open` and `cio_set_raw` (server.c:51-62).<br>5. The plan's pass list names only the banner, the fields and the 15 iterations (plan:377-379).<br>**Beyond the review.** Because nothing synchronises the line, another console writer can interleave with it and break the needle, so a run could lose the line entirely while its IPC completes. Moving `g_srv` out of the order check alone would therefore not be enough, because the presence check would remain. The TCG captures that bear on this are held locally (NC QDL v7 4.6(i)).<br>**What stays checked.** The seven chain needles keep their order check, because the guest fixes their order (§4.1). §4.1's two `g_srv` segments became one chain segment plus recorded offsets, and R37 records the race. |
 | V4 | Review 3 | minor | The worst-case sum uses 23 s for S2 and S11 against the table's 20 s. | **Applied** (with V1) | Same evidence as V1: the 3 s busy workers run beside the collector and do not extend its deadline, so each term is 20 s. |
 | S1 | verification (self-found while applying V3) | minor | §6.6's R1 row said "§8 items 1-9 and 12 (boot mode, no IPC)". That contradicts §8's "items 1-7 and 9-12" and includes the IPC item. §8 item 7 also required both `pidin -p qvm` listings, but boot mode skips S8, which prints the second. | **Applied** | The script enters S8 only when `$MODE` is not `boot` (§3.7). §6.6 now cites §8's list, and the §8 R1 line says item 7 needs only the S7 listing. |
 
@@ -1397,11 +1378,11 @@ What did not change:
 
 > **2026-09-17, later: OD9 reversed OD1.** Freeze item 2 is now **QNX plus Linux**, so v1 does carry a QNX guest and M3's original definition is reachable again. This section is kept as written: its reasoning about what a guest-set change costs still holds, because the guest set changed either way, and the sizing caveat stands. Only its conclusion — that M3 must be redefined against the Linux guest — is superseded.
 
-§0 and §1 of this record define M3 against the **cloud-leg QNX guest**: "The host boots the cloud-leg guest IFS ... attached to its unmodified disk image", timed from the qvm launch to that guest's banner. **Nothing above this section is withdrawn.** It is what M3 was, it is what ran on 2026-09-10, and the five timed rounds stand as recorded.
+§0 and §1 of this record define M3 against the **cloud-leg QNX guest**: "The host boots the cloud-leg guest IFS ... attached to its unmodified disk image", timed from the qvm launch to that guest's banner. **Nothing above this section is withdrawn.** It is what M3 was and what ran on 2026-09-10; that run's record is held locally (NC QDL v7 4.6(i)).
 
 **What changed is the architecture around it.** OD1 (2026-09-16) settled freeze gate item 2 as **Linux only**: the QNX Hypervisor is the host and the safety functions run as QNX processes inside it, so reference architecture v1 carries no QNX guest. The campaign, however, was specified to run "the M3 and M4 numbers" on v1. A number defined against a guest that v1 does not have cannot be taken on v1.
 
-**Redefinition, per the owner's instruction to follow OD1.** M3's campaign measurement is the qvm launch to the **Linux guest's** first console output, on v1's guest set. M3's 2026-09-10 figures keep their A4 label and are not re-run for their own sake.
+**Redefinition, per the owner's instruction to follow OD1.** M3's campaign measurement is the qvm launch to the **Linux guest's** first console output, on v1's guest set. M3's 2026-09-10 run keeps its A4 label (its record is held locally) and is not re-run for its own sake.
 
 **The cost, stated because it is not free.** The plan's sizing caveat applies: "If v1 changes the host image, the CPU set or the guest set, r0's and r1's sizing records go stale. The campaign then runs its own sizing rungs on v1." Changing the guest set does exactly that.
 

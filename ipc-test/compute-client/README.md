@@ -12,7 +12,8 @@ in the KVM guest, then prints the verdict.
 **This source was not committed when the service ran.** The 2026-09-18 commit
 added the monitor, console logs and the findings entry, and described the client
 only in prose. It was recovered from the board on 2026-09-23 and committed as
-found. What can and cannot be tied to the published run:
+found. What can and cannot be tied to that day's run (its record is held
+locally under NC QDL v7 4.6(i)):
 
 | artefact | sha256 | mtime on the board |
 |---|---|---|
@@ -22,7 +23,7 @@ found. What can and cannot be tied to the published run:
 
 - The binary is 23 s younger than the source and the engine 32 s younger than
   the binary, consistent with a build-then-run on the day. **That is timing
-  evidence, not proof** that this exact source produced the published verdicts.
+  evidence, not proof** that this exact source produced that day's verdicts.
 - **How `mnist.engine` was built is not recorded.** NVIDIA ships `mnist.onnx`
   beside the sample images in `/usr/src/tensorrt/data/mnist/`, and `trtexec` is
   present; the command, precision and builder flags used are unknown. Engines are

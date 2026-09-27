@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""tjphase_report.py OUT N WARMUP -- run-tjphase.sh's test: does the slow window move
-with tj-thermal's poll? (Phase 3b / A6, 2026-09-24), by the rule its header fixed
-before any run.
+"""tjphase_report.py OUT N WARMUP -- run-tjphase.sh's test: does a slow window, if
+any, move with tj-thermal's poll? (Phase 3b / A6, 2026-09-24), by the rule its header
+fixed before any run.
 
 For every round whose trace holds exactly WARMUP + N requests (frames into the tap of
 the round's most common length), the k-th request is the probe's k-th exchange; timed

@@ -2080,13 +2080,12 @@ def test_monitor_banners_the_harnesses_grep_are_pinned(native_servers, tmp_path)
 #
 # payload[24] = 1 is a vision-language model's digit claim. The layout, the
 # rules and their order are documented in monitor.c's header and check_vlm().
-# The defaults below are an honest SmolVLM-500M claim as the 2026-09-23
-# characterisation measured one: 269.3 ms of prompt (image encode included),
-# 12.5 ms of generation, 281.8 ms in all -- far over the mnist kind's 100 ms,
-# well under the vlm kind's 1 s.
+# The defaults below are a synthetic claim shaped like an honest SmolVLM-500M one: prompt time (image
+# encode included) plus generation time, a total over the mnist kind's 100 ms
+# bound and under the vlm kind's 1 s.
 
-def _vlm_claim(seq, cls=3, conf=95, model=1, prompt_us=269300, gen_us=12500, total=None,
-               kind=1, prompt_n=162, gen_n=2, wall_us=309900, mass_ppm=999999):
+def _vlm_claim(seq, cls=3, conf=95, model=1, prompt_us=250000, gen_us=10000, total=None,
+               kind=1, prompt_n=150, gen_n=2, wall_us=300000, mass_ppm=999999):
     f = bytearray(_probe_mod().build_frame(seq))
     p = 16
     f[p + 0] = cls
@@ -2105,16 +2104,16 @@ def _vlm_claim(seq, cls=3, conf=95, model=1, prompt_us=269300, gen_us=12500, tot
 
 _VLM_RULES = [
     # label,                                          claim fields,                                verdict, reason
-    ("an honest SmolVLM claim, as measured",          {},                                              0, 0),
-    ("at the bound, 1000000 us",                      {"prompt_us": 987500},                           0, 0),
-    ("one over the bound",                            {"prompt_us": 987501},                           1, 4),
+    ("an honest SmolVLM-shaped claim",                {},                                              0, 0),
+    ("at the bound, 1000000 us",                      {"prompt_us": 990000},                           0, 0),
+    ("one over the bound",                            {"prompt_us": 990001},                           1, 4),
     ("class 10",                                      {"cls": 10},                                     1, 1),
     ("conf 101",                                      {"conf": 101},                                   1, 2),
     ("conf 60, which is CONF_MIN",                    {"conf": 60},                                    0, 0),
     ("conf 59",                                       {"conf": 59},                                    1, 3),
     ("model 2 has no measured bound",                 {"model": 2},                                    1, 6),
     ("model 0",                                       {"model": 0},                                    1, 6),
-    ("a total that is not the sum of its parts",      {"total": 281801},                               1, 7),
+    ("a total that is not the sum of its parts",      {"total": 260001},                               1, 7),
     ("a sum that would wrap in 32 bits",              {"prompt_us": 0xFFFFFFFF, "gen_us": 1, "total": 0}, 1, 7),
     # The order: the first failing check names the reason.
     ("class before model",                            {"cls": 10, "model": 2},                         1, 1),
@@ -2139,9 +2138,9 @@ def test_vlm_claim_rules(udp_monitor, label, fields, verdict, reason):
 
 
 def test_an_honest_vlm_time_is_why_the_kind_exists(udp_monitor):
-    # The same honest 281.8 ms under the mnist kind is rejected on time alone:
-    # the 2026-09-18 contract was written for a 0.1 ms CNN. That is the whole
-    # reason a VLM claim needs a kind of its own.
+    # The same honest claim under the mnist kind is rejected on time alone: the
+    # 2026-09-18 contract, with its 100 ms bound, was written for a small CNN.
+    # That is the whole reason a VLM claim needs a kind of its own.
     port, _ = udp_monitor
     mnist = bytearray(_vlm_claim(400))
     mnist[16 + 24] = 0
@@ -2187,7 +2186,7 @@ def test_vlm_claims_cross_the_shm_transport_unchanged(native_servers, tmp_path):
         out, err = p.communicate(timeout=10)
     out = out.decode()
     assert "shm done: seen=3 accepted=1 rejected=2 jumps=0" in out, (out, err)
-    assert "monitor: REJECT seq=2 kind=vlm model=2 class=3 conf=95 us=281800 reason=vlm-model-unbounded\n" in out, out
+    assert "monitor: REJECT seq=2 kind=vlm model=2 class=3 conf=95 us=260000 reason=vlm-model-unbounded\n" in out, out
     assert "monitor: REJECT seq=3 class=42 conf=95 us=124 reason=class-out-of-range\n" in out, out
 
 
@@ -2198,7 +2197,7 @@ def test_probe_vlm_frame_is_the_kind1_layout_and_the_mnist_frame_is_unchanged():
     f = lp.build_vlm_frame(9)
     assert len(f) == 64 and f[:8] == (9).to_bytes(8, "little") and f[8:16] == bytes(8)
     p = f[16:]
-    assert p[0] == 3 and p[1] == 100 and int.from_bytes(p[2:6], "little") == 269484 + 12548
+    assert p[0] == 3 and p[1] == 100 and int.from_bytes(p[2:6], "little") == 250000 + 10000
     assert p[6] == 0 and p[7] == 0 and p[8:24] == bytes(16)
     assert p[24] == 1 and p[25] == 1
     assert int.from_bytes(p[30:34], "little") + int.from_bytes(p[34:38], "little") == \
@@ -2242,25 +2241,25 @@ def _vlm_client_mod():
     return m
 
 
-# An ask() result as the 2026-09-23 characterisation measured one (digit 3).
-_MEASURED = {"answer": 3, "p_answer": 0.9998, "digit_mass": 0.99999861, "prompt_n": 162,
-             "predicted_n": 2, "prompt_ms": 269.484, "predicted_ms": 12.548, "wall_ms": 309.9}
+# An ask() result for digit 3, in the shape vlm_request.ask() returns.
+_ASKED = {"answer": 3, "p_answer": 0.999, "digit_mass": 0.999999, "prompt_n": 150,
+          "predicted_n": 2, "prompt_ms": 250.0, "predicted_ms": 10.0, "wall_ms": 300.0}
 
 
 def test_vlm_client_packs_the_frame_monitor_c_documents():
     vc = _vlm_client_mod()
-    f = vc.claim_fields(_MEASURED)
-    assert f["total_us"] == f["prompt_us"] + f["gen_us"] == 269484 + 12548, \
+    f = vc.claim_fields(_ASKED)
+    assert f["total_us"] == f["prompt_us"] + f["gen_us"] == 250000 + 10000, \
         "the total must be the integer sum of the rounded parts, or the monitor rejects it"
     fr = vc.pack(f, 5)
     assert len(fr) == 64 and fr[:8] == (5).to_bytes(8, "little") and fr[8:16] == bytes(8)
     p = fr[16:]
-    assert p[0] == 3 and p[1] == 100 and int.from_bytes(p[2:6], "little") == 282032
+    assert p[0] == 3 and p[1] == 100 and int.from_bytes(p[2:6], "little") == 260000
     assert p[6] == 0 and p[7] == 0 and p[8:24] == bytes(16), "verdict, reason and section 3.3 left zero"
     assert p[24] == 1 and p[25] == 1
-    assert int.from_bytes(p[26:28], "little") == 162 and int.from_bytes(p[28:30], "little") == 2
-    assert int.from_bytes(p[30:34], "little") == 269484 and int.from_bytes(p[34:38], "little") == 12548
-    assert int.from_bytes(p[38:42], "little") == 309900 and int.from_bytes(p[42:46], "little") == 999999
+    assert int.from_bytes(p[26:28], "little") == 150 and int.from_bytes(p[28:30], "little") == 2
+    assert int.from_bytes(p[30:34], "little") == 250000 and int.from_bytes(p[34:38], "little") == 10000
+    assert int.from_bytes(p[38:42], "little") == 300000 and int.from_bytes(p[42:46], "little") == 999999
     assert p[46:48] == bytes(2)
     with pytest.raises(ValueError):
         vc.pack(f, 0xFFFFFFFFFFFFFFFF)
@@ -2287,9 +2286,9 @@ def test_vlm_client_claims_meet_the_monitor_over_tcp(native_servers):
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
         _t.sleep(0.3)
-        honest = vc.claim_fields(_MEASURED)
+        honest = vc.claim_fields(_ASKED)
         got = vc.exchange("127.0.0.1", port, vc.pack(honest, 1))
-        assert (got[16 + 6], got[16 + 7]) == (0, 0), "the honest measured claim must ACCEPT"
+        assert (got[16 + 6], got[16 + 7]) == (0, 0), "the honest claim must ACCEPT"
         for i, (how, (_what, want)) in enumerate(sorted(vc.CORRUPTIONS.items())):
             got = vc.exchange("127.0.0.1", port, vc.pack(vc.corrupt(honest, how), 10 + i))
             assert (got[16 + 6], got[16 + 7]) == (1, want), \
@@ -2682,7 +2681,7 @@ def _camera_run(tmp_path, claims, console_extra=None, drop=()):
             con.append("monitor: LIVENESS MISS: no claim for 2001 ms since seq=%d (deadline 2000 ms, miss 1)" % prev[0])
             con.append("monitor: LIVENESS RESTORED: seq=%d after %d ms without a claim" % (seq, (ts - prev[2]) * 1000))
         if v == "REJECT":
-            con.append("monitor: REJECT seq=%d kind=vlm model=1 class=3 conf=41 us=282000 "
+            con.append("monitor: REJECT seq=%d kind=vlm model=1 class=3 conf=41 us=260000 "
                        "reason=confidence-below-threshold" % seq)
             con.append("monitor: client done: seen=1 accepted=0 rejected=1")
         else:

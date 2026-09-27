@@ -26,8 +26,8 @@
 #                                                        plus Linux, so B5 is owed. D14's limit is
 #                                                        derived: 0x8E000000 (see the geometry gate).
 #                                                        2026-09-17: built on the OD7-regenerated
-#                                                        guest; B5 ran on the board and passed
-#                                                        (pass item 3, completion only).
+#                                                        guest; B5's board record is held locally
+#                                                        (pass item 3 is completion only).
 #   s1-j1      the same                                  J6 (revision 3, §15.4.8): host mode with memcanary-w
 #                                                        and a large hold in place of B2's allocation; never a pass run
 # With no names the board form does the first five, in that order; s1-q2 and s1-j1
@@ -199,12 +199,12 @@ CANARY_C1_BASE=0xBD000000     # §3.3; a --q2-limit may not reach it
 #
 # 0x8E000000 is chosen as a tight cap that satisfies the rule, not as the rule's ceiling:
 # 16.01 MiB above the projected end. mkifs padding is not knowable beforehand, and size_check
-# OVER-estimates: on m4 r0 it named an end of 0x8a738d82 against a real 0x8a5e9ccc, 1,372,342 B
-# high (results/orin-native-port/20260916T1500Z/m4/m4-r0-rebuild.log, its size-check and
-# geometry lines). 2026-09-17: s1-q2's own build is the second measured precedent and agrees --
-# size_check named 0x8d142d87 against a real 0x8cffe804, 1,394,051 B high, within 22 KB of m4's
-# 1,372,342. So a limit clearing only the real end can still be refused at step 10, and
-# 16 MiB covers an order more error than the single precedent shows. It leaves 752 MiB below
+# OVER-estimates the real end. Two builds are the precedents: an m4 r0 rebuild (record
+# `20260916T1500Z`, held locally: its size-check and geometry lines) and s1-q2's own build
+# (2026-09-17, also held locally); their figures stay in those records (NC QDL v7 4.6(i)).
+# So a limit clearing only the real end can still be refused at step 10, and 16 MiB is
+# meant to cover an order more error than those precedents show.
+# It leaves 752 MiB below
 # c1 -- 2.8x the STRICTER reading's non-guest requirement, 3.2x the looser one. The stricter
 # figure is the one that binds, and is the one quoted. A looser limit would be a weaker gate,
 # not a safer one.

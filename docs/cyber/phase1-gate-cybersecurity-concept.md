@@ -25,11 +25,11 @@ implemented on the as-built TCG leg, it is marked
 
 ### 1.1 What this concept addresses
 
-The as-built Phase-1 cloud leg (per the 2026-06-11 findings entry) is a
-**QNX host running QHV (`qvm`) that boots a QNX guest under QEMU-TCG**,
-on the **local Windows machine** (which is build host *and* runtime host
-in this leg), with **networking inert** and **no Linux guest, no KVM, no
-AWS**. The new attack surface is the **`qvm` software TCB** and its
+The as-built Phase-1 cloud leg (per the 2026-06-11 findings entry) is
+configured as a **QNX host running QHV (`qvm`) hosting a QNX guest under
+QEMU-TCG**, on the **local Windows machine** (which is build host *and*
+runtime host in this leg), with **no network configured** and **no Linux
+guest, no KVM, no AWS**. The new attack surface is the **`qvm` software TCB** and its
 config / image / boot-time-crypto inputs — *not* the `br0` bridge of the
 TARA body.
 
@@ -49,12 +49,8 @@ one or more TCRs against each:
 
 - TARA gate addendum AA–AH: boundary delta, assets A12–A17, threats
   T29–T34, risk table AE, open questions OQ-11…OQ-16.
-- Evidence:
-  [../../logs/sample-boot/qhv-tcg-host-and-guest-boot.log](../../logs/sample-boot/qhv-tcg-host-and-guest-boot.log)
-  — the `PRNG is not seeded` / `Could not initialize entropy` /
-  `Unable to access /dev/random` lines on **both** host and guest,
-  `---> Starting sshd` reached anyway, and
-  `[g2.conf:9] Failed to arm a resource manager: Function not implemented`.
+- The as-built boot log `qhv-tcg-host-and-guest-boot.log` is held locally
+  (NC QDL v7 4.6(i)); this concept cites no outcome from it.
 - [security-model.md](../security-model.md) §3 secure-boot gap table
   (currently "Guest IPL signature check: No") and §4 NCEULA audit.
 
@@ -72,13 +68,13 @@ one or more TCRs against each:
   has nowhere to root a hardware-backed signature chain. The verification
   *logic* (TCR-IMG-001, TCR-CFG-001, TCR-SB-001) is specifiable now; the
   *anchor* (Tegra fuses / measured boot) is **study-only** until Phase 3.
-- **Remote-exploit latency of T31.** Networking is inert in this leg, so
-  the *remote* path of T31 is latent — but the **defect is present in the
-  image now** and goes live the instant networking comes up, so the
-  entropy TCR is written as a Phase-1 requirement, not deferred.
+- **Remote-exploit latency of T31.** No network is configured in this
+  leg, so the *remote* path of T31 is latent — but the threat goes live
+  the instant networking comes up, so the entropy TCR is written as a
+  Phase-1 requirement, not deferred.
 
-> **2026-09-11 note.** Real EL2 now exists natively: Phase 3b runs `qvm` on
-> the Orin, entered by kexec from L4T
+> **2026-09-11 note.** Phase 3b places `qvm` at real EL2 natively on the
+> Orin, entered by kexec from L4T
 > ([orin-native-port-plan.md](../orin-native-port-plan.md), architecture
 > A4). That plan does no SMMU work (its §7 item 3), rules out reflash and
 > UEFI-variable writes on its primary path (its §1 non-goals), and runs
@@ -112,7 +108,7 @@ not booted**. The **vdev/EL2 boundary (A14/A15)** is hardened by
 config- or guest-driven host fault degrades into a clean, observable
 refusal rather than an ambiguous wedge. Finally, **entropy/PRNG state
 (A17) is treated as a first-class security asset**: because it seeds host
-*and* guest crypto and is observably failing at `sshd` start, the
+*and* guest crypto at `sshd` start, the
 concept makes a **seeded-PRNG precondition a hard gate** in front of
 every key-generating/key-using service, failing those services *secure*
 (not starting) rather than letting them emit predictable keys. The
@@ -152,9 +148,8 @@ not a hardware-isolated, attested system — that is Phase 3's job.
 
 ### 3.1 Entropy / boot-time crypto — **T31** (Cybersecurity Goal: no key-using service ever runs against an unseeded PRNG)
 
-> **This is the load-bearing TCR of this concept** — T31 is the only
-> *concretely evidenced* defect in either Phase-1 gate addendum (cyber or
-> FuSa NF-5). FuSa-Design cites **TCR-ENT-001** as a precondition for
+> **This is the load-bearing TCR of this concept** (T31 ≡ FuSa NF-5).
+> FuSa-Design cites **TCR-ENT-001** as a precondition for
 > integrity-based safety mechanisms. The ID is fixed and must not be
 > renumbered.
 
@@ -175,8 +170,7 @@ full strength** from a valid entropy source. If sufficient entropy is
 service SHALL **fail secure**: it SHALL NOT start and SHALL NOT generate,
 load, or use any key, and the condition SHALL be logged as a security
 event. The system SHALL NOT fall back to starting `sshd` against an
-unseeded PRNG (the exact behaviour observed in the boot log:
-`PRNG is not seeded` immediately followed by `---> Starting sshd`).
+unseeded PRNG.
 
 **Mechanism spec.**
 - *What it does.* Inserts an explicit gate between "entropy
@@ -192,9 +186,7 @@ unseeded PRNG (the exact behaviour observed in the boot log:
   absence of `sshd` is observable rather than silent. The boot may
   continue for non-key services; **only** key-using services are
   withheld.
-- *Entropy provisioning (answers OQ-13).* On this qemu-virt build the
-  default source fails: `devr-virtio.so` is **rejected** as an entropy
-  source and `/dev/random` is inaccessible. The required posture, in
+- *Entropy provisioning (answers OQ-13).* The required posture, in
   priority order:
   1. Provide a **working entropy source** before the gate — preferred:
      a virtio-rng / paravirtual RNG vdev presented by `qvm` to the
@@ -282,11 +274,9 @@ unvalidated config.
   emitted file is diffed/validated against that template before use.
 - *When it triggers.* At host boot, between config generation and
   `qvm @g2.conf`.
-- *Why it matters here.* The boot log already shows a config directive
-  reaching a privileged host path and faulting
-  (`[g2.conf:9] Failed to arm a resource manager`) — concrete evidence
-  that `g2.conf` directives reach privileged code and can fail there.
-  Validation bounds *which* directives can ever be emitted.
+- *Why it matters here.* By design, `g2.conf` directives reach
+  privileged host code and can fail there. Validation bounds *which*
+  directives can ever be emitted.
 - *Key-management / integrity story.* On this leg, integrity is by
   **construction + schema validation** (the config is generated locally
   from a pinned template, then checked). Cryptographic **signing** of
@@ -375,9 +365,9 @@ guest image.)
 | **Allocated component** | qvm host bring-up path; `post_start.custom`; the resource-manager arm step |
 | **Allocated mechanism** | Fail-deterministic + healthcheck + signalled degradation |
 
-**Requirement text.** A failure on the qvm host bring-up path — concretely
-the evidenced `[g2.conf:9] Failed to arm a resource manager: Function not
-implemented` — SHALL resolve to a **deterministic, signalled state**: the
+**Requirement text.** A failure on the qvm host bring-up path — for
+example a resource manager that fails to arm for a `g2.conf` directive —
+SHALL resolve to a **deterministic, signalled state**: the
 host SHALL either (a) bring the guest partition up cleanly, or (b) refuse
 and emit an explicit "guest partition unavailable" security/health event,
 but SHALL NOT enter an **ambiguous partially-armed state** where the guest
@@ -390,12 +380,11 @@ incidental log text).
   success/failure check and a post-launch healthcheck of the guest
   partition's expected vdevs, so a missing arm is caught rather than
   tolerated.
-- *Root-cause coordination (answers OQ-16).* The evidenced failure is
-  ambiguous between (i) a **config-robustness** issue (a `g2.conf`
-  directive that should never have been emitted — bounded by TCR-CFG-001)
-  and (ii) a **build-completeness** issue (a missing package / unimplemented
-  resource manager on this SDP build, cf. the 2026-06-10
-  `target.qemuvirt` finding). This TCR requires the failure be *handled
+- *Root-cause coordination (answers OQ-16).* Such a failure can come from
+  (i) a **config-robustness** issue (a `g2.conf` directive that should
+  never have been emitted — bounded by TCR-CFG-001) or (ii) a
+  **build-completeness** issue (a missing package / unimplemented
+  resource manager on a given SDP build). This TCR requires the failure be *handled
   deterministically* regardless of which root cause; the build-completeness
   fix is a build-host action, not a runtime control.
 - *Key-management story.* None — this is an availability/integrity-of-
@@ -495,7 +484,7 @@ host image **unsigned/unmeasured** on the TCG leg.
 | **T30 hardware isolation** | The vdev/EL2 partition boundary cannot be demonstrated as a *real* isolation boundary; TCG emulates EL2 on a laptop with no RoT, no measured boot, no hardware partitioning, no timing fidelity. TCR-HYP-001 hardens the *software* surface (least-vdev) but the isolation guarantee is **accepted residual TCB risk**. | A genuine isolation argument needs silicon EL2 + a hardware RoT in scope. Neither exists on this leg. | **Phase 3 (Orin / real silicon)** — fuzz/audit the vdev backend against real EL2. |
 | **Trust anchor for signing** (TCR-CFG-001, TCR-IMG-001, TCR-SB-001) | The verification keys live in the (mutable) host image; no rooted chain. Defeats guest-only tampering, not a full build-host compromise (T28). | No-RoT TCG leg has nowhere to root a hardware-backed chain. | **Phase 3** — Tegra-fuse-rooted measured boot. |
 | **HSM-backed key custody** (sshd host key, config/image signing keys) | Keys are file-based / ephemeral on a consumer Windows account; inherits T26 ACL weakness. | No HSM / hardware key store on this leg. | Real programme — HSM / fused key slots. |
-| **T31 remote-exploit path** | The *defect* (unseeded crypto at sshd start) is present **now** and addressed **now** by TCR-ENT-001 — *not* deferred. Only the *remote reachability* is latent because networking is inert. | Networking did not come up in this leg. | The instant networking comes up — hence the TCR is a Phase-1 requirement. |
+| **T31 remote-exploit path** | The *threat* (unseeded crypto at sshd start) is addressed **now** by TCR-ENT-001 — *not* deferred. Only the *remote reachability* is latent, because no network is configured. | No network is configured in this leg. | The instant networking comes up — hence the TCR is a Phase-1 requirement. |
 
 **Stated plainly:** T30's hardware-isolation claim is the one residual
 this concept cannot retire on the TCG leg. It is **assigned to Phase 3**.

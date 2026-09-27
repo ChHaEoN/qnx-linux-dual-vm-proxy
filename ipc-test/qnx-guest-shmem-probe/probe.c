@@ -65,13 +65,12 @@ int main(void)
         return 1;
     }
 
-    /* RUNTIME-SPIKE finding (2026-07-28, this session): a block memcpy()
-     * into factory->name took a Bus error. The factory page is an
-     * MMIO-trapped virtual-register file (unlike the shared DATA region,
-     * which is ordinary guest-physical RAM and memcpy-safe below) -- qvm's
-     * MMIO trap decoder evidently does not accept whatever wide/vector
-     * store instruction the libc memcpy() picked for a 32-byte copy. Write
-     * the name byte-by-byte instead, forcing single-byte volatile stores. */
+    /* The factory page is an MMIO-trapped virtual-register file (unlike
+     * the shared DATA region, which is ordinary guest-physical RAM), so
+     * every store to it must be one the trap decoder can emulate, and a
+     * libc memcpy() may pick wide or vector stores for a 32-byte copy.
+     * Write the name byte-by-byte instead, forcing single-byte volatile
+     * stores. */
     char namebuf[GUEST_SHM_MAX_NAME];
     memset(namebuf, 0, sizeof namebuf);
     strncpy(namebuf, REGION_NAME, sizeof namebuf - 1);
@@ -111,10 +110,8 @@ int main(void)
     /* Byte-wise, not memcpy(), for the same reason as the factory->name
      * write above -- even though the docs describe the data area as
      * ordinary shared guest-physical RAM (unlike the factory page's
-     * virtual registers), this session has exactly one real boot-cycle
-     * budget left after the factory-page Bus error, so the data area gets
-     * the same defensive treatment rather than re-risking a second crash
-     * on an untested code path. */
+     * virtual registers), the data area gets the same defensive treatment
+     * rather than risking a crash on an untested code path. */
     char host_seen[sizeof HOST_PATTERN];
     for (unsigned i = 0; i < sizeof host_seen; i++) {
         host_seen[i] = (char)data[i];

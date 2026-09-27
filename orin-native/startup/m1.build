@@ -1,8 +1,8 @@
 # M1 — the first native QNX image for the Jetson Orin Nano.
 #
-# Phase 3b, docs/orin-native-port-plan.md §6.2. This image has never been built
-# with the real startup and has certainly never run; it is here so the shape of
-# M1 is reviewable before anyone spends a board session on it.
+# Phase 3b, docs/orin-native-port-plan.md §6.2. It is here so the shape of
+# M1 is reviewable before anyone spends a board session on it; what any board
+# session of it showed is held locally (NC QDL v7 4.6(i)).
 #
 # Build it:
 #   startup      orin-native/startup/build-board.sh
@@ -55,10 +55,10 @@
     devc-pty
 
     tcu-cat -m "T234 M1: user space up"
-    # No pipes: an IFS script is not a shell. The first user-space run passed the
-    # '|' and 'tcu-cat' to pidin as arguments ('pidin: | invalid or ambiguous
-    # shorthand'). The pipe was never needed anyway - a script's stdout is the
-    # console, so pidin's output reaches the wire directly.
+    # No pipes: an IFS script is not a shell, so a '|' and 'tcu-cat' after
+    # pidin would reach it as arguments, not as a pipeline. The pipe is not
+    # needed anyway - a script's stdout is the console, so pidin's output
+    # reaches the wire directly.
     pidin info
     pidin
     # A checksum of a known file would have been the cheapest end-to-end proof
@@ -87,9 +87,9 @@
     # session; the session comes when there is a wire to watch it on.
     tcu-cat -m "T234 M1: resetting so the log can be recovered"
     # -S reboot, NOT -b. shutdown's own usage says -b is 'shut down but do not
-    # reboot', equivalent to -S system. The first user-space run used -b, printed
-    # 'It is now safe to reboot your computer' and halted, which cost a power
-    # cycle and the black box with it. -S reboot is the default and reaches the
+    # reboot', equivalent to -S system: a halt, which would cost a power cycle
+    # and the black box with it, since only a warm reset keeps it.
+    # -S reboot is the default and reaches the
     # board's PSCI reset callout, which is warm and keeps the log.
     shutdown -S reboot
 }
@@ -103,9 +103,9 @@ libgcc_s.so.1
 libsecpol.so.1
 # The runtime linker. Every dynamically linked program names /usr/lib/ldqnx-64.so.2
 # as its interpreter, and the link below points that at /proc/boot -- which is
-# worthless unless the file is actually in /proc/boot. The first M1 image had the
-# link and not the file: the kernel came up and every program failed with errno 83,
-# ELIBACC, "can not access shared library".
+# worthless unless the file is actually in /proc/boot. Without the file every
+# dynamically linked program fails to start with errno 83, ELIBACC, "can not
+# access shared library".
 ldqnx-64.so.2
 
 # ours

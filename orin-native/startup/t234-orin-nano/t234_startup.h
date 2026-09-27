@@ -81,7 +81,7 @@
  * the one the driver actually binds.
  *
  * But the M0 hang test showed it does not fire after the kexec hand-over
- * (results/orin-native-port/20260909T1100Z/m0-hang-watchdog.md): a hang needs a
+ * (`m0-hang-watchdog.md`, held locally): a hang needs a
  * power cycle, which also empties the black box. -W stays as insurance and for
  * parity. */
 #define T234_WDT0_BASE      0x02190000u
@@ -224,9 +224,9 @@
 #define T234_AP_PARK_TIMEOUT_S      5
 #define T234_GICR_WAKE_TIMEOUT_S    1
 
-/* CPU0's CNTFRQ_EL0 on this board, 31.25 MHz: the shim's register bank and
- * M1's qtime section both read it (logs/sample-boot/
- * orin-native-m1-reboot-blackbox.log:18 and :50). Used when the syspage value
+/* CPU0's CNTFRQ_EL0 on this board, 31.25 MHz, as the shim's register bank
+ * reads it (`orin-native-m1-reboot-blackbox.log`, held
+ * locally). Used when the syspage value
  * does not exist yet; a secondary's own CNTFRQ_EL0 is never trusted for a
  * deadline, because nothing has shown what firmware leaves in it. */
 #define T234_CNTFRQ_FALLBACK    0x1dcd650

@@ -14,14 +14,14 @@ two sides stay in sync, and how the twin diff is measured.
 > not settled. References to "the v1 campaign" below are the record of what was
 > planned, not a current plan.
 > **2026-09-20:** §1b is new and is the one section to read first if the
-> question is "can a twin be built on the cloud". It can: the byte-identical
-> IFS `26170cd7…` booted under KVM on the Orin and on AWS `a1.metal`, same
-> launch line, so the identical-image invariant holds there for the first time
-> in this project. **It is a design and has not been measured** — both sides
-> are boot arms and no timing was taken on either.
-> **2026-09-11:** §1a and §5 now hold measured results. Under the owner's
-> freeze decision those measurements are architecture-version history. The
-> twin diff runs once, in the v1 campaign
+> question is "can a twin be built on the cloud". On AWS `a1.metal` the
+> byte-identical IFS `26170cd7…` can be given the same KVM launch line as on
+> the Orin, so the identical-image invariant can hold there for the first time
+> in this project. §1b is a design; its run's outcome is held locally.
+> **2026-09-27:** every measured and functional result this document used to
+> quote (§1a, §1b and §5) is held locally under NC QDL v7 4.6(i); what remains
+> is the method. Those measurements are architecture-version history. The
+> twin diff was to run once, in the v1 campaign
 > ([orin-native-port-plan.md](orin-native-port-plan.md#architecture-versions-and-the-measurement-freeze-decided-2026-09-11)).
 > §4 now points there. §6 is still deferred.
 
@@ -43,25 +43,21 @@ substrates:
   ADR-002 found is **non-metal**, not **cloud** — its own words are "Any
   hardware-accelerated partitioner — KVM *or* QHV — needs `*.metal` or real
   silicon". On a bare-metal `a1.metal` that day `/dev/kvm` was present
-  (`Hyp mode initialized successfully`) and a QNX guest booted under
-  `-enable-kvm` to `Startup complete` and its banner, in a matched pair whose
-  control — the SDP's **shipped** `startup-qemu-virt` — still hung at
-  `FOUND GICv3 ITS`. The guest that booted carries a `startup-qemu-virt`
-  **we rebuilt** (`-fno-auto-inc-dec`), which is not a QNX-supported
-  configuration ([findings.md](findings.md) 2026-09-19,
-  [`logs/sample-boot/aws-a1-metal-kvm-fix-crossvendor.log`](../logs/sample-boot/aws-a1-metal-kvm-fix-crossvendor.log)).
-  So an ARM cloud host running these images under KVM is possible again — on
-  `*.metal` only. **2026-09-20: `a1.metal` has now been measured** — it was the
-  second host in the boot comparison of §1b, n=5 timed boots on a byte-identical
-  image. On 2026-09-21 the attribution ladder of A6 ran on `a1.metal` too, over
-  TCP ([record](../results/orin-native-port/20260921T-ladder-a1metal/results.md)),
-  and on 2026-09-22 the Orin's notified-shared-memory ladder: TCP, the D-udp
-  rung, and polled and notified
-  shared memory
-  ([record](../results/orin-native-port/20260922T-a6-a1metal-kick/results.md)).
-  What still does not exist is a cloud *leg* in this
+  (`Hyp mode initialized successfully`), and a QNX guest carrying a
+  `startup-qemu-virt` **we rebuilt** (`-fno-auto-inc-dec`, not a
+  QNX-supported configuration) was run under `-enable-kvm` there, with the
+  SDP's **shipped** `startup-qemu-virt` as the control; the outcome and its
+  log (`aws-a1-metal-kvm-fix-crossvendor.log`) are held locally under NC QDL
+  v7 4.6(i). So KVM on an ARM cloud host is available again — on `*.metal`
+  only. **2026-09-20:** `a1.metal` was the second host in the boot comparison
+  of §1b, n=5 timed boots on a byte-identical image (`20260920T-kvm-twin`,
+  held locally). On 2026-09-21 the attribution ladder of A6 was run on
+  `a1.metal` too, over TCP (`20260921T-ladder-a1metal`, held locally), and on
+  2026-09-22 the Orin's notified-shared-memory ladder: TCP, the D-udp rung,
+  and polled and notified shared memory (`20260922T-a6-a1metal-kick`, held
+  locally). What still does not exist is a cloud *leg* in this
   project's sense, a QHV host plus guest, and QHV cannot run under KVM at all.
-  The §5 figures stay architecture-version history.
+  The §5 records stay architecture-version history.
   Non-metal Graviton still has no `/dev/kvm` (the t4g.small probe stands),
   `c7g.metal` — the closer core match — stays quota-blocked at 64 vCPU, and
   `a1.metal` is Cortex-A72 against the Orin's A78AE, so even a revived pair
@@ -85,7 +81,7 @@ A short table of what crosses the twin boundary:
 | Wire protocol (sequence + timestamp + payload) | **Yes** | Fixed-width binary frame, ~~version-tagged~~ **2026-09-11:** with no version tag (`ipc-test/common/frame.h`; see §3) |
 | Test harness + benchmark scripts | ~~**Yes**~~ **CSV schema only** | ~~Same `run-bench.sh`;~~ output CSV format is identical. **2026-09-11:** No `run-bench.sh` exists. The legs use different programs and launchers. Only the CSV schema is shared (`results/cloud/header.csv`, `results/hw/header.csv`) |
 | QEMU command line (machine/CPU/mem) | **Mostly** | `-machine virt,gic-version=3 -cpu ... -m 1G` shape is shared; see the accel row for the cloud/Orin split |
-| QEMU acceleration | **TCG on both — for two different reasons** | This row previously read "cloud = tcg; Orin = `-enable-kvm` (KVM works on A78AE)". That is **no longer true and should not be quoted**: ~~Orin's KVM boot is blocked by the GICv3 / `KVM_EXIT_ARM_NISV` defect ([orin-port.md](orin-port.md)), so the plain `qnx-safety-vm` leg runs TCG there *because KVM is broken*.~~ **2026-09-18:** the A2 leg ran TCG because the SDP's **shipped** `startup-qemu-virt` hangs under KVM after `FOUND GICv3 ITS` — reproduced as a control that day. An IFS carrying a `startup-qemu-virt` **we rebuilt** (board source `orin-native/startup/qemu-virt/`, startup library compiled `-fno-auto-inc-dec`) boots under `-enable-kvm` to procnto and the guest banner (`logs/sample-boot/orin-kvm-*.log`); not a QNX-supported configuration — QNX ships no such binary — and no timing claim. On the **QHV leg** TCG is instead a hard architectural requirement on both sides — QHV needs EL2 for its guest, i.e. nested virtualisation, which ARM KVM does not provide on A78AE, and nothing measured on 2026-09-18 changes that. Keep the two apart when reporting: only the QHV leg's TCG-on-both is genuine symmetry. **2026-09-19:** the *cloud* side of this row needs the same care. Its reason is **non-metal**, not "cloud": on a bare-metal `a1.metal` that day `/dev/kvm` was present and a QNX guest carrying the same rebuilt `startup-qemu-virt` booted under `-enable-kvm` to `Startup complete` and its banner, against a same-session control on the shipped startup that still hung ([findings.md](findings.md) 2026-09-19, `logs/sample-boot/aws-a1-metal-kvm-fix-crossvendor.log`) — again not a QNX-supported configuration, one 60 s boot arm, **no timing of any kind**, and **no cloud leg built or measured**. Non-metal Graviton still has no `/dev/kvm`. As built this leg runs on the **x86_64** Windows PC, which can never use KVM for an ARM guest, so TCG is required there in principle rather than by any defect and a Windows-vs-Orin pair is TCG-on-both by necessity. The QHV sentence above is unaffected: QHV needs EL2, ARM KVM does not nest on A78AE, and nothing measured on 2026-09-19 changes that |
+| QEMU acceleration | **TCG on both — for two different reasons** | This row previously read "cloud = tcg; Orin = `-enable-kvm` (KVM works on A78AE)". That **should not be quoted**. The A2 leg ran TCG with the SDP's **shipped** `startup-qemu-virt`; the KVM outcomes of that binary and of a `startup-qemu-virt` **we rebuilt** (board source `orin-native/startup/qemu-virt/`, startup library compiled `-fno-auto-inc-dec`; not a QNX-supported configuration — QNX ships no such binary) are held locally (NC QDL v7 4.6(i)). On the **QHV leg** TCG is instead a hard architectural requirement on both sides — QHV needs EL2 for its guest, i.e. nested virtualisation, which ARM KVM does not provide on A78AE. Keep the two apart when reporting: only the QHV leg's TCG-on-both is genuine symmetry. **2026-09-19:** the *cloud* side of this row needs the same care. Its reason is **non-metal**, not "cloud": a bare-metal `a1.metal` exposes `/dev/kvm` (the QNX outcome there is held locally, and **no cloud leg was built or measured**). Non-metal Graviton still has no `/dev/kvm`. As built this leg runs on the **x86_64** Windows PC, which can never use KVM for an ARM guest, so TCG is required there in principle rather than by any defect and a Windows-vs-Orin pair is TCG-on-both by necessity. The QHV sentence above is unaffected: QHV needs EL2 and ARM KVM does not nest on A78AE |
 | IPC transport | **Different by design** | Cloud: host↔guest `qvm` virtio-console (single-OS QNX↔QNX); Orin: QNX↔Linux virtio-net ~~over KVM bridge~~ **2026-09-11:** over the `br0` bridge, under TCG. The legs no longer share an identical topology — see §4 |
 | Linux Compute side | **Different by design** | Cloud: **no Linux guest** (single QNX guest under QHV); HW: L4T native (host OS). See §2/§3. **2026-09-14:** right for A1, stale for v1: S1 plans a Linux guest under native qvm, and v1's TCG twin legs would boot it in their QHV host image ([plan](orin-native-port-plan.md#architecture-versions-and-the-measurement-freeze-decided-2026-09-11), v1 row and campaign item 6) |
 | Host kernel | **Different by design** | This is exactly the variable being studied |
@@ -144,11 +140,11 @@ So the same two images can be copied to the Orin and booted there unchanged:
 QEMU 11.1.0, in different builds that the times files stamp. That pair is A3
 history under the freeze decision. ~~The TCG legs run again in the v1 campaign.~~
 **2026-09-20 (owner): the TCG twin legs are withdrawn. A6 measures under KVM only, which means the QNX Hypervisor has no measurable leg anywhere — QHV needs EL2 and ARM KVM does not nest on A78AE, so TCG was its only emulated route. §1a stays as the record of what was measured, and is not re-run. 2026-09-18: v1 is superseded; whether the TCG twin legs survived was one
-of A6's open choices, now that the native leg runs under KVM.**
+of A6's open choices.**
 
 > **This table originally omitted the QEMU version row, and that omission
-> broke the leg's whole premise on first contact with the hardware
-> (2026-09-08).** The argument above — "only the host CPU differs" — was
+> undermined the leg's whole premise (2026-09-08).** The argument above —
+> "only the host CPU differs" — was
 > written from the *argument list*, which is identical, and never checked the
 > binary producing it. It is not: Windows runs a QEMU 11.0.50 development
 > build, the Orin runs Ubuntu 22.04's stock 6.2.0. Five major releases apart,
@@ -167,7 +163,7 @@ that actually resembles a DRIVE OS partition boundary — rather than on plain
 boot time alone, and it restores the IFS and the topology to the invariant
 set. **It is not, and cannot be, a literal one-variable comparison**, and the
 first attempt to treat it as one failed on exactly that point (see the
-blockquote above and the account below). "Host" here is a *bundle* that
+blockquote above). "Host" here is a *bundle* that
 changes together by construction: the CPU and its micro-architecture, the
 host OS and scheduler, **the TCG code-generation backend** (`tcg/i386` on the
 Windows box vs. `tcg/aarch64` on the Orin — different generated code for the
@@ -186,10 +182,10 @@ change one, change the other):
 - Orin: `scripts/orin/launch-qhv-on-orin-tcg.sh N`
 
 Both time **launch → the guest's `QNX qnx-guest … ARMv8_Foundation_Model`
-banner** and emit `run N: NNNNN ms` lines, matching §5's existing n=5
-methodology. There is **no host banner** — the QHV host prints none, and an
-earlier version of this paragraph (and of the June curated log's header)
-that said to look for one was wrong. A run counts only if all three markers
+banner** and emit `run N: NNNNN ms` lines, matching §5's n=5 methodology.
+There is **no host-banner marker**; an earlier version of this paragraph (and
+of the June curated log's header) that said to look for one was wrong. A run
+counts only if all three markers
 that *are* emitted appear, in order: `=== AUTO-START QNX GUEST UNDER QVM`
 (host reached post_start), `=== launching qvm @g2.conf` (hypervisor invoked),
 and the guest banner (guest came up across EL2/EL1). They fail
@@ -203,10 +199,10 @@ every times file by both instruments (`# qemu:`, `# devices:`, `# disk:`):
   silent fallback is what produced the 6.2.0 confound.
 - **Device set.** `WITH_RNG=1` / `-WithRng` presents virtio-net (slot filler)
   and virtio-rng in the virtio-mmio order the image's `startup.sh` binds
-  (disk, net, rng — rng at `0xa003a00`, the *third* `-device`). Without it the
-  boot spends ~19 s timing out on entropy: on Windows the guest banner moved
-  from ~49.2 s to ~29.3 s. Runs with and without rng are not comparable.
-- **`-snapshot`.** The raw `disk-qemu` is writable and mutates on every boot
+  (disk, net, rng — rng at `0xa003a00`, the *third* `-device`). The image's
+  `startup.sh` waits for `/dev/random` with a timeout, so runs with and
+  without rng are not comparable.
+- **`-snapshot`.** The raw `disk-qemu` is writable and the guest writes to it
   (rnd-seed, keys, logs); without `-snapshot`, `sha256sum -c` fails after the
   first run and "byte-identical images" holds only at copy time. With it,
   every run boots the copy-time bytes.
@@ -215,132 +211,52 @@ every times file by both instruments (`# qemu:`, `# devices:`, `# disk:`):
 (`#   segments run N:`). It gives wall time from launch to four markers: host
 post_start, qvm launched, guest startup complete and the guest banner. The
 segments separate compute-bound time from fixed waits. The release-aligned
-pair and its segment tables used this instrument. They are in
-[findings.md](findings.md) 2026-09-09 and are A3 history.
+pair and its segment tables used this instrument; they are held locally
+(NC QDL v7 4.6(i)) and are A3 history.
 
-**First execution on the Orin: a deterministic hang — caused by QEMU 6.2's
-unwired EL2 virtual-timer IRQ, not the host; verified by a reverted-wiring
-build (2026-09-08/09).** With the byte-identical images (`sha256sum -c`
-verified on arrival) and the identical argument list, the QHV host boots on
-the Orin — `FOUND GICv3 ITS`, slogger2, PCI, `devb`, file systems all come up
-— and then stops dead at:
+**First executions on the Orin (2026-09-08/09).** The byte-identical images
+(`sha256sum -c` verified on arrival) were run on the Orin with the identical
+argument list, first under the distro QEMU 6.2.0 and then under QEMU 11.1.0
+built from source on the board
+([build-qemu-on-orin.sh](../scripts/orin/build-qemu-on-orin.sh)). The outcomes,
+the QEMU-version investigation that followed (including a reverted-wiring
+build, [patch](../scripts/orin/patches/qemu-v11.1.0-unwire-ns-el2-virt-timer-irq.patch),
+and a `-cpu cortex-a57` non-VHE control), their curated logs and the
+release-aligned pair of 2026-09-09 are held locally under NC QDL v7 4.6(i).
+Under the freeze decision they are A3 history.
 
-```
-random: Could not initialize entropy. [random.c(406)]
-```
-
-On the Windows host the same image walks straight past that same line to
-`Starting Networking` and on to `post_start`, reaching the guest banner at
-~49 s. On the Orin the serial log is **419 bytes at 300 s, at 600 s, and after
-12 minutes of runtime** — byte-for-byte unchanged, process alive throughout.
-That is a hang, not slowness, and the sample-based check was run precisely
-because "the ARM host is simply slower" was the cheaper explanation and had to
-be excluded before anything else was considered.
-
-What was learned about it, in the order it was learned — including the part
-that was wrong for a day:
-
-- **A first "entropy ruled out" test was invalid.** `-device virtio-rng-device`
-  was added directly after the block device, i.e. in virtio-mmio slot 2. The
-  image probes the rng at slot 3 (`random … devr-virtio.so:mem=0xa003a00`,
-  the same binding the `qnx-safety-vm` leg hit on 2026-07-28); the log from
-  that test still says `Unable to use devr-virtio.so as an entropy source`.
-  An earlier version of this section said entropy was excluded on that
-  basis. It was not. (Curated as
-  [orin-qhv-tcg-q62-INVALID-rng-in-slot2.log](../logs/sample-boot/orin-qhv-tcg-q62-INVALID-rng-in-slot2.log).)
-- **With the rng in the right slot, 6.2 still hangs — one step later.**
-  Entropy init succeeds, the boot reaches `---> Starting Networking` and
-  stops there (314 bytes at 240 s). So the hang was never about entropy;
-  entropy was merely the first thing the boot *waited* on
-  ([orin-qhv-tcg-q62-hang-rng-slot3.log](../logs/sample-boot/orin-qhv-tcg-q62-hang-rng-slot3.log)).
-- **The line 6.2 never prints is a timeout message.** The image's
-  `startup.sh` runs `random …` and then `waitfor /dev/random` (5-second
-  default timeout); `Unable to access /dev/random` is `waitfor` giving up.
-  On Windows (QEMU 11.0.50), on the plain EL1 IFS on this same board under
-  this same 6.2, and on this image under 11.1.0, that timeout fires and the
-  boot continues. Under 6.2 with `virtualization=on` it never fires. The QHV
-  host runs at EL2 with VHE; the fingerprint is "every interrupt-driven
-  device step works, the first timeout-wait never returns".
-- **QEMU v11.1.0, built from source on the Orin
-  ([build-qemu-on-orin.sh](../scripts/orin/build-qemu-on-orin.sh)), boots
-  the QHV host *and* its guest on this board** — guest banner at ~78 s
-  without rng, ~63 s with rng in slot 3 (probe timings, 2-second
-  granularity; the n=5 instrument numbers are the ones to cite).
-  [orin-qhv-tcg-q111-boot-blk-only.log](../logs/sample-boot/orin-qhv-tcg-q111-boot-blk-only.log),
-  [orin-qhv-tcg-q111-boot-rng-slot3.log](../logs/sample-boot/orin-qhv-tcg-q111-boot-rng-slot3.log).
-  First time the hypervisor and a guest under it ran on real ARM silicon.
-- **Attributed cause — a hypothesis from upstream history, not an
-  observation.** In `v6.2.0`,
-  `hw/arm/virt.c` contains no `GTIMER_HYPVIRT` wiring at all — the
-  non-secure EL2 *virtual* timer interrupt is simply not connected to the
-  GIC; it was added in QEMU 9.0 (`1ec896fe7c`, "hw/arm/virt: Wire up
-  non-secure EL2 virtual timer IRQ"). A VHE hypervisor host programming
-  `CNTV_*` is really programming `CNTHV_*`, so its timeouts depend on
-  exactly that interrupt. `target/arm` gained a related fix in 10.0
-  (`5709038aa8`, "Don't apply CNTVOFF_EL2 for EL2_VIRT timer"). **Which of
-  the two is decisive was not bisected**, and one attempt to do it cheaply
-  was itself invalid: on QEMU 11 the versioned `-machine virt-8.2` still
-  boots this image, but its compat flag only stops the IRQ being *described*
-  in the device tree (the source comment says it is there for an old EDK2
-  bug) — the wiring stays, so the test could not reproduce 6.2. A real
-  bisect means building 8.2 vs 9.0 vs 10.0; it is not needed for the twin's
-  purpose and was not done.
-- **Non-VHE control (2026-09-09), supporting the host-side mechanism:** the
-  same image under the same QEMU 6.2 on the same board with `-cpu cortex-a57`
-  (ARMv8.0: EL2 but no VHE) gets *past* the hang point — `waitfor`'s timeout
-  fires, networking and post_start run, `qvm` is launched
-  ([orin-qhv-tcg-q62-a57-control.log](../logs/sample-boot/orin-qhv-tcg-q62-a57-control.log)).
-  Without VHE the host cannot use the E2H timer redirection, which is exactly
-  the path an unwired EL2 virtual-timer IRQ would break. The guest then aborts
-  with `PE does not support PAUTH feature` — Cortex-A57 lacks Pointer
-  Authentication, which the guest's `startup-armv8_fm` requires — a
-  CPU-feature mismatch unrelated to timers. One run; it supports the
-  mechanism for the host hang, it does not observe register state.
-- **Decisive test (2026-09-09): the wire is the cause.** QEMU 11.1.0 rebuilt
-  on the Orin with exactly one change — the NS EL2 virtual-timer output left
-  unconnected to the GIC
-  ([patch](../scripts/orin/patches/qemu-v11.1.0-unwire-ns-el2-virt-timer-irq.patch)),
-  i.e. 6.2's wiring on an otherwise 11.1.0 tree — **hangs at the same point
-  as 6.2**, while the unpatched 11.1.0 boots the same image on the same
-  board
-  ([orin-qhv-tcg-q111-nohypvirt-control.log](../logs/sample-boot/orin-qhv-tcg-q111-nohypvirt-control.log)).
-  With the a57 control (no VHE → no hang) this closes the chain: the QHV
-  host at EL2 with VHE depends on the EL2 *virtual* timer interrupt, which
-  QEMU's `virt` board did not connect before 9.0 (`1ec896fe7c`). The
-  mechanism is now **verified by a reverted-wiring build**, not merely
-  attributed; the `target/arm` CNTVOFF fix is not required to explain it.
-
-The conclusion that matters for this leg: **the hang is a QEMU-version effect
-and is not attributable to the host.** With a modern QEMU the Orin column
-exists. ~~What is still owed before a number from this leg may be called a twin
-diff is spelled out in the list below.~~ **2026-09-11:** No such list follows.
-A later Windows run under QEMU 6.2.0 hung at the same point, so the version
-effect does not depend on the host
-([windows-qhv-tcg-q62-cell.log](../logs/sample-boot/windows-qhv-tcg-q62-cell.log)).
-The release-aligned pair ran on 2026-09-09 ([findings.md](findings.md)). Under
-the freeze decision it is A3 history.
+Two facts from outside this project bear on any such pairing and stay here.
+In QEMU `v6.2.0`, `hw/arm/virt.c` contains no `GTIMER_HYPVIRT` wiring: the
+non-secure EL2 *virtual* timer interrupt is not connected to the GIC. It was
+added in QEMU 9.0 (`1ec896fe7c`, "hw/arm/virt: Wire up non-secure EL2 virtual
+timer IRQ"), and `target/arm` gained a related fix in 10.0 (`5709038aa8`,
+"Don't apply CNTVOFF_EL2 for EL2_VIRT timer"). A VHE hypervisor host
+programming `CNTV_*` is really programming `CNTHV_*`, so its timeouts depend on
+exactly that interrupt. On QEMU 11 the versioned `-machine virt-8.2` compat
+flag only stops the IRQ being *described* in the device tree (the source
+comment says it is there for an old EDK2 bug); the wiring stays. **So the QEMU
+release is part of the measured configuration of this leg, never a detail.**
 
 **One measurement detail that has to be checked per host, not assumed.** The
 host's `post_start.custom` contains a hard-coded `sleep 90` boot-grace before
 it goes on to the IPC benchmark. That sleep runs on the *host* while the guest
 boots in the background, so whether it pads the measurement depends entirely
-on where the guest banner lands relative to it. On Windows the banner appears
-at ~49 s — comfortably *inside* the sleep — so the sleep contributes nothing
-to the number. If a slower host pushed the banner past 90 s the host would
-already have moved on and the interleaving would differ, so a run that reports
-much more than ~90 s should be inspected rather than plotted.
+on where the guest banner lands relative to it. If a slower host pushed the
+banner past 90 s the host would already have moved on and the interleaving
+would differ, so a run that reports much more than ~90 s should be inspected
+rather than plotted.
 
 **What this leg still cannot show:** it is TCG on both sides, so it measures
 host emulation throughput on the QHV workload, not hardware-timed
 virtualisation cost. ~~No configuration in this repo produces a hardware-timed
 QHV number — that needs nested virt, which the hardware does not offer.~~
 **2026-09-11:** That holds for every QEMU configuration. The native port (A4,
-Phase 3b) runs qvm at EL2 on the Orin itself, with no nesting. M3 there is a
-functional pass. ~~The hardware-timed measurement runs in the v1 campaign
+Phase 3b) places qvm at EL2 on the Orin itself, with no nesting; its records
+are held locally. ~~The hardware-timed measurement runs in the v1 campaign
 ([orin-native-port-plan.md](orin-native-port-plan.md#architecture-versions-and-the-measurement-freeze-decided-2026-09-11)).~~
 **2026-09-18: v1 is superseded. A4 and A5 stay valid as their own architectures
-and are not re-run; A6 has no QNX Hypervisor leg, and no hardware-timed number
-has been measured anywhere.** The
+and are not re-run; A6 has no QNX Hypervisor leg, and no hardware-timed
+hypervisor number is published.** The
 comparison is honest about *what changes when the host changes*; it is not a
 performance claim about QHV.
 
@@ -348,9 +264,8 @@ performance claim about QHV.
 
 ## 1b. The KVM leg — the first pair where the identical-image invariant holds
 
-Written 2026-09-20. **Nothing in this section has been measured.** It is a
-design, and it is marked as one throughout. The two boots it rests on are real;
-no timing of any kind was taken on either.
+Written 2026-09-20 as a design, and marked as one throughout. Its run
+(2026-09-20) is held locally; see the status at the end of this section.
 
 ### Why this section exists
 
@@ -372,20 +287,17 @@ a twin:
 | CPU / accel | `-cpu host -enable-kvm` | `-cpu host -enable-kvm` |
 | Size | `-smp 2 -m 1G` | `-smp 2 -m 1G` |
 | QEMU | distro 6.2.0 | distro 6.2.0 |
-| Reached | `Startup complete`, then the guest banner | `Startup complete`, then the guest banner |
 | Host silicon | Cortex-**A78AE**, Tegra234 | Cortex-**A72**, Graviton1 |
 
 Same bytes, same launch line, KVM on both sides, and only the host silicon
-differs. Provenance: `results/orin-native-port/20260918T-kvm-gpu/results.md`
-pins the Orin side's IFS by that hash; `logs/sample-boot/aws-a1-metal-kvm-fix-crossvendor.log`
+differs. Provenance: record `20260918T-kvm-gpu` (held locally) pins the Orin
+side's IFS by that hash; `aws-a1-metal-kvm-fix-crossvendor.log` (held locally)
 records the same hash on the AWS side. This is the first cloud↔board pair in
-the project where the invariant is an observed fact rather than an intention.
+the project where the invariant is checked by hash rather than intended.
 
-What unlocked it was the GICv3/NISV fix, not a change of plan. Until a
-`startup-qemu-virt` rebuilt with `-fno-auto-inc-dec` existed, no QNX guest
-booted under KVM anywhere, so the cloud side of any KVM pair had nothing to
-run. ADR-002's constraint was **non-metal**, and `*.metal` was never tested
-until 2026-09-19.
+What made it possible was the rebuilt `startup-qemu-virt` (§1's accelerator
+row), not a change of plan. ADR-002's constraint was **non-metal**, and
+`*.metal` was not tried until 2026-09-19.
 
 ### What the measurement would be
 
@@ -393,21 +305,21 @@ until 2026-09-19.
 
 No disk is the deliberate part. The guest disk is the one artefact in this
 configuration that is **not pinned and is known to drift**: the 2026-09-18
-record states plainly that its runs used `disk-qemu` without `-snapshot`, so the
-guest wrote to it, and the board's copy now hashes `f326b792…` against the PC's
-`fd2ee67d…`. Dropping the disk removes that confound completely rather than
-managing it, and both hosts have already been observed reaching
-`Startup complete` on the IFS alone. The cost is scope: this measures IFS load,
-startup and procnto init under KVM, and says nothing about the filesystem,
-networking or IPC.
+runs (record `20260918T-kvm-gpu`, held locally) used `disk-qemu` without
+`-snapshot`, so the guest wrote to it, and the board's copy now hashes
+`f326b792…` against the PC's `fd2ee67d…`. Dropping the disk removes that
+confound completely rather than managing it. The cost is scope: this measures
+IFS load, startup and procnto init under KVM, and says nothing about the
+filesystem, networking or IPC.
 
 ### What must be pinned or stamped, or the number is void
 
 1. **CPU governor.** On the Orin, pin `performance` on all six cores. This is
-   not optional: measured directly on this board, `schedutil` idle p50 was
-   0.319 ms against `performance` 0.192 ms, so **~40% of an unpinned "idle"
-   figure is the governor**. Whatever `a1.metal` exposes must be recorded the
-   same way, and if it cannot be pinned, that is a stated limit, not a footnote.
+   not optional: `schedutil` clocks the board down when idle, and the
+   unpinned-against-pinned comparison on this board is in record
+   `20260919T-saturation` (held locally). Whatever `a1.metal` exposes must be
+   recorded the same way, and if it cannot be pinned, that is a stated limit,
+   not a footnote.
 2. **QEMU build**, not just release. §1a already establishes that "host" is a
    bundle; two builds of 6.2.0 are not interchangeable without saying so.
 3. **Host kernel.** L4T against `6.8.0-aws`. This is part of the bundle and
@@ -429,64 +341,32 @@ A72 against A78AE is a five-year micro-architectural gap inside a host bundle
 that also differs in kernel. `c7g.metal` (Neoverse-V1) would be the closer core
 match and stays quota-blocked at 64 vCPU against a 32-vCPU account limit.
 
-### Status: run 2026-09-20, and the proposed metric was mostly an artefact
+### Status: run 2026-09-20
 
-Both legs ran. Record:
-[`results/orin-native-port/20260920T-kvm-twin/`](../results/orin-native-port/20260920T-kvm-twin/results.md).
+Both legs ran. Record: `20260920T-kvm-twin`, held locally under NC QDL v7
+4.6(i); its figures and outcomes are not reproduced here.
 
-The identical-image invariant held in practice: sha256 `26170cd7…` on the Orin
-and on two separately launched `a1.metal` instances, the same launch line, and
-QEMU 6.2.0 from the *same* Debian package build (`1:6.2+dfsg-2ubuntu6.31`) on
-both sides.
+The inputs were identical as designed: sha256 `26170cd7…` on the Orin and on
+two separately launched `a1.metal` instances, the same launch line, and QEMU
+6.2.0 from the *same* Debian package build (`1:6.2+dfsg-2ubuntu6.31`) on both
+sides.
 
-**The metric proposed above is a poor one, and that is the finding.** Three
-separate fixed waits were hiding inside the end-to-end number, and each one
-agrees across the two hosts to about a millisecond:
-
-| wait | Orin (A78AE) | `a1.metal` (A72) |
-|---|---|---|
-| `waitfor /dev/hd0`, no disk attached | 5001.3 ms | 5000.3 ms |
-| `waitfor /dev/random`, no virtio-rng | 5006.1 ms | — |
-| network bring-up, full device set | 4218.8 ms | 4219.4 ms |
-
-A software timeout does not care how fast the CPU is, so any metric containing
-one makes two different machines look alike. The first configuration measured
-here was 92% artefact; attaching only the disk made it **worse** (24.7 s,
-because the boot then got far enough to hit the entropy wait).
-
-With the disk, `-snapshot`, and virtio net and rng presented in the order this
-image's `startup.sh` requires, the boot is clean and the segments separate:
-
-| segment | Orin A78AE | `a1.metal` A72 | ratio |
-|---|---|---|---|
-| QEMU exec → first serial byte | **410.7 ms** | **167.8 ms** | **2.45×** |
-| first byte → mounting file systems | 57.1 ms | 60.1 ms | 0.95× |
-| mounting → starting networking | 65.8 ms | 66.0 ms | 1.00× |
-| networking → `Startup complete` | 4218.8 ms | 4219.4 ms | 1.00× |
-| total: exec → guest banner | 4747.0 ms | 4519.0 ms | **1.05×** |
-
-**One segment separates the hosts, and it is the first one.** Everything after
-the guest starts talking is equal within noise or is a constant. Quoting the
-total, 1.05×, as a host comparison would understate the real difference by more
-than a factor of two. The 2.45× covers QEMU start, KVM setup, a 9.77 MB IFS load
-and early guest startup, across hosts that differ in clock, kernel and memory
-subsystem — a bundle difference in §1a's sense, not a per-core claim.
-
-One more observation kept because it was not expected: `a1.metal` is **16×
-more repeatable** (n=5 spread 2.16 ms against the Orin's 35.51 ms on the full
-device set), and two *separately launched* instances agreed to 0.4 ms on the
-median. The Orin's spread is wider despite a pinned governor. Unexplained; no
-scheduler or interrupt tracing was done, and the Orin runs a full L4T desktop
-while the AWS host is a fresh minimal image.
+One method point carries over to any boot metric here. A fixed software
+timeout does not depend on CPU speed, so a boot metric that contains one hides
+host differences. The record therefore reports per-segment times as well as the
+total, and its final configuration presents the disk, `-snapshot`, and virtio
+net and rng in the order this image's `startup.sh` requires.
+[measurement-design.md](measurement-design.md) §3.7 is the falsification test
+for how much of the metric a timeout is.
 
 The governor was pinned to `performance` on the Orin and restored afterwards.
 `a1.metal` exposes no `cpufreq` and no `cpuidle` at all, so the AWS side could
 not be pinned — a stated limit, exactly as this section required.
 
 Still true after the run: nothing here is a hypervisor number, the rebuilt
-startup is ours and not a QNX-supported configuration, no disk means nothing is
-shown about filesystems, networking or IPC, and A6's gate remains unsettled, so
-this is a candidate for that campaign rather than part of it.
+startup is ours and not a QNX-supported configuration, nothing is shown about
+networking or IPC, and A6's gate was then unsettled, so this is a candidate for
+that campaign rather than part of it.
 
 ---
 
@@ -501,10 +381,9 @@ been corrected below.
 - **Cloud twin** runs **no Linux Compute guest at all.** The cloud leg
   is the SDP 8.0 QHV host `qvm` hosting a **single QNX guest** under
   QEMU TCG (Phase 1 falsified the original two-co-equal-KVM-guests
-  premise — no `/dev/kvm` on non-metal Graviton, and the host `io-sock`
-  stack needed for a bridged Linux guest is down). The cloud leg
-  therefore demonstrates the **IPC mechanism across a real `qvm` EL2/EL1
-  partition boundary** — but it does **not** demonstrate the QNX-safety
+  premise — no `/dev/kvm` on non-metal Graviton). The cloud leg's IPC
+  mechanism crosses a **real `qvm` EL2/EL1 partition boundary** — but by
+  design it does **not** represent the QNX-safety
   ↔ Linux-compute heterogeneity that is the load-bearing mirror of DRIVE
   OS's dual-OS partitioning. That heterogeneity is twinned on **Orin
   only**. **2026-09-14:** all of this bullet describes A1. It is stale for
@@ -516,15 +395,11 @@ been corrected below.
   native host, and is the **committed home of the heterogeneous QNX↔Linux
   IPC**. This is closer to "real Tegra Linux runs natively"; QNX is the
   one thing being virtualised. (This sentence originally ended "and KVM actually
-  works on the A78AE" — ~~it does not for the QNX IFS: KVM boot hangs on the
-  GICv3/NISV defect in [orin-port.md](orin-port.md), and the leg runs TCG.~~
-  **2026-09-18:** the leg ran TCG, and an IFS with the SDP's **shipped**
-  `startup-qemu-virt` still hangs under KVM on the GICv3/NISV defect (control
-  re-run that day). An IFS with a `startup-qemu-virt` **we rebuilt**
-  (`-fno-auto-inc-dec`, board source `orin-native/startup/qemu-virt/`) boots
-  under KVM on the A78AE to procnto and the guest banner —
-  `logs/sample-boot/orin-kvm-*.log`. Not QNX-supported, no timing claim, and
-  nothing about QHV under KVM, which still needs nested virt.)
+  works on the A78AE"; that should not be quoted. The leg ran TCG, and the KVM
+  outcomes of the SDP's **shipped** `startup-qemu-virt` and of one **we
+  rebuilt** (`-fno-auto-inc-dec`, board source `orin-native/startup/qemu-virt/`,
+  not QNX-supported) are held locally. Nothing here says anything about QHV
+  under KVM, which still needs nested virt.)
   Putting Linux in its own QEMU VM on Orin Nano would burn 2 GB extra
   RAM for no narrative benefit.
 
@@ -535,19 +410,18 @@ dual-OS story. ~~A dual-guest Linux-under-QHV cloud topology (ADR-002
 Option B) is a research-gated **Phase 2.5** stretch only, not a claim
 made today.~~ **2026-09-11:** The cloud dual-guest topology is still unbuilt
 and is not a claim. Its idea moved to the native leg: a Linux guest without a
-GPU under native qvm on the Orin is now S1-F, planned before the v1 freeze. ~~No
-S1 run is recorded in this repo.~~ **2026-09-17: S1-F is met (QNX plus Linux) —
-B3 booted the Linux guest under native qvm on the board, B4 held it ten minutes,
-and B5 ran it beside the QNX guest; records under `results/orin-native-port/`,
-figures unpublished. 2026-09-18: it is a rung of the native-hypervisor ladder
-(A4/A5) and is not evidence about A6.**
+GPU under native qvm on the Orin is now S1-F, planned before the v1 freeze.
+**2026-09-17: S1-F's rungs were run — B3 and B4 a Linux guest under native
+qvm on the board, B5 the Linux guest beside the QNX guest; their records are
+held locally under NC QDL v7 4.6(i). 2026-09-18: it is a rung of the
+native-hypervisor ladder (A4/A5) and is not evidence about A6.**
 
 The HW twin therefore can **claim**:
 - Real Tegra-family silicon (A78AE matches DRIVE Orin's CCPLEX core family)
 - L4T as the actual Compute-side OS (closer to the real DRIVE OS Linux partition than Ubuntu cloudimg)
 
 The HW twin **cannot** claim:
-- Type-1 hypervisor partitioning (~~KVM-on-L4T is host-mediated~~ **2026-09-11:** QEMU TCG on L4T is host-mediated, because KVM boot is blocked. The native port, A4, runs qvm at EL2 on the board itself: a real `qvm` boundary, not a certified one)
+- Type-1 hypervisor partitioning (QEMU on L4T is host-mediated, under TCG or KVM alike. The native port, A4, places qvm at EL2 on the board itself: a real `qvm` boundary, not a certified one)
 - DRIVE OS-class Safety RT guarantees
 - NVDLA / PVA / GPU partitioning (those exist on Orin Nano but are out of scope; QNX guest never sees them)
 - Secure-boot chain across partitions
@@ -580,7 +454,7 @@ sides for the comparison to be sound:
    committed to `results/ifs.sha256` in each measurement run (**not
    implemented as of 2026-09-09** — the SHA256SUMS manifests live only in the
    gitignored build trees; the QHV pair's values are recorded in findings.md
-   and in the curated log headers instead) so any
+   and in the curated log headers, held locally, instead) so any
    accidental rebuild between runs is caught.
 2. **The IPC source code** — under `ipc-test/`, single git tree,
    pinned to the commit SHA used for any given measurement run. ~~The
@@ -592,9 +466,8 @@ sides for the comparison to be sound:
    numbers.~~
 
    **2026-09-11:** Neither was implemented. The CSVs carry no SHA; their only
-   free-text field is `notes`
-   ([cloud](../results/cloud/cloud-ipc-latest.csv),
-   [hw](../results/hw/orin-ipc-latest.csv)). The frame starts with a
+   free-text field is `notes` (schema: `results/cloud/header.csv`,
+   `results/hw/header.csv`; the CSVs themselves are held locally). The frame starts with a
    sequence number and has no version byte (`ipc-test/common/frame.h`).
    Under the freeze decision, the v1 manifest records the instrument source
    hashes, `frame.h` included, and every campaign record carries the
@@ -641,21 +514,15 @@ just having one canonical artefact.
 > single-OS QNX↔QNX exchange over a `qvm` virtio-console vdev under
 > **TCG**, whereas Orin is a heterogeneous QNX↔Linux exchange over
 > virtio-net bridged under **TCG** (this paragraph originally said "under
-> KVM" — wrong; ~~Orin's KVM boot is blocked, see
-> [orin-port.md](orin-port.md)~~ **2026-09-18:** that leg ran under TCG because
-> the **shipped** `startup-qemu-virt` hangs under KVM; an IFS with a startup we
-> rebuilt boots under KVM on the board — `logs/sample-boot/orin-kvm-*.log`, not
-> QNX-supported and not timed — which does not change what this A2 leg
-> measured). The IPC diff therefore confounds at
+> KVM" — wrong: that A2 leg ran under TCG, with the SDP's shipped
+> `startup-qemu-virt`). The IPC diff therefore confounds at
 > least three variables — host (as built: a local Windows x86_64 PC vs. A78AE;
-> Graviton was the design intent), acceleration (**TCG on both** ~~since the Orin
-> KVM boot is blocked~~ **(2026-09-18: since the Orin KVM boot was blocked for the
-> SDP's shipped `startup-qemu-virt`; an IFS with a startup we rebuilt boots under
-> KVM, so the block is specific to that binary — what this diff measured was still
-> TCG on both)** — this line originally said "TCG vs. KVM"), and transport+OS-pair (console/QNX↔QNX vs. virtio-net/QNX↔Linux)
+> Graviton was the design intent), acceleration (**TCG on both** — this line
+> originally said "TCG vs. KVM"), and transport+OS-pair (console/QNX↔QNX vs.
+> virtio-net/QNX↔Linux)
 > — and the methodology must say so explicitly rather than presenting
-> the IPC delta as a host-only effect. The cloud IPC number is
-> TCG-emulation-bound (a *mechanism-alive* sanity figure), so **neither** leg yields a hardware-timed transport number (this originally
+> the IPC delta as a host-only effect. Any cloud IPC number is
+> TCG-emulation-bound, so **neither** leg yields a hardware-timed transport number (this originally
 > claimed the Orin leg did); the diff is
 > "mechanism vs. heterogeneity", not a clean host-only comparison. ~~The
 > **boot-time** diff (same IFS, same QEMU machine shape) remains the
@@ -668,175 +535,46 @@ just having one canonical artefact.
 
 ## 5. Results interpretation
 
-> **2026-09-11:** Every figure in this section is architecture-version history.
-> The cloud IPC leg is A1; the Orin IPC leg and the plain-IFS boot times are A2
-> ([orin-native-port-plan.md](orin-native-port-plan.md#measurement-inventory)).
-> They are kept as recorded and are not re-run for their own sake.
+> **2026-09-27:** the figures this section held — the A1/A2 twin diff of
+> 2026-07-28 from `scripts/twin/diff-results.sh`, the plain-IFS boot-time pair
+> and its n=5 repeat, and the sample-matched re-run — are held locally under
+> NC QDL v7 4.6(i), with the CSVs they came from. The CSV schema stays public
+> (`results/cloud/header.csv`, `results/hw/header.csv`). They are
+> architecture-version history (A1 and A2,
+> [orin-native-port-plan.md](orin-native-port-plan.md#measurement-inventory))
+> and are not re-run for their own sake.
 
-**First real numbers (2026-07-28)**, produced by
-[`scripts/twin/diff-results.sh`](../scripts/twin/diff-results.sh)
-(rewritten 2026-07-28 to parse the schema the CSVs actually use — the
-original version predated any real CSV and assumed a shape neither leg
-ever produced) against
-[`results/cloud/cloud-ipc-latest.csv`](../results/cloud/cloud-ipc-latest.csv)
-and [`results/hw/orin-ipc-latest.csv`](../results/hw/orin-ipc-latest.csv):
+The interpretation rules they taught are method, and stay:
 
-| Metric | Cloud (QNX↔QNX, `qvm` virtio-console, TCG, 15 samples) | HW (QNX↔Linux, virtio-net/`br0`, TCG, 100 000 samples) | Δ (hw − cloud) |
-|---|---|---|---|
-| P50 | 2,002,500 ns | 1,636,269 ns | −366,231 ns (−18.3%) |
-| P99 | 2,332,300 ns | 2,549,813 ns | +217,513 ns (+9.3%) |
-| Max | 2,332,300 ns | 4,127,894 ns | +1,795,594 ns (+77.0%) |
-
-**Reading these deltas correctly is the whole point of this section.**
-Per §4's constraint, this is not a host-only comparison — it confounds
-host, acceleration (matching only incidentally: HW's KVM path is
-separately blocked by the GICv3/NISV finding in
-[orin-port.md](orin-port.md) **(2026-09-18: blocked for the SDP's shipped
-`startup-qemu-virt`; an IFS carrying a startup we rebuilt with
-`-fno-auto-inc-dec` boots under KVM on the board — not a QNX-supported
-configuration, and no timing was taken — which does not change what this A2
-measurement confounded)**, not by design), and transport+OS-pair. Two
-observations are honestly supportable from this data:
-
-- **Stability, not raw speed, is the striking difference.** The cloud
-  leg's virtio-console transport hits a non-deterministic `qvm`/TCG
-  virtio-queue stall within single-digit-to-dozens of iterations
-  (documented in
-  [`ipc-test/qnx-host-client/README.md`](../ipc-test/qnx-host-client/README.md)),
-  capping its sample count at 15. The HW leg's virtio-net/`br0` path
-  completed **two clean 100,000-iteration runs in a row** with zero
-  errors. Read as a mechanism-reliability finding (console vdev framing
-  vs. a real socket transport under TCG), not a host-speed finding.
-- **The P50/P99/Max numbers themselves are not meaningfully comparable**
-  across legs, because they measure different things: cloud's number is
-  round-trip time through a `qvm` EL2↔EL1 console vdev between two QNX
-  instances; HW's number is round-trip time through a Linux bridge +
-  virtio-net between a QNX guest and the native Linux host. Both are
-  real, both are TCG-emulation-bound, neither isolates host CPU
-  performance — that specific comparison (same transport, same IFS, only
-  the host differing) does not exist yet in this repo. It would require
-  either a console-based transport on Orin or a virtio-net-based
-  transport on cloud, and cloud's Linux-side is deliberately absent per
+- **The two IPC legs measure different things.** The cloud leg's round trip
+  runs through a `qvm` EL2↔EL1 console vdev between two QNX instances; the HW
+  leg's runs through a Linux bridge + virtio-net between a QNX guest and the
+  native Linux host. Both are TCG-emulation-bound and neither isolates host
+  CPU performance (§4). A same-transport, same-IFS, host-only comparison would
+  need a console-based transport on Orin or a virtio-net-based transport on
+  the cloud leg, whose Linux side is deliberately absent per
   [ADR-002](phase2-topology-decision.md).
-- **The cleaner host-only comparison remains boot time**, per §4's own
-  guidance, ~~and is still not done — `logs/sample-boot/orin-tcg-qnx-boot1.log`
-  and the cloud-leg equivalents exist but have not been time-diffed
-  against each other in this pass.~~ **2026-09-11:** It ran the same day
-  (next paragraph). It is A2 history, and §4 no longer calls it the cleaner
-  comparison.
-
-**Follow-up, same day: the boot-time comparison, actually run.** No
-plain-`qnx-safety-vm` boot had ever been captured on the local Windows
-build host with wall-clock timing (`logs/sample-boot/` only had QHV-build
-logs for that side). Ran the identical QEMU invocation
-(`-machine virt,gic-version=3 -accel tcg -cpu max -smp 2 -m 1G`, same
-`ifs.bin`+`disk-qemu`) on both hosts, measuring real wall-clock time from
-process launch to the guest's own `Startup complete` line appearing in
-the captured serial log:
-
-| Host | Boot time (launch → `Startup complete`) |
-|---|---|
-| Local Windows (x86_64, TCG) | **26,088 ms** |
-| Jetson Orin Nano (aarch64 A78AE, TCG) | **32,125 ms** |
-
-Δ = +6,037 ms (+23.1%), Orin slower. ~~**This is the cleanest host-only
-comparison in the repo so far** — same IFS, same disk image, same QEMU
-machine/CPU/mem shape, same accelerator (TCG on both, this time by
-genuine symmetry rather than incidental blockage), only the host CPU
-architecture and micro-architecture differ (x86_64 host translating
-aarch64 TCG vs. aarch64 host translating aarch64 TCG).~~ **2026-09-11:**
-Overclaimed. The QEMU build was not controlled. The Orin single run's log
-header records the distro QEMU 6.2.0. The Windows QEMU was never recorded
-(UNKNOWN), and the series files carry no stamp. The TCG backend also changes
-with the host (§1a), and §1's accelerator row says TCG on this plain leg is not
-genuine symmetry. So host and QEMU build are confounded. This diff is A2
-history. TCG-on-TCG
-same-ISA (aarch64 guest on an aarch64 host) still does full binary
-translation — QEMU's TCG does not skip translation just because host and
-guest architectures match, so the Orin result is not disadvantaged by an
-ISA mismatch the Windows result doesn't have; ~~the gap is genuinely about
-host micro-architecture/scheduler/storage differences, which is exactly
-what a twin diff is supposed to isolate.~~ **2026-09-11:** Not established;
-see the note above.
-
-**Follow-up, same day: repeated to a real sample (n=5 per side)**, since
-a single run per side is not a measurement, it's an anecdote. Five
-back-to-back boots on each host, same invocation, `boot-timed.log` reset
-between runs:
-
-| Run | Windows (ms) | Orin Nano (ms) |
-|---|---|---|
-| 1 | 26,515 | 31,753 |
-| 2 | 25,445 | 31,758 |
-| 3 | 25,412 | 31,775 |
-| 4 | 25,427 | 31,780 |
-| 5 | 25,425 | 31,446 |
-| **median** | **25,427** | **31,758** |
-| **mean** | 25,644.8 | 31,702.4 |
-
-Median delta: +6,331 ms (**+24.9%**), mean delta: +6,057.6 ms (+23.6%) —
-both close to the original single-run estimate (+23.1%), so that first
-run was not a fluke; the repeated measurement mainly adds *confidence*,
-not a different conclusion. Two things worth noting in the data itself:
-(1) **Orin's five runs are far tighter** (31,446–31,780 ms, a 334 ms
-spread) **than Windows' single wide outlier** (run 1 at 26,515 ms vs.
-25,412–25,445 ms for runs 2–5, a likely one-time disk-cache-cold-start
-effect on the Windows side — excluding run 1, the remaining four Windows
-runs span only 33 ms). **Do not read this as "Orin is more consistent"** — an earlier version of
-this paragraph did, and README/CLAUDE.md were corrected on 2026-09-08: the
-Windows range is one cold-start outlier, and without it the remaining four
-Windows runs span 33 ms, tighter than Orin's 334. The defensible claim is
-"Orin is slower"; consistency is undetermined at n=5.
-(2) The ~24% gap held up essentially unchanged whether measured by median
-or mean, which is a good sign the sample size (n=5) is already enough to
-trust the headline number — a larger n would tighten the confidence
-interval but is unlikely to move the point estimate much given how tight
-each side's own spread already is.
-
-**Follow-up, same day: a sample-size-matched re-run corrects the P50
-reading above.** The 100k-vs-15 comparison's wildly inconsistent deltas
-(P50 −18.3%, Max +77.0%) were suspicious on their face — with n=15,
-`P99` and `Max` are mathematically the same sample, so cloud's "tail" was
-never a real tail estimate, and comparing it against a 100,000-sample Max
-compares extreme-value statistics from two wildly different sample sizes
-(Max grows with n for any non-degenerate distribution — more trials, more
-chances to hit a rare slow outlier). Re-ran the HW leg with the exact
-same 15-iteration / 5-warm-up shape as the cloud run
-(`./linux-client 15 192.168.100.10 5`, same guest boot, same bridge) to
-remove that confound. Result, appended as a third row in
-[`results/hw/orin-ipc-latest.csv`](../results/hw/orin-ipc-latest.csv):
-
-| Metric | Cloud (n=15) | HW (n=15, matched) | Δ |
-|---|---|---|---|
-| P50 | 2,002,500 ns | 2,213,370 ns | **+10.5%** |
-| P99 | 2,332,300 ns | 2,596,291 ns | +11.3% |
-| Max | 2,332,300 ns | 2,596,291 ns | +11.3% |
-
-Two things worth being honest about: (1) **the earlier "-18.3% P50, HW is
-faster" reading does not survive a fair, sample-matched comparison** — at
-matched n, HW's P50 is actually ~10% *slower*, not faster; the 100k-sample
-run's lower P50 reflects a different, much larger sample benefiting from
-the law of large numbers, not a directly comparable statistic to cloud's
-15-sample P50. Don't quote the earlier −18.3% figure without this
-correction attached. (2) The three metrics now move together (all
-+10–11%) instead of disagreeing wildly, which is itself evidence the
-matched comparison is more trustworthy than the mismatched one — a
-consistent small delta across P50/P99/Max is what a real, modest
-transport-cost difference should look like; three metrics disagreeing by
-an order of magnitude (as in the mismatched comparison) was the tell that
-something other than the transport was driving the numbers. The
-**stability finding from the first pass still stands and is unaffected**
-by any of this: HW ran two clean 100k-iteration passes with zero errors;
-cloud has never exceeded ~35 iterations without the still-unresolved
-`qvm`/TCG virtio-queue stall (see `ipc-test/qnx-host-client/README.md`).
-That asymmetry, not the percentile deltas, remains the most defensible
-finding from this pair of legs.
+- **Compare tail statistics only at matched sample sizes.** With n=15, P99
+  and Max are the same sample, and Max grows with n for any non-degenerate
+  distribution, so a 15-sample tail against a 100,000-sample tail compares
+  extreme-value statistics, not transports. The same holds for a P50 taken
+  from wildly different n.
+- **A host comparison needs the QEMU build stamped.** The plain-IFS boot
+  pair's time files carried no QEMU-build stamp (the Windows QEMU was never
+  recorded), and the TCG backend changes with the host (§1a), so host and
+  QEMU build are confounded in it.
+- **Same-ISA TCG still translates.** QEMU's TCG does full binary translation
+  even when host and guest architectures match, so an aarch64 host is not
+  spared translation an x86_64 host pays.
+- **A single run is an anecdote.** Repeat to n ≥ 5 before reading a
+  difference, and name any one-time outlier (a cold disk cache) rather than
+  let it set a spread.
 
 ---
 
 ## 6. Narrative tie-back
 
 > _Section deferred to Phase 6. Will distill the twin-diff findings
-> into short and long write-ups, with
-> citations to the measured numbers in `results/cloud/` and
-> `results/hw/`._
+> into short and long write-ups, with citations to the measured records
+> (held locally under NC QDL v7 4.6(i) until the licence allows
+> otherwise)._

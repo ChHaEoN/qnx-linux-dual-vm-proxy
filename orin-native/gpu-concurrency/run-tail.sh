@@ -5,8 +5,8 @@
 # interrupt processing on application cores and non-FIFO scheduling inflate the
 # tail).
 #
-# WHAT IS KNOWN. No A6 design has resolved the tail: p99 and above move by tens or
-# hundreds of us between rounds. On this board every device interrupt (Wi-Fi,
+# WHAT IS KNOWN. How the tail moves between rounds in the A6 records so far: record
+# 20260924T-a6-stats (held locally). On this board every device interrupt (Wi-Fi,
 # SD card, audio, the BPMP mailbox) is delivered to core 0 -- the masks say 0-5,
 # and the GIC takes the lowest -- and core 0 is one of QEMU's three cores (0-2).
 # Every host task may also run on those cores, beside QEMU's threads, at the same

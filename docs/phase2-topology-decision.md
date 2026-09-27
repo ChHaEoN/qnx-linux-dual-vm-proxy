@@ -31,14 +31,12 @@ counts:
    > below and needs no change. Only the flatter clause beside it was drawn too
    > broadly: the limit was always **non-metal**, never **cloud**. On AWS
    > `a1.metal` (bare metal, Graviton1, Cortex-A72, eu-central-1) `/dev/kvm` is
-   > present and the host reports `Hyp mode initialized successfully`, and a
-   > QNX guest booted there under KVM. Matched pair, one variable — which IFS
-   > boots: the control arm (the SDP's **shipped** `startup-qemu-virt`) gave 17
-   > bytes of serial and the historic `FOUND GICv3 ITS` hang; the test arm (a
-   > startup **we** rebuilt with `-fno-auto-inc-dec`) gave 1301 bytes through
-   > `Startup complete` and the guest banner. Capture:
-   > [`logs/sample-boot/aws-a1-metal-kvm-fix-crossvendor.log`](../logs/sample-boot/aws-a1-metal-kvm-fix-crossvendor.log),
-   > entry in [findings.md](findings.md) 2026-09-19.
+   > present and the host reports `Hyp mode initialized successfully`. A QNX
+   > guest was run there under KVM as a matched pair, one variable — which IFS:
+   > the control arm with the SDP's **shipped** `startup-qemu-virt`, the test
+   > arm with a startup **we** rebuilt with `-fno-auto-inc-dec`. The outcome and
+   > its capture (`aws-a1-metal-kvm-fix-crossvendor.log`) are held locally under
+   > NC QDL v7 4.6(i).
    >
    > **What this does NOT change.** Non-metal Graviton still has no `/dev/kvm`
    > — the t4g.small probe stands, and it is the constraint this ADR actually
@@ -47,8 +45,8 @@ counts:
    > number was taken on either side; the twin diff has not been re-run. The
    > cloud leg **as built** ran on the Windows PC under TCG, and A1/A2/A3 stay
    > architecture-version history — not re-run, not re-timed. The rebuilt
-   > startup is ours, so this is evidence about a defect, **not** a
-   > QNX-supported configuration. `c7g.metal`, the closer match, stays
+   > startup is ours, **not** a QNX-supported configuration. `c7g.metal`, the
+   > closer match, stays
    > quota-blocked (64 vCPU against a 32-vCPU account limit). The Windows PC is
    > x86_64 and can never use KVM for an ARM guest, so any Windows-vs-Orin pair
    > is TCG-on-both by necessity. And the **QHV** half of the predicting
@@ -57,37 +55,37 @@ counts:
    > statements elsewhere that QHV requires TCG remain true.
 
 2. **The as-built cloud leg is a QNX Type-1 hypervisor, not a Linux host.**
-   The QHV pull-forward demonstrated `qvm` (the SDP 8.0 QHV host) booting a
+   The QHV pull-forward configured `qvm` (the SDP 8.0 QHV host) with a
    **single QNX guest** under `qemu-system-aarch64 ... -accel tcg`. There is no
-   Linux guest. The host boots as `qnx-qhv` (machine `QEMU_virt`); the guest
-   reaches `Startup complete` as `qnx-guest` on the synthetic
-   `ARMv8_Foundation_Model` platform QHV fabricates. That synthetic platform
-   boundary *is* the real partition boundary — this is the strongest hypervisor
-   artefact the project has.
+   Linux guest. The host is `qnx-qhv` (machine `QEMU_virt`); the guest is
+   `qnx-guest` on the synthetic `ARMv8_Foundation_Model` platform QHV
+   fabricates. That synthetic platform boundary *is* the real partition
+   boundary — this is the strongest hypervisor artefact the project has. The
+   outcome of the bring-up is held locally (NC QDL v7 4.6(i)).
 
-3. **The host network stack did not initialise.** The stock `start_guest` wires
-   a virtio-net peer that depends on the host `io-sock` stack, which fails on
-   this qemu-virt build (`network stack down` / `Address family not supported`).
-   The demonstrated guest therefore ran **no-network**, driven by a hand-rolled
-   `g2.conf` (`post_start.custom`) declaring only `pl011`, `virtio-console`, and
-   `virtio-blk` vdevs. Any Phase-2 transport that depends on host `io-sock`
-   (i.e. anything routed through `br0`/tap/host TCP) is presumed broken on this
-   leg until proven otherwise.
+3. **The host network stack is not available to the guest.** The stock
+   `start_guest` wires a virtio-net peer that depends on the host `io-sock`
+   stack, whose device prerequisites the as-built launch line does not provide
+   (RQ-4). The as-built guest therefore runs **no-network**, driven by a
+   hand-rolled `g2.conf` (`post_start.custom`) declaring only `pl011`,
+   `virtio-console`, and `virtio-blk` vdevs. Any Phase-2 transport that depends
+   on host `io-sock` (i.e. anything routed through `br0`/tap/host TCP) is
+   presumed unavailable on this leg until proven otherwise.
 
 **Net effect on Phase 2:** the entire `ipc-test/` premise (QNX TCP server +
 Linux TCP client over `br0`) describes infrastructure that does not exist on the
-cloud leg and partly cannot exist there without first fixing host `io-sock`.
+cloud leg and partly cannot exist there without first providing host `io-sock`.
 This ADR decides what the cloud-leg IPC study actually *is*.
 
 ### As-built constraint summary (the decision must respect these)
 
 | Constraint | Source | Consequence for Phase 2 |
 |---|---|---|
-| ~~No `/dev/kvm` on cloud~~ **No `/dev/kvm` on *non-metal* cloud** | findings 2026-06-11; scope corrected 2026-09-19 | TCG only, and non-metal is where this leg ran; no two-guest KVM topology on cloud. **2026-09-19:** `*.metal` does expose `/dev/kvm`, and a QNX guest booted under KVM on `a1.metal` (§1 item 1) — one boot arm, no leg, no timing; the as-built Phase-2 leg and this decision are unaffected |
+| ~~No `/dev/kvm` on cloud~~ **No `/dev/kvm` on *non-metal* cloud** | findings 2026-06-11; scope corrected 2026-09-19 | TCG only, and non-metal is where this leg ran; no two-guest KVM topology on cloud. **2026-09-19:** `*.metal` does expose `/dev/kvm` (§1 item 1; the QNX run there is held locally) — one boot arm, no leg, no timing; the as-built Phase-2 leg and this decision are unaffected |
 | QHV host is QNX; one QNX guest built | findings 2026-06-11 | Linux-guest path is unproven, not built |
-| Host `io-sock` down | `post_start.custom`, qhv/README | Host-routed TCP/bridge transports presumed dead |
-| Guest vdevs today: pl011 / virtio-console / virtio-blk | `g2.conf` in `post_start.custom`; `vdev.manifest` | A host↔guest channel already exists via virtio-console |
-| TCG is slow (minutes to boot, char-drop on console) | findings, qhv/README | Two guests under TCG is a real performance risk; interactive console control is unreliable |
+| Host `io-sock` unavailable (RQ-4) | `post_start.custom`, qhv/README | Host-routed TCP/bridge transports presumed unavailable |
+| Guest vdevs today: pl011 / virtio-console / virtio-blk | `g2.conf` in `post_start.custom`; `vdev.manifest` | A host↔guest channel is already declared via virtio-console |
+| TCG is full-system emulation | qhv/README | Two guests under TCG is a real performance risk |
 
 ---
 
@@ -103,7 +101,7 @@ IPC client/server across the **host↔guest partition boundary** using a vdev
 channel (virtio-console today; a virtio-vsock or shared-memory vdev as a
 stretch).
 
-- **Cost:** low. The host and guest are both already QNX and already booting; a
+- **Cost:** low. The host and guest are both already QNX and already built; a
   `virtio-console` vdev is already in the live `g2.conf`. Implementation is a
   console-framed echo on each side plus the existing build pipeline. No new
   guest OS, no `io-sock` fix required.
@@ -130,10 +128,9 @@ analogue to DRIVE OS's dual-VM Type-1 partition design.
   unknowns, each a potential blocker: (1) can `mkqnximage`/`qvm` boot an aarch64
   **Linux** guest at all, and how is the guest image built outside the
   QNX-native `--type=qvm` flow? (2) what **inter-guest** channel exists when host
-  `io-sock` is down — a shared-memory vdev, a virtio-vsock-style channel, or a
-  back-to-back virtio-net between guests that does *not* route through the host
-  stack? (3) TCG performance of **two** guests booting concurrently (Phase-1
-  already saw minutes-to-boot for one).
+  `io-sock` is unavailable — a shared-memory vdev, a virtio-vsock-style channel,
+  or a back-to-back virtio-net between guests that does *not* route through the
+  host stack? (3) TCG performance of **two** guests booting concurrently.
 - **Buys:** if it works, this is the single most credible DRIVE OS analogue the
   project can produce on the cloud leg — heterogeneous OS partitions on a real
   Type-1 hypervisor, exactly the cockpit/compute split. Highest narrative payoff.
@@ -151,14 +148,14 @@ analogue to DRIVE OS's dual-VM Type-1 partition design.
 
 One line: cloud leg does **QNX↔QNX over qvm** (Option A) as the *IPC-mechanism*
 study; the QNX-safety ↔ Linux-compute **heterogeneous** IPC moves to **Phase 3
-(Orin)**, where KVM actually works and L4T natively *is* the Linux compute side.
+(Orin)**, where KVM is available and L4T natively *is* the Linux compute side.
 
 - **Cost:** low on the cloud leg (= Option A). Phase 3 already plans a QNX guest
   under KVM-on-L4T with L4T as the Compute host, so the heterogeneous client is
   "free" there — no second guest to build, L4T provides it natively.
 - **Buys:** honesty. Each host demonstrates what it *can*: the cloud leg shows
   the hypervisor partition boundary and the IPC mechanism; Orin shows the
-  heterogeneous QNX↔Linux path on real silicon with working KVM. It also sharpens
+  heterogeneous QNX↔Linux path on real silicon with KVM available. It also sharpens
   the **twin diff**: the cloud and Orin legs are no longer running the identical
   IPC topology, so the diff becomes "mechanism vs. heterogeneity" rather than a
   pure host-only delta.
@@ -173,8 +170,8 @@ study; the QNX-safety ↔ Linux-compute **heterogeneous** IPC moves to **Phase 3
 
 One line: **ship Option A as the committed Phase-2 cloud deliverable now**, and
 hold Option B as an explicitly research-gated stretch (Phase 2.5) that only opens
-if RQ-1 (QHV hosts a Linux guest) and RQ-3 (an inter-guest channel survives
-`io-sock` being down) both come back affirmative — while Phase 3/Orin remains the
+if RQ-1 (QHV hosts a Linux guest) and RQ-3 (an inter-guest channel exists
+without host `io-sock`) both come back affirmative — while Phase 3/Orin remains the
 *committed* home of heterogeneous QNX↔Linux IPC (Option C's posture).
 
 - **Cost:** low committed cost (= A); the B work is conditional and time-boxed
@@ -206,11 +203,10 @@ EL2/EL1 partition boundary.
 
 Why this transport, against the known constraints:
 
-- **It survives host `io-sock` being down.** virtio-console is a `qvm` vdev
+- **It does not need host `io-sock`.** virtio-console is a `qvm` vdev
   mediated by the hypervisor; it does **not** route through the host TCP/IP
-  stack, the bridge, or tap devices. Every transport that died in Phase 1
-  (br0/tap/host TCP) depends on `io-sock`; this one does not. It is the one
-  channel already *proven live* on this leg (the guest banner prints over it).
+  stack, the bridge, or tap devices. Every host-routed transport
+  (br0/tap/host TCP) depends on `io-sock`; this one does not.
 - **It is the partition boundary, not a network.** This is strictly closer to
   the DRIVE OS reference (hypervisor-mediated shared memory + mailbox) than the
   old `br0` virtio-net path was — the old path crossed a host Linux bridge; this
@@ -225,7 +221,7 @@ gated behind RQ-2 and is *not* required for the committed deliverable —
 virtio-console is the guaranteed floor.
 
 **Explicitly rejected for the cloud leg:** any `br0`/tap/host-TCP transport
-(depends on dead `io-sock`); any KVM-dependent topology (~~no `/dev/kvm` on
+(depends on host `io-sock`, unavailable on this leg); any KVM-dependent topology (~~no `/dev/kvm` on
 cloud~~ **no `/dev/kvm` on the non-metal cloud host this leg was to run on** —
 **2026-09-19:** `*.metal` does expose it, §1 item 1. The rejection stands as
 decided: the leg ran on the Windows PC under TCG, nothing is re-run, and no
@@ -239,21 +235,22 @@ not built, or (b) bet Phase 2 on the unproven assumption that QHV hosts Linux.
 Option A is the only option guaranteed to execute today; making it the committed
 deliverable de-risks Phase 2 entirely. Heterogeneity is the project's
 load-bearing DRIVE OS mirror, so it is not abandoned — it is *relocated* to the
-one host where it is cheap and proven (Orin: KVM works, L4T *is* Linux). Option B
+one host where it is cheap (Orin: L4T *is* Linux, and KVM is available there). Option B
 is genuinely the strongest analogue, so it is preserved as upside — but behind a
 spike, so its unbounded risk cannot contaminate the committed schedule. This is
 the honest-framing rule applied to scope: demonstrate what each host can
 actually do, and say plainly where the dual-OS story does and does not live.
 
 > **2026-09-11 note (later evidence; the accepted text above stands as
-> decided).** KVM did not boot the QNX IFS on the Orin. The boot hangs on the
-> GICv3/NISV defect ([orin-port.md](orin-port.md) risk register), and the
-> heterogeneous QNX↔Linux leg ran under TCG instead. The same correction
-> applies to the KVM wording in §1 item 1, Option C and §4. **2026-09-18:** v1
+> decided).** The heterogeneous QNX↔Linux leg on the Orin ran under TCG, not
+> KVM; the KVM outcome of the QNX IFS there is held locally (NC QDL v7
+> 4.6(i)). The same correction applies to the KVM wording in §1 item 1,
+> Option C and §4. **2026-09-18:** v1
 > was superseded before it was ever frozen, and A6 (L4T on the metal with the
 > GPU, QNX as a KVM guest) is the current direction with its gate unsettled —
 > so references to "the v1 campaign" in this file are the record of what was
-> planned, not a current plan, and no hardware-timed number exists on any leg.
+> planned, not a current plan, and no hardware-timed hypervisor number is
+> published on any leg.
 > The route to a
 > hardware-timed number is the native port chosen in
 > [ADR-003](adr-003-hardware-timed-qhv.md), measured in the v1 campaign
@@ -364,8 +361,8 @@ so they do not drift)
 > (`vdev-shmem`, io-sock-free; no virtio-vsock in SDP 8.0 — shmem is the A-stretch
 > transport). **RQ-3 FEASIBLE** (`vdev-shmem` is guest↔guest and io-sock-free →
 > the Option-B blocker is removed; B is now effort-gated, not feasibility-gated).
-> **RQ-4 FIXABLE-CONFIG** (io-sock + entropy both = missing virtio-net/-rng on the
-> `launch-qhv-tcg.ps1` line; re-frames the NF-5/T31 entropy finding). **RQ-5
+> **RQ-4 FIXABLE-CONFIG** (io-sock and entropy both need virtio-net/-rng on the
+> `launch-qhv-tcg.ps1` line; bears on the NF-5/T31 entropy threat). **RQ-5
 > LIKELY / AT-RISK on the Orin *Nano* SKU** (KVM works on the Orin family with a
 > DTB GICv3 patch, unconfirmed on Nano — schedule a smoke spike before Phase 2
 > closes). **Net: Option B feasibility-GREEN; the committed Option-A deliverable
@@ -373,67 +370,37 @@ so they do not drift)
 >
 > **2026-09-11 note on RQ-5 (outcome recorded 2026-07-28 in
 > [orin-port.md](orin-port.md), step 2 and risk register):** on the Nano, vGIC
-> creation with `gic-version=3` works without the DTB patch. ~~The QNX IFS still
-> hangs under KVM on the GICv3/NISV defect, so the Orin leg used TCG.~~
-> **2026-09-18:** the QNX IFS **as shipped** still hangs under KVM on the
-> GICv3/NISV defect, and the Orin leg used TCG. An IFS carrying a
-> `startup-qemu-virt` **we rebuilt** (`-fno-auto-inc-dec`, board source
-> `orin-native/startup/qemu-virt/`) boots under KVM on the Nano to procnto and
-> the guest banner (`logs/sample-boot/orin-kvm-*.log`) — not a QNX-supported
-> configuration, no timing claim, and nothing about QHV under KVM, which still
-> needs nested virt.
+> creation with `gic-version=3` works without the DTB patch. The Orin leg used
+> TCG. **2026-09-18:** the KVM outcomes of the QNX IFS **as shipped** and of one
+> carrying a `startup-qemu-virt` **we rebuilt** (`-fno-auto-inc-dec`, board
+> source `orin-native/startup/qemu-virt/`) are held locally (NC QDL v7 4.6(i)).
+> The rebuilt one is not a QNX-supported configuration, no timing claim
+> attaches to it, and it says nothing about QHV under KVM, which still needs
+> nested virt.
 >
-> **RQ-2 REFINED 2026-07-28 — host<->guest (not just guest<->guest) is
-> RESOLVED YES, proven live on the host side; guest side open.** The
-> 2026-06-11 spike above established that `vdev-shmem` exists and is
-> `io-sock`-free but characterised it as "guest↔guest" without directly
-> testing whether the QHV **host**'s own userspace (as opposed to a `qvm`
-> guest) can use it — this mattered because Option A's committed transport
-> is host<->guest, not guest<->guest. A 2026-07-28 follow-up (see
-> [findings.md](findings.md)) fetched the full vendor doc set and found it
-> explicit: shmem works "between guests, or between guests and the
-> hypervisor host," and "Host applications may also create shared memory
-> regions or attach to them if permission allows" via the Virtualization
-> API (`hyp_shm.h`/`libhyp.a`). That API is shipped in the local SDP 8.0
-> install (confirmed via `nm` against `libhyp.a`) despite vendor docs
-> suggesting it needs additional NDA'd documentation, and a new minimal
-> host-only test program
-> ([ipc-test/qnx-host-shmem-probe/](../ipc-test/qnx-host-shmem-probe/))
-> proved `hyp_shm_attach_ext()` succeeds live on `qnx-qhv`, with zero
-> `qvm`/`g2.conf` involvement. **The guest-side half (a `qnx-guest`
-> process attaching to the same region via `qvm/guest_shm.h`'s raw-MMIO
-> protocol) was not attempted** — a time-boxed stopping point, not a
-> ruled-out wall. `scripts/qhv/g2.conf.allow` has NOT been extended with
-> `vdev:shmem` since no guest-side vdev was actually configured.
->
-> **RQ-2 FULLY RESOLVED 2026-07-28 (continuation session) — guest side is
-> now RESOLVED YES, proven live, two-way.** A `qnx-guest` process
-> ([ipc-test/qnx-guest-shmem-probe/](../ipc-test/qnx-guest-shmem-probe/))
-> added a `vdev shmem` line to the guest's `g2.conf` (staged, not committed
-> to `scripts/qhv/`) and attached to `phase2-rq2-probe` via
-> `qvm/guest_shm.h`'s raw-MMIO factory-page protocol
-> (`mmap_device_memory()` + `guest_shm_create()`): `guest_shm_create()`
-> returned `GSS_OK`, the guest read the host's `"hyp-shm-host-ok"` pattern
-> byte-exact, and wrote `"hyp-shm-guest-ok"` back; a host-side companion
-> (`ipc-test/qnx-host-shmem-probe/roundtrip.c`) that had been polling since
-> before `qvm` launched the guest saw the write-back 24 seconds later. Both
-> ends resolving to the same underlying region (not two independent
-> registries) is now empirically confirmed, not just inferred from docs. A
-> first attempt hit a real `Bus error` (block `memcpy()` into the factory
-> page's MMIO register file — fixed by switching to byte-at-a-time volatile
-> stores); see [findings.md](findings.md) and
-> [ipc-test/qnx-guest-shmem-probe/README.md](../ipc-test/qnx-guest-shmem-probe/README.md)
-> for the full account, including the fix. `scripts/qhv/g2.conf.allow` **is
-> now extended** with the `allow` keyword and `vdev:shmem` type
-> (least-directive: only what this g2.conf actually uses). **Not attempted:**
-> the interrupt/notify-driven path (`InterruptAttach()` +
-> `guest_shm_control.notify`) — everything proven is pure MMIO polling on
-> both ends; `factory->vector` is read/logged for a future attempt. This
-> stretch transport is now proven end-to-end at the mechanism level, but
-> remains a **spike, not the committed Option-A deliverable** — the
-> committed transport is still virtio-console (§3.1); whether to build a
-> full replacement IPC layer on shmem is left to a future Architect
-> decision.
+> **RQ-2 follow-ups, 2026-07-28.** The 2026-06-11 spike characterised
+> `vdev-shmem` as guest↔guest; Option A's committed transport is host↔guest,
+> so the host side mattered. The full vendor doc set is explicit: shmem works
+> "between guests, or between guests and the hypervisor host," and "Host
+> applications may also create shared memory regions or attach to them if
+> permission allows" via the Virtualization API (`hyp_shm.h`/`libhyp.a`). That
+> API is shipped in the local SDP 8.0 install (its symbols listed with `nm`
+> against `libhyp.a`) despite vendor docs suggesting it needs additional
+> NDA'd documentation. Two probes were then written and run: a host-only one
+> ([ipc-test/qnx-host-shmem-probe/](../ipc-test/qnx-host-shmem-probe/)), with no
+> `qvm`/`g2.conf` involvement, and a guest-side one
+> ([ipc-test/qnx-guest-shmem-probe/](../ipc-test/qnx-guest-shmem-probe/)) that
+> adds a `vdev shmem` line to the guest's `g2.conf` and attaches through
+> `qvm/guest_shm.h`'s raw-MMIO factory-page protocol, with a host-side
+> companion (`ipc-test/qnx-host-shmem-probe/roundtrip.c`). Their outcomes are
+> held locally under NC QDL v7 4.6(i). `scripts/qhv/g2.conf.allow` is extended
+> with the `allow` keyword and `vdev:shmem` type (least-directive: only what
+> this g2.conf actually uses). **Not attempted:** the interrupt/notify-driven
+> path (`InterruptAttach()` + `guest_shm_control.notify`); both probes poll.
+> This stretch transport remains a **spike, not the committed Option-A
+> deliverable** — the committed transport is still virtio-console (§3.1);
+> whether to build a full replacement IPC layer on shmem is left to a future
+> Architect decision.
 
 These gate the **Option B stretch** and resolve the **A stretch transport**.
 Implementation can start the committed Option-A/virtio-console deliverable
@@ -450,13 +417,13 @@ Implementation can start the committed Option-A/virtio-console deliverable
   `g2.conf` without depending on host `io-sock`? This decides whether the A
   deliverable can upgrade past byte-stream console framing.
 - **RQ-3 (gates B):** When two guests run under one `qvm` host, what
-  **inter-guest** channel exists with host `io-sock` **down** — a shared-memory
+  **inter-guest** channel exists **without** host `io-sock` — a shared-memory
   vdev between guests, an inter-VM virtio-vsock, or a back-to-back virtio-net
   that `qvm` bridges in EL2 without touching the host stack? *If every inter-guest
   channel depends on `io-sock`, Option B is blocked even if RQ-1 is positive.*
-- **RQ-4 (de-risks everything):** Can the host `io-sock` / network-stack
-  init failure on this qemu-virt build be fixed (missing driver/package, wrong
-  `io-sock` invocation, missing entropy precondition — cf. NF-5/T31)? A fix would
+- **RQ-4 (de-risks everything):** What does the host `io-sock` / network
+  stack need on this qemu-virt build (driver/package, `io-sock` invocation,
+  entropy precondition — cf. NF-5/T31)? Providing it would
   *not* change this decision (the qvm vdev path is preferred regardless) but
   would re-open the host-routed transports as a comparison point and is needed
   anyway for any future Linux-guest networking.
@@ -472,7 +439,7 @@ Implementation can start the committed Option-A/virtio-console deliverable
 | This decision demonstrates | It does NOT demonstrate |
 |---|---|
 | IPC across a **real `qvm` Type-1 partition boundary** (EL2 host ↔ EL1 guest) | Certified Type-1 isolation, ASIL-D, or quantified freedom-from-interference |
-| A transport that **survives the host `io-sock` failure** (qvm vdev, not host TCP) | A working host network stack — `io-sock` is still down (RQ-4) |
+| A transport that **does not need host `io-sock`** (qvm vdev, not host TCP) | A working host network stack (RQ-4) |
 | A **runnable, de-risked** Phase-2 cloud deliverable | The QNX-safety ↔ **Linux**-compute heterogeneity on the cloud leg (relocated to Orin) |
-| A latency number proving the IPC path is **wired and stable** | A meaningful transport-cost benchmark — the cloud number is TCG-emulation-bound, not hardware-timed |
+| A latency measurement across the IPC path (its figures are held locally, NC QDL v7 4.6(i)) | A meaningful transport-cost benchmark — any cloud number is TCG-emulation-bound, not hardware-timed |
 | An honest scope split (mechanism on cloud, heterogeneity on Orin) | A single host that tells the whole DRIVE OS dual-VM story by itself |

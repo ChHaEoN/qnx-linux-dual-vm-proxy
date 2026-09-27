@@ -15,7 +15,7 @@
  * The M0 hang test then showed that it does not fire after `systemctl kexec`:
  * the shim, parked in wfi with nothing feeding the watchdog, stayed unreachable
  * well past two minutes and had to be power-cycled by hand
- * (results/orin-native-port/20260909T1100Z/m0-hang-watchdog.md). Most likely
+ * (`m0-hang-watchdog.md`, held locally). Most likely
  * systemd hands the device back on its way out (HYPOTHESIS, from that note).
  * So a hang costs a power cycle, which also empties the black box, and there is
  * no two-minute ceiling on a run either.

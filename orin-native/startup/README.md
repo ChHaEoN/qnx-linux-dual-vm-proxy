@@ -1,7 +1,7 @@
 # startup/ — the `startup-t234-orin-nano` board directory
 
-Written, building, and run on the board. M1 (one core), M2 (six cores at EL1) and M1b (six cores as the hypervisor
-host at EL2) all passed on 2026-09-10; the records are under `results/orin-native-port/20260909T1100Z/`.
+Written and building. M1 (one core), M2 (six cores at EL1) and M1b (six cores as the hypervisor
+host at EL2) were run on the board on 2026-09-10; their outcomes are held locally under NC QDL v7 4.6(i).
 
 `build-board.sh` stages `t234-orin-nano/` into an extracted QNX BSP tree, builds
 it against the startup library there, and runs a symbol gate on the result. On
@@ -68,13 +68,13 @@ procnto depends on it:
 3. It watches the redistributor's pending bits throughout, never taking an interrupt.
 
 Anything but `wired` stops the run by name with a warm reset, which keeps the
-black box. `-t continue` or `-t off` overrides that. On the board it said `wired` on
-all six cores (M1b).
+black box. `-t continue` or `-t off` overrides that. What it reported on the board
+(M1b) is held locally.
 
 An earlier version of this file planned to learn the answer from whether the host
 comes up and its timeouts work. That would have cost a power cycle, and the log
-with it, if the interrupt were not wired: a host with a dead clock still reaches
-user space and then stalls at its first timed wait.
+with it, if the interrupt were not wired: a host with a dead clock can still reach
+user space and then stall at its first timed wait.
 
 Our code here is Apache-2.0, matching the BSP templates it is modelled on. No
 QNX-shipped file is copied in, and the built startup is an output, not an

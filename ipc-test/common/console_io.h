@@ -29,8 +29,7 @@
  * devc-virtio node /dev/vcon2) default to line-buffered "cooked"/edited tty
  * mode: input is held until a newline byte appears. The wire frame is raw
  * binary (arbitrary byte values, no guaranteed '\n'), so without this a
- * frame can sit in the line-discipline buffer forever -- a real deadlock
- * observed empirically on the qvm/TCG spike, not a hypothetical. Put the fd
+ * frame can sit in the line-discipline buffer forever. Put the fd
  * into raw mode (no canon/echo/signals) right after open(). ENOTTY (fd is a
  * plain file, e.g. in a future non-tty test harness) is not an error here. */
 static inline int cio_set_raw(int fd)
@@ -45,15 +44,14 @@ static inline int cio_set_raw(int fd)
      * for the next request; a bounded read timeout, where wanted, is a
      * caller-local policy layered on top (see qnx-host-client/client.c),
      * not a shared default -- an idle server timing out and treating that
-     * as EOF was a real regression caught empirically on this spike. */
+     * as EOF would be a regression. */
     if (tcsetattr(fd, TCSANOW, &t) < 0) {
         return -1;
     }
-    /* Discard stale bytes queued before this end started reading (observed
-     * empirically: qvm writes a short preamble to its hostdev pty master the
-     * moment it arms the vdev, long before either endpoint's protocol loop
-     * starts -- those bytes sit in the queue and corrupt the very first
-     * frame's alignment otherwise). ENOTTY here is likewise not an error. */
+    /* Discard stale bytes queued before this end started reading: anything
+     * that reached the queue before either endpoint's protocol loop started
+     * would otherwise corrupt the very first frame's alignment. ENOTTY here
+     * is likewise not an error. */
     if (tcflush(fd, TCIOFLUSH) < 0 && errno != ENOTTY) {
         return -1;
     }

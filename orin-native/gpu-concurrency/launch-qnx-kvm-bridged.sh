@@ -11,18 +11,18 @@
 # bridge. The ladder cannot do that: arm B enslaves a veth to br0 and arm D
 # must reach the guest through tap-qnx on that same bridge. SLIRP has no bridge
 # and no tap, so a ladder run over SLIRP would be measuring a different path
-# from the one the published Orin figure measured.
+# from the one the Orin ladder measured.
 #
 # DEVICE ORDER IS LOAD-BEARING: blk, then net, then rng. QEMU assigns
 # virtio-mmio slots in command-line order and the image's startup.sh binds
-# absolute addresses to them. Reordering these does not fail loudly -- it
-# produces a guest that boots and then cannot see its disk or its network.
+# absolute addresses to them. Reordering these does not fail loudly: startup.sh
+# then binds its disk and network drivers to the wrong slots.
 #
 # WHICH IMAGE. It must be one whose startup-qemu-virt is the rebuild
-# (-fno-auto-inc-dec); the startup QNX ships stops after 17 bytes of serial
-# under KVM. It must also actually START the server the ladder probes: several
-# images in this tree stage a binary without running it, and their startup
-# script is visibly shorter. Pass IFS= explicitly; there is no safe default.
+# (-fno-auto-inc-dec), not the startup QNX ships. It must also actually START
+# the server the ladder probes: several images in this tree stage a binary
+# without running it, and their startup script is visibly shorter. Pass IFS=
+# explicitly; there is no safe default.
 #
 # SHARED MEMORY (OD12, 2026-09-22), opt-in with IVSHMEM=/dev/shm/<name>: adds
 # QEMU's ivshmem-plain PCI device, its BAR2 backed by that host file (1 MiB,

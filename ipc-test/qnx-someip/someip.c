@@ -35,9 +35,9 @@
  * unjudged, as the TCP monitor does.
  *
  * TRANSPORTS. TCP and UDP on the same port (default 30509), each served the way monitor.c
- * serves it, because inside this guest every socket call is a message to io-sock that costs
- * ~7-13 us (20260927T-a6-orin-free), so the server's own call pattern would otherwise be
- * measured as SOME/IP's cost:
+ * serves it, because inside this guest every socket call is a message to io-sock, with a cost
+ * of its own (record `20260927T-a6-orin-free`, held locally), so the server's own call pattern
+ * would otherwise be measured as SOME/IP's cost:
  *   TCP  one connection at a time (the main thread), blocking; each read() takes whatever has
  *        arrived into a buffer, so a whole 80-byte message is one read, as the monitor's
  *        64-byte frame is; messages are framed by their length field, and a header announcing

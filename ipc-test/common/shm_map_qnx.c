@@ -8,13 +8,11 @@
  * (IntrMask, IntrStatus, IVPosition at 8, Doorbell at 12); on ivshmem-doorbell
  * BAR1 is the MSI-X table, which this program never uses.
  *
- * WHY NOT THE PCI SERVER. SDP 8.0's pci-server with pci_hw-fdt.so refused QEMU
- * virt's generic ECAM host bridge on 2026-09-22: by its own log it took the ECAM
- * window's size as zero, found no memory window and returned EINVAL, and an
- * [ecam] override in PCI_HW_CONFIG_FILE changed nothing. So this file does what
- * is needed for this one function itself, through ECAM. The same fact means no
+ * WHY NOT THE PCI SERVER. This guest runs no pci-server; this file does what is
+ * needed for this one function itself, through ECAM (why the PCI server is not
+ * used is held locally, NC QDL v7 4.6(i)). With no PCI server there is no
  * MSI-X, so QEMU 6.2's ivshmem-doorbell -- which notifies a guest only by MSI-X
- * and otherwise drops the notification -- can never interrupt this guest. The
+ * and otherwise drops the notification -- cannot interrupt this guest. The
  * guest can still RING a peer (a Doorbell write is caught by a KVM ioeventfd),
  * and it is interrupted instead through the virtio console, whose driver,
  * devc-virtio, takes an ordinary SPI.
@@ -45,8 +43,7 @@
  * MMIO ACCESSES ARE SINGLE-REGISTER, WITHOUT WRITEBACK, BY INLINE ASM, and the
  * Doorbell store is 32 bits. KVM on this board emulates a trapped access only
  * when its syndrome is valid (ISV=1); a post-increment or a load/store pair
- * reports ISV=0 -- the defect this project root-caused in the shipped
- * startup-qemu-virt. And QEMU registers the doorbell's ioeventfd for 4-byte
+ * reports ISV=0. And QEMU registers the doorbell's ioeventfd for 4-byte
  * writes only: a wider store would miss it and go to QEMU's userspace instead.
  *
  * BAR2 IS MAPPED CACHEABLE, ON PURPOSE. The host maps the same pages cacheable,

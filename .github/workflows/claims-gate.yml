@@ -1,22 +1,27 @@
 name: claims-gate
 
-# Re-derive every number README.md quotes from the committed raw data, and fail
-# if the document and the data disagree.
+# Check README.md against the committed tree, and the repo's prose against a
+# denylist: every figure README quotes must be re-derived from committed data.
 #
 # WHY THIS IS THE ONE THAT MATTERS. This project's rule is "never write 'it
 # works' without a log, a number, or a diff". That rule catches a number that
 # was never measured. It does not catch a number that was true when written and
 # drifted afterwards -- a figure edited in prose, a data file appended to, a
-# claim carried past the run it came from. Two published figures in this repo
-# were already found wrong that way, by hand. This job makes that class of
-# error fail the build.
+# claim carried past the run it came from. Two figures once published in this
+# repo were found wrong that way, by hand. This job makes that class of error
+# fail the build.
+#
+# NO RESULTS ARE PUBLISHED (2026-09-27). Clause 4.6(i) of the QNX licence
+# (NC QDL v7) bars making evaluation results available to a third party without
+# BlackBerry's written approval, so the run data is held locally and README
+# quotes no figure. The gate enforces that: a number with a unit in README fails
+# unless a claim re-derives it from committed data.
 #
 # NO MEASUREMENT HAPPENS HERE, and that is deliberate. A GitHub-hosted runner
-# is shared, virtualised x86_64 hardware; both of this project's measured legs
-# are TCG emulation where simulation cost dominates. Any timing taken here would
-# be meaningless and dangerous -- it would look like a result. This job only
-# RECOMPUTES arithmetic over data measured elsewhere, on known hardware. It
-# never gates on an absolute number.
+# is shared, virtualised x86_64 hardware, unlike the board this project targets.
+# Any timing taken here would be meaningless and dangerous -- it would look like
+# a result. This job only checks text, and recomputes arithmetic over committed
+# data where a claim has any. It never gates on an absolute number.
 #
 # NO QNX. Nothing here builds, links or boots anything QNX; the licence forbids
 # it on public runners and no QNX artefact exists in this repo.
@@ -47,15 +52,11 @@ jobs:
       # diff -- never on a repository-settings change the contributor did not
       # make and cannot fix. The pinned description in docs/repo-description.md
       # still gets the full denylist and figure verification here.
-      - name: Re-derive every README figure from committed data (hermetic)
+      - name: Check README figures and prose against the tree (hermetic)
         if: github.event_name == 'pull_request'
-        # The gate prints a claimed-vs-recomputed table to this log on every
-        # run, pass or fail, so a human reviewer can read the check itself and
-        # not merely its exit status.
-        #
-        # It reuses the project's own measurement toolchain rather than a CI
-        # copy: the IPC deltas come from scripts/twin/delta.awk, the same file
-        # scripts/twin/diff-results.sh uses to print the published report.
+        # The gate prints a claimed-vs-recomputed table and every section's
+        # verdict to this log on every run, pass or fail, so a human reviewer
+        # can read the check itself and not merely its exit status.
         run: python scripts/ci/claims_gate.py --repo . --no-network
 
       # PUSH, SCHEDULE, MANUAL: additionally compare the live GitHub "About"
@@ -63,7 +64,7 @@ jobs:
       # gate could not see before -- the description described an AWS Graviton
       # cloud twin for weeks while README and findings.md said no cloud leg was
       # ever built, and nothing was looking at it.
-      - name: Re-derive every README figure, and check the live description
+      - name: Check README figures and prose, and the live description
         if: github.event_name != 'pull_request'
         env:
           # Without this the API call is unauthenticated and hits the shared
@@ -86,14 +87,15 @@ jobs:
           {
             echo '## Claims gate'
             echo
-            echo 'Every figure README.md quotes is recomputed from the committed'
-            echo 'raw data in `logs/` and `results/`. Full claimed-vs-recomputed'
-            echo 'table is in the job log above.'
+            echo 'README.md quotes no measured or functional result (NC QDL v7'
+            echo '4.6(i)): any number with a unit in it fails unless a claim'
+            echo 're-derives it from committed data. The full report is in the'
+            echo 'job log above.'
             echo
-            echo 'This gate checks arithmetic over data measured elsewhere.'
+            echo 'This gate checks text and arithmetic over committed data.'
             echo 'It never measures anything itself and never gates on an'
             echo 'absolute number -- a shared public runner cannot produce a'
-            echo 'meaningful timing for a TCG-emulated target.'
+            echo 'meaningful timing for this target.'
             echo
             echo '### Repository description'
             echo

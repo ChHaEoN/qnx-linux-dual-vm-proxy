@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# run-someip1.sh -- the SOME/IP arm, third run: is vsomeip's own ~60 us its threads' contention
+# run-someip1.sh -- the SOME/IP arm, third run: is vsomeip's own cost its threads' contention
 # with the client for one core? Phase 3b / A6, 2026-09-27; follows 20260927T-a6-orin-someip0 and
 # its a1.metal replication.
 # The owner asked for this run (2026-09-27: "照你建議的做").
 #
-# WHAT IS KNOWN. With npdu-default-timings at 0, a request through vsomeip 3.4.10 costs +59.3 us
-# (TCP) and +62.0 us (UDP) more than the same C++ client on a plain socket, 35-41% of the round
-# trip (Orin; +77/+80 us, 36-42% on a1.metal). In those runs every vsomeip thread inherited the
+# WHAT IS KNOWN. With npdu-default-timings at 0, what a request through vsomeip 3.4.10 costs
+# against the same C++ client on a plain socket: record 20260927T-a6-orin-someip0 (Orin) and
+# its a1.metal replication, record 20260927T-a6-a1metal-someip (both held locally). In those
+# runs every vsomeip thread inherited the
 # probe's core: the client's timing thread and all of vsomeip's (its I/O and dispatch threads)
 # shared core 4.
 #

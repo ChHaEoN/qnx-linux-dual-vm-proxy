@@ -11,7 +11,7 @@
 # parser's (orin-native/s1/parse-s1.py run), written to <rec>/<step>/parse-s1.txt.
 #
 # RUNS ON the PC. It reaches the board over ssh and scp only. It never opens
-# COM3: a capture started from Git Bash receives nothing (m2-runs.md:135-137),
+# COM3: a capture started from Git Bash receives nothing (`m2-runs.md`, held locally),
 # so orin-native/m4/capture-com3-raw.ps1 is started from PowerShell before
 # `run` and named here.
 #
@@ -105,9 +105,9 @@
 #   B5: OD1 (2026-09-16) settled the guest set as Linux only and B5 did not run. OD9 (2026-09-17)
 #   reopened item 2 and reversed it to QNX plus Linux, so pass item 3 applies again and B5 runs.
 #   D14's limit is derived: --q2-limit 0x8E000000 (make-s1-images.sh, the geometry gate).
-#   2026-09-17: s1-q2 was built on the OD7-regenerated guest, and B5 ran on the board and
-#   passed -- pass item 3, completion only (not a hold rung, so no duration claim with two
-#   guests; guest-RAM window unknown; no isolation claim; s1-design 6.10's append).
+#   2026-09-17: s1-q2 was built on the OD7-regenerated guest; B5's board record is held
+#   locally (NC QDL v7 4.6(i)). Pass item 3 is completion only (not a hold rung, so no
+#   duration claim with two guests; no isolation claim; s1-design 6.10's append).
 #   s1-j1 J6 (host; the watcher, §15.4.8: stage and p0 as any image, then jrun only, never run)
 #
 # ENVIRONMENT (no host, user, key or path is written into this file)
@@ -4048,7 +4048,7 @@ j_kexec_runs() {
 
 # §15.4.8 'Run' and §15.6: J6's arm, as refusals. Both need D27 (the owner's, after J4's memo) in
 # J-waivers.conf, no J6 row so far with F39 or F49 (§15.6's immediate stops), and T-J1 met with the
-# image's memcanary-w pin (j6_tj1_met). J2's own F39 was waived by D34 for J3 and J4 only (§15.6.1),
+# image's memcanary-w pin (j6_tj1_met). D34 waives an F39 in J2's row for J3 and J4 only (§15.6.1),
 # so when J2's row holds F39 a J6 run also needs the owner's 'D34_J6=yes'. j6control (J6c)
 # follows J4's F36, J2's F32a or F32b, or J2b's F46; j6remove (J6r) follows J4's F35. Otherwise the
 # arm runs only by the owner's D27 for it: D27_J6C=yes or D27_J6R=yes. Prints the reason and the
@@ -5753,9 +5753,9 @@ cmd_run() {
 	# provisional reading stops the ladder and routes to the owner like any other non-final one.
 	# 2026-09-17: X-f-c was absent from this filter until today, so a correctly classed confirmatory
 	# reading would have made r4bad non-empty and blocked B3-B5 — the gate was narrower than the line
-	# above it and than the design it implements. Found while checking the gate after B5 ran. B5 was
-	# not affected: B2-a3's record reads X-f-final, because --confirmatory was added to the parser
-	# after that reading was taken. The sibling gate at the D86 key (:2727) stays strict on X-f-final
+	# above it and than the design it implements. What the B2 records themselves read is held
+	# locally (NC QDL v7 4.6(i)).
+	# The sibling gate at the D86 key (:2727) stays strict on X-f-final
 	# on purpose — there, an X-f-c on file means a confirmatory run has already been made, and
 	# admitting it would hand out a fourth observation against D86's bound of one.
 	case "$IMG" in
@@ -10089,8 +10089,8 @@ cmd_harness_selftest() {
 	# §16.6.1's X-f-c row: the confirmatory run read clean, and its row says B3-B5 may resume. Tested
 	# in the shape it will really take -- the original reading and the confirmatory one both on file,
 	# neither blocking -- because that pair is what a spent D86 key leaves behind. Until 2026-09-17
-	# the filter whitelisted X-f-final alone and this case blocked; B5 escaped only because B2-a3's
-	# record reads X-f-final. These fixtures land in B2-a3, which the X-p line below overwrites, so
+	# the filter whitelisted X-f-final alone and this case blocked (what the real B2 records read
+	# is held locally). These fixtures land in B2-a3, which the X-p line below overwrites, so
 	# the later check on 'B2-a2 X-f-final;B2-a3 X-p' is untouched.
 	mkdir -p "$jr7/B2-a3"; printf 'S1PC r4_reading=clean\nS1PC r4_class=X-f-c\n' > "$jr7/B2-a3/r4-read.txt"
 	out="$(R4RUN_REC="$jr7a" r4run s1-n1)"

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""mss_report.py OUT -- run-mss.sh's map of the guest path's 1280 B bump and its fast path above
-one MSS, by the rule the harness's header fixed before any run (Phase 3b / A6, 2026-09-26).
+"""mss_report.py OUT -- run-mss.sh's map of the guest path from 1024 B to above one MSS (the
+question comes from record `20260926T-a6-orin-sweep`, held locally), by the rule the harness's
+header fixed before any run (Phase 3b / A6, 2026-09-26).
 
 Per round, the p50 of each arm; a difference is two arms' p50s in the same round, and per
 difference the median over rounds with the distribution-free interval of widest coverage >= 95%.

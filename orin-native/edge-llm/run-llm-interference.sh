@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # run-llm-interference.sh -- does a real generative workload on the GPU owner
-# disturb the safety partition, where a synthetic FMA load did not?
+# disturb the safety partition differently from a synthetic FMA load?
 #
 # ARMS, per round:
 #
@@ -14,18 +14,18 @@
 # with 20260921T-a6-orin-pinned anyway, and that record's tooling stays
 # byte-identical to what produced it.
 #
-# WHY THE llm ARM IS NOT THE gpu ARM AGAIN. Measured on this board on
-# 2026-09-23 (results/orin-native-port/20260923T-a6-orin-llm-prep): at matched
-# GPU occupancy fma.cu holds EMC utilisation at 0% with the memory clock at its
-# idle 2133 MHz, while LLM decode drives EMC to 44-49% and forces 3199 MHz. The
-# two loads differ in the resource the QNX guest's vCPUs also need.
+# WHY THE llm ARM IS NOT THE gpu ARM AGAIN. fma.cu runs out of registers, while
+# LLM decode is memory-bandwidth-bound by construction, so the two loads may
+# differ in the resource the QNX guest's vCPUs also need: DRAM. The prep run on
+# L4T alone that compared them is record `20260923T-a6-orin-llm-prep`, held
+# locally.
 #
 # TWO LOADED ARMS, so the Williams period is 2 and the default K=12 is balanced.
 #
-# THE MODEL IS THE SMALL ONE, deliberately. SmolVLM-500M demands the same
-# ~42.7 GB/s as the 4B while holding 0.42 GB instead of 2.50 GB, and the guest
-# wants 1 GB of the same DRAM. The 4B repeatedly failed to allocate on this
-# board once the page cache was warm.
+# THE MODEL IS THE SMALL ONE, deliberately. SmolVLM-500M holds 0.42 GB
+# instead of the 4B's 2.50 GB, and the guest wants 1 GB of the same DRAM.
+# The 4B repeatedly failed to allocate on this board once the page cache
+# was warm.
 #
 # THE PAGE CACHE IS DROPPED AT PREFLIGHT. cudaMalloc does not reclaim it here: a
 # warm cache is how the 4B failed, and a load that cannot start would file a
@@ -143,10 +143,10 @@ run_arm() {   # $1 tag  $2 round
 		gpu) m_load_start "$OUT/load-$t.log" "$FMA" "$SECS" "$t" ;;
 		llm) m_load_start "$OUT/load-$t.log" "${LLM_ARGV[@]}" ;;
 	esac
-	# The llm arm settles longer than the others on purpose: fma is decoding
-	# nothing and is at 99% GR3D within a second, while llama-cli must read the
-	# model, upload it and run a warm-up before the first token. A 3 s settle
-	# caught it at 0% GR3D and failed the arm.
+	# The llm arm settles longer than the others on purpose: fma decodes
+	# nothing and loads the GPU as soon as it starts, while llama-cli must read
+	# the model, upload it and run a warm-up before the first token. A 3 s
+	# settle was too short for it and failed the arm.
 	local settle=3
 	[ "$tag" = llm ] && settle="$LLM_SETTLE_S"
 	if [ -n "$LOAD_PIDS" ]; then
@@ -203,7 +203,7 @@ say "page cache dropped: $(free -m | sed -n 2p)"
 
 m_write_stamp "$OUT/stamp.json" \
 	'"experiment": "llm-interference"' \
-	"\"pin\": {\"qemu\": \"$QEMU_CORES\", \"probe\": $CORE_PROBE, \"llm\": \"$CORE_LLM\", \"loads\": \"llm pinned at exec and read back; fma unpinned (host thread measured <=1% CPU)\"}" \
+	"\"pin\": {\"qemu\": \"$QEMU_CORES\", \"probe\": $CORE_PROBE, \"llm\": \"$CORE_LLM\", \"loads\": \"llm pinned at exec and read back; fma unpinned (its host thread blocks in cudaDeviceSynchronize)\"}" \
 	"\"fma_sha256\": \"$(_sha "$FMA")\"" \
 	"\"llama_cli_sha256\": \"$(_sha "$LLAMA")\"" \
 	"\"model\": \"$(basename "$MODEL")\"" \

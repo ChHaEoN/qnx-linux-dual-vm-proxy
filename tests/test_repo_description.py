@@ -15,13 +15,11 @@ the same denylist and the same figure verification as README; the live value is
 compared against it on push and on a weekly schedule.
 
 WHY NOT SUBSTRING MATCHING, which is the obvious implementation. A substring
-deny on "Graviton" fails the CURRENT, CORRECT description, whose Graviton clause
-is this project's cross-vendor defect evidence: "the one QNX ships hangs under
-KVM, on this board and on AWS Graviton alike." The distinction between that and
-a claim of a Graviton *leg* is the entire point of the check, and only a
-sentence-level classifier can express it. test_the_live_graviton_clause_is_not_a
-_violation pins that, because a future reader will be tempted by the simpler
-implementation.
+deny on "Graviton" would also fail a sentence that merely names Graviton without
+claiming a Graviton *leg*. The distinction between the two is the entire point
+of the check, and only a sentence-level classifier can express it.
+test_the_live_graviton_clause_is_not_a_violation pins that, because a future
+reader will be tempted by the simpler implementation.
 """
 import io
 import os
@@ -79,9 +77,9 @@ def test_the_pinned_description_passes_its_own_denylist(repo_root):
 def test_the_live_graviton_clause_is_not_a_violation(repo_root):
     """The reason this check is a classifier and not a substring scan.
 
-    Both sentences contain "Graviton". One is the project's cross-vendor defect
-    evidence and one is a claim of a leg that was never built. A substring deny
-    cannot tell them apart; that is why it was not used.
+    Both sentences contain "Graviton". One names it without claiming a leg; the
+    other claims a leg that was never built. A substring deny cannot tell them
+    apart; that is why it was not used.
     """
     rules, exempt = _rules(repo_root)
     evidence = ("Booting it needed a startup we rebuilt: the one QNX ships hangs "

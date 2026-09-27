@@ -11,11 +11,11 @@ exactly a space and one digit. Anything else in the reply is an error, never a
 guess -- the 2026-09-18 service's rule, "if it cannot classify it must fail,
 not invent", carried over.
 
-THE CONFIDENCE IS READ AT THE DIGIT'S POSITION, AND WHY THAT MATTERS. Measured
-on the board on 2026-09-23: this model's first token is a space, with
-probability ~1.000. A grammar that forces a digit into position 0 still gets
-the right answer, but the "probability" reported for it there is ~1e-7 --
-the probability of a digit where the model never meant to put one. So the
+THE CONFIDENCE IS READ AT THE DIGIT'S POSITION, AND WHY THAT MATTERS. This
+model opens its reply with a space token. A grammar that forces a digit into
+position 0 would still get the right answer, but the "probability" reported
+for it there would be that of a digit where the model never meant to put
+one. So the
 confidence here is taken from the distribution at position 1, after the
 space, over the ten digit tokens: P(digit | image, prompt) restricted to the
 label set, the analogue of the 2026-09-18 CNN's softmax at its argmax. How

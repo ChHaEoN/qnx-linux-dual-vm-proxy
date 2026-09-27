@@ -22,5 +22,5 @@ cannot be re-derived from committed data fails here too.
 settings action, so a drift failure tells the owner to go and fix it by hand.
 
 ```text
-QNX SDP 8.0 runs as a KVM guest beside L4T on a Jetson Orin Nano, Linux keeping the metal and the GPU. Booting it needed a startup we rebuilt: the one QNX ships hangs under KVM, on this board and on AWS Graviton alike. QNX has also run here as a native EL2 hypervisor hosting QNX and stock Linux guests.
+A study of DRIVE OS-style dual-VM partitioning on a Jetson Orin Nano: L4T keeps the metal and the GPU, and QNX SDP 8.0 is a KVM guest beside it, started with a startup-qemu-virt rebuilt from source (not a QNX-supported configuration). Code and design only; measured and functional results are held locally under the QNX licence.
 ```

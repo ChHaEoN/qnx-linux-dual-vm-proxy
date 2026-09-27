@@ -3,12 +3,12 @@
 # and matched to its own round-trip sample, so the slowest ones can be taken apart.
 # Phase 3b / A6, 2026-09-24; follows 20260924T-a6-orin-tail.
 #
-# WHAT IS KNOWN. At 2 ms spacing with the default halt-poll window, p50 is ~178 us
-# and p99.9 ~280 us. The slowest 1% spend ~0.17% of their time in the monitor.
-# Moving every device interrupt off QEMU's cores changed nothing; real-time
-# priority for QEMU shaved 2-5 us from p50 to p99 and nothing at p99.9
-# (20260924T-a6-orin-tail). The block-path trace cut the median exchange into
-# four host-side segments; it never looked at the slow ones.
+# WHAT IS KNOWN. The p50 and p99.9 at 2 ms spacing with the default halt-poll
+# window, the monitor's share of the slowest 1%, and what moving every device
+# interrupt off QEMU's cores and real-time priority for QEMU do: record
+# 20260924T-a6-orin-tail (held locally). The block-path trace (record
+# 20260924T-a6-orin-blockpath) cut the median exchange into four host-side
+# segments; it never looked at the slow ones.
 #
 # THE RUN. One boot of the stamping guest, launched with THREAD_NAMES=1, and one
 # arm repeated: t2ms, the A6 default (two vCPUs, halt_poll_ns 500000, 2 ms), with
@@ -46,8 +46,8 @@
 # 101-byte frame that was not the probe's, and could not be aligned. The rule and
 # the prediction above are unchanged.
 #
-# The trace costs ~9-11 us per exchange (the block-path record), on every exchange
-# alike. The ring buffer is raised to TRACE_KB (4096) per core for the run and
+# The trace's own cost per exchange is in the block-path record (held locally); it
+# falls on every exchange alike. The ring buffer is raised to TRACE_KB (4096) per core for the run and
 # restored after; lost events stop the run.
 #
 # NEEDS: the guest running with THREAD_NAMES=1 (ifs-stamp.bin; CONSOLE its console

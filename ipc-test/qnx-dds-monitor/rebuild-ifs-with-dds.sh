@@ -2,11 +2,10 @@
 # rebuild-ifs-with-dds.sh -- rebuild ONLY the IFS, with our own startup-qemu-virt
 # and the DDS monitor staged in. Does not touch disk-qemu.
 #
-# WHY IFS-ONLY. `mkqnximage --build` regenerates the disk as well, and on this
-# tree that fails ("Bad superblock signature in output/system.part"). It also
-# pulls startup-qemu-virt from the SDP, which is the SHIPPED binary -- and that
-# one hangs under KVM after 17 bytes ("FOUND GICv3 ITS"), the historic
-# GICv3/NISV defect. mkifs alone avoids both problems.
+# WHY IFS-ONLY. `mkqnximage --build` regenerates the disk as well, which this
+# script must not touch. It also pulls startup-qemu-virt from the SDP, which is
+# the SHIPPED binary, where this project's KVM guest images carry our rebuilt
+# one (orin-native/startup/qemu-virt/). mkifs alone does neither.
 #
 # THE SEARCH-PATH TRICK. ifs.build resolves `startup-qemu-virt` by name through
 # [search=${MKFS_PATH}]. Putting our rebuilt startup's directory FIRST makes
@@ -14,7 +13,7 @@
 #
 # EXIT CODE PROVES NOTHING. ifs.build carries [+optional], so an unresolved file
 # is silently skipped and mkifs still exits 0. Verify by dumpifs instead:
-#   startup entry 40081ab8 = ours;  40081da8 = the SDP's, which will hang.
+#   startup entry 40081ab8 = ours;  40081da8 = the SDP's shipped one.
 set -euo pipefail
 
 : "${QNX_TARGET:?source qnxsdp-env.sh first}"
@@ -26,15 +25,11 @@ OUT="${OUT:?set OUT to the output image path}"
 # Windows form with semicolons: mkifs.exe is a native PE32+ binary and does not
 # understand POSIX paths or colon separators.
 #
-# Converted in pure bash, not sed. FOUND 2026-09-22: after qnxsdp-env.sh the
-# SDP's own msys-linked host tools come first on PATH, and when Git Bash starts
-# one of them, any argument containing a glob character -- ( * ? [ { -- loses its
-# backslashes on the way in. The sed expression's \( \) arrived as ( ), never
-# matched, and "/c/Users/..." passed through unconverted; mkifs then said "Host
-# file 'raw.boot' not available" with raw.boot on the search path. (A first note
-# here blamed the SDP's sed for lacking \U. It has it; a review showed the
-# argument never reached it intact.) Keep backslashes out of any pattern handed
-# to an SDP tool below.
+# Converted in pure bash, not sed: after qnxsdp-env.sh the SDP's own
+# msys-linked host tools come first on PATH, and when Git Bash starts one of
+# them, an argument containing a glob character -- ( * ? [ { -- can lose its
+# backslashes on the way in, so a sed expression's \( \) would arrive as ( ).
+# Keep backslashes out of any pattern handed to an SDP tool below.
 win_path() {
 	local p="$1" d
 	case "$p" in
@@ -46,8 +41,8 @@ QT_WIN="$(win_path "$QNX_TARGET")"
 BSP_WIN="$(win_path "$BSP")"
 # Each path on its own, and it must be drive-letter form: a POSIX or relative
 # BSP entry is unreadable to mkifs.exe, and mkifs would then fall through to the
-# SDP's startup-qemu-virt -- the one that hangs under KVM. (The first version of
-# this guard looked only at the first character of the two paths joined.)
+# SDP's shipped startup-qemu-virt instead of ours. (The first version of this
+# guard looked only at the first character of the two paths joined.)
 for p in "$QT_WIN" "$BSP_WIN"; do
 	case "$p" in
 		[A-Za-z]:/*) ;;

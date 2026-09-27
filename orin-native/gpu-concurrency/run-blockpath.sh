@@ -1,19 +1,18 @@
 #!/usr/bin/env bash
-# run-blockpath.sh -- where the blocked halt's 32-43 us go: the host-side path of
+# run-blockpath.sh -- where a blocked halt's cost goes: the host-side path of
 # one exchange, traced and cut into segments, for VMs that block and VMs that
 # poll. Phase 3b / A6, 2026-09-24; follows 20260924T-a6-orin-haltpoll.
 #
-# WHAT IS KNOWN. The halt_poll_ns intervention showed that a vCPU which blocks
-# in a halt, instead of polling, costs the p50 32-36 us at 2 ms spacing and
-# 42-43 us at 0.2 ms, and costs the monitor's own span about 7 ticks. It did not
-# say where in the path those microseconds go.
+# WHAT IS KNOWN. The halt_poll_ns intervention (record
+# `20260924T-a6-orin-haltpoll`, held locally) measured what a vCPU which blocks in
+# a halt, instead of polling, costs the p50 at 2 ms and at 0.2 ms spacing, and what
+# it costs the monitor's own span. It did not say where in the path that time goes.
 #
 # THIS IS A DECOMPOSITION, NOT A TEST. No prediction is registered. Before this
 # harness was written, one calibration trace of about 25 exchanges was taken on an
-# unpinned guest, to learn the event formats. That trace was read, and it showed
-# one exchange's sequence: the request into the tap, QEMU raising the interrupt,
-# the blocked vCPU woken and scheduled in, that vCPU waking the other one, and
-# the transmit notify back to QEMU. So nothing here is blind.
+# unpinned guest, to learn the event formats. That trace was read, including one
+# exchange's sequence of events from the request into the tap to the transmit
+# notify back to QEMU. So nothing here is blind.
 #
 # THE DESIGN is run-haltpoll.sh's: every round boots three VMs (halt_poll_ns 0,
 # 500000, 5000000), in a Williams order, each timed at both spacings with the same

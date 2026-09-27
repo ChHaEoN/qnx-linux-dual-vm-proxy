@@ -1,7 +1,7 @@
 /* Phase 2.5 (cloud, ADR-002 RQ-2 host<->guest shmem round trip, 2026-07-28
  * continuation session). HOST-side half of the full round trip: attaches
  * (or, since it runs first, creates) "phase2-rq2-probe" exactly as probe.c
- * already proved works, writes the same host test pattern, then POLLS (see
+ * does, writes the same host test pattern, then POLLS (see
  * ../qnx-guest-shmem-probe/README.md for why this is polling, not
  * interrupt/pulse-driven) for the guest's write-back at a fixed offset
  * before detaching. Pair this with ../qnx-guest-shmem-probe/probe.c running

@@ -4,10 +4,10 @@
 # 2026-09-24; the sixth suggestion of the literature pass (the kernel's halt-polling
 # documentation: a large window can drive an otherwise idle CPU to 100%).
 #
-# WHAT IS KNOWN. halt_poll_ns 5000000 takes 32-36 us off the p50 at 2 ms spacing
-# (20260924T-a6-orin-haltpoll), and kept QEMU's two busiest threads ~92% busy,
-# against ~6% and ~3% with the default. At 0.2 ms the default window already polls
-# (two threads at ~67%). Nothing has measured what that costs in power. Read
+# WHAT IS KNOWN. What halt_poll_ns 5000000 does to the p50 at 2 ms spacing, and to
+# how busy QEMU's threads are against the default, and what the default window does
+# at 0.2 ms: record 20260924T-a6-orin-haltpoll (held locally). Nothing has measured
+# what polling costs in power. Read
 # before this harness was written: the rails (VDD_IN, VDD_CPU_GPU_CV, VDD_SOC on the
 # INA3221; 512-sample averaging, a new reading every ~140 ms). No power was
 # compared.
@@ -30,9 +30,10 @@
 # round, median over the k = 6 rounds:
 #   P1 2 ms traffic, B - D: median >= +150 mW and above zero in all 6 rounds.
 #      REFUTED if <= +30 mW. Between: PARTIAL.
-#   P2 idle, B - D: |median| <= 30 mW. The guest's idle wake-ups are ~30 ms
-#      apart per vCPU (the rate record's idle counters), longer than even a 5 ms
-#      window, so the window stays at zero and nothing spins. FAILED otherwise.
+#   P2 idle, B - D: |median| <= 30 mW. The reasoning rests on how far apart the
+#      guest's idle wake-ups are per vCPU (the idle counters of record
+#      20260924T-a6-orin-rate, held locally): further apart than even a 5 ms
+#      window, the window stays at zero and nothing spins. FAILED otherwise.
 #   P3 0.2 ms traffic, D - N: median >= +100 mW (the default window already
 #      spins there). REFUTED if <= +20 mW. Between: PARTIAL.
 # NOT PREDICTED: VDD_IN and VDD_SOC, B - D at 0.2 ms, and the latency the power

@@ -2,10 +2,10 @@
  * tracectl.c -- Phase 3b / A6 (2026-09-27): a guest-side control for the QNX kernel event
  * trace, for run-trace.sh.
  *
- * WHY. Inside the guest, a read() of a network-connected socket costs ~11-13 us and a read of a
- * loopback socket ~7 (20260927T-a6-orin-free), with no VM exit behind the difference. The host
- * cannot see guest threads, so the split between the kernel's message pass and io-sock's own
- * work has to be traced from inside: the image already runs procnto-smp-instr, and this
+ * WHY. How a guest read() of a network-connected socket compares with a read of a loopback
+ * socket is in record `20260927T-a6-orin-free` (held locally). The host cannot see guest
+ * threads, so the split between the kernel's message pass and io-sock's own work has to be
+ * traced from inside: the image already runs procnto-smp-instr, and this
  * program runs the SDP's tracelogger on request and hands its output back over TCP.
  *
  * It is NOT the monitor: monitor.c stays pure POSIX. This program only spawns QNX's own

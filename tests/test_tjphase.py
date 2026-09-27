@@ -45,7 +45,7 @@ def test_classes_and_phase():
     ph, spread = tr.old_phase([5000.0, 5000.0 + P, 5200.0 + 2 * P])
     assert abs(ph - 5000.0) < 1e-6 and abs(spread - 200.0) < 1e-6
     assert tr.old_phase([1.0]) == (None, None)
-    # FOUND BY THE SMOKE RUN: two reads 1020 ms apart, the first a jiffy late. The phase
+    # A read can land a jiffy late: here two reads 1020 ms apart, the first late. The phase
     # is the earliest read's, the fire jiffy's, and one jiffy of lag passes M3.
     ph, spread = tr.old_phase([12_000.0, 12_000.0 + P - 4000.0])
     assert abs(ph - 8000.0) < 1e-6 and abs(spread - 4000.0) < 1e-6 and spread <= tr.LATE

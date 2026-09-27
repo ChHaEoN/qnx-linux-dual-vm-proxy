@@ -631,8 +631,8 @@ def _rec(tmp_path):
     raw = rec / "ladder" / "raw"
     # json.dump style: no trailing newline, which a line-oriented redactor adds.
     _write(raw / "lat-D-db_r1.json",
-           json.dumps({"summary": {"tag": "D-db_r1", "p50_ms": 0.178123456789, "n": 1000},
-                       "samples_ms": [0.1, 0.178123456789]}), newline=False)
+           json.dumps({"summary": {"tag": "D-db_r1", "p50_ms": 0.100123456789, "n": 1000},
+                       "samples_ms": [0.1, 0.100123456789]}), newline=False)
     # 12-digit counters: exactly the shape of an account id.
     _write(raw / "kvm-D-db_r1.json",
            json.dumps({"before": {"t_ns": 912345678901, "qemu_pid": 4022,

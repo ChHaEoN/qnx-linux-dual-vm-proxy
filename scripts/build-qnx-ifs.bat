@@ -88,8 +88,8 @@ if errorlevel 1 (
 REM ---- TSR-PKG-001(a): package-completeness assertion -----------------------
 REM The aarch64 qemu-virt IFS must include the startup-qemu-virt binary
 REM (via the com.qnx.qnx800.target.qemuvirt package). A missing startup
-REM binary yields an IFS that boots the WRONG / no image (cf. the 2026-06-10
-REM target.qemuvirt finding). Assert presence before declaring success.
+REM binary yields an IFS without the startup this machine needs (cf. the
+REM 2026-06-10 target.qemuvirt note). Assert presence before declaring success.
 echo Asserting package completeness (startup-qemu-virt present) ...
 set "startup_found="
 if exist "%QNX_TARGET%\aarch64le\sbin\startup-qemu-virt" set "startup_found=1"

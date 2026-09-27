@@ -1,4 +1,4 @@
-# orin-native — Phase 3b: QNX running natively on the Jetson Orin Nano
+# orin-native — Phase 3b: the native QNX port to the Jetson Orin Nano
 
 Source for the native port. Everything here is our own code, written against
 public documentation and Apache-2.0 / BSD sources. No QNX-shipped file, header

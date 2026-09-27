@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""walks_report.py OUT N WARMUP -- run-walks.sh's test: is udevd's path walking in sysfs what
-makes the slow window? (Phase 3b / A6, 2026-09-24), by the rule its header fixed before any
+"""walks_report.py OUT N WARMUP -- run-walks.sh's test: does udevd's path walking in sysfs
+make a slow window? (Phase 3b / A6, 2026-09-24), by the rule its header fixed before any
 run. The same rule as bursts_report.py, with the kinds U N P F A.
 
 For every round whose trace holds exactly WARMUP + N requests (frames into the tap of the
