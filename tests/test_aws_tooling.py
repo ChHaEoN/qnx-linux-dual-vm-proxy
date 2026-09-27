@@ -574,10 +574,10 @@ def test_run_accepts_the_liveness_phases(rig):
     _launched(state)
     (state / "armed").touch()
     (state / "ip").write_text("203.0.113.9\n")
-    for phase in ("launch-live", "liveness", "launch-stamp", "stamp", "metal"):
+    for phase in ("launch-live", "liveness", "launch-stamp", "stamp", "metal", "someip"):
         run("run", phase, K="4")
     log = (stub / "ssh.log").read_text()
-    for phase in ("launch-live", "liveness", "launch-stamp", "stamp", "metal"):
+    for phase in ("launch-live", "liveness", "launch-stamp", "stamp", "metal", "someip"):
         assert "remote-ladder.sh %s" % phase in log, (phase, log)
     assert "K=4" in log, log
 
@@ -592,6 +592,7 @@ def _remote_env(tmp_path, phase, **env):
     ("liveness", {}, "run launch-live first"), ("liveness", {"K": "4;reboot"}, "not a round count"),
     ("stamp", {}, "run launch-stamp first"), ("stamp", {"K": "4;reboot"}, "not a round count"),
     ("metal", {}, "no "), ("metal", {"K": "4;reboot"}, "not a round count"),
+    ("someip", {}, "no "), ("someip", {"K": "4;reboot"}, "not a round count"),
 ])
 def test_remote_session_phases_refuse_without_a_guest_or_with_a_bad_k(tmp_path, phase, env, msg):
     r = _remote_env(tmp_path, phase, **env)
@@ -599,7 +600,7 @@ def test_remote_session_phases_refuse_without_a_guest_or_with_a_bad_k(tmp_path, 
 
 
 @needs_bash
-@pytest.mark.parametrize("session", ["liveness", "stamp", "metal"])
+@pytest.mark.parametrize("session", ["liveness", "stamp", "metal", "someip"])
 def test_remote_capture_takes_a_finished_session_and_refuses_an_unfinished_one(tmp_path, session):
     (tmp_path / "rec" / session).mkdir(parents=True)
     r = _remote_env(tmp_path, "capture")

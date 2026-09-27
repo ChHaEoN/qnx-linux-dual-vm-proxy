@@ -387,3 +387,79 @@ def test_the_someip_harness_parses_and_states_its_rule_and_prediction_before_any
         assert s in head, s
     assert 'ARM_PROTOS="U=udp ST=someip SU=someipu CT=csomeip CU=csomeipu VT=vsomeip VU=vsomeipu"' in body
     assert 'm_probe "$OUT" "$a"_r"$r" "$GUEST" "${PORT[$a]}" "" "${PROTO[$a]}"' in body
+
+
+# ---- the follow-up (run-someip0.sh): vsomeip without its nPDU retention
+
+REPORT0 = os.path.join(GC, "someip0_report.py")
+HARNESS0 = os.path.join(GC, "run-someip0.sh")
+P50_0 = {"CT": 170.0, "VT": 5235.0, "VT0": 195.0, "CU": 150.0, "VU": 5215.0, "VU0": 172.0}
+PROTO0 = {"CT": "csomeip", "VT": "vsomeip", "VT0": "vsomeip", "CU": "csomeipu", "VU": "vsomeipu", "VU0": "vsomeipu"}
+NPDU0 = {"debounce-time-request": "0", "debounce-time-response": "0", "max-retention-time-request": "0",
+         "max-retention-time-response": "0"}
+
+
+def _someip0_run(out, p50=None, k=12, npdu_on=("tcp0", "udp0")):
+    p50 = dict(P50_0, **(p50 or {}))
+    out.mkdir()
+    (out / "stamp.json").write_text(json.dumps({"n": 1000, "warmup": 200, "pin": {"probe": 4}}))
+    for name in ("tcp", "udp", "tcp0", "udp0"):
+        cfg = {"unicast": "192.168.100.1", "services": []}
+        if name in npdu_on:
+            cfg["npdu-default-timings"] = dict(NPDU0)
+        (out / ("vsomeip-%s.json" % name)).write_text(json.dumps(cfg))
+    for r in range(1, k + 1):
+        for a, v in p50.items():
+            s = {"p50_ms": (v + 0.2 * (r % 3)) / 1000.0, "p99_ms": (v + 40) / 1000.0, "n": 1000, "bad": 0,
+                 "rejected_by_monitor": 0, "proto": PROTO0[a], "cpu_affinity": [4],
+                 "vsomeip": None if a in ("CT", "CU") else "3.4.10"}
+            (out / ("lat-%s_r%d.json" % (a, r))).write_text(json.dumps({"summary": s}))
+        line = "someip: tcp client done (eof): seen=1200 accepted=1200 rejected=0 errors=0 dropped=0"
+        (out / ("console-A_r%d.log" % r)).write_text("\n".join([line] * 3) + "\n")
+
+
+def _report0(out):
+    r = subprocess.run([sys.executable, REPORT0, str(out)], capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0, r.stdout + r.stderr
+    return r.stdout
+
+
+def test_the_retention_explained_and_a_small_vsomeip_hold_everything(tmp_path):
+    _someip0_run(tmp_path / "o")
+    s = _report0(tmp_path / "o")
+    assert "FAILED" not in s, s
+    for p in ("P1", "P2", "P3"):
+        assert "-> HELD" in _line(s, p), s
+
+
+def test_a_retention_that_explains_nothing_refutes_p1(tmp_path):
+    _someip0_run(tmp_path / "o", {"VT0": 5230.0})
+    s = _report0(tmp_path / "o")
+    assert "-> REFUTED" in _line(s, "P1") and "-> REFUTED" in _line(s, "P3"), s
+
+
+def test_a_free_vsomeip_refutes_p2(tmp_path):
+    _someip0_run(tmp_path / "o", {"VU0": 152.0})
+    s = _report0(tmp_path / "o")
+    assert "-> REFUTED" in _line(s, "P2") and "-> HELD" in _line(s, "P3"), s
+
+
+def test_a_configuration_without_the_zero_timings_voids(tmp_path):
+    _someip0_run(tmp_path / "o", npdu_on=("tcp0",))
+    s = _report0(tmp_path / "o")
+    assert "-> FAILED" in _line(s, "M4") and "VOID (M4 failed)" in _line(s, "P1"), s
+
+
+def test_the_someip0_harness_parses_and_states_its_rule_and_prediction_before_any_code():
+    bash = shutil.which("bash")
+    if bash is not None:
+        r = subprocess.run([bash, "-n", HARNESS0], capture_output=True, text=True, timeout=30)
+        assert r.returncode == 0, r.stderr
+    text = open(HARNESS0, encoding="utf-8").read()
+    head, body = text.split("\nset -u\n", 1)
+    for s in ("It is not to be amended", "The owner asked for this run", "P1 is not blind",
+              "P1 VT - VT0 and VU - VU0 each lie in [4800, 5200] us.", "P2 VT0 - CT >= +10 us and VU0 - CU >= +10 us.",
+              "M4 the four configurations are as described"):
+        assert s in head, s
+    assert 'declare -A CFG=([CT]=tcp [VT]=tcp [VT0]=tcp0 [CU]=udp [VU]=udp [VU0]=udp0)' in body
+    assert '"max-retention-time-request": "0"' in body

@@ -37,13 +37,20 @@
 #                 other session scope, so a guest booted by an earlier phase would be
 #                 confined with them
 #
+# A SOME/IP SESSION (OD12, 2026-09-27), with ifs-someip.bin as the image:
+#
+#   someip        install Boost and a toolchain, build vsomeip 3.4.10 and someip_vprobe with
+#                 orin-native/someip/build-vsomeip.sh (the commit it pins; the build stays on
+#                 this host), then run-someip.sh (K rounds, a multiple of 8, default 16) and
+#                 run-someip0.sh (12 rounds), each booting its own guests
+#
 # capture accepts any of these sessions, but only a FINISHED one.
 #
 # W (default ~/a1) holds repo.tar, inputs.env, remote-ladder.sh, capture.py and
 # img/<ifs> + img/disk-qemu.gz. Nothing under W leaves the host except pub.tgz,
 # and everything in pub.tgz went through redact-aws.sh or capture.py's check here.
 set -euo pipefail
-PHASE="${1:?phase: setup|quiesce|launch|ladder|launch-live|liveness|launch-stamp|stamp|metal|capture|stop}"
+PHASE="${1:?phase: setup|quiesce|launch|ladder|launch-live|liveness|launch-stamp|stamp|metal|someip|capture|stop}"
 W="${W:-$HOME/a1}"
 R="$W/repo/orin-native/gpu-concurrency"
 REC="$W/rec"
@@ -242,14 +249,39 @@ metal)
 	{ date -u +%FT%TZ; cat /proc/loadavg; cat /proc/interrupts; } > "$REC/metal/host-after.txt"
 	tail -24 "$REC/metal/run.log"
 	;;
+someip)
+	case "${K:-16}" in *[!0-9]*|'') die "K='${K:-}' is not a round count" ;; esac
+	inputs
+	[ -r "$R/run-someip.sh" ] && [ -r "$R/run-someip0.sh" ] || die "the repo tarball lacks run-someip.sh or run-someip0.sh"
+	[ -e "$REC/someip" ] && die "$REC/someip exists: one someip run per session"
+	mkdir -p "$REC/someip"
+	sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq > "$REC/someip/apt.log" 2>&1 \
+		&& sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq build-essential cmake git \
+			libboost-system-dev libboost-thread-dev libboost-filesystem-dev >> "$REC/someip/apt.log" 2>&1 \
+		|| { tail -20 "$REC/someip/apt.log"; die "installing the vsomeip build's packages failed"; }
+	PREFIX="$W/vsomeip/3.4.10" SRC="$W/vsomeip/src-3.4.10" JOBS="$(nproc)" \
+		bash "$W/repo/orin-native/someip/build-vsomeip.sh" > "$REC/someip/vsomeip-build.log" 2>&1 \
+		|| { tail -20 "$REC/someip/vsomeip-build.log"; die "the vsomeip build failed"; }
+	cd "$R"
+	{ date -u +%FT%TZ; cat /proc/loadavg; cat /proc/interrupts; } > "$REC/someip/host-before.txt"
+	IMG_S="$W/img/$IFS_NAME" DISK="$W/img/disk-qemu" VPROBE="$W/vsomeip/3.4.10/bin/someip_vprobe" \
+		OUT="$REC/someip/raw" K="${K:-16}" CSTATE=shallow bash "$R/run-someip.sh" > "$REC/someip/run.log" 2>&1 \
+		|| { tail -30 "$REC/someip/run.log"; die "run-someip.sh failed"; }
+	tail -30 "$REC/someip/run.log"
+	IMG_S="$W/img/$IFS_NAME" DISK="$W/img/disk-qemu" VPROBE="$W/vsomeip/3.4.10/bin/someip_vprobe" \
+		OUT="$REC/someip/raw0" K=12 CSTATE=shallow bash "$R/run-someip0.sh" > "$REC/someip/run0.log" 2>&1 \
+		|| { tail -30 "$REC/someip/run0.log"; die "run-someip0.sh failed"; }
+	{ date -u +%FT%TZ; cat /proc/loadavg; cat /proc/interrupts; } > "$REC/someip/host-after.txt"
+	tail -30 "$REC/someip/run0.log"
+	;;
 capture)
 	# The session must have FINISHED: host-after.txt is written only after the
 	# ladder, the liveness phase or the stamp phase returned 0. Without it the
 	# run was interrupted, or refused as incomplete, and a partial record must
 	# not be packed and fetched as a whole one.
 	[ -e "$REC/ladder/host-after.txt" ] || [ -e "$REC/liveness/host-after.txt" ] || [ -e "$REC/stamp/host-after.txt" ] \
-		|| [ -e "$REC/metal/host-after.txt" ] \
-		|| die "no host-after.txt under $REC/ladder, $REC/liveness, $REC/stamp or $REC/metal -- the session did not finish; there is no complete record to capture"
+		|| [ -e "$REC/metal/host-after.txt" ] || [ -e "$REC/someip/host-after.txt" ] \
+		|| die "no host-after.txt under $REC/ladder, $REC/liveness, $REC/stamp, $REC/metal or $REC/someip -- the session did not finish; there is no complete record to capture"
 	RED="$R/redact-aws.sh"
 	bash "$RED" selftest >/dev/null || die "redactor selftest failed"
 	rm -rf "$W/pub" "$W/pub.sha256"; mkdir -p "$W/pub"

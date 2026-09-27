@@ -53,7 +53,7 @@ IP_WAIT_S="${METAL_IP_WAIT_S:-300}"
 PROV_WAIT_S="${METAL_PROV_WAIT_S:-900}"
 CONFIRM_TRIES="${METAL_CONFIRM_TRIES:-6}"
 READBACK_TRIES="${METAL_READBACK_TRIES:-30}"
-PHASES="setup quiesce launch ladder launch-live liveness launch-stamp stamp metal capture"
+PHASES="setup quiesce launch ladder launch-live liveness launch-stamp stamp metal someip capture"
 
 # Local paths in POSIX form: a pasted C:\... path would make scp and tar read "C:" as
 # a host, and sha256sum escape the backslashes in its output.
