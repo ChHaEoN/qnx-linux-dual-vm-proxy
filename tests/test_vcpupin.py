@@ -152,8 +152,10 @@ def test_the_launcher_refuses_a_thread_names_value_it_does_not_know(tmp_path):
 # ---- the per-arm liveness check, and the report end to end on a synthetic run
 
 def _kvm(path, t0_ns, t1_ns, wakes):
-    snap = lambda t, w: {"t_ns": t, "qemu_pid": 1, "counters": {"halt_wakeup": w, "halt_attempted_poll": 0,
-                                                                 "halt_successful_poll": 0}, "threads": {}}
+    def snap(t, w):
+        return {"t_ns": t, "qemu_pid": 1, "counters": {"halt_wakeup": w, "halt_attempted_poll": 0,
+                                                        "halt_successful_poll": 0}, "threads": {}}
+
     path.write_text(json.dumps({"before": snap(t0_ns, 100), "after": snap(t1_ns, 100 + wakes)}))
 
 

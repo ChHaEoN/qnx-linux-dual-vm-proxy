@@ -24,7 +24,8 @@ K, N, WARM = 12, 1000, 200
 def _run(out, r2_us=13.0, rtt_step=16.0, w_shift=0.0, bad_r2n=None):
     out.mkdir()
     (out / "stamp.json").write_text(json.dumps({"n": N, "k": K, "warmup": WARM}))
-    order, guest, ns = [], ["noise", "sweep: timing :7120 default frames=3 r2_n=0 r2_p50_ns=-1 w_p50_ns=9000 svc_p50_ns=9500"], {p: [] for p in PORT.values()}
+    order, ns = [], {p: [] for p in PORT.values()}
+    guest = ["noise", "sweep: timing :7120 default frames=3 r2_n=0 r2_p50_ns=-1 w_p50_ns=9000 svc_p50_ns=9500"]
     fr = N + WARM
     for r in range(1, K + 1):
         row = ARMS[r % len(ARMS):] + ARMS[:r % len(ARMS)]

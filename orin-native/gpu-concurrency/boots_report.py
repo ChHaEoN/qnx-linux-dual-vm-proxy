@@ -45,7 +45,7 @@ def boot(out, n, warm):
         b["p50"].append(st.median(lat))
         b["p99"].append(br.pct(lat, 99))
         b["rows"] += rows
-    qok, seen = 0, {}
+    seen = {}
     p = os.path.join(out, "confine.log")
     if os.path.exists(p):
         for line in open(p):

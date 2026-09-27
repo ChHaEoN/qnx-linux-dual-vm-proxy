@@ -10,7 +10,6 @@ import sys
 HERE = os.path.dirname(__file__)
 GC = os.path.join(HERE, "..", "orin-native", "gpu-concurrency")
 sys.path.insert(0, GC)
-import clock_report as ck  # noqa: E402
 
 REPORT = os.path.join(GC, "clock_report.py")
 HARNESS = os.path.join(GC, "run-clock.sh")
@@ -19,7 +18,9 @@ PAT = ["A", "B", "B", "A", "A", "B", "B", "A"]
 
 
 def _kvm(att, ok):
-    c = lambda a, o: {"halt_attempted_poll": a, "halt_successful_poll": o}
+    def c(a, o):
+        return {"halt_attempted_poll": a, "halt_successful_poll": o}
+
     return {"before": {"counters": c(1000, 500)}, "after": {"counters": c(1000 + att, 500 + ok)}}
 
 

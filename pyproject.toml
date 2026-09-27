@@ -34,6 +34,12 @@ ignore = [
 # errors as plain messages for operators reading a serial console, where a
 # chained traceback is noise.
 "orin-native/**" = ["B904"]
+# E501 in three tests whose fixtures are ftrace output pasted verbatim: a
+# sched_switch line runs to ~185 characters, and wrapping one would change the
+# input the parser under test is given.
+"tests/test_blockpath.py" = ["E501"]
+"tests/test_listeners.py" = ["E501"]
+"tests/test_tailhost.py" = ["E501"]
 
 [tool.mypy]
 # Deliberately NOT strict. The tracked Python carries zero type annotations, so

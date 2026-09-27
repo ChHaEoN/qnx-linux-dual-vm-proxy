@@ -67,7 +67,10 @@ def _run(out, k, sd_ratio=1.0):
                 s["arrival"] = {"kind": "exp", "seed": 100 * r, "draws": 1200,
                                 "sleep_ms": {"mean": m, "p50": m * 0.69, "sd": m * sd_ratio, "max": m * 7}}
             (out / ("lat-%s_r%d.json" % (a, r))).write_text(json.dumps({"summary": s}))
-            snap = lambda v: {"t_ns": 0, "counters": v}
+
+            def snap(v):
+                return {"t_ns": 0, "counters": v}
+
             b = {"halt_attempted_poll": 0, "halt_successful_poll": 0, "halt_wakeup": 0}
             e = {"halt_attempted_poll": int(att * 1200), "halt_successful_poll": int(okp * 1200),
                  "halt_wakeup": int(wk * 1200)}

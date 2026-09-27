@@ -136,12 +136,12 @@ def main(argv):
             print("  round %d has no tick trace" % r)
             continue
         ev = tkt.read(tk)
-        for t, c, k, fn in ev:
+        for t, _c, k, fn in ev:
             if k == "H" and fn == "tick_sched_timer":
                 grid_all += 1
                 grid_on += (t % PERIOD) < GRID_OK
         ids = qtids(out, r)
-        ctx = tkt.Contexts(ev, lambda core, comm, pid: pid in ids or (core == pc and comm.startswith("python")))
+        ctx = tkt.Contexts(ev, lambda core, comm, pid, ids=ids: pid in ids or (core == pc and comm.startswith("python")))
         expiries = [(t, fn) for t, c, k, fn in ev if k == "E"]
         et = [t for t, _ in expiries]
         for t0, v, tail in rows:
@@ -151,7 +151,7 @@ def main(argv):
             for lab, u in fg.items():
                 comps[key][lab].append(u)
             comps[key]["_n"].append(1)
-            for t, fn in expiries[bisect.bisect_left(et, t0):bisect.bisect_left(et, t0 + WINDOW)]:
+            for _t, fn in expiries[bisect.bisect_left(et, t0):bisect.bisect_left(et, t0 + WINDOW)]:
                 timers[key][fn] += 1
     k = len(files)
     # light: ratio and slowdown

@@ -165,7 +165,6 @@ def main(argv=None):
         c1 = (st.median(p for p in per_s if p) / 1e6) if any(per_s) else None
         c2 = None
         if rs and c1:
-            warm = lat[arm][rounds[0]]["summary"].get("warmup_discarded", 0)
             if exch_total is None:
                 exch_total = sum(
                     (lat[b][rounds[0]]["summary"]["n"] + lat[b][rounds[0]]["summary"].get("warmup_discarded", 0))

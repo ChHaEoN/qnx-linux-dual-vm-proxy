@@ -58,7 +58,7 @@ def main(argv):
     for a in ARMS:
         P = per[a]
 
-        def m(k):
+        def m(k, P=P):
             return st.median(P[r]["seg"][k] for r in rounds)
         rtt = st.median(P[r]["rtt"] for r in rounds)
         rest = st.median(P[r]["rtt"] - P[r]["seg"]["total_p50"] for r in rounds)

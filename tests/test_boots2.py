@@ -10,7 +10,6 @@ import sys
 HERE = os.path.dirname(__file__)
 GC = os.path.join(HERE, "..", "orin-native", "gpu-concurrency")
 sys.path.insert(0, GC)
-import boots2_report as b2  # noqa: E402
 
 REPORT = os.path.join(GC, "boots2_report.py")
 HARNESS = os.path.join(GC, "run-boots2.sh")

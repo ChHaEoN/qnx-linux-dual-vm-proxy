@@ -81,7 +81,10 @@ def main(argv):
     qp = os.path.join(out, "qemu-tids.txt")
     if os.path.exists(qp):
         qemu = {int(x) for x in open(qp).read().split()}
-    skip = lambda comm, pid: comm in SKIP_COMMS or pid in qemu
+
+    def skip(comm, pid):
+        return comm in SKIP_COMMS or pid in qemu
+
     files = sorted(glob.glob(os.path.join(out, "lat-t2ms_r*.json")),
                    key=lambda f: int(re.search(r"_r(\d+)\.", f).group(1)))
     counts = {a: {c: [0, 0] for c in ("tj", "U", "R", "other", "out")} for a in ARMS}
@@ -124,7 +127,7 @@ def main(argv):
         for k in ur.KINDS:
             for m in marks[k]:
                 n_win[arm][k] += 1
-                for (comm, pid, core), us in runs.cpu(m, m + WIN, skip).items():
+                for (comm, _pid, core), us in runs.cpu(m, m + WIN, skip).items():
                     cpu_win[arm][k][klass(comm)] += us
                     if k == "U" and klass(comm) == "udevd":
                         udev_core[arm][core] += us

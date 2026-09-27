@@ -89,8 +89,11 @@ def _run(out, k, cells, n_attempts=0):
             summ = {"p50_ms": rtt / 1000.0, "server_us": {"p50": tk * 0.032}, "other_us": {"p50": rtt - 0.4},
                     "period_us": {"p50": rtt + (265.0 if a.endswith("200us") else 2066.0)}}
             (out / ("lat-%s_r%d.json" % (a, r))).write_text(json.dumps({"summary": summ}))
-            snap = lambda base: {"t_ns": 0, "counters": {"halt_attempted_poll": base, "halt_successful_poll": base,
-                                                         "halt_wakeup": base}}
+
+            def snap(base):
+                return {"t_ns": 0, "counters": {"halt_attempted_poll": base, "halt_successful_poll": base,
+                                                  "halt_wakeup": base}}
+
             b, e = snap(1000), snap(1000)
             e["counters"] = {"halt_attempted_poll": 1000 + int(att * ex), "halt_successful_poll": 1000 + int(okp * ex),
                              "halt_wakeup": 1000 + int(wk * ex)}

@@ -104,7 +104,10 @@ def _run(out, k):
             samples = [[1000 + i * 20, vin, cpu, soc] for i in range(500)]
             (out / ("pw-%s_r%d.json" % (a, r))).write_text(json.dumps(
                 {"rails": ["VDD_IN", "VDD_CPU_GPU_CV", "VDD_SOC"], "samples": samples}))
-            th = lambda run: {"1": {"run_ns": run}, "2": {"run_ns": 0}}
+
+            def th(run):
+                return {"1": {"run_ns": run}, "2": {"run_ns": 0}}
+
             kv = {"before": {"t_ns": 1000, "threads": th(0)}, "after": {"t_ns": 1000 + 499 * 20,
                                                                        "threads": th(int(sh * 499 * 20))}}
             (out / ("kvm-%s_r%d.json" % (a, r))).write_text(json.dumps(kv))

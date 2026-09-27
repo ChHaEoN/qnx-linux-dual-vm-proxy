@@ -138,7 +138,10 @@ def main(argv):
     for c in ("tj", "U", "R", "other", "out"):
         print("  %-6s %10d %6d %9.2f%%" % (c, counts[c][0], counts[c][1], rate[c]))
     scored = k == SCORED_K
-    ratio = lambda c: rate[c] / rate["out"] if rate["out"] else float("inf")
+
+    def ratio(c):
+        return rate[c] / rate["out"] if rate["out"] else float("inf")
+
     v1 = verdict(score_hot(rate["U"]), scored, k, ok, ["M1", "M2", "M3", "M4"])
     v2 = verdict(score_quiet(rate["R"]), scored, k, ok, ["M1", "M2", "M3", "M4"])
     v3 = verdict(score_hot(rate["tj"]), scored, k, ok, ["M1", "M5"])

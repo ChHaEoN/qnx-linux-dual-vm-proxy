@@ -147,7 +147,7 @@ def segments(ev, min_len=100, req_len=None):
         win = ev[i:end]
         t0 = win[0][0]
 
-        def first(pred, after):
+        def first(pred, after, win=win):
             for e in win:
                 if e[0] >= after and pred(e):
                     return e

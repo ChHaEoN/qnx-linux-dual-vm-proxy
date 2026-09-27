@@ -170,7 +170,10 @@ def main(argv):
     v1 = verdict(score_ratio_high(rate["tj"], rate["out"]), scored, k, ok, ["M1", "M2", "M3"])
     v2 = verdict(score_quiet(rate["other"]), scored, k, ok, ["M1", "M4"])
     v3 = verdict(score_quiet(rate["old"]), scored, k, ok, ["M1", "M3"])
-    ratio = lambda c: rate[c] / rate["out"] if rate["out"] else float("inf")
+
+    def ratio(c):
+        return rate[c] / rate["out"] if rate["out"] else float("inf")
+
     print("  P1  the tail follows the moved poll: tj windows %.1fx the outside rate -> %s" % (ratio("tj"), v1))
     print("  P2  other zones' reads do not: their windows' tail rate %.2f%% (quiet below %.0f%%) -> %s"
           % (rate["other"], QUIET, v2))

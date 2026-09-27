@@ -177,7 +177,8 @@ def test_the_harness_parses_and_states_its_rule_and_prediction_before_any_code()
     text = open(HARNESS, encoding="utf-8").read()
     head, body = text.split("\nset -u\n", 1)
     for s in ("RATIO >= 3", "SLOWDOWN >= +5 us", "DIFF >= +10 us (heavy)", "SHARE >= 0.5", "DIFF <= +5 us",
-              "[3850, 4000) mod 4000", "[t0, t0 + 250 us]", "The bin and its edges were chosen", "looking at that record: this run tests it on new data",
+              "[3850, 4000) mod 4000", "[t0, t0 + 250 us]", "The bin and its edges were chosen",
+              "looking at that record: this run tests it on new data",
               "It is not to be amended", "Scored only at k = 40", "The owner asked for this"):
         assert s in head, s
     assert "CPAT=(light heavy heavy light)" in body and "tick_report.py" in body and "tracing_cpumask" in body

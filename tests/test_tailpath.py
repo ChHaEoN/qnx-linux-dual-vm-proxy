@@ -7,8 +7,6 @@ import shutil
 import subprocess
 import sys
 
-import pytest
-
 HERE = os.path.dirname(__file__)
 GC = os.path.join(HERE, "..", "orin-native", "gpu-concurrency")
 sys.path.insert(0, GC)

@@ -99,7 +99,7 @@ def main(argv):
         kv = os.path.join(out, "kvm-t2ms_r%d.json" % r)
         if os.path.exists(kv):
             poll[arm].append(poll_fraction(kv))
-        for t0, v, tl in rows:
+        for t0, _v, tl in rows:
             if not tl:
                 continue
             tail[arm][0] += 1

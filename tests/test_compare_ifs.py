@@ -7,6 +7,7 @@ import os
 HERE = os.path.dirname(__file__)
 PATH = os.path.join(HERE, "..", "ipc-test", "qnx-safety-monitor", "compare-ifs.py")
 spec = importlib.util.spec_from_file_location("compare_ifs", PATH)
+assert spec is not None and spec.loader is not None
 ci = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ci)
 

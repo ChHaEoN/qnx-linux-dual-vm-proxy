@@ -48,7 +48,7 @@ def main(argv):
                 want[f[0]] = f[2]
     seg = {w: [] for w in IMAGES}
     ok_all = diskless = sha_ok = gov_ok = 0
-    for i, w, blob in boots:
+    for _i, w, blob in boots:
         runs = [r for r in blob["runs"] if not r.get("warmup")]
         s = segments(runs[0]) if len(runs) == 1 else None
         if s is not None:
