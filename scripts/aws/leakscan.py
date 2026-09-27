@@ -31,7 +31,9 @@ PATTERNS = [
 ]
 IPV4 = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
 MAC = re.compile(r"(?<![0-9A-Fa-f:])(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}(?![0-9A-Fa-f:])")
-IPV6 = re.compile(r"(?<![0-9A-Fa-f:])(?:[0-9A-Fa-f]{0,4}:){2,7}[0-9A-Fa-f]{0,4}(?![0-9A-Fa-f:])")
+# 2026-09-27: not after a letter or "_" either -- traceprinter's header ("TRACE_DATE:: ...") and a
+# C++ scope ("impl::send") matched as "E::" or "::"; an address is not glued to a word.
+IPV6 = re.compile(r"(?<![0-9A-Za-z_:])(?:[0-9A-Fa-f]{0,4}:){2,7}[0-9A-Fa-f]{0,4}(?![0-9A-Fa-f:])")
 # The same boundary redact-aws.sh masks on: a 12-digit run inside a longer
 # word -- a sha256 with twelve decimal digits in it -- is not an account id,
 # and the redactor deliberately keeps it, so flagging it here only blocks a
