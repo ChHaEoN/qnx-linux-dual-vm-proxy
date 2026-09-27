@@ -44,13 +44,22 @@
 #                 this host), then run-someip.sh (K rounds, a multiple of 8, default 16) and
 #                 run-someip0.sh (12 rounds), each booting its own guests
 #
+# A HARNESS SESSION (2026-09-27): one or more images (METAL_IFS, plus METAL_IFS_EXTRA, each verified
+# by setup), and one call per harness:
+#
+#   harness       LADDER_ENV="HARNESS=<name> IMAGE=<image>", K optional. Runs one harness from a
+#                 fixed list -- run-someip.sh, run-someip0.sh, run-someip1.sh, run-trace.sh,
+#                 run-trace2.sh, run-haltpoll.sh -- each of which boots its own guests, on an image
+#                 this session uploaded and verified, into $REC/<name without run- and .sh>. The
+#                 SOME/IP harnesses first build vsomeip here, once per session.
+#
 # capture accepts any of these sessions, but only a FINISHED one.
 #
 # W (default ~/a1) holds repo.tar, inputs.env, remote-ladder.sh, capture.py and
 # img/<ifs> + img/disk-qemu.gz. Nothing under W leaves the host except pub.tgz,
 # and everything in pub.tgz went through redact-aws.sh or capture.py's check here.
 set -euo pipefail
-PHASE="${1:?phase: setup|quiesce|launch|ladder|launch-live|liveness|launch-stamp|stamp|metal|someip|capture|stop}"
+PHASE="${1:?phase: setup|quiesce|launch|ladder|launch-live|liveness|launch-stamp|stamp|metal|someip|harness|capture|stop}"
 W="${W:-$HOME/a1}"
 R="$W/repo/orin-native/gpu-concurrency"
 REC="$W/rec"
@@ -68,6 +77,40 @@ inputs() {
 	REPO_COMMIT="$(sed -n 's/^REPO_COMMIT=\([0-9a-f]\{40\}\)$/\1/p' "$W/inputs.env")"
 	[ -n "$IFS_NAME" ] && [ -n "$IFS_SHA256" ] && [ -n "$DISK_SHA256" ] \
 		&& [ -n "$RL_SHA256" ] && [ -n "$CAP_SHA256" ] || die "inputs.env is malformed"
+	# 2026-09-27: more images, "NAME:SHA256" words; absent in older sessions' files.
+	IFS_EXTRA=""
+	if grep -q '^IFS_EXTRA=' "$W/inputs.env"; then
+		IFS_EXTRA="$(sed -n 's/^IFS_EXTRA=\([A-Za-z0-9._: -]*\)$/\1/p' "$W/inputs.env")"
+		[ -n "$IFS_EXTRA" ] || die "inputs.env is malformed (IFS_EXTRA)"
+		for x in $IFS_EXTRA; do
+			[[ "$x" =~ ^[A-Za-z0-9._-]+:[0-9a-f]{64}$ ]] || die "inputs.env is malformed (IFS_EXTRA word '$x')"
+		done
+	fi
+}
+
+image_path() {   # $1 an image name: its path, if this session uploaded it (setup verified its hash)
+	local x
+	if [ "$1" = "$IFS_NAME" ]; then echo "$W/img/$1"; return 0; fi
+	for x in $IFS_EXTRA; do
+		if [ "${x%%:*}" = "$1" ]; then echo "$W/img/$1"; return 0; fi
+	done
+	return 1
+}
+
+build_vsomeip() {   # $1 the phase's record directory: apt and the vsomeip build, once per session
+	local b="$W/vsomeip/3.4.10/BUILD-INFO" want
+	want="$(sha256sum < "$W/repo/orin-native/someip/someip_vprobe.cpp" | cut -d' ' -f1)"
+	if [ -r "$b" ] && grep -qx "source sha256 $want" "$b"; then
+		say "vsomeip and someip_vprobe already built in this session"
+		return 0
+	fi
+	sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq > "$1/apt.log" 2>&1 \
+		&& sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq build-essential cmake git \
+			libboost-system-dev libboost-thread-dev libboost-filesystem-dev >> "$1/apt.log" 2>&1 \
+		|| { tail -20 "$1/apt.log"; die "installing the vsomeip build's packages failed"; }
+	PREFIX="$W/vsomeip/3.4.10" SRC="$W/vsomeip/src-3.4.10" JOBS="$(nproc)" \
+		bash "$W/repo/orin-native/someip/build-vsomeip.sh" > "$1/vsomeip-build.log" 2>&1 \
+		|| { tail -20 "$1/vsomeip-build.log"; die "the vsomeip build failed"; }
 }
 
 case "$PHASE" in
@@ -83,7 +126,10 @@ setup)
 	echo "$DISK_SHA256  $W/img/disk-qemu" | sha256sum -c --quiet || die "disk-qemu hash mismatch"
 	echo "$RL_SHA256  $W/remote-ladder.sh" | sha256sum -c --quiet || die "remote-ladder.sh differs from what was uploaded"
 	echo "$CAP_SHA256  $W/capture.py" | sha256sum -c --quiet || die "capture.py differs from what was uploaded"
-	say "artefacts verified: $IFS_NAME ${IFS_SHA256:0:16} disk ${DISK_SHA256:0:16}"
+	for x in $IFS_EXTRA; do
+		echo "${x#*:}  $W/img/${x%%:*}" | sha256sum -c --quiet || die "${x%%:*} hash mismatch"
+	done
+	say "artefacts verified: $IFS_NAME ${IFS_SHA256:0:16} disk ${DISK_SHA256:0:16}${IFS_EXTRA:+ and $IFS_EXTRA}"
 	# The record names what actually ran: the instance-side tooling and its inputs.
 	mkdir -p "$REC/tooling"
 	cp "$W/remote-ladder.sh" "$W/capture.py" "$W/inputs.env" "$REC/tooling/"
@@ -255,13 +301,7 @@ someip)
 	[ -r "$R/run-someip.sh" ] && [ -r "$R/run-someip0.sh" ] || die "the repo tarball lacks run-someip.sh or run-someip0.sh"
 	[ -e "$REC/someip" ] && die "$REC/someip exists: one someip run per session"
 	mkdir -p "$REC/someip"
-	sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq > "$REC/someip/apt.log" 2>&1 \
-		&& sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq build-essential cmake git \
-			libboost-system-dev libboost-thread-dev libboost-filesystem-dev >> "$REC/someip/apt.log" 2>&1 \
-		|| { tail -20 "$REC/someip/apt.log"; die "installing the vsomeip build's packages failed"; }
-	PREFIX="$W/vsomeip/3.4.10" SRC="$W/vsomeip/src-3.4.10" JOBS="$(nproc)" \
-		bash "$W/repo/orin-native/someip/build-vsomeip.sh" > "$REC/someip/vsomeip-build.log" 2>&1 \
-		|| { tail -20 "$REC/someip/vsomeip-build.log"; die "the vsomeip build failed"; }
+	build_vsomeip "$REC/someip"
 	cd "$R"
 	{ date -u +%FT%TZ; cat /proc/loadavg; cat /proc/interrupts; } > "$REC/someip/host-before.txt"
 	IMG_S="$W/img/$IFS_NAME" DISK="$W/img/disk-qemu" VPROBE="$W/vsomeip/3.4.10/bin/someip_vprobe" \
@@ -274,6 +314,34 @@ someip)
 	{ date -u +%FT%TZ; cat /proc/loadavg; cat /proc/interrupts; } > "$REC/someip/host-after.txt"
 	tail -30 "$REC/someip/run0.log"
 	;;
+harness)
+	case "${K:-}" in *[!0-9]*) die "K='${K:-}' is not a round count" ;; esac
+	inputs
+	H=""; I=""
+	for w in ${LADDER_ENV:-}; do
+		case "$w" in
+			HARNESS=*) H="${w#HARNESS=}" ;;
+			IMAGE=*) I="${w#IMAGE=}" ;;
+		esac
+	done
+	case "$H" in
+		run-someip.sh|run-someip0.sh|run-someip1.sh|run-trace.sh|run-trace2.sh|run-haltpoll.sh) ;;
+		*) die "HARNESS='$H' is not one the harness phase runs" ;;
+	esac
+	[ -r "$R/$H" ] || die "the repo tarball lacks $H"
+	img="$(image_path "${I:-$IFS_NAME}")" || die "image '${I:-$IFS_NAME}' was not uploaded in this session"
+	stem="${H#run-}"; stem="${stem%.sh}"
+	[ -e "$REC/$stem" ] && die "$REC/$stem exists: one $stem run per session"
+	mkdir -p "$REC/$stem"
+	case "$H" in run-someip*) build_vsomeip "$REC/$stem" ;; esac
+	cd "$R"
+	{ date -u +%FT%TZ; cat /proc/loadavg; cat /proc/interrupts; } > "$REC/$stem/host-before.txt"
+	env IMG_S="$img" IFS_BIN="$img" DISK="$W/img/disk-qemu" VPROBE="$W/vsomeip/3.4.10/bin/someip_vprobe" \
+		OUT="$REC/$stem/raw" CSTATE=shallow ${K:+K="$K"} bash "$R/$H" > "$REC/$stem/run.log" 2>&1 \
+		|| { tail -30 "$REC/$stem/run.log"; die "$H failed"; }
+	{ date -u +%FT%TZ; cat /proc/loadavg; cat /proc/interrupts; } > "$REC/$stem/host-after.txt"
+	tail -30 "$REC/$stem/run.log"
+	;;
 capture)
 	# The session must have FINISHED: host-after.txt is written only after the
 	# ladder, the liveness phase or the stamp phase returned 0. Without it the
@@ -281,6 +349,7 @@ capture)
 	# not be packed and fetched as a whole one.
 	[ -e "$REC/ladder/host-after.txt" ] || [ -e "$REC/liveness/host-after.txt" ] || [ -e "$REC/stamp/host-after.txt" ] \
 		|| [ -e "$REC/metal/host-after.txt" ] || [ -e "$REC/someip/host-after.txt" ] \
+		|| ls "$REC"/*/host-after.txt > /dev/null 2>&1 \
 		|| die "no host-after.txt under $REC/ladder, $REC/liveness, $REC/stamp, $REC/metal or $REC/someip -- the session did not finish; there is no complete record to capture"
 	RED="$R/redact-aws.sh"
 	bash "$RED" selftest >/dev/null || die "redactor selftest failed"

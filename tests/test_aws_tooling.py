@@ -8,6 +8,7 @@ confirm it), teardown checks must refuse a live instance or an orphaned volume,
 the capture must publish run data byte-for-byte and redact only strings, and a
 fetched capture carrying an identifier must be refused.
 """
+import gzip
 import json
 import os
 import re
@@ -574,10 +575,10 @@ def test_run_accepts_the_liveness_phases(rig):
     _launched(state)
     (state / "armed").touch()
     (state / "ip").write_text("203.0.113.9\n")
-    for phase in ("launch-live", "liveness", "launch-stamp", "stamp", "metal", "someip"):
+    for phase in ("launch-live", "liveness", "launch-stamp", "stamp", "metal", "someip", "harness"):
         run("run", phase, K="4")
     log = (stub / "ssh.log").read_text()
-    for phase in ("launch-live", "liveness", "launch-stamp", "stamp", "metal", "someip"):
+    for phase in ("launch-live", "liveness", "launch-stamp", "stamp", "metal", "someip", "harness"):
         assert "remote-ladder.sh %s" % phase in log, (phase, log)
     assert "K=4" in log, log
 
@@ -593,6 +594,7 @@ def _remote_env(tmp_path, phase, **env):
     ("stamp", {}, "run launch-stamp first"), ("stamp", {"K": "4;reboot"}, "not a round count"),
     ("metal", {}, "no "), ("metal", {"K": "4;reboot"}, "not a round count"),
     ("someip", {}, "no "), ("someip", {"K": "4;reboot"}, "not a round count"),
+    ("harness", {}, "no "), ("harness", {"K": "4;reboot"}, "not a round count"),
 ])
 def test_remote_session_phases_refuse_without_a_guest_or_with_a_bad_k(tmp_path, phase, env, msg):
     r = _remote_env(tmp_path, phase, **env)
@@ -600,7 +602,7 @@ def test_remote_session_phases_refuse_without_a_guest_or_with_a_bad_k(tmp_path, 
 
 
 @needs_bash
-@pytest.mark.parametrize("session", ["liveness", "stamp", "metal", "someip"])
+@pytest.mark.parametrize("session", ["liveness", "stamp", "metal", "someip", "trace2"])
 def test_remote_capture_takes_a_finished_session_and_refuses_an_unfinished_one(tmp_path, session):
     (tmp_path / "rec" / session).mkdir(parents=True)
     r = _remote_env(tmp_path, "capture")
@@ -820,3 +822,90 @@ def test_shift_isolation_stops_when_a_service_did_not_start(tmp_path):
     r = subprocess.run([BASH, str(d / "run-shift-isolation.sh")], capture_output=True, text=True, env=env, timeout=300)
     assert r.returncode != 0 and "needs 'shm'" in r.stdout + r.stderr
     assert not (tmp_path / "ladder.log").exists(), "no ladder may run on a guest that is not the condition"
+
+
+# --------------------------------------------------------------------------
+# 2026-09-27: more images per session, and the harness phase
+
+
+def _harness_env(tmp_path, extra="ifs-trace.bin:" + "f" * 64, harness="run-trace2.sh", **env):
+    _inputs_env(tmp_path)
+    if extra is not None:
+        with open(tmp_path / "inputs.env", "a", encoding="utf-8", newline="\n") as f:
+            f.write("IFS_EXTRA=%s\n" % extra)
+    g = tmp_path / "repo" / "orin-native" / "gpu-concurrency"
+    g.mkdir(parents=True, exist_ok=True)
+    if harness:
+        (g / harness).write_text("exit 0\n")
+    return subprocess.run([BASH, REMOTE, "harness"], capture_output=True, text=True, timeout=60,
+                          env=dict(os.environ, W=str(tmp_path), PATH=_path_with(), **env))
+
+
+@needs_bash
+@pytest.mark.parametrize("words,msg", [
+    ("HARNESS=run-ladder.sh", "is not one the harness phase runs"),
+    ("HARNESS=run-trace.sh IMAGE=ifs-trace.bin", "the repo tarball lacks run-trace.sh"),
+    ("HARNESS=run-trace2.sh IMAGE=ifs-nope.bin", "image 'ifs-nope.bin' was not uploaded in this session"),
+])
+def test_the_harness_phase_runs_only_listed_harnesses_on_uploaded_images(tmp_path, words, msg):
+    r = _harness_env(tmp_path, LADDER_ENV=words)
+    assert r.returncode != 0 and msg in r.stdout + r.stderr, r.stdout + r.stderr
+
+
+@needs_bash
+@pytest.mark.parametrize("extra", ["ifs-trace.bin:" + "f" * 63, "ifs trace.bin:" + "f" * 64, ""])
+def test_a_malformed_extra_image_list_is_refused(tmp_path, extra):
+    r = _harness_env(tmp_path, extra=extra, LADDER_ENV="HARNESS=run-trace2.sh IMAGE=ifs-trace.bin")
+    assert r.returncode != 0 and "inputs.env is malformed" in r.stdout + r.stderr, r.stdout + r.stderr
+
+
+@needs_bash
+def test_the_harness_phase_gets_past_its_checks_with_an_uploaded_image(tmp_path):
+    # Past every check: it then fails running the stub harness's missing pieces, not a refusal.
+    r = _harness_env(tmp_path, LADDER_ENV="HARNESS=run-trace2.sh IMAGE=ifs-trace.bin")
+    out = r.stdout + r.stderr
+    for refusal in ("is not one", "lacks", "was not uploaded", "malformed"):
+        assert refusal not in out, out
+    assert (tmp_path / "rec" / "trace2" / "host-before.txt").exists(), out
+
+
+@needs_bash
+@pytest.mark.parametrize("bad", ["ifs;x.bin", "ifs-kick.bin"])
+def test_upload_refuses_a_bad_or_repeated_extra_image(rig, tmp_path, bad):
+    run, state, stub = rig
+    _launched(state)
+    (state / "armed").touch()
+    (state / "ip").write_text("203.0.113.9\n")
+    d = tmp_path / "in"
+    d.mkdir()
+    for name in ("repo.tar", "ifs-kick.bin", bad):
+        (d / name).write_bytes(b"x")
+    with gzip.open(d / "disk-qemu.gz", "wb") as f:
+        f.write(b"disk")
+    r, _ = run("upload", METAL_REPO_TAR=d / "repo.tar", METAL_IFS=d / "ifs-kick.bin",
+               METAL_DISK_GZ=d / "disk-qemu.gz", METAL_IFS_EXTRA=d / bad)
+    out = r.stdout + r.stderr
+    assert r.returncode != 0 and ("will not pass on" in out or "repeats" in out), out
+    assert not (stub / "scp.log").exists(), (stub / "scp.log").read_text()
+
+
+@needs_bash
+def test_upload_sends_and_records_the_extra_images(rig, tmp_path):
+    run, state, stub = rig
+    _launched(state)
+    (state / "armed").touch()
+    (state / "ip").write_text("203.0.113.9\n")
+    d = tmp_path / "in"
+    d.mkdir()
+    for name in ("repo.tar", "ifs-someip.bin", "ifs-trace.bin", "ifs-stamp.bin"):
+        (d / name).write_bytes(name.encode())
+    with gzip.open(d / "disk-qemu.gz", "wb") as f:
+        f.write(b"disk")
+    r, _ = run("upload", METAL_REPO_TAR=d / "repo.tar", METAL_IFS=d / "ifs-someip.bin",
+               METAL_DISK_GZ=d / "disk-qemu.gz", METAL_IFS_EXTRA="%s %s" % (d / "ifs-trace.bin", d / "ifs-stamp.bin"))
+    assert r.returncode == 0, r.stdout + r.stderr
+    scp = (stub / "scp.log").read_text()
+    assert "ifs-trace.bin" in scp and "ifs-stamp.bin" in scp, scp
+    sha = hashlib.sha256(b"ifs-trace.bin").hexdigest()
+    ssh = (stub / "ssh.log").read_text()
+    assert "IFS_EXTRA=%s" in ssh and "ifs-trace.bin:" + sha in ssh, ssh

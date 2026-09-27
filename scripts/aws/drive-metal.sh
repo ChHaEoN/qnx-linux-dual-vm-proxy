@@ -53,7 +53,7 @@ IP_WAIT_S="${METAL_IP_WAIT_S:-300}"
 PROV_WAIT_S="${METAL_PROV_WAIT_S:-900}"
 CONFIRM_TRIES="${METAL_CONFIRM_TRIES:-6}"
 READBACK_TRIES="${METAL_READBACK_TRIES:-30}"
-PHASES="setup quiesce launch ladder launch-live liveness launch-stamp stamp metal someip capture"
+PHASES="setup quiesce launch ladder launch-live liveness launch-stamp stamp metal someip harness capture"
 
 # Local paths in POSIX form: a pasted C:\... path would make scp and tar read "C:" as
 # a host, and sha256sum escape the backslashes in its output.
@@ -301,23 +301,36 @@ main() {
 		ifs_sha="$(sha256_hex "$ifs")"
 		disk_sha="$(gunzip -c "$disk" | sha256sum | cut -c1-64)"
 		case "$disk_sha" in *[!0-9a-f]*|'') die "could not hash the disk" ;; esac
+		# 2026-09-27: METAL_IFS_EXTRA, more images for a harness session, space-separated paths.
+		local x xn extra="" extra_paths=()
+		for x in ${METAL_IFS_EXTRA:-}; do
+			x="$(posix_path "$x")"
+			xn="$(basename "$x")"
+			case "$xn" in ''|*[!A-Za-z0-9._-]*) die "image name '$xn' has characters this script will not pass on" ;; esac
+			[ "$xn" != "$ifs_name" ] || die "METAL_IFS_EXTRA repeats $xn"
+			[ -r "$x" ] || die "METAL_IFS_EXTRA: no $x"
+			extra="${extra:+$extra }$xn:$(sha256_hex "$x")"
+			extra_paths+=("$x")
+		done
 		rl_sha="$(sha256_hex "$HERE/remote-ladder.sh")"; cap_sha="$(sha256_hex "$HERE/capture.py")"
 		{ echo "commit $(git get-tar-commit-id < "$tar" 2>/dev/null || echo unknown)"
 		  echo "repo.tar $(sha256_hex "$tar")"
 		  echo "remote-ladder.sh $rl_sha"
 		  echo "capture.py $cap_sha"
 		  echo "ifs $ifs_name $ifs_sha"
+		  for x in $extra; do echo "ifs ${x%%:*} ${x#*:}"; done
 		  echo "disk $disk_sha"; } > "$STATE/inputs.txt"
 		rsh 'mkdir -p ~/a1/img'
 		scp "${SSHO[@]}" "$tar" "ubuntu@$ip:a1/repo.tar" 2>&1 | red
 		scp "${SSHO[@]}" "$HERE/remote-ladder.sh" "$HERE/capture.py" "ubuntu@$ip:a1/" 2>&1 | red
-		scp "${SSHO[@]}" "$ifs" "$disk" "ubuntu@$ip:a1/img/" 2>&1 | red
+		scp "${SSHO[@]}" "$ifs" "$disk" "${extra_paths[@]}" "ubuntu@$ip:a1/img/" 2>&1 | red
 		# The instance checks everything against these before using it, and copies
 		# them into the record, so the record names what actually ran.
 		local commit; commit="$(git get-tar-commit-id < "$tar" 2>/dev/null || true)"
 		case "$commit" in *[!0-9a-f]*) commit="" ;; esac
 		[ "${#commit}" -eq 40 ] || commit=unknown
 		rsh "printf 'IFS_NAME=%s\nIFS_SHA256=%s\nDISK_SHA256=%s\nREMOTE_LADDER_SHA256=%s\nCAPTURE_SHA256=%s\nREPO_COMMIT=%s\n' '$ifs_name' '$ifs_sha' '$disk_sha' '$rl_sha' '$cap_sha' '$commit' > ~/a1/inputs.env"
+		[ -z "$extra" ] || rsh "printf 'IFS_EXTRA=%s\n' '$extra' >> ~/a1/inputs.env"
 		red < "$STATE/inputs.txt"
 		;;
 	run)
