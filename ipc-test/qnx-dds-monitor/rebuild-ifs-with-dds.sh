@@ -67,4 +67,4 @@ if [ "$entry" != 40081ab8 ]; then
 	echo "FATAL: startup entry is '$entry', not 40081ab8 -- this image carries a startup that is not ours" >&2
 	exit 1
 fi
-echo "startup entry 40081ab8: ours (40081da8 would be the SDP's, which hangs under KVM)"
+echo "startup entry 40081ab8: ours (40081da8 would be the SDP's shipped startup)"

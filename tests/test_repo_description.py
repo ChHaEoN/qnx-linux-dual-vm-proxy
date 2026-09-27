@@ -149,8 +149,8 @@ def test_a_version_string_is_not_treated_as_a_figure(repo_root):
     which names SDP 8.0 -- would fail for quoting its own toolchain version.
     """
     assert C.extract_figures("QNX SDP 8.0 on L4T R36.4.7") == []
-    assert C.extract_figures("4519 ms, 2.45x, 1 GB") == [
-        ("4519", "ms"), ("2.45", "x"), ("1", "GB")]
+    assert C.extract_figures("4321 ms, 1.25x, 1 GB") == [
+        ("4321", "ms"), ("1.25", "x"), ("1", "GB")]
 
 
 def test_the_committed_pin_passes_the_gate(repo_root):

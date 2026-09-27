@@ -11,8 +11,11 @@ Where a public statement was cross-checked against the Apache-2.0 startup
 source that ships in the local BSP zip (`BSP_hyp-guest-arm_be-800_SVN1018940_JBN323.zip`,
 already extracted read-only by task H2 to
 `C:/Users/<user>/AppData/Local/Temp/orin-native-port-bsp/`), the file:line is
-given. No QNX binary was disassembled or dumped; binary evidence is limited to
-the `ar t` / `nm` name listings that task H2 already produced (`harvest-sdp.md`).
+given. No QNX binary was disassembled or dumped. This file also drew on the
+`ar t` / `nm` name listings of QNX-shipped binaries that task H2 produced; they,
+and the claims that rested on them, were withdrawn on 2026-09-27 under NC QDL
+v7 clause 4.6(c), and the claims that the source can carry were re-based on it
+on 2026-09-28.
 No package was installed; the Orin was not touched by this task (board facts
 below cite the H3 harvest files in `raw/`).
 
@@ -30,12 +33,12 @@ or cloud id appears in this file.
 
 | # | Question | Short answer | Class |
 |---|---|---|---|
-| 1 | Is AArch64 UEFI boot documented in 8.0? | **No.** The 8.0 `mkifs` page still lists `uefi.boot` under `x86_64` only; the 8.0 GA, 8.0.1, 8.0.2, 8.0.3, 8.0.4 and 8.0.5 release notes contain no UEFI / `mkifsf_uefi` / `uefi.boot` item; the only UEFI release note is SDP 7.0's, and it is x86-only. The install nevertheless ships `aarch64le/boot/sys/uefi.boot` and a full UEFI/ACPI entry path in `libstartup.a` (task H2, VERIFIED) — a **shipped-but-undocumented** capability. | VERIFIED (absence over fetched pages) + VENDOR_CLAIM |
+| 1 | Is AArch64 UEFI boot documented in 8.0? | **No.** The 8.0 `mkifs` page still lists `uefi.boot` under `x86_64` only; the 8.0 GA, 8.0.1, 8.0.2, 8.0.3, 8.0.4 and 8.0.5 release notes contain no UEFI / `mkifsf_uefi` / `uefi.boot` item; the only UEFI release note is SDP 7.0's, and it is x86-only. The install nevertheless ships `aarch64le/boot/sys/uefi.boot`, and the startup library source in the BSP zip carries a full UEFI/ACPI entry path (task H2, VERIFIED) — a **shipped-but-undocumented** capability. | VERIFIED (absence over fetched pages) + VENDOR_CLAIM |
 | 1 | What does the `mkifsf_uefi` PE expect? | A standard UEFI application entry: `efi_entry_point(ImageHandle, SystemTable)`; it snapshots the memory map, calls `ExitBootServices`, then `cstart()`. **No DTB in x0.** The lib finds ACPI's RSDP through the EFI configuration table; it has **no** lookup of the DTB GUID. | VERIFIED (source) |
-| 1 | Register contract for a non-UEFI (IPL/U-Boot) entry | `_start` must not touch x0–x3; `cstart` saves them to `boot_regs[4]`; the FDT-driven boards (`armv8_fm`, `qemu-virt`) and the documented `-u reg` option treat x0 as the FDT physical address. | VERIFIED (source) + VENDOR_CLAIM (`-u`) |
-| 2 | What must a board supply? | `main`, `tweak_cmdline`, `init_raminfo`, `init_intrinfo`, `init_asinfo`, `board_smp_num_cpu/init/start/adjust_num`, optionally `_start`, plus the debug-device table. Everything else (GICv3+ITS bring-up, PSCI CPU_ON, generic-timer qtime, FDT helpers, UEFI/ACPI, EL2/VHE host enable) is library code. | VERIFIED (source + `nm` T/U) |
+| 1 | Register contract for a non-UEFI (IPL/U-Boot) entry | `_start` must not touch x0–x3; `cstart` saves them to `boot_regs[4]`; the FDT-driven `armv8_fm` board and the documented `-u reg` option treat x0 as the FDT physical address. | VERIFIED (source) + VENDOR_CLAIM (`-u`) |
+| 2 | What must a board supply? | `main`, `init_raminfo`, `init_intrinfo`, `init_asinfo`, `board_smp_num_cpu/init/start/adjust_num`, optionally `_start` and `tweak_cmdline` (the library has defaults for both), plus the debug-device table. Everything else (GICv3+ITS bring-up, PSCI CPU_ON, generic-timer qtime, FDT helpers, UEFI/ACPI, EL2/VHE host enable) is library code. | VERIFIED (source) |
 | 2 | Must startup run at EL2 for `-Q enable,el2-host`? | Yes. If startup finds itself at EL1 with `-Q enable*`, the library calls `crash()`; `el2-host` additionally requires ID_AA64MMFR1_EL1.VH, else `crash()`; without VHE (or with `el1-host`) it silently falls back to an EL1 host. The Orin Nano's UEFI hands off at EL2 (H3 evidence file). | VERIFIED (source; board evidence) |
-| 2 | Does 8.0 startup parse a firmware DTB? | Yes — `fdt_init`, `init_raminfo_fdt`, `fdt_num_cpu`, `fdt_get_cpu_freq`, `fdt_psci_configure`, `fdt_asinfo` all ship; `armv8_fm` and `qemu-virt` use them. **Caveat:** `fdt_psci_configure()` matches only `compatible = "arm,psci"`, and the Orin Nano DT says `"arm,psci-1.0"`. | VERIFIED (source; board DT) |
+| 2 | Does 8.0 startup parse a firmware DTB? | Yes — `fdt_init`, `init_raminfo_fdt`, `fdt_num_cpu`, `fdt_get_cpu_freq`, `fdt_psci_configure`, `fdt_asinfo` all ship; `armv8_fm` uses them. **Caveat:** `fdt_psci_configure()` matches only `compatible = "arm,psci"`, and the Orin Nano DT says `"arm,psci-1.0"`. | VERIFIED (source; board DT) |
 | 2 | What UART does `callout_debug_tegra` target? | A 16550/8250 register map at a 4-byte stride (THR/RBR at +0x00, LSR at +0x14), i.e. the classic Tegra `nvidia,tegra20-uart` block. Upstream Linux drives Tegra234's `uarta`/`uarte` with that very compatible via `8250_tegra.c` (`UPIO_MEM32`, `regshift = 2`). No public BSP naming it was found. | VERIFIED (source) + VENDOR_CLAIM (upstream) |
 | 3 | Source-available BSP for a real board? | Yes: `github.com/qnx/bsp_raspberrypi-bcm2711-rpi4` (GitHub, Apache-2.0 LICENSE, "Experimental Software SQML 1"), with `src/hardware/startup/boards/bcm2711/` (`main.c`, `board_smp.c`, `init_intrinfo.c`, callouts). It is **GICv2 + spin-table, no PSCI, no FDT** — a real-board pattern template, not a GICv3/PSCI template. | VERIFIED (fetched files) |
 | 4 | Which SDP does DRIVE OS use on Orin? | DRIVE OS 6.0.x: **QNX SDP 7.1 + QNX OS for Safety 2.2.x** (6.0.6 page: "SDP 7.1 and QOS 2.2.2 EA"). DRIVE OS 5.1 (Xavier): SDP 7.0.0. DRIVE OS 7.x / DRIVE AGX Thor: QNX OS for Safety **8** (press release, Aug 2025; 8.0 confirms the Tegra-class port exists at QNX). On DRIVE Orin, QNX runs as a **guest under NVIDIA's hypervisor** ("a single guestOS (linux or QNX)"), not as a documented bare-metal startup. | VENDOR_CLAIM |
@@ -100,13 +103,13 @@ Paths are under `src/hardware/startup/lib/` in the extracted BSP zip.
 
 * **ACPI console path.** `acpi_spcr_parse.c:29-39` switches on `spcr->Interface_Type` and handles only `ACPI_SPCR_PL011` and `ACPI_SPCR_SBSA`, wiring `init_pl011`/`put_pl011` and the `*_pl011` callouts. No 8250/16550 or Tegra case. On the Orin Nano the shipped firmware booted Linux in **device-tree mode** with "ACPI: Interpreter disabled" (H3 evidence, `harvest-repo.md` A7), so SPCR is moot unless an ACPI toggle exists (UNKNOWN for Orin Nano, see H1 A18).
 
-* **Neither shipped aarch64 startup links the UEFI code** (`nm` on `startup-armv8_fm` / `startup-qemu-virt`: no `efi_entry_point`, `is_uefi_boot`, `uefi_init` — task H2 §5c). The mkifs probe in H2 §6 (`[virtual=aarch64le,uefi]` → PE32+, machine 0xAA64, subsystem 0xA, entry 0x800) therefore wraps a startup whose `_start` will misread ImageHandle as an FDT pointer. HYPOTHESIS: hang or `fdt_check_header` failure before any console output.
+* **The `armv8_fm` board does not use the UEFI code.** Its source takes x0 as an FDT pointer, and a from-source build of it links none of the UEFI entry code (`build-armv8_fm.md`); a check of the shipped startup binaries was withdrawn on 2026-09-27 (4.6(c)). The mkifs probe in H2 §6 (`[virtual=aarch64le,uefi]` → PE32+, machine 0xAA64, subsystem 0xA, entry 0x800) would therefore wrap, for `armv8_fm`, a startup whose `_start` misreads ImageHandle as an FDT pointer. HYPOTHESIS: hang or `fdt_check_header` failure before any console output.
 
 ---
 
 ## 2. The board API, GICv3, timer, SMP/PSCI, `-Q`, FDT, debug callouts
 
-### 2.1 Board-implemented vs library-provided (VERIFIED: `public/startup.h` + `nm` T/U from H2)
+### 2.1 Board-implemented vs library-provided (VERIFIED: `public/startup.h` + the lib source, H2 §5a)
 
 `lib/public/startup.h:250-286` (Apache-2.0) declares the board hooks; the
 comment above them: "There may be default implementations of these routines in
@@ -114,7 +117,7 @@ the startup library that will work for a particular board".
 
 | Board must define | Library defines (default or full) |
 |---|---|
-| `main()`, `tweak_cmdline()`, `init_raminfo()`, `init_intrinfo()`, `init_asinfo()`, `board_smp_num_cpu()`, `board_smp_init()`, `board_smp_start()`, `board_smp_adjust_num()`; optionally `_start` (default is `b cstart`) | `board_init()` (empty default), `init_qtime()` (ARMv8 generic timer, `init_qtime_v8gt.o`), `init_cacheattr()`, `init_cpuinfo()`, `init_hwinfo()`, `init_mmu()`, `init_smp()`, `init_system_private()`, `board_find_acpi_rsdp()`, all `fdt_*`, `psci_*`, `gic_v3*`, `uefi*`/`efi_*`/`acpi*`, `hypervisor_*`, `smp_start`, `spin_smp*` |
+| `main()`, `init_raminfo()`, `init_intrinfo()`, `init_asinfo()`, `board_smp_num_cpu()`, `board_smp_init()`, `board_smp_start()`, `board_smp_adjust_num()`; optionally `_start` (default is `b cstart`) and `tweak_cmdline()` | `board_init()` (empty default), `tweak_cmdline()` (default calls `cpu_tweak_cmdline()`), `init_qtime()` (ARMv8 generic timer, `aarch64/init_qtime_v8gt.c`), `init_cacheattr()`, `init_cpuinfo()`, `init_hwinfo()`, `init_mmu()`, `init_smp()`, `init_system_private()`, `board_find_acpi_rsdp()`, all `fdt_*`, `psci_*`, `gic_v3*`, `uefi*`/`efi_*`/`acpi*`, `hypervisor_*`, `smp_start`, `spin_smp*` |
 
 Docs cross-check (VENDOR_CLAIM): the "Hardware initialization" page lists the
 board sequence `init_raminfo()`, `init_mmu()`, `init_intrinfo()`,
@@ -134,7 +137,7 @@ are **undocumented** (https://www.qnx.com/developers/docs/8.0/com.qnx.doc.neutri
 → `gic_v3_intr_lpi.num_vectors = gic_v3_num_lpis()` → MMIO-vs-sysreg callout
 choice → `gic_v3_initialize()` → `lsp.smp.p->send_ipi = gic_sendipi`. Kernel
 callouts for SPI/PPI/LPI in both system-register and memory-mapped flavours
-ship in `callout_interrupt_gic_v3.o` / `callout_sendipi_gic_v3.o`.
+are in `aarch64/callout_interrupt_gic_v3.S` / `callout_sendipi_gic_v3.S`.
 Tegra234 facts for that call: GICD `0x0f400000` (64 KiB), a **single** GICR
 region at `0x0f440000` (2 MiB), `#redistributor-regions = <1>`, no ITS node,
 maintenance PPI 9 — VERIFIED from the board DT (`raw/orin-devicetree.txt`) and
@@ -146,8 +149,8 @@ have to be in a single array" (VENDOR_CLAIM) — satisfied here.
 ### 2.3 Timer (VERIFIED)
 
 `init_qtime()` = ARMv8 generic timer; it needs `timer_freq`, which `armv8_fm`
-takes from `CNTFRQ_EL0`; the `timer_load/value/reload_armv8` callouts live in
-`init_qtime_v8gt.o` (H2 §3a). Board DT: `timer` node `compatible =
+takes from `CNTFRQ_EL0`; the `timer_load/value/reload_armv8` callouts are
+declared in `public/aarch64/cpu_startup.h:239-241` (H2 §3a). Board DT: `timer` node `compatible =
 "arm,armv8-timer"` (VERIFIED, `raw/orin-devicetree.txt`).
 
 ### 2.4 SMP: PSCI vs spin table (VERIFIED)
@@ -213,25 +216,24 @@ el1-host for such systems"
 
 ### 2.6 FDT support in the 8.0 startup lib (VERIFIED)
 
-28 `fdt_*.o` members (`fdt_init`, `fdt_asinfo`, `fdt_init_bootopt`,
+24 FDT source files (`fdt_init`, `fdt_asinfo`, `fdt_init_bootopt`,
 `init_raminfo_fdt`, `fdt_num_cpu`, `fdt_get_cpu_freq`, `fdt_qtime`,
 `fdt_tweak_cmdline`, `fdt_get_reg64_cells`, …; H2 §3a) over a separate
-`libfdt.a` (`boards/common.mk` links `fdt`). Users: `armv8_fm` (FDT for RAM,
-CPU count, CPU freq, PSCI conduit, asinfo) and `startup-qemu-virt` (`nm` shows
-`fdt_init`, `fdt_psci_configure`, `init_raminfo_fdt`). The public Pi 4 BSP uses
+`libfdt.a` (`boards/common.mk` links `fdt`). User in the BSP source: `armv8_fm`
+(FDT for RAM, CPU count, CPU freq, PSCI conduit, asinfo). The public Pi 4 BSP uses
 **none** of it (§3). The `-u reg|arg` option exports the FDT to the syspage
 `asinfo` for drivers (VENDOR_CLAIM; 8.0.3 io-sock `qnx.dtb_path` sysctl is the
 consumer side).
 
-### 2.7 Debug callouts (VERIFIED from `ar t` + source)
+### 2.7 Debug callouts (VERIFIED from the lib source and its file list)
 
-| Member | Exists | What it drives |
+| Source file | Exists | What it drives |
 |---|---|---|
-| `callout_debug_8250.o` / `_8250_32b.o` | yes | 16550 byte-stride / 32-bit-register variant with patchable LSR offset |
-| `callout_debug_pl011.o` | yes | PL011 (also what SPCR PL011/SBSA resolve to) |
-| `callout_debug_tegra.o` | yes | see below |
+| `aarch64/callout_debug_8250.S` / `_8250_32b.S` | yes | 16550 byte-stride / 32-bit-register variant with patchable LSR offset |
+| `aarch64/callout_debug_pl011.S` | yes | PL011 (also what SPCR PL011/SBSA resolve to) |
+| `aarch64/callout_debug_tegra.S` | yes | see below |
 | `callout_debug_sbsa*` | **no** | would be a PL011 subset; HYPOTHESIS that `pl011` callouts suffice for Tegra234 `uarti` (`arm,sbsa-uart`) |
-| `hw_ser8250*.o`, `hw_serpl011.o` | yes | startup-side `init_*/put_*`; **no `hw_sertegra`** |
+| `hw_ser8250*.c`, `common_arm/hw_serpl011.c` | yes | startup-side `init_*/put_*`; **no `hw_sertegra`** |
 
 `lib/aarch64/callout_debug_tegra.S` (Apache-2.0, "Copyright 2015, QNX Software
 Systems"), lines 20-23 and 71-85:
@@ -401,7 +403,7 @@ and text-extracted; line numbers refer to the `pdftotext -layout` output).
 | Def. "Non-Commercial Target System(s)" (l.146-148) | "provided the target system is built for Non-Commercial Purpose(s)" | No hardware list; an Orin Nano qualifies. | VERIFIED |
 | Def. "Experimental Software" (l.188-191) | "includes all custom code and/or modifications to Commercially Released Software" | Anything written here is Experimental Software (as-is, no support). | VERIFIED |
 | Def. "Source Code" (l.193-195) | "Some Software files may be delivered in Source Code format." | The BSP zip's `.c/.S/.h` are that case. | VERIFIED |
-| 4.6(c) (l.351-353) | "disassemble or otherwise reduce the Software to human-readable form" | Bars `objdump -d` on shipped binaries (the repo's 2026-07-28 disassembly of `startup-qemu-virt` is the flagged item; the Apache-source route is clean). | VERIFIED |
+| 4.6(c) (l.351-353) | "disassemble or otherwise reduce the Software to human-readable form" | Bars `objdump -d` and any other listing that renders a shipped binary human-readable; the Apache-source route is clean. Material of that kind was withdrawn from the repo on 2026-09-27. | VERIFIED |
 | 4.6(d) (l.353) | "modify any Software delivered in binary code" | Bars binary-patching `startup-qemu-virt`/`procnto`; a rebuilt startup from source is the permitted path. | VERIFIED |
 | 4.6(g) (l.356-357) | "distribute, sell, license or otherwise provide the Software to third parties" | Do not commit QNX binaries, headers or IFS images to the public repo. | VERIFIED |
 | 4.6(i) (l.358-360) | "the results of any performance or functional evaluation of the Software" (may not be released "without the prior written approval of BlackBerry") | Reads on every published latency / boot-time number in this repo, native-Orin ones included. Owner decision recorded in ADR-003. | VERIFIED |
@@ -439,7 +441,7 @@ Apache-2.0 `LICENSE` plus the SQML-1 notice in each file.
 | F10 | `_start` must preserve x0–x3; `cstart` stores them in `boot_regs[]` | VERIFIED | `lib/aarch64/_start.S:37-42`, `cstart.S:60-64`; Pi 4 `_start.S` (GitHub) |
 | F11 | `-u reg` documents "FDT address in x0 register" | VENDOR_CLAIM | startup_options.html |
 | F12 | SPCR parsing handles PL011/SBSA only | VERIFIED | `lib/acpi_spcr_parse.c:29-39` |
-| F13 | Board must supply `main`, `tweak_cmdline`, `init_raminfo`, `init_intrinfo`, `init_asinfo`, `board_smp_*`; lib supplies the rest | VERIFIED | `lib/public/startup.h:250-286`; `nm` T/U (H2) |
+| F13 | Board must supply `main`, `init_raminfo`, `init_intrinfo`, `init_asinfo`, `board_smp_*`; lib supplies the rest, with overridable defaults for `_start` and `tweak_cmdline` | VERIFIED | `lib/public/startup.h:250-286`; the lib source (H2 §5a) |
 | F14 | `board_smp_*`, `fdt_*`, `psci_*`, `gic_*`, `uefi*`, `acpi*`, `hypervisor_init` are undocumented in 8.0's Startup Library chapter | VERIFIED (index read) | startup_library.html |
 | F15 | GICv3 bring-up API: `gic_v3_set_paddr[_range]`, `gic_v3_use_mm_reg_callouts`, `gic_v3_initialize`, ITS/LPI setters | VERIFIED | `lib/public/aarch64/gic.h:489-519` (H2) |
 | F16 | `fdt_psci_configure()` matches only `"arm,psci"`; the Orin Nano DT says `"arm,psci-1.0"` | VERIFIED | `common_arm/fdt_psci_configure.c:42`; `raw/orin-devicetree.txt` |

@@ -384,8 +384,8 @@ so they do not drift)
 > "between guests, or between guests and the hypervisor host," and "Host
 > applications may also create shared memory regions or attach to them if
 > permission allows" via the Virtualization API (`hyp_shm.h`/`libhyp.a`). That
-> API is shipped in the local SDP 8.0 install (its symbols listed with `nm`
-> against `libhyp.a`) despite vendor docs suggesting it needs additional
+> API is shipped in the local SDP 8.0 install (the header and `libhyp.a`)
+> despite vendor docs suggesting it needs additional
 > NDA'd documentation. Two probes were then written and run: a host-only one
 > ([ipc-test/qnx-host-shmem-probe/](../ipc-test/qnx-host-shmem-probe/)), with no
 > `qvm`/`g2.conf` involvement, and a guest-side one

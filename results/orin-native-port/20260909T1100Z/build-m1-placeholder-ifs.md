@@ -45,12 +45,16 @@ libgcc_s.so.1
 | startup header | 0x80081fa0, flags1=0x21 (virtual, little-endian), compress=0 |
 | `image_paddr` / `ram_paddr` | 0x80081fa0 |
 | `startup_size` / `imagefs_size` | 0x2a148 / 0x204f5c |
-| **`startup_vaddr`** | **0x80082800** — a 32-bit value, so the stub's word-sized load of it and the branch that follows still work at this base (opcodes withheld — the repo does not publish machine code of QNX-shipped binaries, QDL v7 4.6(c)) |
-| first 64 bytes | byte-identical to the repo's 0x40080000-based images (opcodes withheld, QDL v7 4.6(c)): three shipped-stub instructions then NOPs. The stub is position-agnostic, and the arm64 Image header must be **prefixed** in a separate page, never overlaid — bytes 0x08-0x0B, where `text_offset` goes, are the stub's third instruction |
+| **`startup_vaddr`** | **0x80082800** — fits the startup header's 32-bit field (`sys/startup.h`) at this base |
 | last file end | 0x802b1000 + trailer — the whole image sits inside the 992 MiB window 0x80000000-0xBDFFFFFF with room for the M3 image |
 
 So the arithmetic in plan §3.2 / §6.2 holds for the base 0x80081000: the raw IFS can follow a 4 KiB shim page
-placed at 0x80080000 by kexec (`text_offset = 0x80000` on top of the 2 MiB-aligned hole at 0x80000000).
+placed at 0x80080000 by kexec (`text_offset = 0x80000` on top of the 2 MiB-aligned hole at 0x80000000). The
+arm64 Image header goes in that separate page, never over the IFS's own first bytes, which belong to the
+bootfile's stub.
+
+A note on the image's first bytes, made on 2026-09-09 from a byte listing of the QNX-shipped bootfile stub,
+was withdrawn on 2026-09-27 under NC QDL v7 clause 4.6(c).
 
 ## What it does not show
 
@@ -67,7 +71,7 @@ further out and the layout check was re-run:
 |---|---|
 | `*.boot` | offset `0x80082000`, `0xfa0` bytes |
 | startup header | `0x80082fa0`, flags1 `0x21`, `compress=0` |
-| `startup_vaddr` | `0x80083800` — still a 32-bit value, so the shipped stub's word-sized load of it still works |
+| `startup_vaddr` | `0x80083800` — still fits the startup header's 32-bit field |
 | image size | 2,289,732 B, ending well inside the 992 MiB window |
 
 `mkifs` exit 0. The shim page is exactly 8,192 bytes (`build-shim.sh` fails the build otherwise), so

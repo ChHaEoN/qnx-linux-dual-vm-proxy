@@ -16,7 +16,8 @@
  *
  * WHY A SHIM AT ALL
  *   A QNX raw IFS starts with its own preboot stub, so the Image header cannot
- *   be overlaid on it — bytes 0x00-0x0B are already the stub's instructions.
+ *   be overlaid on it — per the mkifs docs, raw.boot puts a jump sequence at
+ *   the image's first bytes.
  *   Prefixing a page is the only way to satisfy kexec without touching a
  *   shipped byte.
  *

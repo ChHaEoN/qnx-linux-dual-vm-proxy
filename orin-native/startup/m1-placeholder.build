@@ -6,7 +6,7 @@
 # because startup-t234-orin-nano does not exist yet; armv8_fm cannot boot this
 # board and is not meant to. What it verifies is the container: that mkifs
 # places the preboot stub at the base the shim jumps to, and that the resulting
-# startup_vaddr stays inside the 32-bit field the stub loads it from.
+# startup_vaddr fits the startup header's 32-bit field (sys/startup.h).
 #
 # Build and inspect (needs the SDP environment):
 #     mkifs m1-placeholder.build m1-placeholder.ifs

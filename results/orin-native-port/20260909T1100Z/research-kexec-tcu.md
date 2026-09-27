@@ -314,7 +314,7 @@ avoid any code or data used by any SW CPU pin loop."
 
 ### 1.5 What this means for a QNX `startup` (cross-reference, not researched here)
 
-H2's inventory (`harvest-sdp.md` §0.4) found both shipped startups expect `x0 = FDT`,
+H2's inventory (`harvest-sdp.md` §0.4) found the `armv8_fm` board source expects `x0 = FDT`,
 which matches the kexec contract; whether `startup`'s EL2 handling (`lib/aarch64/
 hypervisor_enable.S`, `lib/hypervisor_setup.c` in the BSP zip, names only from
 `raw/bsp-startup-lib-files.txt:73-74,221`) tolerates arriving with `HCR_EL2.E2H=1` is
@@ -516,15 +516,15 @@ Mechanically yes, on both syscalls (HYPOTHESIS assembled from VERIFIED parts):
 * `kexec -c -l hdr+payload.bin --dtb <fdt> -i` or `kexec -s -l ...`; `--type=Image` if
   the probe order matters. The DTB in `x0` is the (edited) L4T FDT unless `--dtb`
   substitutes one.
-* The QNX IFS from this repo is a *raw* image: its first 12 bytes are the `raw.boot`
-  jump stub followed by NOP padding to `preboot_size = 0xfa0`, and no magic sits at
-  0x38 (`raw/ifs-first-64-bytes.txt`, `raw/dumpifs-plain-ifs-header.txt`, VERIFIED).
-  The stub's third instruction occupies 0x08–0x0B, i.e. the `text_offset` field, so the
-  Linux header cannot be overlaid in place — it must be *prefixed*, shifting the IFS by
-  64 bytes. The IFS is linked for a fixed physical address (`[image=0x40080000]`,
-  `image_paddr=0x40080fa0`, `startup_vaddr=0x40081da8`), so an Orin build would need
+* The QNX IFS from this repo is a *raw* image (`[virtual=aarch64le,raw]`): per the
+  mkifs docs it begins with the `raw.boot` bootfile's own jump sequence to
+  `startup_vaddr` (VENDOR_CLAIM, `mkifs.html`), so the Linux header cannot be
+  overlaid on those bytes — it must be *prefixed*, shifting the IFS by 64 bytes. (A
+  byte-level note on the image's first bytes, made from a listing of the QNX-shipped
+  bootfile, was withdrawn on 2026-09-27 under NC QDL v7 clause 4.6(c).) The IFS is
+  linked for a fixed physical address (`[image=0x40080000]`), so an Orin build would need
   `[image=0x80080000]` (DRAM base + 0x80000) and a header with `text_offset = 0x80000 -
-  0x40` so that the stub lands exactly at `0x80080000` when kexec picks the
+  0x40` so that the IFS lands exactly at `0x80080000` when kexec picks the
   `0x80000000` hole (HYPOTHESIS; depends on §2.3's hole choice and on H2's view of how
   `startup` relocates itself).
 * `kexec_file_load` will place the buffer at the *lowest free* 2 MiB-aligned hole,
@@ -944,7 +944,7 @@ Reasoning from the boot chain (HYPOTHESIS, no test):
   clock/reset-managed through BPMP.
 * QNX already ships the matching callout: `callout_debug_tegra.S` — "nVidia Tegra
   polled serial I/O. Similar to 8250 uart with 32-bit registers.", TX spins on `LSR` at
-  `+0x14` then stores to `+0x00` (H2, `harvest-sdp.md` table row `callout_debug_tegra.o`,
+  `+0x14` then stores to `+0x00` (H2, `harvest-sdp.md` table row `callout_debug_tegra.S`,
   VERIFIED there; Apache-2.0 source in the BSP zip), plus `callout_debug_8250_32b.S`,
   `hw_ser8250_32b.c`, and `callout_debug_pl011.S` / `hw_serpl011.c`
   (`raw/bsp-startup-lib-files.txt:24-29,126,173-175`, VERIFIED names).
@@ -1060,6 +1060,5 @@ ghaf.tii.ae `nvidia_uarti_net_vm`.
 
 Repo-internal: `results/orin-native-port/20260909T1100Z/raw/orin-{kexec,identity,
 firmware-el,uefi-dmesg,devicetree,iomem,ttys,header-uart,followup,followups,boot-config}.txt`,
-`raw/ifs-first-64-bytes.txt`, `raw/dumpifs-plain-ifs-header.txt`,
 `raw/bsp-startup-lib-files.txt`, `harvest-sdp.md`, `scripts/launch-qnx-vm.sh`,
 `scripts/launch-qhv-tcg.ps1`.

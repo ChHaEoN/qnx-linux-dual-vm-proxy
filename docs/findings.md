@@ -15,6 +15,13 @@ with decisions, process or tooling keep only the latter, under neutral titles,
 and name the records they drew on as held locally. The full log is kept
 locally, and this file stays append-only from here on.
 
+**2026-09-27 — listings of QNX-shipped binaries withdrawn.** NC QDL v7 clause
+4.6(c) bars reducing the Software to human-readable form. On 2026-09-27 every
+listing of a QNX-shipped binary (symbol names, archive members, ELF headers,
+leading image bytes, disassembly), and every statement of what one showed, was
+withdrawn from the public tree; the entries below that cited one now say so in
+place.
+
 ---
 
 
@@ -1111,10 +1118,9 @@ and a report run whose thin sections were rewritten by hand and then put
 through a second, adversarial honesty review
 (`results/gicv3-nisv-debug/20260909T101030Z`, held locally). Its findings
 are held locally (NC QDL v7 4.6(i)). Two housekeeping decisions made while
-landing it: the objdump windows of the SDP-shipped startup that the report
-run had produced were replaced by fact summaries before commit (the repo has
-withheld such listings since 2026-07-28; QDL v7 §4.6(c) remains an open
-owner decision), and the `a1.metal` log header's EC2 instance id (instance
+landing it: output of a QNX-shipped binary that the report run had produced
+was kept out of the commit (all such material was withdrawn on 2026-09-27
+under QDL v7 clause 4.6(c)), and the `a1.metal` log header's EC2 instance id (instance
 terminated 2026-07-29) was redacted to honour the CLAUDE.md secrets rule —
 it stays in git history. Six intermediate build/review runs of the script
 were parked outside the repo rather than deleted.
@@ -1295,9 +1301,9 @@ passes, both today:
    ("Host side QNX hypervisor interface definitions") **is** shipped in
    the standard install, with a real, if terse, Doxygen-commented API
    (`hyp_shm_create`, `hyp_shm_attach_ext`, `hyp_shm_data`, `hyp_shm_poke`,
-   `hyp_shm_detach`, ...), and `ntoaarch64-nm.exe` on
-   `target/qnx/aarch64le/lib/libhyp.a` confirms every one of those symbols
-   is a real, defined (`T`) function, not a stub. The guest-side
+   `hyp_shm_detach`, ...), and `target/qnx/aarch64le/lib/libhyp.a` is
+   installed beside it. (A symbol check of that library was withdrawn on
+   2026-09-27 under NC QDL v7 clause 4.6(c).) The guest-side
    counterpart, `qvm/guest_shm.h` (raw MMIO register layout +
    `guest_shm_create()`/`guest_shm_find()` inline helpers), is likewise
    present locally. Neither needs the gated "Virtualization API

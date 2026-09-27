@@ -5,9 +5,8 @@ Windows SDP install (`C:/Users/<user>/qnx800`) and the shipped
 `BSP_hyp-guest-arm_be-800_SVN1018940_JBN323.zip`.
 
 **Provenance.** Two passes of H2 ran today. The first (13:13) produced the
-original version of this file plus `raw/libstartup-nm-all.txt`,
-`raw/libstartup-nm-tagged.txt`, `raw/libstartup-nm-selected-by-member.txt`,
-`raw/bsp-startup-*-files.txt`, `raw/bsp-grep-uefi-acpi-fdt-tegra-psci.txt`,
+original version of this file plus `raw/bsp-startup-*-files.txt`,
+`raw/bsp-grep-uefi-acpi-fdt-tegra-psci.txt`,
 `raw/sdp-include-grep-tegra-hsp-tcu.txt`, `raw/sdp-listings.txt`,
 `raw/bsp-zip-listing-x86.txt`. The second pass (15:30–15:45) independently
 re-derived every claim below from the SDP and the zip, added the raw files listed
@@ -15,10 +14,14 @@ in section 10, and **supersedes** the first version. Where the first pass report
 something this pass could not reproduce, that is said explicitly (section 6, 10).
 
 **Method / limits.** Nothing in the repo was rebuilt and no `mkifs` was run in this
-pass. No QNX binary was disassembled; binary evidence is limited to `ar t`,
-`nm` symbol *names*, `readelf -h`, `dumpifs` directory output, file sizes,
-`strings` on version banners, and the first 64 bytes of the repo's own IFS
-images. BSP sources were extracted only to
+pass. No QNX binary was disassembled. Both passes also listed archive members,
+symbol names, ELF headers, version strings and leading image bytes of
+QNX-shipped binaries; that output, and every claim that rested on it, was
+withdrawn from this file on 2026-09-27 under NC QDL v7 clause 4.6(c) ("reduce
+the Software to human-readable form"). What remains rests on file listings and
+sizes, package metadata, the local docs and the BSP zip's Apache-2.0 source.
+Section 3's library contents were re-read from that source on 2026-09-28, when
+the listing-based evidence was withdrawn. BSP sources were extracted only to
 `C:/Users/<user>/AppData/Local/Temp/orin-native-port-bsp/` and are quoted at
 most 30 lines at a time, from Apache-2.0-headed files only.
 
@@ -33,13 +36,14 @@ board-side cross-reference in section 5e reads H3's already-redacted capture).
 
 ## 0. Bottom line
 
-1. **The generic `libstartup.a` already contains every architecture-level piece a
+1. **The generic startup library already provides every architecture-level piece a
    Tegra234 (Cortex-A78AE) startup needs** — UEFI entry + memory map +
    ExitBootServices, ACPI RSDP/table walker + SPCR, FDT parsing, PSCI (SMC/HVC)
    `CPU_ON`/reset, GICv3 + ITS bring-up with system-register *and* MMIO callouts,
    ARMv8 generic-timer `qtime`, spin-table and PSCI SMP, `cpuid_a78ae`, and an
-   NVIDIA-Tegra polled-UART debug callout. 246 members, source for all of them
-   in the BSP zip (VERIFIED, sections 3, 5).
+   NVIDIA-Tegra polled-UART debug callout. Its source is the BSP zip's
+   `src/hardware/startup/lib` (287 files), which builds `libstartup.a`
+   (VERIFIED from source, sections 3, 5).
 2. **What QNX does *not* ship:** any Tegra234/T23x/T19x board directory, any
    HSP/TCU (mailbox console) code, any Tegra register header, any NVIDIA PCI
    hardware module, the `qemu-virt` board source, and the board-API headers
@@ -50,14 +54,16 @@ board-side cross-reference in section 5e reads H3's already-redacted capture).
    license" header, **not** Apache-2.0; the other 11 board files and 333 of the
    338 source files in the zip are Apache-2.0 (VERIFIED by per-file census,
    `raw/bsp-src-licence-census.txt`).
-4. **Neither shipped startup is UEFI-aware.** `nm` on `startup-armv8_fm`,
-   `startup-qemu-virt` and the BSP prebuilt shows none of `efi_entry_point`,
-   `uefi_init`, `is_uefi_boot`, `init_raminfo_uefi`, `acpi_*`,
-   `display_char_tegra`; both expect x0 = FDT physical address (VERIFIED,
-   `raw/shipped-startup-symbols.txt`).
-5. **The repo's plain IFS is a raw AArch64 binary** (raw.boot jump stub, no
-   Linux arm64 `Image` header at 0x38); the `qhv/guest` IFS is an ELF64. An
-   aarch64le `uefi.boot` (`mkifsf_uefi`) stub exists although the local doc
+4. **The `armv8_fm` board is FDT-driven, not UEFI-aware.** Its source takes
+   x0 as the FDT physical address (section 5b), and a from-source build of it
+   links none of the UEFI entry code
+   ([build-armv8_fm.md](build-armv8_fm.md)). A check of the shipped startup
+   binaries themselves was withdrawn on 2026-09-27 (4.6(c)).
+5. **The repo's plain IFS is built as a raw image** (`[virtual=aarch64le,raw]`:
+   `raw.boot`, which the mkifs docs describe as an instruction sequence at the
+   image's start that jumps to `startup_vaddr`), so it has no Linux arm64
+   `Image` header; the `qhv/guest` IFS is built `[virtual=aarch64le,elf]`. An
+   aarch64le `uefi.boot` (`mkifsf_uefi`) bootfile exists although the local doc
    lists `uefi.boot` as x86_64-only (VERIFIED presence; acceptance of
    `[virtual=aarch64le,uefi]` was **not** exercised in this pass — section 6).
 6. **Concrete fit problems found by reading source against the Orin Nano's live
@@ -68,18 +74,18 @@ board-side cross-reference in section 5e reads H3's already-redacted capture).
 
 ---
 
-## 1. `target/qnx/aarch64le/boot/sys/` — VERIFIED (`ls -la`, `raw/boot-sys-listing.txt`)
+## 1. `target/qnx/aarch64le/boot/sys/` — VERIFIED (`ls -l`, `raw/sdp-listings.txt`)
 
 | file | bytes | what it is |
 |---|---:|---|
-| `startup-armv8_fm` | 1,623,920 | ARMv8 Foundation-Model startup. ELF **REL** object, entry 0x0 (`readelf -h`) — `mkifs` links it at `[image=]` time. Delivered by package `com.qnx.qnx800.target.driver.virtio.startup` 0.1.0 build 21 (2024-11-23), "startup binaries for use with QNX guests of any supporting hypervisor" (VENDOR_CLAIM, `ResourceDescriptor.afd`). |
-| `startup-qemu-virt` | 1,599,632 | QEMU `virt` startup used by every IFS this repo builds. ELF REL. Delivered by `com.qnx.qnx800.target.qemuvirt` 0.2.1 build 87 (2025-07-24); its `buildinfo` names the upstream repo `qnx/products/bsp/startup_boards.git` — the board source exists at QNX but is **not shipped** (VERIFIED metadata; the not-shipped part is VERIFIED by the zip listing). |
+| `startup-armv8_fm` | 1,623,920 | ARMv8 Foundation-Model startup. Delivered by package `com.qnx.qnx800.target.driver.virtio.startup` 0.1.0 build 21 (2024-11-23), "startup binaries for use with QNX guests of any supporting hypervisor" (VENDOR_CLAIM, `ResourceDescriptor.afd`). |
+| `startup-qemu-virt` | 1,599,632 | QEMU `virt` startup used by every IFS this repo builds. Delivered by `com.qnx.qnx800.target.qemuvirt` 0.2.1 build 87 (2025-07-24); its `buildinfo` names the upstream repo `qnx/products/bsp/startup_boards.git` — the board source exists at QNX but is **not shipped** (VERIFIED metadata; the not-shipped part is VERIFIED by the zip listing). |
 | `procnto-smp-instr` | 63,955,552 | the only kernel variant installed |
 | `kdumper` | 1,374,248 | kernel dumper |
 | `libmod_contextid.a` | 373,596 | procnto module |
 | `uefi.boot` | 239 | `[attr="?-bigendian" +rsvd_vaddr vboot=0xffffff8060000000 len=0x200 filter="mkifsf_uefi %a %s %i" pagesizes=4k]`; comment: build file MUST give `[image=]` |
 | `elf.boot` / `elf64k.boot` | 238 / 252 | `filter="mkifsf_elf %a %s %i"` — what `qhv/guest` uses |
-| `raw.boot` / `raw64k.boot` | 14,832 / 14,840 | ELF64 AArch64 PIE, entry 0x1000, carrying the attribute line `[attr=?-bigendian +rsvd_vaddr vboot=0xffffff8060000000 pagesizes=4k]`; supplies the 0xfa0-byte "preboot" jump stub seen at the head of the raw IFS (section 6) |
+| `raw.boot` / `raw64k.boot` | 14,832 / 14,840 | the raw-image bootfile the repo's plain IFS uses; per the mkifs docs it puts "an instruction sequence at its beginning" that jumps to `startup_vaddr` (VENDOR_CLAIM, `mkifs.html`) |
 | `binary.boot` / `binary64k.boot` | 275 / 289 | plain binary, no stub |
 | `srec.boot` / `srec64k.boot` | 234 / 248 | S-record |
 
@@ -105,54 +111,56 @@ see section 6).
 
 ## 3. `libstartup.a` — the reusable startup library
 
-`target/qnx/aarch64le/usr/lib/libstartup.a`: 2,661,074 bytes, **246 members**
-(`ntoaarch64-ar t` → `raw/libstartup-members.txt`), package
-`com.qnx.qnx800.target.base.libstartup` 1.0.0 build 600 (2025-07-30). The BSP zip's
-`prebuilt/aarch64le/usr/lib/libstartup.a` (3,283,336 bytes) has the **same 246
-member names** (`diff` of the two `ar t` lists is empty — VERIFIED) but a different
-size, i.e. a different build of the same source. Symbol names for the requested
-members: `raw/libstartup-nm-selected.txt` (85 members, `nm` names only); the
-first pass's `raw/libstartup-nm-all.txt` covers all 246.
+`target/qnx/aarch64le/usr/lib/libstartup.a`: 2,661,074 bytes, package
+`com.qnx.qnx800.target.base.libstartup` 1.0.0 build 600 (2025-07-30). The BSP zip
+carries a second copy, `prebuilt/aarch64le/usr/lib/libstartup.a` (3,283,336
+bytes), and the library's source, `src/hardware/startup/lib` (287 files,
+`raw/bsp-startup-lib-files.txt`), which builds `libstartup.a` unmodified
+([build-armv8_fm.md](build-armv8_fm.md)). What follows is read from that source.
+A listing of the shipped archives' members and symbols was withdrawn on
+2026-09-27 (4.6(c)).
 
-### 3a. What each requested member provides (VERIFIED from `nm` names + Apache-2.0 source)
+### 3a. What each requested piece provides (VERIFIED from the Apache-2.0 source)
 
-| member(s) | defines (T/D/B) | reading |
+Paths are under `src/hardware/startup/lib/`.
+
+| source file(s) | defines | reading |
 |---|---|---|
-| `efi_entry_point.o` | `efi_entry_point`, `efi_get_table`, `efi_walk_map`, `efi_convert_command_line` | PE/COFF entry `EFI_STATUS efi_entry_point(EFI_HANDLE, EFI_SYSTEM_TABLE*)`: prints "Entering startup..." via ConOut, captures `LoadOptions` as the command line, snapshots the memory map, then continues into `cstart` (`lib/efi_entry_point.c:47-70` read; Copyright 2023 BlackBerry, Apache-2.0). |
-| `efi_tweak_cmdline.o` | `efi_tweak_cmdline` | LoadOptions → startup `argv`. |
-| `uefi.o` | globals `efi_image_handle`, `efi_system_table`, `efi_boot_services`, `efi_runtime_services`; `uefi_exit_init`, `uefi_find_config_tbl` | Config-table lookup by GUID; ref-counted `ExitBootServices` trampoline (`lib/uefi.c:29-80`). |
-| `uefi_init.o` | `uefi_init` | Takes `boot_regs[0]` = ImageHandle, `boot_regs[1]` = SystemTable, sets the service pointers, arms `uefi_exit_init()` (`lib/aarch64/uefi_init.c:37-57`). |
-| `is_uefi_boot.o` | `is_uefi_boot` | Validates `EFI_SYSTEM_TABLE`/`BOOT_SERVICES`/`RUNTIME_SERVICES` signatures from `boot_regs[0..1]`; memoised (`lib/aarch64/is_uefi_boot.c:22-60`). |
-| `uefi_io.o` | `uefi_io_init`, `uefi_io_flush`, `uefi_print_char`, `uefi_print_str` | Debug console through `EFI_SIMPLE_TEXT_OUTPUT` before ExitBootServices — **a console path that needs no UART knowledge at all**, relevant to the TCU problem. |
-| `init_raminfo_uefi.o` / `init_raminfo_efi.o` | `init_raminfo_uefi` / `init_raminfo_efi` | RAM map from `GetMemoryMap` (live BootServices call, `lib/init_raminfo_uefi.c:25-50`) / from the map saved by `efi_entry_point`. |
-| `init_raminfo_fdt.o` | `init_raminfo_fdt` | RAM from FDT `/memory` + reserved-memory (`lib/init_raminfo_fdt.c:27-45`). |
-| `acpi.o`, `acpi_spcr_parse.o` | `acpi_find_table`, `acpi_find_table_next`, `add_acpi_table`; `acpi_spcr_parse` | Generic RSDP→XSDT walker; SPCR parser that configures a **PL011** debug device (`U init_pl011`, `display_char_pl011` in its imports — no 8250/Tegra variant wired). |
-| `board_find_acpi_rsdp.o`, `board_find_acpi_rsdp_uefi.o`, `board_find_efi_smbios.o` | `board_find_acpi_rsdp[_uefi]`, `board_find_efi_smbios_table/_by_type`, `get_smbios_string` | RSDP/SMBIOS via the EFI configuration table. |
-| `callout_debug_tegra.o` | `display_char_tegra`, `poll_key_tegra`, `break_detect_tegra` | Source comment: "nVidia Tegra polled serial I/O. Similar to 8250 uart with 32-bit registers." Maps 0x1000 bytes at a patched base; TX: spin on `LSR` at `+0x14` for `LSR_TXRDY`, `strb` to `+0x00`; RX: `LSR_RXRDY` then `ldrb` from `+0x00`; `break_detect` always returns 0 (`lib/aarch64/callout_debug_tegra.S:20-140`, Copyright 2015 QNX, Apache-2.0). I.e. 8250 registers at a fixed 4-byte stride. Declared in `lib/public/aarch64/cpu_startup.h:244-250` under "nVidia Tegra UART support". **No matching `hw_sertegra` init/put** — pair with `init_8250`/`put_8250` (which honour a `^shift` field in the debug-device string, `lib/hw_ser8250.c:47,85`) or write one. |
-| `callout_debug_8250.o`, `_8250_32b.o`, `callout_debug_pl011.o` | `display_char/poll_key/break_detect_{8250,8250_32b,pl011}` | Byte-register 8250, 32-bit-register 8250, PL011. |
-| `callout_debug_sbsa*.o` | — | **Does not exist** (VERIFIED, no such member). |
-| `callout_interrupt_gic_v3.o` | `interrupt_{id,eoi,mask,unmask}_gic_v3_{spi,ppi,lpi}` in `_sr` and `_mm` flavours, `interrupt_config_gic_v3_ppi`, LPI `_direct`/`_its` mask variants | Kernel-side GICv3 callouts, system-register and memory-mapped-GICC, with ITS and direct-LPI. |
-| `callout_sendipi_gic_v3.o`, `gic.o` | `sendipi_gic_v3_sr/_mm`; `gic_gicd/gicr/gicc` (+`_vaddr`), `gic_gicr_shift`, `gic_cpu_init`, `gic_sendipi` | IPI callouts and shared GIC globals. |
-| `gic_v3.o` | `gic_v3_initialize` (`gic_v3.c:940`), `gic_v3_set_paddr` / `_set_paddr_range` (`:299`), `gic_v3_use_mm_reg_callouts` (`:482`), `gic_v3_num_spis/lpis`, `gic_v3_set_intr_trig_mode`, `gic_v3_lpi_uses_its`, `gic_v3_spi_add_entry` (`:626`), `gic_v3_lpi_add_entry` (`:766`), LPI table setters, `gic_get_arch_version/impl_id/impl_version/impl_productid` | Startup-time distributor/redistributor bring-up. Source `lib/aarch64/gic_v3.c` (Copyright 2011/2021 QNX, 2016 Freescale, 2017 NXP; Apache-2.0) — the file the repo's NISV analysis already builds. Its strings appear verbatim in both shipped startups (`ntoaarch64-strings`: `.../hardware/startup/lib/aarch64/gic_v3.c`, "Unknown/Unhandled GIC version %d"). |
-| `gic_v3_its.o`, `gic_v3_dcache_flush_for_its.o` | `gic_v3_its_initialize` (`gic_v3_its.c:85`), `_set_paddr`, `_mapc`, `_set_{dt,ct,cmd_q}_*`, `_base_vaddr`, `_cmd_q_*` | ITS command queue / device & collection tables. |
-| `psci_call.o`, `psci_cpu_id.o`, `psci_smp.o`, `callout_reboot_psci.o` | `psci_call` (fn-ptr D), `psci_hvc`, `psci_smc`; `psci_cpu_id`; `psci_smp_start`, `psci_cpu_on_cmd` (D, init -1); `reboot_psci_smc/_hvc` | Conduit selection, MPIDR→target id, `CPU_ON` (`lib/common_arm/psci_smp.c:30-40`), `SYSTEM_RESET` callouts. Inline wrappers for every PSCI call in `lib/public/aarch64/psci.h:81-190`. |
-| `fdt_psci_configure.o` | `fdt_psci_configure` | `fdt_node_offset_by_compatible(f, -1, "arm,psci")` then reads the `cpu_on` property and (further down) `method` to pick `psci_smc`/`psci_hvc` (`lib/common_arm/fdt_psci_configure.c:31-50`). **Exact match on `"arm,psci"` only** — see 5e. |
-| `smp_start.o`, `init_smp.o`, `spin_smp.o`, `spin_smp_init.o`, `callout_smp_spin.o`, `spin_bootstrap_id.o`, `fdt_smp_spin_start.o` | `smp_start`; `init_smp`, `cpu_starting`, `smp_spin_vaddr`, `syspage_available`; `spin_smp_start`, `spin_smp_num_cpu`, `spin_num_cpu`, `spin_start_addr`; `spin_smp_init`; `smp_spin`; `spin_bootstrap_id`; `fdt_smp_spin_start`, `spin_shim_*` | Generic SMP driver (imports `board_smp_num_cpu/init/start` — board-supplied) with both spin-table and PSCI secondary start. |
-| `board_smp*.o` | — | **Not in the library**; the four `board_smp_*` hooks are `U` in `init_smp.o`/`gic_v3.o`/`smp_start.o` and come from `boards/<board>/board_smp.c`. |
-| `fdt_*.o` (28 members) | `fdt_init`, `fdt_asinfo`, `fdt_init_bootopt`, `fdt_find_node`, `fdt_num_cpu`, `fdt_get_cpu_freq`, `fdt_qtime`, `fdt_tweak_cmdline`, `fdt_get_{int,intr,intr_cells,num64,reg32,reg64,reg64_cells,reg_addr,reg_int,str,u32,u64}`, `fdt_node_offset_by_nodename`, globals `fdt`, `fdt_paddr`, `fdt_size`, `fdt_boot_option` | Startup-side DT helpers on top of libfdt. **No `libfdt*.o` inside libstartup.a**; libfdt is `aarch64le/usr/lib/libfdt.a` (375,770 B, VERIFIED) and `boards/common.mk` adds `LIBS_aarch64 = fdt`. `fdt_init()` maps the header, `fdt_check_header()`s it, then maps the whole blob (`lib/fdt_init.c:21-38`). |
-| `cpuid_a78ae.o` | `cpuid_a78ae` (D) | `struct aarch64_cpuid cpuid_a78ae = { .midr = 0x4100D420, .name = "Cortex-A78ae" }` (`lib/aarch64/cpuid_a78ae.c:24-27`). Registered in the table `aarch64_cpuid[]` (`lib/aarch64/aarch64_cpuid.c:26-45`, file carries "Copyright 2018, NVIDIA CORPORATION" among others, Apache-2.0) together with NVIDIA Denver `cpuid_d15`/`cpuid_d20`. Present in both shipped startups. |
-| `init_qtime.o`, `init_qtime_v8gt.o` | `init_qtime`; `init_qtime_v8gt` | Default `init_qtime()` = ARMv8 generic timer; `init_qtime_v8gt(vcnt_intr, hvcnt_intr)` reads `CNTFRQ_EL0` when `timer_freq == 0` (`lib/aarch64/init_qtime_v8gt.c:34-50`). **No `callout_timer*.o` member exists**; the `timer_load/value/reload_armv8` callouts are declared in `cpu_startup.h:239-241` and live in `init_qtime_v8gt.o` (local `t timer_start_v8gt`, `timer_diff_v8gt`). |
-| `hypervisor.o`, `hypervisor_enable.o`, `hypervisor_setup.o` | `arch_hypervisor_init`, `hyp_enable_el1_host`, `hyp_enable_el2_host`, `hypervisor_init`, `hypervisor_set_options`, ... | EL2/VHE host enablement — what the QHV host image uses (`main.c` calls `hypervisor_init(0)`). |
-| `_start.o`, `_start_el1.o`, `cstart.o`, `_main.o`, `vstart.o`, `startnext.o`, `load_ifs.o` | `_start`; `_start_el1`, `_start_el2_or_el1`, `drop_to_el1`; `cstart`, `boot_args`, `stack*`; `_main`, `uefi_{io_suspend,io_resume,exit_boot_services}_f` (fn-ptr globals, NULL by default); `vstart`; `startnext`; `load_ifs` | The fixed spine. `lib/aarch64/_start.S:37-39`: "Do NOT modify registers X0-X3 before jumping to the cstart label — cstart will save them in the boot_regs variable". `_main.c:126-158`: `board_init()` → `setup_cmdline()` → `cpu_startup()` → `init_syspage_memory()` → **`main()`** → `write_syspage_memory()` → `smp_hook_rtn()` → `startnext()`; `startnext()` calls `uefi_exit_boot_services()` (a no-op unless `uefi_init()` armed it) before `cpu_startnext()` (`lib/startnext.c:29-45`). |
-| `callout_interrupt_t18x_msi.o`, `_t18x_pcie.o`, `_t18x_pcie_ic6.o` | `interrupt_{id,eoi,mask,unmask}_t18x_{msi,pcie,pcie_ic6}` | **Tegra X2 (T18x) PCIe/MSI cascade callouts**, register offsets `0xB4/0xB8/0xC8` (`lib/aarch64/callout_interrupt_t18x_pcie.S:25-33`). The only other Tegra-specific code in the SDP; not obviously applicable to Tegra234's DesignWare PCIe (HYPOTHESIS). |
-| `hw_ser8250.o`, `hw_ser8250_32b.o`, `hw_ser8250_pci.o`, `hw_serpl011.o`, `hw_serdummy.o` | `init_8250`, `init_8250_common`, `put_8250`, ...; `init_pl011`, `put_pl011` | Pre-kernel UART init/put for the `debug_device` table. |
-| `board_init.o`, `board_cpuconfig1/2.o` | `board_init`, `board_cpuconfig1/2` | Empty library defaults a board may override. |
+| `efi_entry_point.c` | `efi_entry_point`, `efi_get_table`, `efi_walk_map`, `efi_convert_command_line` | PE/COFF entry `EFI_STATUS efi_entry_point(EFI_HANDLE, EFI_SYSTEM_TABLE*)`: prints "Entering startup..." via ConOut, captures `LoadOptions` as the command line, snapshots the memory map, then continues into `cstart` (`lib/efi_entry_point.c:47-70` read; Copyright 2023 BlackBerry, Apache-2.0). |
+| `efi_tweak_cmdline.c` | `efi_tweak_cmdline` | LoadOptions → startup `argv`. |
+| `uefi.c` | globals `efi_image_handle`, `efi_system_table`, `efi_boot_services`, `efi_runtime_services`; `uefi_exit_init`, `uefi_find_config_tbl` | Config-table lookup by GUID; ref-counted `ExitBootServices` trampoline (`lib/uefi.c:29-80`). |
+| `aarch64/uefi_init.c` | `uefi_init` | Takes `boot_regs[0]` = ImageHandle, `boot_regs[1]` = SystemTable, sets the service pointers, arms `uefi_exit_init()` (`lib/aarch64/uefi_init.c:37-57`). |
+| `aarch64/is_uefi_boot.c` | `is_uefi_boot` | Validates `EFI_SYSTEM_TABLE`/`BOOT_SERVICES`/`RUNTIME_SERVICES` signatures from `boot_regs[0..1]`; memoised (`lib/aarch64/is_uefi_boot.c:22-60`). |
+| `uefi_io.c` | `uefi_io_init`, `uefi_io_flush`, `uefi_print_char`, `uefi_print_str` | Debug console through `EFI_SIMPLE_TEXT_OUTPUT` before ExitBootServices — **a console path that needs no UART knowledge at all**, relevant to the TCU problem. |
+| `init_raminfo_uefi.c` / `init_raminfo_efi.c` | `init_raminfo_uefi` / `init_raminfo_efi` | RAM map from `GetMemoryMap` (live BootServices call, `lib/init_raminfo_uefi.c:25-50`) / from the map saved by `efi_entry_point`. |
+| `init_raminfo_fdt.c` | `init_raminfo_fdt` | RAM from FDT `/memory` + reserved-memory (`lib/init_raminfo_fdt.c:27-45`). |
+| `acpi.c`, `acpi_spcr_parse.c` | `acpi_find_table`, `acpi_find_table_next`, `add_acpi_table`; `acpi_spcr_parse` | Generic RSDP→XSDT walker; SPCR parser that configures a **PL011** debug device (`init_pl011`/`put_pl011` and the `*_pl011` callouts, `lib/acpi_spcr_parse.c:35-37` — no 8250/Tegra variant wired). |
+| `board_find_acpi_rsdp.c`, `aarch64/board_find_acpi_rsdp.c`, `aarch64/board_find_acpi_rsdp_uefi.c`, `aarch64/board_find_efi_smbios.c` | `board_find_acpi_rsdp[_uefi]`, `board_find_efi_smbios_table`, `board_find_efi_smbios_by_type`, `get_smbios_string` | RSDP/SMBIOS via the EFI configuration table. |
+| `aarch64/callout_debug_tegra.S` | `display_char_tegra`, `poll_key_tegra`, `break_detect_tegra` | Source comment: "nVidia Tegra polled serial I/O. Similar to 8250 uart with 32-bit registers." Maps 0x1000 bytes at a patched base; TX: spin on `LSR` at `+0x14` for `LSR_TXRDY`, `strb` to `+0x00`; RX: `LSR_RXRDY` then `ldrb` from `+0x00`; `break_detect` always returns 0 (`lib/aarch64/callout_debug_tegra.S:20-140`, Copyright 2015 QNX, Apache-2.0). I.e. 8250 registers at a fixed 4-byte stride. Declared in `lib/public/aarch64/cpu_startup.h:244-250` under "nVidia Tegra UART support". **No matching `hw_sertegra` init/put** — pair with `init_8250`/`put_8250` (which honour a `^shift` field in the debug-device string, `lib/hw_ser8250.c:47,85`) or write one. |
+| `aarch64/callout_debug_8250.S`, `_8250_32b.S`, `callout_debug_pl011.S` | `display_char/poll_key/break_detect_{8250,8250_32b,pl011}` | Byte-register 8250, 32-bit-register 8250, PL011. |
+| `callout_debug_sbsa*` | — | **No such source file** (VERIFIED, `raw/bsp-startup-lib-files.txt`). |
+| `aarch64/callout_interrupt_gic_v3.S` | `interrupt_id_gic_v3_{ppi_sr,ppi_mm,spi,lpi}`, `interrupt_eoi_gic_v3_{ppi,spi,lpi}` in `_sr` and `_mm` flavours, `interrupt_{mask,unmask}_gic_v3_{ppi,spi}`, LPI `_direct`/`_its` mask and unmask variants, `interrupt_config_gic_v3_ppi` | Kernel-side GICv3 callouts, system-register and memory-mapped-GICC, with ITS and direct-LPI. |
+| `aarch64/callout_sendipi_gic_v3.S`, `aarch64/gic.c` | `sendipi_gic_v3_sr/_mm`; `gic_gicd/gicr/gicc` (+`_vaddr`), `gic_gicr_shift`, `gic_cpu_init`, `gic_sendipi` | IPI callouts and shared GIC globals. |
+| `aarch64/gic_v3.c` | `gic_v3_initialize` (`gic_v3.c:940`), `gic_v3_set_paddr` / `_set_paddr_range` (`:299`), `gic_v3_use_mm_reg_callouts` (`:482`), `gic_v3_num_spis/lpis`, `gic_v3_set_intr_trig_mode`, `gic_v3_lpi_uses_its`, `gic_v3_spi_add_entry` (`:626`), `gic_v3_lpi_add_entry` (`:766`), LPI table setters, `gic_get_arch_version/impl_id/impl_version/impl_productid` | Startup-time distributor/redistributor bring-up. Source `lib/aarch64/gic_v3.c` (Copyright 2011/2021 QNX, 2016 Freescale, 2017 NXP; Apache-2.0) — the file the repo's NISV analysis already builds. |
+| `aarch64/gic_v3_its.c`, `aarch64/gic_v3_dcache_flush_for_its.c` | `gic_v3_its_initialize` (`gic_v3_its.c:85`), `_set_paddr`, `_mapc`, `_set_{dt,ct,cmd_q}_*`, `_base_vaddr`, `_cmd_q_*` | ITS command queue / device & collection tables. |
+| `aarch64/psci_call.S`, `common_arm/psci_cpu_id.c`, `common_arm/psci_smp.c`, `aarch64/callout_reboot_psci.S` | `psci_call` (function pointer, `psci_smc` by default), `psci_hvc`, `psci_smc`; `psci_cpu_id`; `psci_smp_start`, `psci_cpu_on_cmd` (initialised to -1); `reboot_psci_smc/_hvc` | Conduit selection, MPIDR→target id, `CPU_ON` (`lib/common_arm/psci_smp.c:30-40`), `SYSTEM_RESET` callouts. Inline wrappers for every PSCI call in `lib/public/aarch64/psci.h:81-190`. |
+| `common_arm/fdt_psci_configure.c` | `fdt_psci_configure` | `fdt_node_offset_by_compatible(f, -1, "arm,psci")` then reads the `cpu_on` property and (further down) `method` to pick `psci_smc`/`psci_hvc` (`lib/common_arm/fdt_psci_configure.c:31-50`). **Exact match on `"arm,psci"` only** — see 5e. |
+| `aarch64/smp_start.S`, `init_smp.c`, `common_arm/spin_smp.c`, `aarch64/spin_smp_init.S`, `aarch64/callout_smp_spin.S`, `common_arm/spin_bootstrap_id.c`, `fdt_smp_spin_start.c`, `aarch64/spin_shim_rtn.S` | `smp_start`; `init_smp`, `cpu_starting`, `smp_spin_vaddr`, `syspage_available`; `spin_smp_start`, `spin_smp_num_cpu`, `spin_num_cpu`, `spin_start_addr`; `spin_smp_init`; `smp_spin`; `spin_bootstrap_id`; `fdt_smp_spin_start`; `spin_shim_*` | Generic SMP driver (calls the board-supplied `board_smp_*` hooks) with both spin-table and PSCI secondary start. |
+| `board_smp*` | — | **Not in the library source**; the four `board_smp_*` hooks are declared in `lib/public/startup.h:268-271`, referenced from `init_smp.c`, `aarch64/gic_v3.c`, `aarch64/smp_start.S` and `aarch64/spin_smp_init.S`, defined in no lib file, and come from `boards/<board>/board_smp.c`. |
+| `fdt_*.c`, `common_arm/fdt_*.c`, `init_raminfo_fdt.c` (24 files) | `fdt_init`, `fdt_asinfo`, `fdt_init_bootopt`, `fdt_find_node`, `fdt_num_cpu`, `fdt_get_cpu_freq`, `fdt_qtime`, `fdt_tweak_cmdline`, `fdt_get_{int,intr,intr_cells,num64,reg32,reg64,reg64_cells,reg_addr,reg_int,str,u32,u64}`, `fdt_node_offset_by_nodename`, globals `fdt`, `fdt_paddr`, `fdt_size`, `fdt_boot_option` | Startup-side DT helpers on top of libfdt. **libfdt is not part of the lib source** (only `public/sys/libfdt_private.h`); it is `aarch64le/usr/lib/libfdt.a` (375,770 B, VERIFIED) and `boards/common.mk` adds `LIBS_aarch64 = fdt`. `fdt_init()` maps the header, `fdt_check_header()`s it, then maps the whole blob (`lib/fdt_init.c:21-38`). |
+| `aarch64/cpuid_a78ae.c` | `cpuid_a78ae` (data) | `struct aarch64_cpuid cpuid_a78ae = { .midr = 0x4100D420, .name = "Cortex-A78ae" }` (`lib/aarch64/cpuid_a78ae.c:24-27`). Registered in the table `aarch64_cpuid[]` (`lib/aarch64/aarch64_cpuid.c:26-45`, file carries "Copyright 2018, NVIDIA CORPORATION" among others, Apache-2.0) together with NVIDIA Denver `cpuid_d15`/`cpuid_d20`. |
+| `aarch64/init_qtime.c`, `aarch64/init_qtime_v8gt.c` | `init_qtime`; `init_qtime_v8gt` | Default `init_qtime()` = ARMv8 generic timer; `init_qtime_v8gt(vcnt_intr, hvcnt_intr)` reads `CNTFRQ_EL0` when `timer_freq == 0` (`lib/aarch64/init_qtime_v8gt.c:34-50`). **No `callout_timer*` source file exists**; the `timer_load/value/reload_armv8` callouts are declared in `cpu_startup.h:239-241` and defined in no lib source file; `init_qtime_v8gt.c` has its own static `timer_start_v8gt`/`timer_diff_v8gt` (`:24-33`). |
+| `aarch64/hypervisor.c`, `aarch64/hypervisor_enable.S`, `hypervisor_setup.c` | `arch_hypervisor_init`, `hyp_enable_el1_host`, `hyp_enable_el2_host`, `hypervisor_init`, `hypervisor_set_options`, ... | EL2/VHE host enablement — what the QHV host image uses (`main.c` calls `hypervisor_init(0)`). |
+| `aarch64/_start.S`, `aarch64/_start_el1.S`, `aarch64/cstart.S`, `_main.c`, `aarch64/vstart.S`, `startnext.c`, `load_ifs.c` | `_start`; `_start_el1`, `_start_el2_or_el1`, `drop_to_el1`; `cstart`, `boot_args`, `stack*`; `_main`, `uefi_{io_suspend,io_resume,exit_boot_services}_f` (fn-ptr globals, NULL by default, `_main.c:56-58`); `vstart`; `startnext`; `load_ifs` | The fixed spine. `lib/aarch64/_start.S:37-39`: "Do NOT modify registers X0-X3 before jumping to the cstart label — cstart will save them in the boot_regs variable". `_main.c:126-158`: `board_init()` → `setup_cmdline()` → `cpu_startup()` → `init_syspage_memory()` → **`main()`** → `write_syspage_memory()` → `smp_hook_rtn()` → `startnext()`; `startnext()` calls `uefi_exit_boot_services()` (a no-op unless `uefi_init()` armed it) before `cpu_startnext()` (`lib/startnext.c:29-45`). |
+| `aarch64/callout_interrupt_t18x_msi.S`, `_t18x_pcie.S`, `_t18x_pcie_ic6.S` | `interrupt_{id,eoi,mask,unmask}_t18x_{msi,pcie,pcie_ic6}` | **Tegra X2 (T18x) PCIe/MSI cascade callouts**, register offsets `0xB4/0xB8/0xC8` (`lib/aarch64/callout_interrupt_t18x_pcie.S:25-33`). The only other Tegra-specific code in the SDP; not obviously applicable to Tegra234's DesignWare PCIe (HYPOTHESIS). |
+| `hw_ser8250.c`, `hw_ser8250_32b.c`, `hw_ser8250_pci.c`, `common_arm/hw_serpl011.c`, `hw_serdummy.c` | `init_8250`, `init_8250_common`, `put_8250`, ...; `init_pl011`, `put_pl011` | Pre-kernel UART init/put for the `debug_device` table. |
+| `board_init.c`, `board_cpuconfig1.c`, `board_cpuconfig2.c` | `board_init`, `board_cpuconfig1/2` | Empty library defaults a board may override. |
 
-### 3b. Members that would matter for Tegra234 but are absent — VERIFIED absent
+### 3b. Pieces that would matter for Tegra234 but are absent from the lib source — VERIFIED absent (`raw/bsp-startup-lib-files.txt`)
 
-`callout_debug_sbsa*`, `callout_timer*`, `board_smp*`, `libfdt*`, `hw_sertegra*`,
-`init_intrinfo*` (board-side), and anything named `hsp`, `tcu`, `t19x`, `t23x`,
-`t234`, `nvidia`.
+`callout_debug_sbsa*`, `callout_timer*`, `board_smp*`, libfdt (a private header only),
+`hw_sertegra*`, `init_intrinfo*` (board-side), and anything named `hsp`, `tcu`,
+`t19x`, `t23x`, `t234`, `nvidia`.
 
 ## 4. SDP headers — VERIFIED
 
@@ -189,7 +197,7 @@ LICENSE/NOTICE file** — licensing is per-file header.
 
 Layout (VERIFIED): `Makefile` (builds `src`, installs to `install/`, links example
 build files into `images/`), `manifest`, `images/{guest-1,guest-2}/` (`.build` +
-`.qvmconf`), `prebuilt/aarch64le/{boot/sys/startup-armv8_fm (307,992 B, stripped —
+`.qvmconf`), `prebuilt/aarch64le/{boot/sys/startup-armv8_fm (307,992 B —
 a different build from the SDP's 1,623,920 B one; sha256 differ),
 usr/lib/libstartup.a, sbin/{shmem-guest,wdtkick}}`,
 `prebuilt/usr/include/aarch64/asmoff.def`, `binary_files_with_symbols/`, and:
@@ -266,13 +274,15 @@ on aarch64, L556), `void hypervisor_init(unsigned cpunum);` + `extern int in_hvc
 `gicv_asinfo` in `cpu_startup.h:184-185`, `boot_regs[4]` ("x0-x3 at time of entry
 to _start") at `cpu_startup.h:107`.
 
-Library-defined vs board-supplied (VERIFIED from `nm` T/U): library — `init_qtime`,
-`init_cacheattr`, `init_cpuinfo`, `init_hwinfo`, `init_mmu`, `init_smp`,
-`init_system_private`, `board_init` (empty), `board_cpuconfig1/2`,
-`board_find_acpi_rsdp`, `_start` (one-instruction `b cstart`); board — `main`,
-`tweak_cmdline`, `init_raminfo`, `init_intrinfo`, `init_asinfo`, `board_smp_num_cpu`,
-`board_smp_init`, `board_smp_start`, `board_smp_adjust_num` (armv8_fm also
-overrides `_start` with EL3/GIC setup).
+Library-defined vs board-supplied (VERIFIED from the lib source, re-read
+2026-09-28): library — `init_qtime`, `init_cacheattr`, `init_cpuinfo`,
+`init_hwinfo`, `init_mmu`, `init_smp`, `init_system_private`, `board_init`
+(empty), `board_cpuconfig1/2`, `board_find_acpi_rsdp`, `tweak_cmdline` (a default
+that calls `cpu_tweak_cmdline()`, `tweak_cmdline.c:28-35`; `armv8_fm`'s `main.c`
+overrides it), `_start` (one-instruction `b cstart`); board — `main`,
+`init_raminfo`, `init_intrinfo`, `init_asinfo`, `board_smp_num_cpu`,
+`board_smp_init`, `board_smp_start`, `board_smp_adjust_num`, none of which any
+lib file defines (armv8_fm also overrides `_start` with EL3/GIC setup).
 
 ### 5b. What `boards/armv8_fm` does
 
@@ -362,7 +372,7 @@ in `pinfo.mk`. `lib/common.mk`: `-O2 -fomit-frame-pointer -fno-PIE`,
 link inputs exist in the SDP: `libfdt.a` 375,770 B, `libdrvr.a` 392,140 B,
 `liblzo2.a` 1,474,022 B, `libucl.a` 354,686 B.
 
-### 5d. UEFI entry path — how the pieces fit (VERIFIED from source + `nm`)
+### 5d. UEFI entry path — how the pieces fit (VERIFIED from source)
 
 * `efi_entry_point()` sets `efi_system_table`, captures `LoadOptions`, snapshots the
   memory map, then continues into `cstart`; `cstart` saves x0-x3 into `boot_regs[]`
@@ -370,18 +380,15 @@ link inputs exist in the SDP: `libfdt.a` 375,770 B, `libdrvr.a` 392,140 B,
   ImageHandle/SystemTable from `boot_regs[0..1]`; `init_raminfo_uefi()` builds the
   RAM map; `board_find_acpi_rsdp_uefi()` → `acpi_find_table()` → `acpi_spcr_parse()`
   picks a (PL011) console; `startnext()` finally calls `uefi_exit_boot_services()`.
-* **None of it is linked into any shipped startup.** `raw/shipped-startup-symbols.txt`:
-  SDP `startup-armv8_fm` (725 names), SDP `startup-qemu-virt` (705), BSP prebuilt
-  and its `.sym` (744) all contain `_start cstart fdt_init fdt_psci_configure
-  init_raminfo_fdt gic_v3_initialize gic_v3_its_initialize psci_smp_start
-  display_char_pl011 cpuid_a78ae hypervisor_init` and **none of** `efi_entry_point
-  uefi_init is_uefi_boot init_raminfo_uefi acpi_find_table acpi_spcr_parse
-  display_char_tegra`; only the three NULL fn-pointer globals from `_main.o` appear.
-  They are FDT-only boards expecting x0 = FDT physical address.
+* **The `armv8_fm` board does not use it.** Its source is FDT-only, expecting
+  x0 = FDT physical address (5b), and a from-source build of it links none of
+  the UEFI entry code ([build-armv8_fm.md](build-armv8_fm.md)). A check of the
+  shipped startup binaries, made on 2026-09-09, was withdrawn on 2026-09-27
+  (4.6(c)).
 * Therefore a Tegra234 port needs its own board `main.c` (and probably `_start`)
   that routes `boot_regs[0..1]` through `is_uefi_boot()` → `uefi_init()` →
   `init_raminfo_uefi()` → ACPI/SPCR or a hard-coded UART — every callee already
-  exists in `libstartup.a` (VERIFIED). Whether an `mkifsf_uefi`-wrapped image's PE
+  exists in the lib source (VERIFIED, section 3). Whether an `mkifsf_uefi`-wrapped image's PE
   entry lands on `_start` or on `efi_entry_point` is not determined here (UNKNOWN;
   `uefi.boot` reserves `len=0x200` for a header, and `mkifsf_uefi` takes `-e
   env_entry_mode`, VENDOR_CLAIM).
@@ -397,18 +404,17 @@ redacted; not re-captured by H2):
 | `callout_debug_tegra`: 8250 regs at 4-byte stride, base patched | `serial@3100000` = `"nvidia,tegra234-uart","nvidia,tegra20-uart"` (alias `serial1`); `serial@3110000/3140000` = `tegra194-hsuart`; `serial@31d0000` = `"arm,sbsa-uart"`; `stdout-path = serial0` = `/serial` = `nvidia,tegra234-tcu` (HSP mailbox, no MMIO UART) | the Tegra callout is the right *shape* for `serial@3100000` (HYPOTHESIS: register stride/ownership unverified); the PL011 callout is the candidate for the sbsa-uart (HYPOTHESIS); **the firmware console (TCU) has no QNX support at all** (VERIFIED absent). |
 | `cpuid_a78ae` MIDR `0x4100D420` | cpus `enable-method = "psci"` (6×) | matches Orin's cores (HYPOTHESIS that the board's MIDR is 0x4100D42x — H3's identity capture, not re-read here). |
 
-## 6. IFS entry format — VERIFIED (`raw/ifs-first-64-bytes.txt`, `raw/dumpifs-plain-ifs-header.txt`)
+## 6. IFS entry format — build attributes VERIFIED, format VENDOR_CLAIM
 
-| image | build attr (`output/build/ifs.build`) | bytes 0x00.. | verdict |
-|---|---|---|---|
-| `qnx-safety-vm/output/ifs.bin` (9,771,456 B) | `[image=0x40080000] [virtual=aarch64le,raw]`, `startup-qemu-virt` | three stub instructions (opcodes withheld — the repo does not publish machine code of QNX-shipped binaries, QDL v7 4.6(c)) then `1f 20 03 d5` (NOP) repeated | **Raw AArch64 binary** — the `raw.boot` stub occupying bytes 0x00-0x0B, then NOP padding. Offset 0x38 = `1f 20 03 d5` (NOP), **not** `41 52 4d 64` ("ARM\x64"): **no Linux arm64 `Image` header**. |
-| `qhv/host/output/ifs.bin` (9,761,056 B) | `[virtual=aarch64le,raw]`, `startup-qemu-virt -Q enable` | identical first 64 bytes | same raw stub |
-| `qhv/guest/output/ifs.bin` (9,783,916 B) | `[image=0x80000000] [virtual=aarch64le,elf]`, `startup-armv8_fm -H` | `7f 45 4c 46 02 01 01 00 ... e_machine 0x00b7` | ELF64 AArch64 (what `qvm` loads) |
+| image | build attr (`output/build/ifs.build`) | format |
+|---|---|---|
+| `qnx-safety-vm/output/ifs.bin` (9,771,456 B) | `[image=0x40080000] [virtual=aarch64le,raw]`, `startup-qemu-virt` | **Raw image**: `raw.boot` puts "an instruction sequence at its beginning" that jumps to `startup_vaddr` (VENDOR_CLAIM, `mkifs.html`). No mkifs bootfile is documented to emit a Linux arm64 `Image` header. |
+| `qhv/host/output/ifs.bin` (9,761,056 B) | `[virtual=aarch64le,raw]`, `startup-qemu-virt -Q enable` | raw image, same bootfile |
+| `qhv/guest/output/ifs.bin` (9,783,916 B) | `[image=0x80000000] [virtual=aarch64le,elf]`, `startup-armv8_fm -H` | ELF image, "an image that looks like an ELF executable" (VENDOR_CLAIM, `mkifs.html`) — what `qvm` loads |
 
-`dumpifs -v` on the plain image: `*.boot` 0xfa0 bytes at 0x40080000
-(`preboot_size=0xfa0`), `Startup-header flags1=0x21` (virtual, little-endian,
-`compress=0`), `startup.*` 0x2b048 bytes at 0x400810a0 with `startup_vaddr=0x40081da8`,
-`imagefs_size=0x9258d8`, `proc/boot/procnto-smp-instr` at 0x400ae000.
+A byte listing of these images' leading bytes and a `dumpifs` header listing of
+the plain image, both made on 2026-09-09, were withdrawn on 2026-09-27 under
+clause 4.6(c): a raw image's leading bytes are the QNX-shipped bootfile's code.
 
 **Does this `mkifs` accept `[virtual=aarch64le,uefi]`?** Established here:
 `aarch64le/boot/sys/uefi.boot` and `mkifsf_uefi.exe` are present (VERIFIED); the
@@ -419,8 +425,8 @@ produced an `MZ`/`PE` file with machine `0xAA64`, PE32+, subsystem 0xA (EFI
 application), and `docs/orin-port.md:349-355` records the same outcome from an
 earlier session — but the first pass's `raw/uefi-probe.txt` was **never written**,
 so in this run the acceptance is **reported, not reproduced: HYPOTHESIS (two
-prior reports, no retained transcript)**. Even if accepted, 5d applies: the
-startup inside is not UEFI-aware.
+prior reports, no retained transcript)**. Even if accepted, 5d applies: a PE
+wrapper does not make an FDT-driven startup such as `armv8_fm` UEFI-aware.
 
 ## 7. Local docs — VERIFIED
 
@@ -460,23 +466,23 @@ no Tegra board guidance.
 
 | piece | path (under `C:/Users/<user>/qnx800/` unless noted) | what it provides for a Tegra234 startup | class |
 |---|---|---|---|
-| `startup-armv8_fm` | `target/qnx/aarch64le/boot/sys/` | FDT+PSCI+GICv2/v3 aarch64 startup, ELF REL; board source in BSP zip; not UEFI-aware | VERIFIED |
+| `startup-armv8_fm` | `target/qnx/aarch64le/boot/sys/` | FDT+PSCI+GICv2/v3 aarch64 startup; its board source in the BSP zip is FDT-driven, not UEFI-aware (5b) | VERIFIED (source) |
 | `startup-qemu-virt` | same | the startup every repo IFS uses; board source not shipped (upstream repo named in package `buildinfo`) | VERIFIED |
-| `uefi.boot` + `mkifsf_uefi.exe` | `boot/sys/`, `host/win64/x86_64/usr/bin/` | UEFI bootfile stub + PE filter (`-M PE_machine`, `-s subsystem`) | VERIFIED (present) / HYPOTHESIS (AArch64 PE accepted — see 6) |
+| `uefi.boot` + `mkifsf_uefi.exe` | `boot/sys/`, `host/win64/x86_64/usr/bin/` | UEFI bootfile + PE filter (`-M PE_machine`, `-s subsystem`) | VERIFIED (present) / HYPOTHESIS (AArch64 PE accepted — see 6) |
 | `raw.boot`, `elf.boot` | `boot/sys/` | the two bootfile types the repo actually uses | VERIFIED |
-| `libstartup.a` (246 members) | `target/qnx/aarch64le/usr/lib/` | the whole startup spine + UEFI/ACPI/FDT/GICv3/PSCI/SMP helpers | VERIFIED |
-| `efi_entry_point.o`, `uefi.o`, `uefi_init.o`, `uefi_io.o`, `is_uefi_boot.o`, `init_raminfo_uefi.o`, `init_raminfo_efi.o`, `efi_tweak_cmdline.o` | in `libstartup.a` | EFI entry, ExitBootServices (armed by `uefi_init`, fired in `startnext`), memory map → RAM, EFI text console, LoadOptions → argv | VERIFIED |
-| `acpi.o`, `acpi_spcr_parse.o`, `board_find_acpi_rsdp*.o`, `board_find_efi_smbios.o` | in `libstartup.a` | RSDP via EFI config table, table walker, SPCR → PL011 debug device only | VERIFIED |
-| `gic_v3.o`, `gic_v3_its.o`, `gic_v3_dcache_flush_for_its.o`, `callout_interrupt_gic_v3.o`, `callout_sendipi_gic_v3.o`, `gic.o` | in `libstartup.a`; source `lib/aarch64/gic_v3*.c` (Apache-2.0) | GICv3/ITS bring-up and kernel callouts (SR and MMIO variants) | VERIFIED |
-| `psci_call.o`, `psci_smp.o`, `psci_cpu_id.o`, `fdt_psci_configure.o`, `callout_reboot_psci.o` | in `libstartup.a` | SMC/HVC conduit, `CPU_ON`, `SYSTEM_RESET`; FDT match string is exactly `"arm,psci"` — Orin's is `"arm,psci-1.0"` | VERIFIED (source) / HYPOTHESIS (runtime effect) |
-| `smp_start.o`, `init_smp.o`, `spin_smp*.o`, `callout_smp_spin.o` | in `libstartup.a` | generic SMP; needs board `board_smp_*` | VERIFIED |
-| `fdt_*.o` (28) + `libfdt.a` | `libstartup.a` + `aarch64le/usr/lib/libfdt.a` | DT parsing; libfdt is a separate archive | VERIFIED |
-| `cpuid_a78ae.o` | in `libstartup.a`; source `lib/aarch64/cpuid_a78ae.c` | MIDR `0x4100D420` "Cortex-A78ae"; linked into both shipped startups | VERIFIED |
-| `init_qtime.o`, `init_qtime_v8gt.o` | in `libstartup.a` | ARMv8 generic-timer qtime + timer callouts (no separate `callout_timer*.o`) | VERIFIED |
-| `callout_debug_tegra.o` | in `libstartup.a`; source `lib/aarch64/callout_debug_tegra.S` (Apache-2.0) | polled 8250-at-4-byte-stride UART callouts (THR/RBR +0x00, LSR +0x14); no matching `hw_sertegra` init | VERIFIED (exists) / HYPOTHESIS (fits `serial@3100000`) |
-| `callout_debug_8250_32b.o`, `hw_ser8250*.o`, `callout_debug_pl011.o`, `hw_serpl011.o` | in `libstartup.a` | alternatives for the 8250-class and sbsa-uart ports | VERIFIED (exist) / HYPOTHESIS (fit) |
-| `callout_interrupt_t18x_*.o` | in `libstartup.a` | Tegra X2 PCIe/MSI cascade callouts — legacy | VERIFIED (exist) / HYPOTHESIS (not for T234) |
-| `hypervisor*.o` | in `libstartup.a` | EL2/VHE host enable (QHV) | VERIFIED |
+| `libstartup.a` | `target/qnx/aarch64le/usr/lib/` | the whole startup spine + UEFI/ACPI/FDT/GICv3/PSCI/SMP helpers, built from the BSP zip's lib source | VERIFIED (source) |
+| `efi_entry_point.c`, `uefi.c`, `uefi_init.c`, `uefi_io.c`, `is_uefi_boot.c`, `init_raminfo_uefi.c`, `init_raminfo_efi.c`, `efi_tweak_cmdline.c` | BSP zip `lib/` | EFI entry, ExitBootServices (armed by `uefi_init`, fired in `startnext`), memory map → RAM, EFI text console, LoadOptions → argv | VERIFIED |
+| `acpi.c`, `acpi_spcr_parse.c`, `board_find_acpi_rsdp*.c`, `board_find_efi_smbios.c` | BSP zip `lib/` | RSDP via EFI config table, table walker, SPCR → PL011 debug device only | VERIFIED |
+| `gic_v3.c`, `gic_v3_its.c`, `gic_v3_dcache_flush_for_its.c`, `callout_interrupt_gic_v3.S`, `callout_sendipi_gic_v3.S`, `gic.c` | BSP zip `lib/aarch64/` (Apache-2.0) | GICv3/ITS bring-up and kernel callouts (SR and MMIO variants) | VERIFIED |
+| `psci_call.S`, `psci_smp.c`, `psci_cpu_id.c`, `fdt_psci_configure.c`, `callout_reboot_psci.S` | BSP zip `lib/` | SMC/HVC conduit, `CPU_ON`, `SYSTEM_RESET`; FDT match string is exactly `"arm,psci"` — Orin's is `"arm,psci-1.0"` | VERIFIED (source) / HYPOTHESIS (runtime effect) |
+| `smp_start.S`, `init_smp.c`, `spin_smp*`, `callout_smp_spin.S` | BSP zip `lib/` | generic SMP; needs board `board_smp_*` | VERIFIED |
+| `fdt_*.c` (24 files with `init_raminfo_fdt.c`) + `libfdt.a` | BSP zip `lib/` + `aarch64le/usr/lib/libfdt.a` | DT parsing; libfdt is a separate archive | VERIFIED |
+| `cpuid_a78ae.c` | BSP zip `lib/aarch64/` | MIDR `0x4100D420` "Cortex-A78ae" | VERIFIED |
+| `init_qtime.c`, `init_qtime_v8gt.c` | BSP zip `lib/aarch64/` | ARMv8 generic-timer qtime; the timer callouts are declared in `cpu_startup.h`, and no `callout_timer*` source exists | VERIFIED |
+| `callout_debug_tegra.S` | BSP zip `lib/aarch64/` (Apache-2.0) | polled 8250-at-4-byte-stride UART callouts (THR/RBR +0x00, LSR +0x14); no matching `hw_sertegra` init | VERIFIED (exists) / HYPOTHESIS (fits `serial@3100000`) |
+| `callout_debug_8250_32b.S`, `hw_ser8250*.c`, `callout_debug_pl011.S`, `hw_serpl011.c` | BSP zip `lib/` | alternatives for the 8250-class and sbsa-uart ports | VERIFIED (exist) / HYPOTHESIS (fit) |
+| `callout_interrupt_t18x_*.S` | BSP zip `lib/aarch64/` | Tegra X2 PCIe/MSI cascade callouts — legacy | VERIFIED (exist) / HYPOTHESIS (not for T234) |
+| `hypervisor*` | BSP zip `lib/` | EL2/VHE host enable (QHV) | VERIFIED |
 | BSP zip `src/hardware/startup/lib` (287 files) | `bsp/BSP_hyp-guest-arm_be-800_SVN1018940_JBN323.zip` | full source of the above; 333/338 files Apache-2.0 | VERIFIED |
 | BSP zip `lib/public/{startup.h, aarch64/*.h, hw/uefi.h, hw/acpi.h, aarch64/callout.ah}` | same zip | the board-API headers the SDP does **not** install | VERIFIED |
 | BSP zip `boards/armv8_fm/` | same zip | the only board template: `main.c` (**proprietary header**), `board_smp.c`, `aarch64/init_intrinfo.c`, `aarch64/_start.S`, `init_asinfo.c`, `build` (Apache-2.0 except `main.c`) | VERIFIED |
@@ -485,29 +491,26 @@ no Tegra board guidance.
 | `pci_hw-fdt.so` | `aarch64le/lib/dll/pci/` | only PCI hardware module; no NVIDIA one | VERIFIED |
 | Local docs (5,140 HTML) | `target/qnx/usr/help/eclipse/plugins/` | Building Embedded Systems (startup, callouts, startup_lib), custom_bsp porting checklist, mkifs, qh | VERIFIED |
 | Tegra / HSP / TCU headers, packages, board dirs | anywhere under `qnx800` and in the zip | **none** | VERIFIED (absent) |
-| `callout_debug_sbsa*`, `callout_timer*`, `hw_sertegra`, `board_smp*`, `init_intrinfo*` in the lib | `libstartup.a` | **absent** — board must supply | VERIFIED (absent) |
+| `callout_debug_sbsa*`, `callout_timer*`, `hw_sertegra`, `board_smp*`, `init_intrinfo*` in the lib | BSP zip `lib/` | **absent** — board must supply | VERIFIED (absent) |
 
 ## 10. Raw files (`raw/`)
 
 Written by this (second) pass, all redacted:
-* `libstartup-members.txt` — `ar t` (246 lines)
-* `libstartup-nm-selected.txt` — `nm` names for the 85 requested/related members
-* `shipped-startup-symbols.txt` — `readelf -h` + `nm`-name presence check on the
-  three shipped startups and the BSP `.sym`
 * `bsp-zip-listing.txt` — `unzip -l` of the arm BSP zip
 * `bsp-src-file-lists.txt` — `lib`/`boards` file lists and the greps
 * `bsp-src-licence-census.txt` — per-file licence class for all 338 sources
-* `boot-sys-listing.txt`, `host-tools.txt`, `ifs-first-64-bytes.txt`,
-  `dumpifs-plain-ifs-header.txt`
+* `host-tools.txt`
 
 Left from the first pass (re-redacted where the owner column leaked the account
-name): `libstartup-nm-all.txt`, `libstartup-nm-tagged.txt`,
-`libstartup-nm-selected-by-member.txt`, `bsp-zip-listing-x86.txt`,
-`bsp-startup-lib-files.txt`, `bsp-startup-boards-files.txt`,
-`bsp-grep-uefi-acpi-fdt-tegra-psci.txt`, `sdp-include-grep-tegra-hsp-tcu.txt`,
-`sdp-listings.txt`. The first pass listed `shipped-startup-symbols.txt` (now
-regenerated here) and `uefi-probe.txt` (**never existed**; see section 6).
+name): `bsp-zip-listing-x86.txt`, `bsp-startup-lib-files.txt`,
+`bsp-startup-boards-files.txt`, `bsp-grep-uefi-acpi-fdt-tegra-psci.txt`,
+`sdp-include-grep-tegra-hsp-tcu.txt`, `sdp-listings.txt`. The first pass also
+listed `uefi-probe.txt` (**never existed**; see section 6).
 `orin-*.txt` files in the same directory belong to H3 (board harvest).
+
+Both passes also wrote listings of QNX-shipped binaries (archive members, symbol
+names, ELF headers, leading image bytes, a `dumpifs` header). They were withdrawn
+on 2026-09-27 under NC QDL v7 clause 4.6(c).
 
 ## 11. Unknowns / not established here
 
@@ -524,5 +527,5 @@ regenerated here) and `uefi-probe.txt` (**never existed**; see section 6).
 * Exact runtime effect of `fdt_psci_configure()` not matching `"arm,psci-1.0"`
   (analysed from source only).
 * What the BSP-prebuilt `libstartup.a` (3,283,336 B) and the SDP one (2,661,074 B)
-  differ in beyond build metadata — member names identical, objects not compared.
+  differ in — the two archives were not compared.
 * Contents of `boards/qemu-virt` (upstream `startup_boards.git`, not shipped).

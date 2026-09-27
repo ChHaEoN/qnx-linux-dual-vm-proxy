@@ -345,14 +345,15 @@ https://github.com/torvalds/linux/blob/master/arch/arm64/boot/dts/nvidia/tegra23
   `target/qnx/aarch64le/boot/sys/uefi.boot` exists (239 bytes:
   `filter="mkifsf_uefi %a %s %i"`, `vboot=0xffffff8060000000`, "The
   build file MUST specify load address via the [image=] attribute");
-  `mkifsf_uefi.exe` is in `host/win64/x86_64/usr/bin`;
-  `aarch64le/usr/lib/libstartup.a` (246 members) contains
-  `efi_entry_point.o uefi.o uefi_init.o uefi_io.o is_uefi_boot.o
-  init_raminfo_uefi.o init_raminfo_efi.o efi_tweak_cmdline.o acpi.o
-  acpi_spcr_parse.o board_find_acpi_rsdp.o board_find_acpi_rsdp_uefi.o
-  board_find_efi_smbios.o` plus 20+ `fdt_*.o`, `psci_*.o`, `gic_v3*.o`,
-  `callout_debug_tegra.o`, `callout_interrupt_t18x_*.o`, `cpuid_a78ae.o`,
-  `hw_ser8250*.o`, `hw_serpl011.o`.
+  `mkifsf_uefi.exe` is in `host/win64/x86_64/usr/bin`; and
+  `aarch64le/usr/lib/libstartup.a` is built from a source tree (next
+  bullet) that has `efi_entry_point.c uefi.c uefi_init.c uefi_io.c
+  is_uefi_boot.c init_raminfo_uefi.c init_raminfo_efi.c efi_tweak_cmdline.c
+  acpi.c acpi_spcr_parse.c board_find_acpi_rsdp.c board_find_acpi_rsdp_uefi.c
+  board_find_efi_smbios.c` plus 20+ `fdt_*.c`, `psci_*`, `gic_v3*.c`,
+  `callout_debug_tegra.S`, `callout_interrupt_t18x_*.S`, `cpuid_a78ae.c`,
+  `hw_ser8250*.c`, `hw_serpl011.c`. A member listing of the shipped archive
+  was withdrawn on 2026-09-27 (NC QDL v7 4.6(c)).
 - **Source for all of it ships [local]:** the hypervisor-guest BSP zip
   (`BSP_hyp-guest-arm_be-800_SVN1018940_JBN323.zip`, 452 files) carries
   `src/hardware/startup/lib/` with **Apache-2.0** headers (BlackBerry
@@ -435,10 +436,10 @@ https://github.com/torvalds/linux/blob/master/arch/arm64/boot/dts/nvidia/tegra23
   commercial product"
   (https://qnx.software/en/developers/get-started/qnx-everywhere/licensing).
 - **Two flags for the Architect / Cyber / Docs agents, not decided here:**
-  the 2026-07-28 root cause disassembled the shipped `startup-qemu-virt`
-  binary (4.6(c)); the 2026-09-08 move to the Apache-2.0 `gic_v3.c` source
-  is the cleaner footing. And 4.6(i) reads on every published latency and
-  boot-time number in this repo.
+  4.6(c) — a listing of a QNX-shipped binary made on 2026-07-28 was
+  withdrawn on 2026-09-27 under clause 4.6(c), and the 2026-09-08 move to
+  the Apache-2.0 `gic_v3.c` source is the cleaner footing. And 4.6(i)
+  reads on every published latency and boot-time number in this repo.
 
 ### Looked for and not found
 

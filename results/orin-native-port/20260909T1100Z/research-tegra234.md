@@ -4,7 +4,8 @@ Date: 2026-09-09 (run id `20260909T1100Z`). External research task, **public sou
 No board access in this task (the live-board facts below come from the sibling H3
 harvest already in `raw/` next to this file, captured read-only on 2026-09-09 and
 redacted there). No QNX binary was disassembled; QNX facts are taken from the sibling
-`harvest-sdp.md` (symbol names / Apache-2.0 source only).
+`harvest-sdp.md` (Apache-2.0 source only; its symbol-name listings of shipped
+binaries were withdrawn on 2026-09-27 under NC QDL v7 clause 4.6(c)).
 
 Evidence classes, used per row: **VERIFIED** (seen this session: a fetched source
 file, a command output, or a `raw/` harvest line), **VENDOR_CLAIM** (an NVIDIA doc,
@@ -62,7 +63,7 @@ External quotes are kept under 15 words each.
 | # | Fact | Source | Class |
 |---|---|---|---|
 | 1.1 | 6 CPUs, all `implementer 0x41 part 0xd42 variant 0 revision 1`; `midr_el1 = 0x00000000410fd421` | `raw/orin-identity.txt` (`/proc/cpuinfo`, `nproc`), `raw/orin-firmware-el.txt` | VERIFIED |
-| 1.2 | Masking variant/revision gives `0x4100d420` = the QNX `cpuid_a78ae` table entry (`{ .midr = 0x4100D420, .name = "Cortex-A78ae" }`), already linked into both shipped startups | `harvest-sdp.md` §3a (nm + Apache-2.0 source) | VERIFIED |
+| 1.2 | Masking variant/revision gives `0x4100d420` = the QNX `cpuid_a78ae` table entry (`{ .midr = 0x4100D420, .name = "Cortex-A78ae" }`) in the startup library source | `harvest-sdp.md` §3a (Apache-2.0 source) | VERIFIED |
 | 1.3 | DT `cpus`: six `cpu@` nodes `reg = <0x0> <0x100> <0x200> <0x300> <0x10200> <0x10300>`, `compatible = "arm,cortex-a78"`, `enable-method = "psci"`; `cpu-map` = cluster0 {core0..3}, cluster1 {core0 = cpu@10200, core1 = cpu@10300}; per-core 64 KiB I/D L1, 256 KiB L2, two 2 MiB L3 nodes | `raw/orin-devicetree.txt` cpus dump | VERIFIED |
 | 1.4 | dmesg: `Booted secondary processor 0x0000000100 ... 0x0000010200 ... 0x0000010300 [0x410fd421]` — the affinity values Linux passed to PSCI `CPU_ON` | `raw/orin-followup.txt` | VERIFIED |
 | 1.5 | Reading: Aff0 is always 0, Aff1 = core-in-cluster, Aff2 = cluster (the DSU "MT" MPIDR layout). Cluster 1 exposes cores 2 and 3 only: cores 0/1 are floor-swept on the 6-core SKU | reasoning over 1.3/1.4 | HYPOTHESIS (values VERIFIED, naming inferred) |
