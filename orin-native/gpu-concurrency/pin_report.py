@@ -28,10 +28,12 @@ TIMING = re.compile(r"sweep: timing :(\d+) (\w+) frames=(\d+) r2_n=(\d+) r2_p50_
 BENCH = re.compile(r"^op (\w+) regime (\w+) n (\d+) p10_ns (-?\d+) p50_ns (-?\d+) p90_ns (-?\d+) mean_ns (-?\d+)$")
 
 
-def load(out, frames):
+def load(out, frames, cfgs=CFGS):
+    """(arm rows, benchmark p50s, benchmark completeness) for the configurations named in cfgs."""
+    alt = "|".join(re.escape(c) for c in cfgs)
     arm = {}
     for f in glob.glob(os.path.join(out, "lat-*_r*.json")):
-        m = re.search(r"lat-(U2|P2|U1)([ds])64_r(\d+)\.json$", f)
+        m = re.search(r"lat-(%s)([ds])64_r(\d+)\.json$" % alt, f)
         if not m:
             continue
         c, mode, r = m.group(1), m.group(2), int(m.group(3))
@@ -58,7 +60,7 @@ def load(out, frames):
         arm[(c + mode + "64", r)] = row
     bench, bench_ok = {}, {}
     for f in glob.glob(os.path.join(out, "bench-*_r*.txt")):
-        m = re.search(r"bench-(U2|P2|U1)_r(\d+)\.txt$", f)
+        m = re.search(r"bench-(%s)_r(\d+)\.txt$" % alt, f)
         if not m:
             continue
         key = (m.group(1), int(m.group(2)))
