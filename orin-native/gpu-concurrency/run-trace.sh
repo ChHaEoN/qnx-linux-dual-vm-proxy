@@ -195,12 +195,15 @@ gpu_idle_around() {   # $1 label
 run_window() {   # $1 kind (N|L)  $2 pair
 	local tag="$1_r$2" f="$OUT/started-$1_r$2" cp i
 	rm -f "$f"
+	# FIXED after the first run (2026-09-27): the reading takes ~2 s (tegrastats), and taken
+	# after "started" it pushed the load to 2.6 s into a 3 s trace -- 127-165 reads per
+	# window, M1 failed. It is taken before the trace starts now; nothing else changed.
+	m_thermal "$tag before" >> "$OUT/thermal.log"
 	taskset -c "$CORE_AUX" python3 "$CLIENT" "$GUEST" 7140 "$TRACE_S" "$OUT/trace-$tag.txt" "$f" \
 		2>> "$OUT/tracectl.err" &
 	cp=$!
 	for i in $(seq 1 100); do [ -e "$f" ] && break; sleep 0.05; done
 	[ -e "$f" ] || { wait "$cp"; die "window $tag: qnx-tracectl never said started -- see tracectl.err"; }
-	m_thermal "$tag before" >> "$OUT/thermal.log"
 	if [ "$1" = N ]; then
 		PROBE_FRAME_BYTES=64 m_probe "$OUT" "N_r$2" "$GUEST" 7122
 	else
