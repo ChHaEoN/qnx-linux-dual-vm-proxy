@@ -243,3 +243,83 @@ def test_the_harness_parses_and_states_its_rule_and_prediction_before_any_code()
         assert s in head, s
     assert 'PROBE_FRAME_BYTES=64 m_probe "$OUT" "N_r$2" "$GUEST" 7122' in body
     assert 'run "$N" 2000 5' in body
+
+
+# ---- the second question (run-trace2.sh): TCP against UDP, per exchange
+
+REPORT2 = os.path.join(GC, "trace2_report.py")
+HARNESS2 = os.path.join(GC, "run-trace2.sh")
+MON, MON2, OTHER = 400, 410, 500
+
+
+def window2(io_b, rest_us=0.0, n=310, buffers=(1, 2)):
+    g = Gen(buffers=buffers)
+    g.name(IDLE, "/proc/boot/procnto-smp-instr", [(1, "idle_cpu_0")])
+    g.name(IOSOCK, "system/bin/io-sock", [(W, "resmgr worker")])
+    g.name(MON, "proc/boot/qnx-safety-monitor", [(1, "main")])
+    g.name(MON2, "proc/boot/qnx-safety-monitor", [(1, "main")])
+    g.name(OTHER, "system/bin/dhcpcd", [(1, "main")])
+    g.ev("THREAD", "THRUNNING", "pid:%d tid:1" % MON)
+    for _ in range(n):
+        g.read(MON, 0x101, A=1.0, B=1700.0, R=0.5, Cw=0.2, Ck=1.0, idle_in_b=1690.0)   # waits for the frame
+        g.read(MON, 0x102, A=1.0, B=io_b, R=0.5, Cw=0.2, Ck=1.0)                       # the reply
+        if rest_us:
+            g.ev("THREAD", "THRUNNING", "pid:%d tid:1" % OTHER)
+            g.adv(rest_us)
+            g.ev("THREAD", "THRUNNING", "pid:%d tid:1" % MON)
+    return g.text()
+
+
+def _run2(out, t_io, u_io, t_rest=0.0, pairs=6, lat_t=180.0, lat_u=160.0):
+    out.mkdir()
+    (out / "stamp.json").write_text(json.dumps({"n": 500, "warmup": 100}))
+    order = []
+    for r in range(1, pairs + 1):
+        order.append("pair %d order: %s boot b%d" % (r, "T U" if r % 2 else "U T", (r - 1) // 3 + 1))
+        (out / ("trace-T_r%d.txt" % r)).write_text(window2(t_io, t_rest))
+        (out / ("trace-U_r%d.txt" % r)).write_text(window2(u_io))
+        for kind, p50, proto in (("T", lat_t, "tcp"), ("U", lat_u, "udp")):
+            s = {"p50_ms": p50 / 1000.0, "n": 500, "bad": 0, "rejected_by_monitor": 0, "proto": proto}
+            (out / ("lat-%s_r%d.json" % (kind, r))).write_text(json.dumps({"summary": s}))
+    (out / "order.log").write_text("\n".join(order) + "\n")
+
+
+def _report2(out):
+    r = subprocess.run([sys.executable, REPORT2, str(out)], capture_output=True, text=True, timeout=600)
+    assert r.returncode == 0, r.stdout + r.stderr
+    return r.stdout
+
+
+def test_extra_io_sock_time_per_tcp_exchange_holds_both(tmp_path):
+    _run2(tmp_path / "o", t_io=20.0, u_io=5.0)
+    s = _report2(tmp_path / "o")
+    assert "FAILED" not in s, s
+    assert "-> HELD" in _line(s, "P1") and "-> HELD" in _line(s, "P2"), s
+    busy = float(_line(s, "P1").split(":")[1].split("us")[0])
+    assert abs(busy - 15.0) < 0.3, busy
+
+
+def test_extra_time_outside_io_sock_refutes_p2(tmp_path):
+    _run2(tmp_path / "o", t_io=5.0, u_io=5.0, t_rest=15.0)
+    s = _report2(tmp_path / "o")
+    assert "-> HELD" in _line(s, "P1") and "-> REFUTED" in _line(s, "P2"), s
+
+
+def test_no_difference_in_the_round_trip_voids(tmp_path):
+    _run2(tmp_path / "o", t_io=20.0, u_io=5.0, lat_t=165.0)
+    s = _report2(tmp_path / "o")
+    assert "-> FAILED" in _line(s, "M2") and "VOID (M2 failed)" in _line(s, "P1"), s
+
+
+def test_the_trace2_harness_parses_and_states_its_rule_and_prediction_before_any_code():
+    if BASH is not None:
+        r = subprocess.run([BASH, "-n", HARNESS2], capture_output=True, text=True, timeout=30)
+        assert r.returncode == 0, r.stderr
+    text = open(HARNESS2, encoding="utf-8").read()
+    head, body = text.split("\nset -u\n", 1)
+    for s in ("It is not to be amended", "The owner asked for this run",
+              "P1 the guest's busy time per exchange is >= 10 us longer for TCP than for UDP.",
+              "P2 io-sock's time per exchange accounts for >= 70% of that difference.",
+              "M2 the premise survives the tracing"):
+        assert s in head, s
+    assert 'm_probe "$OUT" "U_r$2" "$GUEST" 7101 "" udp' in body and 'UDP_ARMS="U" m_require_complete "$OUT" T U' in body

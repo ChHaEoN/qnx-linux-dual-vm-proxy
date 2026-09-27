@@ -23,9 +23,17 @@
 // payload whose seq is the request's, and the verdict byte (a reject is counted, not timed, as
 // latency_probe does). Anything else is fatal: exit 5 with an "error" line, no samples.
 //
+// VPROBE_THREADS_CPU=C (2026-09-27, run-someip1.sh), vsomeip modes only: the main thread moves to
+// CPU C before vsomeip is initialised and started, so every thread vsomeip creates inherits C,
+// then moves back to its own CPUs once the service is available. The client's timing thread
+// stays on the probe core; vsomeip's own threads run on C.
+//
 // Output (stdout), one JSON object: {"rtt_ns": [...], "send_ns": [...], "rejected": R,
-// "sched": {...}, "vsomeip": "3.4.10" | null, "mode": MODE}, the timed exchanges in order.
+// "sched": {...}, "vsomeip": "3.4.10" | null, "mode": MODE, "threads": [{"comm", "cpus"}...]},
+// the timed exchanges in order; "sched" is the main thread's, "threads" every thread's allowed
+// CPUs, read just before vsomeip is stopped.
 #include <arpa/inet.h>
+#include <dirent.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <sched.h>
@@ -35,6 +43,7 @@
 #include <unistd.h>
 
 #include <chrono>
+#include <fstream>
 #include <condition_variable>
 #include <cstdint>
 #include <cstdio>
@@ -59,6 +68,7 @@ using clk = std::chrono::steady_clock;
 struct Samples {
     std::vector<long long> rtt, sends;
     long rejected = 0;
+    std::string threads = "[]";
 };
 
 std::vector<std::uint8_t> build_frame(std::uint64_t seq)
@@ -103,6 +113,38 @@ std::string sched_json()
     }
     return "{\"sched_policy\": \"" + std::string(policy_name(pol)) + "\", \"sched_priority\": " +
            std::to_string(sp.sched_priority) + ", \"cpu_affinity\": [" + cpus + "]}";
+}
+
+// Every thread of this process: its name and its allowed CPUs, from /proc/self/task.
+std::string threads_json()
+{
+    std::string out = "[";
+    DIR *d = opendir("/proc/self/task");
+    if (d == nullptr)
+        return "[]";
+    while (dirent *e = readdir(d)) {
+        if (e->d_name[0] == '.')
+            continue;
+        const std::string base = std::string("/proc/self/task/") + e->d_name;
+        std::string comm, line, cpus;
+        std::ifstream(base + "/comm") >> comm;
+        std::ifstream st(base + "/status");
+        while (std::getline(st, line)) {
+            if (line.rfind("Cpus_allowed_list:", 0) == 0)
+                cpus = line.substr(line.find_first_not_of(" \t", 18));
+        }
+        out += std::string(out.size() > 1 ? ", " : "") + "{\"comm\": \"" + comm + "\", \"cpus\": \"" + cpus + "\"}";
+    }
+    closedir(d);
+    return out + "]";
+}
+
+bool set_cpu(int cpu)
+{
+    cpu_set_t set;
+    CPU_ZERO(&set);
+    CPU_SET(cpu, &set);
+    return sched_setaffinity(0, sizeof set, &set) == 0;
 }
 
 [[noreturn]] void fail(const std::string &why)
@@ -238,6 +280,12 @@ struct State {
 void run_vsomeip(bool reliable, long n, long warmup, double interval_ms, double timeout_s, Samples &s)
 {
     State st;
+    cpu_set_t own;
+    const char *spread = std::getenv("VPROBE_THREADS_CPU");
+    if (sched_getaffinity(0, sizeof own, &own) != 0)
+        fail("sched_getaffinity failed");
+    if (spread != nullptr && *spread != '\0' && !set_cpu(std::atoi(spread)))
+        fail("VPROBE_THREADS_CPU: cannot move to that CPU");
     auto rt = vsomeip::runtime::get();
     auto app = rt->create_application("someip_vprobe");
     if (!app->init())
@@ -264,6 +312,8 @@ void run_vsomeip(bool reliable, long n, long warmup, double interval_ms, double 
         if (!st.cv.wait_for(lk, std::chrono::seconds(10), [&st] { return st.available; }))
             fail("the service never became available");
     }
+    if (sched_setaffinity(0, sizeof own, &own) != 0)
+        fail("cannot move the main thread back to its own CPUs");
     const auto timeout = std::chrono::duration<double>(timeout_s);
     const clk::time_point origin = clk::now();
     for (long i = 0; i < warmup + n; i++) {
@@ -303,6 +353,7 @@ void run_vsomeip(bool reliable, long n, long warmup, double interval_ms, double 
         }
         pace(interval_ms);
     }
+    s.threads = threads_json();
     app->stop();
     runner.join();
 }
@@ -338,7 +389,7 @@ int main(int argc, char **argv)
         out += (k ? ", " : "") + std::to_string(s.sends[k]);
     out += "], \"rejected\": " + std::to_string(s.rejected) + ", \"sched\": " + sched_json() +
            ", \"vsomeip\": " + (raw ? std::string("null") : "\"" VPROBE_VSOMEIP_VERSION "\"") +
-           ", \"mode\": \"" + mode + "\"}";
+           ", \"mode\": \"" + mode + "\", \"threads\": " + (raw ? threads_json() : s.threads) + "}";
     std::printf("%s\n", out.c_str());
     std::fflush(stdout);
     return 0;

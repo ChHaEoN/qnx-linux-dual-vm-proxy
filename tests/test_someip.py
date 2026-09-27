@@ -463,3 +463,88 @@ def test_the_someip0_harness_parses_and_states_its_rule_and_prediction_before_an
         assert s in head, s
     assert 'declare -A CFG=([CT]=tcp [VT]=tcp [VT0]=tcp0 [CU]=udp [VU]=udp [VU0]=udp0)' in body
     assert '"max-retention-time-request": "0"' in body
+
+
+# ---- the third run (run-someip1.sh): vsomeip's threads off the client's core
+
+REPORT1 = os.path.join(GC, "someip1_report.py")
+HARNESS1 = os.path.join(GC, "run-someip1.sh")
+P50_1 = {"CT": 171.0, "VT0": 230.0, "VT0s": 226.0, "CU": 150.0, "VU0": 212.0, "VU0s": 209.0}
+PROTO1 = {"CT": "csomeip", "VT0": "vsomeip", "VT0s": "vsomeip", "CU": "csomeipu", "VU0": "vsomeipu", "VU0s": "vsomeipu"}
+
+
+def _threads(arm, stray=False):
+    if arm in ("CT", "CU"):
+        return [{"comm": "someip_vprobe", "cpus": "4"}]
+    if arm.endswith("s"):
+        th = [{"comm": "someip_vprobe", "cpus": "4"}, {"comm": "vsomeip_io", "cpus": "5"}]
+        return th + ([{"comm": "x", "cpus": "3"}] if stray else [])
+    return [{"comm": "someip_vprobe", "cpus": "4"}, {"comm": "vsomeip_io", "cpus": "4"}]
+
+
+def _someip1_run(out, p50=None, k=12, stray=False):
+    p50 = dict(P50_1, **(p50 or {}))
+    out.mkdir()
+    (out / "stamp.json").write_text(json.dumps({"n": 1000, "warmup": 200, "pin": {"probe": 4, "aux": 5}}))
+    for name in ("tcp0", "udp0"):
+        (out / ("vsomeip-%s.json" % name)).write_text(json.dumps({"npdu-default-timings": dict(NPDU0)}))
+    for r in range(1, k + 1):
+        for a, v in p50.items():
+            s = {"p50_ms": (v + 0.2 * (r % 3)) / 1000.0, "p99_ms": (v + 40) / 1000.0, "n": 1000, "bad": 0,
+                 "rejected_by_monitor": 0, "proto": PROTO1[a], "cpu_affinity": [4],
+                 "vsomeip": None if a in ("CT", "CU") else "3.4.10",
+                 "vprobe_threads": _threads(a, stray and a == "VU0s" and r == 3)}
+            (out / ("lat-%s_r%d.json" % (a, r))).write_text(json.dumps({"summary": s}))
+        line = "someip: tcp client done (eof): seen=1200 accepted=1200 rejected=0 errors=0 dropped=0"
+        (out / ("console-A_r%d.log" % r)).write_text("\n".join([line] * 3) + "\n")
+
+
+def _report1(out):
+    r = subprocess.run([sys.executable, REPORT1, str(out)], capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0, r.stdout + r.stderr
+    return r.stdout
+
+
+def test_a_placement_that_changes_little_and_a_costly_vsomeip_hold_both(tmp_path):
+    _someip1_run(tmp_path / "o")
+    s = _report1(tmp_path / "o")
+    assert "FAILED" not in s, s
+    assert "-> HELD" in _line(s, "P1") and "-> HELD" in _line(s, "P2"), s
+
+
+def test_a_placement_that_saves_much_refutes_p1_and_p2(tmp_path):
+    _someip1_run(tmp_path / "o", {"VT0s": 190.0, "VU0s": 170.0})
+    s = _report1(tmp_path / "o")
+    assert "-> REFUTED" in _line(s, "P1") and "-> REFUTED" in _line(s, "P2"), s
+
+
+def test_a_thread_off_the_two_cores_voids(tmp_path):
+    _someip1_run(tmp_path / "o", stray=True)
+    s = _report1(tmp_path / "o")
+    assert "-> FAILED" in _line(s, "M5") and "VU0s_r3" in s and "VOID (M5 failed)" in _line(s, "P1"), s
+
+
+def test_the_someip1_harness_parses_and_states_its_rule_and_prediction_before_any_code():
+    bash = shutil.which("bash")
+    if bash is not None:
+        r = subprocess.run([bash, "-n", HARNESS1], capture_output=True, text=True, timeout=30)
+        assert r.returncode == 0, r.stderr
+    text = open(HARNESS1, encoding="utf-8").read()
+    head, body = text.split("\nset -u\n", 1)
+    for s in ("It is not to be amended", "The owner asked for this run",
+              "P1 VT0 - VT0s and VU0 - VU0s are each within 10 us of 0.",
+              "P2 VT0s - CT >= +30 us and VU0s - CU >= +30 us.", "M5 thread placement as designed"):
+        assert s in head, s
+    assert 'case "$a" in *s) spread="$CORE_AUX" ;; esac' in body
+    assert 'VPROBE_THREADS_CPU="$spread"' in body
+
+
+@needs_posix
+def test_the_probe_records_the_clients_threads(tmp_path):
+    res = {"rtt_ns": [150000] * 40, "send_ns": [2000000 * i for i in range(40)], "rejected": 0,
+           "sched": {"sched_policy": "SCHED_OTHER", "sched_priority": 0, "cpu_affinity": [4]},
+           "vsomeip": "3.4.10", "threads": [{"comm": "someip_vprobe", "cpus": "4"}, {"comm": "io", "cpus": "5"}]}
+    env = _fake_vprobe(tmp_path, "echo '%s'" % json.dumps(res))
+    r, out = _probe(1, "vsomeip", tmp_path, env=env)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert json.loads(out.read_text())["summary"]["vprobe_threads"] == res["threads"]

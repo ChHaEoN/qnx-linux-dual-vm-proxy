@@ -903,6 +903,8 @@ def main():
     if vs_result is not None:
         res.update(vs_result["sched"])       # the vsomeip client's own report, not this wrapper's
         res["vsomeip"] = vs_result.get("vsomeip")
+        # 2026-09-27 (run-someip1.sh): every client thread's allowed CPUs, as the client read them
+        res["vprobe_threads"] = vs_result.get("threads")
     else:
         res.update(own_scheduling())
     print("RESULT %s" % json.dumps(res))
