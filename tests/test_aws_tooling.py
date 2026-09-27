@@ -912,3 +912,41 @@ def test_upload_sends_and_records_the_extra_images(rig, tmp_path):
     sha = hashlib.sha256(b"ifs-trace.bin").hexdigest()
     ssh = (stub / "ssh.log").read_text()
     assert "IFS_EXTRA=%s" in ssh and "ifs-trace.bin:" + sha in ssh, ssh
+
+
+# --------------------------------------------------------------------------
+# 2026-09-27: a terminate after a failed fetch lost a billed session's data
+
+
+@needs_bash
+@pytest.mark.parametrize("markers,env,ok", [
+    (("uploaded",), {}, False),                           # uploaded, nothing fetched: refused
+    (("uploaded",), {"METAL_DISCARD": "1"}, True),        # the operator says to lose it
+    (("uploaded", "fetched-ok"), {}, True),               # fetched and scanned: fine
+    ((), {}, True),                                       # nothing uploaded yet: nothing to lose
+])
+def test_terminate_wants_a_fetch_once_something_was_uploaded(rig, markers, env, ok):
+    run, state, _ = rig
+    _launched(state)
+    for m in markers:
+        (state / m).touch()
+    r, log = run("terminate", **env)
+    out = r.stdout + r.stderr
+    if ok:
+        assert r.returncode == 0 and (state / "terminated").exists(), out
+    else:
+        assert r.returncode != 0 and "nothing was fetched from this session" in out, out
+        assert "terminate-instances" not in log and not (state / "terminated").exists(), log
+
+
+def test_capture_redacts_many_text_files_side_by_side(tmp_path):
+    """capture.py now runs one redactor per text file in parallel: every file must still come
+    through redacted, whole and in its own place."""
+    rec = _rec(tmp_path)
+    for i in range(40):
+        _write(rec / "many" / ("t%02d.txt" % i), "line %d from 203.0.113.%d\nplain %d" % (i, i % 250, i))
+    r = _capture(rec, tmp_path / "pub")
+    assert r.returncode == 0, r.stdout + r.stderr
+    for i in range(40):
+        got = (tmp_path / "pub" / "many" / ("t%02d.txt" % i)).read_text()
+        assert "203.0.113." not in got and ("plain %d" % i) in got, got

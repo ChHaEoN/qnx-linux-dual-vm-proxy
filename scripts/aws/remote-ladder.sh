@@ -351,14 +351,21 @@ capture)
 		|| [ -e "$REC/metal/host-after.txt" ] || [ -e "$REC/someip/host-after.txt" ] \
 		|| ls "$REC"/*/host-after.txt > /dev/null 2>&1 \
 		|| die "no host-after.txt under $REC/ladder, $REC/liveness, $REC/stamp, $REC/metal or $REC/someip -- the session did not finish; there is no complete record to capture"
+	# 2026-09-27: a capture outlived the operator's SSH, and its last line of output then failed
+	# and aborted the phase before pub.tgz was packed. So nothing here needs the terminal:
+	# SIGPIPE is ignored, capture.py writes to $W/capture.log, and pub.tgz is packed before
+	# anything more is printed.
+	trap '' PIPE
 	RED="$R/redact-aws.sh"
 	bash "$RED" selftest >/dev/null || die "redactor selftest failed"
-	rm -rf "$W/pub" "$W/pub.sha256"; mkdir -p "$W/pub"
+	rm -rf "$W/pub" "$W/pub.sha256" "$W/pub.tgz"; mkdir -p "$W/pub"
 	# USER empty: the login is Ubuntu's public default, "ubuntu", and masking it would
 	# rewrite the QEMU package version (1:6.2+dfsg-2ubuntu6.31) in the stamp and logs.
 	# A trailing "@ubuntu" prompt is still masked through AWS_SSH_USER.
-	USER= python3 "$W/capture.py" "$REC" "$W/pub" "$RED" || die "capture refused"
-	tar -czf "$W/pub.tgz" -C "$W/pub" .
+	USER= python3 "$W/capture.py" "$REC" "$W/pub" "$RED" > "$W/capture.log" 2>&1 \
+		|| { tail -5 "$W/capture.log" || true; die "capture refused -- see $W/capture.log"; }
+	tar -czf "$W/pub.tgz" -C "$W/pub" . 2>> "$W/capture.log" || die "packing pub.tgz failed -- see $W/capture.log"
+	tail -2 "$W/capture.log" || true
 	say "captured $(wc -l < "$W/pub.sha256") files into pub.tgz ($(du -h "$W/pub.tgz" | cut -f1))"
 	;;
 stop)

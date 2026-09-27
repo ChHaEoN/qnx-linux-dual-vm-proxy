@@ -21,6 +21,7 @@ in a counter, the rest only by a trailing newline. So:
   other    text files through the redactor as they are; *.so and the
            .run-start marker are not published.
 """
+import concurrent.futures
 import hashlib
 import json
 import os
@@ -87,6 +88,7 @@ def numbers(o, path=""):
 
 
 verbatim = rewritten = texts = 0
+text_jobs = []      # (src, dst): redacted in parallel below, one redactor process per file
 for root, _dirs, files in os.walk(rec):
     for name in sorted(files):
         if name.endswith(".so") or name == ".run-start":
@@ -120,9 +122,25 @@ for root, _dirs, files in os.walk(rec):
             open(dst, "w", encoding="utf-8").write(new)
             rewritten += 1
         else:
-            with open(src, "rb") as f, open(dst, "wb") as g:     # a console log is not always UTF-8
-                subprocess.run(["bash", BASH_REDACTOR], stdin=f, stdout=g, check=True)
+            text_jobs.append((src, dst))
             texts += 1
+
+
+def redact_file(job):
+    src, dst = job
+    with open(src, "rb") as f, open(dst, "wb") as g:     # a console log is not always UTF-8
+        subprocess.run(["bash", BASH_REDACTOR], stdin=f, stdout=g, check=True)
+
+
+# 2026-09-27: a session's trace windows are ~300 MB of text, which one redactor at a time took
+# ~40 min over. Each file is its own redactor process, so they run side by side; any failure
+# still stops the capture.
+with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, os.cpu_count() or 1)) as pool:
+    for job, fut in [(j, pool.submit(redact_file, j)) for j in text_jobs]:
+        try:
+            fut.result()
+        except subprocess.CalledProcessError as e:
+            sys.exit("%s: the redactor failed (%s)" % (os.path.relpath(job[0], rec), e))
 
 # The arm files must come through byte-for-byte: a redactor that edits a latency
 # sample corrupts data (2026-09-21), and one that edits a counter does too

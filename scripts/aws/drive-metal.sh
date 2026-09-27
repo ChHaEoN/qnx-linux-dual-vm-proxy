@@ -332,6 +332,8 @@ main() {
 		rsh "printf 'IFS_NAME=%s\nIFS_SHA256=%s\nDISK_SHA256=%s\nREMOTE_LADDER_SHA256=%s\nCAPTURE_SHA256=%s\nREPO_COMMIT=%s\n' '$ifs_name' '$ifs_sha' '$disk_sha' '$rl_sha' '$cap_sha' '$commit' > ~/a1/inputs.env"
 		[ -z "$extra" ] || rsh "printf 'IFS_EXTRA=%s\n' '$extra' >> ~/a1/inputs.env"
 		red < "$STATE/inputs.txt"
+		# From here the instance holds this session's data: terminate wants a fetch first.
+		touch "$STATE/uploaded"
 		;;
 	run)
 		armed
@@ -363,10 +365,18 @@ main() {
 		local py; py="$(pick_python)" || die "no working Python for the leak scan"
 		"$py" "$HERE/leakscan.py" "$out/pub" "${lits[@]}" 2>&1 | red \
 			|| die "the capture is NOT publishable -- it is still in $out (pub.tgz and pub/): inspect it, then delete it by hand"
+		touch "$STATE/fetched-ok"
 		say "capture is in $out/pub"
 		;;
 	terminate)
 		local st
+		# 2026-09-27: a terminate run straight after a fetch that had failed lost a billed
+		# session's data. Once something was uploaded, terminate wants a fetch that passed,
+		# or METAL_DISCARD=1. The instance's own self-termination stays armed either way,
+		# and every failure path before the upload still terminates on its own.
+		if [ -e "$STATE/uploaded" ] && [ ! -e "$STATE/fetched-ok" ] && [ "${METAL_DISCARD:-0}" != 1 ]; then
+			die "nothing was fetched from this session: run fetch first, or set METAL_DISCARD=1 to terminate and lose the instance's data (its self-termination is armed either way)"
+		fi
 		aws_ ec2 terminate-instances --region "$REGION" --instance-ids "$(iid)" \
 			--query 'TerminatingInstances[0].CurrentState.Name' --output text >/dev/null
 		# describe-instances lags the terminate it has just accepted; poll as abort does,
