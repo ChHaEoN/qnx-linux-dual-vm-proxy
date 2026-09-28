@@ -212,7 +212,16 @@ legal; the same denylist over `scripts/**`, `orin-native/**` and
 strike-through in this file, which states current state and is rewritten
 rather than annotated; the Phase badge against the Status table; and the
 GitHub "About" field against its pin in
-[docs/repo-description.md](docs/repo-description.md).
+[docs/repo-description.md](docs/repo-description.md). The
+[results guard](scripts/ci/results_guard.py) adds the routes this file's check
+cannot see: a run record, CSV or boot log anywhere in the tree; a figure a
+change adds to a harness's pre-registration ("what is known" cites records by
+name, never quotes them), to `docs/` or to a README below the root; and a
+figure in a pushed commit message. Design values it would otherwise question
+are listed, each with its reason, in
+[figure-allowlist.txt](scripts/ci/figure-allowlist.txt). The same guard runs
+before a push as a [pre-push hook](scripts/githooks/pre-push), which is the
+check that prevents rather than reports.
 
 **Reported, never fails:** the same denylist over `docs/**` and `results/**`,
 which carry the project's superseded record on purpose.

@@ -43,6 +43,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The results guard compares the pushed tree with the one before it
+          # and reads the pushed commits' messages, so it needs the history.
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -72,6 +76,28 @@ jobs:
           # so many words that this is NOT a pass.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/ci/claims_gate.py --repo .
+
+      # RESULTS GUARD. README is the claims gate's; this covers the routes a
+      # result took to main before 2026-09-28 without anyone checking: a
+      # harness's "WHAT IS KNOWN." section, the docs, and commit messages. On a
+      # push it runs after publication, so it reports rather than prevents --
+      # scripts/githooks/pre-push runs the same check before anything leaves
+      # the machine. Without a base (schedule, manual) it checks paths only.
+      - name: No measured result in the tree or the commit messages
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          base=""
+          if [ "$EVENT" = pull_request ]; then base="$PR_BASE"
+          elif [ "$EVENT" = push ] && [ -n "$BEFORE" ] && [ "$BEFORE" != 0000000000000000000000000000000000000000 ]; then base="$BEFORE"
+          fi
+          if [ -n "$base" ]; then
+            python scripts/ci/results_guard.py --repo . --base "$base" --commits "$base..HEAD"
+          else
+            python scripts/ci/results_guard.py --repo .
+          fi
 
       - name: Phase badge must match the status table
         # The badge and the table were two hand-maintained copies of one fact
@@ -105,4 +131,13 @@ jobs:
             echo 'against the pin and drift fails the build; pull requests run'
             echo 'hermetically so they cannot fail on a settings change. If the'
             echo 'API is unreachable the job prints SKIPPED, which is not a pass.'
+            echo
+            echo '### Results guard'
+            echo
+            echo 'No run record, CSV or boot log may be in the tree. A figure that a'
+            echo "change adds to a harness's WHAT IS KNOWN section, to docs/ or to a"
+            echo 'README below the root fails, and so does a figure in a pushed commit'
+            echo 'message. Design values go into scripts/ci/figure-allowlist.txt with'
+            echo 'their reason; scripts/githooks/pre-push runs the same check before'
+            echo 'a push.'
           } >> "$GITHUB_STEP_SUMMARY"

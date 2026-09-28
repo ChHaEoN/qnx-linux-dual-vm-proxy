@@ -233,6 +233,28 @@ match. `twin/diff-results.sh` parses the IPC CSVs, not these files — compare
 them directly. Background: `docs/digital-twin-design.md` §1a (the numbers are
 held locally under NC QDL v7 4.6(i)).
 
+## Results guard — install the pre-push hook once per clone
+
+Measurement results stay local (NC QDL v7 4.6(i)). `ci/results_guard.py` refuses
+a push that would publish one:
+
+- a run record, IPC CSV, sample-boot log or collector report in the tree;
+- a figure the push adds to a harness's "WHAT IS KNOWN." section, to `docs/`, or
+  to a README below the root;
+- a figure in a pushed commit message.
+
+The claims-gate workflow runs it after every push, when the commits are already
+public, so it only reports there. The hook runs it before anything leaves the
+machine:
+
+```bash
+git config core.hooksPath scripts/githooks
+```
+
+A figure that is a design value, not a result, goes into
+`ci/figure-allowlist.txt` with its reason. `python scripts/ci/results_guard.py
+--audit` lists every figure in the guarded text for review.
+
 ## Idempotency notes
 
 - `bootstrap-*.sh` scripts use `apt install` (idempotent on Debian/Ubuntu).

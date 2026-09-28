@@ -1,0 +1,18 @@
+# figure-allowlist.txt -- figures results_guard.py may let through, each with its reason.
+#
+# One entry per line, three fields separated by TABs:
+#
+#   path glob <TAB> literal text on the line <TAB> why this figure is not a result
+#
+# An entry clears a figure only on a line of a matching file, and only when the
+# figure lies inside the literal. Keep the literal short and specific
+# ("halt_poll_ns 5000000, a 5 ms window", not "5 ms"), so it cannot clear a result
+# that happens to share the number.
+#
+# What belongs here: design parameters, configured and default values, vendor
+# and datasheet figures, and the pre-registered windows a harness tests. What
+# never belongs here: anything a run of this project measured. Name its record
+# instead ("record 20260924T-a6-orin-rate, held locally").
+#
+# The figures the tree carried when the guard was introduced (2026-09-28) are
+# its reviewed baseline and need no entry: only a figure a change adds is checked.

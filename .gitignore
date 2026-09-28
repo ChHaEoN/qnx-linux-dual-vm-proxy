@@ -227,6 +227,6 @@ skills/
 results/cloud/*-latest.csv
 results/hw/*-latest.csv
 results/gicv3-nisv-debug/
-results/orin-native-port/2026*T-*/
+results/orin-native-port/[0-9]*T-*/
 logs/sample-boot/*.log
 logs/sample-boot/*.txt
