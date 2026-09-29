@@ -571,7 +571,9 @@ m_kvm_snap() {       # $1 json file  $2 before|after
 	# m_pids_of prints one pid per LINE; count lines, not spaces (FOUND BY CODE REVIEW).
 	[ -n "$qp" ] && [ "$(printf '%s\n' "$qp" | grep -c .)" = 1 ] \
 		|| die "m_kvm_snap: need exactly one qemu-system-aarch64 (have: $(printf '%s' "$qp" | tr '\n' ' '))"
-	[ "$2" = before ] && sleep 0.1
+	# KVM_SNAP_SETTLE_S (2026-09-29): the pause before a "before" read; 0.1 s unless a harness
+	# sets it (run-mmio.sh sets 0: its trace window must hug the snapshots).
+	[ "$2" = before ] && sleep "${KVM_SNAP_SETTLE_S:-0.1}"
 	dirs="$(sudo -n sh -c "ls -d $KVM_DEBUGFS/${qp}-* 2>/dev/null")"
 	[ -n "$dirs" ] && [ "$(printf '%s\n' "$dirs" | wc -l)" = 1 ] \
 		|| die "m_kvm_snap: expected one $KVM_DEBUGFS/${qp}-* directory, found: '$dirs'"

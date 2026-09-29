@@ -298,6 +298,10 @@ def test_the_harness_parses_and_states_its_rule_and_prediction_before_any_code()
     assert 'IMG_B="${IMG_B:-${IFS_BIN:-' in body and "trace_restore" in body.split("cleanup() {")[1][:200]
     assert "gzip" not in body and "echo mono > trace_clock" in body and "expanded:" in body
     assert "set_event'" in body and "tracing_cpumask" in body and "window-$1.json" in body
+    arm = body.split("run_arm() {")[1].split("\n}\n")[0]
+    order = ["trace_start", "KVM_SNAP_SETTLE_S=0 m_kvm_snap", "KVM_STATS=0 m_probe",
+             'm_kvm_snap "$OUT/kvm-${a}_r$r.json" after', "trace_take"]
+    assert [arm.index(x) for x in order] == sorted(arm.index(x) for x in order), "snapshots hug the window"
     assert '"\\"kernel\\"' not in body, "m_write_stamp already writes the kernel"
     import mmio_report
     assert mmio_report.CONSOLE_VIRTIO == 0x0A003800 and "0x0a003800" in head

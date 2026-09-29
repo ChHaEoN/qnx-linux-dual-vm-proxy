@@ -280,15 +280,18 @@ gpu_idle_around() {   # $1 label
 run_arm() {   # $1 arm  $2 round: one trace window around the arm
 	local a="$1" r="$2" idle_s
 	m_thermal "r$r $a before" >> "$OUT/thermal.log"
+	# KVM's snapshots are taken here, right inside the trace window and with no settling pause,
+	# not by m_probe (whose "before" read waits first): every ms between a window's edge and a
+	# snapshot is background the trace sees and KVM's counters over the arm do not (M4).
 	trace_start
+	KVM_SNAP_SETTLE_S=0 m_kvm_snap "$OUT/kvm-${a}_r$r.json" before
 	case "$a" in
-		K) m_probe "$OUT" "K_r$r" "$IVSHMEM@$SLOT_K" "$KICK_SOCK" "" shmdb "$IVSHMEM_SERVER" ;;
-		B) m_probe "$OUT" "B_r$r" "$IVSHMEM@$SLOT_B" "-" "" shmbell "$IVSHMEM_SERVER" ;;
+		K) KVM_STATS=0 m_probe "$OUT" "K_r$r" "$IVSHMEM@$SLOT_K" "$KICK_SOCK" "" shmdb "$IVSHMEM_SERVER" ;;
+		B) KVM_STATS=0 m_probe "$OUT" "B_r$r" "$IVSHMEM@$SLOT_B" "-" "" shmbell "$IVSHMEM_SERVER" ;;
 		I) idle_s="$(awk -v n="$N" -v w="$WARMUP" -v i="$INTERVAL_MS" 'BEGIN {printf "%.3f", (n + w) * i / 1000}')"
-		   m_kvm_snap "$OUT/kvm-I_r$r.json" before
-		   sleep "$idle_s"
-		   m_kvm_snap "$OUT/kvm-I_r$r.json" after ;;
+		   sleep "$idle_s" ;;
 	esac
+	m_kvm_snap "$OUT/kvm-${a}_r$r.json" after
 	trace_take "${a}_r$r"
 	m_thermal "r$r $a after" >> "$OUT/thermal.log"
 	gpu_idle_around "r$r $a"
