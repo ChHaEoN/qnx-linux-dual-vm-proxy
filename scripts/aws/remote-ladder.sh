@@ -49,7 +49,7 @@
 #
 #   harness       LADDER_ENV="HARNESS=<name> IMAGE=<image>", K optional. Runs one harness from a
 #                 fixed list -- run-someip.sh, run-someip0.sh, run-someip1.sh, run-trace.sh,
-#                 run-trace2.sh, run-haltpoll.sh, run-bell.sh (2026-09-29, ifs-bell.bin) -- each of
+#                 run-trace2.sh, run-haltpoll.sh, run-bell.sh, run-paths.sh (2026-09-29) -- each of
 #                 which boots its own guests, on an image
 #                 this session uploaded and verified, into $REC/<name without run- and .sh>. The
 #                 SOME/IP harnesses first build vsomeip here, once per session.
@@ -326,7 +326,7 @@ harness)
 		esac
 	done
 	case "$H" in
-		run-someip.sh|run-someip0.sh|run-someip1.sh|run-trace.sh|run-trace2.sh|run-haltpoll.sh|run-bell.sh) ;;
+		run-someip.sh|run-someip0.sh|run-someip1.sh|run-trace.sh|run-trace2.sh|run-haltpoll.sh|run-bell.sh|run-paths.sh) ;;
 		*) die "HARNESS='$H' is not one the harness phase runs" ;;
 	esac
 	[ -r "$R/$H" ] || die "the repo tarball lacks $H"
