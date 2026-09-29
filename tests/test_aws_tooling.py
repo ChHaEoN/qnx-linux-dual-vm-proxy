@@ -342,6 +342,9 @@ def test_nothing_is_spent_before_the_safety_net_is_proven(rig, step):
     (["run", "rm -rf /"], {}, "unknown phase"),
     (["run", "ladder"], {"LADDER_ENV": "KICK=1 -i"}, "not NAME=value"),
     (["run", "ladder"], {"K": "12;reboot"}, "not a round count"),
+    (["run", "harness"], {"K": "0"}, "no leading zero"),
+    (["run", "ladder"], {"K": "012"}, "no leading zero"),
+    (["run", "liveness"], {"K": "08"}, "no leading zero"),
 ])
 def test_run_passes_only_known_phases_and_validated_words(rig, args, env, msg):
     run, state, stub = rig
@@ -840,8 +843,9 @@ def _harness_env(tmp_path, extra="ifs-trace.bin:" + "f" * 64, harness="run-trace
     g.mkdir(parents=True, exist_ok=True)
     if harness:
         (g / harness).write_text("exit 0\n")
+    base = {k: v for k, v in os.environ.items() if k not in ("K", "LADDER_ENV")}
     return subprocess.run([BASH, REMOTE, "harness"], capture_output=True, text=True, timeout=60,
-                          env=dict(os.environ, W=str(tmp_path), PATH=_path_with(), **env))
+                          env=dict(base, W=str(tmp_path), PATH=_path_with(), **env))
 
 
 @needs_bash
@@ -870,6 +874,147 @@ def test_the_harness_phase_gets_past_its_checks_with_an_uploaded_image(tmp_path)
     for refusal in ("is not one", "lacks", "was not uploaded", "malformed"):
         assert refusal not in out, out
     assert (tmp_path / "rec" / "trace2" / "host-before.txt").exists(), out
+
+
+# 2026-09-29 (later): harnesses that boot more than one image name the others with IMG_ words
+
+_EXTRA3 = " ".join("%s:%s" % (n, "f" * 64) for n in ("ifs-bell.bin", "ifs-robust.bin", "ifs-unmask-a.bin",
+                                                     "ifs-unmask-b.bin"))
+_SHOW_IMGS = ('printf "%s\\n" "IMG_S=${IMG_S:-}" "IFS_BIN=${IFS_BIN:-}" "IMG_B=${IMG_B:-}" "IMG_R=${IMG_R:-}" '
+              '"IMG_UA=${IMG_UA:-}" "IMG_UB=${IMG_UB:-}" > "$W/imgs.txt"\n')
+_UNMASK = "HARNESS=run-unmask.sh IMG_UA=ifs-unmask-a.bin IMG_UB=ifs-unmask-b.bin"
+_ROBUST = "HARNESS=run-bellrobust.sh IMAGE=ifs-bell.bin IMG_R=ifs-robust.bin IMG_UA=ifs-unmask-a.bin"
+# The phase writes host-before.txt from /proc/interrupts, under set -e, before it runs the harness:
+# Git Bash has no such file, so a test that needs the harness itself to run is Linux-only.
+needs_proc_interrupts = pytest.mark.skipif(
+    BASH is None or subprocess.run([BASH, "-c", "test -r /proc/interrupts"]).returncode != 0,
+    reason="the harness phase reads /proc/interrupts before it runs the harness; this bash has none")
+
+
+@needs_bash
+@pytest.mark.parametrize("words,k,msg", [
+    ("HARNESS=run-bellrobust.sh IMAGE=ifs-bell.bin IMG_R=ifs-nope.bin IMG_UA=ifs-unmask-a.bin", None,
+     "image 'ifs-nope.bin' (IMG_R) was not uploaded in this session"),
+    (_UNMASK + " IMG_U=ifs-unmask-b.bin", None, "the harness phase passes only IMG_B, IMG_R, IMG_UA and IMG_UB"),
+    (_ROBUST + " IMG_S=ifs-bell.bin", None, "the harness phase passes only IMG_B, IMG_R, IMG_UA and IMG_UB"),
+    (_ROBUST + " IMG_RX=ifs-robust.bin", None, "the harness phase passes only IMG_B, IMG_R, IMG_UA and IMG_UB"),
+    ("HARNESS=run-unmask.sh IMG_UA=ifs-unmask-a.bin IMGUB=ifs-unmask-b.bin", None,
+     "LADDER_ENV word 'IMGUB=ifs-unmask-b.bin' is not one the harness phase reads"),
+    ("HARNESS=run-unmask.sh IMG_UA=ifs-unmask-a.bin IMG_UB=", None,
+     "image '' (IMG_UB) was not uploaded in this session"),
+    ("HARNESS=run-unmask.sh IMG_UA=ifs-unmask-a.bin", None,
+     "run-unmask.sh boots more than one image: LADDER_ENV needs IMG_UB="),
+    ("HARNESS=run-bellrobust.sh IMAGE=ifs-bell.bin IMG_R=ifs-robust.bin", None,
+     "run-bellrobust.sh boots more than one image: LADDER_ENV needs IMG_UA="),
+    ("HARNESS=run-bellrobust.sh IMG_R=ifs-robust.bin IMG_UA=ifs-unmask-a.bin", None,
+     "run-bellrobust.sh boots more than one image: LADDER_ENV needs IMAGE= or IMG_B="),
+    (_UNMASK + " IMG_UA=ifs-unmask-b.bin", None, "LADDER_ENV names IMG_UA twice"),
+    (_ROBUST + " HARNESS=run-unmask.sh", None, "LADDER_ENV names HARNESS twice"),
+    (_ROBUST + " IMAGE=ifs-unmask-b.bin", None, "LADDER_ENV names IMAGE twice"),
+    ("HARNESS= HARNESS=run-bell.sh IMAGE=ifs-bell.bin", None, "LADDER_ENV word 'HARNESS=' has no value"),
+    ("HARNESS=run-bell.sh IMAGE= IMAGE=ifs-bell.bin", None, "LADDER_ENV word 'IMAGE=' has no value"),
+    ("HARNESS=run-bell.sh IMAGE=ifs-bell.bin IMG_B=ifs-bell.bin", None,
+     "run-bell.sh takes no IMG_B word (its image is IMAGE=)\n"),
+    (_UNMASK + " IMG_R=ifs-robust.bin", None, "run-unmask.sh takes no IMG_R word (it takes IMG_UA IMG_UB)\n"),
+    (_ROBUST + " IMG_UB=ifs-unmask-b.bin", None,
+     "run-bellrobust.sh takes no IMG_UB word (it takes IMG_B IMG_R IMG_UA)\n"),
+    ("HARNESS=run-unmask.sh IMG_UA=ifs-unmask-b.bin IMG_UB=ifs-unmask-b.bin", None,
+     "IMG_UA and IMG_UB are the same image"),
+    (_UNMASK, "6", "run-unmask.sh needs K a multiple of 4"),
+    (_UNMASK, "016", "K='016' is not a round count (digits, no leading zero)"),
+    (_UNMASK, "08", "K='08' is not a round count (digits, no leading zero)"),
+    (_UNMASK, "0", "K='0' is not a round count (digits, no leading zero)"),
+    ("HARNESS=run-bell.sh IMAGE=ifs-bell.bin", "012", "K='012' is not a round count"),
+    (_ROBUST, "12", "run-bellrobust.sh takes no K"),
+    (None, None, "the harness phase needs LADDER_ENV="),
+])
+def test_the_harness_phase_refuses_what_it_cannot_resolve_before_making_anything(tmp_path, words, k, msg):
+    env = {} if words is None else {"LADDER_ENV": words}
+    if k is not None:
+        env["K"] = k
+    harness = "run-bell.sh" if words is None else (words.split()[0][len("HARNESS="):] or "run-bell.sh")
+    r = _harness_env(tmp_path, extra=_EXTRA3, harness=harness, **env)
+    assert r.returncode != 0 and msg in r.stdout + r.stderr, r.stdout + r.stderr
+    assert not (tmp_path / "rec").exists(), "refused before anything was made"
+
+
+@needs_bash
+@needs_proc_interrupts
+@pytest.mark.parametrize("words,k,want", [
+    (_ROBUST, None, {"IMG_S": "ifs-bell.bin", "IFS_BIN": "ifs-bell.bin", "IMG_B": "ifs-bell.bin",
+                     "IMG_R": "ifs-robust.bin", "IMG_UA": "ifs-unmask-a.bin", "IMG_UB": None}),
+    # run-unmask.sh reads no IMAGE=: its IMG_S/IFS_BIN/IMG_B are the session's first image, unused
+    (_UNMASK, "8", {"IMG_S": "ifs-kick.bin", "IFS_BIN": "ifs-kick.bin", "IMG_B": "ifs-kick.bin",
+                    "IMG_R": None, "IMG_UA": "ifs-unmask-a.bin", "IMG_UB": "ifs-unmask-b.bin"}),
+    # an IMG_ word wins over IMAGE's default; IMAGE still sets IMG_S and IFS_BIN
+    ("HARNESS=run-bellrobust.sh IMAGE=ifs-unmask-b.bin IMG_B=ifs-bell.bin IMG_R=ifs-robust.bin "
+     "IMG_UA=ifs-unmask-a.bin", None,
+     {"IMG_S": "ifs-unmask-b.bin", "IFS_BIN": "ifs-unmask-b.bin", "IMG_B": "ifs-bell.bin",
+      "IMG_R": "ifs-robust.bin", "IMG_UA": "ifs-unmask-a.bin", "IMG_UB": None}),
+])
+def test_the_harness_phase_passes_each_named_image_as_this_sessions_upload(tmp_path, words, k, want):
+    harness = words.split()[0][len("HARNESS="):]
+    g = tmp_path / "repo" / "orin-native" / "gpu-concurrency"
+    g.mkdir(parents=True)
+    (g / harness).write_text(_SHOW_IMGS + "exit 0\n", encoding="utf-8", newline="\n")
+    env = {"LADDER_ENV": words}
+    if k is not None:
+        env["K"] = k
+    r = _harness_env(tmp_path, extra=_EXTRA3, harness=None, **env)
+    out = r.stdout + r.stderr
+    assert (tmp_path / "imgs.txt").exists(), out
+    got = dict(ln.split("=", 1) for ln in (tmp_path / "imgs.txt").read_text().splitlines())
+    img = str(tmp_path / "img")
+    for key, v in want.items():
+        assert got[key] == ("" if v is None else img + "/" + v), (key, got, out)
+
+
+def _bellrobust_rec(tmp_path, files):
+    raw = tmp_path / "rec" / "bellrobust" / "raw"
+    for name, text in files.items():
+        _write(raw / name, text, newline=False)
+    _write(tmp_path / "rec" / "bellrobust" / "run.log", "done")
+    return tmp_path / "rec"
+
+
+_EX = json.dumps({"summary": {"tag": "S1_r1-pre", "n": 2, "bad": 0}, "samples_ms": [1.0, 2.0]})   # synthetic
+_STAMP = json.dumps({"experiment": "bellrobust", "repeats": 3})
+
+
+@pytest.mark.parametrize("files", [
+    {"stamp.json": _STAMP},
+    {"stamp.json": _STAMP, "kvm-D-db_r1.json": json.dumps({"before": {"t_ns": 1}})},
+    {"ex-S1_r1-pre.json": _EX},
+    {"stamp.json": _STAMP, "extra.json": _EX},
+    {"stamp.json": _STAMP, "scenarios.log": "S4_r1 msixcfg_seen=never msix_monitor_seen=never\nring-S4_r1 rc=0\n"},
+])
+def test_capture_refuses_a_stamp_without_evidence_or_evidence_without_a_stamp(tmp_path, files):
+    r = _capture(_bellrobust_rec(tmp_path, files), tmp_path / "pub")
+    assert r.returncode != 0 and "nothing ran" in r.stdout + r.stderr, r.stdout + r.stderr
+
+
+@needs_bash
+@pytest.mark.parametrize("files", [
+    {"stamp.json": _STAMP, "ex-S1_r1-pre.json": _EX, "scenarios.log": "S1_r1-pre rc=0 t0=1000 t1=2000\n"},
+    # every set failed: the probe wrote no file, but the run is a result and is captured
+    {"stamp.json": _STAMP, "scenarios.log": "S1_r1-pre rc=3 t0=1000 t1=2000\n", "probe.log": "no reply"},
+])
+def test_capture_takes_run_bellrobust_by_its_exchange_sets(tmp_path, files):
+    rec = _bellrobust_rec(tmp_path, files)
+    r = _capture(rec, tmp_path / "pub")
+    assert r.returncode == 0, r.stdout + r.stderr
+    for name in files:
+        assert (tmp_path / "pub" / "bellrobust" / "raw" / name).exists(), name
+    if "ex-S1_r1-pre.json" in files:
+        assert (tmp_path / "pub" / "bellrobust" / "raw" / "ex-S1_r1-pre.json").read_bytes() == \
+            (rec / "bellrobust" / "raw" / "ex-S1_r1-pre.json").read_bytes()
+
+
+@needs_bash
+def test_capture_holds_an_exchange_set_to_the_arm_files_rule(tmp_path):
+    ex = json.dumps({"summary": {"tag": "on i-0123456789abcdef0", "n": 100}})   # documentation instance id
+    r = _capture(_bellrobust_rec(tmp_path, {"stamp.json": _STAMP, "ex-S1_r1-pre.json": ex}), tmp_path / "pub")
+    assert r.returncode != 0 and "ex-S1_r1-pre.json" in r.stdout + r.stderr, r.stdout + r.stderr
 
 
 @needs_bash

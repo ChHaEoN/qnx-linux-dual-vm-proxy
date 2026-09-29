@@ -340,7 +340,7 @@ main() {
 		local phase="${2:?phase: $PHASES}" envs=() w
 		case " $PHASES " in *" $phase "*) ;; *) die "unknown phase '$phase' (one of: $PHASES)" ;; esac
 		# Only validated NAME=value words cross to the instance, quoted.
-		if [ -n "${K:-}" ]; then case "$K" in *[!0-9]*) die "K='$K' is not a round count" ;; esac; envs+=("K=$K"); fi
+		if [ -n "${K:-}" ]; then case "$K" in *[!0-9]*|0*) die "K='$K' is not a round count (digits, no leading zero)" ;; esac; envs+=("K=$K"); fi
 		if [ -n "${LADDER_ENV:-}" ]; then
 			for w in $LADDER_ENV; do
 				[[ "$w" =~ ^[A-Z_][A-Z0-9_]*=[A-Za-z0-9._/-]*$ ]] || die "LADDER_ENV word '$w' is not NAME=value"

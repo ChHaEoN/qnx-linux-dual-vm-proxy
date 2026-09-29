@@ -50,10 +50,29 @@
 #   harness       LADDER_ENV="HARNESS=<name> IMAGE=<image>", K optional. Runs one harness from a
 #                 fixed list -- run-someip.sh, run-someip0.sh, run-someip1.sh, run-trace.sh,
 #                 run-trace2.sh, run-haltpoll.sh, run-bell.sh, run-paths.sh, run-mmio.sh, run-bellrate.sh
-#                 (2026-09-29) -- each of
+#                 (2026-09-29), run-unmask.sh and run-bellrobust.sh (2026-09-29, later) -- each of
 #                 which boots its own guests, on an image
 #                 this session uploaded and verified, into $REC/<name without run- and .sh>. The
 #                 SOME/IP harnesses first build vsomeip here, once per session.
+#                 A harness that boots more than one image names them with IMG_ words (2026-09-29,
+#                 later), each an image this session uploaded:
+#                   run-unmask.sh      IMG_UA=ifs-unmask-a.bin IMG_UB=ifs-unmask-b.bin (two different
+#                                      images; K a multiple of 4; it reads no IMAGE=)
+#                   run-bellrobust.sh  IMAGE=ifs-bell.bin (or IMG_B=) IMG_R=ifs-robust.bin
+#                                      IMG_UA=ifs-unmask-a.bin (no K: its three repeats are
+#                                      pre-registered)
+#                 Before it makes $REC/<name>, the phase refuses: no LADDER_ENV; a word it does not
+#                 read, or one with no value; a word given twice; an IMG_ word it does not take for
+#                 that harness (only these two take any; every other harness's image is IMAGE=,
+#                 even one that reads IMG_B); a K with a leading zero, or 0; and a multi-image
+#                 harness missing one of its images. An omitted IMG_R, IMG_UA or IMG_UB would fall
+#                 back to the harness's own $HOME/output default, absent here, and the run would
+#                 fail at its preflight; an omitted IMG_B would be the session's first image, and
+#                 the run would go on with it. Either way it would use up that harness's one run
+#                 per session.
+#                 Both list a1.metal among what their pre-registrations do not test, so a run here
+#                 is a replication outside them, not part of either; run-unmask.sh's stated reason
+#                 (one IMAGE=, and not in this list) predates these words.
 #
 # capture accepts any of these sessions, but only a FINISHED one.
 #
@@ -65,6 +84,7 @@ PHASE="${1:?phase: setup|quiesce|launch|ladder|launch-live|liveness|launch-stamp
 W="${W:-$HOME/a1}"
 R="$W/repo/orin-native/gpu-concurrency"
 REC="$W/rec"
+LADDER_GIVEN="${LADDER_ENV:+1}"   # the harness phase takes no default: it needs the operator's words
 LADDER_ENV="${LADDER_ENV:-SHM=1 KICK=1 DB=1 UDP_IN_TCP=1 KVM_STATS=1 ARM_C_PORT=7000 CSTATE=shallow}"
 say() { printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 die() { say "FATAL: $*" >&2; exit 1; }
@@ -317,19 +337,50 @@ someip)
 	tail -30 "$REC/someip/run0.log"
 	;;
 harness)
-	case "${K:-}" in *[!0-9]*) die "K='${K:-}' is not a round count" ;; esac
+	# A leading zero is octal to the harnesses' own arithmetic, and "k": 08 is not JSON in a stamp.
+	case "${K:-}" in *[!0-9]*|0*) die "K='${K:-}' is not a round count (digits, no leading zero)" ;; esac
 	inputs
-	H=""; I=""
+	[ -n "$LADDER_GIVEN" ] || die "the harness phase needs LADDER_ENV=\"HARNESS=<name> IMAGE=<image> ...\""
+	H=""; I=""; imgs=(); declare -A role=() seen=()
+	once() { [ -z "${seen[$1]:-}" ] || die "LADDER_ENV names $1 twice"; seen[$1]=1; }
 	for w in ${LADDER_ENV:-}; do
 		case "$w" in
-			HARNESS=*) H="${w#HARNESS=}" ;;
-			IMAGE=*) I="${w#IMAGE=}" ;;
+			HARNESS=?*) once HARNESS; H="${w#HARNESS=}" ;;
+			IMAGE=?*) once IMAGE; I="${w#IMAGE=}" ;;
+			IMG_B=*|IMG_R=*|IMG_UA=*|IMG_UB=*)
+				once "${w%%=*}"
+				p="$(image_path "${w#*=}")" || die "image '${w#*=}' (${w%%=*}) was not uploaded in this session"
+				role[${w%%=*}]="$p"; imgs+=("${w%%=*}=$p") ;;
+			HARNESS=|IMAGE=) die "LADDER_ENV word '$w' has no value" ;;
+			IMG_*) die "LADDER_ENV word '$w': the harness phase passes only IMG_B, IMG_R, IMG_UA and IMG_UB (IMG_S, IFS_BIN and IMG_P are IMAGE's)" ;;
+			*) die "LADDER_ENV word '$w' is not one the harness phase reads: HARNESS=, IMAGE=, IMG_B=, IMG_R=, IMG_UA=, IMG_UB= (K is its own variable)" ;;
 		esac
 	done
 	case "$H" in
-		run-someip.sh|run-someip0.sh|run-someip1.sh|run-trace.sh|run-trace2.sh|run-haltpoll.sh|run-bell.sh|run-paths.sh|run-mmio.sh|run-bellrate.sh) ;;
+		run-someip.sh|run-someip0.sh|run-someip1.sh|run-trace.sh|run-trace2.sh|run-haltpoll.sh|run-bell.sh|run-paths.sh|run-mmio.sh|run-bellrate.sh|run-unmask.sh|run-bellrobust.sh) ;;
 		*) die "HARNESS='$H' is not one the harness phase runs" ;;
 	esac
+	case "$H" in   # a multi-image harness must be given each image, and K as it takes it, before $REC/<name> exists
+		run-unmask.sh) takes="IMG_UA IMG_UB"
+			[ -z "${K:-}" ] || [ $((K % 4)) = 0 ] || die "run-unmask.sh needs K a multiple of 4 (default 16)" ;;
+		run-bellrobust.sh) takes="IMG_B IMG_R IMG_UA"
+			[ -z "${K:-}" ] || die "run-bellrobust.sh takes no K: its three repeats are pre-registered" ;;
+		*) takes="" ;;
+	esac
+	why=" (its image is IMAGE=)"; [ -z "$takes" ] || why=" (it takes $takes)"
+	for v in "${!role[@]}"; do
+		case " $takes " in *" $v "*) ;; *) die "$H takes no $v word$why" ;; esac
+	done
+	for v in $takes; do
+		if [ "$v" = IMG_B ]; then   # IMAGE= sets it too
+			[ -n "${role[IMG_B]:-}" ] || [ -n "$I" ] \
+				|| die "$H boots more than one image: LADDER_ENV needs IMAGE= or IMG_B=, its first image"
+		else
+			[ -n "${role[$v]:-}" ] || die "$H boots more than one image: LADDER_ENV needs $v=<an image this session uploaded>"
+		fi
+	done
+	[ "$H" != run-unmask.sh ] || [ "${role[IMG_UA]}" != "${role[IMG_UB]}" ] \
+		|| die "IMG_UA and IMG_UB are the same image: run-unmask.sh swaps two"
 	[ -r "$R/$H" ] || die "the repo tarball lacks $H"
 	img="$(image_path "${I:-$IFS_NAME}")" || die "image '${I:-$IFS_NAME}' was not uploaded in this session"
 	stem="${H#run-}"; stem="${stem%.sh}"
@@ -338,7 +389,9 @@ harness)
 	case "$H" in run-someip*) build_vsomeip "$REC/$stem" ;; esac
 	cd "$R"
 	{ date -u +%FT%TZ; cat /proc/loadavg; cat /proc/interrupts; } > "$REC/$stem/host-before.txt"
-	env IMG_S="$img" IMG_B="$img" IFS_BIN="$img" DISK="$W/img/disk-qemu" VPROBE="$W/vsomeip/3.4.10/bin/someip_vprobe" \
+	# The IMG_ words come after IMAGE's defaults, so they win (env applies its assignments in order).
+	env IMG_S="$img" IMG_B="$img" IFS_BIN="$img" ${imgs[@]+"${imgs[@]}"} DISK="$W/img/disk-qemu" \
+		VPROBE="$W/vsomeip/3.4.10/bin/someip_vprobe" \
 		OUT="$REC/$stem/raw" CSTATE=shallow ${K:+K="$K"} bash "$R/$H" > "$REC/$stem/run.log" 2>&1 \
 		|| { tail -30 "$REC/$stem/run.log"; die "$H failed"; }
 	{ date -u +%FT%TZ; cat /proc/loadavg; cat /proc/interrupts; } > "$REC/$stem/host-after.txt"

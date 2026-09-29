@@ -117,18 +117,34 @@ bin, on this host's own cores and HZ.
 
 This runs several harnesses that boot their own guests, each on its own image, in one session:
 `run-someip.sh`, `run-someip0.sh`, `run-someip1.sh`, `run-trace.sh`, `run-trace2.sh`,
-`run-haltpoll.sh` and (2026-09-29) `run-bell.sh` on `ifs-bell.bin`, `run-paths.sh` on `ifs-paths.bin` (at `K=18` only: the phase does not pass `SMOKE`), and `run-mmio.sh` and `run-bellrate.sh` on `ifs-bell.bin`.
+`run-haltpoll.sh` and (2026-09-29) `run-bell.sh` on `ifs-bell.bin`, `run-paths.sh` on `ifs-paths.bin` (at `K=18` only: the phase does not pass `SMOKE`), and `run-mmio.sh` and `run-bellrate.sh` on `ifs-bell.bin`, and two that boot more than one image: `run-unmask.sh` (`IMG_UA=ifs-unmask-a.bin IMG_UB=ifs-unmask-b.bin`; it reads no `IMAGE=`) and `run-bellrobust.sh` (`IMAGE=ifs-bell.bin IMG_R=ifs-robust.bin IMG_UA=ifs-unmask-a.bin`).
 - `METAL_IFS` is the first image. `METAL_IFS_EXTRA` holds more, as space-separated paths.
   `upload` sends them all, and `setup` checks each against its sha256.
 - One call per harness:
   `LADDER_ENV="HARNESS=run-trace2.sh IMAGE=ifs-trace.bin" K=12 drive-metal.sh run harness`.
   - The phase refuses a harness outside that list, and an image this session did not
     upload.
+  - `IMG_B=`, `IMG_R=`, `IMG_UA=` and `IMG_UB=` words name a multi-image harness's images, each
+    one this session uploaded. Before it makes `rec/<name>`, the phase refuses: no `LADDER_ENV`; a
+    word it does not read, or one with no value; a word given twice; an `IMG_` word it does not
+    take for that harness (only these two take any; every other harness's image is `IMAGE=`, even
+    one that reads `IMG_B`); a `K` with a leading zero, or 0; and a multi-image harness missing one
+    of its images. An omitted `IMG_R`, `IMG_UA` or `IMG_UB` would fall back to the harness's own
+    `$HOME/output` default, absent here, and the run would fail at its preflight; an omitted
+    `IMG_B` would be the session's first image, and the run would go on with it. Either way it
+    would use up that harness's one run per session.
+    `run-unmask.sh` needs two different images and `K` a multiple of 4; `run-bellrobust.sh` takes
+    no `K`.
+  - Both of those list a1.metal among what their pre-registrations do not test, so a run here is a
+    replication outside them, not part of either. `run-unmask.sh`'s stated reason (one `IMAGE=`,
+    and not in this list) predates these words.
   - It writes into `rec/<name>` (`trace2` here), and runs each harness once per session.
 - The SOME/IP harnesses build vsomeip on the instance first, once per session. The older
   `someip` phase does the same.
 - Every other step is the same, and `capture` takes the session once any harness has
-  finished.
+  finished. `run-bellrobust.sh` keeps no `lat-*.json`: its exchange sets are `ex-*.json` from the
+  same probe, held to the same byte-for-byte rule, and a `scenarios.log` exchange-set line also
+  counts, so a run in which every set that ran was aborted is still captured.
 
 ## What bounds the cost
 

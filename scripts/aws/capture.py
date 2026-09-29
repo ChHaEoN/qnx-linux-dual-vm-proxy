@@ -14,7 +14,7 @@ in a counter, the rest only by a trailing newline. So:
   *.json   parsed. Every STRING in it (keys and values) goes through the
            redactor; numbers never do, because nothing that writes these files
            reads an AWS identity. If no string changes, the file is copied
-           byte-for-byte. If one does, arm files (lat-, kvm-, db-burst) are
+           byte-for-byte. If one does, arm files (lat-, kvm-, db-burst, ex-) are
            refused outright -- they should hold no host identity at all -- and
            any other JSON (stamp.json) gets those strings replaced in its text,
            after which every number is checked to be unchanged.
@@ -25,6 +25,7 @@ import concurrent.futures
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -32,15 +33,34 @@ import sys
 if len(sys.argv) != 4:
     sys.exit("usage: capture.py REC PUB REDACTOR")
 rec, pub, redactor = sys.argv[1:4]
-ARM = ("lat-", "kvm-", "db-burst")
+ARM = ("lat-", "kvm-", "db-burst", "ex-")   # ex-: run-bellrobust.sh's exchange sets, the same probe's output
 
 # A capture of nothing must fail, not "succeed" with an empty record: a skipped
-# or failed ladder would otherwise be packed and fetched as if it had run.
+# or failed ladder would otherwise be packed and fetched as if it had run. The check is
+# over the whole session directory: somewhere in it a stamp.json, and somewhere a probe's
+# output (lat-*.json, or ex-*.json from run-bellrobust.sh, which keeps no lat-*.json,
+# 2026-09-29) or an exchange-set line in run-bellrobust.sh's scenarios.log. The probe
+# writes no ex- file for a set it aborts (a non-zero exit), so a run in which every set
+# that ran was aborted has only those lines, and it must still be captured: it is a
+# result. A session in which nothing anywhere ran is refused.
+EXSET = re.compile(r"^\S+ rc=\d+ t0=\d+ t1=\d+$", re.M)
+
+
+def ran_sets():
+    for d, _s, fs in os.walk(rec):
+        if "scenarios.log" in fs:
+            with open(os.path.join(d, "scenarios.log"), encoding="utf-8", errors="replace") as f:
+                if EXSET.search(f.read()):
+                    return True
+    return False
+
+
 if not os.path.isdir(rec):
     sys.exit("no run directory %s" % rec)
 names = [n for _d, _s, fs in os.walk(rec) for n in fs]
-if not any(n.startswith("lat-") and n.endswith(".json") for n in names) or "stamp.json" not in names:
-    sys.exit("%s holds no lat-*.json and stamp.json: nothing ran" % rec)
+if "stamp.json" not in names or not (any(n.startswith(("lat-", "ex-")) and n.endswith(".json") for n in names)
+                                     or ran_sets()):
+    sys.exit("%s holds no stamp.json with lat-*.json, ex-*.json or an exchange set in scenarios.log: nothing ran" % rec)
 if os.path.isdir(pub) and os.listdir(pub):
     sys.exit("%s is not empty; refusing to mix captures" % pub)
 if not os.path.isfile(redactor):
