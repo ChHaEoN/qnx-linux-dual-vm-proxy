@@ -5,6 +5,14 @@
  * The notified variant's host side is here too (shm_kick_*): the monitor joins
  * an ivshmem server as a peer (ivshm_client.c), maps the memory the server hands
  * it, and listens for one kick client at a time on a UNIX socket.
+ *
+ * KICK "eventfd" (2026-09-29, the host's counterpart of the guest's "msix"): no
+ * socket; the monitor sleeps on its OWN ivshmem eventfd, which a client rings
+ * directly (latency_probe.py --proto shmbell), and on the server's connection,
+ * so a newcomer's eventfd is in the table before its first reply. A wake-up
+ * counts as one kick (an eventfd folds rings that arrive together into one
+ * read, as the guest's LPI does). The client rings peer 1, so the monitor must
+ * be the server's first peer, as QEMU is for a guest.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -105,6 +113,12 @@ struct shm_kick *shm_kick_open(const char *spec, size_t offset, const char *kick
 		k->region = NULL;
 		goto fail;
 	}
+	if (strcmp(kick, "eventfd") == 0) {
+		*slot = (uint8_t *)k->region + offset;
+		snprintf(what, what_len, "ivshmem server %s as peer %lld, %zu bytes @%zu, kick eventfd",
+		         spec, (long long)k->ivc.my_id, k->len, offset);
+		return k;
+	}
 	/* The kick socket: never take over a path that exists -- it may be a live
 	 * server's -- and never listen for more than one client. */
 	if (strlen(kick) >= sizeof(sa.sun_path) || access(kick, F_OK) == 0) {
@@ -144,6 +158,25 @@ int shm_kick_wait(struct shm_kick *k)
 	int kicked = 0;
 	ssize_t n;
 
+	if (k->lsock < 0) {                  /* KICK "eventfd" */
+		struct pollfd q[2] = { { k->ivc.my_efd, POLLIN, 0 }, { k->ivc.sock, POLLIN, 0 } };
+		uint64_t v;
+
+		if (poll(q, 2, -1) < 0) {
+			return errno == EINTR ? 0 : -1;
+		}
+		if (q[1].revents != 0 && ivshm_client_poll(&k->ivc) != 0) {
+			return -1;
+		}
+		if (q[0].revents == 0) {
+			return 0;
+		}
+		if (read(k->ivc.my_efd, &v, sizeof(v)) != (ssize_t)sizeof(v)) {
+			return (errno == EAGAIN || errno == EINTR) ? 0 : -1;
+		}
+		k->st.kick_bytes++;
+		return 1;
+	}
 	if (k->conn < 0) {
 		k->conn = accept(k->lsock, NULL, NULL);
 		if (k->conn < 0) {

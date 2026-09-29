@@ -9,6 +9,7 @@ distribution rather than a liveness yes/no.
          latency_probe.py --proto shm --shm FILE --shm-lib LIB [the same options]
          latency_probe.py --proto shmkick --shm FILE@OFF --kick SOCK --shm-lib LIB [...]
          latency_probe.py --proto shmdb --shm FILE@OFF --kick SOCK --ivshm SOCK --shm-lib LIB [...]
+         latency_probe.py --proto shmbell --shm FILE@OFF --ivshm SOCK --shm-lib LIB [...]
          latency_probe.py --proto kickecho --kick SOCK --shm-lib LIB [...]
          latency_probe.py --proto someip|someipu|csomeip|csomeipu|vsomeip|vsomeipu --host H
                           --port 30509 [...]    (SOME/IP, 2026-09-27: see SOMEIP below)
@@ -37,6 +38,14 @@ kickecho is the bare notification round trip: one byte out, the same byte back,
 no slot. Each arm's summary counts what woke the probe, and a reply that was in
 the slot with no notification is its own failure ("notification lost", exit 5),
 never a stall.
+
+THE DOORBELL INTO THE GUEST (2026-09-29): --proto shmbell is shmdb without the
+kick stream. The probe wakes the far end by writing the guest's own ivshmem
+eventfd (QEMU is peer 1; QEMU or KVM turns the write into the device's MSI-X
+message), so no console is on the inbound path; the reply comes by doorbell as
+for shmdb, with the same handshake. It needs a guest whose image maps that
+MSI-X vector to an LPI (ifs-bell.bin: startup-qemu-virt-its, qnx-its-probe
+msixcfg) and a monitor waiting on it ("monitor shmkick ivshmem@OFF msix").
 
 WHAT IT MEASURES. One TCP connection is opened and held; each sample writes a
 valid 64-byte frame (ipc-test/common/frame.h layout) and waits for the monitor's
@@ -332,7 +341,8 @@ class ShmChannel:
         return self.lib.shmchan_roundtrip(self.base, frame, self.rsp, int(timeout_s * 1e9))
 
 
-NOTIFIED = ("shmkick", "shmdb", "kickecho")
+NOTIFIED = ("shmkick", "shmdb", "kickecho", "shmbell")
+GUEST_PEER = 1      # QEMU's id at the ivshmem server: launch-qnx-kvm-bridged.sh starts it first
 
 # SOME/IP (OD12's SOME/IP arm, 2026-09-27): the guest's qnx-someip-monitor serves the monitor's
 # judgement as method 0x0001 of service 0x5AFE, interface version 1, on TCP and UDP 30509.
@@ -447,18 +457,31 @@ class KickChannel:
         lib.shmchan_slot_answered.restype = c.c_int
         lib.shmchan_slot_answered.argtypes = [c.c_void_p]
         self._c, self.lib, self.proto = c, lib, proto
-        self.via = SHM_VIA_DOORBELL if proto == "shmdb" else SHM_VIA_KICK
+        self.via = SHM_VIA_DOORBELL if proto in ("shmdb", "shmbell") else SHM_VIA_KICK
         self.peer, self.efd, self.ivshm, self.slot, self.what = 0, -1, None, None, ""
+        self.ring_fd = -1
+        self.sock = None
         self.rsp = c.create_string_buffer(FRAME_TOTAL)
         # The ivshmem server FIRST, then the kick socket: the server tells the
         # far end about this peer before it hands this peer its eventfd, so by
         # the time the first kick lands the far end can already ring it.
-        if proto == "shmdb":
+        if proto in ("shmdb", "shmbell"):
             self.ivshm = lib.shmchan_ivshm_connect(ivshm_path.encode())
             if not self.ivshm:
                 raise OSError("could not join the ivshmem server %s -- see stderr" % ivshm_path)
             self.peer = lib.shmchan_ivshm_id(self.ivshm)
             self.efd = lib.shmchan_ivshm_efd(self.ivshm)
+        if proto == "shmbell":
+            lib.shmchan_bell_roundtrip.restype = c.c_int
+            lib.shmchan_bell_roundtrip.argtypes = [c.c_void_p, c.c_char_p, c.POINTER(c.c_char), c.c_uint64,
+                                                   c.c_int, c.c_int, c.c_uint32]
+            lib.shmchan_ivshm_peer_efd.restype = c.c_int
+            lib.shmchan_ivshm_peer_efd.argtypes = [c.c_void_p, c.c_longlong]
+            self.ring_fd = lib.shmchan_ivshm_peer_efd(self.ivshm, GUEST_PEER)
+            if self.ring_fd < 0:
+                self.close()
+                raise OSError("peer %d (the guest's QEMU) is not at the ivshmem server %s"
+                              % (GUEST_PEER, ivshm_path))
         if proto != "kickecho":
             path, _, off = slot_spec.rpartition("@")
             if not path:
@@ -476,10 +499,14 @@ class KickChannel:
                 raise OSError("slot @%d does not fit %s (%d bytes)" % (off, path, size.value))
             self.slot = base + off
             self.what = "%s, slot @%d" % (what.value.decode(), off)
-        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self.sock.connect(kick_path)
-        self.kick_fd = self.sock.fileno()
-        self.wait_fd = self.efd if proto == "shmdb" else self.kick_fd
+        if proto == "shmbell":
+            # No kick stream: the inbound notification is the guest's eventfd.
+            self.kick_fd = -1
+        else:
+            self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            self.sock.connect(kick_path)
+            self.kick_fd = self.sock.fileno()
+        self.wait_fd = self.efd if proto in ("shmdb", "shmbell") else self.kick_fd
         self.flags_start = lib.shmchan_fd_flags(self.wait_fd)
 
     def ready(self):
@@ -489,11 +516,14 @@ class KickChannel:
         ns = int(timeout_s * 1e9)
         if self.proto == "kickecho":
             return self.lib.shmchan_echo_roundtrip(self.kick_fd, ns)
+        if self.proto == "shmbell":
+            return self.lib.shmchan_bell_roundtrip(self.slot, frame, self.rsp, ns, self.ring_fd, self.efd,
+                                                   self.peer)
         return self.lib.shmchan_kick_roundtrip(self.slot, frame, self.rsp, ns, self.kick_fd, self.efd,
                                                self.via if via is None else via, self.peer, count)
 
     def handshake(self, within_s=5.0):
-        """shmdb only: exchanges until one doorbell has arrived, untimed. Returns
+        """shmdb and shmbell: exchanges until one doorbell has arrived, untimed. Returns
         the number of attempts; raises OSError if none arrives in time.
 
         A LOST attempt (reply in the slot, doorbell dropped: QEMU had not yet
@@ -501,7 +531,7 @@ class KickChannel:
         waited out before the next attempt, so a slot never has two requests in
         it; and whatever that late reply's doorbell leaves on the eventfd is
         discarded, uncounted, before the arm's first timed exchange."""
-        if self.proto != "shmdb":
+        if self.proto not in ("shmdb", "shmbell"):
             return 0
         t0 = time.monotonic()
         attempts = 0
@@ -540,7 +570,9 @@ class KickChannel:
     def close(self):
         """Leave everything this channel joined: the kick stream and the ivshmem
         server (which then tells QEMU or the monitor that this peer is gone)."""
-        self.sock.close()
+        if self.sock is not None:
+            self.sock.close()
+            self.sock = None
         if self.ivshm:
             self.lib.shmchan_ivshm_close(self.ivshm)
             self.ivshm = None
@@ -567,7 +599,7 @@ def main():
                          "vsomeip (someip_vprobe, $SOMEIP_VPROBE), csomeip and csomeipu with the same "
                          "client and no vsomeip")
     ap.add_argument("--kick", default="", help="notified variants: the kick socket")
-    ap.add_argument("--ivshm", default="", help="with --proto shmdb: the ivshmem server socket")
+    ap.add_argument("--ivshm", default="", help="with --proto shmdb or shmbell: the ivshmem server socket")
     ap.add_argument("--db-burst", type=int, default=0,
                     help="with --proto shmdb, instead of sampling: one exchange whose reply is N "
                          "doorbells, and a count of how many arrived")
@@ -597,6 +629,9 @@ def main():
     if a.proto == "shm":
         if not (a.shm and a.shm_lib):
             ap.error("--proto shm needs --shm and --shm-lib")
+    elif a.proto == "shmbell":
+        if not (a.shm and a.shm_lib and a.ivshm) or a.kick:
+            ap.error("--proto shmbell needs --shm, --shm-lib and --ivshm, and no --kick")
     elif a.proto in NOTIFIED:
         if not (a.kick and a.shm_lib) or (a.proto != "kickecho" and not a.shm):
             ap.error("--proto %s needs --kick, --shm-lib and (but for kickecho) --shm" % a.proto)

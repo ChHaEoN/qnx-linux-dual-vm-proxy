@@ -34,11 +34,17 @@ LIVE := qnx-safety-monitor-live
 # own name, for the same reason; ifs-stamp.build stages it.
 STAMP := qnx-safety-monitor-stamp
 
-.PHONY: all svc live stamp clean
+# `make bell` builds the monitor for the doorbell into the guest (2026-09-29)
+# under its own name, for the same reason; ifs-bell.build stages it. It is the
+# first build with shm_map_qnx.c's "msix" kick channel.
+BELL := qnx-safety-monitor-bell
+
+.PHONY: all svc live stamp bell clean
 all: $(BIN)
 svc: $(SVC)
 live: $(LIVE)
 stamp: $(STAMP)
+bell: $(BELL)
 
 $(BIN): $(SRCS)
 	$(CC) $(TARGET) $(CFLAGS) -o $@ monitor.c ../common/shm_map_qnx.c $(LDFLAGS)
@@ -52,5 +58,8 @@ $(LIVE): $(SRCS)
 $(STAMP): $(SRCS)
 	$(CC) $(TARGET) $(CFLAGS) -o $@ monitor.c ../common/shm_map_qnx.c $(LDFLAGS)
 
+$(BELL): $(SRCS)
+	$(CC) $(TARGET) $(CFLAGS) -o $@ monitor.c ../common/shm_map_qnx.c $(LDFLAGS)
+
 clean:
-	rm -f $(BIN) $(SVC) $(LIVE) $(STAMP)
+	rm -f $(BIN) $(SVC) $(LIVE) $(STAMP) $(BELL)

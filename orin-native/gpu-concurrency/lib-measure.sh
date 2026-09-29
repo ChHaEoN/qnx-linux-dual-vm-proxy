@@ -631,7 +631,7 @@ print('"run": 1, "want": %d, "got": %s, "d_mmio_exit_kernel": %s, "d_mmio_exit_u
 sys.exit(0 if ok else 1)
 PY
 }
-m_probe() {         # $1 out-dir  $2 tag  $3 host  $4 port  [$5 prefix command]  [$6 tcp|udp|shm|shmkick|shmdb|kickecho]  [$7 ivshmem server]
+m_probe() {         # $1 out-dir  $2 tag  $3 host  $4 port  [$5 prefix command]  [$6 tcp|udp|shm|shmkick|shmdb|kickecho|shmbell]  [$7 ivshmem server]
 	local out="$1" tag="$2" host="$3" port="$4" pre="${5:-}" proto="${6:-tcp}" rc t0 t1 ms stall=() dest
 	# shm (OD12, 2026-09-22): "host" is the shared-memory file, and the port is unused.
 	# The notified variants: "host" is the slot (FILE@OFFSET, unused by kickecho),
@@ -643,6 +643,13 @@ m_probe() {         # $1 out-dir  $2 tag  $3 host  $4 port  [$5 prefix command] 
 			[ "$proto" != kickecho ] && dest+=(--shm "$host")
 			[ "$proto" != shm ] && dest+=(--kick "$port")
 			[ "$proto" = shmdb ] && dest+=(--ivshm "${7:?m_probe $tag: shmdb needs the ivshmem server}")
+			;;
+		shmbell)
+			# 2026-09-29, the doorbell into the guest: no kick stream, so the
+			# port is unused; $7 is the ivshmem server, as for shmdb.
+			[ -n "${SHMCHAN_LIB:-}" ] || die "m_probe $tag: SHMCHAN_LIB unset -- call m_build_shmchan first"
+			dest=(--shm-lib "$SHMCHAN_LIB" --shm "$host"
+			      --ivshm "${7:?m_probe $tag: shmbell needs the ivshmem server}")
 			;;
 		*) dest=(--host "$host" --port "$port") ;;
 	esac

@@ -51,7 +51,18 @@
  * would give the two views mismatched attributes, for which Arm does not
  * promise coherence. BAR0 is registers, mapped uncached.
  *
- * Runs as root (physical mappings). Not portable beyond QEMU virt.
+ * THE DOORBELL INTO THE GUEST (2026-09-29). With KICK "msix" there is no
+ * console: shm_kick_open() attaches to the LPI that ivshmem's MSI-X vector 0
+ * was mapped to by "qnx-its-probe msixcfg" (ipc-test/qnx-its-probe, read from
+ * its marker /dev/shmem/its-msix; the image must boot startup-qemu-virt-its),
+ * and shm_kick_wait() sleeps in InterruptWait until the host writes the
+ * device's vector-0 eventfd. A wake-up counts as one kick (kick_bytes counts
+ * wake-ups there); the LPI is unmasked straight away, so a ring that arrives
+ * while the request is being answered is held pending by the GIC and wakes the
+ * next wait. Replies go out as before. Only one process may own the LPI.
+ *
+ * Runs as root (physical mappings, interrupt events). Not portable beyond
+ * QEMU virt.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -62,6 +73,7 @@
 #include <termios.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include <sys/neutrino.h>
 
 #include "shm_chan.h"
 #include "shm_map.h"
@@ -71,6 +83,7 @@
 #define MMIO32_BASE     0x10000000ull     /* PCI == CPU address in this window */
 #define MMIO32_SIZE     0x2eff0000ull
 #define MARKER          "/ivshmem-config" /* shm_open name: /dev/shmem/ivshmem-config */
+#define MSIX_MARKER     "/its-msix"       /* written by qnx-its-probe msixcfg */
 
 #define IVSHMEM_ID      0x11101af4u       /* device << 16 | vendor */
 #define CFG_ID          0x00u
@@ -333,10 +346,38 @@ void *shm_map(const char *spec, size_t *len, char *what, size_t what_len)
 
 struct shm_kick {
 	volatile uint8_t *regs;        /* BAR0 */
-	int tty;
+	int tty;                       /* -1 with KICK "msix" */
+	int lpi, iid;                  /* KICK "msix": the LPI and InterruptAttachEvent's id */
 	uint32_t my_id;
 	struct shm_kick_stats st;
 };
+
+/* The LPI "qnx-its-probe msixcfg" mapped ivshmem's MSI-X vector 0 to. */
+static int read_msix_marker(unsigned *lpi)
+{
+	char buf[160];
+	unsigned dev, devid;
+	unsigned long long bar1;
+	ssize_t n;
+	int fd = shm_open(MSIX_MARKER, O_RDONLY, 0);
+
+	if (fd < 0) {
+		fprintf(stderr, "shm-kick: no /dev/shmem%s -- run \"qnx-its-probe msixcfg\" first "
+		        "(and boot startup-qemu-virt-its)\n", MSIX_MARKER);
+		return -1;
+	}
+	n = read(fd, buf, sizeof(buf) - 1);
+	close(fd);
+	if (n <= 0) {
+		return -1;
+	}
+	buf[n] = '\0';
+	if (sscanf(buf, "dev=%u devid=%u bar1=%llx lpi=%u", &dev, &devid, &bar1, lpi) != 4) {
+		fprintf(stderr, "shm-kick: /dev/shmem%s is malformed: %s\n", MSIX_MARKER, buf);
+		return -1;
+	}
+	return 0;
+}
 
 struct shm_kick *shm_kick_open(const char *spec, size_t offset, const char *kick,
                                void **slot, char *what, size_t what_len)
@@ -376,6 +417,27 @@ struct shm_kick *shm_kick_open(const char *spec, size_t offset, const char *kick
 		free(k);
 		return NULL;
 	}
+	if (strcmp(kick, "msix") == 0) {
+		struct sigevent ev;
+		unsigned lpi;
+
+		if (read_msix_marker(&lpi) != 0) {
+			free(k);
+			return NULL;
+		}
+		SIGEV_INTR_INIT(&ev);
+		k->iid = InterruptAttachEvent((int)lpi, &ev, _NTO_INTR_FLAGS_TRK_MSK);
+		if (k->iid == -1) {
+			fprintf(stderr, "shm-kick: InterruptAttachEvent(LPI %u): %s\n", lpi, strerror(errno));
+			free(k);
+			return NULL;
+		}
+		k->lpi = (int)lpi;
+		k->tty = -1;
+		*slot = base + offset;
+		snprintf(what, what_len, "%s; slot @%zu; peer %u; kick msix (LPI %u)", cfgwhat, offset, k->my_id, lpi);
+		return k;
+	}
 	k->tty = open(kick, O_RDWR | O_NOCTTY);
 	if (k->tty < 0) {
 		fprintf(stderr, "shm-kick: open(%s): %s\n", kick, strerror(errno));
@@ -414,7 +476,18 @@ int shm_kick_wait(struct shm_kick *k)
 {
 	unsigned char buf[64];
 	int kicked = 0;
-	ssize_t n = read(k->tty, buf, sizeof(buf));
+	ssize_t n;
+
+	if (k->tty < 0) {
+		/* The LPI: masked by the kernel when it fired, unmasked at once. */
+		if (InterruptWait(0, NULL) == -1) {
+			return errno == EINTR ? 0 : -1;
+		}
+		InterruptUnmask(k->lpi, k->iid);
+		k->st.kick_bytes++;
+		return 1;
+	}
+	n = read(k->tty, buf, sizeof(buf));
 
 	if (n < 0) {
 		return errno == EINTR ? 0 : -1;
@@ -442,7 +515,7 @@ int shm_kick_notify(struct shm_kick *k, unsigned via, unsigned peer, unsigned co
 
 	switch (via) {
 	case SHM_VIA_KICK:
-		if (write(k->tty, &b, 1) != 1) {
+		if (k->tty < 0 || write(k->tty, &b, 1) != 1) {
 			k->st.notify_fail++;
 			return -1;
 		}

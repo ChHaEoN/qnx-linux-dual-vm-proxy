@@ -44,6 +44,7 @@ ipc-test/qnx-safety-monitor/qnx-safety-monitor-svc
 ipc-test/qnx-safety-monitor/qnx-safety-monitor-live
 # Guest-side timestamps' guest monitor (OD15), for the same reasons.
 ipc-test/qnx-safety-monitor/qnx-safety-monitor-stamp
+ipc-test/qnx-safety-monitor/qnx-safety-monitor-bell
 
 # Secrets / credentials / cloud
 .env

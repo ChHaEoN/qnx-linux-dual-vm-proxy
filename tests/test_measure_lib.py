@@ -3458,6 +3458,97 @@ def test_notified_arm_ends_every_exchange_on_exactly_one_notification(native_ser
     assert "shm-kick done:" in done and " jumps=0 " in done and " stray=0 " in done and " ring_misses=0 " in done, done
 
 
+def _bell_rig(native_servers):
+    """2026-09-29: an ivshmem server and the native monitor in shmkick mode with KICK "eventfd",
+    joined FIRST so it is peer 1 -- the id --proto shmbell rings, as QEMU's is for a guest."""
+    import struct as _st
+    import time as _t
+    d = _short_dir()
+    srv, path, shm = _start_ivshmem_server(d)
+    mon = subprocess.Popen([str(native_servers / "monitor"), "shmkick", path + "@4096", "eventfd"],
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    for _ in range(100):
+        with open(shm, "rb") as f:
+            f.seek(4096)
+            if _st.unpack("<I", f.read(4))[0] == 0x314B4853:     # SHM_CHAN_MAGIC_KICK
+                break
+        _t.sleep(0.05)
+    return srv, path, shm, mon
+
+
+def _bell_probe(native_servers, shm, ivshm, tmp_path, *extra):
+    out = tmp_path / "lat-shmbell.json"
+    args = [_PY, PROBE, "--proto", "shmbell", "--shm", shm + "@4096", "--ivshm", ivshm,
+            "--shm-lib", str(native_servers / "libshmchan.so"), "--n", "50", "--warmup", "5",
+            "--interval-ms", "0", "--tag", "B_r1", "--out", str(out)]
+    return subprocess.run(args + list(extra), capture_output=True, text=True, timeout=120), out
+
+
+def test_bell_arm_wakes_the_far_end_by_its_own_eventfd(native_servers, tmp_path):
+    """--proto shmbell: no kick stream at all. The probe writes peer 1's eventfd, the monitor wakes
+    on it, judges the slot and rings the probe back -- one doorbell per exchange, as for shmdb."""
+    if not LINUX_IPC:
+        pytest.skip("needs Linux")
+    srv, path, shm, mon = _bell_rig(native_servers)
+    try:
+        r, out = _bell_probe(native_servers, shm, path, tmp_path)
+    finally:
+        (mout, merr), _ = _stop(mon, srv)
+    assert r.returncode == 0, r.stdout + r.stderr + merr.decode()
+    summ = json.loads(out.read_text())["summary"]
+    assert summ["proto"] == "shmbell" and summ["n"] == 50 and summ["notify"] == _clean_notify(55), summ
+    assert summ["ivshm_peer"] >= 2 and summ["handshake_attempts"] >= 1
+    done = mout.decode()
+    assert "kick eventfd" in done and "shm-kick done:" in done, done
+    assert " rejected=0 " in done and " ring_misses=0 " in done and " notify_fail=0 " in done, done
+
+
+def test_bell_arm_with_no_peer_1_is_a_refused_connect(native_servers, tmp_path):
+    """No monitor joined, so no peer 1: the probe says so and exits 2, as for any server that is not
+    there -- never a stall."""
+    if not LINUX_IPC:
+        pytest.skip("needs Linux")
+    d = _short_dir()
+    srv, path, shm = _start_ivshmem_server(d)
+    try:
+        r, _out = _bell_probe(native_servers, shm, path, tmp_path)
+    finally:
+        _stop(srv)
+    assert r.returncode == 2 and "peer 1" in r.stdout, r.stdout + r.stderr
+
+
+@pytest.mark.parametrize("extra,why", [((), "needs --shm, --shm-lib and --ivshm"),
+                                       (("--ivshm", "s", "--kick", "k"), "and no --kick")])
+def test_bell_arm_refuses_a_wrong_command_line(tmp_path, extra, why):
+    r = subprocess.run([_PY, PROBE, "--proto", "shmbell", "--shm", "f@4096", "--shm-lib", "x.so"] + list(extra),
+                       capture_output=True, text=True, timeout=60)
+    assert r.returncode == 2 and why in r.stderr, r.stderr
+
+
+def test_m_probe_hands_a_bell_arm_its_slot_and_server_and_no_kick(tmp_path):
+    fake = tmp_path / "argv.py"
+    fake.write_bytes(b"import sys, json\na = sys.argv\n"
+                     b"open(a[a.index('--out') + 1], 'w').write(json.dumps({'argv': a[1:]}))\n")
+    out = tmp_path / "out"
+    out.mkdir()
+    r = _run(tmp_path, 'N=10; WARMUP=1; INTERVAL_MS=0; CORE_PROBE=0; SAMPLE_WINDOW=0; PROBE="%s"; '
+             'SHMCHAN_LIB=x.so; taskset() { shift 2; "$@"; }; '
+             'm_probe "%s" B_r1 slot@8192 - "" shmbell ivsock' % (_posix(fake), _posix(out)))
+    assert r.returncode == 0, r.stderr
+    a = json.loads((out / "lat-B_r1.json").read_text())["argv"]
+    assert a[a.index("--proto") + 1] == "shmbell" and a[a.index("--shm") + 1] == "slot@8192"
+    assert a[a.index("--ivshm") + 1] == "ivsock" and a[a.index("--shm-lib") + 1] == "x.so"
+    assert "--kick" not in a and "--host" not in a and "--port" not in a
+
+
+def test_m_probe_refuses_shmbell_without_its_server(tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    r = _run(tmp_path, 'N=10; WARMUP=1; INTERVAL_MS=0; CORE_PROBE=0; SAMPLE_WINDOW=0; PROBE=/x; SHMCHAN_LIB=x.so; '
+             'm_probe "%s" B_r1 slot@8192 - "" shmbell; echo SHOULD NOT REACH' % _posix(out))
+    assert r.returncode != 0 and "shmbell needs the ivshmem server" in r.stderr, r.stderr
+
+
 def test_db_burst_delivers_every_doorbell(native_servers, tmp_path):
     if not LINUX_IPC:
         pytest.skip("needs Linux")

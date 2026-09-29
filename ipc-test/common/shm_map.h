@@ -36,11 +36,16 @@ int shm_configure(const char *spec, char *what, size_t what_len);
  *   guest (shm_map_qnx.c): SPEC is "ivshmem" -- BAR2 for the slot, BAR0 for the
  *         Doorbell register, both from the shm_configure() marker; KICK is the
  *         virtio console's tty, put in raw mode.
+ * KICK may instead be "msix" (guest) or "eventfd" (host), 2026-09-29: no kick
+ * channel; the server sleeps until its own ivshmem vector is rung -- in the
+ * guest the MSI-X LPI qnx-its-probe msixcfg set up, on the host the monitor's
+ * own eventfd. Replies are unchanged.
  * OFFSET places the slot in the region (a multiple of SHM_CHAN_LINE). */
 struct shm_kick;
 
 struct shm_kick_stats {
-	unsigned long long kick_bytes;    /* SHM_KICK_BYTE received */
+	unsigned long long kick_bytes;    /* SHM_KICK_BYTE received; with KICK "msix" (guest) or
+	                                     "eventfd" (host), wake-ups (2026-09-29) */
 	unsigned long long echoes;        /* SHM_ECHO_BYTE received and answered */
 	unsigned long long stray_bytes;   /* anything else received */
 	unsigned long long notify_kicks;  /* SHM_KICK_BYTE sent back */

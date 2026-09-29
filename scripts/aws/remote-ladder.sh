@@ -49,7 +49,8 @@
 #
 #   harness       LADDER_ENV="HARNESS=<name> IMAGE=<image>", K optional. Runs one harness from a
 #                 fixed list -- run-someip.sh, run-someip0.sh, run-someip1.sh, run-trace.sh,
-#                 run-trace2.sh, run-haltpoll.sh -- each of which boots its own guests, on an image
+#                 run-trace2.sh, run-haltpoll.sh, run-bell.sh (2026-09-29, ifs-bell.bin) -- each of
+#                 which boots its own guests, on an image
 #                 this session uploaded and verified, into $REC/<name without run- and .sh>. The
 #                 SOME/IP harnesses first build vsomeip here, once per session.
 #
@@ -325,7 +326,7 @@ harness)
 		esac
 	done
 	case "$H" in
-		run-someip.sh|run-someip0.sh|run-someip1.sh|run-trace.sh|run-trace2.sh|run-haltpoll.sh) ;;
+		run-someip.sh|run-someip0.sh|run-someip1.sh|run-trace.sh|run-trace2.sh|run-haltpoll.sh|run-bell.sh) ;;
 		*) die "HARNESS='$H' is not one the harness phase runs" ;;
 	esac
 	[ -r "$R/$H" ] || die "the repo tarball lacks $H"
@@ -336,7 +337,7 @@ harness)
 	case "$H" in run-someip*) build_vsomeip "$REC/$stem" ;; esac
 	cd "$R"
 	{ date -u +%FT%TZ; cat /proc/loadavg; cat /proc/interrupts; } > "$REC/$stem/host-before.txt"
-	env IMG_S="$img" IFS_BIN="$img" DISK="$W/img/disk-qemu" VPROBE="$W/vsomeip/3.4.10/bin/someip_vprobe" \
+	env IMG_S="$img" IMG_B="$img" IFS_BIN="$img" DISK="$W/img/disk-qemu" VPROBE="$W/vsomeip/3.4.10/bin/someip_vprobe" \
 		OUT="$REC/$stem/raw" CSTATE=shallow ${K:+K="$K"} bash "$R/$H" > "$REC/$stem/run.log" 2>&1 \
 		|| { tail -30 "$REC/$stem/run.log"; die "$H failed"; }
 	{ date -u +%FT%TZ; cat /proc/loadavg; cat /proc/interrupts; } > "$REC/$stem/host-after.txt"

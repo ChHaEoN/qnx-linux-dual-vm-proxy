@@ -296,6 +296,42 @@ int shmchan_kick_roundtrip(void *slot, const uint8_t *req, uint8_t *rsp, uint64_
 	return SHMCHAN_OK;
 }
 
+/* THE DOORBELL INTO THE GUEST (2026-09-29). shmchan_kick_roundtrip with
+ * SHM_VIA_DOORBELL, except for how the far end is woken: a write of 1 to its
+ * own ivshmem eventfd (`ring_fd`; the guest's is QEMU's vector 0, which QEMU
+ * or KVM turns into the device's MSI-X message) instead of a byte on a kick
+ * stream. There is no kick stream, so only `wait_fd`, this probe's eventfd, is
+ * watched. The frame is published with a store-release before the write, as
+ * the kick is sent after it there. */
+int shmchan_bell_roundtrip(void *slot, const uint8_t *req, uint8_t *rsp, uint64_t timeout_ns,
+                           int ring_fd, int wait_fd, uint32_t peer)
+{
+	uint64_t const n = __atomic_load_n(shm_chan_u64(slot, SHM_CHAN_OFF_REQ_SEQ), __ATOMIC_RELAXED) + 1u;
+	int r;
+
+	if (!shm_chan_ready_as(slot, SHM_CHAN_MAGIC_KICK)) {
+		return SHMCHAN_NOTREADY;
+	}
+	g_counts.exchanges++;
+	shm_chan_put_frame(slot, SHM_CHAN_OFF_REQ, req);
+	shm_chan_store32(slot, SHM_CHAN_OFF_REPLY_VIA, SHM_VIA_DOORBELL);
+	shm_chan_store32(slot, SHM_CHAN_OFF_CLIENT_PEER, peer);
+	shm_chan_store32(slot, SHM_CHAN_OFF_RING_COUNT, 0);
+	shm_chan_store(slot, SHM_CHAN_OFF_REQ_SEQ, n);
+	if (ivshm_client_signal(ring_fd) != 0) {
+		return SHMCHAN_BROKEN;
+	}
+	r = wait_notified(wait_fd, 1, SHM_KICK_BYTE, slot, n, now_ns() + timeout_ns, -1);
+	if (r == SHMCHAN_TIMEOUT && shm_chan_load(slot, SHM_CHAN_OFF_RSP_SEQ) == n) {
+		return SHMCHAN_LOST;
+	}
+	if (r != SHMCHAN_OK) {
+		return r;
+	}
+	shm_chan_get_frame(slot, SHM_CHAN_OFF_RSP, rsp);
+	return SHMCHAN_OK;
+}
+
 /* The bare notification round trip: one SHM_ECHO_BYTE out, the same byte back,
  * no slot. */
 int shmchan_echo_roundtrip(int kick_fd, uint64_t timeout_ns)
@@ -359,6 +395,14 @@ long long shmchan_ivshm_id(void *h)
 int shmchan_ivshm_efd(void *h)
 {
 	return ((struct ivshm_client *)h)->my_efd;
+}
+
+/* Another peer's eventfd -- QEMU, the guest's device, is peer 1 -- for
+ * shmchan_bell_roundtrip's ring_fd; -1 if the server has not announced it
+ * within a second. */
+int shmchan_ivshm_peer_efd(void *h, long long id)
+{
+	return ivshm_client_wait_peer((struct ivshm_client *)h, (int64_t)id, 1000);
 }
 
 /* Leave the server: it tells every other peer (QEMU, a monitor) this id is gone. */
