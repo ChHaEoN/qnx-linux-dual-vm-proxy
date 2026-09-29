@@ -116,8 +116,8 @@ bin, on this host's own cores and HZ.
 ### A harness session instead (2026-09-27)
 
 This runs several harnesses that boot their own guests, each on its own image, in one session:
-`run-someip.sh`, `run-someip0.sh`, `run-someip1.sh`, `run-trace.sh`, `run-trace2.sh` and
-`run-haltpoll.sh`.
+`run-someip.sh`, `run-someip0.sh`, `run-someip1.sh`, `run-trace.sh`, `run-trace2.sh`,
+`run-haltpoll.sh` and (2026-09-29, on `ifs-bell.bin`) `run-bell.sh`.
 - `METAL_IFS` is the first image. `METAL_IFS_EXTRA` holds more, as space-separated paths.
   `upload` sends them all, and `setup` checks each against its sha256.
 - One call per harness:
