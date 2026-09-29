@@ -24,7 +24,10 @@ BOOT = {"S1": ("ifs-bell.bin", 1), "S2": ("ifs-bell.bin", 1), "S3": ("ifs-bell.b
 PRE = ("S1", "S2", "S3", "S5", "S7", "S8")
 RINGS = {"S1": 500, "S2": 2000, "S4": 4000, "S7": 500, "S8": 2000}
 MSIXCFG = re.compile(r"EventID 0 -> LPI 8193")      # msixcfg's success line, by a short token
-ERR = re.compile(r"(shm-kick: |its: (?!msixcfg: )|monitor: .*(failed|error))", re.I)   # msixcfg: is its success
+# its_probe.c prints its information on stdout under these prefixes and every error on stderr
+# under others ("its: msixcfg maps ..." is an error, "its: msixcfg: ..." the success line)
+ERR = re.compile(r"(shm-kick: |its: (?!BASER|CBASER |CTLR |CWRITER |GITS 0x|msixcfg: |msixwait|selftest)"
+                 r"|monitor: .*(failed|error))")
 DELIVERY_PER_RING, OVERLAP = 2.0, 0.8
 
 

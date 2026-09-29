@@ -321,6 +321,20 @@ def test_a_wedge_that_also_stops_the_evidence_is_a_failure_not_void(tmp_path):
     assert "S7 r1 FAIL (the closing check)" in s and "M3" not in s.split("S7 r1 ")[1].splitlines()[0], s
 
 
+def test_console_errors_are_listed_without_its_probes_information(tmp_path):
+    info = ("its: GITS 0x8080000, lock 0x1\nits: CTLR 0x0 IIDR 0x1 TYPER 0x1 (Devbits 8)\n"
+            "its: BASER0 0x1 (type 1)\nits: CBASER 0x1 -> queue\nits: CWRITER 0x0 CREADR 0x0, lock word 0\n")
+    def noisy(run, lab):
+        run.boot(lab, "S5", console=info + MSIX0 + "its: msixcfg maps 1..2 vectors, not 3\n" + BK + BB)
+        run.ex(lab + "-pre", 100)
+        run.ex(lab + "-vlm", 100)
+        run.ex(lab + "-check", 100)
+    clean_run(tmp_path / "o", {("S5", 1): noisy})
+    s = _report(tmp_path / "o")
+    assert "(unscored): 1\n" in s and "msixcfg maps" in s, s
+    assert _verdicts(s)["S5"] == "HELD", s
+
+
 def test_the_harness_parses_and_states_its_rule_and_prediction_before_any_code():
     if BASH is not None:
         r = subprocess.run([BASH, "-n", HARNESS], capture_output=True, text=True, timeout=30)
