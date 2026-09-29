@@ -75,40 +75,46 @@ static int peer_index(const struct ivshm_client *c, int64_t id)
 }
 
 /* A message after setup: (own id, fd) = own vector; (other id, fd) = that peer's
- * vector; (other id, no fd) = that peer left. */
+ * next vector, in vector order; (other id, no fd) = that peer left. */
 static int handle(struct ivshm_client *c, int64_t val, int fd)
 {
 	int i;
 
 	if (val == c->my_id) {
-		if (fd < 0 || c->my_efd >= 0) {
-			if (fd >= 0) {
-				close(fd);
-			}
-			return -1;             /* one vector only; a second is a protocol error here */
+		if (fd < 0) {
+			return -1;
 		}
-		c->my_efd = fd;
+		if (c->my_nvec++ == 0) {
+			c->my_efd = fd;        /* this peer waits on its vector 0 only */
+		} else {
+			close(fd);
+		}
 		return 0;
 	}
 	i = peer_index(c, val);
 	if (fd < 0) {                  /* disconnect */
 		if (i >= 0) {
-			close(c->peers[i].efd);
+			for (int v = 0; v < c->peers[i].nvec; v++) {
+				close(c->peers[i].efd[v]);
+			}
 			c->peers[i] = c->peers[--c->npeers];
 		}
 		return 0;
 	}
-	if (i >= 0) {                  /* a second vector for a known peer: keep the first */
-		close(fd);
+	if (i < 0) {
+		if (c->npeers >= IVSHM_PEERS_MAX) {
+			close(fd);
+			return -1;
+		}
+		i = c->npeers++;
+		c->peers[i].id = val;
+		c->peers[i].nvec = 0;
+	}
+	if (c->peers[i].nvec >= IVSHM_VECTORS_MAX) {
+		close(fd);                    /* a vector past the table: ignored, as before */
 		return 0;
 	}
-	if (c->npeers >= IVSHM_PEERS_MAX) {
-		close(fd);
-		return -1;
-	}
-	c->peers[c->npeers].id = val;
-	c->peers[c->npeers].efd = fd;
-	c->npeers++;
+	c->peers[i].efd[c->peers[i].nvec++] = fd;
 	return 0;
 }
 
@@ -196,14 +202,24 @@ int ivshm_client_poll(struct ivshm_client *c)
 	}
 }
 
-int ivshm_client_lookup(const struct ivshm_client *c, int64_t id)
+int ivshm_client_lookup_vec(const struct ivshm_client *c, int64_t id, int vec)
 {
 	int i = peer_index(c, id);
 
-	return i < 0 ? -1 : c->peers[i].efd;
+	return (i < 0 || vec < 0 || vec >= c->peers[i].nvec) ? -1 : c->peers[i].efd[vec];
+}
+
+int ivshm_client_lookup(const struct ivshm_client *c, int64_t id)
+{
+	return ivshm_client_lookup_vec(c, id, 0);
 }
 
 int ivshm_client_wait_peer(struct ivshm_client *c, int64_t id, int timeout_ms)
+{
+	return ivshm_client_wait_peer_vec(c, id, 0, timeout_ms);
+}
+
+int ivshm_client_wait_peer_vec(struct ivshm_client *c, int64_t id, int vec, int timeout_ms)
 {
 	struct pollfd p = { c->sock, POLLIN, 0 };
 	int efd;
@@ -212,7 +228,7 @@ int ivshm_client_wait_peer(struct ivshm_client *c, int64_t id, int timeout_ms)
 		if (ivshm_client_poll(c) != 0) {
 			return -1;
 		}
-		efd = ivshm_client_lookup(c, id);
+		efd = ivshm_client_lookup_vec(c, id, vec);
 		if (efd >= 0) {
 			return efd;
 		}
@@ -232,7 +248,9 @@ int ivshm_client_signal(int efd)
 void ivshm_client_close(struct ivshm_client *c)
 {
 	for (int i = 0; i < c->npeers; i++) {
-		close(c->peers[i].efd);
+		for (int v = 0; v < c->peers[i].nvec; v++) {
+			close(c->peers[i].efd[v]);
+		}
 	}
 	c->npeers = 0;
 	if (c->my_efd >= 0) {

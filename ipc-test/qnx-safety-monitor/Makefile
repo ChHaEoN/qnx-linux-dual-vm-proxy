@@ -39,12 +39,20 @@ STAMP := qnx-safety-monitor-stamp
 # first build with shm_map_qnx.c's "msix" kick channel.
 BELL := qnx-safety-monitor-bell
 
-.PHONY: all svc live stamp bell clean
+# `make unmask` builds the monitor for where the doorbell's LPI is unmasked
+# (2026-09-29) under its own name, for the same reason; ifs-unmask-a.build and
+# ifs-unmask-b.build both stage it, by design: the two images must differ only in
+# startup-script, so rebuild and accept them together. It is the first build with
+# the "msix1" and ":defer" kicks.
+UNMASK := qnx-safety-monitor-unmask
+
+.PHONY: all svc live stamp bell unmask clean
 all: $(BIN)
 svc: $(SVC)
 live: $(LIVE)
 stamp: $(STAMP)
 bell: $(BELL)
+unmask: $(UNMASK)
 
 $(BIN): $(SRCS)
 	$(CC) $(TARGET) $(CFLAGS) -o $@ monitor.c ../common/shm_map_qnx.c $(LDFLAGS)
@@ -61,5 +69,8 @@ $(STAMP): $(SRCS)
 $(BELL): $(SRCS)
 	$(CC) $(TARGET) $(CFLAGS) -o $@ monitor.c ../common/shm_map_qnx.c $(LDFLAGS)
 
+$(UNMASK): $(SRCS)
+	$(CC) $(TARGET) $(CFLAGS) -o $@ monitor.c ../common/shm_map_qnx.c $(LDFLAGS)
+
 clean:
-	rm -f $(BIN) $(SVC) $(LIVE) $(STAMP) $(BELL)
+	rm -f $(BIN) $(SVC) $(LIVE) $(STAMP) $(BELL) $(UNMASK)

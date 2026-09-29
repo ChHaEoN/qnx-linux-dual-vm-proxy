@@ -670,6 +670,9 @@ m_probe() {         # $1 out-dir  $2 tag  $3 host  $4 port  [$5 prefix command] 
 	# OD15 (2026-09-23): PROBE_STAMPS=1 reads a stamping monitor's t_in/t_out.
 	# Passed only when set, as PROBE_CLAIM is.
 	[ "${PROBE_STAMPS:-0}" = 1 ] && claim+=(--stamps)
+	# 2026-09-29 (two MSI-X vectors): PROBE_BELL_VECTOR picks the guest device's vector a shmbell
+	# probe rings. Passed only when set and not 0, so every existing caller's command is unchanged.
+	[ -n "${PROBE_BELL_VECTOR:-}" ] && [ "$PROBE_BELL_VECTOR" != 0 ] && claim+=(--bell-vector "$PROBE_BELL_VECTOR")
 	# 2026-09-24 (the arrival test): PROBE_ARRIVAL=exp draws each sleep from an
 	# exponential distribution with INTERVAL_MS as its mean, seeded by PROBE_SEED.
 	# Passed only when set, as PROBE_CLAIM is.

@@ -60,6 +60,11 @@
  * wake-ups there); the LPI is unmasked straight away, so a ring that arrives
  * while the request is being answered is held pending by the GIC and wakes the
  * next wait. Replies go out as before. Only one process may own the LPI.
+ * KICK "msix1" (2026-09-29) waits on vector 1's LPI instead ("qnx-its-probe
+ * msixcfg 2"), and ":defer" after either leaves the LPI masked while the
+ * request is answered and lets the next InterruptWait unmask it
+ * (_NTO_INTR_WAIT_FLAGS_UNMASK): the same attach and wait, the unmask moved to
+ * after the reply.
  *
  * Runs as root (physical mappings, interrupt events). Not portable beyond
  * QEMU virt.
@@ -347,13 +352,15 @@ void *shm_map(const char *spec, size_t *len, char *what, size_t what_len)
 struct shm_kick {
 	volatile uint8_t *regs;        /* BAR0 */
 	int tty;                       /* -1 with KICK "msix" */
-	int lpi, iid;                  /* KICK "msix": the LPI and InterruptAttachEvent's id */
+	int lpi, iid;                  /* KICK "msix": the LPI and InterruptAttach*()'s id */
+	int defer, armed;              /* KICK "msixN:defer": unmask in the next wait; set once one returned */
 	uint32_t my_id;
 	struct shm_kick_stats st;
 };
 
-/* The LPI "qnx-its-probe msixcfg" mapped ivshmem's MSI-X vector 0 to. */
-static int read_msix_marker(unsigned *lpi)
+/* The LPI "qnx-its-probe msixcfg" mapped ivshmem's MSI-X vector vec to: lpi= for
+ * vector 0, lpi1= (written only by "msixcfg 2") for vector 1. */
+static int read_msix_marker(unsigned vec, unsigned *lpi)
 {
 	char buf[160];
 	unsigned dev, devid;
@@ -375,6 +382,14 @@ static int read_msix_marker(unsigned *lpi)
 	if (sscanf(buf, "dev=%u devid=%u bar1=%llx lpi=%u", &dev, &devid, &bar1, lpi) != 4) {
 		fprintf(stderr, "shm-kick: /dev/shmem%s is malformed: %s\n", MSIX_MARKER, buf);
 		return -1;
+	}
+	if (vec == 1u) {
+		char const *v1 = strstr(buf, " lpi1=");
+		if (v1 == NULL || sscanf(v1, " lpi1=%u", lpi) != 1) {
+			fprintf(stderr, "shm-kick: /dev/shmem%s maps no vector 1 -- run \"qnx-its-probe msixcfg 2\" "
+			        "with QEMU's vectors=2\n", MSIX_MARKER);
+			return -1;
+		}
 	}
 	return 0;
 }
@@ -417,11 +432,27 @@ struct shm_kick *shm_kick_open(const char *spec, size_t offset, const char *kick
 		free(k);
 		return NULL;
 	}
-	if (strcmp(kick, "msix") == 0) {
+	if (strncmp(kick, "msix", 4) == 0) {
+		/* "msix" (vector 0: every earlier image), "msix1" (vector 1), and either
+		 * with ":defer" (2026-09-29): the same attach and the same wait, the LPI's
+		 * unmask done by the next InterruptWait instead of InterruptUnmask. SDP 8.0
+		 * has no ISR, so the kernel masks the LPI whenever it fires. */
 		struct sigevent ev;
-		unsigned lpi;
+		char const *m = kick + 4;
+		unsigned vec = 0u, lpi;
 
-		if (read_msix_marker(&lpi) != 0) {
+		if (*m == '1') {
+			vec = 1u;
+			m++;
+		}
+		if (strcmp(m, ":defer") == 0) {
+			k->defer = 1;
+		} else if (*m != '\0') {
+			fprintf(stderr, "shm-kick: kick '%s' is not msix, msix1, msix:defer or msix1:defer\n", kick);
+			free(k);
+			return NULL;
+		}
+		if (read_msix_marker(vec, &lpi) != 0) {
 			free(k);
 			return NULL;
 		}
@@ -435,7 +466,8 @@ struct shm_kick *shm_kick_open(const char *spec, size_t offset, const char *kick
 		k->lpi = (int)lpi;
 		k->tty = -1;
 		*slot = base + offset;
-		snprintf(what, what_len, "%s; slot @%zu; peer %u; kick msix (LPI %u)", cfgwhat, offset, k->my_id, lpi);
+		snprintf(what, what_len, "%s; slot @%zu; peer %u; kick %s (LPI %u%s)", cfgwhat, offset, k->my_id,
+		         kick, lpi, k->defer ? ", unmask deferred" : "");
 		return k;
 	}
 	k->tty = open(kick, O_RDWR | O_NOCTTY);
@@ -478,6 +510,23 @@ int shm_kick_wait(struct shm_kick *k)
 	int kicked = 0;
 	ssize_t n;
 
+	if (k->tty < 0 && k->defer) {
+		/* The LPI was masked by the kernel when it fired and stayed masked while the
+		 * last request was answered; this wait unmasks it before it blocks. The
+		 * first wait unmasks nothing: nothing has fired yet. On EINTR the unmask
+		 * has already happened (it comes before the block), so the next wait must
+		 * not unmask again. */
+		if (InterruptWait(k->armed ? _NTO_INTR_WAIT_FLAGS_UNMASK : 0, NULL) == -1) {
+			if (errno == EINTR) {
+				k->armed = 0;
+				return 0;
+			}
+			return -1;
+		}
+		k->armed = 1;
+		k->st.kick_bytes++;
+		return 1;
+	}
 	if (k->tty < 0) {
 		/* The LPI: masked by the kernel when it fired, unmasked at once. */
 		if (InterruptWait(0, NULL) == -1) {

@@ -42,6 +42,11 @@
 # devices come AFTER virtio-rng, so blk/net/rng keep their virtio-mmio slots and
 # the console takes the next one (0xa003800, SPI 44). The guest needs ifs-kick.bin.
 #
+# TWO VECTORS (2026-09-29), opt-in with VECTORS=2 (with IVSHMEM_SERVER): the
+# doorbell device gets that many MSI-X vectors, and the server that many eventfds
+# per peer. The default, 1, leaves QEMU's command line as before (the server is
+# now passed its own default, --vectors 1, explicitly).
+#
 # THREAD NAMES (2026-09-24), opt-in with THREAD_NAMES=1: adds
 # "-name qnx,debug-threads=on", so QEMU names each vCPU thread "CPU n/KVM" and a
 # harness can pin or trace a vCPU by name (run-vcpupin.sh needs it). QEMU only
@@ -58,6 +63,8 @@ MAC="${MAC:-52:54:00:11:11:11}"
 QEMU="${QEMU:-qemu-system-aarch64}"
 LOG="${LOG:-${HOME}/ladder/guest-console.log}"
 IVSHMEM="${IVSHMEM:-}"
+VECTORS="${VECTORS:-1}"
+case "${VECTORS}" in 1|2) ;; *) echo "ERROR: VECTORS='${VECTORS}' must be 1 or 2" >&2; exit 1 ;; esac
 IVSHMEM_SERVER="${IVSHMEM_SERVER:-}"
 KICK_SOCK="${KICK_SOCK:-}"
 CORE_AUX="${CORE_AUX:-5}"
@@ -120,7 +127,7 @@ if [ -n "${IVSHMEM_SERVER}" ]; then
 	[ -e "${IVSHMEM_SERVER}" ] && { echo "ERROR: ${IVSHMEM_SERVER} exists -- a live server, or a leftover" >&2; exit 1; }
 	rm -f "${IVSHMEM_SERVER}.ready"
 	setsid nohup taskset -c "${CORE_AUX}" python3 "$here/ivshmem_server.py" --socket "${IVSHMEM_SERVER}" \
-		--shm "${IVSHMEM}" --ready "${IVSHMEM_SERVER}.ready" --exit-with-peer 1 \
+		--shm "${IVSHMEM}" --vectors "${VECTORS}" --ready "${IVSHMEM_SERVER}.ready" --exit-with-peer 1 \
 		> "$(dirname "${LOG}")/ivshmem-server.log" 2>&1 < /dev/null &
 	for i in $(seq 1 50); do [ -s "${IVSHMEM_SERVER}.ready" ] && break; sleep 0.1; done
 	[ -s "${IVSHMEM_SERVER}.ready" ] || { echo "ERROR: the ivshmem server did not come up; see $(dirname "${LOG}")/ivshmem-server.log" >&2; exit 1; }
@@ -128,7 +135,7 @@ if [ -n "${IVSHMEM_SERVER}" ]; then
 	# Until the guest answers, a failure must not leave the server behind.
 	trap '[ -n "$SRV_PID" ] && kill "$SRV_PID" 2>/dev/null' EXIT
 	SHM_ARGS=(-chardev "socket,id=ivsh0,path=${IVSHMEM_SERVER}"
-	          -device "ivshmem-doorbell,chardev=ivsh0,vectors=1")
+	          -device "ivshmem-doorbell,chardev=ivsh0,vectors=${VECTORS}")
 fi
 
 echo "ifs    : ${IFS_BIN}  sha256 $(sha256sum "${IFS_BIN}" | cut -c1-16)..."
@@ -136,7 +143,7 @@ echo "disk   : ${DISK}  sha256 $(sha256sum "${DISK}" | cut -c1-16)...  (-snapsho
 echo "qemu   : $(${QEMU} --version | head -1)"
 echo "console: ${LOG}"
 if [ -n "${IVSHMEM_SERVER}" ]; then
-	echo "ivshmem: ${IVSHMEM} (1 MiB, zeroed) via server ${IVSHMEM_SERVER} (pid $(cat "${IVSHMEM_SERVER}.ready"), core ${CORE_AUX}), -device ivshmem-doorbell"
+	echo "ivshmem: ${IVSHMEM} (1 MiB, zeroed) via server ${IVSHMEM_SERVER} (pid $(cat "${IVSHMEM_SERVER}.ready"), core ${CORE_AUX}), -device ivshmem-doorbell$([ "${VECTORS}" = 1 ] || echo ", ${VECTORS} vectors")"
 elif [ -n "${IVSHMEM}" ]; then
 	echo "ivshmem: ${IVSHMEM} (1 MiB, zeroed, -device ivshmem-plain)"
 fi

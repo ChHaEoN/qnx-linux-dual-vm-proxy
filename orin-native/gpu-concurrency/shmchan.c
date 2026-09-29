@@ -405,6 +405,12 @@ int shmchan_ivshm_peer_efd(void *h, long long id)
 	return ivshm_client_wait_peer((struct ivshm_client *)h, (int64_t)id, 1000);
 }
 
+/* The same for that peer's vector vec (2026-09-29: a device with two MSI-X vectors). */
+int shmchan_ivshm_peer_efd_vec(void *h, long long id, int vec)
+{
+	return ivshm_client_wait_peer_vec((struct ivshm_client *)h, (int64_t)id, vec, 1000);
+}
+
 /* Leave the server: it tells every other peer (QEMU, a monitor) this id is gone. */
 void shmchan_ivshm_close(void *h)
 {

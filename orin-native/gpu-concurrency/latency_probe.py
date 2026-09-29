@@ -252,7 +252,7 @@ def await_recovery(a):
             if a.proto in NOTIFIED:
                 # Each attempt joins and LEAVES: an attempt that kept its ivshmem
                 # peer would leave a phantom peer at QEMU and the monitor.
-                kc = KickChannel(a.shm_lib, a.proto, a.shm, a.kick, a.ivshm)
+                kc = KickChannel(a.shm_lib, a.proto, a.shm, a.kick, a.ivshm, a.bell_vector)
                 try:
                     if not kc.ready():
                         raise OSError("no notified server")
@@ -425,7 +425,7 @@ class KickChannel:
     OK, TIMEOUT, NOTREADY, BROKEN, LOST = 0, 1, 2, 3, 4
     COUNT_NAMES = ("exchanges", "wakeups", "early_wakeups", "notifications", "stray", "eagain")
 
-    def __init__(self, lib_path, proto, slot_spec, kick_path, ivshm_path):
+    def __init__(self, lib_path, proto, slot_spec, kick_path, ivshm_path, bell_vector=0):
         import ctypes
         c = ctypes
         lib = c.CDLL(lib_path)
@@ -475,13 +475,19 @@ class KickChannel:
             lib.shmchan_bell_roundtrip.restype = c.c_int
             lib.shmchan_bell_roundtrip.argtypes = [c.c_void_p, c.c_char_p, c.POINTER(c.c_char), c.c_uint64,
                                                    c.c_int, c.c_int, c.c_uint32]
-            lib.shmchan_ivshm_peer_efd.restype = c.c_int
-            lib.shmchan_ivshm_peer_efd.argtypes = [c.c_void_p, c.c_longlong]
-            self.ring_fd = lib.shmchan_ivshm_peer_efd(self.ivshm, GUEST_PEER)
+            if bell_vector:
+                # 2026-09-29: the guest's device has more than one MSI-X vector; ring this one
+                lib.shmchan_ivshm_peer_efd_vec.restype = c.c_int
+                lib.shmchan_ivshm_peer_efd_vec.argtypes = [c.c_void_p, c.c_longlong, c.c_int]
+                self.ring_fd = lib.shmchan_ivshm_peer_efd_vec(self.ivshm, GUEST_PEER, bell_vector)
+            else:
+                lib.shmchan_ivshm_peer_efd.restype = c.c_int
+                lib.shmchan_ivshm_peer_efd.argtypes = [c.c_void_p, c.c_longlong]
+                self.ring_fd = lib.shmchan_ivshm_peer_efd(self.ivshm, GUEST_PEER)
             if self.ring_fd < 0:
                 self.close()
-                raise OSError("peer %d (the guest's QEMU) is not at the ivshmem server %s"
-                              % (GUEST_PEER, ivshm_path))
+                raise OSError("peer %d (the guest's QEMU)%s is not at the ivshmem server %s"
+                              % (GUEST_PEER, " vector %d" % bell_vector if bell_vector else "", ivshm_path))
         if proto != "kickecho":
             path, _, off = slot_spec.rpartition("@")
             if not path:
@@ -600,6 +606,9 @@ def main():
                          "client and no vsomeip")
     ap.add_argument("--kick", default="", help="notified variants: the kick socket")
     ap.add_argument("--ivshm", default="", help="with --proto shmdb or shmbell: the ivshmem server socket")
+    ap.add_argument("--bell-vector", type=int, default=0,
+                    help="with --proto shmbell: which of the guest device's MSI-X vectors to ring "
+                         "(2026-09-29; 0, the default, is the one every earlier run rang)")
     ap.add_argument("--db-burst", type=int, default=0,
                     help="with --proto shmdb, instead of sampling: one exchange whose reply is N "
                          "doorbells, and a count of how many arrived")
@@ -632,6 +641,8 @@ def main():
     elif a.proto == "shmbell":
         if not (a.shm and a.shm_lib and a.ivshm) or a.kick:
             ap.error("--proto shmbell needs --shm, --shm-lib and --ivshm, and no --kick")
+        if not 0 <= a.bell_vector <= 3:
+            ap.error("--bell-vector must be 0..3")
     elif a.proto in NOTIFIED:
         if not (a.kick and a.shm_lib) or (a.proto != "kickecho" and not a.shm):
             ap.error("--proto %s needs --kick, --shm-lib and (but for kickecho) --shm" % a.proto)
@@ -674,7 +685,7 @@ def main():
     if notified:
         # Nothing to connect to is "could not connect", exit 2, as for TCP.
         try:
-            kc = KickChannel(a.shm_lib, a.proto, a.shm, a.kick, a.ivshm)
+            kc = KickChannel(a.shm_lib, a.proto, a.shm, a.kick, a.ivshm, a.bell_vector)
         except OSError as e:
             print("FATAL %s: %s" % (a.proto, e))
             return 2
@@ -933,6 +944,8 @@ def main():
         counts1 = kc.counts()
         res["shm_region"] = kc.what
         res["notify"] = {k: counts1[k] - counts0[k] for k in KickChannel.COUNT_NAMES}
+        if a.bell_vector:
+            res["bell_vector"] = a.bell_vector   # only when not 0: earlier summaries are unchanged
         res["wait_fd_nonblock"] = [bool(kc.flags_start & os.O_NONBLOCK), kc.nonblocking()]
         res["ivshm_peer"] = kc.peer
         res["handshake_attempts"] = handshake

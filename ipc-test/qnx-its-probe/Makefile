@@ -10,12 +10,20 @@ TARGET  := -Vgcc_ntoaarch64le
 CFLAGS  := -std=gnu99 -Wall -Wextra -Wformat=2 -O2
 
 BIN := qnx-its-probe
+# `make twovec` (2026-09-29): the build with msixcfg NVEC, under its own name, so
+# the binary ifs-its/bell/paths.bin embed is not rebuilt; ifs-unmask-a.build and
+# ifs-unmask-b.build both stage it (one binary for the pair, by design).
+TWOVEC := qnx-its-probe-2v
 
-.PHONY: all clean
+.PHONY: all twovec clean
 all: $(BIN)
+twovec: $(TWOVEC)
 
 $(BIN): its_probe.c
 	$(CC) $(TARGET) $(CFLAGS) -o $@ its_probe.c
 
+$(TWOVEC): its_probe.c
+	$(CC) $(TARGET) $(CFLAGS) -o $@ its_probe.c
+
 clean:
-	rm -f $(BIN)
+	rm -f $(BIN) $(TWOVEC)

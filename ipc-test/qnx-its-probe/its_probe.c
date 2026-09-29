@@ -2,7 +2,7 @@
  *
  *   qnx-its-probe info              what the syspage and the ITS registers say
  *   qnx-its-probe selftest [N]      N LPIs raised by the ITS's own INT command
- *   qnx-its-probe msixcfg           ivshmem's MSI-X vector 0 -> an LPI (once, early)
+ *   qnx-its-probe msixcfg [NVEC]    ivshmem's MSI-X vectors 0..NVEC-1 -> LPIs (once, early)
  *   qnx-its-probe msixwait [SECS]   wait on that LPI; ring the host back each time
  *
  * WHY. QEMU 6.2's ivshmem-doorbell interrupts a guest by MSI-X only, and this
@@ -41,6 +41,10 @@
  * bus-master write; QEMU drops it otherwise), unmasks the entry, and writes
  * /dev/shmem/its-msix for msixwait.
  *
+ * NVEC = 2 (2026-09-29; QEMU started with vectors=2) does the same for entry 1:
+ * EventID 1 -> LPI MSIX_LPI + 1, and adds "lpi1=" to the marker. The default, 1,
+ * is what every earlier image ran, command for command.
+ *
  * MSIXWAIT counts the LPI and, when the host has put its ivshmem peer id at
  * ECHO_OFF in BAR2 (ivshmem_ring.py does), rings that peer back through the
  * Doorbell register -- one host-to-guest interrupt and one guest-to-host
@@ -50,7 +54,7 @@
  * whatever it prints is a local record (NC QDL v7 4.6(i)). It proves nothing
  * about a real ITS (KVM keeps its translations in kernel structures and never
  * reads the ITT), nothing about QNX's supported MSI path (the PCI server, which
- * this guest does not run), and nothing about more than one vector or one
+ * this guest does not run), and nothing about more than two vectors or one
  * device. And it runs on a startup WE rebuilt: not a QNX-supported
  * configuration.
  *
@@ -74,6 +78,7 @@
 #define SELFTEST_LPI    (LPI_BASE + 100u)
 #define SELFTEST_DEVID  0xff00u      /* bus 0xff: no function on bus 0 can have it */
 #define MSIX_LPI        (LPI_BASE + 1u)
+#define MSIX_VECTORS_MAX 2u          /* msixcfg NVEC: vector v -> EventID v -> LPI MSIX_LPI + v */
 #define ICID            0u           /* collection 0 = CPU 0 (the startup's MAPC) */
 
 #define GITS_CTLR       0x000u
@@ -514,12 +519,12 @@ static int read_shm_marker(struct shmcfg *c)
 	return 0;
 }
 
-static int do_msixcfg(void)
+static int do_msixcfg(unsigned nvec)
 {
 	struct its t;
 	struct shmcfg s;
 	volatile uint8_t *ecam, *cfg, *tbl;
-	uint64_t itt_pa, c[3][4], a1, s1, tr;
+	uint64_t itt_pa, c[2 + MSIX_VECTORS_MAX][4], a1, s1, tr;
 	uint32_t lo1, tblreg;
 	uint16_t cmd, mc;
 	unsigned cap = 0, bir, guard = 0, devid;
@@ -527,6 +532,10 @@ static int do_msixcfg(void)
 	int fd, len;
 
 	on_cpu1();
+	if (nvec < 1u || nvec > MSIX_VECTORS_MAX) {
+		fprintf(stderr, "its: msixcfg maps 1..%u vectors, not %u\n", MSIX_VECTORS_MAX, nvec);
+		return 1;
+	}
 	if (read_shm_marker(&s) != 0 || its_open(&t) != 0) {
 		return 1;
 	}
@@ -558,6 +567,11 @@ static int do_msixcfg(void)
 	mc = rd16(cfg + cap + 2u);
 	tblreg = rd32(cfg + cap + 4u);
 	bir = tblreg & 7u;
+	if ((unsigned)(mc & 0x7ffu) + 1u < nvec) {
+		fprintf(stderr, "its: the MSI-X table has %u entries, not %u: start QEMU with vectors=%u\n",
+		        (unsigned)(mc & 0x7ffu) + 1u, nvec, nvec);
+		return 1;
+	}
 	if (bir != 1u) {
 		fprintf(stderr, "its: the MSI-X table is in BAR%u, not BAR1 as ivshmem puts it\n", bir);
 		return 1;
@@ -589,7 +603,7 @@ static int do_msixcfg(void)
 		return 1;
 	}
 
-	/* Table entry 0 -> GITS_TRANSLATER, EventID 0, masked for now. */
+	/* Table entry i -> GITS_TRANSLATER, EventID i, masked for now. */
 	tbl = mmap_device_memory(NULL, (size_t)s1, PROT_READ | PROT_WRITE | PROT_NOCACHE, 0, a1);
 	if (tbl == MAP_FAILED) {
 		fprintf(stderr, "its: mmap_device_memory(BAR1): %s\n", strerror(errno));
@@ -597,31 +611,38 @@ static int do_msixcfg(void)
 	}
 	tbl += tblreg & ~7u;
 	tr = t.pa + GITS_TRANSLATER;
-	wr32(tbl + 12u, 1u);
-	wr32(tbl + 0u, (uint32_t)tr);
-	wr32(tbl + 4u, (uint32_t)(tr >> 32));
-	wr32(tbl + 8u, 0u);
+	for (unsigned v = 0; v < nvec; v++) {
+		volatile uint8_t *e = tbl + 16u * v;
+		wr32(e + 12u, 1u);
+		wr32(e + 0u, (uint32_t)tr);
+		wr32(e + 4u, (uint32_t)(tr >> 32));
+		wr32(e + 8u, v);
+	}
 
 	/* The ITS side: the function's requester ID is its DeviceID. */
 	devid = s.dev << 3;
-	if (devid >= (1u << t.devbits) || MSIX_LPI >= (1u << t.idbits)) {
-		fprintf(stderr, "its: DeviceID 0x%x or LPI %u out of the ITS's range\n", devid, MSIX_LPI);
+	if (devid >= (1u << t.devbits) || MSIX_LPI + nvec - 1u >= (1u << t.idbits)) {
+		fprintf(stderr, "its: DeviceID 0x%x or LPI %u out of the ITS's range\n", devid, MSIX_LPI + nvec - 1u);
 		return 1;
 	}
 	if (itt_alloc("/its-msix-itt", &itt_pa) == NULL) {
 		return 1;
 	}
-	cmd_mapd(c[0], devid, 1u, itt_pa, 1);
-	cmd_mapti(c[1], devid, 0u, MSIX_LPI);
-	cmd_sync(c[2]);
-	if (its_submit(&t, (const uint64_t (*)[4])c, 3u) != 0) {
+	cmd_mapd(c[0], devid, 1u, itt_pa, 1);               /* 1 bit of EventID: 0 and 1 */
+	for (unsigned v = 0; v < nvec; v++) {
+		cmd_mapti(c[1 + v], devid, v, MSIX_LPI + v);
+	}
+	cmd_sync(c[1 + nvec]);
+	if (its_submit(&t, (const uint64_t (*)[4])c, 2u + nvec) != 0) {
 		return 1;
 	}
 
 	/* MSI-X on, function unmasked, bus mastering on, then the entry. */
 	wr16(cfg + cap + 2u, (uint16_t)((mc | MSIX_ENABLE) & (uint16_t)~MSIX_FMASK));
 	wr16(cfg + CFG_CMD, (uint16_t)(rd16(cfg + CFG_CMD) | CMD_MEM | CMD_MASTER));
-	wr32(tbl + 12u, 0u);
+	for (unsigned v = 0; v < nvec; v++) {
+		wr32(tbl + 16u * v + 12u, 0u);
+	}
 	mc = rd16(cfg + cap + 2u);
 	cmd = rd16(cfg + CFG_CMD);
 	if ((mc & MSIX_ENABLE) == 0u || (mc & MSIX_FMASK) != 0u || (cmd & CMD_MASTER) == 0u) {
@@ -629,7 +650,14 @@ static int do_msixcfg(void)
 		return 1;
 	}
 
-	len = snprintf(buf, sizeof(buf), "dev=%u devid=%u bar1=%" PRIx64 " lpi=%u\n", s.dev, devid, a1, MSIX_LPI);
+	/* One vector: the marker every earlier image wrote. Two: " lpi1=" added, which
+	 * an older reader's four-field sscanf ignores. */
+	if (nvec == 1u) {
+		len = snprintf(buf, sizeof(buf), "dev=%u devid=%u bar1=%" PRIx64 " lpi=%u\n", s.dev, devid, a1, MSIX_LPI);
+	} else {
+		len = snprintf(buf, sizeof(buf), "dev=%u devid=%u bar1=%" PRIx64 " lpi=%u lpi1=%u\n",
+		               s.dev, devid, a1, MSIX_LPI, MSIX_LPI + 1u);
+	}
 	fd = shm_open(MSIX_MARKER, O_RDWR | O_CREAT | O_TRUNC, 0444);
 	if (fd < 0 || ftruncate(fd, len) != 0 || write(fd, buf, (size_t)len) != len) {
 		fprintf(stderr, "its: writing /dev/shmem%s: %s\n", MSIX_MARKER, strerror(errno));
@@ -639,6 +667,10 @@ static int do_msixcfg(void)
 	printf("its: msixcfg: ivshmem 00:%02x.0 BAR1 0x%" PRIx64 " (%" PRIu64 " B), MSI-X entry 0 -> 0x%" PRIx64
 	       " data 0, DeviceID 0x%x EventID 0 -> LPI %u (ITT 0x%" PRIx64 "), MC 0x%04x cmd 0x%04x\n",
 	       s.dev, a1, s1, tr, devid, MSIX_LPI, itt_pa, mc, cmd);
+	for (unsigned v = 1; v < nvec; v++) {
+		printf("its: msixcfg: MSI-X entry %u -> 0x%" PRIx64 " data %u, DeviceID 0x%x EventID %u -> LPI %u\n",
+		       v, tr, v, devid, v, MSIX_LPI + v);
+	}
 	return 0;
 }
 
@@ -723,11 +755,11 @@ int main(int argc, char **argv)
 		return do_selftest(argc >= 3 ? (unsigned)strtoul(argv[2], NULL, 0) : 10u);
 	}
 	if (argc >= 2 && strcmp(argv[1], "msixcfg") == 0) {
-		return do_msixcfg();
+		return do_msixcfg(argc >= 3 ? (unsigned)strtoul(argv[2], NULL, 0) : 1u);
 	}
 	if (argc >= 2 && strcmp(argv[1], "msixwait") == 0) {
 		return do_msixwait(argc >= 3 ? (unsigned)strtoul(argv[2], NULL, 0) : 0u);
 	}
-	fprintf(stderr, "usage: qnx-its-probe info | selftest [N] | msixcfg | msixwait [SECS]\n");
+	fprintf(stderr, "usage: qnx-its-probe info | selftest [N] | msixcfg [NVEC] | msixwait [SECS]\n");
 	return 2;
 }
