@@ -11,6 +11,12 @@
 # a fix to one is easy to carry to the other.
 #
 #   BSP=/path/to/extracted/BSP_hyp-guest-arm_be-800_* ./build-qemu-virt.sh
+#   BSP=... VARIANT=its ./build-qemu-virt.sh    # startup-qemu-virt-its
+#
+# VARIANT=its builds the ITS/LPI variant (qemu-virt-its/aarch64/init_intrinfo.c,
+# see its header): qemu-virt is staged as boards/qemu-virt-its and that one file
+# is put over it. The default build stages qemu-virt alone, so its sources, and
+# the startup-qemu-virt every existing image embeds, do not change.
 #
 # WHAT THIS PRODUCES AND WHY
 #
@@ -25,7 +31,12 @@
 #
 set -euo pipefail
 
-BOARD=qemu-virt
+VARIANT="${VARIANT:-}"
+case "$VARIANT" in
+	"")  BOARD=qemu-virt ;;
+	its) BOARD=qemu-virt-its ;;
+	*)   echo "VARIANT='$VARIANT': the only variant is 'its'" >&2; exit 1 ;;
+esac
 HERE="$(cd "$(dirname "$0")" && pwd)"
 BSP="${BSP:-$HOME/orin-native-port-bsp}"
 STARTUP="$BSP/src/hardware/startup"
@@ -100,7 +111,11 @@ fi
 echo "== staging $BOARD into the BSP tree"
 rm -rf "${STARTUP:?}/boards/$BOARD"
 mkdir -p "$STARTUP/boards/$BOARD"
-cp -r "$HERE/$BOARD/." "$STARTUP/boards/$BOARD/"
+cp -r "$HERE/qemu-virt/." "$STARTUP/boards/$BOARD/"
+if [ -n "$VARIANT" ]; then
+	cp -r "$HERE/$BOARD/." "$STARTUP/boards/$BOARD/"
+	echo "   $(cd "$HERE/$BOARD" && find . -type f | sed 's|^\./||' | tr '\n' ' ')from $BOARD over qemu-virt"
+fi
 
 # The library must be built and installed before the board: `make hinstall`
 # alone leaves out asmoff.def, which the callout assembly includes.
@@ -212,6 +227,22 @@ for s in init_intrinfo board_smp_start board_smp_num_cpu init_asinfo \
 		fail=1
 	fi
 done
+
+# Which init_intrinfo went in. The library's ITS code is linked either way
+# (gic_v3_initialize calls it when an ITS is set), so symbols cannot tell the
+# variants apart; the board's own call to gic_v3_lpi_add_entry can. Our own
+# artifact, built from the BSP's Apache-2.0 source, as above.
+ii="$(ntoaarch64-objdump -d --disassemble=init_intrinfo "$OUT" 2>/dev/null)"
+if [ "$(printf '%s\n' "$ii" | wc -l)" -lt 10 ]; then
+	echo "  could not disassemble init_intrinfo: refusing to report the variant check" >&2
+	fail=1
+elif printf '%s\n' "$ii" | grep -q '<gic_v3_lpi_add_entry>'; then
+	[ "$VARIANT" = its ] && echo "== init_intrinfo adds the LPI block (ITS variant)" \
+	  || { echo "  the default init_intrinfo calls gic_v3_lpi_add_entry" >&2; fail=1; }
+else
+	[ -z "$VARIANT" ] && echo "== init_intrinfo adds no LPIs (default)" \
+	  || { echo "  the ITS variant's init_intrinfo does not call gic_v3_lpi_add_entry" >&2; fail=1; }
+fi
 
 # The entry point, checked rather than merely reported.
 #

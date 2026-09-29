@@ -63,8 +63,21 @@ mkifs -r "$QT_WIN" "$BUILDFILE" "$OUT"
 echo "--- acceptance (exit code is not evidence) ---"
 dumpifs "$OUT" | grep -E 'startup[.][*]|proc/boot/qnx-|proc/boot/cyclone'
 entry="$(dumpifs "$OUT" | awk '$4 == "startup.*" { print $3 }')"
-if [ "$entry" != 40081ab8 ]; then
-	echo "FATAL: startup entry is '$entry', not 40081ab8 -- this image carries a startup that is not ours" >&2
+# STARTUP_ENTRY/STARTUP_MARK: a build file that names another of our startups
+# (ifs-its.build: startup-qemu-virt-its, whose code and so whose entry differ)
+# gives the entry that startup has here AND a string only that startup
+# contains; both must hold. The default stays startup-qemu-virt's 40081ab8.
+want="${STARTUP_ENTRY:-40081ab8}"
+if [ "$entry" != "$want" ]; then
+	echo "FATAL: startup entry is '$entry', not $want -- this image carries a startup that is not ours" >&2
 	exit 1
 fi
-echo "startup entry 40081ab8: ours (40081da8 would be the SDP's shipped startup)"
+if [ -n "${STARTUP_MARK:-}" ]; then
+	if ! grep -aqF "$STARTUP_MARK" "$OUT"; then
+		echo "FATAL: the image does not contain '$STARTUP_MARK' -- not the startup the build file names" >&2
+		exit 1
+	fi
+	echo "startup entry $want and '$STARTUP_MARK' present: ours"
+else
+	echo "startup entry 40081ab8: ours (40081da8 would be the SDP's shipped startup)"
+fi

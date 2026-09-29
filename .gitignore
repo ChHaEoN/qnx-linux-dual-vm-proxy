@@ -70,6 +70,7 @@ ipc-test/qnx-dds-monitor/qnx-dds-monitor
 ipc-test/qnx-clockctl/qnx-clockctl
 ipc-test/qnx-tracectl/qnx-tracectl
 ipc-test/qnx-someip/qnx-someip-monitor
+ipc-test/qnx-its-probe/qnx-its-probe
 
 # Interview / application material: local only, never published (owner,
 # 2026-09-20 for the narrative, 2026-09-21 for the JD mapping).
