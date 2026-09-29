@@ -6,8 +6,8 @@
 #
 # WHAT IS KNOWN. The notified arm with the console kick in and the doorbell out, and what the
 # console costs the guest's side: 20260922T-a6-orin-kick and 20260922T-a6-orin-shift (held
-# locally). The doorbell into the guest works, from one functional, unpinned run whose round trips
-# are orientation only: 20260929T-a6-orin-its (held locally).
+# locally). The doorbell into the guest, one functional, unpinned run whose round trips are
+# orientation only: 20260929T-a6-orin-its (held locally).
 #
 # THE INSTRUMENTS.
 #   guest  ifs-bell.bin: ifs-its.bin (startup-qemu-virt-its, qnx-its-probe msixcfg) with
