@@ -141,7 +141,7 @@ STALL_POLICY=refuse
 VLM_ARMS=""
 LOCK="${LOCK:-/tmp/vlm-characterize.lock}"
 LOADS="llama-server llama-cli llama-bench fma cpuload"
-VM_PID=""; BOOTED=0; TRACE_TOUCHED=0
+VM_PID=""; BOOTED=0; TRACE_TOUCHED=0; KVM_DIR=""
 
 tsu() {   # $1 = a shell command, run as root on the aux core
 	taskset -c "$CORE_AUX" sudo -n sh -c "$1"
@@ -161,24 +161,39 @@ trace_restore() {   # leave tracing as the preflight found it
 		|| echo "WARNING: could not restore $TRACE -- events, the clock or the buffer size may be left changed" >&2
 }
 
-mono_ns() {
-	python3 -c 'import time; print(time.monotonic_ns())'
+# The window's edges. KVM's two MMIO exit counters are read in the SAME root shell that turns
+# tracing on (after it) and off (before it), with the time: every ms between a window's edge and
+# a counter read is background the trace sees and the counters do not (M4), and a separate
+# snapshot process (m_kvm_snap) takes tens of ms each way. Prints "t_ns kernel user".
+edge() {   # $1 on|off
+	local on off
+	[ -n "$KVM_DIR" ] || die "no KVM debugfs directory for this boot"
+	on="echo 1 > '$TRACE/tracing_on' && date +%s%N && cat '$KVM_DIR/mmio_exit_kernel' '$KVM_DIR/mmio_exit_user'"
+	off="cat '$KVM_DIR/mmio_exit_kernel' '$KVM_DIR/mmio_exit_user' && date +%s%N && echo 0 > '$TRACE/tracing_on'"
+	if [ "$1" = on ]; then
+		tsu "$on" | tr '\n' ' ' | awk 'NF == 3 {print $1, $2, $3}'
+	else
+		tsu "$off" | tr '\n' ' ' | awk 'NF == 3 {print $3, $1, $2}'
+	fi
 }
 
-trace_start() {   # an empty buffer, the two events on, tracing on; the window's start
+trace_start() {   # an empty buffer, the two events on; then tracing on and the window's start
 	TRACE_TOUCHED=1
 	tsu "cd '$TRACE' && echo 0 > tracing_on && echo > trace" || die "could not clear the trace"
 	trace_events 1 || die "could not enable the trace events"
-	tsu "cd '$TRACE' && echo 1 > tracing_on" || die "could not start tracing"
-	WIN_T0="$(mono_ns)"
+	EDGE_ON="$(edge on)"
+	[ -n "$EDGE_ON" ] || die "could not start tracing and read KVM's counters"
 }
 
-trace_take() {   # $1 tag: the window's end, stop, keep the raw trace as text, reduce it into mmio-$1.json
-	local t1
-	t1="$(mono_ns)"
-	tsu "cd '$TRACE' && echo 0 > tracing_on" || die "could not stop the trace after $1"
+trace_take() {   # $1 tag: the window's end and tracing off; the raw trace as text, reduced into mmio-$1.json
+	local off
+	off="$(edge off)"
+	[ -n "$off" ] || die "could not read KVM's counters and stop the trace after $1"
 	trace_events 0 || die "could not disable the trace events after $1"
-	printf '{"t0_ns": %s, "t1_ns": %s}\n' "$WIN_T0" "$t1" > "$OUT/window-$1.json"
+	set -- "$1" $EDGE_ON $off
+	printf '{"t0_ns": %s, "t1_ns": %s, "clock": "realtime"}\n' "$2" "$5" > "$OUT/window-$1.json"
+	printf '{"before": {"t_ns": %s, "qemu_pid": %s, "counters": {"mmio_exit_kernel": %s, "mmio_exit_user": %s}}, "after": {"t_ns": %s, "qemu_pid": %s, "counters": {"mmio_exit_kernel": %s, "mmio_exit_user": %s}}}\n' \
+		"$2" "$VM_PID" "$3" "$4" "$5" "$VM_PID" "$6" "$7" > "$OUT/kvm-$1.json"
 	tsu "cat '$TRACE/trace'" > "$OUT/trace-$1.txt" || die "could not read the trace of $1"
 	python3 "$REDUCE" reduce < "$OUT/trace-$1.txt" > "$OUT/mmio-$1.json" \
 		|| die "the trace of $1 was refused (see the message above) -- the run stops here"
@@ -252,6 +267,9 @@ boot_vm() {   # $1 label
 	args="$(tr '\0' ' ' < "/proc/$VM_PID/cmdline")"
 	case "$args" in *"-kernel $IMG_B "*) ;; *) die "boot $lab: QEMU was not given $IMG_B" ;; esac
 	pin_vm
+	KVM_DIR="$(sudo -n sh -c "ls -d $KVM_DEBUGFS/${VM_PID}-*" 2>/dev/null)"
+	[ -n "$KVM_DIR" ] && [ "$(printf '%s\n' "$KVM_DIR" | grep -c .)" = 1 ] \
+		|| die "boot $lab: expected one $KVM_DEBUGFS/${VM_PID}-* directory, found '$KVM_DIR'"
 	for t in $(ls "/proc/$VM_PID/task"); do
 		cm="$(cat "/proc/$VM_PID/task/$t/comm" 2>/dev/null)"
 		case "$cm" in "CPU "*"/KVM") nv=$((nv + 1)) ;; esac
@@ -280,18 +298,15 @@ gpu_idle_around() {   # $1 label
 run_arm() {   # $1 arm  $2 round: one trace window around the arm
 	local a="$1" r="$2" idle_s
 	m_thermal "r$r $a before" >> "$OUT/thermal.log"
-	# KVM's snapshots are taken here, right inside the trace window and with no settling pause,
-	# not by m_probe (whose "before" read waits first): every ms between a window's edge and a
-	# snapshot is background the trace sees and KVM's counters over the arm do not (M4).
+	# KVM's counters are read at the trace window's edges (trace_start, trace_take), not by
+	# m_probe: see edge().
 	trace_start
-	KVM_SNAP_SETTLE_S=0 m_kvm_snap "$OUT/kvm-${a}_r$r.json" before
 	case "$a" in
 		K) KVM_STATS=0 m_probe "$OUT" "K_r$r" "$IVSHMEM@$SLOT_K" "$KICK_SOCK" "" shmdb "$IVSHMEM_SERVER" ;;
 		B) KVM_STATS=0 m_probe "$OUT" "B_r$r" "$IVSHMEM@$SLOT_B" "-" "" shmbell "$IVSHMEM_SERVER" ;;
 		I) idle_s="$(awk -v n="$N" -v w="$WARMUP" -v i="$INTERVAL_MS" 'BEGIN {printf "%.3f", (n + w) * i / 1000}')"
 		   sleep "$idle_s" ;;
 	esac
-	m_kvm_snap "$OUT/kvm-${a}_r$r.json" after
 	trace_take "${a}_r$r"
 	m_thermal "r$r $a after" >> "$OUT/thermal.log"
 	gpu_idle_around "r$r $a"
