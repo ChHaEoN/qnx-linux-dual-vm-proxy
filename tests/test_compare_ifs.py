@@ -42,6 +42,34 @@ def test_an_expected_addition_is_accepted_and_an_unexpected_one_refused(tmp_path
     assert rc == 1 and "NOT EXPECTED" in capsys.readouterr().out
 
 
+def test_the_extraction_is_removed_with_read_only_files_in_it(tmp_path):
+    """dumpifs -x leaves read-only files; on Windows rmtree(ignore_errors=True) left them all behind."""
+    root = tmp_path / "compare-ifs-x"
+    (root / "old" / "proc" / "boot").mkdir(parents=True)
+    ro = root / "old" / "proc" / "boot" / "monitor"
+    ro.write_bytes(b"m")
+    os.chmod(ro, 0o444)
+    ci.remove_tree(str(root))
+    assert not root.exists()
+
+
+def test_the_error_handler_makes_the_path_writable_and_retries(tmp_path):
+    p = tmp_path / "f"
+    p.write_bytes(b"x")
+    os.chmod(p, 0o444)
+    seen = []
+    ci._force_writable(lambda path: seen.append(os.access(path, os.W_OK)), str(p), None)
+    assert seen == [True]
+
+
+def test_a_tree_that_cannot_be_removed_is_reported_not_ignored(monkeypatch, capsys):
+    def fail(path, **kw):
+        raise OSError("stand-in failure")
+    monkeypatch.setattr(ci.shutil, "rmtree", fail)
+    ci.remove_tree("somewhere")
+    assert "could not remove somewhere" in capsys.readouterr().err
+
+
 def test_a_missing_addition_or_a_changed_monitor_is_refused(tmp_path, monkeypatch, capsys):
     new = dict(BASE, **{"proc/boot/startup-script": b"s2"})
     (tmp_path / "a").mkdir()

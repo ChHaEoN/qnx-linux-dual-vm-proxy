@@ -23,6 +23,7 @@ no QNX code; needs the SDP's dumpifs on PATH to run.
 """
 import os
 import shutil
+import stat
 import struct
 import subprocess
 import sys
@@ -41,6 +42,27 @@ def extract(image, into):
             p = os.path.join(d, n)
             files[os.path.relpath(p, into).replace(os.sep, "/")] = p
     return files
+
+
+def _force_writable(func, path, _exc):
+    """rmtree's error handler: dumpifs -x leaves read-only files, which Windows will not delete."""
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
+
+
+def remove_tree(tmp):
+    """Remove the extraction directory, read-only files included; say so if that still fails.
+
+    ignore_errors=True used to leave every Windows run's extraction (QNX-derived files) in the temp
+    directory without a word.
+    """
+    try:
+        if sys.version_info >= (3, 12):
+            shutil.rmtree(tmp, onexc=_force_writable)
+        else:
+            shutil.rmtree(tmp, onerror=_force_writable)
+    except OSError as e:
+        print("compare-ifs: could not remove %s: %s" % (tmp, e), file=sys.stderr)
 
 
 def normalised(path):
@@ -112,7 +134,7 @@ def main(argv):
         print("ACCEPT" if ok else "REFUSE")
         return 0 if ok else 1
     finally:
-        shutil.rmtree(tmp, ignore_errors=True)
+        remove_tree(tmp)
 
 
 if __name__ == "__main__":
