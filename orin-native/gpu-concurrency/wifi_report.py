@@ -34,11 +34,18 @@ ALIGN = 0.9
 
 
 def wifi_name(out):
-    """The Wi-Fi driver's interrupt name, from stamp.json, else rtl88x2ce."""
+    """The name of the Wi-Fi's hard interrupt: stamp.json's wifi.driver, which run-wifi.sh
+    reads from the running system (the interface's driver, whose name its interrupt carries)
+    and checks against /proc/interrupts before the run. There is no fallback (2026-10-04): a
+    name taken from one board would score another board's record against an interrupt it
+    never had, so a stamp that does not say is refused."""
     p = os.path.join(out, "stamp.json")
-    if os.path.exists(p):
-        return json.load(open(p)).get("wifi", {}).get("driver", "rtl88x2ce")
-    return "rtl88x2ce"
+    wifi = json.load(open(p)).get("wifi") if os.path.exists(p) else None
+    name = wifi.get("driver") if isinstance(wifi, dict) else None
+    if not isinstance(name, str) or not name:
+        sys.exit("wifi_report: %s names no wifi.driver: the report cannot tell which interrupt is the Wi-Fi's, and it "
+                 "does not guess one" % p)
+    return name
 
 
 def rounds(out):

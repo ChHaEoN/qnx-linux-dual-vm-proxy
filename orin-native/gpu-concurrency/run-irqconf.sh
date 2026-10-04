@@ -279,6 +279,7 @@ run_arm() {   # $1 arm  $2 round
 }
 
 # ---------------------------------------------------------------- preflight
+m_require_hz 250
 exec 9>"$LOCK" || die "cannot open $LOCK"
 flock -n 9 || die "another run holds $LOCK"
 for x in $LOADS; do

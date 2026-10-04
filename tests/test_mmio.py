@@ -306,6 +306,9 @@ def test_the_harness_parses_and_states_its_rule_and_prediction_before_any_code()
     assert on.index("tracing_on") < on.index("mmio_exit_kernel") and off.index("mmio_exit_user") < off.index("tracing_on"), \
         "the counters are read inside the trace window, in the shell that turns it on and off"
     assert '"\\"kernel\\"' not in body, "m_write_stamp already writes the kernel"
+    assert '"\\"system\\"' not in body, "m_write_stamp writes the system object; an extra of that name would replace it"
+    assert '"\\"wifi_state\\": \\"$(m_wifi_state)\\"" \\\n' in body and "operstate" not in body, \
+        "the Wi-Fi's state is the library's helper's, read from the running system, not from one board's interface name"
     import mmio_report
     assert mmio_report.CONSOLE_VIRTIO == 0x0A003800 and "0x0a003800" in head
 

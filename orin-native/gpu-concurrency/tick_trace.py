@@ -16,12 +16,21 @@ run-tick.sh can charge the time inside a window to the host's own work (Phase 3b
         workqueue_execute_start  W function   a work item starts in a kworker
         workqueue_execute_end    w            ... and ends
         timer_expire_entry       E function   a timer-wheel timer expires
-        hrtimer_expire_entry     H function   an hrtimer expires (tick_sched_timer: the tick)
+        hrtimer_expire_entry     H function   an hrtimer expires (the tick: one of TICK_HANDLERS)
 
 Contexts turns the reduced lines into, per core, a timeline of what held the core, the
 innermost first: a hard interrupt (hardirq:NAME), else a softirq (softirq:ACTION), else a
 work item in a kworker (work:FUNCTION), else the running task (task:COMM), where a task
 the caller calls its own (QEMU's threads, the probe) is "own" and the idle task "idle".
+
+THE TICK'S NAME (2026-10-04). The reducer keeps whatever function name the kernel printed.
+The reports that count tick expiries used to compare it with one literal, tick_sched_timer,
+which is the handler's name up to Linux 6.6. Mainline renamed it tick_nohz_highres_handler
+in 6.7 and 6.8 and tick_nohz_handler from 6.9, so on a newer kernel the grid check would find
+no expiry at all. TICK_HANDLERS lists the three and is_tick() is the one test the reports use.
+What the check means, the tick on its grid, is unchanged; a name that is none of the three
+still counts as no tick, and the check fails. run-tick.sh's and run-metal.sh's registered
+headers name the handler the kernel had when they were written, and are left as written.
 """
 import bisect
 import collections
@@ -36,6 +45,21 @@ SWITCH = re.compile(r"prev_comm=(.*) prev_pid=(\d+) prev_prio=\S+ prev_state=(\S
 EVENTS = ("sched_switch", "irq_handler_entry", "irq_handler_exit", "softirq_entry", "softirq_exit",
           "workqueue_execute_start", "workqueue_execute_end", "timer_expire_entry", "hrtimer_expire_entry")
 FOREIGN = ("hardirq", "softirq", "work", "task")
+# The hrtimer function that is the scheduler tick, by kernel series: up to 6.6; 6.7 and 6.8;
+# from 6.9.
+TICK_HANDLERS = ("tick_sched_timer", "tick_nohz_highres_handler", "tick_nohz_handler")
+
+
+def is_tick(fn):
+    """Whether an hrtimer_expire_entry's function is the tick's handler, under any of the
+    names mainline has given it."""
+    return fn in TICK_HANDLERS
+
+
+def seen(names):
+    """How a report names the handler in its grid check: the name or names it met, or that
+    it met none of the ones it looked for."""
+    return ", ".join(sorted(names)) if names else "none seen; looked for " + ", ".join(TICK_HANDLERS)
 
 
 def _one(ev, body):

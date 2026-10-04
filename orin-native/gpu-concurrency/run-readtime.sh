@@ -232,7 +232,7 @@ INTERVAL_MS=2 m_write_stamp "$OUT/stamp.json" \
 	"\"rtime_native_sha256\": \"$(_sha "$READS_BIN")\"" \
 	'"native_build": "gcc -DSWEEP_TIMING"' \
 	"\"lan_default_route\": \"$(ip route | awk '/^default/ {print $5; exit}')\"" \
-	"\"wifi_state\": \"$(cat /sys/class/net/wlP1p1s0/operstate 2>/dev/null || echo none)\"" \
+	"\"wifi_state\": \"$(m_wifi_state)\"" \
 	"\"nvpmodel\": \"$(sudo -n nvpmodel -q 2>/dev/null | tr '\n' ' ' | sed 's/  */ /g')\"" \
 	'"claims": "latency_probe.build_frame, length in payload[46..47], pseudo-random tail; every byte checked"' \
 	'"order": "Williams design over the six arms, period 6"' \

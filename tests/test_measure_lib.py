@@ -4256,3 +4256,432 @@ def test_m_pids_of_silences_a_vanished_process_before_it_opens_it():
                         "read -r x < /nonexistent/cmdline 2>/dev/null; true"],
                        capture_output=True, text=True, timeout=30)
     assert r.stderr.count("No such file") == 1, r.stderr
+
+
+# ============================================================ the host system (2026-10-04)
+#
+# What a record has to say about the host before it can be told from a record of another
+# kernel or board: the L4T and OS releases, CONFIG_HZ and where it was read, the Python
+# versions, nvpmodel, the Wi-Fi and the bridge's netfilter state -- one nested "system" object
+# in the stamp, written by the library, beside every key that was there before. And two things
+# the harnesses take from the same readers: a refusal when CONFIG_HZ is not the one a rule is
+# fixed at, and the wireless interface's name from the running system.
+#
+# Every input is faked: /etc, /sys and /proc by ETC_ROOT, SYS_ROOT and PROC_ROOT, the kernel
+# config by KCONFIG_GZ and KCONFIG_BOOT, the tools by stubs first on PATH. The fixtures of this
+# section are synthetic: written in the layout an L4T R39 host has, and the release's name is
+# all they take from one. Every value in them is made up (the revision, the OS release, the
+# Python versions, clock rates, temperatures, rails, interface and driver names), none is a
+# captured line, and 250 is the HZ the rules are fixed at, not a reading.
+
+STAMP_KEYS = {"utc", "script", "script_sha256", "lib_sha256", "probe_sha256", "python3", "python3_under_sudo",
+              "machine", "kernel", "ncpu", "sysfs_cpu", "governor_state", "governor_before", "cur_freq_khz_before",
+              "cpuidle", "cstate_policy", "cstate_exposed", "cstate_disabled", "qemu_exe", "qemu_version",
+              "qemu_threads", "qemu_affinity", "qemu_pid", "qemu_started", "guest_ifs", "guest_ifs_sha256",
+              "guest_disk", "guest_disk_sha256", "udp_arms", "sample_window", "fifo_arms", "stall_policy",
+              "probe_timeout_s", "recover_max_s", "n", "k", "warmup", "interval_ms"}
+SYSTEM_KEYS = {"l4t_release", "os_release", "config_hz", "config_hz_source", "python3_version",
+               "python3_version_under_sudo", "nvpmodel", "wifi", "br_netfilter", "bridge_nf_call_iptables",
+               "sys_root", "etc_root", "proc_root"}
+WIFI_KEYS = {"interface", "state", "driver", "module"}
+L4T_LINE = "# R39 (release), REVISION: 0.0, GCID: 12345678, BOARD: generic, EABI: aarch64, DATE: Thu Jan  1 00:00:00 UTC 2026"
+OS_PRETTY = "Example OS 98.04.7 LTS"
+SUDO_TAKES_N = '[ "$1" = -n ] && shift; exec "$@"'      # a sudo that takes -n, as the sampler's tests use
+STAMP = ('N=1000; K=12; WARMUP=200; INTERVAL_MS=2; SAMPLE_WINDOW=0; FIFO_ARMS=""; OUT="%s"; '
+         'm_write_stamp "$OUT/stamp.json" %s; cat "$OUT/stamp.json"')
+
+
+def _put(path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data if isinstance(data, bytes) else data.encode())
+
+
+def _kconfig(tmp_path, hz, gz=True, name=None):
+    """A made-up kernel config that says CONFIG_HZ=hz, gzipped as /proc/config.gz is or plain as
+    /boot/config-<release> is. hz=None: a config with no CONFIG_HZ line."""
+    import gzip
+    text = "# a made-up kernel config\nCONFIG_HZ_PERIODIC=n\n%sCONFIG_PREEMPT=y\n" % (
+        "" if hz is None else "CONFIG_HZ_%s=y\nCONFIG_HZ=%s\n" % (hz, hz))
+    p = tmp_path / (name or ("config.gz" if gz else "config-plain"))
+    _put(p, gzip.compress(text.encode()) if gz else text)
+    return p
+
+
+def _host(tmp_path, l4t=L4T_LINE + "\n", os_release='NAME="Example"\nPRETTY_NAME="%s"\nID=example\n' % OS_PRETTY,
+          hz=250, nets=(("eth0", False, "up"), ("wlan0", True, "up")), br=True):
+    """A fake host under tmp_path, and the shell assignments that point the library at it.
+    nets: (name, wireless?, operstate) for each entry of /sys/class/net."""
+    root = tmp_path / "host"
+    etc, sysr, proc = root / "etc", root / "sys", root / "proc"
+    for d in (etc, sysr / "class" / "net", sysr / "module", proc):
+        d.mkdir(parents=True, exist_ok=True)
+    if l4t is not None:
+        _put(etc / "nv_tegra_release", l4t)
+    if os_release is not None:
+        _put(etc / "os-release", os_release)
+    for name, wireless, state in nets:
+        d = sysr / "class" / "net" / name
+        d.mkdir()
+        if wireless:
+            (d / "phy80211").mkdir()
+        if state is not None:
+            _put(d / "operstate", state + "\n")
+    if br:
+        (sysr / "module" / "br_netfilter").mkdir()
+        _put(proc / "sys" / "net" / "bridge" / "bridge-nf-call-iptables", "1\n")
+    cfg = _kconfig(tmp_path, hz) if hz != "none" else tmp_path / "no-config.gz"
+    return ('ETC_ROOT="%s"; SYS_ROOT="%s"; PROC_ROOT="%s"; KCONFIG_GZ="%s"; KCONFIG_BOOT="%s"; '
+            % (_posix(etc), _posix(sysr), _posix(proc), _posix(cfg), _posix(tmp_path / "no-boot-config")))
+
+
+def _tool(tmp_path, name, body):
+    b = tmp_path / "bin"
+    b.mkdir(exist_ok=True)
+    _put(b / name, "#!/usr/bin/env bash\n" + body + "\n")
+    (b / name).chmod(0o755)
+
+
+def _stamp_of(tmp_path, host, extras='\'"experiment": "t"\'', sudo=SUDO_TAKES_N):
+    r = _run(tmp_path, host + STAMP % (_posix(tmp_path), extras), sudo=sudo)
+    assert r.returncode == 0, r.stdout + r.stderr
+    return json.loads(r.stdout[r.stdout.index("{"):]), r
+
+
+# ------------------------------------------------------------ CONFIG_HZ, and the guard
+
+def test_config_hz_is_read_from_the_gzipped_config_and_250_passes(tmp_path):
+    cfg = _kconfig(tmp_path, 250)
+    r = _run(tmp_path, 'KCONFIG_GZ="%s"; KCONFIG_BOOT="%s"; m_require_hz 250; echo "HZ=$HOST_HZ SRC=$HOST_HZ_SRC"'
+             % (_posix(cfg), _posix(tmp_path / "none")))
+    assert r.returncode == 0, r.stderr
+    assert "HZ=250 SRC=%s" % _posix(cfg) in r.stdout, r.stdout
+
+
+def test_config_hz_falls_back_to_the_boot_config_as_run_metal_did(tmp_path):
+    """/proc/config.gz first, else /boot/config-<release>: the order run-metal.sh has always read."""
+    plain = _kconfig(tmp_path, 250, gz=False)
+    r = _run(tmp_path, 'KCONFIG_GZ="%s"; KCONFIG_BOOT="%s"; m_config_hz; echo "HZ=$HOST_HZ SRC=$HOST_HZ_SRC"'
+             % (_posix(tmp_path / "no.gz"), _posix(plain)))
+    assert r.returncode == 0 and "HZ=250 SRC=%s" % _posix(plain) in r.stdout, r.stdout + r.stderr
+    both = _kconfig(tmp_path, 1000)
+    r = _run(tmp_path, 'KCONFIG_GZ="%s"; KCONFIG_BOOT="%s"; m_config_hz; echo "HZ=$HOST_HZ SRC=$HOST_HZ_SRC"'
+             % (_posix(both), _posix(plain)))
+    assert "HZ=1000 SRC=%s" % _posix(both) in r.stdout, "the gzipped config wins when both exist: " + r.stdout
+
+
+@pytest.mark.parametrize("hz", [1000, 100, 300, 25, 2500])
+def test_another_hz_refuses_and_names_both_values(tmp_path, hz):
+    """Not a scaled bin: the rules are pre-registered in microseconds on HZ 250's grid. 25 and
+    2500 are here because a prefix or substring match of "250" would pass them."""
+    cfg = _kconfig(tmp_path, hz)
+    r = _run(tmp_path, 'KCONFIG_GZ="%s"; KCONFIG_BOOT="%s"; m_require_hz 250; echo SHOULD NOT REACH'
+             % (_posix(cfg), _posix(tmp_path / "none")))
+    assert r.returncode != 0 and "SHOULD NOT REACH" not in r.stdout, r.stdout
+    assert "CONFIG_HZ is %d" % hz in r.stderr and "HZ=250" in r.stderr and _posix(cfg) in r.stderr, r.stderr
+    assert "not scaled" in r.stderr, r.stderr
+
+
+def test_no_readable_config_refuses(tmp_path):
+    r = _run(tmp_path, 'KCONFIG_GZ="%s"; KCONFIG_BOOT="%s"; m_require_hz 250; echo SHOULD NOT REACH'
+             % (_posix(tmp_path / "no.gz"), _posix(tmp_path / "no-boot")))
+    assert r.returncode != 0 and "SHOULD NOT REACH" not in r.stdout
+    assert "cannot read CONFIG_HZ" in r.stderr and "HZ=250" in r.stderr, r.stderr
+    assert _posix(tmp_path / "no.gz") in r.stderr and _posix(tmp_path / "no-boot") in r.stderr, "it says where it looked"
+
+
+def test_a_config_without_the_line_refuses_and_reads_as_unread(tmp_path):
+    cfg = _kconfig(tmp_path, None)
+    r = _run(tmp_path, 'KCONFIG_GZ="%s"; KCONFIG_BOOT="%s"; m_config_hz; echo "HZ=[$HOST_HZ] SRC=$HOST_HZ_SRC"; '
+             'm_require_hz 250; echo SHOULD NOT REACH' % (_posix(cfg), _posix(tmp_path / "none")))
+    assert "HZ=[] SRC=unread" in r.stdout and "SHOULD NOT REACH" not in r.stdout, r.stdout
+    assert r.returncode != 0 and "cannot read CONFIG_HZ" in r.stderr
+
+
+def test_m_config_hz_never_dies_and_can_run_under_errexit_and_pipefail(tmp_path):
+    """The stamp calls it on every host, a1.metal and CI included; only m_require_hz refuses."""
+    r = subprocess.run([BASH, "-c", 'set -euo pipefail; . "%s"; KCONFIG_GZ="%s"; KCONFIG_BOOT="%s"; m_config_hz; '
+                        'echo "HZ=[$HOST_HZ] SRC=$HOST_HZ_SRC"; KCONFIG_GZ="%s"; m_config_hz; echo "HZ=[$HOST_HZ]"'
+                        % (_posix(LIB), _posix(tmp_path / "no.gz"), _posix(tmp_path / "no-boot"),
+                           _posix(_kconfig(tmp_path, 250)))], capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stderr
+    assert "HZ=[] SRC=unread" in r.stdout and "HZ=[250]" in r.stdout, r.stdout
+
+
+def test_an_overridden_config_path_is_announced_and_reaches_the_stamp(tmp_path):
+    """As SYSFS_CPU: a path a test can redirect must leave a trace in a real run."""
+    host = _host(tmp_path, hz=1000)
+    j, r = _stamp_of(tmp_path, host)
+    assert "WARNING: KCONFIG_GZ overridden to %s" % _posix(tmp_path / "config.gz") in r.stdout, r.stdout
+    assert "WARNING: KCONFIG_BOOT overridden to %s" % _posix(tmp_path / "no-boot-config") in r.stdout, r.stdout
+    assert j["system"]["config_hz"] == 1000 and j["system"]["config_hz_source"] == _posix(tmp_path / "config.gz")
+    r = _run(tmp_path, 'm_config_hz; echo done')
+    assert "WARNING: KCONFIG" not in r.stdout, "the defaults are not announced: " + r.stdout
+
+
+# ------------------------------------------------------------ the stamp's system object
+
+def test_stamp_has_the_system_object_and_every_key_it_had_before(tmp_path):
+    j, _r = _stamp_of(tmp_path, _host(tmp_path))
+    assert STAMP_KEYS | {"system", "experiment"} <= set(j), sorted((STAMP_KEYS | {"system", "experiment"}) - set(j))
+    assert set(j["system"]) == SYSTEM_KEYS, sorted(set(j["system"]) ^ SYSTEM_KEYS)
+    assert set(j["system"]["wifi"]) == WIFI_KEYS
+    for k in sorted(SYSTEM_KEYS - {"config_hz", "wifi"}):
+        assert isinstance(j["system"][k], str) and j["system"][k], k
+
+
+def test_a_running_qemus_command_line_is_still_in_the_stamp(tmp_path):
+    """STAMP_KEYS holds the keys every stamp has. Two more are written on a condition:
+    sampler_paths, pinned above with SAMPLE_WINDOW=1, and qemu_cmdline, which needs a live
+    QPID. A stand-in process is the "QEMU" here; the new object must not have displaced it."""
+    snippet = (_host(tmp_path) + 'sleep 60 >/dev/null 2>&1 & QPID=$!; trap \'kill "$QPID" 2>/dev/null\' EXIT; '
+               '[ -r "/proc/$QPID/cmdline" ] || { echo NOPROC; exit 0; }; '
+               + STAMP % (_posix(tmp_path), '\'"experiment": "t"\''))
+    r = _run(tmp_path, snippet, sudo=SUDO_TAKES_N)
+    if "NOPROC" in r.stdout:
+        pytest.skip("this host has no /proc/<pid>/cmdline")
+    assert r.returncode == 0, r.stdout + r.stderr
+    j = json.loads(r.stdout[r.stdout.index("{"):])
+    want = STAMP_KEYS | {"system", "qemu_cmdline"}
+    assert want <= set(j), "missing from the stamp: %s" % sorted(want - set(j))
+    argv = j["qemu_cmdline"].split()
+    assert argv[0].endswith("sleep") and argv[1:] == ["60"], j["qemu_cmdline"]
+    assert j["qemu_pid"].isdigit()
+
+
+def test_system_values_are_the_fake_hosts(tmp_path):
+    _tool(tmp_path, "nvpmodel", 'echo "NV Power Mode: EXAMPLE"; echo 1')
+    j, r = _stamp_of(tmp_path, _host(tmp_path))
+    s = j["system"]
+    assert s["l4t_release"] == L4T_LINE
+    assert s["os_release"] == OS_PRETTY
+    assert s["config_hz"] == 250 and isinstance(s["config_hz"], int)
+    assert s["config_hz_source"] == _posix(tmp_path / "config.gz")
+    assert s["nvpmodel"] == "NV Power Mode: EXAMPLE 1"
+    assert s["wifi"]["interface"] == "wlan0" and s["wifi"]["state"] == "up"
+    assert s["br_netfilter"] == "loaded" and s["bridge_nf_call_iptables"] == "1"
+    assert s["sys_root"] == _posix(tmp_path / "host" / "sys") and s["etc_root"] == _posix(tmp_path / "host" / "etc")
+    assert s["proc_root"] == _posix(tmp_path / "host" / "proc")
+    for root in ("SYS_ROOT", "ETC_ROOT", "PROC_ROOT"):
+        assert "WARNING: %s overridden" % root in r.stdout, "an overridden root is announced: " + r.stdout
+
+
+def test_system_python_versions_are_what_each_python3_says(tmp_path):
+    import sys
+    # The library needs a working python3 for its JSON checks, so the fake answers --version
+    # itself and hands everything else to the real one. It sits in a directory of its own, put
+    # first on PATH inside the run: the stub directory's python3 is rewritten by every _run.
+    # Under sudo another python3 answers, as cpu6_prio's probe can meet.
+    b2 = tmp_path / "bin2"
+    _put(b2 / "python3", '#!/usr/bin/env bash\n[ "${1:-}" = --version ] && { echo "Python 9.8.7"; exit 0; }\n'
+         'exec "%s" "$@"\n' % _posix(sys.executable))
+    (b2 / "python3").chmod(0o755)
+    sudo = '[ "$1" = -n ] && shift\n[ "$*" = "python3 --version" ] && { echo "Python 9.8.6"; exit 0; }\nexec "$@"'
+    j, _r = _stamp_of(tmp_path, 'PATH="$(cd "%s" && pwd):$PATH"; ' % _posix(b2) + _host(tmp_path), sudo=sudo)
+    s = j["system"]
+    assert s["python3_version"] == "9.8.7" and s["python3_version_under_sudo"] == "9.8.6", s
+
+
+def test_a_denied_sudo_reads_as_unavailable_not_as_an_error(tmp_path):
+    j, _r = _stamp_of(tmp_path, _host(tmp_path), sudo='echo "sudo: a password is required" >&2; exit 1')
+    s = j["system"]
+    assert s["python3_version_under_sudo"] == "unavailable" and s["nvpmodel"] == "unavailable", s
+    assert re.match(r"^\d+\.\d+", s["python3_version"]), s["python3_version"]
+    assert j["python3_under_sudo"] == "unavailable", "the key that was there before reads as it did"
+
+
+def test_a_host_with_nothing_to_read_says_absent_unread_and_unavailable(tmp_path):
+    """The CI case, and a1.metal for the L4T file: no value is invented, and none is fatal."""
+    host = _host(tmp_path, l4t=None, os_release=None, hz="none", nets=(("eth0", False, "up"),), br=False)
+    j, r = _stamp_of(tmp_path, host, sudo="exit 1")
+    s = j["system"]
+    assert s["l4t_release"] == "absent" and s["os_release"] == "unread"
+    assert s["config_hz"] is None and s["config_hz_source"] == "unread"
+    assert s["nvpmodel"] == "unavailable" and s["python3_version_under_sudo"] == "unavailable"
+    assert s["wifi"] == {"interface": "none", "state": "none", "driver": "none", "module": "none"}
+    assert s["br_netfilter"] == "absent" and s["bridge_nf_call_iptables"] == "absent"
+    assert "stamp written and parsed" in r.stdout
+
+
+@pytest.mark.parametrize("mode", ["-u", "-uo pipefail", "-euo pipefail"])
+@pytest.mark.parametrize("bare", [True, False])
+def test_the_system_object_reads_the_same_under_errexit_and_pipefail(tmp_path, mode, bare):
+    """run-llm-interference.sh runs the library with pipefail and the launcher sources it with
+    errexit as well. A read that fails must be a recorded word in every regime, never the end
+    of the run and never a different word."""
+    if bare:
+        host = _host(tmp_path, l4t=None, os_release=None, hz="none", nets=(), br=False)
+        sudo = "exit 1"
+    else:
+        host = _host(tmp_path)
+        sudo = '[ "$1" = -n ] && shift; [ "$1" = nvpmodel ] && { echo "NV Power Mode: EXAMPLE"; echo 1; exit 3; }; exec "$@"'
+    b = _stub_sudo(tmp_path, sudo)
+    env = dict(os.environ, SYSFS_CPU=_posix(_sysfs(tmp_path, [])), PATH=_posix(b) + os.pathsep + os.environ.get("PATH", ""))
+    script = 'set %s\n. "%s"\n%s m_config_hz >/dev/null; _system_json; echo; echo REACHED' % (mode, _posix(LIB), host)
+    r = subprocess.run([BASH, "-c", script], env=env, capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0 and r.stdout.rstrip().endswith("REACHED"), r.stdout + r.stderr
+    s = json.loads(r.stdout[r.stdout.index("{"):r.stdout.rindex("}") + 1])
+    assert set(s) == SYSTEM_KEYS
+    if bare:
+        assert (s["l4t_release"], s["os_release"], s["config_hz"], s["config_hz_source"]) == ("absent", "unread", None, "unread")
+        assert (s["nvpmodel"], s["python3_version_under_sudo"]) == ("unavailable", "unavailable")
+        assert s["wifi"]["interface"] == "none" and s["bridge_nf_call_iptables"] == "absent"
+    else:
+        assert s["config_hz"] == 250 and s["wifi"]["interface"] == "wlan0" and s["l4t_release"] == L4T_LINE
+        assert s["nvpmodel"] == "unavailable", "a query that exits non-zero is not a reading, whatever it printed"
+
+
+@pytest.mark.parametrize("line", [
+    b'# R39 (release), REVISION: 0.0, "quoted" and \'single\'',
+    b"# R39 (release), a back\\slash and a trailing one \\",
+    b"# R39 (release), caf\xc3\xa9 \xff\xfe non-ASCII and a \x1b[31mcolour\x1b[0m and a tab\there",
+    b'# R39 "\\" \\" \\\\"',
+    b"",
+])
+def test_a_release_line_with_awkward_bytes_still_gives_valid_json(tmp_path, line):
+    host = _host(tmp_path, l4t=line + b"\nsecond line\n", os_release=b'PRETTY_NAME="An \\"OS\\" caf\xc3\xa9 \\\\"\n')
+    j, _r = _stamp_of(tmp_path, host)
+    got = j["system"]["l4t_release"]
+    want = "".join(chr(c) for c in line if 0x20 <= c < 0x7f)
+    assert got == (want or "absent"), (got, want)
+    assert "second line" not in got, "line 1 only"
+    assert all(0x20 <= ord(c) < 0x7f for c in j["system"]["os_release"]), j["system"]["os_release"]
+
+
+def test_the_flat_nvpmodel_extra_stays_beside_the_system_object(tmp_path):
+    """55 harnesses pass "nvpmodel" as an extra; it is not moved. The three that pass none get
+    it through the system object, and a nested key cannot collide with an extra."""
+    _tool(tmp_path, "nvpmodel", 'echo "NV Power Mode: EXAMPLE"; echo 1')
+    extras = '\'"experiment": "t"\' \'"nvpmodel": "from the harness"\' \'"wifi_state": "up"\' \'"wifi": {"driver": "x"}\''
+    j, _r = _stamp_of(tmp_path, _host(tmp_path), extras=extras)
+    assert j["nvpmodel"] == "from the harness" and j["system"]["nvpmodel"] == "NV Power Mode: EXAMPLE 1"
+    assert j["wifi"] == {"driver": "x"} and j["system"]["wifi"]["interface"] == "wlan0"
+    raw = (tmp_path / "stamp.json").read_text()
+    assert raw.index('"system"') < raw.index('"experiment"'), "written before the extras"
+
+
+def test_stamp_after_keeps_the_system_object(tmp_path):
+    snippet = (_host(tmp_path) + 'N=1; K=1; WARMUP=0; INTERVAL_MS=0; OUT="%s"; m_write_stamp "$OUT/stamp.json" '
+               '\'"experiment": "t"\'; m_stamp_after "$OUT/stamp.json"; cat "$OUT/stamp.json"' % _posix(tmp_path))
+    r = _run(tmp_path, snippet, sudo=SUDO_TAKES_N)
+    assert r.returncode == 0, r.stderr
+    j = json.loads(r.stdout[r.stdout.index("{"):])
+    assert set(j["system"]) == SYSTEM_KEYS and "governor_after" in j
+
+
+def test_json_safe_keeps_printable_ascii_and_escapes_quote_and_backslash(tmp_path):
+    r = _run(tmp_path, r'''printf '[%s]\n' "$(_json_safe 'a"b\c')" "$(_json_safe $'x\ty\nz\x01')" "$(_json_safe "")"''')
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.splitlines()[-3:] == [r'[a\"b\\c]', "[xyz]", "[]"], r.stdout
+
+
+# ------------------------------------------------------------ the wireless interface
+
+@pytest.mark.parametrize("nets,state,name", [
+    ((), "none", None),
+    ((("eth0", False, "up"), ("lo", False, "unknown")), "none", None),
+    ((("eth0", False, "up"), ("wlan0", True, "up")), "up", "wlan0"),
+    ((("wlan0", True, "down"),), "down", "wlan0"),
+    ((("wlx00example", True, "dormant"), ("br0", False, "up")), "dormant", "wlx00example"),
+    ((("wlan0", True, None),), "unread", "wlan0"),
+    ((("wlan0", True, "up"), ("wlan1", True, "down"), ("eth0", False, "up")), "wlan0=up;wlan1=down", None),
+])
+def test_wifi_state_and_name_come_from_the_interfaces_that_have_a_phy(tmp_path, nets, state, name):
+    """none for no wireless interface, the operstate word for one, name=state;... for more. An
+    interface without a phy80211 directory is not wireless, whatever it is called."""
+    host = _host(tmp_path, nets=nets)
+    r = _run(tmp_path, host + 'echo "STATE=[$(m_wifi_state)]"; if n="$(m_wifi_if)"; then echo "IF=[$n] rc=0"; '
+             'else echo "IF=[$n] rc=$?"; fi')
+    assert r.returncode == 0, r.stderr
+    assert "STATE=[%s]" % state in r.stdout, r.stdout
+    assert ("IF=[%s] rc=0" % name if name else "IF=[] rc=1") in r.stdout, r.stdout
+
+
+def test_a_wireless_looking_name_without_a_phy_is_not_counted(tmp_path):
+    host = _host(tmp_path, nets=(("wlan0", False, "up"), ("wlP9p9s9", False, "up"), ("eth0", False, "up")))
+    r = _run(tmp_path, host + 'echo "STATE=[$(m_wifi_state)]"; m_wifi_if || echo "NO-IF"')
+    assert "STATE=[none]" in r.stdout and "NO-IF" in r.stdout, r.stdout
+
+
+def test_no_wireless_interface_is_none_and_never_an_old_name(tmp_path):
+    """The helper has no fallback: with nothing wireless it says so. The 17 stamp lines it
+    replaced read one board's interface name and printed none for any other host by accident
+    of the name, which is how a renamed interface would have read as no Wi-Fi."""
+    host = _host(tmp_path, nets=())
+    r = _run(tmp_path, host + 'echo "STATE=[$(m_wifi_state)] IF=[$(m_wifi_if)]"')
+    assert "STATE=[none] IF=[]" in r.stdout, r.stdout
+    j, _r = _stamp_of(tmp_path, host)
+    assert j["system"]["wifi"] == {"interface": "none", "state": "none", "driver": "none", "module": "none"}
+
+
+def test_several_wireless_interfaces_are_named_in_the_stamp_not_guessed(tmp_path):
+    host = _host(tmp_path, nets=(("wlan0", True, "up"), ("wlan1", True, "down")))
+    j, _r = _stamp_of(tmp_path, host)
+    assert j["system"]["wifi"] == {"interface": "several", "state": "wlan0=up;wlan1=down",
+                                   "driver": "several", "module": "several"}
+
+
+def test_the_wifi_driver_and_module_are_where_the_device_links_point(tmp_path):
+    """The driver's name (the interrupt's, on the board) and the module's can differ, so both
+    are read: device/driver and device/driver/module, each a symlink in sysfs."""
+    host = _host(tmp_path, nets=(("wlan0", True, "up"),))
+    sysr = tmp_path / "host" / "sys"
+    drv = sysr / "bus" / "pci" / "drivers" / "examplewifi"
+    mod = sysr / "module" / "examplemod"
+    for d in (drv, mod, sysr / "class" / "net" / "wlan0" / "device"):
+        d.mkdir(parents=True)
+    try:
+        os.symlink(str(drv), str(sysr / "class" / "net" / "wlan0" / "device" / "driver"), target_is_directory=True)
+        os.symlink(str(mod), str(drv / "module"), target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("this host cannot make symlinks")
+    j, _r = _stamp_of(tmp_path, host)
+    assert j["system"]["wifi"] == {"interface": "wlan0", "state": "up", "driver": "examplewifi", "module": "examplemod"}
+
+
+def test_a_wireless_interface_without_a_driver_link_reads_as_unread(tmp_path):
+    j, _r = _stamp_of(tmp_path, _host(tmp_path, nets=(("wlan0", True, "up"),)))
+    assert j["system"]["wifi"] == {"interface": "wlan0", "state": "up", "driver": "unread", "module": "unread"}
+
+
+# ------------------------------------------------------------ tegrastats in the R39 layout
+#
+# SYNTHETIC lines, written from the layout L4T R39's tegrastats prints, with made-up values:
+# no SWAP field, NVDEC0 and NVJPG0 where R36 had NVDEC and NVJPG, two values per temperature
+# and three per rail. As the user (no EMC_FREQ, no GR3D clock) and as root. The two captured
+# JetPack 6 lines above stay as they are.
+TEGRA_LINE_R39 = ("01-01-2026 00:00:00 RAM 1000/7000MB (lfb 5x4MB) "
+                  "CPU [1%@700,2%@700,3%@700,4%@700,0%@700,0%@700] GR3D_FREQ {pct}% "
+                  "cpu@40C/41.5C soc2@40C/41C soc0@40.5C/41C gpu@40C/40.5C tj@41C/41.5C soc1@40C/41C "
+                  "VDD_IN 4000mW/4000mW/4100mW VDD_CPU_GPU_CV 500mW/500mW/510mW VDD_SOC 1300mW/1300mW/1310mW")
+TEGRA_LINE_R39_ROOT = ("01-01-2026 00:00:00 RAM 1000/7000MB (lfb 5x4MB) "
+                       "CPU [1%@700,2%@700,3%@700,4%@700,0%@700,0%@700] EMC_FREQ 0%@2000 GR3D_FREQ {pct}%@[300] "
+                       "NVDEC0 off NVJPG0 off NVJPG1 off VIC off OFA off APE 200 "
+                       "cpu@40C/41.5C soc2@40C/41C soc0@40.5C/41C gpu@40C/40.5C tj@41C/41.5C soc1@40C/41C "
+                       "VDD_IN 4000mW/4000mW/4100mW VDD_CPU_GPU_CV 500mW/500mW/510mW VDD_SOC 1300mW/1300mW/1310mW")
+
+
+@pytest.mark.parametrize("line", [TEGRA_LINE_R39, TEGRA_LINE_R39_ROOT], ids=["user", "root"])
+@pytest.mark.parametrize("pct", [0, 3, 33, 99, 100])
+def test_gpu_busy_reads_the_r39_layout(tmp_path, line, pct):
+    _tool(tmp_path, "tegrastats", "echo '%s'" % line.format(pct=pct))
+    r = _run(tmp_path, "m_gpu_busy_pct")
+    assert r.stdout.strip() == str(pct), "read %r from a %d%% line" % (r.stdout, pct)
+
+
+def test_the_thermal_line_reads_the_r39_layout(tmp_path):
+    _tool(tmp_path, "tegrastats", "echo '%s'" % TEGRA_LINE_R39.format(pct=7))
+    r = _run(tmp_path, "m_thermal r1")
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == "r1 CPU [1%@700,2%@700,3%@700,4%@700,0%@700,0%@700] GR3D_FREQ 7% cpu@40C gpu@40C", r.stdout
+
+
+def test_the_sampler_counts_r39_root_lines_and_not_user_lines(tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    # A made-up clock line: the check wants digits in each field, whatever they are.
+    clk = b"1000000000.000001 emc_bpmp_hz=2000000000 emc_ccf_hz=200000000 gpu_hz=300000000\n"
+    for tag, line, ok in (("a_r1", TEGRA_LINE_R39_ROOT, True), ("b_r1", TEGRA_LINE_R39, False)):
+        (out / ("clk-%s.log" % tag)).write_bytes(clk)
+        (out / ("tegra-%s.log" % tag)).write_bytes((line.format(pct=0) + "\n").encode())
+        r = _run(tmp_path, 'OUT="%s"; m_sampler_require %s; echo PASSED' % (_posix(out), tag))
+        assert ("PASSED" in r.stdout) is ok, (tag, r.stderr)

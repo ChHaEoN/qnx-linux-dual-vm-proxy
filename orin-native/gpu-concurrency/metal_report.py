@@ -11,6 +11,10 @@ Pooled over both arms: the bin's tail RATIO and SLOWDOWN; per arm: p50 and p99 o
 timed exchange. confine.log holds udevd's, PID 1's and QEMU's allowed CPUs before and after
 every round; tk-t2ms_rN.log the hrtimer expiries on QEMU's cores and the probe's. Scored
 only at k = 40; a prediction resting on a failed check prints VOID.
+
+2026-10-04; the rule above is unchanged. The grid check counts the tick's hrtimer expiries
+under any of the handler's three names (tick_trace.TICK_HANDLERS: the kernel renamed the
+function after this was written) and prints the name it met.
 """
 import collections
 import glob
@@ -75,6 +79,7 @@ def main(argv):
     files = sorted(glob.glob(os.path.join(out, "lat-t2ms_r*.json")), key=lambda f: int(re.search(r"_r(\d+)\.", f).group(1)))
     rows, allv = [], {a: [] for a in cr.ARMS}
     grid_on = grid_all = aligned = 0
+    handlers = set()        # the tick handler's name(s) met
     for f in files:
         r = int(re.search(r"_r(\d+)\.", f).group(1))
         a = arms.get(r)
@@ -90,7 +95,8 @@ def main(argv):
         tk = os.path.join(out, "tk-t2ms_r%d.log" % r)
         if os.path.exists(tk):
             for t, _, k, fn in tkt.read(tk):
-                if k == "H" and fn == "tick_sched_timer":
+                if k == "H" and tkt.is_tick(fn):
+                    handlers.add(fn)
                     grid_all += 1
                     grid_on += (t % period) < GRID_OK
     k = len(files)
@@ -124,8 +130,8 @@ def main(argv):
           % (fit, nr, "ok" if ok["M2"] else "FAILED"))
     print("  M3 rounds whose QEMU threads stayed on their cores: %d/%d (want all) -> %s" % (qok, nr, "ok" if ok["M3"] else "FAILED"))
     print("  M4 SSH logins accepted during the rounds: %s (want 0) -> %s" % (nl, "ok" if ok["M4"] else "FAILED"))
-    print("  M5 tick_sched_timer expiries within [0, %.0f) us of the grid: %d/%d (want >= 90%%) -> %s"
-          % (GRID_OK, grid_on, grid_all, "ok" if ok["M5"] else "FAILED"))
+    print("  M5 tick handler (%s) expiries within [0, %.0f) us of the grid: %d/%d (want >= 90%%) -> %s"
+          % (tkt.seen(handlers), GRID_OK, grid_on, grid_all, "ok" if ok["M5"] else "FAILED"))
     print("  M6 tick-bin tail exchanges %d (want >= %d) -> %s" % (tin, MIN_TAIL, "ok" if ok["M6"] else "FAILED"))
     print("  tick bin: %.2f%% of out-class exchanges, %d of their %d tail; median %.1f in the bin, %.1f outside"
           % (100 * share, tin, len(tail), st.median(inb) if inb else float("nan"), st.median(outb) if outb else float("nan")))

@@ -201,7 +201,7 @@ INTERVAL_MS=2 m_write_stamp "$OUT/stamp.json" \
 	"\"source_sha256\": \"$(_sha "$SRC")\"" \
 	"\"edge_native_sha256\": \"$(_sha "$MSS_BIN")\"" \
 	"\"lan_default_route\": \"$(ip route | awk '/^default/ {print $5; exit}')\"" \
-	"\"wifi_state\": \"$(cat /sys/class/net/wlP1p1s0/operstate 2>/dev/null || echo none)\"" \
+	"\"wifi_state\": \"$(m_wifi_state)\"" \
 	"\"mtu\": \"$(tr '\n' ';' < "$OUT/mtu.txt")\"" \
 	"\"nvpmodel\": \"$(sudo -n nvpmodel -q 2>/dev/null | tr '\n' ' ' | sed 's/  */ /g')\"" \
 	'"claims": "latency_probe.build_frame, length in payload[46..47], pseudo-random tail; every byte checked"' \

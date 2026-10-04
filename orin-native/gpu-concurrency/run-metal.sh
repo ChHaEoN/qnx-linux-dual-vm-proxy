@@ -245,7 +245,8 @@ fi
 [ -n "$CONF_CORES" ] || die "no core is left to confine the host's userspace to"
 for c in $(cores_of "$QEMU_CORES,$CORE_PROBE"); do TK_MASK=$(( ${TK_MASK:-0} | (1 << c) )); done
 TK_MASK="$(printf %x "$TK_MASK")"
-HZ="$( { zcat /proc/config.gz 2>/dev/null || cat "/boot/config-$(uname -r)" 2>/dev/null; } | sed -n 's/^CONFIG_HZ=\([0-9]*\)$/\1/p' | head -1)"
+m_config_hz
+HZ="$HOST_HZ"
 case "$HZ" in ''|*[!0-9]*) die "cannot read CONFIG_HZ of the running kernel" ;; esac
 tsu "test -d '$TRACE/instances' && test ! -e '$INST'" || die "no $TRACE/instances, or $INST exists -- someone else is tracing"
 ME="$(basename "$(cut -d: -f3 /proc/self/cgroup)")"

@@ -7,10 +7,13 @@ import shutil
 import subprocess
 import sys
 
+import pytest
+
 HERE = os.path.dirname(__file__)
 GC = os.path.join(HERE, "..", "orin-native", "gpu-concurrency")
 sys.path.insert(0, GC)
 import metal_report as mr  # noqa: E402
+import tick_trace as tkt  # noqa: E402
 
 REPORT = os.path.join(GC, "metal_report.py")
 HARNESS = os.path.join(GC, "run-metal.sh")
@@ -19,10 +22,11 @@ PAT = ["open", "confined", "confined", "open"]
 
 
 def _run(out, k, hz=250, tick=8.0, conf_shift=0.0, conf_tail=1.0, bad_state=False, off_grid=False,
-         n=1000, warm=200, seed=5):
+         n=1000, warm=200, seed=5, handler="tick_sched_timer"):
     """Requests every 2250 us from 137 us past a base on every grid. Exchanges leaving
     150..0 us before a tick are +tick us; 1 in 8 of them +40 more. 1 in 120 others +40 us
-    (confined: times conf_tail). Ticks every 1e6/hz us, on the grid unless off_grid."""
+    (confined: times conf_tail). Ticks every 1e6/hz us, on the grid unless off_grid, their
+    hrtimer expiries named `handler` (the kernel renamed the function twice)."""
     out.mkdir(parents=True)
     rng = random.Random(seed)
     period = 1e6 / hz
@@ -52,7 +56,7 @@ def _run(out, k, hz=250, tick=8.0, conf_shift=0.0, conf_tail=1.0, bad_state=Fals
             samples.append(v / 1000.0)
         j = 0
         while j * period < (warm + n) * 2250.0 + period:
-            tk.append("%.6f 001 H tick_sched_timer" % ((base + j * period + (period / 2 if off_grid else 3.5)) / 1e6))
+            tk.append("%.6f 001 H %s" % ((base + j * period + (period / 2 if off_grid else 3.5)) / 1e6, handler))
             j += 1
         (out / ("tp-t2ms_r%d.log" % r)).write_text("\n".join(sorted(lines, key=lambda l: float(l.split()[0]))) + "\n")
         (out / ("tk-t2ms_r%d.log" % r)).write_text("\n".join(tk) + "\n")
@@ -76,17 +80,39 @@ def test_cpu_lists_compare_as_sets():
     assert mr.cpus("3,5-15") == mr.cpus("3,5,6,7,8,9,10,11,12,13,14,15") and mr.cpus("0-2") == mr.cpus("0 1 2")
 
 
-def test_a_tick_cost_and_no_confinement_gain_hold_everything(tmp_path):
+@pytest.mark.parametrize("handler", tkt.TICK_HANDLERS)
+def test_a_tick_cost_and_no_confinement_gain_hold_everything(tmp_path, handler):
     for hz in (250, 1000):
-        s = _report_of(tmp_path / str(hz), hz=hz)
+        s = _report_of(tmp_path / str(hz), hz=hz, handler=handler)
         assert "FAILED" not in s, s
         for p in ("P1", "P2", "P3", "P4"):
             assert "-> HELD" in _line(s, p), (hz, s)
+        m5 = _line(s, "M5")
+        assert "tick handler (%s) expiries" % handler in m5 and "-> ok" in m5, m5
 
 
 def _report_of(d, **kw):
     _run(d, 40, **kw)
     return _report(d)
+
+
+def test_the_three_names_are_the_ones_mainline_has_used():
+    assert tkt.TICK_HANDLERS == ("tick_sched_timer", "tick_nohz_highres_handler", "tick_nohz_handler")
+
+
+def test_a_handler_the_report_does_not_know_scores_nothing(tmp_path):
+    """No expiry counts as a tick: the grid check FAILS at 0/0, and at the scored k the two
+    predictions that rest on it print VOID. P3 and P4 do not rest on it, as before."""
+    s = _report_of(tmp_path / "a", handler="tick_renamed_again")
+    m5 = _line(s, "M5")
+    assert ": 0/0 " in m5 and "-> FAILED" in m5 and "tick handler (none seen; looked for" in m5, m5
+    for h in tkt.TICK_HANDLERS:
+        assert h in m5, "the failed check says which names it looked for: " + m5
+    assert "tick_renamed_again" not in m5
+    for p in ("P1", "P2"):
+        assert "VOID (M5 failed)" in _line(s, p), s
+    for p in ("P3", "P4"):
+        assert "-> HELD" in _line(s, p), s
 
 
 def test_no_tick_cost_or_a_confinement_gain_refutes(tmp_path):
@@ -116,3 +142,16 @@ def test_the_harness_parses_and_states_its_rule_and_prediction_before_any_code()
               "rehearsals and", "Scored only at k = 40", "The owner asked for this session"):
         assert s in head, s
     assert "0-5" not in body and "metal_report.py" in body and "hrtimer_expire_entry" in body
+
+
+def test_the_harness_reads_hz_through_the_librarys_one_reader():
+    """CONFIG_HZ comes from lib-measure.sh's m_config_hz, the reader lifted out of this harness
+    (the stamp's system object and the fixed-grid harnesses' guard use the same one). An
+    unreadable HZ still stops the run before its directory exists, and the host.hz extra that
+    metal_report.py derives its period from is unchanged. Not a guard at 250: this is the
+    harness written for a host with another HZ."""
+    body = open(HARNESS, encoding="utf-8").read().split("\nset -u\n", 1)[1]
+    hz = body.index("\nm_config_hz\n")
+    assert 'HZ="$HOST_HZ"\ncase "$HZ" in \'\'|*[!0-9]*) die "cannot read CONFIG_HZ of the running kernel" ;; esac' in body[hz:hz + 200]
+    assert hz < body.index("\nm_prepare_out ") and "config.gz" not in body and "/boot/config" not in body
+    assert '\\"hz\\": $HZ,' in body and "m_require_hz" not in body

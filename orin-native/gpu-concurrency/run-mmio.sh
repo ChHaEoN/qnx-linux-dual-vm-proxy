@@ -385,7 +385,7 @@ INTERVAL_MS=2 m_write_stamp "$OUT/stamp.json" \
 	"\"smp\": $SMP" \
 	"\"trace\": {\"events\": \"$TEVENTS\", \"clock\": \"mono (was $TRACE_CLOCK_BEFORE, restored after)\", \"cpumask\": \"$CPUMASK\", \"buffer_kb_per_cpu\": $TRACE_BUF_KB_RUN, \"buffer_kb_before\": $TRACE_BUF_KB_BEFORE, \"buffer_before_raw\": \"$TRACE_BUF_RAW\"}" \
 	"\"lan_default_route\": \"$(ip route | awk '/^default/ {print $5; exit}')\"" \
-	"\"wifi_state\": \"$(cat /sys/class/net/wlP1p1s0/operstate 2>/dev/null || echo none)\"" \
+	"\"wifi_state\": \"$(m_wifi_state)\"" \
 	"\"reset_reason_at_start\": \"$(cat /sys/devices/platform/bus@0/c360000.pmc/reset_reason 2>/dev/null || echo unread)\"" \
 	"\"nvpmodel\": \"$(sudo -n nvpmodel -q 2>/dev/null | tr '\n' ' ' | sed 's/  */ /g')\"" \
 	'"boots": "one per round; per boot K, B and I in a Williams order over them (period 6); see order.log"' \

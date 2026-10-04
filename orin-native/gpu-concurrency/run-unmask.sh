@@ -286,7 +286,7 @@ INTERVAL_MS=2 m_write_stamp "$OUT/stamp.json" \
 	"\"config\": \"ifs-unmask-a.bin / ifs-unmask-b.bin, -smp $SMP, VECTORS=2\"" \
 	"\"smp\": $SMP" \
 	"\"lan_default_route\": \"$(ip route | awk '/^default/ {print $5; exit}')\"" \
-	"\"wifi_state\": \"$(cat /sys/class/net/wlP1p1s0/operstate 2>/dev/null || echo none)\"" \
+	"\"wifi_state\": \"$(m_wifi_state)\"" \
 	"\"reset_reason_at_start\": \"$(cat /sys/devices/platform/bus@0/c360000.pmc/reset_reason 2>/dev/null || echo unread)\"" \
 	"\"nvpmodel\": \"$(sudo -n nvpmodel -q 2>/dev/null | tr '\n' ' ' | sed 's/  */ /g')\"" \
 	'"boots": "one per round; images a a b b ...; U and D alternating within each pair of rounds; both images in the preflight; see order.log"' \

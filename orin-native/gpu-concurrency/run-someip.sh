@@ -257,7 +257,7 @@ INTERVAL_MS=2 m_write_stamp "$OUT/stamp.json" \
 	"\"vsomeip_config_sha256\": {\"tcp\": \"$(_sha "$OUT/vsomeip-tcp.json")\", \"udp\": \"$(_sha "$OUT/vsomeip-udp.json")\"}" \
 	"\"config\": \"ifs-someip.bin, -smp $SMP\"" \
 	"\"lan_default_route\": \"$(ip route | awk '/^default/ {print $5; exit}')\"" \
-	"\"wifi_state\": \"$(cat /sys/class/net/wlP1p1s0/operstate 2>/dev/null || echo none)\"" \
+	"\"wifi_state\": \"$(m_wifi_state)\"" \
 	"\"reset_reason_at_start\": \"$(cat /sys/devices/platform/bus@0/c360000.pmc/reset_reason 2>/dev/null || echo unread)\"" \
 	"\"nvpmodel\": \"$(sudo -n nvpmodel -q 2>/dev/null | tr '\n' ' ' | sed 's/  */ /g')\"" \
 	'"boots": "one per round; per boot the eight arms in a Williams order over them (period 8); see order.log"' \

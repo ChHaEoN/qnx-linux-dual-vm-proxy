@@ -239,7 +239,7 @@ INTERVAL_MS=2 m_write_stamp "$OUT/stamp.json" \
 	'"configs": {"N1": "ifs-offon.bin (receive offloads on), -smp 1", "F1": "ifs-offoff.bin (ifconfig vtnet0 -lro -rxcsum), -smp 1"}' \
 	"\"bench\": {\"n\": $BENCH_N, \"gap_us\": $GAP_US}" \
 	"\"lan_default_route\": \"$(ip route | awk '/^default/ {print $5; exit}')\"" \
-	"\"wifi_state\": \"$(cat /sys/class/net/wlP1p1s0/operstate 2>/dev/null || echo none)\"" \
+	"\"wifi_state\": \"$(m_wifi_state)\"" \
 	"\"reset_reason_at_start\": \"$(cat /sys/devices/platform/bus@0/c360000.pmc/reset_reason 2>/dev/null || echo unread)\"" \
 	"\"nvpmodel\": \"$(sudo -n nvpmodel -q 2>/dev/null | tr '\n' ' ' | sed 's/  */ /g')\"" \
 	'"boots": "two per round, a Williams order over N1 F1 (period 2); per boot d64 and s64 in an order alternating by round, then the benchmark; see boots.log and offloads.log"' \

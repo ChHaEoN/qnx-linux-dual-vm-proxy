@@ -88,7 +88,9 @@ SEED="${SEED:-29}"
 QEMU_CORES="${QEMU_CORES:-0-2}"
 CORE_PROBE="${CORE_PROBE:-4}"
 CORE_AUX="${CORE_AUX:-5}"
-WIFI_IF="${WIFI_IF:-wlP1p1s0}"
+# No default name: the one wireless interface of the running system (lib-measure.sh, m_wifi_if).
+WIFI_IF="${WIFI_IF:-$(m_wifi_if)}"
+[ -n "$WIFI_IF" ] || die "this host has not exactly one wireless interface (found: $(m_wifi_state)); set WIFI_IF to the one whose radio this run switches"
 SETTLE_ON="${SETTLE_ON:-20}"
 SETTLE_OFF="${SETTLE_OFF:-3}"
 CONNECT_S="${CONNECT_S:-90}"
@@ -306,6 +308,7 @@ run_arm() {   # $1 arm  $2 round
 }
 
 # ---------------------------------------------------------------- preflight
+m_require_hz 250
 exec 9>"$LOCK" || die "cannot open $LOCK"
 flock -n 9 || die "another run holds $LOCK"
 for x in $LOADS; do

@@ -12,6 +12,13 @@ exchange's FOREIGN time, the host's own work on QEMU's cores and the probe's in 
 (the part of the difference in means not in hard interrupts). confine.log holds the
 allowed CPUs before and after every round (confine_report.conf_checks). Scored only at
 k = 40; a prediction resting on a failed check prints VOID.
+
+2026-10-04, two notes; the rule above is unchanged. The grid check counts the tick's hrtimer
+expiries under any of the handler's three names (tick_trace.TICK_HANDLERS: the kernel renamed
+the function after this was written) and prints the name it met. And the bin is fixed at the
+4 ms grid of HZ 250: when the stamp's system object names another CONFIG_HZ, the report says
+so and scores nothing; the bin is not scaled. A stamp without that key, as every record
+before the object existed has, reads as before.
 """
 import bisect
 import collections
@@ -35,6 +42,7 @@ PERIOD, BIN_LO, WINDOW, GRID_OK = 4000.0, 3850.0, 250.0, 100.0
 RATIO, SLOW, DIFF_TICK, SHARE, DIFF_REST, SAME = 3.0, 5.0, 10.0, 0.5, 5.0, 10.0
 MIN_LIGHT_TAIL, MIN_HEAVY_TAIL, MIN_HEAVY_REST, MIN_HEAVY_BASE = 30, 20, 20, 100
 NOT_HARD = ("softirq", "work", "task")
+RULE_HZ = 250        # PERIOD is this HZ's tick period; the rule is fixed there and is not scaled
 
 
 def kinds_of(out):
@@ -60,6 +68,17 @@ def cores(out):
         a, _, b = x.partition("-")
         cs.update(range(int(a), int(b or a) + 1))
     return sorted(cs), p
+
+
+def stamp_hz(out):
+    """CONFIG_HZ from stamp.json's system object, or None when the stamp names none: every
+    record written before the object existed, and a host whose config could not be read."""
+    s = os.path.join(out, "stamp.json")
+    if not os.path.exists(s):
+        return None
+    system = json.load(open(s)).get("system")
+    hz = system.get("config_hz") if isinstance(system, dict) else None
+    return hz if isinstance(hz, int) and not isinstance(hz, bool) else None
 
 
 def in_bin(t0):
@@ -90,7 +109,9 @@ def split(rows, key):
     return [x for x in rows if key(x)], [x for x in rows if not key(x)]
 
 
-def verdict(v, scored, k, ok, needs):
+def verdict(v, scored, k, ok, needs, other_hz=None):
+    if other_hz is not None:
+        return "not scored (CONFIG_HZ %d; the rule is fixed at HZ %d)" % (other_hz, RULE_HZ)
     if not scored:
         return "not scored (k=%d; the prediction is for k=%d)" % (k, SCORED_K)
     failed = [m for m in needs if not ok[m]]
@@ -110,10 +131,16 @@ def main(argv):
     kinds = kinds_of(out)
     qc, pc = cores(out)
     traced = qc + [pc]
+    hz = stamp_hz(out)
+    other_hz = hz if hz is not None and hz != RULE_HZ else None
+    if other_hz is not None:
+        print("  the stamp says CONFIG_HZ %d: this rule is fixed at a 4 ms grid (HZ %d), its bin is not scaled to another,"
+              " and nothing below is scored" % (other_hz, RULE_HZ))
     files = sorted(glob.glob(os.path.join(out, "lat-t2ms_r*.json")),
                    key=lambda f: int(re.search(r"_r(\d+)\.", f).group(1)))
     light, heavy, allv = [], [], {k: [] for k in KINDS}
     grid_on = grid_all = 0
+    handlers = set()                                                         # the tick handler's name(s) met
     comps = collections.defaultdict(lambda: collections.defaultdict(list))   # (bin, tail) -> label -> [us]
     timers = collections.defaultdict(collections.Counter)                    # (bin, tail) -> function -> count
     aligned = 0
@@ -137,7 +164,8 @@ def main(argv):
             continue
         ev = tkt.read(tk)
         for t, _c, k, fn in ev:
-            if k == "H" and fn == "tick_sched_timer":
+            if k == "H" and tkt.is_tick(fn):
+                handlers.add(fn)
                 grid_all += 1
                 grid_on += (t % PERIOD) < GRID_OK
         ids = qtids(out, r)
@@ -187,8 +215,8 @@ def main(argv):
     print("  M2 rounds confined (udevd, PID 1, gnome-shell on %s) %d/%d, QEMU's threads on %s %d/%d (want all) -> %s"
           % (cr.CONF, fit, nr, cr.QEMU, qemu_ok, nr, "ok" if ok["M2"] else "FAILED"))
     print("  M3 SSH logins accepted during the rounds: %s (want 0) -> %s" % (nl, "ok" if ok["M3"] else "FAILED"))
-    print("  M4 tick_sched_timer expiries within [0, %.0f) us of the %.0f us grid: %d/%d (want >= 90%%) -> %s"
-          % (GRID_OK, PERIOD, grid_on, grid_all, "ok" if ok["M4"] else "FAILED"))
+    print("  M4 tick handler (%s) expiries within [0, %.0f) us of the %.0f us grid: %d/%d (want >= 90%%) -> %s"
+          % (tkt.seen(handlers), GRID_OK, PERIOD, grid_on, grid_all, "ok" if ok["M4"] else "FAILED"))
     print("  M5 tick-bin tail in light rounds %d (want >= %d) -> %s; heavy tick-bin tail %d, non-tail %d (want >= %d, >= %d)"
           " -> %s; heavy tail outside the bin %d (want >= %d) -> %s"
           % (len(lin_t), MIN_LIGHT_TAIL, "ok" if ok["M5a"] else "FAILED", len(hin_t), len(hin_n), MIN_HEAVY_TAIL,
@@ -212,17 +240,20 @@ def main(argv):
             print("    %-17s timers expiring per exchange: %s" % ("", ", ".join("%s %.2f" % (fn, c / nn) for fn, c in tf)))
     scored = k == SCORED_K
     base = ["M1", "M2", "M3", "M4"]
+
+    def vd(v, needs):
+        return verdict(v, scored, k, ok, needs, other_hz)
+
     print("  P1  the tick bin is over-represented in the tail: RATIO %.2f -> %s"
-          % (ratio, verdict("HELD" if ratio >= RATIO else "REFUTED", scored, k, ok, base + ["M5a"])))
+          % (ratio, vd("HELD" if ratio >= RATIO else "REFUTED", base + ["M5a"])))
     print("  P2  tick-bin exchanges are slower: SLOWDOWN %+.1f us -> %s"
-          % (slowdown, verdict("HELD" if slowdown >= SLOW else "REFUTED", scored, k, ok, base + ["M5a"])))
+          % (slowdown, vd("HELD" if slowdown >= SLOW else "REFUTED", base + ["M5a"])))
     print("  P3  in the bin, tail exchanges carry more foreign time: DIFF %+.1f us -> %s"
-          % (diff_tick, verdict("HELD" if diff_tick >= DIFF_TICK else "REFUTED", scored, k, ok, base + ["M5b", "M6"])))
+          % (diff_tick, vd("HELD" if diff_tick >= DIFF_TICK else "REFUTED", base + ["M5b", "M6"])))
     print("  P4  that extra is mostly not hard interrupts: SHARE %.2f of %+.1f us -> %s"
-          % (share, dmean, verdict("HELD" if share == share and share >= SHARE else "REFUTED", scored, k, ok,
-                                   base + ["M5b", "M6"])))
+          % (share, dmean, vd("HELD" if share == share and share >= SHARE else "REFUTED", base + ["M5b", "M6"])))
     print("  P5  outside the bin the tail is not host work on those cores: DIFF %+.1f us -> %s"
-          % (diff_rest, verdict("HELD" if diff_rest <= DIFF_REST else "REFUTED", scored, k, ok, base + ["M5c", "M6"])))
+          % (diff_rest, vd("HELD" if diff_rest <= DIFF_REST else "REFUTED", base + ["M5c", "M6"])))
     return 0
 
 

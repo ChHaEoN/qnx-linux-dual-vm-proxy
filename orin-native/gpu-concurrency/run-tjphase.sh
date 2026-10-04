@@ -185,6 +185,7 @@ gpu_idle_around() {   # $1 round  $2 arm
 }
 
 # ---------------------------------------------------------------- preflight
+m_require_hz 250
 exec 9>"$LOCK" || die "cannot open $LOCK"
 flock -n 9 || die "another run holds $LOCK"
 for x in $LOADS; do

@@ -686,6 +686,46 @@ def test_capture_publishes_arm_files_byte_for_byte_and_redacts_the_rest(tmp_path
 
 
 @needs_bash
+def test_capture_takes_a_stamp_with_the_system_object_through_unchanged(tmp_path):
+    """The stamp's "system" object (2026-10-04) names the L4T and OS releases, the kernel's HZ
+    and where it was read, the Python versions, nvpmodel, the Wi-Fi and the bridge's netfilter
+    state. None of it is a host identity, so the redactor must leave every string of it alone:
+    a version string it over-masked would come back changed in the published copy. Every value
+    is made up, in the shape a noble a1.metal and an L4T R39 host give (a three-part release,
+    a kernel release in a config path, a Debian package build): none is one a host reported."""
+    systems = {
+        "metal": {"l4t_release": "absent", "os_release": "Example OS 98.04.7 LTS", "config_hz": 250,
+                  "config_hz_source": "/boot/config-9.8.0-1234-example", "python3_version": "9.8.7",
+                  "python3_version_under_sudo": "9.8.7", "nvpmodel": "unavailable",
+                  "wifi": {"interface": "none", "state": "none", "driver": "none", "module": "none"},
+                  "br_netfilter": "absent", "bridge_nf_call_iptables": "absent",
+                  "sys_root": "/sys", "etc_root": "/etc", "proc_root": "/proc"},
+        "l4t": {"l4t_release": "# R39 (release), REVISION: 0.0, GCID: 12345678, BOARD: generic, EABI: aarch64, "
+                               "DATE: Thu Jan  1 00:00:00 UTC 2026",
+                "os_release": "Example OS 98.04.7 LTS", "config_hz": 250, "config_hz_source": "/proc/config.gz",
+                "python3_version": "9.8.7", "python3_version_under_sudo": "unavailable",
+                "nvpmodel": "NV Power Mode: EXAMPLE 1",
+                "wifi": {"interface": "wlan0", "state": "up", "driver": "examplewifi", "module": "examplemod"},
+                "br_netfilter": "loaded", "bridge_nf_call_iptables": "1",
+                "sys_root": "/sys", "etc_root": "/etc", "proc_root": "/proc"},
+    }
+    for name, system in systems.items():
+        rec, pub = _rec(tmp_path / name), tmp_path / name / "pub"
+        src = rec / "ladder" / "raw" / "stamp.json"
+        stamp = json.loads(src.read_text(encoding="utf-8"))
+        stamp["qemu_version"] = "QEMU emulator version 9.8.7 (Debian 1:9.8.7+ds-0example1.23)"
+        stamp["system"] = system
+        _write(src, json.dumps(stamp, indent=2))
+        r = _capture(rec, pub)
+        assert r.returncode == 0, r.stdout + r.stderr
+        out = pub / "ladder" / "raw" / "stamp.json"
+        assert out.read_bytes() == src.read_bytes(), "%s: the redactor changed a stamp that holds no identity" % name
+        assert json.loads(out.read_text(encoding="utf-8"))["system"] == system
+        lk = subprocess.run([PY, LEAKSCAN, str(pub)], capture_output=True, text=True)
+        assert lk.returncode == 0, lk.stdout
+
+
+@needs_bash
 def test_capture_refuses_an_arm_file_carrying_an_identity(tmp_path):
     rec, pub = _rec(tmp_path), tmp_path / "pub"
     _write(rec / "ladder" / "raw" / "lat-D-kick_r1.json",

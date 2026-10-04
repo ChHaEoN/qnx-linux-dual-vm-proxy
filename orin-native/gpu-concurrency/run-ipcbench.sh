@@ -157,7 +157,7 @@ INTERVAL_MS=2 m_write_stamp "$OUT/stamp.json" \
 	"\"source_sha256\": \"$(_sha "$SRC")\"" \
 	"\"bench_native_sha256\": \"$(_sha "$BENCH_BIN")\"" \
 	"\"lan_default_route\": \"$(ip route | awk '/^default/ {print $5; exit}')\"" \
-	"\"wifi_state\": \"$(cat /sys/class/net/wlP1p1s0/operstate 2>/dev/null || echo none)\"" \
+	"\"wifi_state\": \"$(m_wifi_state)\"" \
 	"\"nvpmodel\": \"$(sudo -n nvpmodel -q 2>/dev/null | tr '\n' ' ' | sed 's/  */ /g')\"" \
 	'"order": "per round the guest run and the native run, alternating by round; the ops rotated by round"' \
 	"\"gpu_load\": \"$GPU_NOTE\"" \

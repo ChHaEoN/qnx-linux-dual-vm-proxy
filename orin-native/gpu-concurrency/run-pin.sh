@@ -240,7 +240,7 @@ INTERVAL_MS=2 m_write_stamp "$OUT/stamp.json" \
 	'"configs": {"U2": "ifs-pina.bin, -smp 2", "P2": "ifs-pinb.bin (io-sock on -C 0), -smp 2", "U1": "ifs-pina.bin, -smp 1"}' \
 	"\"bench\": {\"n\": $BENCH_N, \"gap_us\": $GAP_US}" \
 	"\"lan_default_route\": \"$(ip route | awk '/^default/ {print $5; exit}')\"" \
-	"\"wifi_state\": \"$(cat /sys/class/net/wlP1p1s0/operstate 2>/dev/null || echo none)\"" \
+	"\"wifi_state\": \"$(m_wifi_state)\"" \
 	"\"reset_reason_at_start\": \"$(cat /sys/devices/platform/bus@0/c360000.pmc/reset_reason 2>/dev/null || echo unread)\"" \
 	"\"nvpmodel\": \"$(sudo -n nvpmodel -q 2>/dev/null | tr '\n' ' ' | sed 's/  */ /g')\"" \
 	'"boots": "three per round, a Williams order over U2 P2 U1 (period 6); per boot d64 and s64 in an order alternating by round, then the benchmark; see boots.log"' \

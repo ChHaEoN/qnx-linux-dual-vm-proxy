@@ -8,6 +8,8 @@ import shutil
 import subprocess
 import sys
 
+import pytest
+
 HERE = os.path.dirname(__file__)
 GC = os.path.join(HERE, "..", "orin-native", "gpu-concurrency")
 sys.path.insert(0, GC)
@@ -121,6 +123,30 @@ def test_failed_checks_void(tmp_path):
     assert "not scored (k=4; the prediction is for k=40)" in _report(tmp_path / "c")
 
 
+@pytest.mark.parametrize("stamp", [None, {"pin": {"qemu": "0-2", "probe": 4}},
+                                   {"wifi": {"interface": "wlan0", "irq": 277}}, {"wifi": {"driver": ""}}])
+def test_a_stamp_without_the_driver_name_is_refused_not_guessed(tmp_path, stamp):
+    """The report used to fall back to one board's driver name. A record whose stamp does not
+    say which interrupt is the Wi-Fi's cannot be scored against a name from somewhere else."""
+    out = tmp_path / "o"
+    _run(out, 4)
+    if stamp is None:
+        (out / "stamp.json").unlink()
+    else:
+        (out / "stamp.json").write_text(json.dumps(stamp))
+    r = subprocess.run([sys.executable, REPORT, str(out), "1000", "200"], capture_output=True, text=True, timeout=900)
+    assert r.returncode != 0, r.stdout
+    assert "wifi.driver" in r.stderr and "stamp.json" in r.stderr, r.stderr
+    assert "P1" not in r.stdout and "M4" not in r.stdout, "nothing is scored: " + r.stdout
+    with pytest.raises(SystemExit):
+        wr.wifi_name(str(out))
+
+
+def test_the_driver_name_is_the_stamps(tmp_path):
+    (tmp_path / "stamp.json").write_text(json.dumps({"wifi": {"interface": "wlan0", "driver": "examplewifi", "irq": 9}}))
+    assert wr.wifi_name(str(tmp_path)) == "examplewifi"
+
+
 def test_the_harness_parses_and_states_its_rule_and_prediction_before_any_code():
     if BASH is not None:
         r = subprocess.run([BASH, "-n", HARNESS], capture_output=True, text=True, timeout=30)
@@ -134,6 +160,45 @@ def test_the_harness_parses_and_states_its_rule_and_prediction_before_any_code()
         assert s in head, s
     assert "wifi_report.py" in body and 'BG=""' in body and "rfkill unblock" in body
     assert "would cut it" in body, "the harness refuses to run over the Wi-Fi it switches off"
+
+
+def test_the_interface_is_the_running_systems_and_has_no_default_name():
+    body = open(HARNESS, encoding="utf-8").read().split("\nset -u\n", 1)[1]
+    assert 'WIFI_IF="${WIFI_IF:-$(m_wifi_if)}"\n[ -n "$WIFI_IF" ] || die ' in body and "set WIFI_IF" in body
+    assert "WIFI_IF:-wl" not in body
+
+
+def _harness(tmp_path, nets, **env):
+    """run-wifi.sh against a fake /sys whose class/net holds `nets` ({name: wireless?})."""
+    sys_root = tmp_path / "sys"
+    (sys_root / "class" / "net").mkdir(parents=True)
+    for name, wireless in nets.items():
+        d = sys_root / "class" / "net" / name
+        d.mkdir()
+        if wireless:
+            (d / "phy80211").mkdir()
+        (d / "operstate").write_bytes(b"up\n")
+    e = dict(os.environ, SYS_ROOT=str(sys_root).replace("\\", "/"), **env)
+    for k in ("WIFI_IF", "CONSOLE"):
+        if k not in env:
+            e.pop(k, None)
+    return subprocess.run([BASH, HARNESS], capture_output=True, text=True, timeout=60, env=e)
+
+
+@pytest.mark.skipif(BASH is None, reason="bash not available")
+def test_the_harness_takes_the_one_wireless_interface_and_asks_when_there_is_not_exactly_one(tmp_path):
+    """No default name: the interface is the running system's one wireless interface, and with
+    none or several the harness stops and asks for WIFI_IF. It gets no further here than its
+    next required setting (CONSOLE), which is unset on purpose: nothing is switched."""
+    r = _harness(tmp_path / "none", {"eth0": False, "lo": False})
+    assert r.returncode != 0 and "set WIFI_IF" in r.stderr and "none" in r.stderr, r.stderr
+    assert "CONSOLE" not in r.stderr, "it stopped at the interface, before anything else: " + r.stderr
+    r = _harness(tmp_path / "two", {"wlan0": True, "wlan1": True})
+    assert r.returncode != 0 and "set WIFI_IF" in r.stderr and "wlan0=up;wlan1=up" in r.stderr, r.stderr
+    r = _harness(tmp_path / "one", {"eth0": False, "wlan0": True})
+    assert r.returncode != 0 and "set WIFI_IF" not in r.stderr and "set CONSOLE" in r.stderr, r.stderr
+    r = _harness(tmp_path / "given", {"eth0": False}, WIFI_IF="wlan7")
+    assert r.returncode != 0 and "set WIFI_IF" not in r.stderr and "set CONSOLE" in r.stderr, r.stderr
 
 
 def test_what_is_known_names_records_and_quotes_no_figure():

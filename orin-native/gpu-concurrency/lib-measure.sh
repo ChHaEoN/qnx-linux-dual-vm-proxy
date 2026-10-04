@@ -465,6 +465,194 @@ m_round_order() {   # $1 round, then: first  middle...  last
 	echo "${out[@]}"
 }
 
+# ------------------------------------------------------------- the host system
+# ADDED 2026-10-04, before the first record on another kernel and another L4T
+# release. Three things a record could not say, or a harness took on trust:
+#
+#   CONFIG_HZ. Several reports score against a bin fixed in microseconds on the tick
+#   grid of HZ 250 (tick_report.in_bin and the reports that reuse it, tailhost's and
+#   tjphase's multiples of a jiffy). Nothing read the kernel's HZ but run-metal.sh,
+#   whose report derives its period from it. m_config_hz is that one reader, lifted
+#   here; m_require_hz is a REFUSAL for the fixed-bin harnesses. Not a scaled bin:
+#   the rules are pre-registered on that grid, and a bin scaled to another HZ would
+#   be a new rule under an old name.
+#
+#   THE STAMP'S "system" OBJECT (_system_json; written by m_write_stamp): the L4T and
+#   OS releases, CONFIG_HZ and where it was read, the Python versions, nvpmodel, the
+#   Wi-Fi, and whether bridged frames pass netfilter. `kernel` told one L4T release's
+#   records from another's only by accident of its version string. Every value is
+#   read, or recorded as absent, unread or unavailable; none is fatal here, because
+#   a stamp is written on hosts that have no L4T at all. One NESTED object, so it
+#   cannot collide with a harness's extra keys: "nvpmodel", "wifi" and "wifi_state"
+#   are extras already, and a later duplicate key wins in silence.
+#
+#   THE WI-FI'S NAME. Seventeen stamps read one board's interface name and printed
+#   "none" for any other, which a renamed interface would have turned into "no Wi-Fi"
+#   with nothing noticing. m_wifi_state and m_wifi_if find the wireless interfaces by
+#   what they are (a phy80211 directory), and have no fallback name.
+#
+# The files these read are overridable so the tests can fake a host, and an override
+# is announced and recorded, as SYSFS_CPU is: KCONFIG_GZ and KCONFIG_BOOT (the stamp
+# records the file CONFIG_HZ was read from), SYS_ROOT, ETC_ROOT and PROC_ROOT (the
+# stamp records all three).
+KCONFIG_GZ_DEFAULT="/proc/config.gz"
+KCONFIG_BOOT_DEFAULT="/boot/config-$(uname -r)"
+KCONFIG_GZ="${KCONFIG_GZ:-$KCONFIG_GZ_DEFAULT}"
+KCONFIG_BOOT="${KCONFIG_BOOT:-$KCONFIG_BOOT_DEFAULT}"
+HOST_HZ=""; HOST_HZ_SRC="unread"
+
+# A string that goes into the stamp's JSON: printable ASCII only, backslash and
+# quote escaped.
+_json_safe() {      # $1 = string
+	local s
+	s="$(printf '%s' "$1" | LC_ALL=C tr -cd '[:print:]')"
+	s="${s//\\/\\\\}"
+	printf '%s' "${s//\"/\\\"}"
+}
+
+# CONFIG_HZ of the running kernel, the way run-metal.sh has always read it: the
+# gzipped config in /proc, else the boot config of this release. Sets HOST_HZ (empty
+# when it cannot be read) and HOST_HZ_SRC (the file it was read from, else "unread").
+# NEVER DIES, so the stamp can call it on any host; m_require_hz is what refuses.
+# Sets globals: call it directly, never inside $(...). What it says goes to stdout,
+# so it is called before a stamp file is opened, not while one is being written.
+m_config_hz() {
+	local text
+	HOST_HZ=""; HOST_HZ_SRC="unread"
+	[ "$KCONFIG_GZ" = "$KCONFIG_GZ_DEFAULT" ] \
+		|| say "WARNING: KCONFIG_GZ overridden to $KCONFIG_GZ -- test use only; the stamp records where CONFIG_HZ was read"
+	[ "$KCONFIG_BOOT" = "$KCONFIG_BOOT_DEFAULT" ] \
+		|| say "WARNING: KCONFIG_BOOT overridden to $KCONFIG_BOOT -- test use only; the stamp records where CONFIG_HZ was read"
+	if text="$(zcat "$KCONFIG_GZ" 2>/dev/null)"; then
+		HOST_HZ_SRC="$KCONFIG_GZ"
+	elif text="$(cat "$KCONFIG_BOOT" 2>/dev/null)"; then
+		HOST_HZ_SRC="$KCONFIG_BOOT"
+	else
+		return 0
+	fi
+	# sed reads the whole text and bash takes the first line: a `| head -1` could
+	# close the pipe early, which under pipefail is a failure of its own.
+	HOST_HZ="$(printf '%s\n' "$text" | sed -n 's/^CONFIG_HZ=\([0-9][0-9]*\)$/\1/p')" || HOST_HZ=""
+	HOST_HZ="${HOST_HZ%%$'\n'*}"
+	[ -n "$HOST_HZ" ] || HOST_HZ_SRC="unread"
+	return 0
+}
+
+# For a harness whose report scores against a bin fixed on one HZ's tick grid.
+# Unreadable is refused like different: a host whose HZ is unknown cannot be shown
+# to be on the grid. Call it directly, in the preflight, before anything is changed.
+m_require_hz() {    # $1 = the HZ the harness's rule is fixed at
+	local want="$1"
+	m_config_hz
+	[ -n "$HOST_HZ" ] \
+		|| die "cannot read CONFIG_HZ of the running kernel (tried $KCONFIG_GZ, then $KCONFIG_BOOT): this harness's rule is fixed at HZ=$want, and a host whose HZ is unknown cannot be shown to be on that grid"
+	[ "$HOST_HZ" = "$want" ] \
+		|| die "CONFIG_HZ is $HOST_HZ (from $HOST_HZ_SRC), and this harness's rule is fixed at HZ=$want: its bins are pre-registered in microseconds on that tick grid and are not scaled to another. Refusing."
+	say "CONFIG_HZ $HOST_HZ (from $HOST_HZ_SRC): the tick grid this harness's rule is fixed at"
+}
+
+# The wireless interfaces of the running system, one name per line: every entry of
+# SYS_ROOT/class/net that has a phy80211 directory. No name pattern and no default.
+_wifi_ifs() {
+	local d
+	for d in "${SYS_ROOT:-/sys}"/class/net/*; do
+		[ -d "$d/phy80211" ] && echo "${d##*/}"
+	done
+	return 0
+}
+# The name of the wireless interface when there is EXACTLY ONE. With none or
+# several it prints nothing and returns 1, and the caller asks for the name: it
+# never guesses. Safe inside $(...): it does not die.
+m_wifi_if() {
+	local ifs
+	ifs="$(_wifi_ifs)"
+	[ -n "$ifs" ] && [ "$ifs" = "${ifs%%$'\n'*}" ] || return 1
+	printf '%s\n' "$ifs"
+}
+# For a stamp: "none" with no wireless interface, the operstate word with one
+# ("unread" when it cannot be read), "name=state;name=state" with several. Safe to
+# put between JSON quotes as it is.
+m_wifi_state() {
+	local ifs i st f out=""
+	ifs="$(_wifi_ifs)"
+	[ -n "$ifs" ] || { echo none; return 0; }
+	while IFS= read -r i; do
+		f="${SYS_ROOT:-/sys}/class/net/$i/operstate"
+		st=""
+		[ -r "$f" ] && st="$(tr -cd 'A-Za-z0-9_-' < "$f")"
+		st="${st:-unread}"
+		[ "$ifs" = "$i" ] && { echo "$st"; return 0; }
+		out="${out:+$out;}$(_json_safe "$i")=$st"
+	done <<< "$ifs"
+	echo "$out"
+}
+# Where a link below a wireless interface's device directory points, by its last
+# component: device/driver is the driver (on the board, the name its interrupt
+# carries) and device/driver/module the module, and the two can differ.
+_wifi_link() {      # $1 = interface  $2 = path below its device directory
+	local p="${SYS_ROOT:-/sys}/class/net/$1/device/$2" t=""
+	[ -L "$p" ] || { echo unread; return 0; }
+	t="$(readlink -f "$p" 2>/dev/null)" || t=""
+	t="$(_json_safe "${t##*/}")"
+	echo "${t:-unread}"
+}
+
+# Says which of the roots the system object reads under are not the real ones.
+# Called before a stamp file is opened, like m_config_hz.
+_system_announce() {
+	[ "${SYS_ROOT:-/sys}" = /sys ] || say "WARNING: SYS_ROOT overridden to $SYS_ROOT -- test use only; recorded in the stamp"
+	[ "${ETC_ROOT:-/etc}" = /etc ] || say "WARNING: ETC_ROOT overridden to $ETC_ROOT -- test use only; recorded in the stamp"
+	[ "${PROC_ROOT:-/proc}" = /proc ] || say "WARNING: PROC_ROOT overridden to $PROC_ROOT -- test use only; recorded in the stamp"
+	return 0
+}
+
+# The stamp's "system" object, on one line. Prints nothing else and never dies;
+# m_config_hz must have run (m_write_stamp calls it). Every value is a string but
+# config_hz (a number, or null when it could not be read) and wifi (an object).
+_system_json() {
+	local etc="${ETC_ROOT:-/etc}" sysr="${SYS_ROOT:-/sys}" proc="${PROC_ROOT:-/proc}"
+	local l4t="" os="" pv="" pvs="" nv="" wif="" wst="" wdrv="" wmod="" brn="" brs="" f
+	# Line 1 only; read returns non-zero on a last line without a newline, and has
+	# still read it.
+	[ -r "$etc/nv_tegra_release" ] && { IFS= read -r l4t < "$etc/nv_tegra_release" || true; }
+	l4t="$(_json_safe "$l4t")"
+	os="$(sed -n 's/^PRETTY_NAME=//p' "$etc/os-release" 2>/dev/null)" || os=""
+	os="${os%%$'\n'*}"; os="${os#\"}"; os="${os%\"}"
+	os="$(_json_safe "$os")"
+	# `python3 --version` prints "Python X.Y.Z"; anything else is not a version.
+	pv="$(python3 --version 2>/dev/null)" || pv=""
+	pv="${pv%$'\r'}"
+	[[ "$pv" =~ ^Python\ ([0-9][0-9A-Za-z.+]*)$ ]] && pv="${BASH_REMATCH[1]}" || pv=""
+	pvs="$(sudo -n python3 --version 2>/dev/null)" || pvs=""
+	pvs="${pvs%$'\r'}"
+	[[ "$pvs" =~ ^Python\ ([0-9][0-9A-Za-z.+]*)$ ]] && pvs="${BASH_REMATCH[1]}" || pvs=""
+	# The text the harnesses' own "nvpmodel" extras record, on one line. Taken first
+	# and reshaped after, so a failed query reads the same with and without pipefail.
+	nv="$(sudo -n nvpmodel -q 2>/dev/null)" || nv=""
+	nv="$(printf '%s' "$nv" | tr '\n\r\t' '   ' | sed 's/  */ /g; s/^ //; s/ $//')"
+	nv="$(_json_safe "$nv")"
+	wst="$(m_wifi_state)"
+	if wif="$(m_wifi_if)"; then
+		wdrv="$(_wifi_link "$wif" driver)"
+		wmod="$(_wifi_link "$wif" driver/module)"
+		wif="$(_json_safe "$wif")"
+	else
+		if [ "$wst" = none ]; then wif=none; else wif=several; fi
+		wdrv="$wif"; wmod="$wif"
+	fi
+	if [ -d "$sysr/module/br_netfilter" ]; then brn=loaded; else brn=absent; fi
+	f="$proc/sys/net/bridge/bridge-nf-call-iptables"
+	[ -r "$f" ] && brs="$(tr -cd '0-9' < "$f")"
+	printf '{"l4t_release": "%s", "os_release": "%s", "config_hz": %s, "config_hz_source": "%s", ' \
+		"${l4t:-absent}" "${os:-unread}" "${HOST_HZ:-null}" "$(_json_safe "$HOST_HZ_SRC")"
+	printf '"python3_version": "%s", "python3_version_under_sudo": "%s", "nvpmodel": "%s", ' \
+		"${pv:-unavailable}" "${pvs:-unavailable}" "${nv:-unavailable}"
+	printf '"wifi": {"interface": "%s", "state": "%s", "driver": "%s", "module": "%s"}, ' \
+		"$wif" "$wst" "$wdrv" "$wmod"
+	printf '"br_netfilter": "%s", "bridge_nf_call_iptables": "%s", "sys_root": "%s", "etc_root": "%s", "proc_root": "%s"}' \
+		"$brn" "${brs:-absent}" "$(_json_safe "$sysr")" "$(_json_safe "$etc")" "$(_json_safe "$proc")"
+}
+
 # ------------------------------------------------------------- the stamp
 # $1 = output path; remaining args = extra "key": value lines.
 # Hashes every binary that produced a number -- REVIEW FINDING: the first draft
@@ -474,6 +662,10 @@ m_round_order() {   # $1 round, then: first  middle...  last
 _sha() { [ -r "$1" ] && sha256sum "$1" | cut -d' ' -f1 || echo "unreadable"; }
 m_write_stamp() {
 	local out="$1"; shift
+	# Before the file is opened: what these two say goes to stdout, and inside the
+	# braces below stdout is the stamp.
+	m_config_hz
+	_system_announce
 	{
 		printf '{\n'
 		printf '  "utc": "%s",\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -513,6 +705,10 @@ m_write_stamp() {
 		printf '  "fifo_arms": "%s",\n' "${FIFO_ARMS:-}"
 		printf '  "stall_policy": "%s", "probe_timeout_s": %s, "recover_max_s": %s,\n' \
 			"${STALL_POLICY:-refuse}" "$PROBE_TIMEOUT_S" "$RECOVER_MAX_S"
+		# The host's releases, HZ, Pythons, nvpmodel, Wi-Fi and bridge netfilter
+		# (2026-10-04). One nested object, before the extras, so that no harness's
+		# extra key can collide with it; see _system_json.
+		printf '  "system": %s,\n' "$(_system_json)"
 		local kv; for kv in "$@"; do printf '  %s,\n' "$kv"; done
 		printf '  "n": %s, "k": %s, "warmup": %s, "interval_ms": %s\n' "$N" "$K" "$WARMUP" "$INTERVAL_MS"
 		printf '}\n'

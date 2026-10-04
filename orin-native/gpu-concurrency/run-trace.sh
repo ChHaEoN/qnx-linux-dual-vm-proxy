@@ -254,7 +254,7 @@ INTERVAL_MS=2 m_write_stamp "$OUT/stamp.json" \
 	"\"image_sha256\": \"$(_sha "$IMG_S")\"" \
 	'"config": "ifs-trace.bin, -smp 1"' \
 	"\"lan_default_route\": \"$(ip route | awk '/^default/ {print $5; exit}')\"" \
-	"\"wifi_state\": \"$(cat /sys/class/net/wlP1p1s0/operstate 2>/dev/null || echo none)\"" \
+	"\"wifi_state\": \"$(m_wifi_state)\"" \
 	"\"reset_reason_at_start\": \"$(cat /sys/devices/platform/bus@0/c360000.pmc/reset_reason 2>/dev/null || echo unread)\"" \
 	"\"nvpmodel\": \"$(sudo -n nvpmodel -q 2>/dev/null | tr '\n' ' ' | sed 's/  */ /g')\"" \
 	"\"boots\": \"one per $PAIRS_PER_BOOT pairs; a pair's order N L if the pair is odd, L N if even; see order.log\"" \
