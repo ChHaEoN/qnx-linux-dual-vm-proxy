@@ -7,7 +7,7 @@
 # under it here.
 #
 # Run on:  Orin Nano L4T, after:
-#   1. ./bootstrap-orin-l4t.sh                (and re-login for kvm group)
+#   1. bash ./provision-orin-r39.sh apply     (and re-login for kvm group)
 #   2. sudo ./setup-bridge-orin.sh            (br0 + tap-qnx exist)
 #   3. scp output/ifs.bin, output/disk-qemu.vmdk AND output/disk-qemu from the
 #      cloud-twin build host (disk-qemu.vmdk is only a descriptor pointing at
