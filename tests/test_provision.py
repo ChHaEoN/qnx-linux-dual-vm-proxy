@@ -9,7 +9,8 @@ one real command besides bash's own is timeout, which the script puts in front o
 
 Every value below is made up: package versions, the release line's revision, the login, the
 group ids, the device names, the host's name. The layouts are the real ones (apt's simulation
-lines, lsblk -P, nvpmodel -q, a gdm custom.conf, dpkg's status words, sudo's own messages).
+lines, lsblk -P, findmnt -r with its three columns, a loop device's backing_file under /sys,
+nvpmodel -q, a gdm custom.conf, dpkg's status words, sudo's own messages).
 
 What these tests do NOT show: that the script works on the board. The apt-get stub re-implements,
 from apt's manual, the behaviour the script leans on (--no-upgrade skips an installed package,
@@ -18,10 +19,12 @@ is not found, a held dpkg lock ends the install at once unless it was told to wa
 is only checked to be passed. The sudo stub models -k, a cached credential and a refused command
 from sudo's manual, and runs what it is given: the real sudo's rules for passing a signal on are
 not modelled, so a timeout that sits outside sudo passes here whatever the real one does. The
-real apt, the real package archive and the real sudo are not exercised here. The lost-session
-tests take away the reader of the script's output, or send the script a hangup, while the
-apt-get stub is in the middle of an install; what the real sudo, apt and dpkg do with those two
-signals is not exercised either.
+real apt, the real package archive and the real sudo are not exercised here. The lsblk and
+findmnt stubs answer from a file, and what is behind a loop device is a file in the made-up /sys:
+the real findmnt's line for a loop mount and the kernel's own backing_file are not read here.
+The lost-session tests take away the reader of the script's output, or send the script a hangup,
+while the apt-get stub is in the middle of an install; what the real sudo, apt and dpkg do with
+those two signals is not exercised either.
 """
 import hashlib
 import os
@@ -327,7 +330,7 @@ if [ "$*" != "-d -n -P -o NAME,RM,TRAN,TYPE" ]; then echo "stub lsblk: unexpecte
 show lsblk; code lsblk_rc
 ''',
     "findmnt": r'''
-if [ "$*" != "-r -n -o TARGET" ]; then echo "stub findmnt: unexpected arguments: $*" >&2; exit 64; fi
+if [ "$*" != "-r -n -o TARGET,SOURCE,OPTIONS" ]; then echo "stub findmnt: unexpected arguments: $*" >&2; exit 64; fi
 show findmnt; code findmnt_rc
 ''',
     "nvpmodel": r'''
@@ -399,6 +402,22 @@ mkdir -p "$SYS_ROOT/class/net/br0" "$SYS_ROOT/class/net/tap-qnx"
 
 PY_STUBS = ("apt-get", "usermod")
 
+# What lsblk and findmnt say on a board with no stick in it, in the layout of the two calls the
+# script makes: lsblk -d -n -P -o NAME,RM,TRAN,TYPE, and findmnt -r -n -o TARGET,SOURCE,OPTIONS
+# (one mount a line, the three columns a space apart).
+LSBLK = 'NAME="nvme0n1" RM="0" TRAN="nvme" TYPE="disk"\nNAME="zram0" RM="0" TRAN="" TYPE="disk"\n'
+MOUNTS = ("/ /dev/nvme0n1p1 rw,relatime\n/boot/efi /dev/nvme0n1p10 rw,relatime,fmask=0077,dmask=0077,errors=remount-ro\n"
+          "/run tmpfs rw,nosuid,nodev,noexec,relatime\n/run/user/1000 tmpfs rw,nosuid,nodev,relatime\n")
+STICK = 'NAME="sda" RM="1" TRAN="usb" TYPE="disk"\n'
+# The vendor's own documentation image, as the desktop session of a freshly installed board mounts
+# it by itself: a loop device on a file under /opt/nvidia/, vfat, read-only, under /media/<login>.
+VENDOR_IMG = "/opt/nvidia/l4t-usb-device-mode/filesystem.img"
+VENDOR_AT = "/media/%s/L4T-README" % LOGIN
+RO_VFAT = ("ro,nosuid,nodev,relatime,uid=1000,gid=1000,fmask=0022,dmask=0022,codepage=437,iocharset=iso8859-1,"
+           "shortname=mixed,showexec,utf8,flush,errors=remount-ro")
+RW_VFAT = "rw" + RO_VFAT[2:]
+LOOP0 = 'NAME="loop0" RM="0" TRAN="" TYPE="loop"\n'
+
 
 # ------------------------------------------------------------------ a made-up board
 
@@ -464,8 +483,8 @@ class Board:
         self.set("uid", "1000\n")
         self.set("units", "docker.service enabled active\ndocker.socket enabled active\ncontainerd.service enabled active\n"
                           "auditd.service enabled active\napt-daily.timer enabled active\napt-daily-upgrade.timer enabled active\n")
-        self.set("lsblk", 'NAME="nvme0n1" RM="0" TRAN="nvme" TYPE="disk"\nNAME="zram0" RM="0" TRAN="" TYPE="disk"\n')
-        self.set("findmnt", "/\n/boot/efi\n/run\n/run/user/1000\n")
+        self.set("lsblk", LSBLK)
+        self.set("findmnt", MOUNTS)
         self.set("nvpmodel", "NV Power Mode: EXAMPLE\n1\n")
         self.set("containers", "")
         # the stubs
@@ -488,6 +507,13 @@ class Board:
 
     def installed(self):
         return dict(l.split(" ", 1) for l in self.get("installed").splitlines())
+
+    def backing(self, dev, text):
+        """What the fake /sys says is behind a loop device: <dev>/loop/backing_file, as the kernel
+        has it for a loop device that is bound to a file (one that is not bound has no such file)."""
+        p = self.sys / "block" / dev / "loop" / "backing_file"
+        _put(p, text)
+        return p
 
     def provisioned(self):
         """Every default family installed and the login in kvm: what a finished apply leaves."""
@@ -1122,13 +1148,18 @@ def _refused(board, r, where):
 
 @needs_bash
 @pytest.mark.parametrize("lsblk, findmnt, says", [
-    ('NAME="nvme0n1" RM="0" TRAN="nvme" TYPE="disk"\nNAME="sda" RM="1" TRAN="usb" TYPE="disk"\n', "/\n", "removable block device: sda"),
-    ('NAME="nvme0n1" RM="0" TRAN="nvme" TYPE="disk"\nNAME="sdb" RM="0" TRAN="usb" TYPE="disk"\n', "/\n", "removable block device: sdb"),
-    ('NAME="nvme0n1" RM="0" TRAN="nvme" TYPE="disk"\nNAME="mmcblk1" RM="1" TRAN="" TYPE="disk"\n', "/\n", "removable block device: mmcblk1"),
-    ('NAME="nvme0n1" RM="0" TRAN="nvme" TYPE="disk"\n', "/\n/media/%s/writable\n" % LOGIN, "1 mount under /media"),
+    ('NAME="nvme0n1" RM="0" TRAN="nvme" TYPE="disk"\nNAME="sda" RM="1" TRAN="usb" TYPE="disk"\n', MOUNTS, "removable block device: sda"),
+    ('NAME="nvme0n1" RM="0" TRAN="nvme" TYPE="disk"\nNAME="sdb" RM="0" TRAN="usb" TYPE="disk"\n', MOUNTS, "removable block device: sdb"),
+    ('NAME="nvme0n1" RM="0" TRAN="nvme" TYPE="disk"\nNAME="mmcblk1" RM="1" TRAN="" TYPE="disk"\n', MOUNTS, "removable block device: mmcblk1"),
+    ('NAME="nvme0n1" RM="0" TRAN="nvme" TYPE="disk"\n', MOUNTS + "/media/%s/writable /dev/sda1 rw,nosuid,nodev,relatime\n" % LOGIN,
+     "1 mount under /media"),
     ('NAME="nvme0n1" RM="0" TRAN="nvme" TYPE="disk"\nNAME="sda" RM="1" TRAN="usb" TYPE="disk"\n',
-     "/\n/media/%s/writable\n/media/%s/two\n" % (LOGIN, LOGIN), "removable block device: sda; 2 mounts under /media"),
-], ids=["removable", "usb-not-flagged-removable", "removable-not-usb", "mounted", "both"])
+     MOUNTS + "/media/%s/writable /dev/sda1 rw,nosuid,nodev,relatime\n/media/%s/two /dev/sda2 ro,nosuid,nodev,relatime\n" % (LOGIN, LOGIN),
+     "removable block device: sda; 2 mounts under /media"),
+    (LSBLK, "/media tmpfs rw,relatime\n", "1 mount under /media"),
+    # A findmnt that says less than it was asked for: a mount point with no source and no options.
+    (LSBLK, "/\n/media/%s/writable\n" % LOGIN, "1 mount under /media"),
+], ids=["removable", "usb-not-flagged-removable", "removable-not-usb", "mounted", "both", "media-itself", "mount-point-only"])
 def test_apply_refuses_while_an_installer_stick_is_plugged_in_or_mounted(board, lsblk, findmnt, says):
     board.set("lsblk", lsblk)
     board.set("findmnt", findmnt)
@@ -1136,6 +1167,7 @@ def test_apply_refuses_while_an_installer_stick_is_plugged_in_or_mounted(board, 
     r = board.run("apply")
     stop = _refused(board, r, "installer stick")
     assert says in stop and "PROVISION_ALLOW_REMOVABLE=1" in stop
+    assert "vendor" not in stop, "nothing here is the vendor's image"
     assert changing(r.calls) == [], "refused before the package lists were even refreshed"
     assert not [c for c in r.calls if c.startswith("apt-get")]
     assert board.state_of() == state
@@ -1148,6 +1180,14 @@ def test_apply_refuses_while_an_installer_stick_is_plugged_in_or_mounted(board, 
 
 
 @needs_bash
+def test_a_mount_point_that_only_begins_like_media_is_not_under_it(board):
+    board.set("findmnt", MOUNTS + "/media-archive /dev/nvme0n1p3 rw,relatime\n/mediafiles/a /dev/nvme0n1p4 rw,relatime\n"
+                                  "/srv/media/a /dev/nvme0n1p5 rw,relatime\n")
+    r = board.run("check")
+    assert r.items["installer stick"] == ("ok", "no removable or USB block device, nothing mounted under /media"), said(r)
+
+
+@needs_bash
 def test_the_stick_refusal_fails_closed_when_the_devices_cannot_be_listed(board):
     for name in ("lsblk_rc", "findmnt_rc"):
         b = Board(board.root.parent / ("closed-" + name))
@@ -1155,15 +1195,25 @@ def test_the_stick_refusal_fails_closed_when_the_devices_cannot_be_listed(board)
         r = b.run("apply")
         stop = _refused(b, r, "installer stick")
         assert "cannot tell" in stop and changing(r.calls) == []
-    b = Board(board.root.parent / "closed-empty")
-    b.set("lsblk", "")
-    assert "cannot tell" in _refused(b, b.run("apply"), "installer stick")
+    for name in ("lsblk", "findmnt"):
+        b = Board(board.root.parent / ("closed-empty-" + name))
+        b.set(name, "")
+        assert "cannot tell" in _refused(b, b.run("apply"), "installer stick")
+    # With a mount list that cannot be read nothing is known of /media, so nothing is called the
+    # vendor's image, whatever the list would have held.
+    b = Board(board.root.parent / "closed-vendor")
+    b.set("lsblk", LSBLK + LOOP0)
+    b.set("findmnt", MOUNTS + "%s /dev/loop0 %s\n" % (VENDOR_AT, RO_VFAT))
+    b.backing("loop0", VENDOR_IMG + "\n")
+    b.set("findmnt_rc", "32\n")
+    stop = _refused(b, b.run("apply"), "installer stick")
+    assert "cannot tell" in stop and "vendor" not in stop
 
 
 @needs_bash
 def test_the_owners_override_lets_apply_proceed_with_a_stick_and_says_so(board):
     board.set("lsblk", 'NAME="nvme0n1" RM="0" TRAN="nvme" TYPE="disk"\nNAME="sda" RM="1" TRAN="usb" TYPE="disk"\n')
-    board.set("findmnt", "/\n/media/%s/writable\n" % LOGIN)
+    board.set("findmnt", MOUNTS + "/media/%s/writable /dev/sda1 rw,nosuid,nodev,relatime\n" % LOGIN)
     r = board.run("apply", PROVISION_ALLOW_REMOVABLE="1")
     assert r.returncode == 0, said(r)
     assert r.items["installer stick"][0] == "note" and "PROVISION_ALLOW_REMOVABLE=1" in r.items["installer stick"][1]
@@ -1177,6 +1227,220 @@ def test_the_owners_override_lets_apply_proceed_with_a_stick_and_says_so(board):
     b = Board(board.root.parent / "other")
     b.set("lsblk", 'NAME="sda" RM="1" TRAN="usb" TYPE="disk"\n')
     _refused(b, b.run("apply", PROVISION_ALLOW_REMOVABLE="yes"), "installer stick")
+
+
+# ------------------------------------------------------------------ the vendor's image under /media
+
+def _stick_item(r):
+    word, text = r.items["installer stick"]
+    assert LOGIN not in text, "of a mount point only the last component is ever said: %s" % text
+    return word, text
+
+
+@needs_bash
+@pytest.mark.parametrize("loop_line", [LOOP0, 'NAME="loop0" TYPE="loop" RM="0" TRAN=""\n'],
+                         ids=["columns-as-asked", "columns-in-another-order"])
+def test_the_vendors_read_only_image_under_media_is_not_taken_for_a_stick(board, loop_line):
+    """A freshly installed board with no stick in it still has one mount under /media: the
+    vendor's documentation image, which the desktop session mounts read-only by itself. lsblk
+    lists its loop device as neither removable nor USB, and /sys names the file behind it. Every
+    line here has that layout; the login in the mount point is made up."""
+    board.set("lsblk", LSBLK + loop_line)
+    board.set("findmnt", MOUNTS + "%s /dev/loop0 %s\n" % (VENDOR_AT, RO_VFAT))
+    board.backing("loop0", VENDOR_IMG + "\n")
+    before, state = board.tree(), board.state_of()
+    r = board.run("check")
+    assert r.returncode == 1, said(r)            # a fresh board: packages and the group are missing, nothing differs
+    word, text = _stick_item(r)
+    assert word == "ok", (word, text)
+    assert "the vendor's read-only image" in text and "L4T-README" in text and "/opt/nvidia/" in text, text
+    assert "no removable or USB block device" in text and "nothing mounted under /media" not in text, text
+    assert "/media/" + LOGIN not in said(r) and VENDOR_IMG not in said(r), "neither the mount point nor the file's path is said"
+    assert "findmnt -r -n -o TARGET,SOURCE,OPTIONS" in r.calls and "lsblk -d -n -P -o NAME,RM,TRAN,TYPE" in r.calls
+    assert board.tree() == before and board.state_of() == state and changing(r.calls) == []
+    assert r.out.rstrip().split("\n")[-1] == "check: 10 ok, 4 missing, 0 differs -- apply has something to do"
+    # apply goes on, and its log says the same of the stick.
+    r = board.run("apply")
+    assert r.returncode == 0, said(r)
+    assert _stick_item(r) == (word, text) and "g++" in board.installed()
+    assert "%-8s %s: %s" % ("ok", "installer stick", text) in one_log(board).split("\n")
+    assert "/media/" + LOGIN not in everything(r, board) and VENDOR_IMG not in everything(r, board)
+    # And afterwards nothing is left for apply to do. Nothing was refused, so the owner's override
+    # has nothing to allow: with it the line is the same.
+    r = board.run("check")
+    assert r.returncode == 0 and _stick_item(r) == (word, text), said(r)
+    assert _stick_item(board.run("check", PROVISION_ALLOW_REMOVABLE="1")) == (word, text)
+
+
+def _unreadable(p):
+    os.chmod(str(p), 0)
+    if os.access(str(p), os.R_OK):
+        pytest.skip("a file cannot be made unreadable here (Windows, or root)")
+
+
+# Each row: the mounts under /media, what /sys says is behind each device, and what the refusal
+# says. One thing is wrong in each, against the vendor's image as the test above has it.
+_STILL_COUNTS = {
+    "read-write": ("%s /dev/loop0 %s" % (VENDOR_AT, RW_VFAT), {"loop0": VENDOR_IMG + "\n"}),
+    "no-ro-option-of-its-own": ("%s /dev/loop0 nosuid,nodev,relatime,errors=remount-ro" % VENDOR_AT, {"loop0": VENDOR_IMG + "\n"}),
+    "ro-inside-another-option": ("%s /dev/loop0 rw,nosuid,zero,euro,ro=1,x-ro" % VENDOR_AT, {"loop0": VENDOR_IMG + "\n"}),
+    "no-options-column": ("%s /dev/loop0" % VENDOR_AT, {"loop0": VENDOR_IMG + "\n"}),
+    "backing-file-elsewhere": ("%s /dev/loop0 %s" % (VENDOR_AT, RO_VFAT), {"loop0": "/var/lib/made-up/installer.iso\n"}),
+    "backing-file-in-a-home": ("%s /dev/loop0 %s" % (VENDOR_AT, RO_VFAT), {"loop0": "/home/%s/Downloads/installer.iso\n" % LOGIN}),
+    "backing-file-missing": ("%s /dev/loop0 %s" % (VENDOR_AT, RO_VFAT), {}),
+    "backing-file-empty": ("%s /dev/loop0 %s" % (VENDOR_AT, RO_VFAT), {"loop0": ""}),
+    "backing-file-a-blank-line": ("%s /dev/loop0 %s" % (VENDOR_AT, RO_VFAT), {"loop0": "\n" + VENDOR_IMG + "\n"}),
+    "backing-file-unreadable": ("%s /dev/loop0 %s" % (VENDOR_AT, RO_VFAT), {"loop0": (VENDOR_IMG + "\n", _unreadable)}),
+    "backing-file-a-directory": ("%s /dev/loop0 %s" % (VENDOR_AT, RO_VFAT), {"loop0/loop/backing_file": VENDOR_IMG + "\n"}),
+    "another-directory-that-begins-alike": ("%s /dev/loop0 %s" % (VENDOR_AT, RO_VFAT), {"loop0": "/opt/nvidia-other/filesystem.img\n"}),
+    "the-directory-and-no-file": ("%s /dev/loop0 %s" % (VENDOR_AT, RO_VFAT), {"loop0": "/opt/nvidia\n"}),
+    "the-directory-further-down": ("%s /dev/loop0 %s" % (VENDOR_AT, RO_VFAT), {"loop0": "/srv/opt/nvidia/filesystem.img\n"}),
+    "a-relative-path": ("%s /dev/loop0 %s" % (VENDOR_AT, RO_VFAT), {"loop0": "opt/nvidia/filesystem.img\n"}),
+    # No such tree exists on a real system (only a loop device has loop/backing_file): it is made
+    # here so that the source's name is what decides.
+    "not-a-loop-device": ("%s /dev/sda1 %s" % (VENDOR_AT, RO_VFAT), {"sda1": VENDOR_IMG + "\n", "loop0": VENDOR_IMG + "\n"}),
+    "a-device-named-like-one": ("%s /dev/mapper/loop0 %s" % (VENDOR_AT, RO_VFAT), {"mapper/loop0": VENDOR_IMG + "\n", "loop0": VENDOR_IMG + "\n"}),
+    "a-partition-of-a-loop-device": ("%s /dev/loop0p1 %s" % (VENDOR_AT, RO_VFAT), {"loop0": VENDOR_IMG + "\n", "loop0p1": VENDOR_IMG + "\n"}),
+    "a-directory-of-a-loop-device": ("%s /dev/loop0[/docs] %s" % (VENDOR_AT, RO_VFAT), {"loop0": VENDOR_IMG + "\n"}),
+    "the-next-loop-device": ("%s /dev/loop1 %s" % (VENDOR_AT, RO_VFAT), {"loop0": VENDOR_IMG + "\n"}),
+    "no-source": ("%s  %s" % (VENDOR_AT, RO_VFAT), {"loop0": VENDOR_IMG + "\n"}),
+}
+
+
+@needs_bash
+@pytest.mark.parametrize("case", sorted(_STILL_COUNTS))
+def test_a_mount_under_media_counts_unless_all_three_hold(board, case):
+    """Not a stick only when the source is a loop device, the file behind that device is under
+    /opt/nvidia/, and the mount is read-only. With any one of the three wrong, or not readable,
+    the mount counts as before."""
+    mounts, sysfs = _STILL_COUNTS[case]
+    board.set("lsblk", LSBLK + LOOP0)
+    board.set("findmnt", MOUNTS + mounts + "\n")
+    for dev, text in sysfs.items():
+        text, after = text if isinstance(text, tuple) else (text, None)
+        p = board.backing(dev, text)
+        if after:
+            after(p)
+    state = board.state_of()
+    r = board.run("apply")
+    stop = _refused(board, r, "installer stick")
+    assert "1 mount under /media" in stop and "vendor" not in stop and LOGIN not in stop, stop
+    assert changing(r.calls) == [] and not [c for c in r.calls if c.startswith("apt-get")] and board.state_of() == state
+    r = board.run("check")
+    assert r.returncode == 2 and _stick_item(r)[0] == "differs" and "1 mount under /media" in _stick_item(r)[1], said(r)
+
+
+@needs_bash
+def test_a_loop_mount_whose_file_is_on_a_stick_counts_and_so_does_the_stick(board):
+    """An image mounted from the stick itself: the file behind the loop device is under the
+    stick's own mount point, which is not /opt/nvidia/, and lsblk's rule sees the stick as before."""
+    board.set("lsblk", LSBLK + STICK + LOOP0)
+    board.set("findmnt", MOUNTS + "/media/%s/INSTALLER /dev/sda1 ro,nosuid,nodev,relatime\n%s /dev/loop0 %s\n" % (LOGIN, VENDOR_AT, RO_VFAT))
+    board.backing("loop0", "/media/%s/INSTALLER/casper/filesystem.img\n" % LOGIN)
+    stop = _refused(board, board.run("apply"), "installer stick")
+    assert "removable block device: sda; 2 mounts under /media" in stop and "vendor" not in stop and LOGIN not in stop, stop
+
+
+@needs_bash
+@pytest.mark.parametrize("lsblk, says", [
+    (LSBLK + STICK + LOOP0, "removable block device: sda"),
+    (LSBLK + 'NAME="sdb" RM="0" TRAN="usb" TYPE="disk"\n' + LOOP0, "removable block device: sdb"),
+    (LSBLK + 'NAME="loop0" RM="1" TRAN="" TYPE="loop"\n', "removable block device: loop0"),
+    (LSBLK + 'NAME="loop0" RM="0" TRAN="usb" TYPE="loop"\n', "removable block device: loop0"),
+], ids=["a-stick-beside-it", "a-usb-disk-beside-it", "the-loop-device-removable", "the-loop-device-usb"])
+def test_the_vendors_image_does_not_hide_a_removable_or_usb_device(board, lsblk, says):
+    """lsblk's rule is as it was. The image is still named, as what was not counted."""
+    board.set("lsblk", lsblk)
+    board.set("findmnt", MOUNTS + "%s /dev/loop0 %s\n" % (VENDOR_AT, RO_VFAT))
+    board.backing("loop0", VENDOR_IMG + "\n")
+    r = board.run("apply")
+    stop = _refused(board, r, "installer stick")
+    assert says in stop and "under /media" not in stop.split("; not counted: ")[0], stop
+    assert stop.count("the vendor's read-only image") == 1 and "not counted: the vendor's read-only image (L4T-README" in stop, stop
+    assert LOGIN not in stop and changing(r.calls) == []
+    r = board.run("check")
+    assert r.returncode == 2 and _stick_item(r)[0] == "differs" and says in _stick_item(r)[1]
+    # The owner's override says both as well.
+    r = board.run("check", PROVISION_ALLOW_REMOVABLE="1")
+    word, text = _stick_item(r)
+    assert word == "note" and says in text and "not counted: the vendor's read-only image (L4T-README" in text, text
+
+
+@needs_bash
+@pytest.mark.parametrize("order", ["image-first", "image-last"])
+def test_the_vendors_image_does_not_hide_another_mount_under_media(board, order):
+    """Each mount is judged by its own device and its own options: the image beside a stick's
+    partition, read-write or read-only, and beside a second loop device whose file is somewhere
+    else."""
+    image = "%s /dev/loop0 %s\n" % (VENDOR_AT, RO_VFAT)
+    for n, other in enumerate(["/media/%s/writable /dev/sda1 rw,nosuid,nodev,relatime\n" % LOGIN,
+                               "/media/%s/two /dev/sda2 ro,nosuid,nodev,relatime\n" % LOGIN,
+                               "/media/%s/OTHER /dev/loop1 %s\n" % (LOGIN, RO_VFAT)]):
+        b = Board(board.root.parent / ("beside-%d" % n))
+        b.set("lsblk", LSBLK + LOOP0 + 'NAME="loop1" RM="0" TRAN="" TYPE="loop"\n')
+        b.set("findmnt", MOUNTS + (image + other if order == "image-first" else other + image))
+        b.backing("loop0", VENDOR_IMG + "\n")
+        b.backing("loop1", "/var/lib/made-up/installer.iso\n")
+        r = b.run("apply")
+        stop = _refused(b, r, "installer stick")
+        assert "STOP at installer stick: 1 mount under /media; not counted: the vendor's read-only image (L4T-README" in stop, stop
+        assert "OTHER" not in stop and "writable" not in stop and LOGIN not in stop, stop
+        assert changing(r.calls) == []
+        assert _stick_item(b.run("check"))[0] == "differs"
+
+
+@needs_bash
+@pytest.mark.parametrize("target, source, backing, named", [
+    (VENDOR_AT, "/dev/loop12", VENDOR_IMG + "\n", "L4T-README"),
+    (VENDOR_AT, "/dev/loop0", VENDOR_IMG, "L4T-README"),
+    (VENDOR_AT, "/dev/loop0", "/opt/nvidia/made-up/dir/other.img (deleted)\n", "L4T-README"),
+    ("/media/%s/a/b/NOTES" % LOGIN, "/dev/loop0", VENDOR_IMG + "\n", "NOTES"),
+    ("/media/L4T-README", "/dev/loop0", VENDOR_IMG + "\n", "[not shown]"),
+    ("/media/%s" % LOGIN, "/dev/loop0", VENDOR_IMG + "\n", "[not shown]"),
+    ("/media", "/dev/loop0", VENDOR_IMG + "\n", "[not shown]"),
+], ids=["a-two-digit-loop-device", "no-newline", "file-deleted-since", "further-down", "directly-under-media",
+        "at-the-logins-own-directory", "media-itself"])
+def test_how_the_vendors_image_is_named(board, target, source, backing, named):
+    """By the last component of its mount point and nothing more. A mount point one level under
+    /media (or /media itself) is not named at all: that level is the login's own directory where
+    the desktop mounts things, so its name can be a login."""
+    board.set("lsblk", LSBLK + 'NAME="%s" RM="0" TRAN="" TYPE="loop"\n' % source[len("/dev/"):])
+    board.set("findmnt", MOUNTS + "%s %s %s\n" % (target, source, RO_VFAT))
+    board.backing(source[len("/dev/"):], backing)
+    r = board.run("check")
+    word, text = _stick_item(r)
+    assert word == "ok" and "the vendor's read-only image (%s: " % named in text, (word, text)
+    assert LOGIN not in text and backing.strip() not in said(r)
+    assert r.returncode == 1, said(r)
+
+
+@needs_bash
+def test_two_images_of_the_vendors_are_both_named_and_neither_counts(board):
+    board.set("lsblk", LSBLK + LOOP0 + 'NAME="loop1" RM="0" TRAN="" TYPE="loop"\n')
+    board.set("findmnt", MOUNTS + "%s /dev/loop0 %s\n/media/%s/SECOND /dev/loop1 ro,relatime\n" % (VENDOR_AT, RO_VFAT, LOGIN))
+    board.backing("loop0", VENDOR_IMG + "\n")
+    board.backing("loop1", "/opt/nvidia/made-up/second.img\n")
+    word, text = _stick_item(board.run("check"))
+    assert word == "ok" and "the vendor's read-only image (L4T-README, SECOND: " in text, (word, text)
+
+
+def test_the_stick_step_asks_for_three_columns_and_reads_the_backing_file_under_the_sys_root():
+    code = _code(_text(SCRIPT))
+    cmds = _cmds(code)
+    assert re.findall(r"\bfindmnt (.*?) 2>", cmds) == ["-r -n -o TARGET,SOURCE,OPTIONS"], "the source and the options as well as the target"
+    assert re.findall(r"\blsblk (.*?) 2>", cmds) == ["-d -n -P -o NAME,RM,TRAN,TYPE"], "lsblk is asked what it was"
+    # What is behind a loop device is read from sysfs, under the root a test can redirect, and by
+    # no command: nothing is run that would print the file's whole path, or change a mount.
+    assert code.count("/loop/backing_file") == 1 and 'first_line "$SYSR/block/${BASH_REMATCH[1]}/loop/backing_file"' in code
+    assert "/sys/block" not in code
+    for word in ("losetup", "udisksctl", "blkid", "umount", "mount ", "mountpoint", "eject"):
+        assert word not in cmds, "%r has a code path" % word
+    # The mount point is never said whole: of the three columns only the last component of the
+    # first reaches a message, and only for the vendor's image.
+    body = re.search(r"\nstep_stick\(\) \{\n(.*?)\n\}\n", code, re.S).group(1)
+    assert re.findall(r"\$\{?target\b[^\s\"]*", body) == ["$target", "$target", "${target##*/}"], "tested twice, and its last component taken"
+    said_lines = [l for l in body.split("\n") if re.search(r"\b(item|differs|say)\b|\b(what|vendor|unknown)=", l)]
+    assert len(said_lines) >= 8 and not re.search(r"\$\{?(target|src|opts|FL|line|out)\b", "\n".join(said_lines)), said_lines
 
 
 @needs_bash

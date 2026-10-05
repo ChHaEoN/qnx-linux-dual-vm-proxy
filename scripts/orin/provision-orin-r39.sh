@@ -72,7 +72,12 @@
 # anything is mounted under /media. The installer's boot entry installs unattended, and a reset
 # nobody chose would walk the boot order with the stick attached. The only override is
 # PROVISION_ALLOW_REMOVABLE=1, and it is the owner's to give. A device list that cannot be read
-# counts as a stick.
+# counts as a stick. One kind of mount under /media does not: the vendor's own image, which the
+# desktop session mounts by itself with no stick in. A mount is taken for it only when all three
+# hold: its source is a loop device, the file behind that device (the first line of
+# /sys/block/<loopN>/loop/backing_file) is under /opt/nvidia/, and it is mounted read-only. With
+# any one of them wrong, or the backing file not readable, the mount counts as any other. The
+# item then names the image, and a removable or USB device beside it is refused as before.
 #
 # A LOST SESSION. apply ignores SIGPIPE and SIGHUP, and writes each line to its log before it
 # prints it. When the reader of its output goes away (an SSH session that drops, a caller that
@@ -82,7 +87,9 @@
 #
 # NO NAME AND NO ADDRESS. It prints and logs no host name and no address. It runs no command that
 # asks for the host's name, never lists interface addresses, and asks systemd only is-enabled and
-# is-active. Mount points are counted, not printed. Other commands can name the host: sudo does,
+# is-active. Mount points are counted, not printed; of the vendor's image under /media the last
+# component of its mount point is said, and nothing of one that sits directly under /media, where
+# the desktop keeps a directory per login. Other commands can name the host: sudo does,
 # on stderr at every call, when the name does not resolve. Before a command's output is logged or
 # printed, sudo's "unable to resolve host" line loses the name, and so does any line that holds
 # the name as the shell has it (its HOSTNAME variable, which is used for that and never said).
@@ -100,7 +107,9 @@
 # which are not ignored, and the setting is not read here); what a package's maintainer scripts
 # and triggers did besides installing it (a boot file rewritten, a service restarted, a unit
 # enabled: nothing is compared before and after); that a host-naming line in a wording this
-# script does not know is struck out when the shell's HOSTNAME is not the name in it.
+# script does not know is struck out when the shell's HOSTNAME is not the name in it; that a
+# read-only loop mount on a file under /opt/nvidia/ is the vendor's image and nothing else (the
+# file's path is all that is read of it; who may write under /opt/nvidia/ is not looked at).
 # Booting a guest under KVM on this board uses a startup we rebuilt, which is not a QNX-supported
 # configuration, and nothing here times anything.
 
@@ -306,7 +315,8 @@ step_sudo() {
 
 step_stick() {
 	local out rc line name removable tran found="" mounts=0 unknown="" what=""
-	local re_name='NAME="([^"]*)"' re_rm='RM="([^"]*)"' re_tran='TRAN="([^"]*)"'
+	local target src opts label vendor=""
+	local re_name='NAME="([^"]*)"' re_rm='RM="([^"]*)"' re_tran='TRAN="([^"]*)"' re_loop='^/dev/(loop[0-9]+)$'
 	out=$(lsblk -d -n -P -o NAME,RM,TRAN,TYPE 2>/dev/null); rc=$?
 	if [ "$rc" != 0 ] || [ -z "$out" ]; then
 		unknown="lsblk listed no block device (exit $rc)"
@@ -319,19 +329,40 @@ step_stick() {
 			if [ "$removable" = 1 ] || [ "$tran" = usb ]; then found="$found $name"; fi
 		done <<< "$out"
 	fi
-	out=$(findmnt -r -n -o TARGET 2>/dev/null); rc=$?
+	out=$(findmnt -r -n -o TARGET,SOURCE,OPTIONS 2>/dev/null); rc=$?
 	if [ "$rc" != 0 ] || [ -z "$out" ]; then
 		unknown="${unknown:+$unknown; }findmnt listed no mount (exit $rc)"
 	else
-		while IFS= read -r line; do
-			case "$line" in /media|/media/*) mounts=$((mounts + 1)) ;; esac
+		while read -r target src opts; do
+			case "$target" in /media|/media/*) ;; *) continue ;; esac
+			# One kind of mount under /media is not a stick: the vendor's own image, which the
+			# desktop session mounts by itself. A mount is taken for it only when all three hold:
+			# its source is a loop device, the file behind that device is under /opt/nvidia/, and
+			# it is mounted read-only. A backing file that cannot be read is under nothing.
+			FL=""
+			if [[ "$src" =~ $re_loop ]]; then first_line "$SYSR/block/${BASH_REMATCH[1]}/loop/backing_file"; fi
+			if [[ "$FL" == /opt/nvidia/* ]] && [[ ",$opts," == *,ro,* ]]; then
+				# Named by the last component of its mount point. One level under /media is where
+				# the desktop keeps a directory per login, so a name at that level is not said.
+				label="[not shown]"
+				case "$target" in /media/*/*) label="${target##*/}" ;; esac
+				vendor="${vendor:+$vendor, }$label"
+			else
+				mounts=$((mounts + 1))
+			fi
 		done <<< "$out"
 	fi
 	if [ -n "$found" ]; then what="removable block device:$found"; fi
 	if [ "$mounts" = 1 ]; then what="${what:+$what; }1 mount under /media"; fi
 	if [ "$mounts" -gt 1 ]; then what="${what:+$what; }$mounts mounts under /media"; fi
 	if [ -n "$unknown" ]; then what="${what:+$what; }cannot tell whether a stick is in: $unknown"; fi
-	if [ -z "$what" ]; then
+	if [ -n "$vendor" ]; then
+		vendor="the vendor's read-only image ($vendor: a loop device on a file under /opt/nvidia/)"
+		if [ -n "$what" ]; then what="$what; not counted: $vendor"; fi
+	fi
+	if [ -z "$what" ] && [ -n "$vendor" ]; then
+		item ok "installer stick" "no removable or USB block device; under /media only $vendor, which is not a stick"
+	elif [ -z "$what" ]; then
 		item ok "installer stick" "no removable or USB block device, nothing mounted under /media"
 	elif [ "${PROVISION_ALLOW_REMOVABLE:-}" = 1 ]; then
 		item note "installer stick" "$what -- allowed by PROVISION_ALLOW_REMOVABLE=1, the owner's override"
