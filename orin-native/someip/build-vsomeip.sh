@@ -12,6 +12,26 @@
 # prefix, where a later find_package(vsomeip3) with no directory given would find it. Read
 # from the tag's file, not run.
 #
+# ONE KIND OF WARNING IS NOT AN ERROR: -DCMAKE_CXX_FLAGS=-Wno-error=stringop-overflow. g++ 13
+# reports -Wstringop-overflow inside a Boost 1.74 header, boost/icl/detail/interval_set_algo.hpp,
+# which vsomeip's security policy header brings in (implementation/security/include/policy.hpp,
+# through boost/icl/interval_set.hpp), and the flags the tag's CMakeLists.txt sets for Linux
+# include -Werror, so that every warning is an error. The flag stops that one kind from being
+# an error and leaves it a warning, in make's log; every other kind stays an error. No
+# generated code depends on it: it changes what the compiler does with a diagnostic, not the
+# code it generates. vsomeip's source is not changed. The alternative, another Boost (the
+# fallback named below), would change what the binary is built against. Where the word stands
+# does not matter: the tag's file appends its own flags to a CMAKE_CXX_FLAGS it is given, so
+# its -Werror follows this word, and gcc's manual gives the more specific warning option
+# priority over the less specific one wherever each stands, and has -Wno-error=<kind> hold
+# while -Werror is in effect. With CMAKE_CXX_FLAGS given, cmake does not read CXXFLAGS from the
+# environment for this configure. The word is one of FLAGS, so BUILD-INFO's flags line has it.
+# The probe's configure does not get it: the CMakeLists.txt beside this script asks for -Wall
+# -Wextra and for no -Werror, and the tag's file gives the vsomeip3 target no compile option to
+# pass on. Which warning, and in which header, is the compiler's own word. What is said here of
+# the tag's files, of Boost's (as its 1.74.0 release has them), of gcc's rule for the two
+# options and of cmake is read from those files and from the two manuals.
+#
 # BOOST: ONE, KNOWN BY NAME, OR NO BUILD. Ubuntu 22.04's default Boost is 1.74, and its
 # unversioned -dev packages are that. Ubuntu 24.04's default is 1.83; 1.74 is there as the
 # versioned packages from universe, which cannot be installed beside the default ones. So the
@@ -51,6 +71,7 @@ PREFIX="${PREFIX:-$HOME/vsomeip/$TAG}"
 SRC="${SRC:-$HOME/vsomeip/src-$TAG}"
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FLAGS=(-DCMAKE_BUILD_TYPE=Release -DENABLE_SIGNAL_HANDLING=1 -DDISABLE_DLT=1 -DCMAKE_EXPORT_NO_PACKAGE_REGISTRY=ON)
+FLAGS+=(-DCMAKE_CXX_FLAGS=-Wno-error=stringop-overflow)     # one kind of warning is not an error: the header says why
 BOOST_V="libboost1.74-dev libboost-system1.74-dev libboost-thread1.74-dev libboost-filesystem1.74-dev"
 BOOST_U="libboost-system-dev libboost-thread-dev libboost-filesystem-dev"
 

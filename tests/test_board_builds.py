@@ -29,7 +29,8 @@ script that writes a line to a file when it is run. So "nothing built is execute
 that the file does not exist afterwards, for every script.
 
 What these tests do NOT show: that anything builds. No source is fetched and nothing of the
-builds is compiled; the flags are pinned as text and as the stubs' argv, not by a compiler. The
+builds is compiled; the flags are pinned as text and as the stubs' argv, not by a compiler: what
+g++ does with the one -Wno-error=<kind> word of vsomeip's configure is its manual's to say. The
 systemd-run stub writes the limit into a made-up cgroup tree as systemd writes it into the real
 one, and the first stub that runs inside a scope writes the peak and the oom_kill count the
 test gave that scope, as the kernel counts them while a scope's command runs; where a test says
@@ -84,7 +85,19 @@ REST_KB = 1572864                                       # what a cap must leave 
 GIT_NET = ["-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=60"]
 LLAMA_FLAGS = ["-DGGML_CUDA=ON", "-DCMAKE_CUDA_ARCHITECTURES=87", "-DLLAMA_CURL=OFF", "-DCMAKE_BUILD_TYPE=Release",
                "-DLLAMA_USE_PREBUILT_UI=OFF", "-DLLAMA_BUILD_UI=OFF"]
-VSOMEIP_FLAGS = ["-DCMAKE_BUILD_TYPE=Release", "-DENABLE_SIGNAL_HANDLING=1", "-DDISABLE_DLT=1", "-DCMAKE_EXPORT_NO_PACKAGE_REGISTRY=ON"]
+# The one kind of warning vsomeip's build does not treat as an error, as the configure word that says so.
+VSOMEIP_WARN = "-DCMAKE_CXX_FLAGS=-Wno-error=stringop-overflow"
+VSOMEIP_FLAGS = ["-DCMAKE_BUILD_TYPE=Release", "-DENABLE_SIGNAL_HANDLING=1", "-DDISABLE_DLT=1", "-DCMAKE_EXPORT_NO_PACKAGE_REGISTRY=ON",
+                 VSOMEIP_WARN]
+# A word that takes a warning, or its force, away: -Wno- in any form (-Wno-error with or without a kind, a kind switched
+# off), a kind's level set to 0 (-W<kind>=0, which switches off a kind that takes a level: gcc's manual says it of
+# -Wformat=0), -fpermissive, and -w, alone or as what a -D gives. WEAKER is for one word of an argv; WEAKER_TEXT finds
+# them in a file's text. There its bare -w would also name a `[ -w file ]` or a `grep -w`: none is in the four scripts
+# or the library today, and one that comes has to be told from a flag here.
+WEAKER = re.compile(r"-Wno-|-W[A-Za-z][A-Za-z0-9+-]*=0(?![0-9])|-fpermissive|(?:^|=)-w$")
+WEAKER_TEXT = re.compile(r"-Wno-[A-Za-z0-9=_+-]*|-W[A-Za-z][A-Za-z0-9+-]*=0(?![0-9])|-fpermissive|(?<![A-Za-z0-9_-])-w(?![A-Za-z0-9_=-])")
+# The environment's words a compiler driver or cmake takes flags from. No build script sets one.
+FLAG_ENV = ("CXXFLAGS", "CFLAGS", "CPPFLAGS", "LDFLAGS")
 
 BOOST_V = ("libboost1.74-dev", "libboost-system1.74-dev", "libboost-thread1.74-dev", "libboost-filesystem1.74-dev")
 BOOST_U = ("libboost-system-dev", "libboost-thread-dev", "libboost-filesystem-dev")
@@ -114,6 +127,8 @@ STUB_HEAD = r'''#!/bin/bash
 S="$STUB_STATE"
 me="${0##*/}"
 printf '[%s] %s %s\n' "${STUB_SCOPE:--}" "$me" "$*" >> "$S/calls.log"
+# What this call saw of the environment's flag words, CXXFLAGS first: cmake and a compiler read them.
+printf '%s|%s|%s|%s\n' "${CXXFLAGS-unset}" "${CFLAGS-unset}" "${CPPFLAGS-unset}" "${LDFLAGS-unset}" >> "$S/flag_env"
 st() { local v="${2:-}"; if [ -e "$S/$1" ]; then IFS= read -r v < "$S/$1" || true; fi; printf '%s' "$v"; }
 show() { if [ -e "$S/$1" ]; then cat "$S/$1"; fi; }
 # What a build leaves where a binary would be: a script that says so when it is run.
@@ -512,7 +527,7 @@ class Host:
         for k in ("JOBS", "MEM_MAX", "NVCC", "PEER_SRC", "CC", "PREFIX", "SRC", "BUILD", "OUT", "BUILD_STATE", "STUB_SCOPE",
                   "STUB_CG", "STUB_PEAK", "STUB_KILLS", "STUB_OOM", "STUB_STOP", "STUB_SIG",
                   "VSOMEIP_TAG", "VSOMEIP_COMMIT", "VSOMEIP_URL", "CDDS_COMMIT", "CDDS_URL", "LLAMA_COMMIT", "LLAMA_URL",
-                  "LD_LIBRARY_PATH"):
+                  "LD_LIBRARY_PATH") + FLAG_ENV:
             e.pop(k, None)
         for k in [k for k in e if k.startswith("GIT_")]:    # no git setting of the session that runs pytest reaches a script
             e.pop(k)
@@ -538,6 +553,7 @@ class Host:
             calls.unlink()
         self.unset("sdrun_calls")
         self.unset("git_prompt")
+        self.unset("flag_env")
         r = subprocess.run([BASH, _fwd(SCRIPTS[which])], capture_output=True, text=True, timeout=300, cwd=_cwd,
                            env=self.env(**self.defaults(which, env)), stdin=subprocess.DEVNULL)
         return self._read(r)
@@ -562,6 +578,11 @@ class Host:
 
     def executed(self):
         p = self.state / "executed"
+        return _text(p).splitlines() if p.exists() else []
+
+    def flag_env(self):
+        """What each stub of the last run saw of FLAG_ENV's words, a line a call: "unset" for one that was not set."""
+        p = self.state / "flag_env"
         return _text(p).splitlines() if p.exists() else []
 
     def wait_for(self, name, proc, seconds=60.0):
@@ -1452,6 +1473,7 @@ def test_vsomeip_the_unversioned_boost_set_passes_and_its_version_is_dpkg_s(host
     r = host.run("vsomeip")
     assert r.returncode == 0, r.all
     assert boost_line(host) == "boost 1.83 from the unversioned dev set: " + " ".join("%s=%s" % (p, U183) for p in BOOST_U)
+    assert tools(r.calls, "cmake")[0].args[4:-1] == VSOMEIP_FLAGS, "the configure's flags are the same whichever Boost set was found"
 
 
 def test_vsomeip_the_unversioned_set_of_ubuntu_22_04_is_one_boost_with_its_own_dependencies(host):
@@ -1461,6 +1483,7 @@ def test_vsomeip_the_unversioned_set_of_ubuntu_22_04_is_one_boost_with_its_own_d
     r = host.run("vsomeip")
     assert r.returncode == 0, r.all
     assert boost_line(host).startswith("boost 1.74 from the unversioned dev set: libboost-system-dev=%s " % U174)
+    assert tools(r.calls, "cmake")[0].args[4:-1] == VSOMEIP_FLAGS, "the configure's flags are the same whichever Boost set was found"
 
 
 MIXES = {
@@ -1528,6 +1551,129 @@ def test_vsomeip_build_info_holds_the_commit_the_flags_the_compiler_and_each_out
         "-DCMAKE_INSTALL_PREFIX=%s" % _fwd(host.vs_prefix)]
     assert "-DCMAKE_EXPORT_NO_PACKAGE_REGISTRY=ON" in VSOMEIP_FLAGS, \
         "vsomeip's export(PACKAGE) would otherwise write the build tree's path into ~/.cmake/packages"
+
+
+def test_vsomeip_one_kind_of_warning_is_not_an_error_for_vsomeip_s_configure_and_the_probe_s_gets_nothing(host):
+    """g++ 13 reports -Wstringop-overflow inside a Boost 1.74 header that vsomeip's security
+    policy header brings in, and the flags vsomeip's CMakeLists.txt sets include -Werror. So
+    vsomeip's configure gets one word, for that one kind, once. The probe's configure does not:
+    it is this repo's CMakeLists.txt, which makes no warning an error, and its argv stays what
+    it was. The three make lines carry a directory, a job count or a target, and no flag."""
+    r = host.run("vsomeip")
+    assert r.returncode == 0, r.all
+    assert VSOMEIP_WARN == "-DCMAKE_CXX_FLAGS=-Wno-error=stringop-overflow" and VSOMEIP_FLAGS[-1] == VSOMEIP_WARN
+    configure, probe = tools(r.calls, "cmake")
+    assert [a for a in configure.args if "FLAGS" in a] == [VSOMEIP_WARN], "once, whole, and no other flags variable beside it"
+    assert configure.args == ["-S", _fwd(host.vs_src), "-B", _fwd(host.vs_src / "build")] + VSOMEIP_FLAGS + [
+        "-DCMAKE_INSTALL_PREFIX=%s" % _fwd(host.vs_prefix)]
+    pre = _fwd(host.vs_prefix)
+    assert probe.args == ["-S", _fwd(os.path.join(REPO, "orin-native", "someip")), "-B", pre + "/probe-build", "-DCMAKE_BUILD_TYPE=Release",
+                          "-Dvsomeip3_DIR=%s/lib/cmake/vsomeip3" % pre, "-DCMAKE_INSTALL_RPATH=%s/lib" % pre,
+                          "-DCMAKE_BUILD_WITH_INSTALL_RPATH=ON"], "the probe's configure is as it was"
+    # the same through what each scope was made for: the step that configures vsomeip, and no other step
+    steps = [step_cmd(host, s) for s in scopes(r.calls)[1:]]
+    assert [VSOMEIP_WARN in s for s in steps] == [True, False, False, False, False], steps
+    # make's own command line can hand a compiler flags as well (a variable after the directory): each of the three, whole
+    bld = _fwd(host.vs_src / "build")
+    assert [c.args for c in tools(r.calls, "make")] == [["-C", bld, "-j2"], ["-C", bld, "install"], ["-C", pre + "/probe-build"]]
+
+
+def test_vsomeip_the_header_says_why_one_kind_of_warning_is_not_an_error():
+    """The header names the way from vsomeip's sources to the Boost header, which can be read in
+    them, and gives no count of the files that go that way: a count would be a compile's. It
+    says which of its statements are readings and which one is the compiler's."""
+    head = " ".join(_text(SCRIPTS["vsomeip"]).split("\nset -euo pipefail\n")[0].replace("\n#", " ").split())
+    for said in (VSOMEIP_WARN, "g++ 13", "-Wstringop-overflow", "boost/icl/detail/interval_set_algo.hpp", "-Werror",
+                 "implementation/security/include/policy.hpp", "boost/icl/interval_set.hpp",
+                 "leaves it a warning", "every other kind stays an error", "No generated code depends on it",
+                 "vsomeip's source is not changed", "another Boost", "what the binary is built against",
+                 "is the compiler's own word", "is read from those files and from the two manuals"):
+        assert said in head, said
+    assert not re.search(r"\b(\d+|two|three|four|five|six|several|some|both) of vsomeip's (own )?(source )?files\b", head)
+
+
+def test_vsomeip_the_checkout_s_files_are_as_they_were_after_a_build(host):
+    """vsomeip's source is not changed: the one word goes to cmake, and no file of the checkout is
+    edited, removed or added so that the build passes. BUILD-INFO's count of changed tracked
+    files is read before the build steps and would not see an edit the script made itself; this
+    does. What is new under the checkout after a run is under build/, which is the build's own."""
+    made_up = {".git/STUB_HEAD": VSOMEIP_PIN, "CMakeLists.txt": 'set(OS_CXX_FLAGS "-Wall -Wextra -Werror -fPIE")  # made up\n',
+               "implementation/security/include/policy.hpp": "// a made-up policy.hpp\n"}
+    for name, text in made_up.items():
+        _put(host.vs_src / name, text)
+
+    def files():
+        inside = [p for p in host.vs_src.rglob("*") if p.is_file()]
+        return {_fwd(p.relative_to(host.vs_src)): _sha(p) for p in inside if p.relative_to(host.vs_src).parts[0] != "build"}
+
+    before = files()
+    assert sorted(before) == sorted(made_up)
+    r = host.run("vsomeip")
+    assert r.returncode == 0 and clones(r.calls) == [], r.all
+    assert (host.vs_src / "build" / "CMakeCache.txt").is_file(), "the build wrote, and under build/"
+    assert files() == before, "no file of the checkout was edited, removed or added"
+
+
+def test_vsomeip_the_probe_s_own_build_makes_no_warning_an_error_and_hides_none():
+    """Why the probe's configure is left alone: nothing gives its compile a -Werror. Not this
+    script, and not the CMakeLists.txt beside it, which asks for -Wall -Wextra. A warning in the
+    probe's compile, the Boost header's or any other, stays a warning in its log."""
+    cmakelists = "\n".join(l for l in _text(os.path.join(REPO, "orin-native", "someip", "CMakeLists.txt")).split("\n")
+                           if not l.lstrip().startswith("#"))
+    assert "target_compile_options(someip_vprobe PRIVATE -O2 -Wall -Wextra)" in cmakelists
+    assert re.findall(r"-W[A-Za-z][A-Za-z0-9=_+-]*", cmakelists) == ["-Wall", "-Wextra"], "no -Werror, and no -Wno- either"
+    assert WEAKER_TEXT.findall(cmakelists) == [] and "CMAKE_CXX_FLAGS" not in cmakelists
+    assert "-Werror" not in _code(_text(SCRIPTS["vsomeip"])), "and this script hands nobody one"
+
+
+def test_vsomeip_build_info_s_flags_line_is_what_the_configure_got(host):
+    """BUILD-INFO says with which flags the libraries were built: the words of its flags line are
+    the configure's own, in order, the warning's word among them."""
+    r = host.run("vsomeip")
+    assert r.returncode == 0, r.all
+    lines = info_lines(host, "vsomeip")
+    configure = tools(r.calls, "cmake")[0]
+    flags = one(lines, "flags ")
+    assert flags.split(" ") == ["flags"] + configure.args[4:-1], "the line's words are the configure's, between its directories and its prefix"
+    assert flags.endswith(" -DCMAKE_EXPORT_NO_PACKAGE_REGISTRY=ON " + VSOMEIP_WARN), flags
+    assert [l for l in lines if "stringop-overflow" in l] == [flags], "in that line and in no other"
+
+
+def test_vsomeip_build_info_s_first_four_lines_are_in_the_form_they_had(host):
+    """Whatever reads BUILD-INFO by line number or by a whole line finds the first four as they
+    were: the commit, the probe's sha256, its source's sha256, when and with which compiler.
+    scripts/aws/remote-ladder.sh asks for the third whole (grep -qx "source sha256 <hash>").
+    The flags line is below them."""
+    r = host.run("vsomeip")
+    assert r.returncode == 0, r.all
+    lines = info_lines(host, "vsomeip")
+    assert re.fullmatch(r"vsomeip 3\.4\.10 commit %s from https://github\.com/COVESA/vsomeip\.git" % VSOMEIP_PIN, lines[0]), lines[0]
+    assert re.fullmatch(r"someip_vprobe sha256 [0-9a-f]{64}", lines[1]), lines[1]
+    assert re.fullmatch(r"source sha256 [0-9a-f]{64}", lines[2]), lines[2]
+    assert re.fullmatch(r"built \d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ with g\+\+ \(Stub 0\.0-s1\) 0\.0\.0", lines[3]), lines[3]
+    assert lines.count("source sha256 %s" % _sha(os.path.join(REPO, "orin-native", "someip", "someip_vprobe.cpp"))) == 1
+    assert [l.split(" ")[0] for l in lines[:8]] == ["vsomeip", "someip_vprobe", "source", "built", "boost", "boost", "flags", "tracked"]
+
+
+@pytest.mark.parametrize("which", ALL)
+def test_no_build_passes_a_word_that_takes_a_warning_s_force_away_but_vsomeip_s_one(host, which):
+    """-Wno-error with no kind named would stop every kind of warning from being an error in
+    vsomeip's build, a kind switched off (-Wno-<kind>, or -W<kind>=0) or -w would take a
+    warning's line out of a log, and -fpermissive would let through what the compiler refuses.
+    None is passed by any of the four scripts: not in an argv, not through the environment's
+    flag words, and not in the text of a script or of the library. vsomeip's configure has its
+    one word, seen once in its scope's argv and once in cmake's."""
+    host.set("llama_libs")
+    r = host.run(which)
+    assert r.returncode == 0, r.all
+    want = [("systemd-run", VSOMEIP_WARN), ("cmake", VSOMEIP_WARN)] if which == "vsomeip" else []
+    assert [(c.name, a) for c in r.calls for a in c.args if WEAKER.search(a)] == want, "every such word in every argv of the run"
+    assert host.flag_env() and set(host.flag_env()) == {"|".join(["unset"] * len(FLAG_ENV))}, "no stub saw a flag word in its environment"
+    for path, own in ((SCRIPTS[which], ["-Wno-error=stringop-overflow"] if which == "vsomeip" else []), (LIB, [])):
+        code = _code(_text(path))
+        assert WEAKER_TEXT.findall(code) == own, path
+        assert not re.search(r"\b(%s|CMAKE_C_FLAGS)\b" % "|".join(FLAG_ENV), code), path
+        assert len(re.findall(r"CMAKE_CXX_FLAGS", code)) == len(own), path
 
 
 def test_vsomeip_a_cache_without_a_boost_line_is_said_not_guessed(host):
