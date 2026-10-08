@@ -467,7 +467,7 @@ def test_red_masks_every_aws_shape_and_the_local_literals():
         "ec2-203-0-113-7.eu-central-1.compute.amazonaws.com ip-10-0-0-5",
         "ssh 203.0.113.7 mac 0a:1b:2c:3d:4e:5f accounts 111122223333 444455556666 done",
         "InvalidKeyPair.NotFound: lab-key; group lab-sg; addr 2001:db8::1 and fe80::1",
-        "booted ami-02153ae97d7504246",
+        "booted ami-0d9429f78b33241cd",
     ])
     # stdin, not argv: on Windows an argv string is cut at its first newline.
     r = _sourced("red", env={"METAL_PEM": "/c/keys/lab-eu.pem", "METAL_KEY_NAME": "lab-key",
@@ -479,7 +479,7 @@ def test_red_masks_every_aws_shape_and_the_local_literals():
                    "203.0.113.7", "0a:1b:2c:3d:4e:5f", "111122223333", "444455556666",
                    "lab-key", "lab-sg", "2001:db8::1", "fe80::1"):
         assert leaked not in out, (leaked, out)
-    assert "ami-02153ae97d7504246" in out, "the AMI is provenance and must survive"
+    assert "ami-0d9429f78b33241cd" in out, "the AMI is provenance and must survive"
 
 
 @needs_bash
@@ -643,8 +643,9 @@ def _rec(tmp_path):
                                   "threads": {"4022": {"comm": "qemu-system-aar", "wait_ns": 5}}}}), newline=False)
     _write(raw / "stamp.json",
            json.dumps({"guest_ifs": "/home/ubuntu/a1/img/ifs-kick.bin", "qemu_started_ns": 123456789012,
-                       "qemu_version": "QEMU emulator version 6.2.0 (Debian 1:6.2+dfsg-2ubuntu6.31)",
-                       "kernel": "6.8.0-1063-aws", "ami": "ami-02153ae97d7504246"}, indent=2))
+                       # Ubuntu 24.04's shape, with a made-up build: the login's name stands inside it
+                       "qemu_version": "QEMU emulator version 8.2.2 (Debian 1:8.2.2+ds-0ubuntu1.99)",
+                       "kernel": "6.8.0-1063-aws", "ami": "ami-0d9429f78b33241cd"}, indent=2))
     _write(rec / "ladder" / "run.log",
            "ubuntu@ip-10-0-0-5 ran it\naccount 111122223333.\nguest 192.168.100.10:7100 on br0")
     (raw / "libshmchan.so").write_bytes(b"\x7fELF")
@@ -671,8 +672,8 @@ def test_capture_publishes_arm_files_byte_for_byte_and_redacts_the_rest(tmp_path
         assert (praw / name).read_bytes() == (raw / name).read_bytes(), name
     stamp = json.loads((praw / "stamp.json").read_text(encoding="utf-8"))
     assert stamp["qemu_started_ns"] == 123456789012, "a 12-digit NUMBER must survive"
-    assert stamp["ami"] == "ami-02153ae97d7504246", "the AMI is provenance and is kept"
-    assert stamp["qemu_version"].endswith("2ubuntu6.31)"), "the package version must not be over-masked"
+    assert stamp["ami"] == "ami-0d9429f78b33241cd", "the AMI is provenance and is kept"
+    assert stamp["qemu_version"].endswith("+ds-0ubuntu1.99)"), "the package version must not be over-masked"
     log = (pub / "ladder" / "run.log").read_text(encoding="utf-8")
     assert "ip-10-0-0-5" not in log and "111122223333" not in log and "192.168.100.10" in log
     assert not (praw / "libshmchan.so").exists() and not (praw / ".run-start").exists()
@@ -760,7 +761,8 @@ def test_capture_refuses_nothing_and_a_used_output(tmp_path):
     ("arn:aws:iam::111122223333:user/x", False),
     ("id 11112222-3333-4444-5555-666677778888", False),
     ("account 111122223333 here", False),
-    ("ami-02153ae97d7504246 is fine", True),
+    ("ami-0d9429f78b33241cd is fine", True),
+    ("ami-02153ae97d7504246 is fine", True),     # a held record names the image launched until 2026-10-08
 ])
 def test_leakscan_text(tmp_path, text, ok):
     _write(tmp_path / "d" / "x.log", text)

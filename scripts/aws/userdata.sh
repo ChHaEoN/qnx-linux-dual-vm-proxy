@@ -6,11 +6,14 @@
 # the poweroff into a termination, which bounds the bill if the operator is gone.
 #
 # SURVIVES A REBOOT. A pending shutdown lives in /run, which a reboot empties, and
-# user-data runs once per instance -- this AMI boots with panic=-1, so a host panic
-# would reboot into an unbounded instance. So the deadline is written to disk as an
+# user-data runs once per instance -- so on a kernel that reboots when it panics
+# (kernel.panic not 0; panic=-1 on the command line sets it) a host panic would
+# reboot into an unbounded instance. So the deadline is written to disk as an
 # absolute time, and a per-boot script re-arms the remainder, or powers off at once
 # if the deadline has passed. What it cannot bound is a kernel that hangs without
-# rebooting; README.md says so.
+# rebooting, which is also what a panic is where kernel.panic is 0; README.md says
+# so. Which of the two this image's kernel does is not assumed here: remote-ladder.sh's
+# setup reads it, prints it, and records it in host-facts.txt.
 #
 # The +90 here and SHUTDOWN_MIN_EXPECTED in drive-metal.sh must agree
 # (tests/test_aws_tooling.py checks it).
@@ -30,12 +33,18 @@ chmod 755 /var/lib/cloud/scripts/per-boot/qnx-metal-deadline.sh
 
 # Everything the run needs, installed before the operator logs in. A failure is
 # written down, never papered over with a readiness file.
+#
+# ipxe-qemu (2026-10-08) is named because qemu-system-arm only recommends it and
+# nothing recommended is installed here. With it the instance and the Orin carry
+# the same three QEMU packages: qemu-system-arm, qemu-utils, ipxe-qemu. Not the
+# same set: the Orin also has qemu-efi-aarch64, another recommended package,
+# which a guest started with -kernel does not use.
 set -e
 trap 'touch "$M/PROVISION_FAILED"' ERR
 export DEBIAN_FRONTEND=noninteractive
 apt-get -o DPkg::Lock::Timeout=300 update -y
 apt-get -o DPkg::Lock::Timeout=300 install -y --no-install-recommends \
-  qemu-system-arm qemu-utils bridge-utils iproute2 \
+  qemu-system-arm qemu-utils ipxe-qemu bridge-utils iproute2 \
   build-essential python3 net-tools gawk
 usermod -aG kvm ubuntu
 touch "$M/PROVISIONED"

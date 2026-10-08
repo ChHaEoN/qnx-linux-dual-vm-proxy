@@ -56,18 +56,25 @@ A `METAL_*` value exported in the environment wins over the file's. Pass a
 session's own `METAL_REPO_TAR` that way.
 
 **Check these before `launch`, while nothing is billed yet.** `launch` validates only
-`METAL_KEY_NAME` and `METAL_SG_NAME`; the values below are first read once the instance
-is up, so a stale one costs a launched `a1.metal` and the full 15-minute provisioning
-wait before `wait` aborts and terminates it.
+`METAL_KEY_NAME`, `METAL_SG_NAME` and the shape of `METAL_QEMU_PKG`; the values below are
+first read once the instance is up, so a stale one costs a launched `a1.metal` and the
+full 15-minute provisioning wait before `wait` aborts and terminates it.
 - The security group still admits **your current address** on 22. A home address moves,
   and an SSH that never connects is indistinguishable from a failed boot from here.
 - `METAL_PEM` is set, and is the private key matching `METAL_KEY_NAME`.
 - `METAL_REPO_TAR`, `METAL_IFS` and `METAL_DISK_GZ` all exist and `METAL_DISK_GZ` is
   named `disk-qemu.gz`; `upload`, after `wait`, is the first step that reads them.
+- `METAL_QEMU_PKG`, when the session expects one QEMU package build on both hosts, is the
+  other host's `qemu-system-arm` version as its `dpkg-query` prints it that day, epoch
+  included. Export it for the session, as `METAL_REPO_TAR` is passed, and do not keep it
+  in `.env.local`: a value left there is the last session's. `launch` refuses one that is
+  not a package version; whether it is the right one is first known at `run setup`, on
+  the billed instance (see "What `run setup` says about the host").
 
 `run-instances` itself rejects a key pair or security group that no longer exists,
 unconfigured credentials, and a `METAL_AMI` that is not in `METAL_REGION` (an AMI id is
-region-local, and the default is an `eu-central-1` one). Those cost nothing, but they
+region-local, and the default is an `eu-central-1` one: Canonical's public Ubuntu 24.04
+arm64 server image, pinned by id in `drive-metal.sh`). Those cost nothing, but they
 leave `$METAL_STATE/token` behind, and every later `launch` refuses the unclean session
 state until it is removed by hand (`clear` will not remove it: it waits on a `verify-vol`
 pass, and no volume was recorded).
@@ -140,7 +147,11 @@ This runs several harnesses that boot their own guests, each on its own image, i
     and not in this list) predates these words.
   - It writes into `rec/<name>` (`trace2` here), and runs each harness once per session.
 - The SOME/IP harnesses build vsomeip on the instance first, once per session. The older
-  `someip` phase does the same.
+  `someip` phase does the same. The build's packages are the versioned Boost 1.74 ones, the
+  four the Orin's provisioning script installs: on Ubuntu 24.04 the plain `-dev` names are a
+  later Boost. `build-vsomeip.sh` runs its build under a memory cap, so the phase passes a
+  job count and a cap sized to the host: the cap is half the host's memory, with the Orin's
+  share of it for each job and never more jobs than cores.
 - Every other step is the same, and `capture` takes the session once any harness has
   finished. `run-bellrobust.sh` keeps no `lat-*.json`: its exchange sets are `ex-*.json` from the
   same probe, held to the same byte-for-byte rule, and a `scenarios.log` exchange-set line also
@@ -153,8 +164,10 @@ This runs several harnesses that boot their own guests, each on its own image, i
     schedules `shutdown -h +90` first.
   - It also writes the absolute deadline to disk with a per-boot script that
     re-arms whatever time remains, or powers off at once if the deadline has
-    passed. A pending shutdown lives in `/run`, which a reboot empties, and this
-    AMI boots with `panic=-1`.
+    passed. A pending shutdown lives in `/run`, which a reboot empties, and a
+    kernel whose `kernel.panic` is not 0 reboots when it panics. What this image's
+    kernel does is read, not assumed: `run setup` prints it and records it in
+    `host-facts.txt`, and warns when a panic would halt the host instead.
   - `wait` goes on only if a poweroff is armed 61–91 minutes ahead and the
     per-boot re-arm is installed. `upload`, `run` and `fetch` refuse until it has.
 - **Every failure between launch and that proof terminates**, and the
@@ -181,9 +194,53 @@ This runs several harnesses that boot their own guests, each on its own image, i
   then stays in that state for about ten minutes.
 
 **What this cannot bound:** a host kernel that hangs without rebooting runs no
-timer. Nothing here watches the instance from outside the instance.
+timer, and where `kernel.panic` is 0 a panic is such a hang. Nothing here watches
+the instance from outside the instance.
 
 The 2026-09-22 session: about 11 minutes billed, about $0.09.
+
+## What `run setup` says about the host (2026-10-08)
+
+The instance runs the image's own kernel, whatever its series, so `setup` says what it met
+before it checks anything:
+- It prints one `host fact:` line each for the kernel release, `CONFIG_HZ` and the file it
+  was read from, the tick handler's name as `/proc/kallsyms` has it, the lockdown state,
+  whether the KVM counters read, the `qemu-system-arm` package version found and the one
+  expected, and what `kernel.panic` and the command line say about a panic. None of them
+  is an identifier, and they reach the transcript whole.
+  - One exception is the operator's machine's doing, not the instance's. `red()` masks
+    the operator's own login wherever it stands, inside a word too: a transcript is never
+    data. On a machine whose login is `ubuntu`, a package version in these lines prints
+    with that word masked. `host-facts.txt` has it whole.
+  - `tick_handler` is one of the three names the reports accept, or `unknown` when
+    kallsyms has none of them. A kernel that has more than one gets each of them,
+    comma-separated, in kallsyms' order: mainline up to 6.6 defines two of the three, one
+    of them a different function from the one that took the name later.
+  - `kvm_counters` is `readable`; or `unreadable:` and the names of the counters that
+    did not give an integer; or `unread`, when the list could not be taken from the
+    uploaded tarball or `/sys/kernel/debug/kvm` could not be looked at (no debugfs
+    mounted there yet, or `sudo` wants a password). It is read here and checked later:
+    the check that stops `setup` on a counter comes after the bridge, as before.
+- It writes `host-facts.txt` as soon as the record has a directory, and again once the
+  bridge is up. A `setup` that stops later, on a KVM counter that does not read for one,
+  leaves both the printed lines and the file. The five checks before that point (the
+  inputs file, user-data finished, access to `/dev/kvm`, a leftover record,
+  `METAL_QEMU_PKG`) refuse before a record directory exists, and leave the printed lines.
+- `METAL_QEMU_PKG`, when set, is the `qemu-system-arm` version the session expects: the
+  other host's, as its `dpkg-query` prints it. The image and the Orin's archive give one
+  QEMU release, but user-data installs the day's package and the Orin keeps the build it
+  has. `run setup` carries the value to the instance, and `setup` refuses a host whose
+  `dpkg` has another.
+  - It refuses before the record has a directory, so nothing is left behind: a mistyped
+    value is corrected and `run setup` run again. When the value was right, the session
+    ends there, since no harness may run on the other build.
+  - Whether the KVM counters read is printed by then, and the refusal repeats it, so a
+    session that stops there has still learnt what a fallback is planned from.
+  - The comparison is made once more as `setup`'s final act, on a fresh read: the
+    package timers are stopped only by `quiesce`, and a package that changed while
+    `setup` ran stops it there.
+  - Unset, nothing is expected. `host-facts.txt` records the version found and the one
+    expected.
 
 ## What keeps identifiers out of the repo
 
@@ -199,6 +256,16 @@ The 2026-09-22 session: about 11 minutes billed, about $0.09.
     the redactor unchanged. Their numbers are never redacted, because the
     account-id mask would rewrite 12-digit KVM counters.
   - The arm files are checked to be identical to what the run wrote.
+  - The account-id mask takes a run of twelve digits only when it stands alone.
+    Inside a longer run of digits it is kept, as it is inside a word. Until
+    2026-10-08 a longer run whose length was a multiple of twelve lost its last
+    twelve wherever a word ended with it.
+  - An IPv6 address is masked by the rule the scan after the fetch refuses on: a run
+    of hex digits and colons that is not glued to a word, holds `::` or at least five
+    colons, and is not a MAC. The guest's link-local address, which follows from its
+    fixed MAC, is kept, as the scan keeps it. Until 2026-10-08 the redactor masked
+    IPv4 only: an instance's own IPv6 address in a text file reached `pub.tgz`, and
+    the scan then refused the whole capture.
   - A capture of nothing, or into a used directory, is refused.
 - **A scan after the fetch.** `leakscan.py` runs before anything can be copied
   anywhere, and its findings print the shape of a leak, never its value. It
@@ -211,7 +278,9 @@ The 2026-09-22 session: about 11 minutes billed, about $0.09.
     name.
 - **The operator's transcript is redacted too.** Everything `drive-metal.sh`
   prints, `aws` CLI errors included, goes through `red()`, which also masks
-  those literal local values.
+  those literal local values. As in the redactor, a 12-digit run beside a
+  letter or a digit is part of a longer token, such as a sha256, and is not
+  taken for an account id, so the hashes `upload` prints stay whole.
 
 ## What it does not do
 

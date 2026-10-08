@@ -44,6 +44,9 @@ ALLOWED = {
     "sg-0123456789abcdef0",
     # the public Ubuntu arm64 AMI drive-metal.sh launches: a published image id,
     # not a resource belonging to this account.
+    "ami-0d9429f78b33241cd",
+    # the public Ubuntu arm64 AMI it launched until 2026-10-08, kept while a fixture
+    # names it (leakscan must go on passing a held record's image id).
     "ami-02153ae97d7504246",
 }
 
@@ -76,18 +79,51 @@ def _read(p):
         return f.read().decode("utf-8", errors="replace")
 
 
-@pytest.mark.parametrize("path", sorted(_files()), ids=lambda p: os.path.relpath(p, REPO).replace(os.sep, "/"))
-def test_only_allowlisted_identifiers(path):
-    text = _read(path)
+def _unlisted(text, allowed):
+    """Every identifier-shaped value in `text` that is not in `allowed`."""
     bad = []
     for rx in (RESOURCE, ACCOUNT):
-        bad += [m.group(0) for m in rx.finditer(text) if m.group(0) not in ALLOWED]
+        bad += [m.group(0) for m in rx.finditer(text) if m.group(0) not in allowed]
     for m in IPV4.finditer(text):
         v = m.group(0)
         if not DOC_OR_PRIVATE.match(v) and all(0 <= int(o) <= 255 for o in v.split(".")):
             bad.append(v)
+    return bad
+
+
+@pytest.mark.parametrize("path", sorted(_files()), ids=lambda p: os.path.relpath(p, REPO).replace(os.sep, "/"))
+def test_only_allowlisted_identifiers(path):
+    bad = _unlisted(_read(path), ALLOWED)
     rel = os.path.relpath(path, REPO).replace(os.sep, "/")
     # Report the shape, never the value: the value may be the leak, and this
     # message ends up in a public CI log.
     assert not bad, "%s carries %d identifier(s) not on the allowlist: %s" % (
         rel, len(bad), ", ".join(sorted({"%s[%d chars]" % (v[:4], len(v)) for v in bad})))
+
+
+DRIVER = os.path.join(REPO, "scripts", "aws", "drive-metal.sh")
+LAUNCH_AMI = re.compile(r'^AMI="\$\{METAL_AMI:-(ami-[0-9a-f]+)\}"', re.M)
+
+
+def test_the_image_the_driver_launches_is_on_the_list_and_is_caught_without_it():
+    """The image id drive-metal.sh launches by default is the one AWS-shaped value in the tooling
+    that is not typed by hand, so a new pin is the likeliest way for this check to meet a value
+    nobody listed. With the id on the list the driver is clean; with it taken off, the check
+    names it. Both halves, so the list is shown to be what lets the id through."""
+    driver = _read(DRIVER)
+    m = LAUNCH_AMI.search(driver)
+    assert m, "drive-metal.sh no longer sets its default image in the form this test reads"
+    ami = m.group(1)
+    assert ami in ALLOWED, "the image the driver launches is not on the allowlist (%s[%d chars])" % (ami[:4], len(ami))
+    assert _unlisted(driver, ALLOWED) == []
+    assert set(_unlisted(driver, ALLOWED - {ami})) == {ami}
+
+
+def test_every_listed_image_id_is_still_named_by_something():
+    """An image id stays on the list while the tooling or a fixture names it, and goes when the
+    last of them does: a list that keeps what nothing uses is how a real value comes to look
+    like a placeholder. This file is the list, so it does not count."""
+    here = os.path.abspath(__file__)
+    texts = [_read(p) for p in _files() if os.path.abspath(p) != here]
+    unused = sorted(v for v in ALLOWED if v.startswith("ami-") and not any(v in t for t in texts))
+    assert not unused, "on the allowlist, and named by nothing: %s" % ", ".join("%s[%d chars]" % (v[:4], len(v)) for v in unused)

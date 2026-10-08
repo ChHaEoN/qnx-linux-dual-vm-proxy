@@ -29,6 +29,17 @@
 # SESSION STATE (instance id, volume id, address, known_hosts) lives in METAL_STATE, by
 # default outside the repo, and the script refuses a state or fetch directory inside
 # the repo. Everything printed, stderr included, goes through red().
+#
+# THE IMAGE (2026-10-08). The default is Canonical's public Ubuntu 24.04 arm64 server image for
+# eu-central-1, pinned by id: its archive gives the QEMU release the Orin runs since its upgrade
+# to L4T R39. The image's own kernel is used, whatever its series: `run setup` prints and records
+# the kernel release, CONFIG_HZ and the tick handler's name before it checks anything. One
+# release is not one package build: user-data installs the day's qemu-system-arm, and the Orin
+# keeps the build it has. METAL_QEMU_PKG (optional) is the package version a session expects, the
+# other host's on the day: exported for the session, as a session's own METAL_REPO_TAR is, and not
+# kept in .env.local, where the last session's value would be the next one's. `launch` refuses a
+# value that is not a package version, while nothing is billed; `run setup` carries it to the
+# instance, which refuses when dpkg has another, before it makes a record and before any harness.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # METAL_NO_ENV_LOCAL: the tests must not pick up a developer's local configuration.
@@ -44,7 +55,7 @@ if [ -z "${METAL_NO_ENV_LOCAL:-}" ] && [ -r "$HERE/.env.local" ]; then
 fi
 AWS="${AWS:-aws}"
 REGION="${METAL_REGION:-eu-central-1}"
-AMI="${METAL_AMI:-ami-02153ae97d7504246}"      # ubuntu-jammy-22.04-arm64-server-20260904 (public)
+AMI="${METAL_AMI:-ami-0d9429f78b33241cd}"      # ubuntu-noble-24.04-arm64-server-20260923 (public)
 TYPE="${METAL_TYPE:-a1.metal}"
 SHUTDOWN_MIN_EXPECTED="${SHUTDOWN_MIN_EXPECTED:-90}"   # must match userdata.sh (a test checks it)
 # Polling pace and patience; the tests shrink them.
@@ -74,6 +85,12 @@ red_literals() {
 	forms+=("${METAL_KEY_NAME:-}" "${METAL_SG_NAME:-}" "${USER:-}" "${USERNAME:-}")
 	printf '%s\n' "${forms[@]}" | awk 'length($0) >= 3' | awk '{ print length($0) "\t" $0 }' | sort -rn | cut -f2- | uniq
 }
+# The literals first, then every AWS shape. THE 12-DIGIT RULE (an account id) takes a run of exactly 12 digits that
+# stands alone. A letter or a digit on either side makes the run part of a longer token, and a "." before it makes it
+# a fraction: both stay. FOUND 2026-10-04: a letter on either side did not count, so a sha256 that holds 12
+# digits in a row (about 1 in 35 does) printed as ab<account>cd... in the inputs.txt upload shows. redact-aws.sh keeps
+# the same runs; it also keeps one beside - or _, and the integer part of a decimal, which red() masks: its output is
+# a transcript, never data, so masking more costs nothing here.
 red() {
 	local s lit
 	s="$(cat; printf x)"; s="${s%x}"
@@ -87,7 +104,7 @@ red() {
 		s/(^|[^A-Za-z0-9])(i|vol|sg|subnet|vpc|eni|r|snap)-[0-9a-f]{8,}/\1<\2-id>/g
 		s/arn:aws[^ "]*/<arn>/g
 		:a
-		s/(^|[^0-9.])[0-9]{12}([^0-9]|$)/\1<account>\2/
+		s/(^|[^0-9A-Za-z.])[0-9]{12}([^0-9A-Za-z]|$)/\1<account>\2/
 		ta
 		s/([0-9]{1,3}\.){3}[0-9]{1,3}/<ip>/g
 		s/([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}/<mac>/g
@@ -183,6 +200,13 @@ main() {
 		esac
 	}
 	need() { local v; for v in "$@"; do [ -n "${!v:-}" ] || die "set $v (environment or scripts/aws/.env.local)"; done; }
+	# 2026-10-08: METAL_QEMU_PKG, when set, is a Debian version string and nothing else. `launch`
+	# asks, so a malformed one is refused before anything is billed, and `run setup` asks again
+	# before the value crosses to the instance.
+	qemu_pkg_shape() {
+		[ -z "${METAL_QEMU_PKG:-}" ] || [[ "$METAL_QEMU_PKG" =~ ^[0-9][A-Za-z0-9.+:~-]*$ ]] \
+			|| die "METAL_QEMU_PKG='$METAL_QEMU_PKG' is not a package version"
+	}
 	armed() { [ -e "$STATE/armed" ] && [ -s "$STATE/ip" ] || die "the safety net was not proven armed (run wait)"; }
 	SSHO=(-o BatchMode=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$STATE/known_hosts"
 	      -o ConnectTimeout=8 -o ServerAliveInterval=20 -o LogLevel=ERROR)
@@ -192,6 +216,7 @@ main() {
 	case "${1:?step: launch|wait|upload|run|fetch|terminate|verify|verify-vol|clear}" in
 	launch)
 		need METAL_KEY_NAME METAL_SG_NAME
+		qemu_pkg_shape
 		mkdir "$STATE/lock" 2>/dev/null || die "another launch holds $STATE/lock (or a stale one; remove it after checking)"
 		trap 'rmdir "$STATE/lock" 2>/dev/null || true' EXIT
 		local f
@@ -346,6 +371,12 @@ main() {
 				[[ "$w" =~ ^[A-Z_][A-Z0-9_]*=[A-Za-z0-9._/-]*$ ]] || die "LADDER_ENV word '$w' is not NAME=value"
 			done
 			envs+=("LADDER_ENV=$LADDER_ENV")
+		fi
+		# 2026-10-08: the qemu-system-arm version this session expects, for setup alone, which
+		# refuses when dpkg has another. A Debian version string, and nothing else, crosses.
+		if [ "$phase" = setup ] && [ -n "${METAL_QEMU_PKG:-}" ]; then
+			qemu_pkg_shape
+			envs+=("METAL_QEMU_PKG=$METAL_QEMU_PKG")
 		fi
 		rsh "$(printf '%q ' env "${envs[@]}" bash a1/remote-ladder.sh "$phase")"
 		;;
