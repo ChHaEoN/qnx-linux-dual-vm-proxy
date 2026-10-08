@@ -13,6 +13,9 @@
  * ITS up and gives procnto an LPI block (vectors 8192.., vector == INTID); what
  * it leaves to the owner of a device is the device's mapping, MAPD and MAPTI.
  * With no PCI server that owner is this program, as shm_map_qnx.c is for BARs.
+ * (R39 note, 2026-10-05: "QEMU 6.2's" names the QEMU the board ran when this
+ * was written. The sentence is about the device and holds for the QEMU 8.2.2
+ * the board runs since its upgrade to L4T R39 on 2026-10-04.)
  *
  * THE ITS IS SHARED WITH THE KERNEL. procnto's LPI mask and unmask callouts
  * write INVALL/SYNC into the same command queue, under a lock the startup puts

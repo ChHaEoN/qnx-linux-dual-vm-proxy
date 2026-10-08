@@ -27,7 +27,7 @@
  *     ITS mask/unmask callouts for it, and gic_v3_initialize() allocates the
  *     LPI configuration and pending tables and the ITS device table,
  *     collection table and command queue, and maps ICID n to CPU n (MAPC).
- *
+ * (R39 note, 2026-10-05, on "QEMU 6.2's ivshmem-doorbell": end of this file.)
  * The library does NOT map any device to an LPI (MAPD/MAPTI): that is the job
  * of whatever owns the device's MSI-X, normally the PCI server's hardware
  * module. This guest runs no PCI server, so ipc-test/qnx-its-probe does it,
@@ -129,3 +129,20 @@ init_intrinfo(void)
 		}
 	}
 }
+
+/*
+ * R39 NOTE (2026-10-05), on "QEMU 6.2's ivshmem-doorbell interrupts a guest
+ * by MSI-X only" in the header of this file.
+ *
+ * "6.2" names the QEMU the board ran when that was written. The sentence is
+ * about the device and holds for the QEMU 8.2.2 the board runs since its
+ * upgrade to L4T R39 on 2026-10-04. Whether the ITS and the LPIs this file
+ * sets up behave the same under that QEMU and its host kernel is not for a
+ * comment to say: a run shows it, and what a run shows is held locally (NC
+ * QDL v7 4.6(i)).
+ *
+ * The note stands below the last line of code so that no line above moves
+ * (the reason is at the end of ../../qemu-virt/qemu_virt_startup.h). No line
+ * above this comment moved. One changed: a comment line of the header that
+ * was empty and now points down here.
+ */

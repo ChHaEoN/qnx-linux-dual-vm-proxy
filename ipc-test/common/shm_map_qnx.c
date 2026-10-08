@@ -16,6 +16,9 @@
  * guest can still RING a peer (a Doorbell write is caught by a KVM ioeventfd),
  * and it is interrupted instead through the virtio console, whose driver,
  * devc-virtio, takes an ordinary SPI.
+ * (R39 note, 2026-10-05: "QEMU 6.2's" names the QEMU the board ran when this
+ * was written. The sentence is about the device and holds for the QEMU 8.2.2
+ * the board runs since its upgrade to L4T R39 on 2026-10-04.)
  *
  * CONFIGURE ONCE (FOUND BY DESIGN REVIEW, 2026-09-22). Sizing a BAR means
  * switching memory decoding off and writing all-ones to it, which unmaps the
@@ -39,6 +42,10 @@
  * <0x40 0x10000000 0x0 0x10000000>, and a 32-bit memory window mapping PCI
  * 0x10000000 to CPU 0x10000000 (size 0x2eff0000). The IDs read in step 2 are the
  * check that the ECAM address is right.
+ * (R39 note, 2026-10-05: a tree dumped under the board's QEMU 8.2.2 on
+ * 2026-10-04 gives the same ECAM and the same window.
+ * orin-native/tools/check_virt_dtb.py reads the four defines below, and the
+ * same four in qnx-its-probe, and compares a dump with them.)
  *
  * MMIO ACCESSES ARE SINGLE-REGISTER, WITHOUT WRITEBACK, BY INLINE ASM, and the
  * Doorbell store is 32 bits. KVM on this board emulates a trapped access only

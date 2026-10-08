@@ -87,7 +87,7 @@
 # refuses. KVM_STATS=1 snapshots the VM's KVM counters and QEMU's per-thread
 # schedstat around every arm (lib-measure.sh m_kvm_snap). UDP_IN_TCP=1 puts D-udp
 # in the tcp group, a datagram comparator without a fifth group.
-#
+# (R39 note, 2026-10-05, on "QEMU 6.2's ivshmem-doorbell": end of this file.)
 # TRANSPORT ORDER. With more than one transport, the order of the transport
 # groups in each round follows a Williams design over the groups (as the loaded
 # arms elsewhere do), so K must be a multiple of its period: 2 for two
@@ -455,3 +455,11 @@ if [ "$KICK$DB" != 00 ]; then
 	[ "$UDP_IN_TCP" = 1 ] && [ "$KICK" = 1 ] && PAIRS+=("D-kick:D-udp")
 	m_pairs "$OUT" "${PAIRS[@]}"
 fi
+
+# R39 NOTE (2026-10-05), on "QEMU 6.2's ivshmem-doorbell interrupts a guest only
+# by MSI-X" in the header (NOTIFIED SHM ARMS). "6.2" names the QEMU the board ran
+# when that was written. The sentence is about the device and holds for the QEMU
+# 8.2.2 the board runs since its upgrade to L4T R39 on 2026-10-04. The note is
+# down here so that no line above moves: tests/test_measure_lib.py cites three
+# of this file's greps by line number. One line above changed: a comment line
+# of the header that was empty and now points down here.

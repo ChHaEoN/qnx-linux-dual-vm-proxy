@@ -12,6 +12,9 @@ eventfd -- peer 1 is QEMU, whose eventfds the server hands every peer -- is
 what makes QEMU (or KVM, through an irqfd) send the device's MSI-X message. In
 the guest, ipc-test/qnx-its-probe (msixcfg) has pointed that message at the GIC
 ITS and mapped it to an LPI, and `qnx-its-probe msixwait` waits on the LPI.
+(R39 note, 2026-10-05: "QEMU 6.2" names the QEMU the board ran when this was
+written. MSI-X as the only way into a guest is the device's, and holds for the
+QEMU 8.2.2 the board runs since its upgrade to L4T R39 on 2026-10-04.)
 
 WITH --echo it also puts its own peer id at ECHO_OFF in the shared memory,
 where msixwait reads it and rings this peer back through the Doorbell register

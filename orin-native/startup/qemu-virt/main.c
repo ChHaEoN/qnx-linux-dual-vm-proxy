@@ -27,7 +27,7 @@
  * The chain this board is built on -- remove the writeback store, and that
  * instruction can raise no NISV exit -- rests on the compiler flag and the
  * disassembly gate in build-qemu-virt.sh, not on those runs.
- *
+ * (R39 note, 2026-10-05, on those two QEMU versions: at the end of this file.)
  * Whatever they showed, this establishes nothing about timing, latency or
  * throughput; nothing about running two guests; nothing about the GPU. And
  * the fix lives in a startup WE rebuilt -- QNX ships no such binary, so this
@@ -42,7 +42,7 @@
  *     node says "arm,psci-1.0" and the library's probe matches only the literal
  *     "arm,psci". The virt machine's node is "arm,psci-0.2\0arm,psci", which
  *     does contain that string, and carries method = "hvc". So the probe works
- *     here and forcing SMC would be exactly wrong.
+ *     here and forcing SMC would be exactly wrong. (R39 note: end of file.)
  *   - psci_cpu_id. t234 overrides it because Tegra's MPIDR affinities are
  *     0x00000, 0x00100, ... The virt machine's are flat (cpu@0 reg=<0>,
  *     cpu@1 reg=<1>), which is what the library's identity version already
@@ -164,3 +164,22 @@ main(int argc, char **argv, char **envv)
 
 	return 0;
 }
+
+/*
+ * R39 NOTES (2026-10-05). They stand below the last line of code so that no
+ * line above moves (the reason is at the end of qemu_virt_startup.h). No line
+ * above this comment moved. Two changed: comment lines of the header, one
+ * that was empty and one that is longer, which now point down here.
+ *
+ * On "under QEMU 6.2.0 and 11.1.0" in WHAT IT HAS BEEN USED FOR. Those are
+ * the control runs of 2026-09-18. The board was upgraded to L4T R39 on
+ * 2026-10-04 and its QEMU is now 8.2.2. That paragraph says nothing about a
+ * run under 8.2.2, and what any such run shows is held locally as well.
+ *
+ * On the PSCI conduit in WHY IT IS NOT A COPY OF t234-orin-nano. The node
+ * QEMU 8.2.2 generates lists "arm,psci-1.0\0arm,psci-0.2\0arm,psci" (dump of
+ * 2026-10-04), where 6.2.0 gave "arm,psci-0.2\0arm,psci". The list still
+ * ends in the string the library's probe matches, and method is still "hvc".
+ * ../../tools/check_virt_dtb.py fails a dump whose list does not end in the
+ * string that the crash message in main() names.
+ */

@@ -25,6 +25,10 @@ Then, as the reference server does: the new peer's (id, eventfd) for each of
 its vectors to every EXISTING peer; every existing peer's (id, eventfd) per
 vector to the new peer; and the new peer's own (id, eventfd) per vector to
 itself. When a peer goes away, every remaining peer gets (its id) with no fd.
+(R39 note, 2026-10-05: "QEMU 6.2's" names the QEMU the board ran when this was
+written; since its upgrade to L4T R39 on 2026-10-04 the board runs 8.2.2. The
+protocol is version 0 of QEMU's ivshmem specification, the first message
+above. It belongs to the device, not to one release.)
 
 IDS ONLY GO UP, from 1, and are never handed out twice (FOUND BY DESIGN REVIEW,
 2026-09-22). QEMU 6.2's device frees a departed peer's eventfd array in
@@ -36,6 +40,11 @@ free id would hit it on the second probe of a run. Starting at 1 means QEMU,
 the first peer, never has id 0, so a guest that reads 0 from IVPosition knows
 its view of the device's registers is wrong. The Doorbell register holds 16
 bits, so the counter stops at 65535 and later peers are refused.
+(R39 note, 2026-10-05: the use-after-free was found in QEMU 6.2's device. For
+the QEMU 8.2.2 the board runs since its upgrade to L4T R39 on 2026-10-04 it is
+UNVERIFIED: whether that release's device still does this has not been
+established. The rule does not hang on the answer. Ids only go up here,
+whatever 8.2 does.)
 
 EVENTFDS ARE NON-BLOCKING (EFD_NONBLOCK | EFD_CLOEXEC), as the reference's
 event_notifier_init() makes them. QEMU sets O_NONBLOCK on every peer eventfd it
