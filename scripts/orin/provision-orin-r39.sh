@@ -78,6 +78,8 @@
 # /sys/block/<loopN>/loop/backing_file) is under /opt/nvidia/, and it is mounted read-only. With
 # any one of them wrong, or the backing file not readable, the mount counts as any other. The
 # item then names the image, and a removable or USB device beside it is refused as before.
+# The rule is lib-stick.sh's, beside this script: one copy, which gate2-smoke.sh sources as well
+# and holds every step that creates a KVM VM to, with the same wording and the same override.
 #
 # A LOST SESSION. apply ignores SIGPIPE and SIGHUP, and writes each line to its log before it
 # prints it. When the reader of its output goes away (an SSH session that drops, a caller that
@@ -123,6 +125,11 @@ SYSR="${SYS_ROOT:-/sys}"
 PROC="${PROC_ROOT:-/proc}"
 BRIDGE_SCRIPT="${BRIDGE_SCRIPT:-$here/setup-bridge-orin.sh}"
 
+# The installer-stick rule (stick_rule) and first_line: one copy, shared with gate2-smoke.sh.
+[ -r "$here/lib-stick.sh" ] || { echo "FATAL: lib-stick.sh not found beside $0" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$here/lib-stick.sh"
+
 WANT_L4T=39
 WANT_OS=24.04
 WANT_NVPMODEL=1
@@ -161,7 +168,6 @@ SIM_WHY=""
 SIM_LIST=()
 QEMU_INST=""
 QEMU_CAND=""
-FL=""
 UNIT_WORD=""
 
 # ------------------------------------------------------------------ output
@@ -231,12 +237,6 @@ differs() {  # differs <what> <detail>
 failed() {
 	say "FAILED: $*. Nothing further was done."
 	finish 1
-}
-
-first_line() {  # FL = the first line of a file, or nothing; never an error
-	FL=""
-	if [ -r "$1" ]; then IFS= read -r FL < "$1" 2>/dev/null; fi
-	return 0
 }
 
 # systemd is asked two questions about a unit and no other. Neither prints anything about the
@@ -313,62 +313,14 @@ step_sudo() {
 
 # ------------------------------------------------------------------ 11. the installer stick
 
+# The rule itself is lib-stick.sh's stick_rule; this says its outcome as the item. check counts a
+# stick and goes on; apply stops there.
 step_stick() {
-	local out rc line name removable tran found="" mounts=0 unknown="" what=""
-	local target src opts label vendor=""
-	local re_name='NAME="([^"]*)"' re_rm='RM="([^"]*)"' re_tran='TRAN="([^"]*)"' re_loop='^/dev/(loop[0-9]+)$'
-	out=$(lsblk -d -n -P -o NAME,RM,TRAN,TYPE 2>/dev/null); rc=$?
-	if [ "$rc" != 0 ] || [ -z "$out" ]; then
-		unknown="lsblk listed no block device (exit $rc)"
-	else
-		while IFS= read -r line; do
-			name=""; removable=""; tran=""
-			if [[ "$line" =~ $re_name ]]; then name="${BASH_REMATCH[1]}"; fi
-			if [[ "$line" =~ $re_rm ]]; then removable="${BASH_REMATCH[1]}"; fi
-			if [[ "$line" =~ $re_tran ]]; then tran="${BASH_REMATCH[1]}"; fi
-			if [ "$removable" = 1 ] || [ "$tran" = usb ]; then found="$found $name"; fi
-		done <<< "$out"
-	fi
-	out=$(findmnt -r -n -o TARGET,SOURCE,OPTIONS 2>/dev/null); rc=$?
-	if [ "$rc" != 0 ] || [ -z "$out" ]; then
-		unknown="${unknown:+$unknown; }findmnt listed no mount (exit $rc)"
-	else
-		while read -r target src opts; do
-			case "$target" in /media|/media/*) ;; *) continue ;; esac
-			# One kind of mount under /media is not a stick: the vendor's own image, which the
-			# desktop session mounts by itself. A mount is taken for it only when all three hold:
-			# its source is a loop device, the file behind that device is under /opt/nvidia/, and
-			# it is mounted read-only. A backing file that cannot be read is under nothing.
-			FL=""
-			if [[ "$src" =~ $re_loop ]]; then first_line "$SYSR/block/${BASH_REMATCH[1]}/loop/backing_file"; fi
-			if [[ "$FL" == /opt/nvidia/* ]] && [[ ",$opts," == *,ro,* ]]; then
-				# Named by the last component of its mount point. One level under /media is where
-				# the desktop keeps a directory per login, so a name at that level is not said.
-				label="[not shown]"
-				case "$target" in /media/*/*) label="${target##*/}" ;; esac
-				vendor="${vendor:+$vendor, }$label"
-			else
-				mounts=$((mounts + 1))
-			fi
-		done <<< "$out"
-	fi
-	if [ -n "$found" ]; then what="removable block device:$found"; fi
-	if [ "$mounts" = 1 ]; then what="${what:+$what; }1 mount under /media"; fi
-	if [ "$mounts" -gt 1 ]; then what="${what:+$what; }$mounts mounts under /media"; fi
-	if [ -n "$unknown" ]; then what="${what:+$what; }cannot tell whether a stick is in: $unknown"; fi
-	if [ -n "$vendor" ]; then
-		vendor="the vendor's read-only image ($vendor: a loop device on a file under /opt/nvidia/)"
-		if [ -n "$what" ]; then what="$what; not counted: $vendor"; fi
-	fi
-	if [ -z "$what" ] && [ -n "$vendor" ]; then
-		item ok "installer stick" "no removable or USB block device; under /media only $vendor, which is not a stick"
-	elif [ -z "$what" ]; then
-		item ok "installer stick" "no removable or USB block device, nothing mounted under /media"
-	elif [ "${PROVISION_ALLOW_REMOVABLE:-}" = 1 ]; then
-		item note "installer stick" "$what -- allowed by PROVISION_ALLOW_REMOVABLE=1, the owner's override"
-	else
-		differs "installer stick" "$what -- apply refuses while it is there: a reset would walk the boot order with an unattended installer attached. The owner removes it; PROVISION_ALLOW_REMOVABLE=1 is the owner's override"
-	fi
+	stick_rule apply
+	case "$STICK_WORD" in
+		ok|note) item "$STICK_WORD" "installer stick" "$STICK_TEXT" ;;
+		*) differs "installer stick" "$STICK_TEXT" ;;
+	esac
 }
 
 # ------------------------------------------------------------------ 2. packages

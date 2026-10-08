@@ -1,7 +1,9 @@
 """scripts/orin/provision-orin-r39.sh, run against stubs only (2026-10-04).
 
 The script says where a freshly installed board stands (check) and installs what is missing
-(apply). Nothing here needs a board: every command it calls that could read or change a system
+(apply). Its installer-stick rule is lib-stick.sh's, which it sources (2026-10-05: one copy,
+shared with gate2-smoke.sh), so the tests of the script's text read both files. Nothing here
+needs a board: every command it calls that could read or change a system
 is a stub on PATH (sudo, apt-get, apt-cache, dpkg-query, usermod, getent, id, lsblk, findmnt,
 nvpmodel, systemctl, docker), /etc, /sys and /proc are made-up trees, and HOME is a temporary
 directory. Stubs for hostname, uname, ip and journalctl print a marker and must never run. The
@@ -42,6 +44,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 ORIN = os.path.join(REPO, "scripts", "orin")
 SCRIPT = os.path.join(ORIN, "provision-orin-r39.sh")
+LIB = os.path.join(ORIN, "lib-stick.sh")        # the installer-stick rule, sourced by the script
 BASH = shutil.which("bash")
 needs_bash = pytest.mark.skipif(BASH is None, reason="bash not available")
 
@@ -675,6 +678,11 @@ def _text(path):
         return f.read().decode("utf-8")
 
 
+def _program():
+    """Everything that runs when the script runs: the script, then the library it sources."""
+    return _text(SCRIPT) + "\n" + _text(LIB)
+
+
 def _code(text):
     """The script without its comments: full-line comments and a trailing ` # ...` are dropped."""
     lines = []
@@ -696,6 +704,8 @@ def test_the_script_is_there_and_the_placeholder_it_replaces_is_gone():
     text = _text(SCRIPT)
     assert text.startswith("#!/usr/bin/env bash\n") and "\r" not in text
     assert re.search(r"^# Phase \d", text, re.M), "the header carries its Phase tag"
+    lib = _text(LIB)
+    assert re.search(r"^# Phase \d", lib, re.M) and "\r" not in lib, "so does the library it sources"
     assert not os.path.exists(os.path.join(ORIN, "bootstrap-orin-l4t.sh")), "the TODO placeholder is deleted, not kept beside it"
     launch = _text(os.path.join(ORIN, "launch-qnx-on-orin.sh"))
     assert "bootstrap-orin-l4t.sh" not in launch and "provision-orin-r39.sh" in launch
@@ -715,8 +725,9 @@ def test_the_families_are_the_four_listed_and_cuda_is_opt_in():
 
 def test_the_script_never_changes_what_it_only_asserts_or_reports():
     """No nvpmodel mode change, no governor write, no gdm or auto-login edit, no sudoers file, no
-    unit, no kernel command line, no upgrade, no reboot: none of these has a code path."""
-    text = _text(SCRIPT)
+    unit, no kernel command line, no upgrade, no reboot: none of these has a code path, in the
+    script or in the library it sources."""
+    text = _program()
     code = _code(text)
     cmds = _cmds(code)
     assert "nvpmodel -m" not in text and "nvpmodel --mode" not in text, "the mode is asserted; the script cannot change it"
@@ -756,7 +767,7 @@ def test_the_script_never_changes_what_it_only_asserts_or_reports():
 
 
 def test_no_sudoers_auto_login_or_bridge_unit_write_anywhere_in_the_script():
-    code = _code(_text(SCRIPT))
+    code = _code(_program())
     seen = 0
     for line in code.split("\n"):
         if re.search(r"sudoers|visudo|NOPASSWD", line):
@@ -779,7 +790,7 @@ def test_no_sudoers_auto_login_or_bridge_unit_write_anywhere_in_the_script():
 
 
 def test_the_script_never_asks_the_system_its_name():
-    code = _code(_text(SCRIPT))
+    code = _code(_program())
     cmds = _cmds(code)
     for word in ("hostname", "uname", "journalctl", "nmcli", "ifconfig", "machine-id", "/sys/class/dmi", "serial", "address",
                  "hostnamectl", "iwgetid", "ssid", "SSID"):
@@ -799,7 +810,7 @@ def test_the_script_never_asks_the_system_its_name():
 
 
 def test_every_apt_get_install_in_the_text_is_bounded():
-    cmds = _cmds(_code(_text(SCRIPT)))
+    cmds = _cmds(_code(_program()))
     assert re.findall(r"\bapt-get +(\S+)", cmds) == ["update", "-s", "install"], "update, the simulation, the install; nothing else"
     sites = re.findall(r"apt-get (.*\binstall\b.*)$", cmds, re.M)
     assert len(sites) == 2, sites
@@ -1425,7 +1436,7 @@ def test_two_images_of_the_vendors_are_both_named_and_neither_counts(board):
 
 
 def test_the_stick_step_asks_for_three_columns_and_reads_the_backing_file_under_the_sys_root():
-    code = _code(_text(SCRIPT))
+    code = _code(_program())
     cmds = _cmds(code)
     assert re.findall(r"\bfindmnt (.*?) 2>", cmds) == ["-r -n -o TARGET,SOURCE,OPTIONS"], "the source and the options as well as the target"
     assert re.findall(r"\blsblk (.*?) 2>", cmds) == ["-d -n -P -o NAME,RM,TRAN,TYPE"], "lsblk is asked what it was"
@@ -1436,11 +1447,50 @@ def test_the_stick_step_asks_for_three_columns_and_reads_the_backing_file_under_
     for word in ("losetup", "udisksctl", "blkid", "umount", "mount ", "mountpoint", "eject"):
         assert word not in cmds, "%r has a code path" % word
     # The mount point is never said whole: of the three columns only the last component of the
-    # first reaches a message, and only for the vendor's image.
-    body = re.search(r"\nstep_stick\(\) \{\n(.*?)\n\}\n", code, re.S).group(1)
+    # first reaches a message, and only for the vendor's image. The rule's body is the library's
+    # stick_rule since the rule moved there, and what it says leaves it in STICK_TEXT.
+    body = re.search(r"\nstick_rule\(\) \{\n(.*?)\n\}\n", _code(_text(LIB)), re.S).group(1)
     assert re.findall(r"\$\{?target\b[^\s\"]*", body) == ["$target", "$target", "${target##*/}"], "tested twice, and its last component taken"
-    said_lines = [l for l in body.split("\n") if re.search(r"\b(item|differs|say)\b|\b(what|vendor|unknown)=", l)]
+    said_lines = [l for l in body.split("\n") if re.search(r"\b(item|differs|say)\b|\b(what|vendor|unknown|STICK_TEXT)=", l)]
     assert len(said_lines) >= 8 and not re.search(r"\$\{?(target|src|opts|FL|line|out)\b", "\n".join(said_lines)), said_lines
+
+
+def test_the_stick_rule_is_the_librarys_and_the_script_holds_no_copy_of_it():
+    """The rule moved to lib-stick.sh, which gate2-smoke.sh sources as well: one rule, one text.
+    The script keeps the step that says the rule's outcome as its item, and nothing of the rule."""
+    script, lib = _code(_text(SCRIPT)), _code(_text(LIB))
+    # Sourced once, from beside the script, after the roots it reads are set; and no other file is.
+    assert re.findall(r"(?m)^\s*(?:\.|source)\s+(\S+)", script) == ['"$here/lib-stick.sh"']
+    assert script.index('SYSR="${SYS_ROOT:-/sys}"') < script.index('. "$here/lib-stick.sh"') < script.index("\nMODE=check\n")
+    assert not re.search(r"(?m)^\s*(?:\.|source)\s", lib), "the library sources nothing"
+    # What the script still has of the stick: the call, and the item.
+    body = re.search(r"\nstep_stick\(\) \{\n(.*?)\n\}\n", script, re.S).group(1)
+    assert [l.strip() for l in body.split("\n")] == [
+        "stick_rule apply",
+        'case "$STICK_WORD" in',
+        'ok|note) item "$STICK_WORD" "installer stick" "$STICK_TEXT" ;;',
+        '*) differs "installer stick" "$STICK_TEXT" ;;',
+        "esac"]
+    for word in ("lsblk", "findmnt", "backing_file", "/media", "PROVISION_ALLOW_REMOVABLE", "first_line()"):
+        assert word not in script, "%r is the library's, and the script holds no second copy" % word
+    assert lib.count("stick_rule() {") == 1 and lib.count("first_line() {") == 1
+    # The override is one variable, read in one place, and the refusal's words are one string
+    # whose only variable part is who refuses.
+    assert re.findall(r"\$\{(\w*ALLOW\w*)[:}]", lib) == ["PROVISION_ALLOW_REMOVABLE"]
+    assert lib.count('STICK_TEXT="$what -- $who refuses while it is there: a reset would walk the boot order with an '
+                     "unattended installer attached. The owner removes it; PROVISION_ALLOW_REMOVABLE=1 is the owner's override\"") == 1
+    assert lib.count('STICK_TEXT="$what -- allowed by PROVISION_ALLOW_REMOVABLE=1, the owner\'s override"') == 1
+    # Sourcing it runs nothing: outside its two functions it only gives three variables their
+    # empty start.
+    inside, top = False, []
+    for line in lib.split("\n"):
+        if re.match(r"^\w+\(\) \{", line):
+            inside = True
+        elif line == "}":
+            inside = False
+        elif not inside and line.strip():
+            top.append(line)
+    assert top == ['FL=""', 'STICK_WORD=""', 'STICK_TEXT=""'], top
 
 
 @needs_bash
