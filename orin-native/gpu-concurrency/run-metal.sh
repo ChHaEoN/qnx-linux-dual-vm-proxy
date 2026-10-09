@@ -252,6 +252,7 @@ tsu "test -d '$TRACE/instances' && test ! -e '$INST'" || die "no $TRACE/instance
 ME="$(basename "$(cut -d: -f3 /proc/self/cgroup)")"
 case "$ME" in session-*.scope) ;; *) die "the harness is not in a session scope ($ME)" ;; esac
 UNITS="system.slice init.scope $(systemctl list-units 'user@*.service' --no-legend | awk '{print $1}') $(systemctl list-units --type=scope --state=running --no-legend | awk '{print $1}' | grep '^session-' | grep -vx "$ME")"
+UNITS="${UNITS//$'\n'/ }"  # Keep the unit list on one line for the JSON stamp.
 for u in $UNITS; do
 	case "$(systemctl show -p AllowedCPUs --value "$u")" in ""|"$ALL") ;; *) die "$u already has AllowedCPUs set -- someone else changed it" ;; esac
 done
