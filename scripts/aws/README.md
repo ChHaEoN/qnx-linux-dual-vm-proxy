@@ -41,7 +41,7 @@ This is a test bed for one measurement session, never a runtime host.
 | file | runs on | job |
 |---|---|---|
 | `drive-metal.sh` | the operator's machine (Git Bash or Linux; GNU sed, `git`, Python 3, `aws`) | launch, wait, upload, run each phase, fetch, terminate, verify, clear |
-| `userdata.sh` | the instance, at first boot | arm the self-termination (reboot-safe), install QEMU, the compiler and Python |
+| `userdata.sh` | the instance, at first boot | arm both self-termination nets (reboot-safe), install QEMU, the compiler and Python |
 | `remote-ladder.sh` | the instance | setup, quiesce, launch the guest, the ladder, capture |
 | `capture.py` | the instance | the publishable copy, redacted on the host that produced it |
 | `leakscan.py` | the operator's machine | refuse a fetched capture that still identifies anything |
@@ -159,23 +159,64 @@ This runs several harnesses that boot their own guests, each on its own image, i
 
 ## What bounds the cost
 
-- **Self-termination, proven before anything is spent.**
-  - The instance is launched with shutdown behaviour `terminate`, and user-data
-    schedules `shutdown -h +90` first.
-  - It also writes the absolute deadline to disk with a per-boot script that
-    re-arms whatever time remains, or powers off at once if the deadline has
-    passed. A pending shutdown lives in `/run`, which a reboot empties, and a
-    kernel whose `kernel.panic` is not 0 reboots when it panics. What this image's
-    kernel does is read, not assumed: `run setup` prints it and records it in
-    `host-facts.txt`, and warns when a panic would halt the host instead.
-  - `wait` goes on only if a poweroff is armed 61–91 minutes ahead and the
-    per-boot re-arm is installed. `upload`, `run` and `fetch` refuse until it has.
+- **Self-termination, proven before anything is spent.** The instance is
+  launched with shutdown behaviour `terminate`, so a poweroff from inside it is a
+  termination. User-data arms two nets that power it off (2026-10-10), because
+  the wall clock of a freshly booted instance may still be stepped:
+  - **A monotonic timer, armed first.** User-data's first command is a transient
+    systemd timer (`systemd-run`, unit `qnx-metal-monotonic`) that powers the
+    instance off when the time since boot reaches the uptime at that moment plus
+    the session's 90 minutes. It is set as a time since boot, so no step of the
+    wall clock moves it, in either direction, and a `daemon-reload` does not
+    start it counting again, as systemd's source says it would a timer set
+    relative to its own start (read there, not tried on an instance).
+    What it cannot bound: it lives in the service manager, so it does not
+    survive a reboot.
+  - **The wall-clock poweroff, scheduled once the clock has had time to be
+    set.** `shutdown -h` is an absolute wall-clock time: a clock stepped after it
+    is scheduled moves the time left by the size of the step. So user-data first
+    waits, for a bounded time (tens of seconds, a constant in `userdata.sh`), for
+    the kernel to call its clock synchronised, and then, synchronised or not,
+    schedules the poweroff for what is left of the 90 minutes and writes that
+    deadline to disk. What it cannot bound: a clock that is stepped after that
+    moment. A step forward shortens the session. A step backward would lengthen
+    it, and until a reboot the monotonic timer is the bound.
+  - **If `systemd-run` is missing or refuses,** the wall-clock poweroff is
+    scheduled at once, as it was before there were two nets, and scheduled again
+    after the wait. `wait` then refuses the session, which has one net.
+  - **A reboot.** Both nets live in memory: a pending shutdown in `/run`, which a
+    reboot empties, and the timer in the service manager; and a kernel whose
+    `kernel.panic` is not 0 reboots when it panics. So the deadline is on disk as
+    an absolute time, written right after the first net, with a per-boot script
+    that re-arms both for whatever time remains, the monotonic timer never for
+    more than the session's minutes. It powers off at once if the deadline has
+    passed or cannot be read: a deadline that is missing, empty or not a plain
+    number of seconds was lost, and the session's end with it. What this cannot
+    bound: the deadline on disk is itself a wall-clock time, so after a reboot
+    both nets are counted from the clock of that boot. A clock that is wrong at
+    that boot and is not set, or one that was stepped backward after the
+    deadline was written, lets that boot run past the session's end by the size
+    of the error, at most the session's minutes again for each boot. What this
+    image's kernel does on a panic is read, not assumed: `run setup` prints it
+    and records it in `host-facts.txt`, and warns when a panic would halt the
+    host instead.
+  - `wait` goes on only if both are right: the timer unit active with no more
+    than the session's minutes left on it, a poweroff 61–91 minutes ahead by the
+    wall clock, and the per-boot re-arm installed. `upload`, `run` and `fetch`
+    refuse until it has.
+  - `wait` prints what the instance recorded at each arming (the wall clock, the
+    uptime, whether the kernel called its clock synchronised) beside the same
+    reads taken then, before it decides. A refusal therefore says what the clock
+    did, and so does a session that goes on; one that goes on with a clock the
+    instance does not call synchronised is told what a later step would do.
+  - The two nets, the per-boot script and `wait`'s proof of them run in the
+    tests, against stub programs. They have not run on an instance.
 - **Every failure between launch and that proof terminates**, and the
   termination is confirmed. Such failures include:
   - EC2 not knowing the new id yet (retried, not fatal);
   - a throttled or failed call;
   - a wrong root volume, no public address, or failed provisioning;
-  - a missing or mistimed shutdown.
+  - a missing or mistimed shutdown, or a missing or mistimed timer.
 
   A `run-instances` call that fails is followed by a lookup by client token, so an
   instance that started anyway is found and terminated. If a termination cannot
@@ -194,8 +235,11 @@ This runs several harnesses that boot their own guests, each on its own image, i
   then stays in that state for about ten minutes.
 
 **What this cannot bound:** a host kernel that hangs without rebooting runs no
-timer, and where `kernel.panic` is 0 a panic is such a hang. Nothing here watches
-the instance from outside the instance.
+timer of either kind, and where `kernel.panic` is 0 a panic is such a hang.
+Neither net is a bound then. A host that keeps rebooting with a wall clock that
+is behind at each boot is not bounded in sum: each boot is held to the session's
+minutes, their number is not. Nothing here watches the instance from outside the
+instance.
 
 The 2026-09-22 session: about 11 minutes billed, about $0.09.
 

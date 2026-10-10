@@ -187,7 +187,11 @@ def rig(tmp_path):
 def _sched(tmp_path, minutes, mode="poweroff"):
     now = 1_790_000_000
     f = tmp_path / "sched.txt"
-    _write(f, "USEC=%d\nWARN_WALL=1\nMODE=%s\nNOW=%d" % ((now + minutes * 60) * 1_000_000, mode, now))
+    # 2026-10-10: `wait` proves two nets with one read of the instance, so the answer also carries
+    # the two marks user-data leaves and the monotonic timer, armed and in time. What a case here
+    # varies is still the wall-clock schedule alone.
+    _write(f, "ARMED_FILE=yes\nPERBOOT=yes\nUSEC=%d\nWARN_WALL=1\nMODE=%s\nNOW=%d\n"
+              "ActiveState=active\nNextElapseUSecMonotonic=1h 30min 41s\nUPTIME=180" % ((now + minutes * 60) * 1_000_000, mode, now))
     return f
 
 
@@ -510,8 +514,13 @@ def test_userdata_arms_the_shutdown_first_survives_a_reboot_and_agrees_with_the_
     body = open(USERDATA, encoding="utf-8").read()
     lines = [ln.strip() for ln in body.splitlines() if ln.strip() and not ln.strip().startswith("#")]
     commands = [ln for ln in lines if not re.match(r"^[A-Z_]+=\S+$", ln)]
-    m = re.match(r'^shutdown -h \+\$MIN .*&& touch "\$M/SHUTDOWN_ARMED"$', commands[0])
-    assert m, "the first command must arm the shutdown and record that it did: %r" % commands[0]
+    # 2026-10-10: the first command arms the monotonic net and records that it did; what was the
+    # first command until then is what runs at once when it cannot, and records which net there is.
+    assert re.match(r'^if systemd-run .* --on-boot=\$\(\( \$\{UP:-0\} \+ MIN \* 60 \)\) .*systemctl poweroff; then$', commands[0]), \
+        "the first command must arm the monotonic net: %r" % commands[0]
+    assert commands[1] == 'echo monotonic > "$M/SHUTDOWN_ARMED"' and commands[2] == "else" and commands[4] == "fi", commands[:5]
+    m = re.match(r'^shutdown -h \+\$MIN .*&& echo wall-clock > "\$M/SHUTDOWN_ARMED"$', commands[3])
+    assert m, "without it the first command must arm the shutdown and record that it did: %r" % commands[3]
     mins = re.search(r"^MIN=(\d+)$", body, re.M)
     driver = open(DRIVER, encoding="utf-8").read()
     d = re.search(r'SHUTDOWN_MIN_EXPECTED="\$\{SHUTDOWN_MIN_EXPECTED:-(\d+)\}"', driver)

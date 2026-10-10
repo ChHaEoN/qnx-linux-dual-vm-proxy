@@ -3,7 +3,7 @@
 # operator's machine (Git Bash on Windows, or Linux; GNU sed and Python 3 needed).
 #
 #   drive-metal.sh launch        run-instances, self-terminating; root volume read back
-#   drive-metal.sh wait          until provisioned; PROVES the shutdown safety net is armed
+#   drive-metal.sh wait          until provisioned; PROVES both self-termination nets are armed
 #   drive-metal.sh upload        repo tarball, remote-ladder.sh, capture.py, image, gzipped disk
 #   drive-metal.sh run PHASE     remote-ladder.sh PHASE (setup|quiesce|launch|ladder|launch-live|liveness|launch-stamp|stamp|metal|capture)
 #   drive-metal.sh fetch         pub.tgz back, hash-verified, then leak-scanned
@@ -116,7 +116,9 @@ die() { say "FATAL: $*" >&2; exit 1; }
 
 # Minutes until the scheduled poweroff, from the text of
 # /run/systemd/shutdown/scheduled plus a NOW=<epoch> line; fails unless it is a
-# poweroff. Pure, so the tests call it directly.
+# poweroff. Pure, so the tests call it directly. Both numbers are read in base ten: a
+# leading zero makes an octal number for bash, and its arithmetic stops on "08". A line
+# that stands twice is no schedule to count with.
 shutdown_left_min() {
 	local t usec mode now
 	t="$(printf '%s\n' "$1" | tr -d '\r')"     # a CRLF anywhere must not hide an armed poweroff
@@ -124,7 +126,144 @@ shutdown_left_min() {
 	mode="$(printf '%s\n' "$t" | sed -n 's/^MODE=//p')"
 	now="$(printf '%s\n' "$t" | sed -n 's/^NOW=\([0-9][0-9]*\)$/\1/p')"
 	[ -n "$usec" ] && [ -n "$now" ] && [ "$mode" = poweroff ] || return 1
-	echo $(( (usec / 1000000 - now) / 60 ))
+	case "$usec$now" in *[!0-9]*) return 1 ;; esac
+	echo $(( (10#$usec / 1000000 - 10#$now) / 60 ))
+}
+
+# THE TWO NETS (2026-10-10). userdata.sh arms a monotonic timer first, which no step of the
+# instance's wall clock can move, and then the wall-clock poweroff above, which is an absolute
+# time and so moves against "now" by the size of any step that comes after it. `wait` proves
+# both, from ONE command on the instance, so that every number is of one moment and the
+# operator's own clock is in none of them. The command is one line: a multi-line argument may
+# not survive every ssh. The same command gives the record userdata.sh keeps of each arming
+# (wall clock, uptime, synchronised or not) and the same three reads now; `wait` prints them
+# before it decides, so a refusal says what the clock did. The two reads that ask systemd over
+# a bus are held to some seconds by coreutils' timeout, so one that does not answer cannot
+# hold `wait`; and of the record only its first kilobytes are read: user-data writes a few
+# hundred bytes, and whatever else the file has become is not the transcript's to carry.
+MONO_UNIT=qnx-metal-monotonic.timer
+# shellcheck disable=SC2016  # expanded on the instance, not here
+ARMING_READ='M=/var/lib/cloud/instance; test -e $M/SHUTDOWN_ARMED && echo ARMED_FILE=yes; test -x /var/lib/cloud/scripts/per-boot/qnx-metal-deadline.sh && echo PERBOOT=yes; cat /run/systemd/shutdown/scheduled; echo "NOW=$(date +%s)"; timeout 20 systemctl show -p ActiveState -p NextElapseUSecMonotonic '"$MONO_UNIT"'; read -r up _ < /proc/uptime; echo "UPTIME=${up%%.*}"; timeout 20 timedatectl show -p NTPSynchronized; echo "== arming facts"; head -c 4096 /var/lib/qnx-metal-arming'
+
+# Whole seconds in a time span as `systemctl show` prints one ("1h 30min 41.279004s": systemd's
+# format_timespan, parts from years down to microseconds, a fraction only on seconds and
+# milliseconds). Fails on anything else, "0" and "infinity" included: those are no time; so is
+# a span of two lines (the property said twice). Its words are split by read, not by an
+# unquoted expansion, which would also match them against the operator's directory: a file
+# called 89min there would have made a time of "??min".
+timespan_s() {
+	local tok toks n total=0 seen=0
+	case "$1" in *$'\n'*) return 1 ;; esac
+	read -ra toks <<< "$1"
+	for tok in "${toks[@]}"; do
+		if [[ "$tok" =~ ^([0-9]+)(y|month|w|d|h|min|us)$ ]] || [[ "$tok" =~ ^([0-9]+)(s|ms)$ ]] \
+			|| [[ "$tok" =~ ^([0-9]+)\.[0-9]+(s|ms)$ ]]; then
+			n=$((10#${BASH_REMATCH[1]}))
+			case "${BASH_REMATCH[2]}" in
+				y) total=$((total + n * 31557600)) ;;
+				month) total=$((total + n * 2629800)) ;;
+				w) total=$((total + n * 604800)) ;;
+				d) total=$((total + n * 86400)) ;;
+				h) total=$((total + n * 3600)) ;;
+				min) total=$((total + n * 60)) ;;
+				s) total=$((total + n)) ;;
+				*) ;;                       # under a second
+			esac
+			seen=1
+		else
+			return 1
+		fi
+	done
+	[ "$seen" = 1 ] || return 1
+	echo "$total"
+}
+
+# Seconds until the monotonic net fires, from the text of the read above: the time since boot
+# at which the timer elapses, less the uptime. Fails unless the unit is active and both are
+# there. A timer that has elapsed gives a negative number, for the caller to refuse. Pure.
+mono_left_s() {
+	local t state next up s
+	t="$(printf '%s\n' "$1" | tr -d '\r')"
+	state="$(printf '%s\n' "$t" | sed -n 's/^ActiveState=//p')"
+	next="$(printf '%s\n' "$t" | sed -n 's/^NextElapseUSecMonotonic=//p')"
+	up="$(printf '%s\n' "$t" | sed -n 's/^UPTIME=\([0-9][0-9]*\)$/\1/p')"
+	[ "$state" = active ] && [ -n "$up" ] || return 1
+	case "$up" in *[!0-9]*) return 1 ;; esac
+	s="$(timespan_s "$next")" || return 1
+	echo $(( s - 10#$up ))
+}
+
+# One number of the text, by its key, in base ten; nothing unless the key stands there once
+# with digits alone, fifteen at most. Base ten: a leading zero makes an octal number for bash,
+# and its arithmetic stops on "08" -- which discards the whole command it is in, and for a
+# caller on its way to an abort that command is the driver. What this prints, bash can count
+# with.
+arming_num() {   # $1 text  $2 key
+	local v
+	v="$(printf '%s\n' "$1" | sed -n "s/^$2=\([0-9][0-9]*\)\$/\1/p")"
+	case "$v" in ''|*[!0-9]*) return 0 ;; esac
+	[ "${#v}" -le 15 ] || return 0
+	printf '%s' "$((10#$v))"
+}
+
+# The thirteen lines userdata.sh writes into its record, each with the only forms its value
+# has: a number of at most eleven digits (epoch seconds have ten, and red() masks a run of
+# exactly twelve), or one of a few words. A shape is not enough: key=my-key-name has the shape
+# of a fact, and red() masks no such thing.
+ARMING_FACT='^((minutes|sync_wait_s|sched_left_min|deadline)=[0-9]{1,11}|(arm|sched)_(wall|uptime)=([0-9]{1,11}|unread)|(arm|sched)_synced=(yes|no|unknown)|arm_net=(monotonic|wall-clock|none)|sched_net=(wall-clock|failed)|sync_wait=(synchronised|bound))$'
+
+# The arming, for the transcript: what the instance recorded and what the same reads say now.
+# Of the record only its own lines are shown (ARMING_FACT: numbers and a few words, so no
+# identifier); the rest are counted. Wall clocks are epoch seconds, uptimes seconds.
+# now_monotonic_elapse is the time since boot at which the timer fires, as systemd prints it,
+# with "_" for its spaces: a form this script does not read shows there, and not only as
+# "unread". The two step_ lines say how much further the wall clock moved than the uptime:
+# from the first arming to the schedule, and from the schedule to now. It is called on the way
+# to an abort, so it must never stop its caller: every number it counts with comes through
+# arming_num, and `wait` runs it in a subshell all the same.
+arming_say() {
+	local t head facts line out=() hidden=0 v left mleft state next
+	local aw au sw su nw nu s1=unread s2=unread
+	t="${1//$'\r'/}"
+	if [ -z "${t//[[:space:]]/}" ]; then
+		say "the arming: nothing could be read from the instance"
+		return 0
+	fi
+	t=$'\n'"$t"
+	head="${t%%$'\n'== arming facts*}"
+	facts=""
+	case "$t" in *$'\n'"== arming facts"*) facts="${t#*$'\n'== arming facts}" ;; esac
+	while IFS= read -r line; do
+		[ -n "$line" ] || continue
+		if [[ "$line" =~ $ARMING_FACT ]]; then out+=("  $line"); else hidden=$((hidden + 1)); fi
+	done <<< "$facts"
+	nw="$(arming_num "$head" NOW)"; nu="$(arming_num "$head" UPTIME)"
+	v="$(printf '%s\n' "$head" | sed -n 's/^NTPSynchronized=\(yes\|no\)$/\1/p')"
+	case "$v" in yes|no) ;; *) v=unknown ;; esac          # said once, or not known
+	out+=("  now_wall=${nw:-unread}" "  now_uptime=${nu:-unread}" "  now_synced=$v")
+	left="$(shutdown_left_min "$head" || true)"
+	state="$(printf '%s\n' "$head" | sed -n 's/^ActiveState=\([a-z-]*\)$/\1/p')"
+	# One of the states systemd gives a unit, or "other": a word of any kind is not shown.
+	case "$state" in ''|active|reloading|inactive|failed|activating|deactivating|maintenance|refreshing) ;; *) state=other ;; esac
+	next="$(printf '%s\n' "$head" | sed -n 's/^NextElapseUSecMonotonic=//p')"
+	next="${next// /_}"
+	if [ -n "$next" ] && { [[ ! "$next" =~ ^[0-9a-z._]+$ ]] || [ "${#next}" -gt 40 ]; }; then next=unshown; fi
+	mleft="$(mono_left_s "$head" || true)"
+	[ -z "$mleft" ] || mleft=$(( mleft / 60 ))
+	out+=("  now_wallclock_left_min=${left:-none}" "  now_monotonic_state=${state:-absent}"
+	      "  now_monotonic_elapse=${next:-absent}" "  now_monotonic_left_min=${mleft:-unread}")
+	aw="$(arming_num "$facts" arm_wall)"; au="$(arming_num "$facts" arm_uptime)"
+	sw="$(arming_num "$facts" sched_wall)"; su="$(arming_num "$facts" sched_uptime)"
+	if [ -n "$aw" ] && [ -n "$au" ] && [ -n "$sw" ] && [ -n "$su" ]; then s1=$(( (sw - aw) - (su - au) )); fi
+	if [ -n "$sw" ] && [ -n "$su" ] && [ -n "$nw" ] && [ -n "$nu" ]; then s2=$(( (nw - sw) - (nu - su) )); fi
+	out+=("  step_arm_to_sched_s=$s1" "  step_sched_to_now_s=$s2")
+	# One pass through red() for the whole block: on Git Bash each pass costs about a second.
+	{
+		printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "the arming, as the instance recorded it and as it reads now (wall clock in epoch seconds, uptime in seconds):"
+		printf '%s\n' "${out[@]}"
+		[ "$hidden" = 0 ] || printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$hidden line(s) of the record not shown (not a line userdata.sh writes, or cut by the read)"
+	} | red
+	return 0
 }
 
 # A Python that runs: on Windows `python3` is often the Microsoft Store placeholder,
@@ -282,7 +421,20 @@ main() {
 		# budget legitimately shrinks as the session runs: re-running must not abort it.
 		if [ -e "$STATE/armed" ] && [ -s "$STATE/ip" ]; then say "the safety net is already proven armed"; exit 0; fi
 		set -E; trap 'abort "unexpected failure at line $LINENO"' ERR
-		local t0 ip="" st="" sched left
+		local t0 ip="" st="" proof="" said=0 head left mleft mmin
+		# The one read of the instance the proof is made on, printed once. Every refusal from the
+		# moment an address is known comes through `refuse`, so each says first what the instance
+		# recorded of its arming and what the same reads say now. abort itself is unchanged. The
+		# printing runs in a subshell: it stands between a refusal and its abort, and whatever
+		# goes wrong in it (bash discards the whole running command on an arithmetic error, and
+		# `|| true` does not hold that) ends there and not in the driver.
+		arming_once() {
+			[ "$said" = 0 ] || return 0
+			said=1
+			proof="$(ssh "${SSHO[@]}" "ubuntu@$ip" "$ARMING_READ" 2>/dev/null || true)"
+			( arming_say "$proof" ) || true
+		}
+		refuse() { arming_once; abort "$@"; }
 		t0=$SECONDS
 		while [ $((SECONDS - t0)) -lt "$IP_WAIT_S" ]; do
 			ip="$(aws_ ec2 describe-instances --region "$REGION" --instance-ids "$(iid)" \
@@ -300,19 +452,36 @@ main() {
 			sleep "$POLL_S"
 		done
 		case "$st" in
-			*FAILED*) abort "user-data failed (PROVISION_FAILED)" ;;
+			*FAILED*) refuse "user-data failed (PROVISION_FAILED)" ;;
 			*OK*) say "provisioned after $((SECONDS - t0))s of polling" ;;
-			*) abort "not provisioned after ${PROV_WAIT_S}s" ;;
+			*) refuse "not provisioned after ${PROV_WAIT_S}s" ;;
 		esac
-		sched="$(ssh "${SSHO[@]}" "ubuntu@$ip" 'test -e /var/lib/cloud/instance/SHUTDOWN_ARMED && test -x /var/lib/cloud/scripts/per-boot/qnx-metal-deadline.sh && cat /run/systemd/shutdown/scheduled && echo "NOW=$(date +%s)"' 2>/dev/null || true)"
-		left="$(shutdown_left_min "$sched" || true)"
-		[ -n "$left" ] || abort "the self-termination shutdown is NOT armed (or its per-boot re-arm is missing)"
+		# The proof: one read, printed, then judged. It is printed whether `wait` goes on or
+		# not, so a session that passes also says what its clock did.
+		arming_once
+		head=$'\n'"${proof//$'\r'/}"
+		head="${head%%$'\n'== arming facts*}"$'\n'
+		# The wall-clock net, as before: the two marks user-data leaves, and a poweroff scheduled.
+		case "$head" in *$'\nARMED_FILE=yes\n'*) ;; *) refuse "the self-termination shutdown is NOT armed (or its per-boot re-arm is missing)" ;; esac
+		case "$head" in *$'\nPERBOOT=yes\n'*) ;; *) refuse "the self-termination shutdown is NOT armed (or its per-boot re-arm is missing)" ;; esac
+		left="$(shutdown_left_min "$head" || true)"
+		[ -n "$left" ] || refuse "the self-termination shutdown is NOT armed (or its per-boot re-arm is missing)"
+		# The monotonic net: the timer unit active, with no more than the session's minutes left on
+		# it, to the second. Its lower end is the wall-clock window's: too little left is no session.
+		mleft="$(mono_left_s "$head" || true)"
+		[ -n "$mleft" ] || refuse "the monotonic timer is NOT armed ($MONO_UNIT is not active, or its time could not be read)"
+		mmin=$(( mleft / 60 ))
+		[ "$mmin" -gt $((SHUTDOWN_MIN_EXPECTED - 30)) ] && [ "$mleft" -le $((SHUTDOWN_MIN_EXPECTED * 60)) ] \
+			|| refuse "monotonic timer armed for $mmin min ahead, expected $((SHUTDOWN_MIN_EXPECTED - 29))..$SHUTDOWN_MIN_EXPECTED and not a second more"
 		[ "$left" -gt $((SHUTDOWN_MIN_EXPECTED - 30)) ] && [ "$left" -le $((SHUTDOWN_MIN_EXPECTED + 1)) ] \
-			|| abort "shutdown armed for $left min ahead, expected $((SHUTDOWN_MIN_EXPECTED - 29))..$((SHUTDOWN_MIN_EXPECTED + 1))"
+			|| refuse "shutdown armed for $left min ahead, expected $((SHUTDOWN_MIN_EXPECTED - 29))..$((SHUTDOWN_MIN_EXPECTED + 1))"
 		mv "$STATE/ip.pending" "$STATE/ip"
 		touch "$STATE/armed"
 		trap - ERR
-		say "self-termination armed: poweroff in $left min, re-armed on any reboot"
+		say "self-termination armed: poweroff in $left min by the wall clock and in $mmin min by the monotonic timer, both re-armed on any reboot"
+		# Said, not refused: the wall-clock poweroff is right by the clock as it stands, and the
+		# monotonic timer holds whatever the clock does next.
+		case "$head" in *$'\nNTPSynchronized=yes\n'*) ;; *) say "NOTE: the instance does not call its clock synchronised. A step forward from here brings the wall-clock poweroff, and the session's end, nearer by its size; a step backward cannot move it past the monotonic timer, which holds until a reboot." ;; esac
 		;;
 	upload)
 		armed
