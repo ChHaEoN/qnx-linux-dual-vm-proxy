@@ -224,7 +224,7 @@ guest banner, with every controllable setting stamped into the times file.
 |---|---|---|
 | Build the images | `build-qhv.bat` | — (same images, copied) |
 | Stage to the Orin | `twin/sync-qhv.sh` (scp, checksum-verified on arrival, resumable; `SSH_OPTS` for a non-default key) | — |
-| QEMU ≥ 9.0 on the Orin | — | `orin/build-qemu-on-orin.sh` (the distro 6.2.0 lacks the NS-EL2 virtual-timer IRQ wiring QEMU added in 9.0 — see `docs/digital-twin-design.md` §1a; builds a tagged release into its own prefix, 6.2.0 untouched) |
+| QEMU ≥ 9.0 on the Orin | — | `orin/build-qemu-on-orin.sh` (the distro's QEMU, 6.2.0 on JetPack 6 and 8.2 on JetPack 7, is older than 9.0, which added the NS-EL2 virtual-timer IRQ wiring — see `docs/digital-twin-design.md` §1a; builds a tagged release into its own prefix, the distro's QEMU untouched) |
 | Measure n=5 | `launch-qhv-tcg.ps1 -Runs 5 -StopOnGuestBanner -WithRng [-QemuPath …]` | `WITH_RNG=1 orin/launch-qhv-on-orin-tcg.sh 5` (picks `~/qemu-v11.1.0`, or `QEMU_BIN`) |
 
 Both instruments write `# qemu:` / `# devices:` / `# disk:` stamps and

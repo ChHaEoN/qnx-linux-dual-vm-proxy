@@ -113,7 +113,7 @@ exists so the gap is documented rather than glossed over.
 |---|---|---|---|
 | Hardware root of trust | Tegra fuses | None | Orin Nano fuses exist but not used by this project |
 | First-stage bootloader | NVIDIA-signed | None: QEMU loads the IFS with `-kernel`, no firmware chain | JetPack UEFI (default) |
-| OS kernel signature check | Yes | No | No (default JetPack does *measured* boot but the project does not extend it) |
+| OS kernel signature check | Yes | No | No (the project enables no secure-boot feature of the firmware and extends no measurement) |
 | Hypervisor signature check | Yes | No (`qvm` inside the host IFS, unsigned) | n/a on the plain leg (no HV); No for native `qvm` (Phase 3b: unsigned, entered by kexec from L4T) |
 | Guest IPL signature check | Yes | No (mkqnximage IFS, unsigned) | No (same IFS) |
 

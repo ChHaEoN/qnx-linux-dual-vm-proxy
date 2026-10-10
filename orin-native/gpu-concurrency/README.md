@@ -15,11 +15,15 @@ putting a hardware-virtualised QNX beside the GPU owner costs the GPU anything.
 
 - **`fma.cu`** — sustained FP32 FMA load, 512 blocks x 256 threads x 200k
   iterations per round, reporting GFLOP/s per round and a mean. Build on the
-  board with:
+  board with [`build-fma.sh`](build-fma.sh):
 
   ```
-  /usr/local/cuda/bin/nvcc -O3 -arch=sm_87 -o fma fma.cu
+  bash build-fma.sh
   ```
+
+  It compiles `fma.cu` with `nvcc -O3 -arch=sm_87` into `~/gpuload/fma`, using
+  the one `nvcc` it finds under `/usr/local/cuda*` (or the one `NVCC=` names),
+  under the memory cap of `lib-build.sh`, and it never starts `fma`.
 
   A `if (x == 12345.678f)` guard that is never true keeps the compiler from
   deleting the loop. Pair it with `tegrastats` to confirm `GR3D_FREQ` actually

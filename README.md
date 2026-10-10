@@ -50,7 +50,7 @@ P1 are explained under [Reading the ids](#reading-the-ids).
   no client driver.
 
 - **What was built.** The partition itself, a guest-side safety monitor and
-  its claim protocol, five IPC paths across the boundary, an edge-AI service on
+  its claim protocol, six IPC paths across the boundary, an edge-AI service on
   the Linux side, a native-port toolchain, a measurement method with
   pre-registered tests and about fifty harnesses, bare-metal AWS tooling, and a
   CI gate over the repo's own prose. See [What was built](#what-was-built).
@@ -115,13 +115,22 @@ synchronisation.
 | UDP | the same route, datagrams |
 | Polled shared memory | one slot in QEMU's `ivshmem`, both ends polling; the guest maps the BARs itself through ECAM (`shmcfg`), with no PCI server |
 | Notified shared memory | the host kicks the guest over a virtio console (`devc-virtio`); the guest answers over the console or through the `ivshmem` doorbell, which KVM handles in the kernel (ioeventfd) |
+| Notified shared memory, by MSI-X | the host writes the guest's `ivshmem` eventfd, which QEMU or KVM turns into the device's MSI-X message, a write to the GIC ITS; the guest's startup sets the ITS up (`startup-qemu-virt-its`), `qnx-its-probe msixcfg` maps the vector to an LPI, and the monitor waits on it (`shmkick ivshmem@OFF msix`); the guest answers through the `ivshmem` doorbell as above |
 | SOME/IP | a SOME/IP method in the guest (`qnx-someip-monitor`, TCP and UDP, the monitor's own judgement); on L4T a Python client, a C++ client, and the same C++ client through vsomeip 3.4.10 |
 
-A doorbell *into* the guest is not built: QEMU 6.2 interrupts a guest by MSI-X
-only, which would have to be programmed in this guest by hand, with the GIC ITS
-passed through the startup. It is under study. A Cyclone DDS variant of the
-monitor is in [`ipc-test/qnx-dds-monitor/`](ipc-test/qnx-dds-monitor/), with
-notes in [cyclonedds-qnx80.md](docs/middleware/cyclonedds-qnx80.md). vsomeip
+The doorbell *into* the guest exists as code. QEMU's `ivshmem` interrupts a
+guest by MSI-X only, and this guest runs no PCI server, so the MSI-X path is
+programmed by hand: [`startup-qemu-virt-its`](orin-native/startup/qemu-virt-its/)
+sets up the GIC ITS in the startup, [`qnx-its-probe`](ipc-test/qnx-its-probe/)
+maps the device's vector to an LPI,
+[`ifs-bell.build`](ipc-test/qnx-safety-monitor/ifs-bell.build) is the build file
+of an image that carries it, and
+[`ivshmem_ring.py`](orin-native/gpu-concurrency/ivshmem_ring.py) rings the guest
+from the host. It rests on a startup that is ours, so it is
+not a QNX-supported configuration, and no result of it is published. A Cyclone
+DDS variant of the monitor is in
+[`ipc-test/qnx-dds-monitor/`](ipc-test/qnx-dds-monitor/), with notes in
+[cyclonedds-qnx80.md](docs/middleware/cyclonedds-qnx80.md). vsomeip
 (MPL-2.0) is built on the board by
 [`build-vsomeip.sh`](orin-native/someip/build-vsomeip.sh) and never committed.
 AUTOSAR CAPI is not used.
@@ -163,8 +172,9 @@ instrument. See [The native port](#the-native-port-phase-3b).
 - **Controls.** The CPU governor pinned and recorded before and after; QEMU's
   threads, the probe and every load pinned to named cores, with the map in the
   record; the memory-controller clock sampled per window under any GPU load;
-  `nvpmodel` stamped; the page cache dropped before GPU memory work; no SSH
-  polling of the board during a run.
+  `nvpmodel`, the L4T release and the kernel's `CONFIG_HZ` stamped; the page
+  cache dropped before GPU memory work; no SSH polling of the board during a
+  run.
 
 **Pre-registration.** Each hypothesis-driven harness states its question, its
 predictions with thresholds (P1, P2, …) and its validity checks (M1, …) in its
@@ -256,7 +266,7 @@ This table is the load-bearing part:
 | GPU (Ampere CUDA / vGPU) | No leg passes a GPU to a guest. The cloud host has no NVIDIA GPU at all; the Orin Nano's Ampere iGPU belongs to L4T and is never exposed to the QNX guest — no in-guest CUDA, no vGPU partitioning. The native leg's S1 guest is Linux without a GPU. GPU pass-through is a later target, studied on a separate unpublished research track; no GPU stage has started. |
 | Real-time guarantees | The QEMU-TCG legs (A1 to A3, history) were emulation-bound, not hardware-timed. **The TCG twin legs were withdrawn by owner decision on 2026-09-20; A6 measures under KVM only.** On A6 the guest is **never configured for real time** — the monitor is pure POSIX at default priority — and its vCPU threads are scheduled by a general-purpose Linux kernel beside every other host load. The "Safety VM" framing is POSIX-realtime, not certified RT. Nothing here bounds a tail: there is no WCET or WCRT analysis. |
 | ASIL-D certification | None. SDP 8.0 ≠ QNX OS for Safety (QOS); no safety case, no MISRA-C, no ISO 26262 evidence. |
-| Inter-VM shared memory | A1 (history): host↔guest over the `qvm` virtio-console vdev — it crosses the EL2/EL1 boundary, but TCG-emulated, so any latency there measures emulation cost, not transport cost. A2 (history): QNX↔Linux virtio-net → tap → bridge, also TCG-emulated. A6 crosses on real silicon under KVM, over TCP and UDP and over host↔guest shared memory in QEMU's `ivshmem`, polled and notified. Neither shared-memory path is DRIVE OS's VM↔VM shared memory and mailbox, and no doorbell into the guest is built. What cannot exist under KVM is a figure for the `qvm` shared-memory path, because that path belongs to the QNX Hypervisor and QHV cannot run under KVM at all. **No hardware-timed *hypervisor* number exists on any leg and none ever will.** No sourced DRIVE OS IPC figure is in the repo, so no gap is quantified here. See [ADR-002](docs/phase2-topology-decision.md). |
+| Inter-VM shared memory | A1 (history): host↔guest over the `qvm` virtio-console vdev — it crosses the EL2/EL1 boundary, but TCG-emulated, so any latency there measures emulation cost, not transport cost. A2 (history): QNX↔Linux virtio-net → tap → bridge, also TCG-emulated. A6 crosses on real silicon under KVM, over TCP and UDP and over host↔guest shared memory in QEMU's `ivshmem`, polled and notified. None of the shared-memory paths is DRIVE OS's VM↔VM shared memory and mailbox, and the doorbell into the guest is QEMU's MSI-X through a GIC ITS that this repo's own startup sets up, not a hypervisor mailbox. What cannot exist under KVM is a figure for the `qvm` shared-memory path, because that path belongs to the QNX Hypervisor and QHV cannot run under KVM at all. **No hardware-timed *hypervisor* number exists on any leg and none ever will.** No sourced DRIVE OS IPC figure is in the repo, so no gap is quantified here. See [ADR-002](docs/phase2-topology-decision.md). |
 | Certified bootloader chain | No SecureBoot, no measured boot, no chain-of-trust. The native leg's UEFI entry (M5-F) is an EFI loader of ours launched by hand from the firmware's Shell: not a supported, certified or unattended boot path. |
 
 One limit sits outside the table because it is not a DRIVE OS feature: no
@@ -291,7 +301,7 @@ A78AE.
 ```
  Jetson Orin Nano — Tegra234, six Cortex-A78AE cores, Ampere iGPU
  ┌──────────────────────────────────────────────────────────────────┐
- │  L4T / JetPack 6  — owns the machine                             │
+ │  L4T / JetPack 7  — owns the machine                             │
  │                                                                  │
  │   CUDA / llama-server ────────────► Ampere iGPU                  │
  │                                       QNX never touches it       │
@@ -313,6 +323,9 @@ A78AE.
  │  └────────────────────────────────────────────────────┘          │
  └──────────────────────────────────────────────────────────────────┘
 ```
+
+The diagram names the release the board runs now. Every Orin record this
+repository names was taken earlier, when the board ran JetPack 6.
 
 **Why not a Type-1 hypervisor here.** A4 put the QNX Hypervisor natively at
 EL2 on these cores. It is not withdrawn — it is simply no longer the
@@ -356,11 +369,10 @@ was used as a second host: for KVM boot captures (2026-07-29, 2026-09-19), the
 Phase 4 twin diff (2026-09-20), and A6 ladder and harness sessions from
 2026-09-21. Every record from it is held locally.
 
-**What is next** is not decided. Open: a doorbell into the guest (MSI-X in the
-guest and the ITS in the startup, under study); Phases 5 and 6; the Phase 7
-stretch in [future-multi-soc.md](docs/future-multi-soc.md), no longer held
-back behind Phase 4; and publication of any result, which needs BlackBerry's
-written approval first.
+**What is next** is not decided. Open: Phases 5 and 6; the Phase 7 stretch in
+[future-multi-soc.md](docs/future-multi-soc.md), no longer held back behind
+Phase 4; and publication of any result, which needs BlackBerry's written
+approval first.
 
 ---
 

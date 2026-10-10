@@ -32,10 +32,12 @@ Type-1 hypervisor:
 Three things make that real and are absent here: a **certified** Type-1
 partitioner enforcing mixed-criticality isolation, **FSI lockstep and camera
 ingest** in the hardware, and an IPC path that is **shared memory between VMs,
-with a notification mechanism, not a network**. (A6's `ivshmem` slot, 2026-09-22,
-is host↔guest, and either polled or notified — a virtio console in, and a
-console or an `ivshmem` doorbell out; no doorbell into the guest, which QEMU 6.2
-would need MSI-X for.)
+with a notification mechanism, not a network**. (A6's `ivshmem` slot is
+host↔guest, and either polled or notified — the host reaches the guest over a
+virtio console, or by the `ivshmem` doorbell as an MSI-X interrupt through the
+GIC ITS, which a startup variant rebuilt in this repo (`startup-qemu-virt-its`,
+not a QNX-supported configuration) sets up; the guest answers over the console
+or through the doorbell.)
 
 ---
 
@@ -48,7 +50,7 @@ Type-1 layer, because QHV needs EL2 and ARM KVM does not nest on A78AE.
 ```
  Jetson Orin Nano — Tegra234, 6 × Cortex-A78AE, Ampere iGPU
  ┌─────────────────────────────────────────────────────────┐
- │  L4T / JetPack 6 — EL1, owns the machine                │
+ │  L4T / JetPack 7 — owns the machine                     │
  │                                                         │
  │    TensorRT / CUDA ─────► Ampere iGPU                   │
  │                            QNX never touches it         │
@@ -77,10 +79,11 @@ compiled `-fno-auto-inc-dec` so that the compiler emits no writeback
 (auto-increment) stores to MMIO: KVM cannot emulate a trapped store whose
 syndrome reports ISV=0. That rebuild is **not a QNX-supported configuration**.
 
-**Measured on 2026-09-21** with the attribution ladder, which splits the round
-trip above into rung A (the probe and a host-side server over loopback TCP),
-`br0`, and **the crossing** — tap, virtio-net, the guest's `io-sock`, its
-scheduler and the monitor. The figures are in record `20260921T-ladder`, held
+**Measured on 2026-09-21**, when the board still ran JetPack 6, with the
+attribution ladder, which splits the round trip above into rung A (the probe
+and a host-side server over loopback TCP), `br0`, and **the crossing** — tap,
+virtio-net, the guest's `io-sock`, its scheduler and the monitor. The figures
+are in record `20260921T-ladder`, held
 locally (NC QDL v7 4.6(i)). Method and sample sizes:
 [measurement-design.md](measurement-design.md).
 
@@ -137,9 +140,9 @@ Under A1 and A3 this path sat inside QEMU **TCG**, so any latency on it measures
 emulation cost, not transport cost. Under A4 it sat on silicon; that record is
 held locally. **No hypervisor shared-memory or mailbox figure exists on any
 architecture**: the `vdev shmem` path was TCG-only, never timed, and its notify
-half was deliberately skipped. (A6's `ivshmem` paths of 2026-09-22 are
-host↔guest under KVM: polled, and notified with a doorbell in the guest-to-host
-direction only.)
+half was deliberately skipped. (A6's `ivshmem` paths are host↔guest under KVM:
+polled, and notified — the guest answers through a doorbell, and the host
+reaches it over a console or by MSI-X.)
 
 ---
 

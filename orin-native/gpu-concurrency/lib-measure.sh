@@ -1239,7 +1239,7 @@ m_sampler_start() {  # $1 = tag
 	# FOUND ON THE BOARD, 2026-09-21, by the first smoke test -- the unit tests'
 	# sudo stub could not show it. The loop used to run as a background
 	# `sudo -n timeout ...` and be stopped with `sudo -n kill <sudo's pid>`. sudo
-	# before 1.9.13 -- the board has 1.9.9 -- does not relay a signal sent from a
+	# before 1.9.13 -- the board then had 1.9.9 -- does not relay a signal sent from a
 	# process in sudo's OWN process group, and the script, both sudos and the
 	# kill all shared it: the stop was ignored, `wait` blocked until the 122 s
 	# ceiling, and the loop wrote on through it. Now a short sudo starts
