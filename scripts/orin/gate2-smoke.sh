@@ -201,8 +201,9 @@
 # the board survives a hang (nothing here hangs it on purpose, and a step that boots a guest is
 # run when the owner can reach the plug). G14 reads the scenario lines, which are also what its
 # report's predictions are about; a line that does not read pass fails the step without saying
-# which of the two it was. The wording this script takes for llama.cpp's offload lines and for
-# an NvMap failure is from the upstream project and the vendor's forum, and is unverified at the
+# which of the two it was. The wording this script takes for llama.cpp's offload line and its
+# device line was read in the source at the pinned commit, with the verbosity they are logged
+# at. The wording for an NvMap failure is from the vendor's forum and is unverified at the
 # pinned commit; so is what llama-cli puts on its standard output. G19's "tokens" is therefore
 # only this: something was printed there besides the prompt's own word. A token cannot be told
 # from anything else the program prints there (a banner, a template's role names). Every smoke

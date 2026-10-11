@@ -19,8 +19,10 @@ lines).
 What these tests do NOT show: that any step passes on the board, or that a real harness prints
 what its stub prints here (the pass rules are held to the report sources' wording by reading
 them, not by running them). The stub sudo runs what it is given; the real one is not
-exercised. llama.cpp's own wording for an offloaded model and for an NvMap failure is taken
-from its upstream form and from the vendor's forum note, and is unverified at the pinned commit.
+exercised. llama.cpp's own wording for an offloaded model and its device line was read in the
+source at the pinned commit, with the verbosity they are logged at; no test here runs
+llama.cpp. The wording for an NvMap failure is taken from the vendor's forum note and is
+unverified at the pinned commit.
 """
 import hashlib
 import os
