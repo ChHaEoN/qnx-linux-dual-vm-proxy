@@ -89,11 +89,14 @@
 #        none, with a CUDA device named, or the GPU seen busy during the run. If the load fails
 #        with the NvMap error it is run once more with GGML_CUDA_ENABLE_UNIFIED_MEMORY=1, in a
 #        directory of its own and with a line of its own; a second failure ends the tier. A
-#        pass on the GPU seen busy alone, without the offload wording, is said: G20 reads that
-#        wording alone
-#   G20  ifs-svc.bin: vlm-demo.sh exits 0 and its server.log holds the same offload evidence.
-#        Stop. Refused after the workaround was needed, until the deployed demo names the
-#        variable itself
+#        pass on the GPU seen busy alone, without the offload wording, is said: at its default
+#        verbosity this llama-cli does not print that wording, and G20 sets the verbosity in its
+#        own row and reads the wording in the server's log
+#   G20  ifs-svc.bin: vlm-demo.sh, with LLAMA_ARG_LOG_VERBOSITY=4 in its row (the pinned
+#        llama.cpp prints the library's load lines at that verbosity only), exits 0 and its
+#        server.log holds the offload wording with a CUDA device named. Stop. Refused after the
+#        workaround was needed, until the deployed demo names GGML_CUDA_ENABLE_UNIFIED_MEMORY
+#        itself
 #   G21  ifs-kick.bin: run-llm-interference.sh K=2: the sampler verified, complete. Stop. Left
 #        out for good once the workaround was needed
 #
@@ -1201,6 +1204,10 @@ llama_once() {  # one load of the small model; $1 = the workaround's assignment,
 	if [ -n "$1" ]; then how=set; fi
 	drop_cache || { fail page-cache; return; }
 	# Bounded, and with nothing on its standard input: this build's llama-cli once spun on end-of-input.
+	# LLAMA_ARG_LOG_VERBOSITY is not set here, as it is in G20's row: llama-cli writes its log's info
+	# lines to standard output, which is where the token check reads, so with the variable the token
+	# check would pass on log lines alone. G19 keeps its two-way evidence: the offload wording, or the
+	# GPU seen busy.
 	row ${1:+"$1"} -- timeout 180 "$HOME/llama.cpp/build/bin/llama-cli" -m "$HOME/models/SmolVLM-500M-Instruct-Q8_0.gguf" -ngl 99 -n 16 -st -p "$prompt"
 	gpu_beside "$A/llama"
 	kernel_peek "$A/kernel-during.log" || { fail kernel-lines-read; return; }
@@ -1220,7 +1227,7 @@ llama_once() {  # one load of the small model; $1 = the workaround's assignment,
 	[[ "${text//"$prompt"/}" =~ [^[:space:]] ]] || fail tokens
 	if [ "$off" != yes ] && [ "$GPU_BUSY" != yes ]; then fail gpu-evidence; fi
 	if [ -z "$WHY" ] && [ "$off" != yes ]; then
-		say "  it passes on the GPU seen busy alone: the offload wording this script looks for is not in the load's output. G20's rule reads that wording alone, in the server's log: read $A/llama.stderr and settle the wording before G20"
+		say "  it passes on the GPU seen busy alone: at its default verbosity this llama-cli does not print the offload wording. G20 sets the verbosity in its own row and reads the wording in the server's log"
 	fi
 }
 
@@ -1249,7 +1256,11 @@ step_G19() {
 step_G20() {
 	local rc
 	boot svc || return
-	row "CONSOLE=$CONSOLE" "OUT=$A" "IMAGES=$HOME/mnist" -- bash "$E/vlm-demo.sh"
+	# At the pinned llama.cpp commit the library's load lines, the ones `offloaded` reads, are logged at
+	# verbosity 4, and the server's default is 3. LLAMA_ARG_LOG_VERBOSITY is the environment name of the
+	# -lv option at that pin and changes what is logged, nothing else. It is in the row, so the row's
+	# record names it. This is read from the source at the pin.
+	row "CONSOLE=$CONSOLE" "OUT=$A" "IMAGES=$HOME/mnist" LLAMA_ARG_LOG_VERBOSITY=4 -- bash "$E/vlm-demo.sh"
 	"${ROW[@]}" > "$A/run.log" 2>&1 < /dev/null; rc=$?
 	kernel_peek "$A/kernel-during.log" || { fail kernel-lines-read; return; }
 	if nvmap_in "$A/server.log" "$A/run.log" "$A/kernel-during.log"; then

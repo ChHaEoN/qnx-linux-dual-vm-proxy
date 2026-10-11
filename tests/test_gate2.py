@@ -229,6 +229,17 @@ STAMP_JSON = """{
 }
 """
 SERVER_LOG = LLAMA_ERR + "main: server is listening on http://127.0.0.1:8089\n"
+# What the made-up server logs at the tools' default verbosity: neither an offload line nor a CUDA
+# device line. This models the verbosity levels of the pinned llama.cpp as read from its source:
+# the library's own info lines (the offload line, the device lines) reach the tools' log at
+# verbosity 4, and the tools' default is 3. The demo's stub writes SERVER_LOG at 4 or more and
+# this at less.
+SERVER_LOG_DEFAULT = "srv    load_model: loading model 'made-up.gguf'\nmain: server is listening on http://127.0.0.1:8089\n"
+VLM_DEMO_POST = ("if [ \"${LLAMA_ARG_LOG_VERBOSITY:-0}\" -ge 4 ] 2> /dev/null; then\n"
+                 "cat > \"$OUT/server.log\" <<'EOF'\n" + SERVER_LOG + "EOF\n"
+                 "else\n"
+                 "cat > \"$OUT/server.log\" <<'EOF'\n" + SERVER_LOG_DEFAULT + "EOF\n"
+                 "fi\n")
 
 # ------------------------------------------------------------------ the stubs
 
@@ -620,7 +631,7 @@ class Board:
         self.set("post-run-llm-interference.sh", POST_LAT)
         self.set("post-run-stamp.sh", POST_LAT + "cat > \"$OUT/stamp.json\" <<'EOF'\n" + STAMP_JSON + "EOF\n")
         self.set("post-run-tick.sh", POST_LAT + 'echo "made-up reduced trace" > "$OUT/tk-t2ms_r2.log"\n')
-        self.set("post-vlm-demo.sh", "cat > \"$OUT/server.log\" <<'EOF'\n" + SERVER_LOG + "EOF\n")
+        self.set("post-vlm-demo.sh", VLM_DEMO_POST)
         self.script(self.R + "/launch-qnx-kvm-bridged.sh", LAUNCHER)
         _put(self.R + "/ivshmem_ring.py", "# made up\n")
         _put(self.REPO + "/orin-native/tools/check_virt_dtb.py", "# made up\n")
@@ -1039,7 +1050,7 @@ NOISE = dict(N="7", K="99", WARMUP="1", CSTATE="", SMOKE="0", R="9", IMG_B="/now
              DISK="/nowhere/disk", LOG="/nowhere/log", OUT="/nowhere/out", CONSOLE="/nowhere/console", LOCK="/nowhere/lock",
              IVSHMEM="/nowhere/shm", IVSHMEM_SERVER="/nowhere/sock", KICK_SOCK="/nowhere/kick", THREAD_NAMES="0",
              VECTORS="2", TEGRA="0", QEMU="/nowhere/qemu", MON="/nowhere/mon", PROBE="/nowhere/probe", IMAGES="/nowhere/img",
-             CYCLONEDDS_URI="file:///nowhere", GGML_CUDA_ENABLE_UNIFIED_MEMORY="1", STUB_STRAY="1")
+             CYCLONEDDS_URI="file:///nowhere", GGML_CUDA_ENABLE_UNIFIED_MEMORY="1", LLAMA_ARG_LOG_VERBOSITY="1", STUB_STRAY="1")
 
 
 @needs_bash
@@ -1257,10 +1268,32 @@ def test_the_gpu_tier_runs_its_four_rows_with_the_owner_present(board):
     # G20 and G21: a guest each, and the row's harness.
     a20, a21 = _fwd(board.attempt("G20")), _fwd(board.attempt("G21"))
     assert _launch_env(board, 0, "ifs-svc.bin", {}) == a20 + "/guest-console.log"
-    _harness(board, "vlm-demo.sh", CONSOLE=a20 + "/guest-console.log", OUT=a20, IMAGES=board.H + "/mnist")
+    _harness(board, "vlm-demo.sh", CONSOLE=a20 + "/guest-console.log", OUT=a20, IMAGES=board.H + "/mnist", LLAMA_ARG_LOG_VERBOSITY="4")
     assert _launch_env(board, 1, "ifs-kick.bin", {}) == a21 + "/guest-console.log"
     _harness(board, "run-llm-interference.sh", K="2", OUT=a21 + "/raw")
     assert r.calls.count("qemu-term") == 2 and board.alive() == []
+
+
+@needs_bash
+def test_only_g20s_row_carries_the_log_verbosity_and_the_runners_own_value_reaches_no_row(board):
+    """The server's log is where G20 reads the offload wording, and the pinned llama.cpp logs the
+    library's load lines there at verbosity 4 only (the tools' default is 3), so G20's row sets
+    LLAMA_ARG_LOG_VERBOSITY=4. llama-cli's standard output is where G19 reads its tokens, and its
+    log's info lines go there too: with the variable the token check would pass on log lines
+    alone, so G19's row does not carry it. The liveness demo and the interference harness read
+    neither, and a value in the runner's own environment reaches none of the rows."""
+    board.set("tegrastats", TEGRA_BUSY)
+    steps = ("G12", "G18", "G19", "G20", "G21")
+    r = board.run(*steps, **dict(NOISE, **GPU))
+    assert r.log == [s + " PASS" for s in steps] and r.returncode == 0, (r.log, r.out[-3000:])
+    assert NOISE["LLAMA_ARG_LOG_VERBOSITY"] != "4", "the runner's own value is told apart from the row's"
+    assert row_env(board, "harness-vlm-demo.sh.env")["LLAMA_ARG_LOG_VERBOSITY"] == "4"
+    for dump in ("llama.env", "fma.env", "harness-liveness-demo.sh.env", "harness-run-llm-interference.sh.env"):
+        assert "LLAMA_ARG_LOG_VERBOSITY" not in row_env(board, dump), dump
+    # In the text: named in one place of the code, and that is G20's row.
+    code = _code(_text(SCRIPT))
+    assert code.count("LLAMA_ARG_LOG_VERBOSITY") == 1
+    assert re.search(r'(?m)^\trow [^\n]*LLAMA_ARG_LOG_VERBOSITY=4 -- bash "\$E/vlm-demo\.sh"$', code)
 
 
 @needs_bash
@@ -1874,8 +1907,9 @@ def test_gap_4o_after_the_workaround_g21_is_left_out_and_g20_waits_for_the_scrip
     board.write_manifests()
     r = board.run("G20", "G21", **GPU)
     assert r.log[-2:] == ["G20 PASS", "G21 FAIL refused-nvmap-workaround"], (r.log, r.out[-1500:])
-    assert "GGML_CUDA_ENABLE_UNIFIED_MEMORY" not in row_env(board, "harness-vlm-demo.sh.env"), \
-        "the runner does not set it for the demo: the scripts do"
+    got = row_env(board, "harness-vlm-demo.sh.env")
+    assert "GGML_CUDA_ENABLE_UNIFIED_MEMORY" not in got, "the runner does not set it for the demo: the scripts do"
+    assert got["LLAMA_ARG_LOG_VERBOSITY"] == "4", "the row sets the log verbosity, which is about what is logged and nothing else"
 
 
 @needs_bash
@@ -2969,18 +3003,22 @@ def test_a_guest_whose_launch_failed_is_not_kept_for_the_steps_that_share_its_bo
                                               (LLAMA_ERR, TEGRA_IDLE, False), ("load_tensors: layers on the CPU\n", TEGRA_IDLE, None)],
                          ids=["busy-and-no-wording", "busy-and-the-wording", "the-wording-alone", "neither-and-so-a-fail"])
 def test_g19_says_when_it_passed_without_the_offload_wording_that_g20_reads_alone(board, err, tegra, told):
-    """G20's rule reads the offload wording alone, in the server's log, and that wording is
-    unverified at the pin. A G19 that passed on the GPU seen busy, without the wording, says so
-    and names the file to read before G20 is run. A G19 that failed says nothing of G20."""
+    """G20's rule reads the offload wording alone, in the server's log, where G20's row sets the
+    verbosity that prints it; llama-cli at its default verbosity does not print that wording. A
+    G19 that passed on the GPU seen busy, without the wording, says so and says where G20 reads
+    it, with no instruction to stop before G20. A G19 that failed says nothing of G20."""
     _put(board.G + "/gate2.log", "G18 PASS\n")
     board.set("llama_stderr", err)
     board.set("tegrastats", tegra)
     r = board.run("G19", **GPU)
     assert r.log[-1] == ("G19 FAIL gpu-evidence" if told is None else "G19 PASS"), (r.log, r.out[-1200:])
-    line = [l for l in r.out.split("\n") if "before G20" in l]
+    line = [l for l in r.out.split("\n") if "it passes on the GPU seen busy alone" in l]
     assert (len(line) == 1) == bool(told), r.out[-1200:]
     if told:
-        assert board.norm(line[0]).rstrip().endswith("read %s/llama.stderr and settle the wording before G20" % _fwd(board.attempt("G19")))
+        said = board.norm(line[0]).rstrip()
+        assert "at its default verbosity this llama-cli does not print the offload wording" in said
+        assert said.endswith("G20 sets the verbosity in its own row and reads the wording in the server's log"), said
+        assert "before G20" not in said and "settle" not in said, "no instruction to stop before G20"
 
 
 # ------------------------------------------------------------------ edges no test held
