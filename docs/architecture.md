@@ -52,8 +52,8 @@ Type-1 layer, because QHV needs EL2 and ARM KVM does not nest on A78AE.
  ┌─────────────────────────────────────────────────────────┐
  │  L4T / JetPack 7 — owns the machine                     │
  │                                                         │
- │    TensorRT / CUDA ─────► Ampere iGPU                   │
- │                            QNX never touches it         │
+ │    CUDA / llama-server ─────► Ampere iGPU               │
+ │                                QNX never touches it     │
  │                                                         │
  │    latency probe                                        │
  │         │ 64-byte frame, TCP :7100                      │
