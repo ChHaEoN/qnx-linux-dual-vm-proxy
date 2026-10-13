@@ -189,13 +189,15 @@ processes, tail decomposition (host ticks, the guest's timer, thermal-zone
 polling, udev event handling, CPU confinement, kernel isolation), boot-to-boot
 variance, frame size and socket reads, guest kernel traces, and SOME/IP.
 
-**Bare-metal AWS tooling** ([`scripts/aws/`](scripts/aws/)). AWS is a test bed,
-never a runtime host. Sessions on an `a1.metal` instance (Graviton1, with
-`/dev/kvm`) are launched self-terminating with a shutdown timer as a safety
-net, rehearsed on the Orin first, captured so that a lost SSH connection loses
-nothing, and redacted at capture time; `terminate` refuses to run after an
-upload until a fetch has passed. A6 ladder and harness sessions ran on
-`a1.metal` from 2026-09-21 as a second host; their records are held locally.
+**Bare-metal AWS tooling** ([`scripts/aws/`](scripts/aws/)). A bare-metal
+session is a test bed, never a runtime host: the tooling launches one in the
+account of whoever runs it, and nothing here is offered as a hosted service.
+Sessions on an `a1.metal` instance (Graviton1, with `/dev/kvm`) are launched
+self-terminating with a shutdown timer as a safety net, rehearsed on the Orin
+first, captured so that a lost SSH connection loses nothing, and redacted at
+capture time; `terminate` refuses to run after an upload until a fetch has
+passed. A6 ladder and harness sessions ran on `a1.metal` from 2026-09-21 as a
+second host; their records are held locally.
 
 **Safety and security study material** under [`docs/fusa/`](docs/fusa/),
 [`docs/cyber/`](docs/cyber/) and [`docs/tara/`](docs/tara/): a Phase-1-gate

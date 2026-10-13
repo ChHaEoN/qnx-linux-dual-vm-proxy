@@ -64,8 +64,8 @@ substrates:
   would differ in a *bundle*, not in one variable (§1a). Every
   QHV boot and QHV IPC number attributed to the cloud leg (A1) was
   produced on the Windows box; the Phase-4 boot-time table names it
-  honestly as "Local Windows (x86_64, TCG)". AWS's remaining real role
-  is the KVM *test bed* (`a1.metal`, see
+  honestly as "Local Windows (x86_64, TCG)". In the bare-metal sessions
+  AWS is the KVM *test bed* (`a1.metal`, see
   [findings.md](findings.md) 2026-07-29 and **2026-09-19**), not the
   runtime host.
 - **Hardware twin** — Jetson Orin Nano Dev Kit (NVIDIA L4T / JetPack 6

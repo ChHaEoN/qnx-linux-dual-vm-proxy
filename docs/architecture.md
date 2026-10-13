@@ -180,11 +180,12 @@ build-equivalence check was withdrawn on 2026-05-07 and none is planned.
 
 ## AWS
 
-A test bed, never a runtime host. Non-metal Graviton exposes no `/dev/kvm` at
-all ([ADR-002](phase2-topology-decision.md)), so the `c7g.large` runtime host
-the design called for was never built. Bare metal is different: `a1.metal` has
-`/dev/kvm`, and on 2026-09-20 it was the second host in a two-host boot
-comparison on a byte-identical image (`20260920T-kvm-twin`, held locally).
+A bare-metal session is a test bed, never a runtime host. Non-metal Graviton
+exposes no `/dev/kvm` at all ([ADR-002](phase2-topology-decision.md)), so the
+`c7g.large` runtime host the design called for was never built. Bare metal is
+different: `a1.metal` has `/dev/kvm`, and on 2026-09-20 it was the second host
+in a two-host boot comparison on a byte-identical image (`20260920T-kvm-twin`,
+held locally).
 
 On 2026-09-21 the attribution ladder of A6 was run on `a1.metal` too, over TCP
 (`20260921T-ladder-a1metal`, held locally), and on 2026-09-22 the Orin's
