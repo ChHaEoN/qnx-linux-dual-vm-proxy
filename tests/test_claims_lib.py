@@ -6,6 +6,7 @@ appended, which is the gate's job, not a unit test's -- and since 2026-09-27 no
 run data is committed at all (NC QDL v7 4.6(i)). Every value below is invented.
 """
 import os
+import subprocess
 
 import pytest
 
@@ -313,14 +314,24 @@ def test_repo_slug_from_env_wins(monkeypatch):
     assert C.repo_slug_from_git(".") == "owner/name"
 
 
-def test_repo_slug_from_git_remote(repo_root, monkeypatch):
+@pytest.mark.parametrize("origin", [
+    "https://github.com/example-owner/example-repo.git",
+    "https://github.com/example-owner/example-repo",
+    "https://github.com/example-owner/example-repo/",
+    "git@github.com:example-owner/example-repo.git",
+])
+def test_repo_slug_from_git_remote(tmp_path, monkeypatch, origin):
+    # A repository of the test's own: a checkout's origin is whatever it was cloned from, or nothing.
+    # No git setting of the session that runs pytest reaches it either. With GIT_DIR in the
+    # environment, `git init` and `git remote add` would write into the repository it names.
     monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
-    slug = C.repo_slug_from_git(repo_root)
-    assert slug is not None
-    assert slug.count("/") == 1
-    owner, name = slug.split("/")
-    assert owner and name
-    assert not name.endswith(".git")
+    for name in [k for k in os.environ if k.startswith("GIT_")]:
+        monkeypatch.delenv(name)
+    fixture = tmp_path / "fixture-repo"
+    fixture.mkdir()
+    subprocess.run(["git", "init", "-q", str(fixture)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(fixture), "remote", "add", "origin", origin], check=True, capture_output=True)
+    assert C.repo_slug_from_git(str(fixture)) == "example-owner/example-repo"
 
 
 def test_repo_slug_returns_none_outside_a_repo(tmp_path, monkeypatch):

@@ -288,9 +288,9 @@ outside_repo() {   # $1 path  $2 what
 	# git missing from PATH must not disarm the guard: a checkout still has .git,
 	# and a bare copy of these scripts has no repository to leak into.
 	if [ -z "$top" ] && [ -e "$HERE/../../.git" ]; then top="$(cd "$HERE/../.." && pwd)"; fi
+	mkdir -p "$1"
 	[ -n "$top" ] || return 0
 	top="$(posix_path "$top")"
-	mkdir -p "$1"
 	p="$(cd "$1" && pwd)"
 	# Windows opens E:/Project and /e/PROJECT as one directory, so compare the way that
 	# filesystem does -- and only there, where the two are not different paths.

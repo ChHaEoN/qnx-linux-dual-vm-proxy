@@ -216,6 +216,21 @@ def test_the_environment_wins_over_env_local(tmp_path):
 
 
 @needs_bash
+def test_launch_from_copy_outside_repository_creates_state(rig, tmp_path, monkeypatch):
+    # Only the existing stand-in can be called; the script has no Git root here.
+    copied = tmp_path / "copied-scripts" / "drive-metal.sh"
+    copied.parent.mkdir()
+    shutil.copyfile(DRIVER, copied)
+    monkeypatch.setitem(globals(), "DRIVER", str(copied))
+    run, state, _ = rig
+    r, log = run("launch")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "run-instances" in log
+    assert (state / "vol").read_text().strip() == "vol-0abcdef1234567890"
+    assert not (state / "lock").exists()
+
+
+@needs_bash
 def test_launch_terminates_when_the_block_devices_are_wrong(rig):
     run, state, _ = rig
     r, log = run("launch", STUB_MAPPINGS="/dev/sda1 2 /dev/sda1 True vol-0abcdef1234567890")
