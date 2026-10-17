@@ -54,6 +54,7 @@ PINS = {
     "run-pin.sh": "eec286ed9132b5d8c79935e6b6c3c82b4429cc1458ea9391bc0e1ddad3d51985",
     "run-power.sh": "cb82bd4cd751f79c2027521c47bc57ad235fa2ab8364e83a89b5ab0512e66e90",
     "run-queue.sh": "6f62e15efaf7b81891c863806a89fb503b0697f4eac34475b1431dc3f2a2ded4",
+    "run-randomise.sh": "776e09c20187352b64e36d99a08bcc1edbe9d9f351d98f286537a7e095ffe811",
     "run-rate.sh": "6bfa9d0f6a89b6b432584f2e755b74b7aaf347fa4435c3fb82eb94c4af4cb68b",
     "run-readpath.sh": "0f39d76e6b7afaf499fa8bad3a3acff376de61658a40b5d28fa550006a8b134b",
     "run-reads.sh": "7f1bba5ad6b10b7ba01904763b9a73f2eb2f48a37ddffcb3e4110a384131ba7d",

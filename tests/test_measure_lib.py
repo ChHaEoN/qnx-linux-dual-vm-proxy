@@ -36,6 +36,13 @@ def _posix(p):
     return os.path.abspath(p).replace("\\", "/")
 
 
+def _stub(path, body):
+    """An executable `#!/usr/bin/env bash` script with LF endings, whatever the host."""
+    with open(path, "w", newline="\n") as f:
+        f.write("#!/usr/bin/env bash\n" + body + "\n")
+    os.chmod(path, 0o755)
+
+
 def _sysfs(tmp_path, governors):
     root = tmp_path / "cpu"
     for i, gov in enumerate(governors):
@@ -72,17 +79,33 @@ def _stub_sudo(tmp_path, body):
     return b
 
 
-def _run(tmp_path, snippet, governors=(), sudo='exec "$@"'):
+def _run(tmp_path, snippet, governors=(), sudo='exec "$@"', only=None, strict=False):
+    """`only`: directories that make up PATH beside the stub bin (the host's PATH is NOT
+    inherited), so a test can say which tools exist. `strict`: set -euo pipefail, as
+    launch-qnx-kvm-bridged.sh runs the library."""
     sysfs = _sysfs(tmp_path, list(governors))
     sudo_bin = _stub_sudo(tmp_path, sudo)
     env = dict(os.environ)
     env["SYSFS_CPU"] = _posix(sysfs)
-    env["PATH"] = _posix(sudo_bin) + os.pathsep + env.get("PATH", "")
+    # A stamp reads the host's process table, /sys/module and systemd (2026-09-30) and
+    # refuses while dockerd runs outside cores 3,5 or docker.socket is active: a test
+    # that writes one must not see the CI runner's dockerd, nor its systemctl. Neither
+    # tree exists here and the default systemctl knows no unit (every word "unknown"); a
+    # test wanting a fake host assigns PROC_ROOT / SYS_ROOT in its snippet, like the
+    # guest-identity tests, and writes its own systemctl (_platform does).
+    env["PROC_ROOT"] = _posix(tmp_path / "noproc")
+    env["SYS_ROOT"] = _posix(tmp_path / "nosys")
+    if only is None:
+        if not (sudo_bin / "systemctl").exists():
+            _stub(sudo_bin / "systemctl", "exit 1")
+        env["PATH"] = _posix(sudo_bin) + os.pathsep + env.get("PATH", "")
+    else:
+        env["PATH"] = os.pathsep.join([_posix(sudo_bin)] + [_posix(p) for p in only])
     script = textwrap.dedent("""
-        set -u
+        set %s
         . "%s"
         %s
-    """) % (_posix(LIB), snippet)
+    """) % ("-euo pipefail" if strict else "-u", _posix(LIB), snippet)
     r = subprocess.run([BASH, "-c", script], env=env, capture_output=True, text=True)
     r.sysfs = sysfs
     return r
@@ -1024,6 +1047,657 @@ def test_stamp_records_no_sampler_when_there_is_none(tmp_path):
     assert r.returncode == 0, r.stderr
     j = json.loads(r.stdout[r.stdout.index("{"):])
     assert j["sample_window"] == 0 and "sampler_paths" not in j
+
+
+# ============================================================ the platform state (owner's S6)
+#
+# The stamp records what else the host was running -- nvpmodel, the Docker units,
+# dockerd and containerd with the cores they may use, containerd's shims, running
+# containers, vcan -- and REFUSES to start a run while dockerd or containerd is
+# allowed on a core outside {3,5}, or while docker.socket is active. Baseline is the
+# board as inventoried (Docker installed and enabled); A6 runs stop docker.socket,
+# docker and containerd (platform-quiesce.sh) and restore them. m_stamp_after reads
+# the same things again into "platform_after" and never refuses.
+# Every input is faked: /proc and /sys/module by PROC_ROOT and SYS_ROOT, the rest
+# by stubs first on PATH, so no test depends on what the machine running it has.
+
+PLATFORM_KEYS = {"policy", "proc_root", "sys_root", "nvpmodel", "docker", "docker_socket", "containerd",
+                 "dockerd_cpus", "containerd_cpus", "containerd_shims", "containers_running", "vcan_loaded"}
+UNITS_AS_INVENTORIED = {"docker": ("enabled", "inactive"), "docker.socket": ("enabled", "inactive"),
+                        "containerd": ("enabled", "inactive")}
+# sudo as the board has it: only `sudo -n` is accepted (97 otherwise, so a call that could
+# prompt for a password is a failure), and VIA_SUDO marks whatever runs through it.
+SUDO_N = '[ "$1" = -n ] || exit 97\nshift\nVIA_SUDO=1 exec "$@"'
+
+
+def _fake_proc(root, procs):
+    root.mkdir(exist_ok=True)
+    for pid, argv0, cpus in procs:
+        d = root / str(pid)
+        d.mkdir(exist_ok=True)
+        (d / "cmdline").write_bytes(argv0.encode() + (b"\0-x\0" if argv0 else b""))
+        status = "Name:\t%s\n" % os.path.basename(argv0) + ("Cpus_allowed_list:\t%s\n" % cpus if cpus else "")
+        (d / "status").write_bytes(status.encode())
+
+
+def _fake_units(root, units):
+    root.mkdir(exist_ok=True)
+    for unit, (enabled, active) in units.items():
+        for verb, text in (("is-enabled", enabled), ("is-active", active)):
+            if text is not None:
+                (root / ("%s.%s" % (unit, verb))).write_bytes((text + "\n").encode())
+
+
+def _platform(tmp_path, procs=(), units=None, docker=None, docker_sudo_only=False,
+              nvpmodel="NV Power Mode: 25W\n1\n", vcan=False, policy=None, real_roots=False,
+              then=None, between="", client_env=None):
+    """m_write_stamp against a fake host; the result carries .stamp (None if none was written),
+    .timeouts (the first argument of every `timeout` call), .sudo_calls (every `sudo` call),
+    .docker_calls (the arguments of every call of the docker stub, direct or through sudo) and
+    .docker_envs (what each of those calls saw of DOCKER_HOST, DOCKER_CONTEXT and DOCKER_CONFIG).
+
+    client_env  {name: value} exported before the stamp is written: the caller's docker client
+            configuration, which the library must keep out of its docker call
+
+    procs   (pid, argv0, Cpus_allowed_list or None) rows of the fake /proc; None writes a status
+            file with no such line
+    units   {unit: (is-enabled text, is-active text)}; None for a text means systemctl prints nothing
+    docker  ids `docker ps -q` prints; None makes docker fail
+    nvpmodel  what `nvpmodel -q` prints (str or the raw bytes); it works only through sudo
+    real_roots  PROC_ROOT=/proc and SYS_ROOT=/sys, as when nothing overrides them (use with
+            policy="record": the host's own processes are then what is read)
+    then    {"procs": rows, "units": {...}} that appear AFTER the stamp is written, before
+            m_stamp_after runs (which then also runs); between: shell run at that point too
+    """
+    proc = tmp_path / "proc"
+    _fake_proc(proc, procs)
+    (tmp_path / "sys" / "module").mkdir(parents=True)
+    if vcan:
+        (tmp_path / "sys" / "module" / "vcan").mkdir()
+    ud = tmp_path / "units"
+    _fake_units(ud, units or UNITS_AS_INVENTORIED)
+    b = tmp_path / "bin"
+    b.mkdir(exist_ok=True)
+    tlog, slog, dlog = tmp_path / "timeout.log", tmp_path / "sudo.log", tmp_path / "docker.log"
+    # is-enabled / is-active print the unit's file. `show -p LoadState --value UNIT`, which the library
+    # does not ask but a real systemctl answers, says `loaded` for a unit that has a file and
+    # `not-found` for one that has none, so that a call of that shape is not read as a unit named -p.
+    _stub(b / "systemctl", 'if [ "$1" = show ]; then\n'
+                           '  u="${!#}"\n'
+                           '  if [ -e "%(u)s/$u.is-enabled" ] || [ -e "%(u)s/$u.is-active" ]; then echo loaded; else echo not-found; fi\n'
+                           '  exit 0\nfi\n'
+                           '[ -r "%(u)s/$2.$1" ] || exit 1\ncat "%(u)s/$2.$1"' % {"u": _posix(ud)})
+    # `timeout` as a guard: it fails unless it is asked for the 10 s deadline, then runs the rest
+    _stub(b / "timeout", 'echo "$1" >> "%s"\n[ "$1" = 10 ] || exit 98\nshift\nexec "$@"' % _posix(tlog))
+    # every call to docker is logged (its arguments, and what it sees of the client configuration in the
+    # environment), so a test can say it was never asked, and which daemon it was pointed at
+    denv = tmp_path / "docker-env.log"
+    dlogs = 'echo "$*" >> "%s"\necho "host=${DOCKER_HOST-unset} context=${DOCKER_CONTEXT-unset} config=${DOCKER_CONFIG-unset}" >> "%s"\n' % (
+        _posix(dlog), _posix(denv))
+    if docker is None:
+        _stub(b / "docker", dlogs + "exit 1")
+    else:
+        _stub(b / "docker", dlogs
+              + ('[ -z "${VIA_SUDO:-}" ] && exit 1\n' if docker_sudo_only else "")
+              + "".join("echo %s\n" % i for i in docker))
+    if nvpmodel is None:
+        _stub(b / "nvpmodel", "exit 1")
+    else:
+        (tmp_path / "nvpmodel.txt").write_bytes(nvpmodel if isinstance(nvpmodel, bytes) else nvpmodel.encode())
+        _stub(b / "nvpmodel", '[ -n "${VIA_SUDO:-}" ] || exit 1\ncat "%s"' % _posix(tmp_path / "nvpmodel.txt"))
+    out = tmp_path / "out"
+    out.mkdir()
+    steps = ["export " + " ".join('%s="%s"' % kv for kv in client_env.items()) if client_env else "",
+             "" if policy is None else "PLATFORM_POLICY=%s" % policy,
+             "PROC_ROOT=/proc; SYS_ROOT=/sys" if real_roots
+             else 'PROC_ROOT="%s"; SYS_ROOT="%s"' % (_posix(proc), _posix(tmp_path / "sys")),
+             'OUT="%s"; N=1000; K=12; WARMUP=200; INTERVAL_MS=2' % _posix(out),
+             'm_write_stamp "$OUT/stamp.json" \'"experiment": "t"\' \'"nvpmodel": "25W"\'']
+    if then is not None:
+        _fake_proc(tmp_path / "proc_then", then.get("procs", ()))
+        _fake_units(tmp_path / "units_then", then.get("units", {}))
+        steps += ['cp -R "%s/." "%s/"' % (_posix(tmp_path / "proc_then"), _posix(proc)),
+                  'cp -R "%s/." "%s/"' % (_posix(tmp_path / "units_then"), _posix(ud))]
+    if between:
+        steps.append(between)
+    if then is not None or between:
+        steps.append('m_stamp_after "$OUT/stamp.json"')
+    steps.append("echo REACHED")
+    r = _run(tmp_path, "\n".join(steps), sudo="echo \"$*\" >> \"%s\"\n%s" % (_posix(slog), SUDO_N))
+    stamp = out / "stamp.json"
+    r.stamp = json.loads(stamp.read_text(encoding="utf-8")) if stamp.exists() else None
+    r.timeouts = tlog.read_text().split() if tlog.exists() else []
+    r.sudo_calls = slog.read_text().splitlines() if slog.exists() else []
+    r.docker_calls = dlog.read_text().splitlines() if dlog.exists() else []
+    r.docker_envs = denv.read_text().splitlines() if denv.exists() else []
+    return r
+
+
+def _refused(r, *names):
+    assert r.returncode != 0 and "REACHED" not in r.stdout, r.stdout
+    assert r.stamp is None, "a refused run must not leave a stamp"
+    for n in names:
+        assert n in r.stderr, r.stderr
+
+
+def test_platform_with_no_daemons_is_recorded_as_not_running(tmp_path):
+    r = _platform(tmp_path, procs=[(1, "/sbin/init", "0-5"), (2, "", None)])
+    assert r.returncode == 0 and "REACHED" in r.stdout, r.stderr
+    p = r.stamp["platform"]
+    assert p["dockerd_cpus"] == "not running" and p["containerd_cpus"] == "not running"
+    assert p["containers_running"] == "n/a" and p["policy"] == "refuse" and p["vcan_loaded"] is False
+    assert p["nvpmodel"] == "NV Power Mode: 25W 1"
+    assert p["docker"] == {"enabled": "enabled", "active": "inactive"}
+    assert p["containerd_shims"] == 0 and isinstance(p["containerd_shims"], int)
+
+
+def test_dockerd_on_every_core_refuses_the_run(tmp_path):
+    r = _platform(tmp_path, procs=[(812, "/usr/bin/dockerd", "0-5")])
+    _refused(r, "dockerd is running on cores '0-5', outside {3,5}", "docker.socket", "containerd", "S6",
+             "PLATFORM_POLICY=record")
+
+
+def test_record_policy_writes_the_stamp_with_dockerd_on_every_core(tmp_path):
+    r = _platform(tmp_path, procs=[(812, "/usr/bin/dockerd", "0-5")], policy="record")
+    assert r.returncode == 0 and "REACHED" in r.stdout, r.stderr
+    p = r.stamp["platform"]
+    assert p["dockerd_cpus"] == "0-5" and p["policy"] == "record"
+    assert p["containers_running"] == "unknown"     # dockerd runs and the stub docker cannot answer
+
+
+@pytest.mark.parametrize("cpus", ["3,5", "3", "5"])
+def test_dockerd_confined_to_a_subset_of_3_5_passes(tmp_path, cpus):
+    r = _platform(tmp_path, procs=[(812, "/usr/bin/dockerd", cpus)], docker=[])
+    assert r.returncode == 0 and "REACHED" in r.stdout, r.stderr
+    assert r.stamp["platform"]["dockerd_cpus"] == cpus and r.stamp["platform"]["policy"] == "refuse"
+
+
+@pytest.mark.parametrize("cpus", ["3-5", "0-5", "4", "0-2,5", "3,5,6"])
+def test_dockerd_allowed_on_any_other_core_refuses_the_run(tmp_path, cpus):
+    """3-5 is core 4 as well: a range is expanded, not compared as text."""
+    r = _platform(tmp_path, procs=[(812, "/usr/bin/dockerd", cpus)])
+    _refused(r, "dockerd is running on cores '%s'" % cpus)
+
+
+def test_containerd_outside_the_host_cores_refuses_the_run(tmp_path):
+    r = _platform(tmp_path, procs=[(700, "/usr/bin/containerd", "0-3"), (812, "/usr/bin/dockerd", "3,5")],
+                  docker=[])
+    _refused(r, "containerd is running on cores '0-3'")
+    assert "dockerd is running" not in r.stderr
+
+
+def test_containerd_confined_beside_a_confined_dockerd_passes(tmp_path):
+    r = _platform(tmp_path, procs=[(700, "/usr/bin/containerd", "5"), (812, "/usr/bin/dockerd", "3,5")],
+                  docker=[])
+    assert r.returncode == 0, r.stderr
+    assert r.stamp["platform"]["containerd_cpus"] == "5"
+
+
+def test_containerd_alone_on_every_core_refuses_the_run(tmp_path):
+    _refused(_platform(tmp_path, procs=[(700, "/usr/bin/containerd", "0-5")]), "containerd", "0-5")
+
+
+def test_containerd_on_every_core_is_recorded_under_the_record_policy(tmp_path):
+    r = _platform(tmp_path, procs=[(700, "/usr/bin/containerd", "0-5")], policy="record")
+    assert r.returncode == 0, r.stderr
+    assert r.stamp["platform"]["containerd_cpus"] == "0-5"
+    assert r.stamp["platform"]["dockerd_cpus"] == "not running"
+
+
+def test_only_a_daemons_own_argv0_counts_as_the_daemon(tmp_path):
+    """The shim, the proxy, the CLI, a longer name and a shell that merely mentions it are not it."""
+    procs = [(10, "/usr/bin/containerd-shim-runc-v2", "0-5"), (11, "/usr/bin/docker-proxy", "0-5"),
+             (12, "/opt/not-dockerd", "0-5"), (13, "/usr/bin/docker", "0-5"),
+             (14, "bash\0-c\0dockerd", "0-5"), (15, "/usr/bin/containerd-stress", "0-5")]
+    r = _platform(tmp_path, procs=procs)
+    assert r.returncode == 0, r.stderr
+    p = r.stamp["platform"]
+    assert p["dockerd_cpus"] == "not running" and p["containerd_cpus"] == "not running"
+    assert p["containerd_shims"] == 1
+
+
+# ------------------------------------------------------------ every daemon, not the first
+
+def test_a_second_dockerd_outside_the_host_cores_refuses_the_run(tmp_path):
+    """One confined dockerd must not vouch for another: /proc order has no meaning."""
+    r = _platform(tmp_path, procs=[(812, "/usr/bin/dockerd", "3,5"), (900, "/usr/bin/dockerd", "0-5")])
+    _refused(r, "dockerd is running on cores '3,5;0-5', outside {3,5}")
+
+
+def test_the_unconfined_dockerd_is_found_whichever_pid_comes_first(tmp_path):
+    r = _platform(tmp_path, procs=[(99, "/usr/bin/dockerd", "0-5"), (812, "/usr/bin/dockerd", "3,5")])
+    _refused(r, "dockerd is running on cores '0-5;3,5', outside {3,5}")
+
+
+def test_a_second_containerd_outside_the_host_cores_refuses_the_run(tmp_path):
+    r = _platform(tmp_path, procs=[(700, "/usr/bin/containerd", "5"), (701, "/usr/bin/containerd", "0-3")])
+    _refused(r, "containerd is running on cores '5;0-3', outside {3,5}")
+
+
+def test_every_dockerd_is_recorded_in_pid_order_joined_with_semicolons(tmp_path):
+    """99 comes before 812 by number, not by the /proc directory's text order."""
+    r = _platform(tmp_path, procs=[(812, "/usr/bin/dockerd", "3"), (99, "/usr/bin/dockerd", "5"),
+                                   (1500, "/usr/bin/dockerd", "3,5")], docker=[])
+    assert r.returncode == 0, r.stderr
+    assert r.stamp["platform"]["dockerd_cpus"] == "5;3;3,5"
+
+
+def test_every_dockerd_is_recorded_under_the_record_policy(tmp_path):
+    r = _platform(tmp_path, procs=[(812, "/usr/bin/dockerd", "3,5"), (900, "/usr/bin/dockerd", "0-5")],
+                  policy="record")
+    assert r.returncode == 0, r.stderr
+    assert r.stamp["platform"]["dockerd_cpus"] == "3,5;0-5"
+
+
+def test_a_second_dockerd_whose_core_list_cannot_be_read_refuses_the_run(tmp_path):
+    r = _platform(tmp_path, procs=[(812, "/usr/bin/dockerd", "3,5"), (900, "/usr/bin/dockerd", None)])
+    _refused(r, "dockerd is running on cores '3,5;unknown', its allowed cores could not be read")
+
+
+# ------------------------------------------------------------ a list that cannot be read
+
+def test_a_daemon_whose_core_list_cannot_be_read_is_refused_not_assumed_confined(tmp_path):
+    r = _platform(tmp_path, procs=[(812, "/usr/bin/dockerd", None)])
+    _refused(r, "dockerd is running on cores 'unknown', its allowed cores could not be read")
+    assert "outside {3,5}" not in r.stderr, "it was not shown to be outside anything"
+
+
+def test_a_containerd_whose_core_list_cannot_be_read_says_so_too(tmp_path):
+    r = _platform(tmp_path, procs=[(700, "/usr/bin/containerd", None)])
+    _refused(r, "containerd is running on cores 'unknown', its allowed cores could not be read")
+    assert "outside {3,5}" not in r.stderr
+
+
+def test_a_daemon_whose_core_list_cannot_be_read_is_recorded_as_unknown_under_record(tmp_path):
+    r = _platform(tmp_path, procs=[(812, "/usr/bin/dockerd", None)], policy="record")
+    assert r.returncode == 0, r.stderr
+    assert r.stamp["platform"]["dockerd_cpus"] == "unknown"
+
+
+def test_one_refusal_names_every_reason(tmp_path):
+    procs = [(700, "/usr/bin/containerd", "0-3"), (812, "/usr/bin/dockerd", None)]
+    r = _platform(tmp_path, procs=procs, units={"docker.socket": ("enabled", "active")})
+    _refused(r, "dockerd is running on cores 'unknown', its allowed cores could not be read",
+             "containerd is running on cores '0-3', outside {3,5}", "docker.socket is active")
+
+
+# ------------------------------------------------------------ docker.socket
+
+def test_an_active_docker_socket_refuses_the_run_though_no_daemon_runs(tmp_path):
+    """Socket activation would start dockerd mid-run, on whatever core the scheduler picks."""
+    r = _platform(tmp_path, units={"docker": ("enabled", "inactive"), "docker.socket": ("enabled", "active"),
+                                   "containerd": ("enabled", "inactive")})
+    _refused(r, "docker.socket is active", "socket activation", "S6", "PLATFORM_POLICY=record")
+    assert "is running on cores" not in r.stderr
+
+
+def test_an_active_docker_socket_is_recorded_under_the_record_policy(tmp_path):
+    r = _platform(tmp_path, units={"docker.socket": ("enabled", "active")}, policy="record")
+    assert r.returncode == 0 and "REACHED" in r.stdout, r.stderr
+    assert r.stamp["platform"]["docker_socket"] == {"enabled": "enabled", "active": "active"}
+
+
+@pytest.mark.parametrize("active", ["inactive", "failed", None])
+def test_a_docker_socket_that_is_not_active_does_not_refuse_the_run(tmp_path, active):
+    r = _platform(tmp_path, units={"docker.socket": ("enabled", active)})
+    assert r.returncode == 0 and "REACHED" in r.stdout, r.stderr
+    assert r.stamp["platform"]["docker_socket"]["active"] == (active or "unknown")
+
+
+@pytest.mark.parametrize("active", ["activating", "reloading"])
+def test_a_docker_socket_on_its_way_up_or_being_reloaded_refuses_the_run_too(tmp_path, active):
+    """Neither is `active` yet or any more, and either can take the connection that starts dockerd."""
+    r = _platform(tmp_path, units={"docker": ("enabled", "inactive"), "docker.socket": ("enabled", active),
+                                   "containerd": ("enabled", "inactive")})
+    _refused(r, "docker.socket is %s" % active, "socket activation", "S6", "PLATFORM_POLICY=record")
+    assert "is running on cores" not in r.stderr
+
+
+@pytest.mark.parametrize("active", ["activating", "reloading"])
+def test_a_docker_socket_on_its_way_up_or_being_reloaded_is_recorded_under_the_record_policy(tmp_path, active):
+    r = _platform(tmp_path, units={"docker.socket": ("enabled", active)}, policy="record")
+    assert r.returncode == 0 and "REACHED" in r.stdout, r.stderr
+    assert r.stamp["platform"]["docker_socket"] == {"enabled": "enabled", "active": active}
+
+
+def test_a_docker_socket_in_transition_at_the_end_of_a_run_is_recorded_not_refused(tmp_path):
+    r = _platform(tmp_path, then={"units": {"docker.socket": ("enabled", "activating")}})
+    assert r.returncode == 0 and "REACHED" in r.stdout, r.stderr
+    assert r.stamp["platform"]["docker_socket"]["active"] == "inactive"
+    assert r.stamp["platform_after"]["docker_socket"]["active"] == "activating"
+
+
+@pytest.mark.parametrize("procs,units", [
+    ([(812, "/usr/bin/dockerd", "0-5")], None),                                   # dockerd on every core
+    ([(812, "/usr/bin/dockerd", "3,5")], {"docker.socket": ("enabled", "active")}),   # a confined dockerd, an active socket
+    ([(812, "/usr/bin/dockerd", "3,5"), (900, "/usr/bin/dockerd", None)], None),      # a dockerd whose cores are unreadable
+])
+def test_a_refused_run_never_asks_docker_what_it_runs(tmp_path, procs, units):
+    """`docker ps` under its deadline is for a run that goes ahead: a refused one must not wait for a
+    wedged dockerd first. The docker stub would answer, and logs every call; `timeout` and every sudo call
+    are looked at too, so neither the direct try nor the sudo one is made."""
+    r = _platform(tmp_path, procs=procs, units=units, docker=["a1", "b2"], docker_sudo_only=False)
+    _refused(r)
+    assert r.docker_calls == [] and r.timeouts == []
+    assert not any("docker" in c or "timeout" in c for c in r.sudo_calls), r.sudo_calls
+
+
+def test_a_unit_word_with_a_quote_or_a_backslash_cannot_break_the_stamp(tmp_path):
+    """The words are cut to a safe alphabet before they reach the JSON, at the start and at the end."""
+    units = {"docker": ('ena"bled', 'inact"ive'), "docker.socket": ("enabled", "inactive"),
+             "containerd": ("ena\\bled", "active")}
+    r = _platform(tmp_path, units=units, then={"units": {"docker": ('en"abled', 'act"ive')}})
+    assert r.returncode == 0 and "REACHED" in r.stdout, r.stderr      # _platform parsed the stamp as JSON
+    assert r.stamp["platform"]["docker"] == {"enabled": "enabled", "active": "inactive"}
+    assert r.stamp["platform"]["containerd"] == {"enabled": "enabled", "active": "active"}
+    assert r.stamp["platform_after"]["docker"] == {"enabled": "enabled", "active": "active"}
+
+
+def test_active_docker_and_containerd_units_with_confined_daemons_pass(tmp_path):
+    """Only the socket is a reason of its own: a confined daemon under an active service is the
+    state the owner allows (S6(c) is the choice to run beside it)."""
+    units = {"docker": ("enabled", "active"), "docker.socket": ("enabled", "inactive"),
+             "containerd": ("enabled", "active")}
+    r = _platform(tmp_path, units=units, procs=[(700, "/usr/bin/containerd", "5"), (812, "/usr/bin/dockerd", "3,5")],
+                  docker=[])
+    assert r.returncode == 0, r.stderr
+    assert r.stamp["platform"]["docker"]["active"] == "active"
+
+
+# ------------------------------------------------------------ what is recorded
+
+@pytest.mark.parametrize("policy", ["bogus", "off", "RECORD"])
+def test_an_unknown_platform_policy_dies_even_with_nothing_running(tmp_path, policy):
+    r = _platform(tmp_path, policy=policy)
+    _refused(r, "PLATFORM_POLICY='%s' is not a policy" % policy)
+
+
+@pytest.mark.parametrize("loaded", [True, False])
+def test_vcan_loaded_is_read_from_sys_module(tmp_path, loaded):
+    r = _platform(tmp_path, vcan=loaded)
+    assert r.returncode == 0, r.stderr
+    assert r.stamp["platform"]["vcan_loaded"] is loaded
+
+
+def test_the_platform_object_has_every_key_and_the_stamp_stays_valid_json(tmp_path):
+    units = {"docker": ("disabled", "failed"), "docker.socket": ("masked", "inactive"),
+             "containerd": ("enabled-runtime and more", "active")}
+    procs = [(812, "/usr/bin/dockerd", "3,5"), (700, "/usr/bin/containerd", "5"),
+             (701, "/usr/bin/containerd-shim-runc-v2", "0-5"), (702, "/usr/bin/containerd-shim-runc-v2", "0-5")]
+    r = _platform(tmp_path, procs=procs, units=units, docker=["a1", "b2"], vcan=True)
+    assert r.returncode == 0, r.stderr
+    j = r.stamp
+    p = j["platform"]
+    assert set(p) == PLATFORM_KEYS
+    assert p == {"policy": "refuse", "proc_root": _posix(tmp_path / "proc"), "sys_root": _posix(tmp_path / "sys"),
+                 "nvpmodel": "NV Power Mode: 25W 1",
+                 "docker": {"enabled": "disabled", "active": "failed"},
+                 "docker_socket": {"enabled": "masked", "active": "inactive"},
+                 "containerd": {"enabled": "enabled-runtime", "active": "active"},
+                 "dockerd_cpus": "3,5", "containerd_cpus": "5", "containerd_shims": 2, "containers_running": "2",
+                 "vcan_loaded": True}
+    # the harnesses' own "nvpmodel" line is a different key at the top level, and neither eats the other
+    assert j["nvpmodel"] == "25W" and j["experiment"] == "t" and j["n"] == 1000
+
+
+def test_a_unit_systemctl_prints_nothing_for_is_recorded_as_unknown(tmp_path):
+    r = _platform(tmp_path, units={"docker": (None, "inactive")})
+    assert r.returncode == 0, r.stderr
+    p = r.stamp["platform"]
+    assert p["docker"] == {"enabled": "unknown", "active": "inactive"}
+    assert p["docker_socket"] == {"enabled": "unknown", "active": "unknown"}
+
+
+# ------------------------------------------------------------ containerd's shims (recorded only)
+
+def test_containerd_shims_are_counted_by_argv0_prefix(tmp_path):
+    procs = [(10, "/usr/bin/containerd-shim-runc-v2", "0-5"), (11, "/usr/bin/containerd-shim-runc-v2", "0-5"),
+             (12, "containerd-shim", "0-5"), (13, "/usr/bin/containerd-shim-runsc-v1", None),
+             (20, "/usr/bin/containerd", "5"),                        # the daemon is not a shim
+             (21, "/usr/bin/xcontainerd-shim-runc-v2", "0-5"),        # the prefix is of the basename
+             (22, "bash\0-c\0containerd-shim-x", "0-5"),              # a shell that names one
+             (23, "", None)]                                          # a kernel thread
+    r = _platform(tmp_path, procs=procs)
+    assert r.returncode == 0, r.stderr
+    p = r.stamp["platform"]
+    assert p["containerd_shims"] == 4
+    assert p["containerd_cpus"] == "5"
+
+
+def test_shims_outside_the_host_cores_are_recorded_not_refused(tmp_path):
+    procs = [(10, "/usr/bin/containerd-shim-runc-v2", "0-5"), (812, "/usr/bin/dockerd", "3,5"),
+             (700, "/usr/bin/containerd", "3,5")]
+    r = _platform(tmp_path, procs=procs, docker=[])
+    assert r.returncode == 0, r.stderr
+    assert r.stamp["platform"]["containerd_shims"] == 1 and r.stamp["platform"]["policy"] == "refuse"
+
+
+# ------------------------------------------------------------ the roots the check read
+
+def test_the_stamp_records_the_proc_and_sys_roots_it_read(tmp_path):
+    r = _platform(tmp_path)
+    assert r.returncode == 0, r.stderr
+    p = r.stamp["platform"]
+    assert p["proc_root"] == _posix(tmp_path / "proc") and p["sys_root"] == _posix(tmp_path / "sys")
+    assert "WARNING: PROC_ROOT overridden" in r.stdout and "WARNING: SYS_ROOT overridden" in r.stdout
+
+
+def test_roots_that_nothing_overrides_are_recorded_as_proc_and_sys(tmp_path):
+    r = _platform(tmp_path, policy="record", real_roots=True)
+    assert r.returncode == 0, r.stderr
+    p = r.stamp["platform"]
+    assert p["proc_root"] == "/proc" and p["sys_root"] == "/sys" and set(p) == PLATFORM_KEYS
+    assert "overridden" not in r.stdout
+
+
+def test_a_string_going_into_the_stamp_is_printable_ascii_with_quotes_escaped(tmp_path):
+    snippet = ("_json_safe 'a\"b\\c'; echo\n"
+               "_json_safe \"$(printf 'x\\001y\\377z\\033')\"; echo")
+    r = _run(tmp_path, snippet)
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.split("\n")[:2] == ['a\\"b\\\\c', "xyz"]
+
+
+# ------------------------------------------------------------ containers, nvpmodel and the guards
+
+@pytest.mark.parametrize("ids,count", [([], "0"), (["a1"], "1"), (["a1", "b2", "c3"], "3")])
+def test_containers_running_counts_the_lines_docker_ps_prints(tmp_path, ids, count):
+    r = _platform(tmp_path, procs=[(812, "/usr/bin/dockerd", "3,5")], docker=ids)
+    assert r.returncode == 0, r.stderr
+    assert r.stamp["platform"]["containers_running"] == count
+
+
+def test_containers_running_falls_back_to_sudo(tmp_path):
+    r = _platform(tmp_path, procs=[(812, "/usr/bin/dockerd", "3,5")], docker=["a1", "b2"],
+                  docker_sudo_only=True)
+    assert r.returncode == 0, r.stderr
+    assert r.stamp["platform"]["containers_running"] == "2"
+
+
+def test_containers_running_is_unknown_when_docker_ps_fails_both_ways(tmp_path):
+    r = _platform(tmp_path, procs=[(812, "/usr/bin/dockerd", "3,5")], docker=None)
+    assert r.returncode == 0, r.stderr
+    assert r.stamp["platform"]["containers_running"] == "unknown"
+
+
+@pytest.mark.parametrize("via_sudo,expected", [(False, ["10"]), (True, ["10", "10"])])
+def test_docker_ps_always_runs_under_a_ten_second_deadline(tmp_path, via_sudo, expected):
+    """A wedged dockerd must not hang the start of an unattended run: the `timeout` stub fails
+    (98) unless asked for 10, and the log shows it was asked, on the direct try and the sudo one."""
+    r = _platform(tmp_path, procs=[(812, "/usr/bin/dockerd", "3,5")], docker=["a1"], docker_sudo_only=via_sudo)
+    assert r.returncode == 0, r.stderr
+    assert r.timeouts == expected
+    assert r.docker_calls == ["-H unix:///run/docker.sock ps -q --no-trunc"] * len(expected)
+    assert r.stamp["platform"]["containers_running"] == "1"
+
+
+DOCKER_CLIENT_ELSEWHERE = {"DOCKER_HOST": "tcp://203.0.113.9:2375", "DOCKER_CONTEXT": "remote-elsewhere",
+                           "DOCKER_CONFIG": "/nonexistent/docker-config-elsewhere"}
+DOCKER_SYSTEM_CMD = "env -u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_CONFIG docker -H unix:///run/docker.sock ps -q --no-trunc"
+
+
+@pytest.mark.parametrize("via_sudo", [False, True])
+def test_docker_ps_asks_the_system_daemon_whatever_the_callers_client_configuration_says(tmp_path, via_sudo):
+    """The caller's DOCKER_HOST, DOCKER_CONTEXT and DOCKER_CONFIG point elsewhere: on every call -- the
+    start's and the end state's (m_stamp_after), direct and through sudo -n, the fallback whose sudo
+    passes the environment on here -- the docker stub sees all three unset and -H unix:///run/docker.sock,
+    the daemon platform-quiesce.sh stops. The control: the same stub run with nothing removing them sees them."""
+    r = _platform(tmp_path, procs=[(812, "/usr/bin/dockerd", "3,5")], docker=["a1"], docker_sudo_only=via_sudo,
+                  client_env=DOCKER_CLIENT_ELSEWHERE, then={})
+    assert r.returncode == 0, r.stderr
+    n = 2 * (2 if via_sudo else 1)              # the start and the end state, each a direct call and, if it fails, a sudo one
+    assert r.docker_calls == ["-H unix:///run/docker.sock ps -q --no-trunc"] * n
+    assert r.docker_envs == ["host=unset context=unset config=unset"] * n
+    assert r.timeouts == ["10"] * n
+    assert [c for c in r.sudo_calls if "docker" in c] == ["-n timeout 10 " + DOCKER_SYSTEM_CMD] * (n // 2 if via_sudo else 0)
+    assert r.stamp["platform"]["containers_running"] == "1" and r.stamp["platform_after"]["containers_running"] == "1"
+    control = subprocess.run([BASH, _posix(tmp_path / "bin" / "docker"), "-H", "unix:///run/docker.sock", "ps", "-q", "--no-trunc"],
+                             capture_output=True, text=True, env=dict(os.environ, VIA_SUDO="1", **DOCKER_CLIENT_ELSEWHERE))
+    assert control.returncode == 0
+    envs = (tmp_path / "docker-env.log").read_text().splitlines()
+    assert envs[-1] == "host=tcp://203.0.113.9:2375 context=remote-elsewhere config=/nonexistent/docker-config-elsewhere"
+
+
+def test_no_container_query_is_made_without_a_dockerd(tmp_path):
+    r = _platform(tmp_path, docker=["a1"])
+    assert r.returncode == 0, r.stderr
+    assert r.timeouts == [] and r.stamp["platform"]["containers_running"] == "n/a"
+
+
+def test_every_sudo_call_of_the_platform_check_is_non_interactive(tmp_path):
+    """The stub refuses a sudo without -n (97), and the nvpmodel stub works only through sudo:
+    an nvpmodel that reads back proves the -n call was made; the log proves no other kind was."""
+    r = _platform(tmp_path, procs=[(812, "/usr/bin/dockerd", "3,5")], docker=["a1"], docker_sudo_only=True)
+    assert r.returncode == 0, r.stderr
+    assert r.stamp["platform"]["nvpmodel"] == "NV Power Mode: 25W 1"
+    assert r.stamp["python3_under_sudo"].endswith("python3")
+    assert len(r.sudo_calls) >= 3 and all(c.startswith("-n ") for c in r.sudo_calls), r.sudo_calls
+
+
+def test_nvpmodel_that_cannot_be_read_is_recorded_as_unavailable(tmp_path):
+    r = _platform(tmp_path, nvpmodel=None)
+    assert r.returncode == 0, r.stderr
+    assert r.stamp["platform"]["nvpmodel"] == "unavailable"
+
+
+def test_a_hostile_nvpmodel_line_cannot_break_the_stamp(tmp_path):
+    r = _platform(tmp_path, nvpmodel='NV "Power"\tMode\\ 25W\r\n1\n')
+    assert r.returncode == 0, r.stderr
+    assert r.stamp["platform"]["nvpmodel"] == 'NV "Power" Mode\\ 25W 1'
+
+
+def test_nvpmodel_output_is_cut_to_printable_ascii_before_it_reaches_the_stamp(tmp_path):
+    """Colour escapes and a byte that is no UTF-8 would each make the stamp unparseable, and a
+    stamp that does not parse refuses the run. The stamp is read back as UTF-8 here."""
+    r = _platform(tmp_path, nvpmodel=b"\x1b[1mNV Power Mode: 25W\x1b[0m\n1\n\xff")
+    assert r.returncode == 0 and "REACHED" in r.stdout, r.stderr
+    nv = r.stamp["platform"]["nvpmodel"]
+    assert "NV Power Mode: 25W" in nv and nv.endswith(" 1")
+    assert nv.isascii() and nv.isprintable() and "\x1b" not in nv
+
+
+# ------------------------------------------------------------ no systemctl, no docker, no nvpmodel
+
+# Found by removing each in turn: without any of these the stamp fails or, for sh, silently
+# records python3_under_sudo as "unavailable". `env` by name is needed only for the docker call
+# (`timeout 10 env -u ... docker`; the stubs' shebang names /usr/bin/env, which finds `bash` here). grep,
+# timeout and env are used only when a dockerd is to be asked what it runs; without them that answer
+# is "unknown" either way.
+TOOLS_THE_STAMP_NEEDS = ["bash", "sh", "date", "basename", "uname", "sha256sum", "cut", "tr", "sed", "awk",
+                         "sort", "uniq", "grep", "timeout", "env"]
+
+
+def _tools_only(tmp_path, names):
+    """A PATH directory of symlinks to just these tools (a copy of each where symlinks cannot be made)."""
+    d = tmp_path / "tools"
+    d.mkdir()
+    for n in names:
+        src = shutil.which(n)
+        if src is None:
+            pytest.skip("no %s on this machine" % n)
+        try:
+            os.symlink(src, str(d / n))
+        except (OSError, NotImplementedError):
+            pytest.skip("cannot make symlinks here")
+    return d
+
+
+@pytest.mark.parametrize("with_dockerd", [False, True])
+def test_a_host_without_systemctl_docker_or_nvpmodel_still_stamps_under_errexit_and_pipefail(tmp_path,
+                                                                                            with_dockerd):
+    """The a1.metal shape, and the shape launch-qnx-kvm-bridged.sh runs the library in. A tool the
+    library needs and this list lacks surfaces as 'command not found' -- a `|| true` would hide it
+    behind 'unavailable' or 'unknown' and the stamp would still parse, so stderr is checked too."""
+    tools = _tools_only(tmp_path, TOOLS_THE_STAMP_NEEDS)
+    proc = tmp_path / "proc"
+    _fake_proc(proc, [(812, "/usr/bin/dockerd", "3,5"), (700, "/usr/bin/containerd", "5"),
+                      (701, "/usr/bin/containerd-shim-runc-v2", "0-5")] if with_dockerd else [(1, "/sbin/init", "0-5")])
+    (tmp_path / "sys" / "module").mkdir(parents=True)
+    out = tmp_path / "out"
+    out.mkdir()
+    snippet = ('PROC_ROOT="%s"; SYS_ROOT="%s"; OUT="%s"; N=1000; K=12; WARMUP=200; INTERVAL_MS=2\n'
+               'm_write_stamp "$OUT/stamp.json" \'"experiment": "t"\'\n'
+               'm_stamp_after "$OUT/stamp.json"\n'
+               'echo REACHED' % (_posix(proc), _posix(tmp_path / "sys"), _posix(out)))
+    r = _run(tmp_path, snippet, only=[tools], strict=True, sudo=SUDO_N)
+    path = os.pathsep.join([_posix(tmp_path / "bin"), _posix(tools)])
+    assert all(shutil.which(n, path=path) is None for n in ("systemctl", "docker", "nvpmodel"))
+    assert r.returncode == 0 and "REACHED" in r.stdout, r.stdout + r.stderr
+    assert "not found" not in r.stderr and "No such file" not in r.stderr, r.stderr
+    j = json.loads((out / "stamp.json").read_text(encoding="utf-8"))
+    assert j["python3_under_sudo"].endswith("python3")      # sh was found, or this would say "unavailable"
+    for key in ("platform", "platform_after"):
+        p = j[key]
+        assert set(p) == PLATFORM_KEYS
+        assert p["nvpmodel"] == "unavailable"
+        for unit in ("docker", "docker_socket", "containerd"):
+            assert p[unit] == {"enabled": "absent", "active": "absent"}, (key, unit)
+        assert p["dockerd_cpus"] == ("3,5" if with_dockerd else "not running")
+        assert p["containers_running"] == ("unknown" if with_dockerd else "n/a")
+        assert p["containerd_shims"] == (1 if with_dockerd else 0)
+
+
+# ------------------------------------------------------------ the end state (m_stamp_after)
+
+def test_the_end_state_is_recorded_beside_the_start_with_the_same_keys(tmp_path):
+    r = _platform(tmp_path, then={"procs": [(812, "/usr/bin/dockerd", "0-5"), (813, "/usr/bin/containerd-shim-runc-v2", "0-5")],
+                                  "units": {"docker.socket": ("enabled", "active")}},
+                  docker=["a1", "b2"])
+    assert r.returncode == 0 and "REACHED" in r.stdout, r.stderr
+    j = r.stamp
+    p, a = j["platform"], j["platform_after"]
+    assert set(p) == PLATFORM_KEYS and set(a) == PLATFORM_KEYS
+    assert p["dockerd_cpus"] == "not running" and p["docker_socket"]["active"] == "inactive"
+    assert p["containers_running"] == "n/a" and p["containerd_shims"] == 0 and p["policy"] == "refuse"
+    assert a["dockerd_cpus"] == "0-5" and a["docker_socket"] == {"enabled": "enabled", "active": "active"}
+    assert a["containers_running"] == "2" and a["containerd_shims"] == 1
+    assert a["proc_root"] == p["proc_root"] and a["nvpmodel"] == "NV Power Mode: 25W 1"
+    # the older keys m_stamp_after writes are still there, and the run's own were not disturbed
+    assert "governor_after" in j and "cur_freq_khz_after" in j and j["experiment"] == "t" and j["n"] == 1000
+
+
+def test_the_end_state_never_refuses_and_records_its_policy_as_record(tmp_path):
+    """dockerd on every core and an active socket would refuse a START; at the END they are recorded."""
+    r = _platform(tmp_path, then={"procs": [(812, "/usr/bin/dockerd", "0-5"), (700, "/usr/bin/containerd", None)],
+                                  "units": {"docker.socket": ("enabled", "active")}})
+    assert r.returncode == 0 and "REACHED" in r.stdout, r.stderr
+    a = r.stamp["platform_after"]
+    assert a["policy"] == "record" and r.stamp["platform"]["policy"] == "refuse"
+    assert a["containerd_cpus"] == "unknown" and a["docker_socket"]["active"] == "active"
+    assert "FATAL" not in r.stderr
+
+
+def test_the_end_state_keeps_the_stamp_valid_json_even_if_it_cannot_be_read(tmp_path):
+    r = _platform(tmp_path, between='_platform_json() { printf "{not json"; }')
+    assert r.returncode == 0 and "REACHED" in r.stdout, r.stderr
+    assert "error" in r.stamp["platform_after"] and "policy" in r.stamp["platform"]
+
+
+def test_the_end_state_of_an_unchanged_host_matches_the_start(tmp_path):
+    r = _platform(tmp_path, procs=[(812, "/usr/bin/dockerd", "3,5")], docker=["a1"], between="true")
+    assert r.returncode == 0, r.stderr
+    p, a = r.stamp["platform"], r.stamp["platform_after"]
+    assert {k: v for k, v in a.items() if k != "policy"} == {k: v for k, v in p.items() if k != "policy"}
 
 
 def test_probe_refuses_a_window_the_sampler_did_not_record(tmp_path):

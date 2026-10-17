@@ -402,6 +402,172 @@ m_reachable_notified() {  # $1 label  $2 proto  $3 slot spec (or -)  $4 kick soc
 	esac
 }
 
+# ------------------------------------------------------------- the setup layout
+# ADDED 2026-10-17 for run-randomise.sh, the A6 setup randomisation: a launch's
+# memory layout and QEMU's thread placement as factors, held FIXED or drawn RANDOM,
+# and each launch READ BACK, never assumed.
+#
+#   fixed   env -i with M_FIXED_ENV only, then setarch -R (ADDR_NO_RANDOMIZE, per
+#           process). env -i because an SSH session's variables -- the client's port
+#           among them -- would otherwise change the stack's layout at every login.
+#   random  env -i with M_FIXED_ENV and A6PAD of E bytes (the letter x), ASLR as the
+#           kernel draws it.
+# A probe launch also carries PYTHONHASHSEED (0 when fixed, drawn when random): the
+# hash seed is the Python analogue of ASLR. randomise_schedule.py holds the same list,
+# draws the levels, and states each launch's environment size, which the harness
+# compares with what it reads back.
+#
+# setarch COMES LAST, after any sudo and ip netns exec: a set-user-ID exec clears
+# ADDR_NO_RANDOMIZE (PER_CLEAR_ON_SETID in the Linux source), so setarch before sudo
+# would silently give a random layout. The read-back of the personality is what
+# catches it if a caller gets this wrong.
+M_FIXED_ENV=(PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C)
+LAYOUT_CMD=(); LAYOUT_ENV_BYTES=0; RB=""
+
+# Sets LAYOUT_CMD, the words to put before the program, and LAYOUT_ENV_BYTES, the size
+# /proc/PID/environ will have. Dies on a level the design does not have. Sets globals:
+# call it directly, never inside $(...).
+m_layout_cmd() {    # $1 norand 0|1  $2 pad: - (fixed) or E (random)  [$3 hash seed, for a probe]
+	local norand="${1:-}" pad="${2:-}" hs="${3:--}" e
+	[ $# -ge 2 ] && [ $# -le 3 ] || die "m_layout_cmd: usage: m_layout_cmd NORAND PAD [HASHSEED]"
+	case "$norand" in 0|1) ;; *) die "m_layout_cmd: norand='$norand' is not 0 or 1" ;; esac
+	if [ "$norand" = 1 ]; then
+		[ "$pad" = - ] || die "m_layout_cmd: a fixed launch has no pad (got '$pad')"
+	else
+		[ "$pad" != - ] || die "m_layout_cmd: a random launch has a pad"
+		case "$pad" in ''|*[!0-9]*) die "m_layout_cmd: pad '$pad' is not on the pad grid 0, 16, ..., 4080" ;; esac
+		[ "${#pad}" -le 4 ] && [ $((10#$pad % 16)) -eq 0 ] && [ $((10#$pad)) -le 4080 ] \
+			|| die "m_layout_cmd: pad '$pad' is not on the pad grid 0, 16, ..., 4080"
+	fi
+	if [ "$hs" != - ]; then
+		case "$hs" in ''|*[!0-9]*) die "m_layout_cmd: hash seed '$hs' is not a number" ;; esac
+		[ "${#hs}" -le 10 ] && [ $((10#$hs)) -le 4294967295 ] || die "m_layout_cmd: hash seed '$hs' is above 4294967295"
+	fi
+	LAYOUT_CMD=(env -i "${M_FIXED_ENV[@]}")
+	[ "$hs" = - ] || LAYOUT_CMD+=("PYTHONHASHSEED=$((10#$hs))")
+	if [ "$norand" = 0 ]; then
+		printf -v e '%*s' "$((10#$pad))" ''
+		LAYOUT_CMD+=("A6PAD=${e// /x}")
+	fi
+	LAYOUT_ENV_BYTES=0
+	for e in "${LAYOUT_CMD[@]:2}"; do LAYOUT_ENV_BYTES=$((LAYOUT_ENV_BYTES + ${#e} + 1)); done
+	[ "$norand" = 0 ] || LAYOUT_CMD+=(setarch "$(uname -m)" -R)
+	return 0
+}
+
+# 0 once the process's argv[0] basename is $2 -- its exec chain (env, setarch,
+# taskset) has reached the program, so personality, environment and stack are the
+# program's -- polled every 5 ms, at most $3 times (400, two seconds). 1 when it
+# never does, or the process is gone. Reads with builtins; never dies.
+m_await_exec() {    # $1 pid  $2 basename  [$3 tries]
+	local i a0 tries="${3:-400}"
+	for ((i = 0; i < tries; i++)); do
+		a0=""
+		IFS= read -r -d '' a0 2>/dev/null < "${PROC_ROOT:-/proc}/$1/cmdline" || true
+		[ -n "$a0" ] && [ "${a0##*/}" = "$2" ] && return 0
+		[ -d "${PROC_ROOT:-/proc}/$1" ] || return 1
+		sleep 0.005
+	done
+	return 1
+}
+
+# RB = one line of what a launch IS, read as root from core CORE_AUX: the personality
+# (hex; ADDR_NO_RANDOMIZE is 0x0040000), the size of /proc/PID/environ, startstack
+# (/proc/PID/stat field 28, counted after the last ')' so a name with spaces or
+# brackets cannot shift it), the start addresses of the first three mappings, and the
+# [stack] mapping. Root, because the personality needs ptrace access (Yama refuses it
+# to a sibling) and the namespace monitor runs as root. A field that cannot be read is
+# "unread", and the return is then 1. Never dies: the caller decides.
+m_launch_readback() {   # $1 pid
+	RB="$(taskset -c "${CORE_AUX:-5}" sudo -n sh -c '
+		d="$1"
+		p=$(cat "$d/personality" 2>/dev/null) || p=""
+		e=$(wc -c < "$d/environ" 2>/dev/null) || e=""
+		s=$(awk "{ sub(/^.*\\) /, \"\"); n = split(\$0, f, \" \"); if (n >= 26) print f[26] }" "$d/stat" 2>/dev/null) || s=""
+		m=$(head -n 3 "$d/maps" 2>/dev/null | cut -d- -f1 | tr "\n" "," ) || m=""
+		k=$(grep -m 1 "\[stack\]" "$d/maps" 2>/dev/null | cut -d" " -f1) || k=""
+		printf "personality=%s environ=%s startstack=%s maps=%s stack=%s\n" "${p:-unread}" "$(echo ${e:-unread})" \
+			"${s:-unread}" "$(m=${m%,}; echo ${m:-unread})" "${k:-unread}"
+	' _ "${PROC_ROOT:-/proc}/$1" 2>/dev/null)" || true
+	[ -n "$RB" ] || RB="personality=unread environ=unread startstack=unread maps=unread stack=unread"
+	case "$RB" in *unread*) return 1 ;; esac
+	return 0
+}
+
+# One line per QEMU thread, in thread-id order: the CPU it last ran on (/proc stat
+# field 39), its allowed CPUs and its name. QEMU is the caller's own process, so no
+# sudo. A thread that vanishes between the listing and the read is left out.
+m_qemu_threads() {  # $1 qemu pid
+	local t tid c a l
+	for t in $(ls "${PROC_ROOT:-/proc}/$1/task" 2>/dev/null | sort -n); do
+		tid="${PROC_ROOT:-/proc}/$1/task/$t"
+		c="" a="" l=""
+		IFS= read -r c 2>/dev/null < "$tid/comm" || continue
+		a="$(awk '/^Cpus_allowed_list:/ {print $2; exit}' "$tid/status" 2>/dev/null)" || a=""
+		l="$(awk '{ sub(/^.*\) /, ""); print $37 }' "$tid/stat" 2>/dev/null)" || l=""
+		echo "tid=$t last=${l:-unread} allowed=${a:-unread} comm=$c"
+	done
+	return 0
+}
+
+# QEMU's three thread groups one per core, by name (THREAD_NAMES=1 names a vCPU
+# thread "CPU n/KVM"): vCPU 0 on the first core of $2, vCPU 1 on the second, every
+# other thread on the third. Each thread is read back. 0 when every thread reads its
+# core; 1 when one does not, or there is a vCPU the spec has no core for. The owner
+# pins its own threads, so no sudo. A thread that vanishes meanwhile is skipped.
+m_pin_by_name() {   # $1 qemu pid  $2 "V0,V1,REST"
+	local qp="$1" spec="${2:-}" v0 v1 rest t d c want got
+	[[ "$spec" =~ ^([0-9]+),([0-9]+),([0-9]+)$ ]] \
+		|| die "m_pin_by_name: '$spec' is not three distinct cores V0,V1,REST"
+	v0="${BASH_REMATCH[1]}"; v1="${BASH_REMATCH[2]}"; rest="${BASH_REMATCH[3]}"
+	[ "$v0" != "$v1" ] && [ "$v0" != "$rest" ] && [ "$v1" != "$rest" ] \
+		|| die "m_pin_by_name: '$spec' is not three distinct cores V0,V1,REST"
+	for t in $(ls "${PROC_ROOT:-/proc}/$qp/task" 2>/dev/null | sort -n); do
+		d="${PROC_ROOT:-/proc}/$qp/task/$t"
+		c=""
+		IFS= read -r c 2>/dev/null < "$d/comm" || continue
+		case "$c" in
+			"CPU 0/KVM") want="$v0" ;;
+			"CPU 1/KVM") want="$v1" ;;
+			"CPU "*"/KVM") echo "m_pin_by_name: thread $t is '$c', and the spec has cores for two vCPUs" >&2; return 1 ;;
+			*) want="$rest" ;;
+		esac
+		taskset -pc "$want" "$t" > /dev/null 2>&1 || [ ! -d "$d" ] || return 1
+		got="$(awk '/^Cpus_allowed_list:/ {print $2; exit}' "$d/status" 2>/dev/null)" || got=""
+		[ -n "$got" ] || [ -d "$d" ] || continue
+		[ "$got" = "$want" ] || { echo "m_pin_by_name: thread $t ($c) reads '$got', asked for '$want'" >&2; return 1; }
+	done
+	return 0
+}
+
+# The running QEMU and the guest it booted, as m_pin_qemu records them, with NOTHING
+# pinned: a harness whose QEMU is pinned by name (m_pin_by_name, in the launcher)
+# must not have its placement overwritten by a set pin. QAFF is then every thread's
+# allowed CPUs by name. With a pid (the one the launcher printed) that process is the
+# QEMU, and it must be one by argv[0]; without, exactly one must run. Sets globals:
+# call it directly.
+m_qemu_identify() { # [$1 qemu pid]
+	local pids n a0=""
+	if [ -n "${1:-}" ]; then
+		IFS= read -r -d '' a0 2>/dev/null < "${PROC_ROOT:-/proc}/$1/cmdline" || true
+		[ "${a0##*/}" = qemu-system-aarch64 ] || die "pid $1 is not a qemu-system-aarch64 (argv[0] '${a0:-none}')"
+		pids="$1"
+	else
+		pids="$(m_pids_of qemu-system-aarch64)"
+		n="$(printf '%s\n' "$pids" | grep -c . || true)"
+		[ "$n" -eq 1 ] || die "expected exactly 1 qemu-system-aarch64, found $n"
+	fi
+	QPID="$pids"
+	QTHREADS="$(ls "${PROC_ROOT:-/proc}/$QPID/task" 2>/dev/null | wc -l)"
+	QAFF="$(m_qemu_threads "$QPID" | sed -n 's/^tid=[0-9]* last=[^ ]* allowed=\([^ ]*\) comm=\(.*\)$/\2:\1/p' \
+		| sort | uniq -c | awk '{c=$1; $1=""; sub(/^ /, ""); printf "%s%s x%d", (NR > 1 ? "; " : ""), $0, c}')"
+	[ -n "$QAFF" ] || die "could not read QEMU's threads back -- placement unverified"
+	QEXE="$(readlink -f "${PROC_ROOT:-/proc}/$QPID/exe" 2>/dev/null)"
+	QVER="$("$QEXE" --version 2>/dev/null | head -1)"
+	say "qemu pid=$QPID ($QTHREADS threads, by name: $QAFF) exe=$QEXE; nothing pinned here"
+	_guest_identity
+}
+
 # ------------------------------------------------------------- counterbalance
 # A WILLIAMS DESIGN over the loaded middle arms, with idle fixed first and
 # idle2 fixed last in every round.
@@ -465,6 +631,29 @@ m_round_order() {   # $1 round, then: first  middle...  last
 	echo "${out[@]}"
 }
 
+# ------------------------------------------------------------- the platform
+# ADDED 2026-09-30 (owner's S6). The board ships with
+# Docker installed and enabled, and dockerd and containerd are ordinary userspace
+# on whatever cores the scheduler likes -- which is exactly the tail the confinement
+# to cores 3,5 exists to remove. A stamp that does not say what else was running
+# cannot say what a figure was measured beside. Baseline is the board as
+# inventoried; for A6 runs docker.socket, docker and containerd are STOPPED
+# (platform-quiesce.sh stop) and restored afterwards (platform-quiesce.sh restore),
+# and the stamp REFUSES while dockerd or containerd runs outside {3,5} or while
+# docker.socket is active, activating or reloading (socket activation could start
+# dockerd mid-run, on any core; a socket on its way up or being reloaded is not yet
+# off). PLATFORM_POLICY=record only records, and is S6(c), not chosen.
+#
+# Three functions, so the start of a run and its end read the host the same way:
+# _platform_gather / _platform_containers set the PLAT_* globals and never die,
+# _platform_json prints them as the stamp's "platform" object, and only
+# m_platform_state (the start) judges them. m_stamp_after (the end) records
+# "platform_after" from the same three and never refuses.
+PLATFORM_POLICY="${PLATFORM_POLICY:-refuse}"
+PLAT_NVPMODEL=""; PLAT_DOCKER_EN=""; PLAT_DOCKER_ACT=""; PLAT_SOCK_EN=""; PLAT_SOCK_ACT=""
+PLAT_CONTD_EN=""; PLAT_CONTD_ACT=""; PLAT_DOCKERD_CPUS=""; PLAT_CONTD_CPUS=""; PLAT_SHIMS="0"
+PLAT_CONTAINERS=""; PLAT_VCAN="false"; PLAT_PROC_ROOT=""; PLAT_SYS_ROOT=""
+
 # ------------------------------------------------------------- the host system
 # ADDED 2026-10-04, before the first record on another kernel and another L4T
 # release. Three things a record could not say, or a harness took on trust:
@@ -508,6 +697,156 @@ _json_safe() {      # $1 = string
 	s="$(printf '%s' "$1" | LC_ALL=C tr -cd '[:print:]')"
 	s="${s//\\/\\\\}"
 	printf '%s' "${s//\"/\\\"}"
+}
+
+# The first word systemctl prints. "absent" only without systemctl; an empty answer
+# (a unit it does not know prints nothing on stdout) is "unknown", not "". Stripped
+# to a safe alphabet because the word goes into the stamp's JSON.
+_unit_word() {      # $1 = is-enabled|is-active  $2 = unit
+	local out w rest
+	command -v systemctl >/dev/null 2>&1 || { echo absent; return 0; }
+	out="$(systemctl "$1" "$2" 2>/dev/null || true)"
+	read -r w rest <<< "$out" || true
+	w="$(printf '%s' "$w" | tr -cd 'A-Za-z0-9._-')"
+	echo "${w:-unknown}"
+}
+
+# The basename of argv[0] of the process whose /proc directory is $1, into A0BASE
+# ("" for a process that vanished or a kernel thread). Read under PROC_ROOT so tests
+# can fake it (m_pids_of stays on /proc; see its comment for why argv[0] and not
+# comm). `2>/dev/null` before the `<`: bash applies redirections left to right.
+_argv0_base() {     # $1 = a PROC_ROOT/PID directory
+	local a0=""
+	IFS= read -r -d '' a0 2>/dev/null < "$1/cmdline" || true
+	A0BASE="${a0##*/}"
+}
+
+# Cpus_allowed_list of EVERY process whose argv[0] basename is $1 (dockerd can run
+# twice, and a second one outside {3,5} is exactly what must not be missed), in pid
+# order, joined with ';'. Prints "not running" for none. A process whose list cannot
+# be read is "unknown" -- not one that can be shown to be confined, and the refusal
+# below treats it that way. The list is the process leader's; a thread with a
+# narrower or wider mask of its own is not looked at.
+_daemon_cpus() {    # $1 = executable basename
+	local want="$1" d cpus rows=()
+	for d in "${PROC_ROOT:-/proc}"/[0-9]*; do
+		_argv0_base "$d"
+		[ "$A0BASE" = "$want" ] || continue
+		cpus="$(awk '/^Cpus_allowed_list:/ {print $2; exit}' "$d/status" 2>/dev/null || true)"
+		[[ "$cpus" =~ ^[0-9]+(-[0-9]+)?(,[0-9]+(-[0-9]+)?)*$ ]] || cpus="unknown"
+		rows+=("${d##*/} $cpus")
+	done
+	[ "${#rows[@]}" -gt 0 ] || { echo "not running"; return 0; }
+	printf '%s\n' "${rows[@]}" | sort -n | cut -d' ' -f2 | tr '\n' ';' | sed 's/;$//'
+	echo
+}
+
+# How many processes have an argv[0] basename that STARTS with $1. Recorded only:
+# the shims of running containers are containerd's children, not containerd.
+_count_argv0_prefix() {     # $1 = prefix
+	local pre="$1" d n=0
+	for d in "${PROC_ROOT:-/proc}"/[0-9]*; do
+		_argv0_base "$d"
+		case "$A0BASE" in "$pre"*) n=$((n+1)) ;; esac
+	done
+	echo "$n"
+}
+
+_cores_within() {   # $1 = core list  $2 = allowed core list; 0 when every core of $1 is in $2
+	local c allowed
+	allowed=" $(_cpuset "$2") "
+	for c in $(_cpuset "$1"); do
+		case "$allowed" in *" $c "*) ;; *) return 1 ;; esac
+	done
+}
+
+# Reads the host into the PLAT_* globals, except the container count. Never dies:
+# every read is allowed to fail, and a failure is a recorded word, not an error.
+# Called directly, never inside $(...): the globals would be lost with the subshell.
+_platform_gather() {
+	PLAT_PROC_ROOT="$(_json_safe "${PROC_ROOT:-/proc}")"
+	PLAT_SYS_ROOT="$(_json_safe "${SYS_ROOT:-/sys}")"
+	# Printable ASCII first: a tool that colours its output, or a stray byte, must not
+	# reach the JSON (the stamp is parsed, so one such byte would refuse a whole run).
+	PLAT_NVPMODEL="$(sudo -n nvpmodel -q 2>/dev/null | LC_ALL=C tr -cd '[:print:]\n\r\t' | tr '\n\r\t' '   ' | sed 's/  */ /g; s/^ //; s/ $//; s/\\/\\\\/g; s/"/\\"/g' || true)"
+	[ -n "$PLAT_NVPMODEL" ] || PLAT_NVPMODEL="unavailable"
+	PLAT_DOCKER_EN="$(_unit_word is-enabled docker)";          PLAT_DOCKER_ACT="$(_unit_word is-active docker)"
+	PLAT_SOCK_EN="$(_unit_word is-enabled docker.socket)";     PLAT_SOCK_ACT="$(_unit_word is-active docker.socket)"
+	PLAT_CONTD_EN="$(_unit_word is-enabled containerd)";       PLAT_CONTD_ACT="$(_unit_word is-active containerd)"
+	PLAT_DOCKERD_CPUS="$(_daemon_cpus dockerd)"
+	PLAT_CONTD_CPUS="$(_daemon_cpus containerd)"
+	PLAT_SHIMS="$(_count_argv0_prefix containerd-shim)"
+	if [ -e "${SYS_ROOT:-/sys}/module/vcan" ]; then PLAT_VCAN="true"; else PLAT_VCAN="false"; fi
+}
+
+# `docker ps` on a wedged dockerd would hang the start of an unattended run, so it
+# gets a deadline; the user's own socket access is tried first, then sudo. Only with
+# a dockerd to ask, and after the refusal, so a refused run does not wait for it.
+# It asks the SYSTEM daemon only (the one platform-quiesce.sh stops), whatever the
+# caller's client configuration says: -H names it, and DOCKER_HOST, DOCKER_CONTEXT and
+# DOCKER_CONFIG are removed from the call. The very call platform-quiesce.sh makes (the ids
+# are counted here, not kept, so --no-trunc changes nothing but the length of the lines).
+_platform_containers() {
+	local ids
+	local -a dps=(env -u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_CONFIG docker -H unix:///run/docker.sock ps -q --no-trunc)
+	PLAT_CONTAINERS="n/a"
+	[ "$PLAT_DOCKERD_CPUS" != "not running" ] || return 0
+	if ids="$(timeout 10 "${dps[@]}" 2>/dev/null)" || ids="$(sudo -n timeout 10 "${dps[@]}" 2>/dev/null)"; then
+		PLAT_CONTAINERS="$(printf '%s\n' "$ids" | grep -c . || true)"
+	else
+		PLAT_CONTAINERS="unknown"
+	fi
+}
+
+# The stamp's "platform" object, from the PLAT_* globals. A nested object, so it
+# cannot collide with the "nvpmodel" key several harnesses already pass as an extra
+# line. Every value is a string but containerd_shims (a number) and vcan_loaded (a
+# boolean).
+_platform_json() {  # $1 = the policy word to record
+	printf '{"policy": "%s", "proc_root": "%s", "sys_root": "%s", "nvpmodel": "%s", "docker": {"enabled": "%s", "active": "%s"}, "docker_socket": {"enabled": "%s", "active": "%s"}, "containerd": {"enabled": "%s", "active": "%s"}, "dockerd_cpus": "%s", "containerd_cpus": "%s", "containerd_shims": %s, "containers_running": "%s", "vcan_loaded": %s}' \
+		"$1" "$PLAT_PROC_ROOT" "$PLAT_SYS_ROOT" "$PLAT_NVPMODEL" "$PLAT_DOCKER_EN" "$PLAT_DOCKER_ACT" "$PLAT_SOCK_EN" "$PLAT_SOCK_ACT" \
+		"$PLAT_CONTD_EN" "$PLAT_CONTD_ACT" "$PLAT_DOCKERD_CPUS" "$PLAT_CONTD_CPUS" "$PLAT_SHIMS" "$PLAT_CONTAINERS" "$PLAT_VCAN"
+}
+
+# Sets the PLAT_* globals, or dies under the refuse policy. Called directly, never
+# inside $(...): a die there would end only the subshell. Every reason is collected
+# before the die, so one refusal names everything that is wrong.
+m_platform_state() {
+	local host_cores="3,5" d lists cpus parts outside unreadable why reasons=""
+	case "$PLATFORM_POLICY" in
+		refuse|record) ;;
+		*) die "PLATFORM_POLICY='$PLATFORM_POLICY' is not a policy; use 'refuse' (default) or 'record' (S6(c) only)" ;;
+	esac
+	[ "${PROC_ROOT:-/proc}" = /proc ] || say "WARNING: PROC_ROOT overridden to $PROC_ROOT -- the platform check reads it; test use only"
+	[ "${SYS_ROOT:-/sys}" = /sys ] || say "WARNING: SYS_ROOT overridden to $SYS_ROOT -- test use only"
+	_platform_gather
+	if [ "$PLATFORM_POLICY" = refuse ]; then
+		for d in dockerd containerd; do
+			case "$d" in dockerd) lists="$PLAT_DOCKERD_CPUS" ;; *) lists="$PLAT_CONTD_CPUS" ;; esac
+			[ "$lists" != "not running" ] || continue
+			outside=0; unreadable=0
+			IFS=';' read -r -a parts <<< "$lists" || true
+			for cpus in "${parts[@]}"; do
+				if [ "$cpus" = unknown ]; then
+					unreadable=1
+				elif ! _cores_within "$cpus" "$host_cores"; then
+					outside=1
+				fi
+			done
+			why=""
+			[ "$outside" = 0 ] || why="outside {$host_cores}"
+			[ "$unreadable" = 0 ] || why="${why:+$why, and }its allowed cores could not be read"
+			[ -z "$why" ] || reasons="${reasons:+$reasons; }$d is running on cores '$lists', $why"
+		done
+		case "$PLAT_SOCK_ACT" in
+			active|activating|reloading)
+				reasons="${reasons:+$reasons; }docker.socket is $PLAT_SOCK_ACT (socket activation could start dockerd mid-run, on any core)" ;;
+		esac
+		[ -z "$reasons" ] \
+			|| die "platform refused: $reasons. Stop docker.socket, docker and containerd for A6 runs and restore them afterwards (owner's S6, 2026-09-30; platform-quiesce.sh does both); PLATFORM_POLICY=record only under S6(c)."
+	fi
+	_platform_containers
+	say "platform: nvpmodel '$PLAT_NVPMODEL'; docker $PLAT_DOCKER_EN/$PLAT_DOCKER_ACT, docker.socket $PLAT_SOCK_EN/$PLAT_SOCK_ACT, containerd $PLAT_CONTD_EN/$PLAT_CONTD_ACT; dockerd cpus $PLAT_DOCKERD_CPUS, containerd cpus $PLAT_CONTD_CPUS, containerd shims $PLAT_SHIMS; containers $PLAT_CONTAINERS; vcan $PLAT_VCAN; policy $PLATFORM_POLICY"
 }
 
 # CONFIG_HZ of the running kernel, the way run-metal.sh has always read it: the
@@ -662,6 +1001,8 @@ _system_json() {
 _sha() { [ -r "$1" ] && sha256sum "$1" | cut -d' ' -f1 || echo "unreadable"; }
 m_write_stamp() {
 	local out="$1"; shift
+	m_platform_state    # before the file is opened: a refusal must not leave a stamp behind
+
 	# Before the file is opened: what these two say goes to stdout, and inside the
 	# braces below stdout is the stamp.
 	m_config_hz
@@ -705,6 +1046,10 @@ m_write_stamp() {
 		printf '  "fifo_arms": "%s",\n' "${FIFO_ARMS:-}"
 		printf '  "stall_policy": "%s", "probe_timeout_s": %s, "recover_max_s": %s,\n' \
 			"${STALL_POLICY:-refuse}" "$PROBE_TIMEOUT_S" "$RECOVER_MAX_S"
+		# A nested object, so it cannot collide with the "nvpmodel" key several harnesses
+		# already pass as an extra line (2026-09-30); see _platform_json.
+		printf '  "platform": %s,\n' "$(_platform_json "$PLATFORM_POLICY")"
+
 		# The host's releases, HZ, Pythons, nvpmodel, Wi-Fi and bridge netfilter
 		# (2026-10-04). One nested object, before the extras, so that no harness's
 		# extra key can collide with it; see _system_json.
@@ -719,13 +1064,24 @@ m_write_stamp() {
 }
 
 # Appended after the run, so the stamp records the END state as well as the start.
+# "platform_after" is the platform read again, with the same keys as "platform"
+# (2026-09-30, owner's S6). It is RECORD ONLY: the run is over and its figures are
+# taken, so nothing here judges the host or dies over it -- its "policy" is always
+# "record", whatever the run's was. A daemon that came back during the run shows up
+# here and nowhere else.
 m_stamp_after() {   # $1 = stamp path
-	python3 - "$1" "$GOV_AFTER" "$FREQ_AFTER" <<'PY' || die "could not append the after-state to the stamp"
-import json, sys
+	_platform_gather
+	_platform_containers
+	PA_JSON="$(_platform_json record)" python3 - "$1" "$GOV_AFTER" "$FREQ_AFTER" <<'PY' || die "could not append the after-state to the stamp"
+import json, os, sys
 p, gov, freq = sys.argv[1], sys.argv[2], sys.argv[3]
 d = json.load(open(p))
 d["governor_after"] = gov or None
 d["cur_freq_khz_after"] = freq or None
+try:
+    d["platform_after"] = json.loads(os.environ["PA_JSON"])
+except ValueError:      # recorded as unreadable, not a reason to lose a finished run's stamp
+    d["platform_after"] = {"error": "the platform's end state did not parse"}
 json.dump(d, open(p, "w"), indent=2)
 PY
 }

@@ -52,6 +52,28 @@
 # harness can pin or trace a vCPU by name (run-vcpupin.sh needs it). QEMU only
 # names its threads; the device set and slot order are unchanged. Off by
 # default, so every earlier record's command line is unchanged.
+#
+# SETUP LAYOUT (2026-10-17, run-randomise.sh), opt-in, and off by default so every
+# earlier record's command line is unchanged:
+#   QEMU_LAYOUT=fixed            QEMU under env -i with the library's fixed list, then
+#                                setarch -R (lib-measure.sh m_layout_cmd)
+#   QEMU_LAYOUT=random QEMU_PAD=E   env -i with the fixed list and A6PAD of E bytes
+#                                (E on the grid 0, 16, ..., 4080), ASLR as the kernel draws
+#   QEMU_PIN=V0,V1,REST          QEMU's three thread groups one per core, by name: vCPU 0
+#                                on V0, vCPU 1 on V1, every other thread on REST
+#                                (m_pin_by_name). Needs THREAD_NAMES=1 and SMP=2. Applied
+#                                once the vCPU threads exist, and again once the guest
+#                                answers, for the threads QEMU made while it booted; each
+#                                thread is read back, and a pin that does not hold stops
+#                                QEMU and fails the launch. QEMU is started on REST
+#                                (taskset -c REST before the layout words), so every thread
+#                                is born on its group's core or is a vCPU's: a thread that
+#                                sleeps across the pins keeps the CPU it last ran on until it
+#                                wakes, and born elsewhere (on the caller's core) it would
+#                                read that core as its last CPU.
+# The layout words go between nohup and QEMU: the device order above is untouched, and
+# QEMU stays the process that nohup started (taskset, env and setarch exec it), so
+# "qemu pid" below is still QEMU's own.
 set -euo pipefail
 
 IFS_BIN="${IFS_BIN:?set IFS_BIN to the QNX image (it must start the server the ladder probes)}"
@@ -74,6 +96,23 @@ case "${THREAD_NAMES}" in
 	1) NAME_ARGS=(-name qnx,debug-threads=on) ;;
 	*) echo "ERROR: THREAD_NAMES='${THREAD_NAMES}' is not 0 or 1" >&2; exit 1 ;;
 esac
+QEMU_LAYOUT="${QEMU_LAYOUT:-}"
+QEMU_PAD="${QEMU_PAD:-}"
+QEMU_PIN="${QEMU_PIN:-}"
+case "${QEMU_LAYOUT}" in
+	"") [ -z "${QEMU_PAD}" ] || { echo "ERROR: QEMU_PAD needs QEMU_LAYOUT=random" >&2; exit 1; } ;;
+	fixed) [ -z "${QEMU_PAD}" ] || { echo "ERROR: QEMU_LAYOUT=fixed takes no QEMU_PAD" >&2; exit 1; } ;;
+	random) [ -n "${QEMU_PAD}" ] || { echo "ERROR: QEMU_LAYOUT=random needs QEMU_PAD" >&2; exit 1; } ;;
+	*) echo "ERROR: QEMU_LAYOUT='${QEMU_LAYOUT}' is not fixed or random" >&2; exit 1 ;;
+esac
+if [ -n "${QEMU_PIN}" ]; then
+	[ "${THREAD_NAMES}" = 1 ] || { echo "ERROR: QEMU_PIN pins by thread name: it needs THREAD_NAMES=1" >&2; exit 1; }
+	[ "${SMP}" = 2 ] || { echo "ERROR: QEMU_PIN has cores for two vCPUs: it needs SMP=2" >&2; exit 1; }
+	if ! [[ "${QEMU_PIN}" =~ ^([0-9]+),([0-9]+),([0-9]+)$ ]] || [ "${BASH_REMATCH[1]}" = "${BASH_REMATCH[2]}" ] \
+		|| [ "${BASH_REMATCH[1]}" = "${BASH_REMATCH[3]}" ] || [ "${BASH_REMATCH[2]}" = "${BASH_REMATCH[3]}" ]; then
+		echo "ERROR: QEMU_PIN='${QEMU_PIN}' is not three distinct cores V0,V1,REST" >&2; exit 1
+	fi
+fi
 
 for f in "${IFS_BIN}" "${DISK}"; do
 	[ -r "$f" ] || { echo "ERROR: unreadable: $f" >&2; exit 1; }
@@ -98,6 +137,14 @@ fi
 # Everything that can refuse is checked BEFORE the ivshmem server starts, and the
 # log directory exists before anything writes to it (FOUND BY CODE REVIEW: a
 # refusal after the server started orphaned it, pinned and holding IVSHMEM).
+PREFIX=()
+if [ "${QEMU_LAYOUT}" = fixed ]; then
+	m_layout_cmd 1 -
+	PREFIX=("${LAYOUT_CMD[@]}")
+elif [ "${QEMU_LAYOUT}" = random ]; then
+	m_layout_cmd 0 "${QEMU_PAD}"
+	PREFIX=("${LAYOUT_CMD[@]}")
+fi
 mkdir -p "$(dirname "${LOG}")"
 KICK_ARGS=()
 if [ -n "${KICK_SOCK}" ]; then
@@ -149,6 +196,11 @@ elif [ -n "${IVSHMEM}" ]; then
 fi
 [ -n "${KICK_SOCK}" ] && echo "kick   : virtio console on ${KICK_SOCK}"
 [ "${THREAD_NAMES}" = 1 ] && echo "names  : -name qnx,debug-threads=on (vCPU threads named CPU n/KVM)"
+case "${QEMU_LAYOUT}" in
+	fixed) echo "layout : fixed (env -i with the fixed list, setarch -R; environment ${LAYOUT_ENV_BYTES} bytes)" ;;
+	random) echo "layout : random (env -i with the fixed list and A6PAD of ${QEMU_PAD} bytes; environment ${LAYOUT_ENV_BYTES} bytes)" ;;
+esac
+[ -n "${QEMU_PIN}" ] && echo "pin    : by name, vCPU 0 / vCPU 1 / every other thread on cores ${QEMU_PIN}"
 # KVM halt polling decides whether a "sleeping" vCPU really sleeps; the VM takes
 # its maximum when it is created, so the values in force are the ones now.
 for p in halt_poll_ns halt_poll_ns_grow halt_poll_ns_grow_start halt_poll_ns_shrink; do
@@ -157,7 +209,7 @@ done
 
 # -snapshot ALWAYS: the guest disk is an input to a measurement, and a run that
 # mutates it makes the next run a different experiment.
-nohup "${QEMU}" \
+nohup ${QEMU_PIN:+taskset -c ${QEMU_PIN##*,}} ${PREFIX[@]+"${PREFIX[@]}"} "${QEMU}" \
 	-machine virt,gic-version=3 -cpu host -enable-kvm \
 	-smp "${SMP}" -m "${MEM}" \
 	-drive file="${DISK}",if=none,id=drv0,format=raw \
@@ -175,9 +227,33 @@ nohup "${QEMU}" \
 
 qpid=$!
 echo "qemu pid: ${qpid}"
+if [ -n "${QEMU_PIN}" ]; then
+	# Both vCPU threads exist (and are named) before the first pin; a pin that does not hold stops
+	# QEMU: a guest on another placement than its VM boot's would be measured under the wrong label.
+	named=0
+	for i in $(seq 1 100); do
+		if grep -qx "CPU 0/KVM" /proc/"${qpid}"/task/*/comm 2>/dev/null \
+			&& grep -qx "CPU 1/KVM" /proc/"${qpid}"/task/*/comm 2>/dev/null; then named=1; break; fi
+		kill -0 "${qpid}" 2>/dev/null || break
+		sleep 0.1
+	done
+	if [ "${named}" != 1 ] || ! m_pin_by_name "${qpid}" "${QEMU_PIN}"; then
+		echo "ERROR: QEMU's threads could not be pinned by name to ${QEMU_PIN}; QEMU stopped" >&2
+		kill "${qpid}" 2>/dev/null
+		exit 1
+	fi
+fi
 echo "waiting for the guest to answer on 192.168.100.10 ..."
 for i in $(seq 1 60); do
 	if timeout 1 bash -c 'echo > /dev/tcp/192.168.100.10/7100' 2>/dev/null; then
+		if [ -n "${QEMU_PIN}" ]; then
+			if ! m_pin_by_name "${qpid}" "${QEMU_PIN}"; then
+				echo "ERROR: QEMU's threads would not stay pinned by name to ${QEMU_PIN} once the guest was up; QEMU stopped" >&2
+				kill "${qpid}" 2>/dev/null
+				exit 1
+			fi
+			m_qemu_threads "${qpid}" | sed 's/^/pinned : /'
+		fi
 		echo "guest up after ${i}s (monitor answering on :7100)"; trap - EXIT; exit 0
 	fi
 	kill -0 "${qpid}" 2>/dev/null || { echo "ERROR: qemu exited; see ${LOG}" >&2; tail -20 "${LOG}" >&2; exit 1; }
