@@ -2440,8 +2440,8 @@ def test_the_readme_says_the_two_nets_and_what_each_cannot_bound():
                    # what the two nets cannot bound across a reboot, and what a lost deadline does
                    "until a reboot the monotonic timer is the bound", "or cannot be read", "is itself a wall-clock time",
                    "at most the session's minutes again for each boot", "is not bounded in sum",
-                   # and that none of it has run where it is meant to
-                   "have not run on an instance"):
+                   # and that `wait` checks the nets on the instance itself, not only the tests against stubs
+                   "against stub programs, and `wait` checks them on each instance"):
         assert phrase in said, phrase
     assert "61\u201391 minutes" in said, "the wall-clock window is still said, and still the driver's"
     table = [ln for ln in _text(README).splitlines() if ln.startswith("| `userdata.sh`")]

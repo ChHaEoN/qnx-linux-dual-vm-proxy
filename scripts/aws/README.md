@@ -53,7 +53,8 @@ cp scripts/aws/.env.example scripts/aws/.env.local   # then fill it in; it is gi
 ```
 
 A `METAL_*` value exported in the environment wins over the file's. Pass a
-session's own `METAL_REPO_TAR` that way.
+session's own `METAL_REPO_TAR` that way. `METAL_TYPE` (default `a1.metal`) names
+the bare-metal instance type to launch.
 
 **Check these before `launch`, while nothing is billed yet.** `launch` validates only
 `METAL_KEY_NAME`, `METAL_SG_NAME` and the shape of `METAL_QEMU_PKG`; the values below are
@@ -210,7 +211,8 @@ This runs several harnesses that boot their own guests, each on its own image, i
     did, and so does a session that goes on; one that goes on with a clock the
     instance does not call synchronised is told what a later step would do.
   - The two nets, the per-boot script and `wait`'s proof of them run in the
-    tests, against stub programs. They have not run on an instance.
+    tests, against stub programs, and `wait` checks them on each instance
+    before anything is uploaded.
 - **Every failure between launch and that proof terminates**, and the
   termination is confirmed. Such failures include:
   - EC2 not knowing the new id yet (retried, not fatal);
