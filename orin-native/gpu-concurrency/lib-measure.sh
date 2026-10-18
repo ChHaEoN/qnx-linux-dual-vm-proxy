@@ -99,8 +99,13 @@ m_governor_pin() {
 	fi
 	PRE_GOV="$(cat "$g0")"
 	FREQ_BEFORE="$(_freq_list)"
+	# Every core's governor is read before any is written: cores share a cpufreq policy (on R39 two,
+	# 0-3 and 4-5), so pinning cpu0 also pins cpu1-3, and a read taken after it would record
+	# "performance" as their original, which the restore would then write back.
 	for c in "$SYSFS_CPU"/cpu[0-9]*/cpufreq/scaling_governor; do
 		GOV_ORIG["$c"]="$(cat "$c")"
+	done
+	for c in "$SYSFS_CPU"/cpu[0-9]*/cpufreq/scaling_governor; do
 		echo performance | sudo tee "$c" >/dev/null
 		now="$(cat "$c")"
 		[ "$now" = "performance" ] || die "governor present but $c would not pin (still '$now')"

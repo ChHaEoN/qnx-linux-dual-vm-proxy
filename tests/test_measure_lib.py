@@ -142,6 +142,30 @@ def test_governor_restore_puts_back_what_was_there(tmp_path):
         assert (r.sysfs / ("cpu%d" % i) / "cpufreq" / "scaling_governor").read_text().strip() == "schedutil"
 
 
+# A `sudo tee <core>` that writes the value to every core of that core's policy, as the Orin's two
+# cpufreq policies (0-3 and 4-5) do: one core's governor is its whole policy's.
+SHARED_POLICY_SUDO = (
+    'v="$(cat)"; case "$2" in */cpu[0-3]/*) set -- 0 1 2 3 ;; *) set -- 4 5 ;; esac; '
+    'for i in "$@"; do echo "$v" > "$SYSFS_CPU/cpu$i/cpufreq/scaling_governor"; done')
+
+
+def test_governor_pin_records_every_core_before_a_shared_policy_moves_it(tmp_path):
+    """The board day of 2026-10-18: reading each core after the previous core's pin recorded cpu1-3 and
+    cpu5 as "performance" (cpu0's and cpu4's pins had moved them), so the as-found record was wrong."""
+    r = _run(tmp_path, 'm_governor_pin; for c in "${!GOV_ORIG[@]}"; do echo "ORIG ${c##*/cpu/} ${GOV_ORIG[$c]}"; done',
+             ["schedutil"] * 6, sudo=SHARED_POLICY_SUDO)
+    assert r.returncode == 0, r.stderr
+    orig = sorted(line.split()[1:] for line in r.stdout.splitlines() if line.startswith("ORIG "))
+    assert orig == [["cpu%d/cpufreq/scaling_governor" % i, "schedutil"] for i in range(6)], orig
+
+
+def test_governor_restore_under_shared_policies_puts_back_what_was_there(tmp_path):
+    r = _run(tmp_path, "m_governor_pin; m_governor_restore", ["schedutil"] * 6, sudo=SHARED_POLICY_SUDO)
+    assert r.returncode == 0, r.stderr
+    for i in range(6):
+        assert (r.sysfs / ("cpu%d" % i) / "cpufreq" / "scaling_governor").read_text().strip() == "schedutil"
+
+
 def test_restore_is_a_noop_when_nothing_was_pinned(tmp_path):
     r = _run(tmp_path, "m_governor_pin; m_governor_restore; echo OK", sudo="echo SUDO_CALLED >&2; exit 1")
     assert r.returncode == 0, r.stderr
