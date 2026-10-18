@@ -9,7 +9,8 @@
 #
 # The text from "1. The question" to the end of "7. Analysis", and "12. What it would NOT show", is the
 # design's own text (only lines too long for this header are wrapped, and the markdown heading marks
-# dropped). Sections 5 to 7 (D11) and 12 are copied word for word. Sections 1, 3 and 4 are copied word for
+# dropped). Sections 5 to 7 (D11) and 12 are copied word for word but for two departures the owner approved
+# on 2026-10-18 (sections 6 and 12, below). Sections 1, 3 and 4 are copied word for
 # word but for the departures below, each made so that this header states no outcome of any record: a
 # pre-registration's WHAT IS KNOWN names records only, and no measured or functional result is published.
 #   - Section 2 is replaced by WHAT IS KNOWN below, which names the design's records and notes by topic
@@ -24,6 +25,11 @@
 #   - Section 4.6: the confinement's heading names it without saying what it removes; the halt-polling
 #     bullet on a blocked halt says that a contrast can include its cost; and the last Docker bullet,
 #     which said where this code lived before this commit, now says that this commit ports it (D5).
+#   - Section 4.6: the recorded-as-found bullet on the bridge's netfilter settings says what R39 loads at
+#     boot, without a comparison with R36.
+#   - Section 6: the sentence after the rule names the kind of guard it rules out, without a record's
+#     outcome.
+#   - Section 12: the third item's heading names what is not shown without presupposing an outcome.
 # It is written and committed, with the schedule's hash below, before any run of this harness, smoke runs
 # included. It is not to be amended.
 #
@@ -278,7 +284,7 @@
 #
 # - the Wi-Fi radio (D9);
 # - `net.bridge.bridge-nf-call-iptables` and its companions, and the size of the nf_tables ruleset (R39 loads
-#   `br_netfilter` at boot; R36 did not);
+#   `br_netfilter` at boot);
 # - `kernel.randomize_va_space` (D12);
 # - `CONFIG_HZ` and the tick handler;
 # - `/proc/interrupts`, at each board boot's start and end;
@@ -350,7 +356,7 @@
 # prediction is false.
 #
 # - Nothing here checks a contrast, a level, a tail or a variance component.
-# - The `-boots` record's void P4 (a tail count guarding a median) is the mistake this rules out.
+# - A tail count guarding a median is the kind of guard this rules out.
 # - There is deliberately no check of the form "the fixed reference reproduces" or "K2 is near zero".
 #
 # | check | what it reads | guards |
@@ -466,7 +472,8 @@
 # - **Not the A6 default's levels.** Every VM boot pins QEMU one thread group per core, where the A6 records
 #   pinned the threads as a set (D4). Robustness of the contrasts under one pinning style is not shown for
 #   the other.
-# - **Not why a boot sets the level.** P4 can place it at the VM boot or the board boot, and nothing more.
+# - **Not the cause of a difference in level between boots.** P4 can place such a difference at the VM boot
+#   or the board boot, and nothing more.
 #   KASLR, DRAM training, physical placement and driver state stay unseparated.
 # - **S's two parts are aliased.** S bundles QEMU's layout with the vCPUs' assignment, so a moved P3 cannot
 #   be pinned on either one. U3 and U4 only hint.

@@ -199,7 +199,8 @@ def test_the_departures_from_the_design_are_named_in_the_intro_and_made():
     """Sections 1, 3 and 4 depart from the design's text only so that the header states no outcome of a
     record; the intro names each departure, and each is made."""
     prose = _prose(_head_body()[0])
-    for words in ("Sections 5 to 7 (D11) and 12 are copied word for word.",
+    for words in ("Sections 5 to 7 (D11) and 12 are copied word for word but for two departures the owner approved "
+                  "on 2026-10-18 (sections 6 and 12, below).",
                   "Sections 1, 3 and 4 are copied word for word but for the departures below, each made so that "
                   "this header states no outcome of any record",
                   "Section 2 is replaced by WHAT IS KNOWN below, which names the design's records and notes by topic "
@@ -209,7 +210,12 @@ def test_the_departures_from_the_design_are_named_in_the_intro_and_made():
                   "Section 4.2: the \"why\" cells of the board boot, spacing, role placement and guest image rows",
                   "Section 4.3: the fallback image's devices are named as gate2-smoke.sh's G4 step presents them",
                   "Section 4.6: the confinement's heading names it without saying what it removes; the halt-polling "
-                  "bullet on a blocked halt says that a contrast can include its cost"):
+                  "bullet on a blocked halt says that a contrast can include its cost",
+                  "Section 4.6: the recorded-as-found bullet on the bridge's netfilter settings says what R39 loads "
+                  "at boot, without a comparison with R36.",
+                  "Section 6: the sentence after the rule names the kind of guard it rules out, without a record's "
+                  "outcome.",
+                  "Section 12: the third item's heading names what is not shown without presupposing an outcome."):
         assert words in prose, words
     for made in ("**Q2, where the level lives.** Is the p50 level re-drawn at every VM boot, or only at every board "
                  "boot? The answer decides",
@@ -223,12 +229,18 @@ def test_the_departures_from_the_design_are_named_in_the_intro_and_made():
                  "- Otherwise use `ifs-kick.bin` with its devices presented exactly as `gate2-smoke.sh`'s G4 step "
                  "presents them. - Confirming",
                  "**The confinement.** - **Applied in every round of both regimes.**",
-                 "- At 2 ms spacing a contrast can include the cost of a blocked halt."):
+                 "- At 2 ms spacing a contrast can include the cost of a blocked halt.",
+                 "(R39 loads `br_netfilter` at boot);",
+                 "- A tail count guarding a median is the kind of guard this rules out.",
+                 "- **Not the cause of a difference in level between boots.** P4 can place such a difference at the "
+                 "VM boot or the board boot, and nothing more."):
         assert made in prose, made
     one_to_four = prose[prose.index("1. The question"):prose.index("5. Predictions, with thresholds")]
     for word in ("known cause", "known to set", "mitigation", "section 2"):
         assert word not in one_to_four, word
     assert "section 2" not in prose, "section 2 is replaced, so nothing refers to it"
+    for gone in ("R36 did not", "void P4", "Not why a boot sets the level"):
+        assert gone not in prose, gone
     gate2 = _text(os.path.join(HERE, "..", "scripts", "orin", "gate2-smoke.sh"))
     assert 'G4|G21) IMAGES="ifs-kick.bin"' in gate2, "the step the fallback names presents ifs-kick.bin"
 
