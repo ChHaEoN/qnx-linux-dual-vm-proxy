@@ -16,3 +16,130 @@
 #
 # The figures the tree carried when the guard was introduced (2026-09-28) are
 # its reviewed baseline and need no entry: only a figure a change adds is checked.
+
+# Batch SDV design values, checked against the working tree.
+scripts/aws/README.md	stats` sampled by the harness every 5 s, never by new logins. A drive	Configured harness sampling interval; run-aw-suite.sh SAMPLE_S.
+sdv/aw/README.md	4): the memory-floor stop and its 1 s series, the 5 s sampler. |	G1 watchdog sampling uses g1_watchdog.py SPACING_S. The separate sampler uses g1_sampler.py SPACING_S.
+sdv/aw/README.md	stop and its 1 s series, the 5 s sampler. |	G1 watchdog sampling uses g1_watchdog.py SPACING_S. The separate sampler uses g1_sampler.py SPACING_S.
+sdv/aw/README.md	65500B and `WhcHigh` 500kB kept, and the image's	ros-env.json retains the configured CycloneDDS MaxMessageSize and WhcHigh settings.
+sdv/aw/README.md	10 MB dropped: WSL's	The removed CycloneDDS receive-buffer minimum is an image configuration value.
+sdv/aw/README.md	has delivered a message, for at most 5 s and never past the step's	aw_scenario.py SETTLE_S bounds the wait for a state topic's first message.
+sdv/aw/README.md	left. A topic still silent after 5 s is accepted (it	aw_scenario.py SETTLE_S bounds the wait for a state topic's first message.
+sdv/aw/README.md	(within 10 s of asking), since a run starts	aw_scenario.py CLAIM_NODE_WAIT_S bounds discovery of the claim node.
+sdv/aw/README.md	are design values: `localize` 60 s and `route` 60 s, what WP4a's	sample-lanelet-102.json timeouts_s.localize and timeouts_s.route configure the two service waits.
+sdv/aw/README.md	service calls; `engage` 60 s, for the wait for autonomous to	sample-lanelet-102.json timeouts_s.engage configures the wait for autonomous mode.
+sdv/aw/README.md	the call (WP4a's script allowed it 30 s)	The earlier engage budget is the configured WP4a script timeout.
+sdv/aw/README.md	up after its `transition_timeout` of 10.0 s (W4 P10); `arrive`	Autoware's transition_timeout setting is the upstream transition manager's configured deadline.
+sdv/aw/README.md	120 s, about six times the drive at	sample-lanelet-102.json timeouts_s.arrive is the configured arrival budget. The drive-duration estimate uses the route distance and the cited planner speed and acceleration settings.
+sdv/aw/README.md	m/s^2: about 20 s, W4 P8). The driver's own: 30 s	The drive-duration estimate uses the route distance and the cited planner speed and acceleration settings. aw_scenario.py CLEAR_TIMEOUT_S bounds route clearing.
+sdv/aw/README.md	20 s, W4 P8). The driver's own: 30 s for the clear, 10 s for the	The drive-duration estimate uses the route distance and the cited planner speed and acceleration settings. aw_scenario.py CLEAR_TIMEOUT_S and CLAIM_NODE_WAIT_S bound the two waits.
+sdv/aw/README.md	driver's own: 30 s for the clear, 10 s for the claim node's discovery,	aw_scenario.py CLEAR_TIMEOUT_S and CLAIM_NODE_WAIT_S bound route clearing and claim-node discovery.
+sdv/aw/README.md	10 s for the claim node's discovery, 5 s for a state	aw_scenario.py CLAIM_NODE_WAIT_S and SETTLE_S bound the discovery and first-state waits.
+sdv/aw/README.md	open; below its floor (716800 kB, a design value) the stop file	g1_watchdog.py FLOOR_KB is the configured MemAvailable floor.
+sdv/aw/README.md	the first kill is caught, and after 5 s also	g1_watchdog.py CGROUP_KILL_AFTER_S schedules the cgroup kill.
+sdv/aw/README.md	each scope's `memory.events` every 5 s.	g1_sampler.py SPACING_S sets the memory.events sample interval.
+sdv/aw/README.md	each change of its level, and every 5 s each	g1_sampler.py SPACING_S sets the periodic scope sample interval.
+sdv/aw/README.md	runs), or that its timeouts, and its 5 s bound for a	aw_scenario.py SETTLE_S bounds the wait for a state topic's first message.
+sdv/bridge/README.md	monitor on `:7160` (svc, 500 ms deadline), or on `:7161` (stamp)	stack.py MONITOR_DEADLINE_MS is the svc deadline at the configured monitor port.
+sdv/bridge/README.md	check before every send, the 500 ms reply timeout); the scenario	vss_claim_bridge.py REPLY_TIMEOUT_NS is the configured reply deadline.
+sdv/bridge/README.md	or not completed within the 500 ms connect timeout) backs off from	vss_claim_bridge.py CONNECT_TIMEOUT_NS is the configured connect deadline.
+sdv/bridge/README.md	tick, doubling, to 2 s. A non-blocking `recv(MSG_PEEK)`	vss_claim_bridge.py BACKOFF_FIRST_NS and BACKOFF_CAP_NS bound the configured doubling backoff.
+sdv/bridge/README.md	connection drops, or for 500 ms (the reply timeout, design	vss_claim_bridge.py REPLY_TIMEOUT_NS bounds the reply wait.
+sdv/bridge/README.md	none generated: the 10 Hz tick, the 500 ms reply timeout, the backoff,	vss_claim_bridge.py TICK_HZ and REPLY_TIMEOUT_NS set the tick rate and reply deadline.
+sdv/bridge/README.md	reply timeouts) and the signal poll (50 ms: a SIGTERM or SIGINT	vss_claim_bridge.py END_POLL_S is the configured signal poll interval.
+sdv/carla/README.md	refuses below `FREE_MIB_MIN` (9,500 MiB free: the owner's value of	gpucheck.py FREE_MIB_MIN is the owner's configured free-memory floor.
+sdv/carlaif/README.md	0.05 s (the generated contract's	CARLA_STEP_MS from the generated contract sets the launch's fixed_delta_seconds.
+sdv/carlaif/README.md	read, at attach, synchronous at 0.05 s (the substep is recorded in the	pubcheck.py TAKE_STEP_S checks the attached world's fixed_delta_seconds against the launch.
+sdv/cloud/README.md	the pull role, credentials of 3600 s.	twinctl.py ROLE_ALIAS_SECONDS sets the pull role alias credential duration.
+sdv/cloud/burst/README.md	0 the burst met its goal inside its 60 s (the run then ended at its time	burst.py EXIT['ok'] is the defined success status. WINDOW_S sets its hand-over deadline.
+sdv/cloud/burst/README.md	its threshold, handed over inside 60 s, so that however a period	burst.py WINDOW_S bounds the burst hand-over.
+sdv/cloud/burst/README.md	A burst is paced evenly over 40 s; a hand-over that would	burst.py WINDOW_S bounds the hand-over window. BURST_SPREAD_S sets the pacing interval.
+sdv/cloud/burst/README.md	come 60 s or more after the burst's start	burst.py WINDOW_S is the cutoff for a burst hand-over.
+sdv/cloud/burst/README.md	of the tool. Afterwards, every 10 s, one small attempt, the	burst.py TRICKLE_INTERVAL_S sets the spacing of trickle attempts.
+sdv/cloud/burst/README.md	- a burst: 2,000 publishes, 8 MiB, 60 shadow updates, whatever the	burst.py CEILINGS sets the publish, byte and shadow-update caps.
+sdv/cloud/burst/README.md	- the trickle: one attempt every 10 s, so fewer than 120 in a run, 60	burst.py TRICKLE_INTERVAL_S sets the attempt spacing. TRICKLE_MAX is derived from CEILING_S. Alternating the topics bounds the attempts per topic.
+sdv/cloud/burst/README.md	10 s before the ceiling either (the	burst.py CONNECT_ANSWER_S reserves the connect-answer budget before CEILING_S.
+sdv/cloud/burst/README.md	(7 s), the link's close, the last	burst.py SETTLE_S is the sum of the operation timeout and uplink wait margin.
+sdv/cloud/burst/README.md	bounds it: the first attempt comes 10 s after the burst's end and none at	burst.py TRICKLE_INTERVAL_S sets the first trickle attempt after the burst.
+sdv/cloud/burst/README.md	every threshold.** One attempt every 10 s, the two topics in turn, is at	burst.py TRICKLE_INTERVAL_S and alternating topics determine the closed-window cap.
+sdv/cloud/burst/README.md	16 on a topic and 31 on both in any 300 s, the alarms' period read as a	burst.py TRICKLE_PERIOD_TOPIC and TRICKLE_PERIOD_BOTH derive the caps from PERIOD_S and TRICKLE_INTERVAL_S.
+sdv/cloud/burst/README.md	bytes stay under 8 MiB and the trickle's publishes are	burst.py CEILINGS['bytes'] sets the burst byte cap.
+sdv/cloud/burst/README.md	paced evenly over 40 s; a hand-over that would come 60	burst.py WINDOW_S bounds the hand-over window. BURST_SPREAD_S sets the pacing interval.
+sdv/cloud/burst/README.md	40 s; a hand-over that would come 60 s or more after the burst's start	burst.py WINDOW_S bounds the hand-over window. BURST_SPREAD_S sets the pacing interval.
+sdv/cloud/burst/README.md	once a second and ends the process 30 s after the time	burst.py WATCHDOG_LOOK_S sets the clock poll and WATCHDOG_GRACE_S sets the grace after CEILING_S.
+sdv/cloud/burst/README.md	a thread of its own and waited for 1 s at the most: a log that	burst.py WATCHDOG_LINE_S bounds the wait for the watchdog's log line.
+sdv/cloud/burst/README.md	it, and not in the run's last 10 s (above).	burst.py CONNECT_ANSWER_S reserves the connect-answer budget before CEILING_S.
+sdv/cloud/burst/README.md	(the run's last 10 s); or, with a `ceiling connects`	burst.py CONNECT_ANSWER_S reserves the connect-answer budget before CEILING_S.
+sdv/cloud/burst/README.md	to one tick, 10 s.	burst.py TRICKLE_INTERVAL_S sets the retry tick.
+sdv/cloud/burst/README.md	whose t_mono is later than 1,200 s by more than a moment says that	burst.py CEILING_S is the configured run ceiling in seconds.
+sdv/cloud/burst/README.md	stop`. A bare one gives the tool 10 s before its KILL, and the tool's	The unqualified docker stop uses the documented default grace period.
+sdv/cloud/burst/README.md	wait for a connection's answer (10 s), and the link's close takes up	burst.py CONNECT_ANSWER_S uses limits.py CONNECT_WAIT_S for the connection wait.
+sdv/cloud/burst/README.md	s), and the link's close takes up to 2 s more.	limits.py CLOSE_WAIT_S bounds the link close.
+sdv/cloud/burst/README.md	the PAYLOAD's: 'MQTT payload size', 128 KB, not adjustable, publishes and	Documented vendor MQTT payload quota named with its source in this paragraph, not a project run.
+sdv/cloud/burst/README.md	beside it a whole MQTT5 packet of 146 KB. The page does not say whether	Documented vendor MQTT packet quota named with its source in this paragraph, not a project run.
+sdv/connector/README.md	and the guards for the service's 8 KB and 8-level limits. |	limits.py SHADOW_DOC_LIMIT_BYTES and SHADOW_DOC_MAX_DEPTH set the service-limit guards.
+sdv/connector/README.md	once a second and 60 times in any 300 s at 16 KiB each, shadow publishes	limits.py TELEMETRY_MIN_GAP_S, TELEMETRY_MAX_PER_WINDOW and TELEMETRY_MAX_BYTES bound telemetry.
+sdv/connector/README.md	at most 10 times in any 300 s at 4 KB each. The window is closed (a	limits.py SHADOW_MAX_PER_WINDOW and SHADOW_MAX_BYTES cap shadow publishes within LIMITER_WINDOW_S.
+sdv/connector/README.md	and the refusal of a start within 120 s of it. The other file the	limits.py START_SPACING_S is the startstamp.py refusal interval.
+sdv/connector/README.md	- **Telemetry.** One batch every 60 s at 1 Hz and every 10 s at 10 Hz	limits.py BATCH_INTERVAL_S maps each configured sample rate to its telemetry batch interval.
+sdv/connector/README.md	batch every 60 s at 1 Hz and every 10 s at 10 Hz to the Basic Ingest	limits.py BATCH_INTERVAL_S maps each configured sample rate to its telemetry batch interval.
+sdv/connector/README.md	60 s to the previous one, and once at	limits.py SHADOW_MIN_INTERVAL_S sets the spacing before a scheduled shadow publish.
+sdv/connector/README.md	waits for the source's first value, 2 s at most.	limits.py FIRST_DOCUMENT_WAIT_S bounds the wait for the source's first value.
+sdv/connector/README.md	tried on a shadow topic for 60 s (`limits.SHADOW_RETRY_S`), the	limits.py SHADOW_RETRY_S spaces repeated shadow attempts.
+sdv/connector/README.md	at most six times in any closed 300 s. The order in a step is the	The six-attempt bound follows from limits.py SHADOW_RETRY_S and the closed LIMITER_WINDOW_S.
+sdv/connector/README.md	One process's worst case in 300 s is 60 telemetry publishes and	limits.py LIMITER_WINDOW_S and TELEMETRY_MAX_PER_WINDOW set the per-process telemetry cap.
+sdv/connector/README.md	directory (`startstamp.py`): within 120 s of it the start is	limits.py START_SPACING_S is the startstamp.py refusal interval.
+sdv/connector/README.md	written anew, so the refusals end 120 s later; a spool directory that	limits.py START_SPACING_S is the startstamp.py refusal interval.
+sdv/connector/README.md	three starts fall into any closed 300 s. This holds for starts on one	The three-start limit follows from limits.py START_SPACING_S and the closed LIMITER_WINDOW_S.
+sdv/connector/README.md	every 120 s, and the stamp's two ends	limits.py START_SPACING_S is the startstamp.py refusal interval.
+sdv/connector/README.md	120 s, and the stamp's two ends (119.999 s refused, 120.000 s let in) are	The startstamp test inputs bracket limits.py START_SPACING_S at millisecond resolution.
+sdv/connector/README.md	stamp's two ends (119.999 s refused, 120.000 s let in) are held in whole	The startstamp test inputs bracket limits.py START_SPACING_S at millisecond resolution.
+sdv/connector/README.md	(the SDK's: a persistent one), a 60 s keep-alive (1200 s), a 5 s	limits.py KEEP_ALIVE_S and OPERATION_TIMEOUT_S are the configured settings. The parenthetical values are SDK defaults.
+sdv/connector/README.md	persistent one), a 60 s keep-alive (1200 s), a 5 s operation time-out	limits.py KEEP_ALIVE_S and OPERATION_TIMEOUT_S are the configured settings. The parenthetical values are SDK defaults.
+sdv/connector/README.md	one), a 60 s keep-alive (1200 s), a 5 s operation time-out (none: a	limits.py KEEP_ALIVE_S and OPERATION_TIMEOUT_S are the configured settings. The parenthetical values are SDK defaults.
+sdv/connector/README.md	wait without end), a 3 s ping time-out, a 5 s TCP connect	limits.py PING_TIMEOUT_S and TCP_CONNECT_TIMEOUT_S are the configured timeouts.
+sdv/connector/README.md	without end), a 3 s ping time-out, a 5 s TCP connect time-out, the SDK's	limits.py PING_TIMEOUT_S and TCP_CONNECT_TIMEOUT_S are the configured timeouts.
+sdv/connector/README.md	3600 s at both ends (5 s to 60 s; the	limits.py SDK_RECONNECT_HOLD_S sets both SDK bounds. RECONNECT_MIN_S and RECONNECT_MAX_S identify the default range.
+sdv/connector/README.md	3600 s at both ends (5 s to 60 s; the uplink never uses a	limits.py SDK_RECONNECT_HOLD_S sets both SDK bounds. RECONNECT_MIN_S and RECONNECT_MAX_S identify the default range.
+sdv/connector/README.md	first publish after the back-off (5 s, doubling to 60 s while attempts	limits.py RECONNECT_MIN_S and RECONNECT_MAX_S bound the uplink's own backoff.
+sdv/connector/README.md	after the back-off (5 s, doubling to 60 s while attempts fail or	limits.py RECONNECT_MIN_S and RECONNECT_MAX_S bound the uplink's own backoff.
+sdv/connector/README.md	then. With the SDK's default timer (5 s, which the uplink	The SDK's default reconnect starts at the duration in limits.py RECONNECT_MIN_S.
+sdv/connector/README.md	is handed `SDK_RECONNECT_HOLD_S`, 3600 s, for both ends of its timer:	limits.py SDK_RECONNECT_HOLD_S sets both ends of the SDK reconnect timer.
+sdv/connector/README.md	shown no life for `LINK_LIFE_MAX_S`, 900 s: no connect, publish or	limits.py LINK_LIFE_MAX_S bounds time without a successful operation on the connection.
+sdv/connector/README.md	when the uplink stops waiting** (10 s) cannot be given up like that:	limits.py CONNECT_WAIT_S bounds the uplink's wait for a connect answer.
+sdv/connector/README.md	`--images loaded`, and a start within 120 s of the previous one this host's	limits.py START_SPACING_S is the startstamp.py refusal interval.
+sdv/connector/README.md	3.1.1, clean, 60 s, with no user name; the	test_sdv_connector_broker.py pins the CONNECT flags and limits.py KEEP_ALIVE_S.
+sdv/connector/README.md	come back (its reconnect timer is 8 s in the driver's own process, so	test_sdv_connector_broker.py HANDOFF_HOLD_S sets the test driver's reconnect timer.
+sdv/connector/README.md	the uplink's wait (shortened to 3 s in the driver's own	test_sdv_connector_broker.py overrides CONNECT_WAIT_S in the short-wait case.
+sdv/connector/README.md	a hold and a life of seconds). Told 25 s late,	test_sdv_connector_broker.py DEFER_S schedules the loss notification.
+sdv/connector/README.md	a hold of 30 s and a life of 8 s, and a publish	test_sdv_connector_broker.py HOLD_S and LIFE_S configure the driver. The publish is scheduled at HOLD_S minus 4 s.
+sdv/connector/README.md	a hold of 30 s and a life of 8 s, and a publish made 4 s before	test_sdv_connector_broker.py HOLD_S and LIFE_S configure the driver. The publish is scheduled at HOLD_S minus 4 s.
+sdv/connector/README.md	a life of 8 s, and a publish made 4 s before the SDK's own attempt	test_sdv_connector_broker.py HOLD_S and LIFE_S configure the driver. The publish is scheduled at HOLD_S minus 4 s.
+sdv/connector/README.md	is not written when the SDK's timer, 30 s, runs out with the	test_sdv_connector_broker.py HOLD_S sets the test driver's reconnect timer.
+sdv/connector/README.md	come back by itself, with a timer of 12 s: it makes its own CONNECT, the	test_sdv_connector_broker.py ALONE_HOLD_S sets the test driver's reconnect timer.
+sdv/connector/README.md	refuses a connector start within 120 s of the previous	limits.py START_SPACING_S is the startstamp.py refusal interval.
+sdv/connector/README.md	`startstamp.py` refuses it within 120 s of the	limits.py START_SPACING_S is the startstamp.py refusal interval.
+sdv/connector/README.md	refuses a connector start within 120 s of the previous one it made,	limits.py START_SPACING_S is the startstamp.py refusal interval.
+sdv/connector/README.md	starts can fall into one closed 300 s, each with its own limiter: the	The three-start limit follows from limits.py START_SPACING_S and the closed LIMITER_WINDOW_S.
+sdv/ctl/README.md	values (reply and connect timeouts 500 ms, the backoff from 100 ms	ctlclient.py REPLY_TIMEOUT_NS and CONNECT_TIMEOUT_NS configure the deadlines. ctlclient.py BACKOFF_FIRST_NS and BACKOFF_CAP_NS bound the configured doubling backoff.
+sdv/ctl/README.md	timeouts 500 ms, the backoff from 100 ms doubling to 2 s, the odometry	ctlclient.py REPLY_TIMEOUT_NS and CONNECT_TIMEOUT_NS configure the deadlines. ctlclient.py BACKOFF_FIRST_NS and BACKOFF_CAP_NS bound the configured doubling backoff.
+sdv/ctl/README.md	the backoff from 100 ms doubling to 2 s, the odometry freshness window	ctlclient.py BACKOFF_FIRST_NS and BACKOFF_CAP_NS bound the configured doubling backoff. ODOM_FRESH_NS is the freshness threshold.
+sdv/feeder/README.md	the per-step hook, the sender (the 20 ms and 50 ms timers, the repeat	The SliceDynamics and SliceGear timer periods come from the generated contract and slice.dbc.
+sdv/feeder/README.md	hook, the sender (the 20 ms and 50 ms timers, the repeat cap, no	The SliceDynamics and SliceGear timer periods come from the generated contract and slice.dbc.
+sdv/feeder/README.md	became current (SliceDynamics every 20 ms,	The SliceDynamics and SliceGear timer periods come from the generated contract and slice.dbc.
+sdv/feeder/README.md	SliceGear every 50 ms), each frame from the step	The SliceDynamics and SliceGear timer periods come from the generated contract and slice.dbc.
+sdv/feeder/README.md	up to `LATE_HOOK_GUARD_MS` (5 ms) after the instant: a frame goes	live.py LATE_HOOK_GUARD_MS is the allowance for a late step hook.
+sdv/feeder/README.md	`FREEZE_S` (2.0 s): at least AGE_MAX plus one tick	live.py FREEZE_S sets the freeze duration.
+sdv/feeder/README.md	phase, and four of the monitor's 500 ms deadlines, so a bridge that	live.py FREEZE_S is sized in part against four monitor deadlines at stack.py MONITOR_DEADLINE_MS.
+sdv/feeder/README.md	of the shortest message period (20 ms); it is no measured scheduling	live.py LATE_HOOK_GUARD_MS is chosen as one quarter of SliceDynamics' period.
+sdv/ota/README.md	Within 30 s, at least 3 heartbeats of the	ota_health.py DEADLINE_S and BEATS set the heartbeat window and count.
+sdv/ota/README.md	bounded by `RPC_TIMEOUT_S` (1 s). A databroker that does not	ota_kuksa.py RPC_TIMEOUT_S bounds one databroker read.
+sdv/stack/README.md	guest's 500 ms deadline: a probe whose socket	stack.py MONITOR_DEADLINE_MS sets the guest deadline.
+sdv/stack/README.md	waits, bounded (`CONSOLE_END_S`, 5 s), for as many `client done:`	step3.py CONSOLE_END_S bounds the wait for the final console lines.
+sdv/stack/README.md	the databroker, with a grace of 30 s,	stack.py CONNECTOR_STOP_S sets the stop grace before stopping the databroker.
+sdv/stack/README.md	`connector.env`; and a start within 120 s of the previous connector start	limits.py START_SPACING_S is the startstamp.py refusal interval.
+sdv/stack/README.md	its start record and still runs 3 s later (`FEEDER_SETTLE_S`):	stack.py FEEDER_SETTLE_S is the required time alive after the feeder start record.
+sdv/stack/README.md	or not); that a feeder still running 3 s after its start record has made	stack.py FEEDER_SETTLE_S is the required time alive after the feeder start record.
+sdv/steershim/README.md	through a first-order lag (`tau` 0.2 s) after the gain, so the inverse	The inverse model's tau is the interface's configured first-order lag time constant.
+sdv/connector/README.md	a publish exactly 300 s old still counts	limits.py LIMITER_WINDOW_S is a closed window, including its oldest endpoint.
+sdv/ctl/README.md	odometry freshness window 100 ms	ctlclient.py ODOM_FRESH_NS sets the odometry freshness threshold.

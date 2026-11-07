@@ -1,19 +1,10 @@
 name: tooling
 
-# Lint, type-check and unit-test the Python in this repo.
-#
-# SCOPE NOTE. The ruff and mypy lines below are the whole of the coverage --
-# read them, not this paragraph, for what is checked. Two places hold tracked
-# Python that they do not reach: scripts/twin/time-kvm-boot.py, and the as-run
-# copies under results/, which must never be reformatted. The rest of scripts/
-# and ipc-test/ contain none -- bash/PowerShell/batch and C -- so pointing a
-# linter at them would produce a green check over an empty file set, which is
-# worse than no check.
-#
-# NO QNX ANYWHERE. QNX SDP 8.0 is non-commercial-licensed; no QNX binary, IFS or
-# header may enter this repo or run on a GitHub-hosted runner. Nothing in this
-# job builds, links or boots anything QNX. It runs on stock ubuntu-latest with
-# no hardware attached.
+# Lint and native tests only. No QNX compiler, binary, header or guest runs here.
+# KVM elsewhere boots a startup-qemu-virt that is ours, not a QNX-supported configuration;
+# no timing claim attaches to that boot.
+# Ruff and mypy's command lines define their coverage. Recorded source copies
+# under results/ and scripts/twin/time-kvm-boot.py remain outside that coverage.
 
 on:
   push:
@@ -25,35 +16,77 @@ permissions:
 jobs:
   python:
     runs-on: ubuntu-latest
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      SDV_REQUIRE_GEN: '1'
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          # The tracked tools target 3.8 (a single walrus operator sets the
-          # floor); CI runs a current interpreter to catch deprecations early.
           python-version: '3.12'
 
+      # Pinned so a new release cannot turn a green PR red without a commit.
       - name: Install tooling
-        # Pinned so a new ruff release cannot turn a green PR red without a
-        # commit. The repo's own code has no third-party dependencies at all.
         run: python -m pip install --disable-pip-version-check ruff==0.16.8 pytest==9.1.1 mypy==1.18.2
 
+      # The rule selection and its rationale are in pyproject.toml.
       - name: ruff
-        # Configuration lives in pyproject.toml: line-length 150 and E,F,B,
-        # both chosen from a trial run against the real tree rather than
-        # guessed. See the comments there for why the default rule set was
-        # rejected.
-        run: ruff check --output-format=github orin-native scripts/ci scripts/aws scripts/twin tests
+        run: ruff check --output-format=github tests sdv orin-native scripts/ci scripts/aws scripts/twin
 
       - name: mypy
-        # Deliberately non-strict: the tracked Python carries zero annotations,
-        # so a strict run would emit noise proportional to ~14k lines. This is a
-        # regression guard against syntax-level and obvious call errors.
-        run: mypy scripts/ci scripts/aws scripts/twin tests
+        # Non-strict: a regression guard against syntax-level and obvious call errors.
+        # These standalone image builders share a module name. Check each
+        # separately so mypy reaches all of them without a duplicate module.
+        run: |
+          set -euo pipefail
+          mypy --no-incremental --exclude '^sdv/(connector|rosvss|carlaif)/build_image\.py$' \
+            scripts/ci scripts/aws scripts/twin tests \
+            sdv/connector sdv/cloud sdv/ota sdv/carla sdv/feeder sdv/ctl \
+            sdv/rosvss sdv/steershim sdv/drill sdv/carlaif \
+            sdv/arm64/awscan.py sdv/sim/carla010_iso.py
+          for f in sdv/connector/build_image.py sdv/rosvss/build_image.py sdv/carlaif/build_image.py; do
+            mypy --no-incremental "$f"
+          done
+
+      - name: Read the VSS archive pin
+        id: vss-source
+        run: |
+          python -c 'import ast; from pathlib import Path; t = ast.parse(Path("sdv/vss/generate.py").read_text()); print("sha256=" + next(ast.literal_eval(n.value) for n in t.body if isinstance(n, ast.Assign) and any(isinstance(x, ast.Name) and x.id == "ARCHIVE_SHA256" for x in n.targets)))' >> "$GITHUB_OUTPUT"
+
+      - name: Cache the pinned VSS archive and wheels
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/sdv-cache/vss-v6.0.tar.gz
+            ~/.cache/pip
+          key: ${{ runner.os }}-py312-vss-${{ steps.vss-source.outputs.sha256 }}-${{ hashFiles('sdv/vss/requirements.lock') }}
+
+      - name: Generate the VSS contracts and twin allowlist
+        # The generator checks the source-tag archive's SHA and embedded
+        # commit before extraction. Dependencies come only from the hash lock.
+        run: |
+          set -euo pipefail
+          python -m venv "$HOME/sdv-venv"
+          "$HOME/sdv-venv/bin/python" -m pip install --disable-pip-version-check \
+            --require-hashes --no-deps --only-binary=:all: -r sdv/vss/requirements.lock
+          "$HOME/sdv-venv/bin/python" -B sdv/vss/generate.py
+          "$HOME/sdv-venv/bin/python" -B sdv/connector/gen_allowlist.py
+          "$HOME/sdv-venv/bin/python" -B sdv/connector/gen_allowlist.py --check
 
       - name: pytest
-        run: pytest -q
+        # These opt-in files and the Windows-only case skip by their own marks;
+        # they are left out here so the hosted report lists only tests that can run.
+        # Git tests DO run here: a checkout on GitHub has usable native git.
+        run: |
+          pytest -q -rfEs -o addopts= -p no:cacheprovider --junitxml=sdv-out/pytest.xml \
+            --ignore=tests/test_sdv_connector_probe.py \
+            --ignore=tests/test_sdv_connector_broker.py \
+            --ignore=tests/test_sdv_burst_broker.py \
+            --deselect=tests/test_sdv_cloud.py::test_docker_path_reads_a_drive_path_for_a_prefix_whose_first_word_is_wsl_and_for_no_other
+
+      - name: Require the twin exclusion tests and monitor guard
+        run: python -B tests/twin_gate.py sdv-out/pytest.xml
 
       - name: No QNX artefact may enter CI or fixtures
         # A licence check, enforced rather than promised. If a QNX-derived
