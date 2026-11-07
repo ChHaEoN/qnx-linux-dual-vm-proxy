@@ -39,10 +39,8 @@ filter() {
 	# Replace every occurrence of `re` that stands alone, with `rep`.
 	#
 	# `num` (optional): the token is a NUMBER, and a digit run is not a
-	# standalone number if it is part of a decimal. FOUND 2026-09-21 by
-	# corrupting real data: the account mask took the 12 fraction digits of a
-	# latency sample, "0.100123456789," -- "." before, "," after, neither a
-	# word character -- and wrote "0.<account>,", which is no longer JSON.
+	# standalone number if it is part of a decimal. Masking the fraction of
+	# a numeric sample would write a token into it and break JSON.
 	#
 	# The rule is deliberately NOT "a dot on either side blocks". That first
 	# attempt would have let "account 123456789012." through -- a real id at
@@ -120,8 +118,8 @@ filter() {
 	#     and the epoch of a package version ("1:9.8") do not;
 	#   - it is not six pairs, a MAC: mask_macs has been over the line, and the
 	#     one it kept is the guest;
-	#   - it is not the link-local address of the guest, which follows from that
-	#     fixed MAC.
+	#   - it is not the unspecified or loopback address, or the link-local address
+	#     of the guest, which follows from that fixed MAC.
 	# The match is the leftmost run with two colons, taken whole: the pattern ends
 	# in a class that takes every hex digit and colon, so what follows a match is
 	# neither. AFTER mask_ips: in an IPv4-mapped address the run ends at the first
@@ -140,7 +138,7 @@ filter() {
 				if (length(g[i]) > 4) ok = 0
 				if (length(g[i]) != 2) pairs = 0
 			}
-			if (pairs || tolower(tok) == "fe80::5054:ff:fe11:1111") ok = 0
+			if (pairs || tok == "::" || tok == "::1" || tolower(tok) == "fe80::5054:ff:fe11:1111") ok = 0
 			out = out substr(rest, 1, RSTART - 1) (ok ? "<ipv6>" : tok)
 			prev = substr(tok, length(tok), 1)
 			rest = substr(rest, RSTART + RLENGTH)
@@ -214,6 +212,7 @@ if [ "${1:-}" = "selftest" ]; then
 	check "full v6"       "route 2001:db8:0:0:0:0:0:1 dev"     "2001:db8" 0
 	check "upper-case v6" "ADDR FE80::ABCD:1 UP"               "FE80" 0
 	check "another guest" "fe80::5054:ff:fe11:1112 is not it"  "fe80::" 0
+	check "beside loopback" "addr ::2 is not the loopback one" "::2" 0
 
 	echo "preserved direction:"
 	check "br0 addr"      "br0 192.168.100.1/24 up"            "192.168.100.1" 1
@@ -229,16 +228,18 @@ if [ "${1:-}" = "selftest" ]; then
 	# from its fixed MAC; the rest is data. (No kept line here may hold the login of the host
 	# the capture runs on, which the filter masks: the package version below is made up.)
 	check "guest link-local" "link fe80::5054:ff:fe11:1111/64 scope" "fe80::5054:ff:fe11:1111/64" 1
+	check "unspecified v6" "listening on [::]:22 and :: here"  "on [::]:22 and :: here" 1
+	check "loopback v6"   "listening on [::1]:631 and ::1 here" "on [::1]:631 and ::1 here" 1
 	check "clock time"    "at 13:20:34 on 2026-10-08T13:20:34Z" "at 13:20:34 on 2026-10-08T13:20:34Z" 1
 	check "package epoch" "qemu 1:9.8.7+ds-0example1.23 here"  "1:9.8.7+ds-0example1.23" 1
 	check "c++ scope"     "in client_endpoint_impl::send, x_::1" "client_endpoint_impl::send, x_::1" 1
 	check "trace header"  "TRACE_DATE:: Sun 08:20:16 SEC:: 3125" "TRACE_DATE:: Sun 08:20:16 SEC:: 3125" 1
 	check "five hex, nine groups" "sum 12345:6:7:8:9:a of 1:2:3:4:5:6:7:8:9" "12345:6:7:8:9:a of 1:2:3:4:5:6:7:8:9" 1
-	# 2026-09-21: the account mask corrupted a real latency sample. Both
-	# directions pinned -- the data must survive AND a real id must not.
-	check "12-digit fraction" "0.0012345678, 0.100123456789, 0.5000" "0.100123456789" 1
+	# A newly chosen fractional sample with the account rule digit width.
+	# Pin both directions: preserve data and mask an account id.
+	check "12-digit fraction" "0.0012345678, 0.123456789012, 0.5000" "0.123456789012" 1
 	check "decimal integer"   "value 123456789012.75 ms"            "123456789012.75" 1
-	check "fraction, EOL"     "p50 0.100123456789"                  "0.100123456789" 1
+	check "fraction, EOL"     "p50 0.123456789012"                  "0.123456789012" 1
 
 	echo "masked direction, numeric edge cases:"
 	check "id then period"    "the account is 111122223333."        "111122223333" 0

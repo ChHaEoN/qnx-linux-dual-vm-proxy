@@ -1,4 +1,6 @@
 #!/bin/bash
+# KVM here boots our startup-qemu-virt; this is not a QNX-supported
+# configuration, and no timing claim attaches to the boot.
 # User-data for one bare-metal A6 ladder session: it arms the session's two self-termination
 # nets before anything else, then installs what the run needs.
 # --instance-initiated-shutdown-behavior terminate turns a poweroff from inside the instance
@@ -26,8 +28,8 @@
 # after the wait it is scheduled again, and a second schedule replaces the first in logind
 # with no moment between them without one. `wait` then refuses the session: it goes on only
 # if SHUTDOWN_ARMED exists, the timer unit is active with no more than the session's minutes
-# left, the scheduled poweroff is 61-91 minutes ahead and the per-boot re-arm is installed;
-# otherwise it terminates the instance.
+# left, the scheduled poweroff is 61-91 minutes ahead (MIN-29 to MIN+1 for a session of MIN
+# minutes) and the per-boot re-arm is installed; otherwise it terminates the instance.
 #
 # SURVIVES A REBOOT. Both nets live in memory: a pending shutdown in /run, which a reboot
 # empties, and the transient timer in the service manager. User-data runs once per instance
@@ -50,8 +52,11 @@
 # synchronised, at the first arming and again at the schedule; `wait` prints it beside the
 # same reads taken then, whether it goes on or refuses.
 #
-# The 90 here and SHUTDOWN_MIN_EXPECTED in drive-metal.sh must agree
-# (tests/test_aws_tooling.py checks it).
+# THE SESSION'S MINUTES (SDV Phase 7 WP6-T). MIN=90 below is a session's that does
+# not choose. drive-metal.sh `launch` sends this file with that one line made MIN=N for
+# METAL_SESSION_MIN=N (60 to 180), every other byte as it is, and `wait` holds both nets to
+# the N it recorded. So the line stays exactly MIN=90, and once; the driver's default is the
+# same 90 (tests/test_aws_tooling.py checks both).
 M=/var/lib/cloud/instance
 MIN=90
 NET=qnx-metal-monotonic

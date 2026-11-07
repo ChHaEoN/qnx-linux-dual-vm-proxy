@@ -4,13 +4,14 @@ These pin the one rule that file exists to enforce -- a control is APPLIED AND
 VERIFIED, RECORDED AS ABSENT, or the run REFUSES; never skipped in silence --
 against fake sysfs trees and fake result files, so no board is needed.
 
-An adversarial review on 2026-09-21 confirmed 40 findings against the first
-draft, 39 of them reproduced, and every serious one had that same shape. The
-tests below are organised by the finding they pin, so a regression names the
-defect it has brought back.
+The tests are organised by failure mode, so a regression names the defect
+it has brought back.
 
 Each test was also checked the other way: the property must FAIL against the
 code it replaced. A test that only passes proves nothing.
+
+KVM here boots our startup-qemu-virt; this is not a QNX-supported
+configuration, and no timing claim attaches to the boot.
 """
 import itertools
 import json
@@ -150,8 +151,7 @@ SHARED_POLICY_SUDO = (
 
 
 def test_governor_pin_records_every_core_before_a_shared_policy_moves_it(tmp_path):
-    """The board day of 2026-10-18: reading each core after the previous core's pin recorded cpu1-3 and
-    cpu5 as "performance" (cpu0's and cpu4's pins had moved them), so the as-found record was wrong."""
+    """A shared cpufreq policy moves sibling cores; record them before any pin."""
     r = _run(tmp_path, 'm_governor_pin; for c in "${!GOV_ORIG[@]}"; do echo "ORIG ${c##*/cpu/} ${GOV_ORIG[$c]}"; done',
              ["schedutil"] * 6, sudo=SHARED_POLICY_SUDO)
     assert r.returncode == 0, r.stderr
@@ -353,8 +353,8 @@ def test_file_older_than_the_stamp_refuses(tmp_path):
 
 
 @pytest.mark.parametrize("field,value,message", [
-    ("n", 129, "n=129"),
-    ("bad", 171, "bad=171"),
+    ("n", 137, "n=137"),
+    ("bad", 183, "bad=183"),
     ("rejected_by_monitor", 1, "rejected_by_monitor=1"),
     ("warmup_discarded", 20, "warmup_discarded=20"),
     ("tag", "gpu_r9", "tag='gpu_r9'"),
@@ -362,8 +362,7 @@ def test_file_older_than_the_stamp_refuses(tmp_path):
 def test_degraded_arm_file_refuses(tmp_path, field, value, message):
     """REVIEW: a truncated or corrupted arm used to count as a full run-median.
 
-    n=129 and bad=171 are the numbers the reviewer's stalling monitor produced
-    against the old probe, which exited 0 and wrote that file.
+    The malformed counts are chosen below to exercise incomplete and bad arms.
     """
     def mutate(a, r, b):
         if (a, r) == ("gpu", 5):
@@ -510,22 +509,18 @@ def test_full_sequence_passes_even_though_stamp_after_rewrites_the_stamp(tmp_pat
 
 # ============================================================ the GPU load check
 
-# A real JetPack 6 tegrastats line, as the Orin printed it on 2026-09-21.
-TEGRA_LINE = ("09-21-2026 15:43:44 RAM 1928/7620MB (lfb 5x4MB) SWAP 0/3810MB (cached 0MB) "
-              "CPU [1%@729,3%@729,4%@729,3%@729,0%@729,0%@729] GR3D_FREQ {pct}% "
-              "cpu@48.281C soc2@47.718C soc0@48.531C gpu@48.25C tj@48.531C soc1@48.25C "
-              "VDD_IN 4563mW/4563mW VDD_CPU_GPU_CV 524mW/524mW VDD_SOC 1373mW/1373mW")
-# Captured from the board, 2026-09-21, with tegrastats run AS THE USER -- the way
-# m_thermal and m_gpu_busy_pct run it. The first version of this fixture was
-# written from memory and carried an "EMC_FREQ 0%@2133" field and a "@[1020]"
-# suffix on GR3D. A later review asked why, and one board command answered it:
-# tegrastats prints both only when run as root. So the user line below has
-# neither, and the root line the window sampler sees has both.
-TEGRA_LINE_ROOT = ("09-21-2026 16:47:06 RAM 1954/7620MB (lfb 4x4MB) SWAP 0/3810MB (cached 0MB) "
-                   "CPU [0%@883,0%@883,0%@883,0%@883,0%@729,0%@729] EMC_FREQ 0%@2133 GR3D_FREQ {pct}%@[305] "
-                   "NVDEC off NVJPG off NVJPG1 off VIC off OFA off APE 200 cpu@48.062C soc2@47.343C "
-                   "soc0@48.218C gpu@48.156C tj@48.218C soc1@48C VDD_IN 4523mW/4523mW "
-                   "VDD_CPU_GPU_CV 524mW/524mW VDD_SOC 1373mW/1373mW")
+# Synthetic JetPack 6-shaped input, with newly chosen numbers, not a capture.
+TEGRA_LINE = ("01-01-2026 00:00:00 RAM 1200/8000MB (lfb 6x4MB) SWAP 0/4000MB (cached 0MB) "
+              "CPU [1%@700,2%@700,3%@700,4%@700,0%@700,0%@700] GR3D_FREQ {pct}% "
+              "cpu@40.125C soc2@41.25C soc0@42.5C gpu@43.75C tj@44.5C soc1@45C "
+              "VDD_IN 4200mW/4200mW VDD_CPU_GPU_CV 600mW/600mW VDD_SOC 1400mW/1400mW")
+# Synthetic root-shaped input: EMC_FREQ and the GR3D clock suffix are present.
+# The user-shaped input above omits both. These test the accepted forms.
+TEGRA_LINE_ROOT = ("01-01-2026 00:00:00 RAM 1300/8000MB (lfb 7x4MB) SWAP 0/4000MB (cached 0MB) "
+                   "CPU [0%@800,0%@800,0%@800,0%@800,0%@700,0%@700] EMC_FREQ 0%@2200 GR3D_FREQ {pct}%@[320] "
+                   "NVDEC off NVJPG off NVJPG1 off VIC off OFA off APE 200 cpu@40.25C soc2@41.5C "
+                   "soc0@42.75C gpu@43.125C tj@44.25C soc1@45.5C VDD_IN 4300mW/4300mW "
+                   "VDD_CPU_GPU_CV 600mW/600mW VDD_SOC 1400mW/1400mW")
 
 
 def _stub_tegrastats(tmp_path, pct):
@@ -563,7 +558,8 @@ def test_gpu_arm_refuses_when_the_gpu_is_idle(tmp_path):
 
 # ============================================================ CPU idle states
 
-# The Orin's real cpuidle table, read on 2026-09-21: WFI at 1 us, c7 at 5000 us.
+# Kernel-advertised idle-state metadata used by the fixture. These values
+# are not measured wake-up costs.
 ORIN_IDLE = [("WFI", 1), ("c7", 5000)]
 
 
@@ -772,7 +768,7 @@ def test_default_k_fits_both_pinned_arm_sets(tmp_path, k, n, ok):
 
 # ============================================================ the window sampler
 
-def _sampler(tmp_path, snippet, emc_bpmp="2133000000", gpu_hz="306000000", tegra=True, gpu_node=True,
+def _sampler(tmp_path, snippet, emc_bpmp="2000000000", gpu_hz="300000000", tegra=True, gpu_node=True,
              sudo='[ "$1" = -n ] && shift; exec "$@"'):
     # Bytes, not text: on Windows write_text emits CRLF, and a sysfs value read
     # back with a trailing carriage return is a fixture artefact, not a finding.
@@ -781,14 +777,14 @@ def _sampler(tmp_path, snippet, emc_bpmp="2133000000", gpu_hz="306000000", tegra
     b = tmp_path / "bin"
     b.mkdir(exist_ok=True)
     t = b / "tegrastats"
-    line = {True: TEGRA_LINE_ROOT.format(pct=0), False: "RAM 1928/7620MB",
+    line = {True: TEGRA_LINE_ROOT.format(pct=0), False: "RAM 1200/8000MB",
             "user": TEGRA_LINE.format(pct=0)}[tegra]
     put(t, "#!/usr/bin/env bash\nwhile :; do echo '%s'; sleep 0.2; done\n" % line)
     t.chmod(0o755)
     clk = tmp_path / "clk"
     clk.mkdir(exist_ok=True)
     put(clk / "bpmp", emc_bpmp + "\n")
-    put(clk / "ccf", "204000000\n")
+    put(clk / "ccf", "200000000\n")
     devfreq = tmp_path / "devfreq"
     node = devfreq / ("17000000.gpu" if gpu_node else "15340000.vic")
     node.mkdir(parents=True, exist_ok=True)
@@ -804,8 +800,8 @@ def _sampler(tmp_path, snippet, emc_bpmp="2133000000", gpu_hz="306000000", tegra
 def test_sampler_preflight_passes_and_records_both_emc_sources(tmp_path):
     r = _sampler(tmp_path, 'm_sampler_preflight; cat "$OUT/clk-preflight.log"')
     assert r.returncode == 0, r.stderr
-    assert "emc_bpmp_hz=2133000000" in r.stdout and "emc_ccf_hz=204000000" in r.stdout
-    assert "gpu_hz=306000000" in r.stdout
+    assert "emc_bpmp_hz=2000000000" in r.stdout and "emc_ccf_hz=200000000" in r.stdout
+    assert "gpu_hz=300000000" in r.stdout
     assert "window sampler verified" in r.stdout
 
 
@@ -946,7 +942,7 @@ def _pinlog(tmp_path, lines):
     return _posix(p)
 
 
-PINNED_OK = ["cpuload: 2 thread(s) for 17 s (no GPU, no memory streaming), PINNED",
+PINNED_OK = ["cpuload: 2 thread(s) for 30 s (no GPU, no memory streaming), PINNED",
              "cpuload: thread 0 pinned to core 3 (verified)",
              "cpuload: thread 1 pinned to core 5 (verified)"]
 
@@ -957,7 +953,7 @@ def test_pins_confirmed_by_cpuload_pass(tmp_path):
 
 
 @pytest.mark.parametrize("lines,cores,why", [
-    (["cpuload: 2 thread(s) for 17 s (no GPU, no memory streaming), unpinned"], "3,5",
+    (["cpuload: 2 thread(s) for 30 s (no GPU, no memory streaming), unpinned"], "3,5",
      "a stale binary ignores CORES"),
     (PINNED_OK, "5,3", "thread 0 on core 5"),
     (PINNED_OK[:2], "3,5", "thread 1 on core 5"),
@@ -1011,12 +1007,13 @@ def test_sampler_preflight_announces_an_overridden_path(tmp_path):
     assert "WARNING: EMC_BPMP overridden" in r.stdout
 
 
+# Synthetic sampler lines, not a capture.
 @pytest.mark.parametrize("line,ok", [
-    ("1789998639.001839 emc_bpmp_hz=2133000000 emc_ccf_hz=204000000 gpu_hz=306000000", True),
-    ("1789998639.001839 emc_bpmp_hz= emc_ccf_hz=204000000 gpu_hz=306000000", False),
-    ("1789998639.001839 emc_bpmp_hz=2133000000 emc_ccf_hz= gpu_hz=306000000", False),
-    ("1789998639.001839 emc_bpmp_hz=2133000000 emc_ccf_hz=204000000 gpu_hz=", False),
-    ("1789998639,001839 emc_bpmp_hz=2133000000 emc_ccf_hz=204000000 gpu_hz=306000000", False),
+    ("1000000000.000001 emc_bpmp_hz=2000000000 emc_ccf_hz=200000000 gpu_hz=300000000", True),
+    ("1000000000.000001 emc_bpmp_hz= emc_ccf_hz=200000000 gpu_hz=300000000", False),
+    ("1000000000.000001 emc_bpmp_hz=2000000000 emc_ccf_hz= gpu_hz=300000000", False),
+    ("1000000000.000001 emc_bpmp_hz=2000000000 emc_ccf_hz=200000000 gpu_hz=", False),
+    ("1000000000,000001 emc_bpmp_hz=2000000000 emc_ccf_hz=200000000 gpu_hz=300000000", False),
 ])
 def test_every_window_must_hold_a_complete_clock_reading(tmp_path, line, ok):
     """FOUND BY REVIEW: only the preflight was checked, so a credential or node
@@ -1033,7 +1030,7 @@ def test_a_window_without_a_cpu_line_is_refused(tmp_path):
     out = tmp_path / "out"
     out.mkdir()
     (out / "clk-a_r1.log").write_bytes(
-        b"1789998639.001839 emc_bpmp_hz=2133000000 emc_ccf_hz=204000000 gpu_hz=306000000\n")
+        b"1000000000.000001 emc_bpmp_hz=2000000000 emc_ccf_hz=200000000 gpu_hz=300000000\n")
     (out / "tegra-a_r1.log").write_bytes(b"")
     r = _run(tmp_path, 'OUT="%s"; m_sampler_require a_r1; echo PASSED' % _posix(out))
     assert "PASSED" not in r.stdout and "0 line(s) with per-core CPU and EMC_FREQ during a_r1" in r.stderr
@@ -1047,7 +1044,7 @@ def test_a_read_that_fails_mid_run_records_empty_not_the_last_value(tmp_path):
     r = _sampler(tmp_path, snippet)
     assert r.returncode == 0, r.stderr
     last = r.stdout.strip().splitlines()[-1]
-    assert " emc_bpmp_hz= emc_ccf_hz=204000000 " in last, last
+    assert " emc_bpmp_hz= emc_ccf_hz=200000000 " in last, last
 
 
 def test_stamp_records_the_sampler_and_the_fifo_arms(tmp_path):
@@ -1751,9 +1748,10 @@ wait "$c"
 
 
 def test_sampler_stop_really_stops_when_sudo_will_not_relay(tmp_path):
-    """FOUND ON THE BOARD, 2026-09-21: the stop signalled sudo, sudo ignored it,
-    `wait` blocked for the whole 122 s ceiling and the root loop wrote on. The
-    exec-style stub every other test uses could not show it."""
+    """A sudo that does not relay a stop must not leave the sampler running.
+
+    An exec-style stub would hide the wrapper process and miss this case.
+    """
     snippet = ('m_sampler_preflight; t0=$SECONDS; m_sampler_start s; sleep 1.2; m_sampler_stop; echo "rc=$?"; '
                'echo "took=$((SECONDS - t0))"; a=$(wc -l < "$OUT/clk-s.log"); sleep 1.3; '
                'b=$(wc -l < "$OUT/clk-s.log"); echo "lines $a $b"')
@@ -1769,7 +1767,7 @@ def test_sampler_stop_really_stops_when_sudo_will_not_relay(tmp_path):
 
 # ============================================================ a window must be traced across its length
 
-CLK_OK = "1789998639.001839 emc_bpmp_hz=2133000000 emc_ccf_hz=204000000 gpu_hz=306000000"
+CLK_OK = "1000000000.000001 emc_bpmp_hz=2000000000 emc_ccf_hz=200000000 gpu_hz=300000000"     # made up, as above
 
 
 @pytest.mark.parametrize("clk,tg,ms,ok", [
@@ -2063,7 +2061,7 @@ CONNECT_REFUSED = ("def _cr(*a, **k):\n    raise ConnectionRefusedError(111, 'Co
 
 
 def test_a_connect_timeout_is_a_stall_when_stalls_are_recorded(tmp_path):
-    """FOUND BY REVIEW: the load runs ~5 s before the probe connects, so a stall can
+    """A load starts before the probe connects, so a stall can
     already be under way; the connect then timed out, the probe exited 2, and the
     run stopped -- while the same stall one frame later was recorded."""
     st = tmp_path / "stall.json"
@@ -2598,6 +2596,38 @@ def native_servers(tmp_path_factory):
     return d
 
 
+# sdv Phase 2, WP5 (SDV): the pins below that judge kinds 0 and 1, read the banners or write the
+# reply run against BOTH builds of monitor.c -- the default one above, and the vss build (MONITOR_EXT_KINDS=0x10,
+# the kind 4 wire specification, section 11), which serves :7100-:7102 in ifs-vss as well as kind 4 on
+# :7160/:7161. Each such test takes `monitor_build`, a directory holding `monitor` like native_servers, and runs
+# once per build: [default] and [vss]. The vss build is the native_vss fixture's line (tests/test_monitor_vss.py
+# VSS_FLAGS: -Wformat=2 -Wundef -Werror -ffp-contract=off), against the generated contract in sdv-out/gen; without
+# that contract the [vss] case skips. Kind 4 itself is tests/test_monitor_kind4*.py's, the golden (C1, C2)
+# tests/test_monitor_golden.py's. What this does NOT show: anything about the qcc build of either.
+MONITOR_BUILDS = ("default", "vss")
+VSS_GEN = os.path.join(HERE, "..", "sdv-out", "gen")
+VSS_GEN_HEADERS = ("vss_contract.h", "vss_profiles.h")
+
+
+@pytest.fixture(scope="module")
+def vss_servers(native_servers, tmp_path_factory):
+    """The vss build of the monitor, as native_vss compiles it; skips without the generated contract."""
+    if not all(os.path.isfile(os.path.join(VSS_GEN, h)) for h in VSS_GEN_HEADERS):
+        pytest.skip("needs the generated contract in sdv-out/gen (sdv/vss/generate.py)")
+    import test_monitor_vss as tmv
+    d = tmp_path_factory.mktemp("servers-vss")
+    r = subprocess.run([shutil.which("gcc"), *tmv.VSS_FLAGS, "-I", COMMON, "-I", VSS_GEN, "-o", str(d / "monitor"),
+                        MONITOR_C, SHM_MAP_POSIX_C, IVSHM_CLIENT_C], capture_output=True, text=True)
+    assert r.returncode == 0, "the vss build must compile clean under -Werror:\n" + r.stderr
+    return d
+
+
+@pytest.fixture(scope="module", params=MONITOR_BUILDS)
+def monitor_build(request, native_servers):
+    """The directory holding `monitor`, once per build: native_servers itself, then the vss build."""
+    return native_servers if request.param == "default" else request.getfixturevalue("vss_servers")
+
+
 def _free_udp_port():
     import socket
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -2699,10 +2729,11 @@ _RULES = [
 
 
 @pytest.fixture(scope="module")
-def udp_monitor(native_servers):
+def udp_monitor(monitor_build):
+    # sdv Phase 2, WP5: once per build, so every test that judges through it runs against both.
     import time as _t
     port = _free_udp_port()
-    p = subprocess.Popen([str(native_servers / "monitor"), str(port), "udp"],
+    p = subprocess.Popen([str(monitor_build / "monitor"), str(port), "udp"],
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     _t.sleep(0.3)
     yield port, p
@@ -2748,20 +2779,20 @@ def test_monitor_echoes_every_byte_it_does_not_judge(udp_monitor):
     assert got == bytes(want), "only the verdict and reason bytes may differ"
 
 
-def test_monitor_banners_the_harnesses_grep_are_pinned(native_servers, tmp_path):
+def test_monitor_banners_the_harnesses_grep_are_pinned(monitor_build, tmp_path):
     # run-ladder.sh:298 greps ':<port>/udp' in the UDP monitor's log, and :305
     # greps 'serving shm on file <file>,' in the host shm monitor's. A reworded
     # banner fails those runs at preflight, on the board, not here.
     import time as _t
     port = _free_udp_port()
-    p = subprocess.Popen([str(native_servers / "monitor"), str(port), "udp"],
+    p = subprocess.Popen([str(monitor_build / "monitor"), str(port), "udp"],
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     _t.sleep(0.3)
     p.terminate()
     out, _ = p.communicate(timeout=10)
     assert (":%d/udp" % port) in out.decode(), out
     f = _shm_file(tmp_path)
-    s = _shm_serve(native_servers, f)
+    s = _shm_serve(monitor_build, f)
     _t.sleep(0.3)
     s.terminate()
     out, err = s.communicate(timeout=10)
@@ -2850,9 +2881,45 @@ def test_an_honest_vlm_time_is_why_the_kind_exists(udp_monitor):
 
 @pytest.mark.parametrize("kind", [2, 7, 255])
 def test_an_unknown_claim_kind_is_rejected(udp_monitor, kind):
+    # sdv Phase 2: the vss build keeps this parameter too (kind4-spec section 10; kind 3 not added, owner,
+    # 2026-10-01), and udp_monitor runs it against both builds.
     port, _ = udp_monitor
     got = _exchange(port, _vlm_claim(500 + kind, kind=kind))
     assert (got[16 + 6], got[16 + 7]) == (1, 5), "kind %d: reason 5, claim-kind-unknown" % kind
+
+
+# sdv Phase 2, WP5 (kind4-spec sections 10 and 12, C26): only kind 4's REJECT lines are rate-limited, and only in
+# the vss build. A run of identical rejects of kind 0, kind 1 or an unknown kind -- more than twice kind 4's cap of
+# 11 lines a bucket -- prints one byte-identical line per frame in both builds, where kind 4's rule 1 would print
+# the first alone and its cap at most 11 a second; and no `vss summary:` line counts them.
+N_IDENTICAL = 25
+
+
+def test_identical_rejects_of_kinds_0_1_and_unknown_each_print_their_own_line(monitor_build):
+    import time as _t
+    blocks = [(_claim(800, 10, 95, 124), 1, "monitor: REJECT seq=800 class=10 conf=95 us=124 reason=class-out-of-range\n"),
+              (_vlm_claim(801, model=2), 6,
+               "monitor: REJECT seq=801 kind=vlm model=2 class=3 conf=95 us=260000 reason=vlm-model-unbounded\n")]
+    blocks += [(_vlm_claim(810 + k, kind=k), 5, "monitor: REJECT seq=%d kind=%d reason=claim-kind-unknown\n" % (810 + k, k))
+               for k in (2, 7, 255)]
+    port = _free_udp_port()
+    p = subprocess.Popen([str(monitor_build / "monitor"), str(port), "udp"],
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        _t.sleep(0.3)
+        for frame, reason, _line in blocks:
+            want = bytearray(frame)
+            want[16 + 6], want[16 + 7] = 1, reason
+            for _ in range(N_IDENTICAL):
+                assert _exchange(port, frame) == bytes(want), "every frame is judged: reject, reason %d" % reason
+    finally:
+        p.terminate()
+        out, err = p.communicate(timeout=10)
+    lines = out.decode("ascii").splitlines(keepends=True)
+    n = N_IDENTICAL * len(blocks)
+    assert [ln for ln in lines if ln.startswith("monitor: REJECT ")] == [ln for _f, _r, ln in blocks for _ in range(N_IDENTICAL)], out
+    assert not [ln for ln in lines if ln.startswith("monitor: vss summary:")], out
+    assert lines[-1] == "monitor: udp done: seen=%d accepted=0 rejected=%d dropped=0\n" % (n, n), (out, err)
 
 
 def test_vlm_claims_cross_the_shm_transport_unchanged(native_servers, tmp_path):
@@ -2996,13 +3063,15 @@ def test_vlm_client_claims_meet_the_monitor_over_tcp(native_servers):
         p.communicate(timeout=10)
 
 
-def test_the_monitor_announces_its_claim_kinds(native_servers):
+def test_the_monitor_announces_its_claim_kinds(monitor_build):
     # A serving monitor names its kinds and bounds on a line of its own, so a
     # guest console shows which rules judged a run, and an image can be
-    # checked for this build by the string alone.
+    # checked for this build by the string alone. sdv Phase 2 (kind4-spec C3):
+    # the vss build prints the same line, still naming kinds 0 and 1 only, and
+    # no announcement line of its own carries "claim kinds:".
     import time as _t
     port = _free_udp_port()
-    p = subprocess.Popen([str(native_servers / "monitor"), str(port), "udp"],
+    p = subprocess.Popen([str(monitor_build / "monitor"), str(port), "udp"],
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     _t.sleep(0.3)
     p.terminate()
@@ -3299,16 +3368,96 @@ def test_svc_refuses_a_deadline_it_cannot_honour(native_servers, args):
     assert r.returncode == 2 and "usage: monitor PORT svc DEADLINE_MS (1..60000)" in r.stderr, r
 
 
-@pytest.mark.parametrize("ms", [1, 2000, 60000])
-def test_svc_banner_and_stop_line_are_pinned(native_servers, ms):
+@pytest.mark.parametrize("ms", [1, 500, 2000, 60000])
+def test_svc_banner_and_stop_line_are_pinned(monitor_build, ms):
     # The live harnesses grep the banner on the guest console to confirm the
-    # image, and the stop line carries the run's miss count.
-    s = _Svc(native_servers, ms)
+    # image, and the stop line carries the run's miss count. sdv Phase 2: both
+    # builds; 500 is the vss image's :7160 deadline (kind4-spec section 13).
+    s = _Svc(monitor_build, ms)
     s.stop()
     s.wait_for("monitor: stopped (liveness misses=0)")
     assert ("monitor: service monitor listening on :%d (frame=64 bytes, conf_min=60%%), liveness deadline %d ms"
             % (s.port, ms)) in s.text().splitlines(), s.text()
     assert "monitor: claim kinds: 0 mnist (us <= 100000)" in s.text()
+
+
+# ============================================================ kind 4 in the service mode (sdv Phase 2, WP5)
+#
+# kind4-spec 16.1 C28, on the vss build with :7160's deadline of 500 ms (section 13): a rejected kind 4 claim
+# is life (it arms the deadline, and RESTORED follows it), a sentinel is not, and a silence of one deadline gives
+# one MISS and closes the connection. serve_svc() is unchanged by kind 4 but for its flush hook; this pins that
+# the one judge_frame() it calls gives kind 4 the liveness rules OD14 gave kinds 0 and 1. The frames are
+# sdv/frame's (tests/test_sdv_frame.py), judged by its oracle, sdv/frame/rules.py. What this does NOT show: the
+# guest build, or any timing beyond the deadline's own (SVC_SLACK, as above).
+
+SVC_K4_D = 0.500
+
+
+def test_c28_a_rejected_kind_4_claim_is_life_a_sentinel_is_not_and_a_silence_closes(vss_servers):
+    import socket
+    import test_sdv_frame as tsf
+    if tsf.C is None:
+        pytest.skip("needs the generated contract (sdv/vss/generate.py)")
+    t = tsf.tables()
+
+    def k4(seq, reason):
+        f = tsf._mutations()[reason](tsf.honest())
+        f = seq.to_bytes(8, "little") + f[8:]
+        assert tsf.rules.judge_frame(f, t) == (1, reason)
+        return f
+
+    def ask(c, f):
+        c.sendall(f)
+        got = _recv_all(c, 64)
+        assert got == tsf.rules.reply(f, t) and got[16 + 6] == 1, got.hex()
+
+    frames = {1: k4(1, 23), 2: k4(2, 23), 3: k4(3, 24)}
+    # A sentinel with a kind 4 body that is a reject: a monitor that judged it would write (1, 23) into the echo.
+    sentinel = b"\xff" * 8 + frames[1][8:]
+    s = _Svc(vss_servers, int(SVC_K4_D * 1000))
+    try:
+        with socket.create_connection(("127.0.0.1", s.port), timeout=5) as c:
+            ask(c, frames[1])                                   # a rejected claim arms the deadline
+            t0 = time.monotonic()
+            while time.monotonic() - t0 < 3 * SVC_K4_D:
+                c.sendall(sentinel)
+                assert _recv_all(c, 64) == sentinel, "a sentinel is echoed byte for byte, never judged"
+                time.sleep(SVC_K4_D / 4)
+            t_miss, line = s.wait_for("LIVENESS MISS")
+            assert "since seq=1 (deadline 500 ms, miss 1)" in line, line
+            assert SVC_K4_D - 0.005 <= t_miss - t0 < SVC_K4_D + SVC_SLACK, (t_miss - t0, line)
+            n = len(s.lines)
+            # The same reason again, so the limiter prints no line for it (rule 1): life all the same.
+            ask(c, frames[2])
+            _t, line = s.wait_for("LIVENESS RESTORED", after=n)
+            assert line.startswith("monitor: LIVENESS RESTORED: seq=2 after "), line
+        s.wait_for("monitor: client done: seen=2 accepted=0 rejected=2")
+        assert s.count("LIVENESS MISS") == 1 and s.count("client closed") == 0, s.text()
+        n = len(s.lines)
+        with socket.create_connection(("127.0.0.1", s.port), timeout=5) as c:
+            ask(c, frames[3])
+            t0 = time.monotonic()
+            c.settimeout(SVC_K4_D + 2)
+            assert c.recv(64) == b"", "the monitor must hang up on a client silent for a deadline"
+            t_eof = time.monotonic()
+        assert SVC_K4_D - 0.005 <= t_eof - t0 < SVC_K4_D + SVC_SLACK, t_eof - t0
+        s.wait_for("monitor: client closed: no complete frame for 500 ms", after=n)
+        _t, line = s.wait_for("LIVENESS MISS", after=n)
+        assert "since seq=3 (deadline 500 ms, miss 2)" in line, line
+        s.wait_for("monitor: client done: seen=1 accepted=0 rejected=1", after=n)
+    finally:
+        err = s.stop()
+    assert not err, err
+    s.wait_for("monitor: stopped (liveness misses=2)")
+    assert s.count("LIVENESS MISS") == 2 and s.count("LIVENESS RESTORED") == 1, s.text()
+    profile = tsf.nominal()
+    assert [ln for ln in s.text().splitlines() if ln.startswith("monitor: REJECT ")] == [
+        "monitor: REJECT seq=1 kind=vss profile=%d reason=vss-speed" % profile,
+        "monitor: REJECT seq=3 kind=vss profile=%d reason=vss-accel" % profile], s.text()
+    # seq=2 was suppressed, at least a second after seq=1, so its bucket's summary closes the first session.
+    lines = s.text().splitlines()
+    first_done = lines.index("monitor: client done: seen=2 accepted=0 rejected=2")
+    assert lines[first_done - 1] == "monitor: vss summary: seen=1 rejected=1 suppressed=1 by reason: 23=1", s.text()
 
 
 def test_the_liveness_demo_passes_against_the_real_monitor(native_servers, tmp_path):
@@ -3415,7 +3564,7 @@ def test_camera_check_passes_an_outage_the_monitor_reported(tmp_path):
     rows, bad = cc.check(log, con, 2.0)
     assert bad == [], bad
     assert any("MISS since seq=3, RESTORED at seq=4" in r for r in rows), rows
-    assert any("1 camera outage(s), 1 gap(s)" in r for r in rows), rows      # found on the board: it said 2
+    assert any("1 camera outage(s), 1 gap(s)" in r for r in rows), rows      # the first version double-counted an outage
 
 
 @pytest.mark.parametrize("drop,why", [
@@ -3517,8 +3666,9 @@ def _patterned(seq):
     return bytes(f)
 
 
-def test_the_plain_tcp_mode_still_writes_only_the_verdict(native_servers):
-    port, p = _tcp_monitor(native_servers)
+def test_the_plain_tcp_mode_still_writes_only_the_verdict(monitor_build):
+    # sdv Phase 2: both builds (monitor_build).
+    port, p = _tcp_monitor(monitor_build)
     try:
         req = _patterned(1)
         got = _tcp_exchange(port, [req])[0]
@@ -3531,9 +3681,10 @@ def test_the_plain_tcp_mode_still_writes_only_the_verdict(native_servers):
     assert "stamping" not in out, out
 
 
-def test_the_stamp_mode_writes_t_in_and_t_out_and_nothing_else(native_servers):
+def test_the_stamp_mode_writes_t_in_and_t_out_and_nothing_else(monitor_build):
+    # sdv Phase 2: both builds (monitor_build); the vss image's :7161 is this mode.
     import struct
-    port, p = _tcp_monitor(native_servers, "stamp")
+    port, p = _tcp_monitor(monitor_build, "stamp")
     try:
         reqs = [_patterned(1), _patterned(2)]
         got = _tcp_exchange(port, reqs)
@@ -4570,7 +4721,7 @@ def test_a_burst_the_monitor_refuses_fails_the_probe(native_servers, tmp_path):
 
 
 def test_one_host_monitor_serves_probe_after_probe(native_servers, tmp_path):
-    """A ladder run sends ~26 probes through one host monitor in turn."""
+    """Successive probe calls share one host monitor."""
     if not LINUX_IPC:
         pytest.skip("needs Linux")
     d, srv, path, shm, kick, mon = _notified_rig(native_servers)
@@ -4939,8 +5090,7 @@ def test_the_redactor_selftest_passes_under_each_awk(impl):
 
 
 def test_m_pids_of_silences_a_vanished_process_before_it_opens_it():
-    """FOUND 2026-09-24 in the rate run's log: two "/proc/<pid>/cmdline: No such
-    file or directory" lines. The read's `2>/dev/null` stood after its `<`, and
+    """A process can vanish before its cmdline is opened. The read's `2>/dev/null` stood after its `<`, and
     bash applies redirections left to right, so the failed open was reported on
     the caller's stderr first. A process vanishing mid-scan cannot be staged
     deterministically, so this pins the order in the source, and checks that
@@ -5345,8 +5495,8 @@ def test_a_wireless_interface_without_a_driver_link_reads_as_unread(tmp_path):
 #
 # SYNTHETIC lines, written from the layout L4T R39's tegrastats prints, with made-up values:
 # no SWAP field, NVDEC0 and NVJPG0 where R36 had NVDEC and NVJPG, two values per temperature
-# and three per rail. As the user (no EMC_FREQ, no GR3D clock) and as root. The two captured
-# JetPack 6 lines above stay as they are.
+# and three per rail. As the user (no EMC_FREQ, no GR3D clock) and as root.
+# The JetPack 6-shaped inputs above are synthetic too.
 TEGRA_LINE_R39 = ("01-01-2026 00:00:00 RAM 1000/7000MB (lfb 5x4MB) "
                   "CPU [1%@700,2%@700,3%@700,4%@700,0%@700,0%@700] GR3D_FREQ {pct}% "
                   "cpu@40C/41.5C soc2@40C/41C soc0@40.5C/41C gpu@40C/40.5C tj@41C/41.5C soc1@40C/41C "

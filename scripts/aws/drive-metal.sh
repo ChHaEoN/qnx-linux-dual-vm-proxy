@@ -2,10 +2,14 @@
 # drive-metal.sh -- drive ONE bare-metal AWS session for an A6 ladder, from the
 # operator's machine (Git Bash on Windows, or Linux; GNU sed and Python 3 needed).
 #
-#   drive-metal.sh launch        run-instances, self-terminating; root volume read back
-#   drive-metal.sh wait          until provisioned; PROVES both self-termination nets are armed
-#   drive-metal.sh upload        repo tarball, remote-ladder.sh, capture.py, image, gzipped disk
-#   drive-metal.sh run PHASE     remote-ladder.sh PHASE (setup|quiesce|launch|ladder|launch-live|liveness|launch-stamp|stamp|metal|capture)
+#   drive-metal.sh launch        run-instances, self-terminating; root volume read back, its size too
+#                                (METAL_VOLUME_SIZE, whole GiB from 16 to 64, default 16); the session's minutes
+#                                (METAL_SESSION_MIN, 60 to 180, default 90), recorded in the session state
+#   drive-metal.sh wait          until provisioned; PROVES both self-termination nets are armed, for the state's minutes
+#   drive-metal.sh upload        repo tarball, remote-ladder.sh, capture.py, image(s), gzipped disk, and
+#                                the files METAL_FILES names (to ~/a1/in, each hashed into inputs.env);
+#                                once per session, and a bundle.json among them must name the tarball's commit
+#   drive-metal.sh run PHASE     remote-ladder.sh PHASE (setup|quiesce|launch|ladder|launch-live|liveness|launch-stamp|stamp|metal|someip|harness|wait-run|capture)
 #   drive-metal.sh fetch         pub.tgz back, hash-verified, then leak-scanned
 #   drive-metal.sh terminate     terminate-instances, confirmed
 #   drive-metal.sh verify        nothing running|pending, ours shutting-down|terminated, no
@@ -23,8 +27,12 @@
 # self-termination, or to `terminate`.
 #
 # CONFIGURATION, none of it in the repo: METAL_KEY_NAME, METAL_PEM, METAL_SG_NAME, and
-# METAL_REPO_TAR / METAL_IFS / METAL_DISK_GZ -- in the environment or in
+# METAL_REPO_TAR / METAL_IFS / METAL_DISK_GZ (with METAL_IFS_EXTRA, METAL_FILES and
+# METAL_VOLUME_SIZE when a session needs them) -- in the environment or in
 # scripts/aws/.env.local, which .gitignore keeps out (see .env.example).
+#
+# A VSS SESSION (plan Phase 3) carries sdv in its repository tarball.
+# See README.md, "A vss session instead".
 #
 # SESSION STATE (instance id, volume id, address, known_hosts) lives in METAL_STATE, by
 # default outside the repo, and the script refuses a state or fetch directory inside
@@ -56,15 +64,23 @@ fi
 AWS="${AWS:-aws}"
 REGION="${METAL_REGION:-eu-central-1}"
 AMI="${METAL_AMI:-ami-0d9429f78b33241cd}"      # ubuntu-noble-24.04-arm64-server-20260923 (public)
-TYPE="${METAL_TYPE:-a1.metal}"
-SHUTDOWN_MIN_EXPECTED="${SHUTDOWN_MIN_EXPECTED:-90}"   # must match userdata.sh (a test checks it)
+TYPE="${METAL_TYPE:-c7g.metal}"                # 2026-10-17: c7g.metal by default; a1.metal by METAL_TYPE=a1.metal
+# (plan Phase 3): the root volume's size in GiB, 16 (the default) to 64; vss sessions use 32.
+# Checked by launch before any aws call, and read back from EC2 after it.
+VOLUME_SIZE="${METAL_VOLUME_SIZE:-16}"
+# SDV Phase 7 WP6-T (2026-10-26): the session's minutes. The default is userdata.sh's MIN=90, the minutes of a
+# session that does not choose (a test holds the two equal). `launch` alone reads METAL_SESSION_MIN, sends userdata.sh
+# with that one line made MIN=N and records N in the state as session_min; every later step reads the state's
+# (session_min_of), never the environment. The rendered copy's path, for launch's EXIT trap.
+SESSION_MIN_DEFAULT=90
+USERDATA_SENT=""
 # Polling pace and patience; the tests shrink them.
 POLL_S="${METAL_POLL_S:-5}"
 IP_WAIT_S="${METAL_IP_WAIT_S:-300}"
 PROV_WAIT_S="${METAL_PROV_WAIT_S:-900}"
 CONFIRM_TRIES="${METAL_CONFIRM_TRIES:-6}"
 READBACK_TRIES="${METAL_READBACK_TRIES:-30}"
-PHASES="setup quiesce launch ladder launch-live liveness launch-stamp stamp metal someip harness capture"
+PHASES="setup quiesce launch ladder launch-live liveness launch-stamp stamp metal someip harness wait-run capture"
 
 # Local paths in POSIX form: a pasted C:\... path would make scp and tar read "C:" as
 # a host, and sha256sum escape the backslashes in its output.
@@ -88,7 +104,7 @@ red_literals() {
 # The literals first, then every AWS shape. THE 12-DIGIT RULE (an account id) takes a run of exactly 12 digits that
 # stands alone. A letter or a digit on either side makes the run part of a longer token, and a "." before it makes it
 # a fraction: both stay. FOUND 2026-10-04: a letter on either side did not count, so a sha256 that holds 12
-# digits in a row (about 1 in 35 does) printed as ab<account>cd... in the inputs.txt upload shows. redact-aws.sh keeps
+# digits in a row was printed, in the lines the inputs.txt upload shows, with that run masked. redact-aws.sh keeps
 # the same runs; it also keeps one beside - or _, and the integer part of a decimal, which red() masks: its output is
 # a transcript, never data, so masking more costs nothing here.
 red() {
@@ -128,6 +144,36 @@ shutdown_left_min() {
 	[ -n "$usec" ] && [ -n "$now" ] && [ "$mode" = poweroff ] || return 1
 	case "$usec$now" in *[!0-9]*) return 1 ;; esac
 	echo $(( (10#$usec / 1000000 - 10#$now) / 60 ))
+}
+
+# THE SESSION'S MINUTES (SDV Phase 7 WP6-T). A whole number from 60 to 180 in plain decimal digits: no sign,
+# no leading zero, no space. Pure.
+session_min_ok() {
+	case "$1" in [6-9][0-9]|1[0-7][0-9]|180) return 0 ;; *) return 1 ;; esac
+}
+
+# The user-data one session sends: $1 userdata.sh, $2 the session's minutes (session_min_ok's), $3 the file to write.
+# The one line that is exactly MIN=<the default> becomes MIN=$2 and every other byte stays as it is, so the default
+# sends $1's own bytes. Fails, and writes nothing, unless exactly one line of $1 is that line: the minutes go there.
+# Binary mode, both: Git Bash's grep and sed drop the CR of a CRLF line unless told not to (-U, -b; no-ops on Linux).
+render_userdata() {
+	local n
+	n="$(grep -U -c "^MIN=$SESSION_MIN_DEFAULT\$" "$1" || true)"
+	[ "$n" = 1 ] || return 1
+	sed -b "s/^MIN=$SESSION_MIN_DEFAULT\$/MIN=$2/" "$1" > "$3"
+}
+
+# The session's minutes as `launch` recorded them in the state (session_min, one line, the number), for every later
+# step. A state without the file, a session launched before there was one, is the default's. A file that holds
+# anything else fails: no guess stands in for the minutes the instance was armed with. The file is read with the x
+# trick red() uses: Git Bash's command substitution drops a trailing CRLF, and a CR is no part of a number. cat's own
+# complaint about a file it cannot read (a directory, no permission) names the state's path, which red() holds back from
+# the transcript, so its stderr is dropped: the caller's abort line says what was wrong.
+session_min_of() {
+	local v="$SESSION_MIN_DEFAULT"
+	if [ -e "$STATE/session_min" ]; then v="$(cat "$STATE/session_min" 2>/dev/null; printf x)"; v="${v%x}"; v="${v%$'\n'}"; fi
+	session_min_ok "$v" || return 1
+	printf '%s' "$v"
 }
 
 # THE TWO NETS (2026-10-10). userdata.sh arms a monotonic timer first, which no step of the
@@ -257,7 +303,7 @@ arming_say() {
 	if [ -n "$aw" ] && [ -n "$au" ] && [ -n "$sw" ] && [ -n "$su" ]; then s1=$(( (sw - aw) - (su - au) )); fi
 	if [ -n "$sw" ] && [ -n "$su" ] && [ -n "$nw" ] && [ -n "$nu" ]; then s2=$(( (nw - sw) - (nu - su) )); fi
 	out+=("  step_arm_to_sched_s=$s1" "  step_sched_to_now_s=$s2")
-	# One pass through red() for the whole block: on Git Bash each pass costs about a second.
+	# One pass through red() for the whole block, avoiding repeated process starts.
 	{
 		printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "the arming, as the instance recorded it and as it reads now (wall clock in epoch seconds, uptime in seconds):"
 		printf '%s\n' "${out[@]}"
@@ -292,7 +338,7 @@ outside_repo() {   # $1 path  $2 what
 	[ -n "$top" ] || return 0
 	top="$(posix_path "$top")"
 	p="$(cd "$1" && pwd)"
-	# Windows opens E:/Project and /e/PROJECT as one directory, so compare the way that
+	# Windows opens C:/Work and /c/WORK as one directory, so compare the way that
 	# filesystem does -- and only there, where the two are not different paths.
 	if command -v cygpath >/dev/null 2>&1; then shopt -s nocasematch; fi
 	case "$p/" in "$top"/*) die "$2 ($p) is inside the repository; point it elsewhere" ;; esac
@@ -347,6 +393,27 @@ main() {
 			|| die "METAL_QEMU_PKG='$METAL_QEMU_PKG' is not a package version"
 	}
 	armed() { [ -e "$STATE/armed" ] && [ -s "$STATE/ip" ] || die "the safety net was not proven armed (run wait)"; }
+	# 2026-10-17 (SDV): a vss harness's VSS_HOST follows the type this session launched ($STATE/type), so that its
+	# records name the host they ran on: without the word, the type's is added (a1.metal: a1-metal, c7g.metal: c7g-metal);
+	# a word that is not the type's is refused, and so is a vss harness on a type with no host role. A state from before
+	# the type was recorded passes the words as given. Prints the words to send.
+	vss_host_words() {
+		local words="$1" t role="" given="" w
+		case " $words " in *" HARNESS=run-vss-setup.sh "*|*" HARNESS=run-vss-suite.sh "*) ;; *) printf '%s' "$words"; return 0 ;; esac
+		t="$(cat "$STATE/type" 2>/dev/null || true)"
+		[ -n "$t" ] || { printf '%s' "$words"; return 0; }
+		case "$t" in a1.metal) role=a1-metal ;; c7g.metal) role=c7g-metal ;; esac
+		for w in $words; do case "$w" in VSS_HOST=*) given="${w#VSS_HOST=}" ;; esac; done
+		[ -n "$role" ] || die "this session launched $t, which has no vss host role (a1.metal: a1-metal, c7g.metal: c7g-metal)"
+		if [ -z "$given" ]; then
+			say "the vss harness gets VSS_HOST=$role, the host mode of $t, which this session launched" >&2
+			printf '%s' "$words VSS_HOST=$role"
+		elif [ "$given" != "$role" ]; then
+			die "VSS_HOST=$given, but this session launched $t (VSS_HOST=$role): its records would name another host"
+		else
+			printf '%s' "$words"
+		fi
+	}
 	SSHO=(-o BatchMode=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$STATE/known_hosts"
 	      -o ConnectTimeout=8 -o ServerAliveInterval=20 -o LogLevel=ERROR)
 	[ -n "${METAL_PEM:-}" ] && SSHO=(-i "$(posix_path "$METAL_PEM")" "${SSHO[@]}")
@@ -354,29 +421,50 @@ main() {
 
 	case "${1:?step: launch|wait|upload|run|fetch|terminate|verify|verify-vol|clear}" in
 	launch)
+		# Whole GiB, 16 to 64, no leading zero: refused here, before any aws call or any state is written.
+		case "$VOLUME_SIZE" in
+			1[6-9]|[2-5][0-9]|6[0-4]) ;;
+			*) die "METAL_VOLUME_SIZE='$VOLUME_SIZE' is not a whole number of GiB from 16 to 64" ;;
+		esac
+		# The session's minutes (WP6-T): unset or empty for the default, else a whole number from 60 to 180, refused here
+		# as the size is.
+		local smin="${METAL_SESSION_MIN:-$SESSION_MIN_DEFAULT}"
+		session_min_ok "$smin" \
+			|| die "METAL_SESSION_MIN='$smin' is not a whole number of minutes from 60 to 180 in plain digits (unset or empty: the default $SESSION_MIN_DEFAULT)"
 		need METAL_KEY_NAME METAL_SG_NAME
 		qemu_pkg_shape
 		mkdir "$STATE/lock" 2>/dev/null || die "another launch holds $STATE/lock (or a stale one; remove it after checking)"
-		trap 'rmdir "$STATE/lock" 2>/dev/null || true' EXIT
+		trap '[ -z "$USERDATA_SENT" ] || rm -f "$USERDATA_SENT"; rmdir "$STATE/lock" 2>/dev/null || true' EXIT
 		local f
-		for f in id ip ip.pending vol armed terminated closed known_hosts inputs.txt token; do
+		for f in id ip ip.pending vol armed terminated closed known_hosts inputs.txt token type session_min; do
 			[ -e "$STATE/$f" ] && die "session state is not clean ($f exists): verify-vol, then clear"
 		done
-		local n m token
+		# The user-data this session sends (WP6-T): userdata.sh with its one line MIN=90 made MIN=<the minutes>, in a file
+		# of the session state, which outside_repo holds outside the repository. It goes as soon as run-instances returns,
+		# and with the lock on any earlier exit. A userdata.sh without exactly that one line is refused here.
+		USERDATA_SENT="$(mktemp "$STATE/userdata.sh.XXXXXX")"
+		render_userdata "$HERE/userdata.sh" "$smin" "$USERDATA_SENT" \
+			|| die "userdata.sh must hold exactly one line MIN=$SESSION_MIN_DEFAULT, the line the session's minutes go into: not launching"
+		local n m token sent=0
 		n="$(aws_ ec2 describe-instances --region "$REGION" --filters Name=instance-state-name,Values=running,pending \
 			--query 'length(Reservations[].Instances[])' --output text)"
 		[ "$n" = 0 ] || die "$n instance(s) already running or pending in $REGION -- not launching beside them"
+		# The minutes are session state from here: every later step reads them there, never in the environment.
+		printf '%s\n' "$smin" > "$STATE/session_min"
+		if [ "$smin" = "$SESSION_MIN_DEFAULT" ]; then say "session minutes: $smin"; else say "session minutes: $smin (not the default $SESSION_MIN_DEFAULT)"; fi
 		# A client token makes a retried or doubled launch return the SAME instance.
 		token="qnx-a6-$(date -u +%Y%m%dT%H%M%S)-$$-${RANDOM}"
 		echo "$token" > "$STATE/token"
-		if ! aws_ ec2 run-instances --region "$REGION" --image-id "$AMI" --instance-type "$TYPE" \
+		aws_ ec2 run-instances --region "$REGION" --image-id "$AMI" --instance-type "$TYPE" \
 			--key-name "$METAL_KEY_NAME" --security-groups "$METAL_SG_NAME" \
 			--client-token "$token" \
 			--instance-initiated-shutdown-behavior terminate \
-			--user-data "$(file_url "$HERE/userdata.sh")" \
-			--block-device-mappings '[{"DeviceName":"/dev/sda1","Ebs":{"DeleteOnTermination":true,"VolumeSize":16,"VolumeType":"gp3"}}]' \
+			--user-data "$(file_url "$USERDATA_SENT")" \
+			--block-device-mappings '[{"DeviceName":"/dev/sda1","Ebs":{"DeleteOnTermination":true,"VolumeSize":'"$VOLUME_SIZE"',"VolumeType":"gp3"}}]' \
 			--tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=qnx-a6-ladder}]' 'ResourceType=volume,Tags=[{Key=Name,Value=qnx-a6-ladder}]' \
-			--query 'Instances[0].InstanceId' --output text > "$STATE/id.tmp"; then
+			--query 'Instances[0].InstanceId' --output text > "$STATE/id.tmp" || sent=$?
+		rm -f "$USERDATA_SENT"   # sent or refused, the rendered copy goes as soon as run-instances returns
+		if [ "$sent" != 0 ]; then
 			# Did it start anyway? Ask by the token before giving up.
 			# describe-instances is eventually consistent: one empty answer straight after a
 			# create means nothing, so poll before concluding nothing was started.
@@ -389,13 +477,15 @@ main() {
 			case "$(cat "$STATE/id.tmp")" in i-*) mv "$STATE/id.tmp" "$STATE/id"; abort "run-instances failed, but an instance exists" ;; esac
 			# Nothing started, so nothing is owed -- and the token goes with the id:
 			# left behind it refuses the next launch and names a recovery (verify-vol,
-			# then clear) that cannot run, because no volume was ever recorded.
-			rm -f "$STATE/id.tmp" "$STATE/token"; die "run-instances failed and no instance carries this launch's token"
+			# then clear) that cannot run, because no volume was ever recorded. So do
+			# the minutes (WP6-T), for the same reason.
+			rm -f "$STATE/id.tmp" "$STATE/token" "$STATE/session_min"; die "run-instances failed and no instance carries this launch's token"
 		fi
 		mv "$STATE/id.tmp" "$STATE/id"
 		case "$(cat "$STATE/id")" in i-*) ;; *) abort "run-instances returned no instance id" ;; esac
 		set -E; trap 'abort "unexpected failure at line $LINENO"' ERR
 		date -u +%Y-%m-%dT%H:%M:%SZ > "$STATE/launched"
+		echo "$TYPE" > "$STATE/type"   # 2026-10-17: what `run harness` gives a vss harness as its host mode (vss_host_words)
 		say "launched $(iid) ($TYPE, $REGION) at $(cat "$STATE/launched")"
 		# One mapping, and it is the root, deleted on termination -- read back, not assumed.
 		# Right after a launch EC2 may not know the id yet: retry, do not die.
@@ -413,7 +503,16 @@ main() {
 		[ "$#" -eq 5 ] && [ "$2" = 1 ] && [ "$1" = "$3" ] && [ "$4" = True ] \
 			|| abort "block devices not as expected: root=${1:-?} mappings=${2:-?} first=${3:-?} delete_on_term=${4:-?}"
 		echo "$5" > "$STATE/vol"
-		say "root volume recorded ($1, delete on termination)"
+		# Its size, read back too: a volume other than the one asked for is a launch failure, and the
+		# policy above terminates. The volume is recorded first, so verify-vol can see it go.
+		local vsz=""
+		for _ in $(seq 1 "$READBACK_TRIES"); do
+			vsz="$(aws_ ec2 describe-volumes --region "$REGION" --volume-ids "$5" \
+				--query 'Volumes[0].Size' --output text 2>/dev/null || true)"
+			case "$vsz" in ''|*[!0-9]*) vsz=""; sleep "$POLL_S" ;; *) break ;; esac
+		done
+		[ "$vsz" = "$VOLUME_SIZE" ] || abort "the root volume reads back as ${vsz:-no size} GiB, not the $VOLUME_SIZE GiB asked for"
+		say "root volume recorded ($1, $vsz GiB, delete on termination)"
 		trap - ERR
 		;;
 	wait)
@@ -421,7 +520,11 @@ main() {
 		# budget legitimately shrinks as the session runs: re-running must not abort it.
 		if [ -e "$STATE/armed" ] && [ -s "$STATE/ip" ]; then say "the safety net is already proven armed"; exit 0; fi
 		set -E; trap 'abort "unexpected failure at line $LINENO"' ERR
-		local t0 ip="" st="" proof="" said=0 head left mleft mmin
+		local t0 ip="" st="" proof="" said=0 head left mleft mmin SHUTDOWN_MIN_EXPECTED
+		# The minutes both nets are held to are the state's, as launch recorded them (a state from before it did: the
+		# default's), never the environment's: the instance was armed with the minutes launch sent (WP6-T).
+		SHUTDOWN_MIN_EXPECTED="$(session_min_of)" \
+			|| abort "the session state's session_min is not a whole number of minutes from 60 to 180, so the minutes the instance was armed with are not known"
 		# The one read of the instance the proof is made on, printed once. Every refusal from the
 		# moment an address is known comes through `refuse`, so each says first what the instance
 		# recorded of its arming and what the same reads say now. abort itself is unchanged. The
@@ -485,6 +588,11 @@ main() {
 		;;
 	upload)
 		armed
+		# One upload per session (WP3fix). setup verifies the first and does not run again, so a second
+		# would leave the first tarball's repo on the instance beside the second's inputs.env. An upload that failed
+		# part-way never wrote `uploaded`, and may be run again.
+		[ ! -e "$STATE/uploaded" ] \
+			|| die "this session already uploaded (its state holds uploaded): setup verified that upload and does not run again, so a changed input needs a new session"
 		need METAL_REPO_TAR METAL_IFS METAL_DISK_GZ
 		local ip tar ifs disk ifs_name ifs_sha disk_sha rl_sha cap_sha
 		ip="$(cat "$STATE/ip")"
@@ -506,6 +614,38 @@ main() {
 			extra="${extra:+$extra }$xn:$(sha256_hex "$x")"
 			extra_paths+=("$x")
 		done
+		# plan Phase 3: METAL_FILES, the files a session carries besides its images (a vss
+		# session's upload bundle), space-separated paths, to ~/a1/in. Each name once, never an image's or
+		# the disk's, so in/ and img/ never name one file twice; each hashed into inputs.txt and inputs.env,
+		# and setup checks every one.
+		local fp fn files="" file_paths=()
+		for fp in ${METAL_FILES:-}; do
+			fp="$(posix_path "$fp")"
+			fn="$(basename "$fp")"
+			case "$fn" in ''|.|..|*[!A-Za-z0-9._-]*) die "file name '$fn' has characters this script will not pass on" ;; esac
+			case "$fn" in "$ifs_name"|disk-qemu.gz|disk-qemu) die "METAL_FILES names $fn, which is an image or the disk" ;; esac
+			for x in $extra; do [ "$fn" != "${x%%:*}" ] || die "METAL_FILES names $fn, which is an image or the disk"; done
+			for x in $files; do [ "$fn" != "${x%%:*}" ] || die "METAL_FILES names $fn twice"; done
+			[ -f "$fp" ] && [ -r "$fp" ] || die "METAL_FILES: no readable file $fp"
+			files="${files:+$files }$fn:$(sha256_hex "$fp")"
+			file_paths+=("$fp")
+		done
+		local commit; commit="$(git get-tar-commit-id < "$tar" 2>/dev/null || true)"
+		case "$commit" in *[!0-9a-f]*) commit="" ;; esac
+		[ "${#commit}" -eq 40 ] || commit=unknown
+		# The bundle's commit is the tarball's (WP3fix). bundle.json names the commit it was built from,
+		# and the setup harness's preflight would compare the two only on the instance, after a launch: so here,
+		# before anything is sent.
+		local bc py
+		for fp in ${file_paths[@]+"${file_paths[@]}"}; do
+			[ "$(basename "$fp")" = bundle.json ] || continue
+			[ "$commit" != unknown ] \
+				|| die "METAL_FILES names bundle.json, but the repo tarball carries no commit to compare it with (git get-tar-commit-id): make it with git archive <commit>"
+			py="$(pick_python)" || die "no working Python to read bundle.json's commit"
+			bc="$("$py" -c 'import json, sys; c = json.loads(sys.stdin.buffer.read().decode("utf-8")).get("commit"); print(c if isinstance(c, str) else "")' \
+				< "$fp" 2>/dev/null | tr -d '\r' || true)"
+			[ "$bc" = "$commit" ] || die "bundle.json names commit '${bc:-none}' and the repo tarball $commit: build both from one commit"
+		done
 		rl_sha="$(sha256_hex "$HERE/remote-ladder.sh")"; cap_sha="$(sha256_hex "$HERE/capture.py")"
 		{ echo "commit $(git get-tar-commit-id < "$tar" 2>/dev/null || echo unknown)"
 		  echo "repo.tar $(sha256_hex "$tar")"
@@ -513,18 +653,20 @@ main() {
 		  echo "capture.py $cap_sha"
 		  echo "ifs $ifs_name $ifs_sha"
 		  for x in $extra; do echo "ifs ${x%%:*} ${x#*:}"; done
-		  echo "disk $disk_sha"; } > "$STATE/inputs.txt"
-		rsh 'mkdir -p ~/a1/img'
+		  echo "disk $disk_sha"
+		  for x in $files; do echo "file ${x%%:*} ${x#*:}"; done; } > "$STATE/inputs.txt"
+		rsh 'mkdir -p ~/a1/img ~/a1/in'
 		scp "${SSHO[@]}" "$tar" "ubuntu@$ip:a1/repo.tar" 2>&1 | red
 		scp "${SSHO[@]}" "$HERE/remote-ladder.sh" "$HERE/capture.py" "ubuntu@$ip:a1/" 2>&1 | red
 		scp "${SSHO[@]}" "$ifs" "$disk" "${extra_paths[@]}" "ubuntu@$ip:a1/img/" 2>&1 | red
+		if [ "${#file_paths[@]}" -gt 0 ]; then
+			scp "${SSHO[@]}" "${file_paths[@]}" "ubuntu@$ip:a1/in/" 2>&1 | red
+		fi
 		# The instance checks everything against these before using it, and copies
 		# them into the record, so the record names what actually ran.
-		local commit; commit="$(git get-tar-commit-id < "$tar" 2>/dev/null || true)"
-		case "$commit" in *[!0-9a-f]*) commit="" ;; esac
-		[ "${#commit}" -eq 40 ] || commit=unknown
 		rsh "printf 'IFS_NAME=%s\nIFS_SHA256=%s\nDISK_SHA256=%s\nREMOTE_LADDER_SHA256=%s\nCAPTURE_SHA256=%s\nREPO_COMMIT=%s\n' '$ifs_name' '$ifs_sha' '$disk_sha' '$rl_sha' '$cap_sha' '$commit' > ~/a1/inputs.env"
 		[ -z "$extra" ] || rsh "printf 'IFS_EXTRA=%s\n' '$extra' >> ~/a1/inputs.env"
+		[ -z "$files" ] || rsh "printf 'FILES=%s\n' '$files' >> ~/a1/inputs.env"
 		red < "$STATE/inputs.txt"
 		# From here the instance holds this session's data: terminate wants a fetch first.
 		touch "$STATE/uploaded"
@@ -539,6 +681,7 @@ main() {
 			for w in $LADDER_ENV; do
 				[[ "$w" =~ ^[A-Z_][A-Z0-9_]*=[A-Za-z0-9._/-]*$ ]] || die "LADDER_ENV word '$w' is not NAME=value"
 			done
+			if [ "$phase" = harness ]; then LADDER_ENV="$(vss_host_words "$LADDER_ENV")" || exit 1; fi
 			envs+=("LADDER_ENV=$LADDER_ENV")
 		fi
 		# 2026-10-08: the qemu-system-arm version this session expects, for setup alone, which
@@ -625,12 +768,13 @@ main() {
 		fi
 		# The fetched capture defaults to $STATE/fetched and is the billed session's
 		# only artifact: clear the state around it, never through it.
-		local f
+		local f t
+		t="$(cat "$STATE/type" 2>/dev/null || true)"   # 2026-10-17: a record is named for the type it ran on
 		for f in "${STATE:?}/"*; do
 			case "$(basename "$f")" in fetched) ;; *) rm -rf "$f" ;; esac
 		done
 		if [ -e "$STATE/fetched" ]; then
-			say "session state cleared; the capture stays in $STATE/fetched -- move it into the record before another session fetches over it"
+			say "session state cleared; the capture stays in $STATE/fetched -- move it into the record before another session fetches over it${t:+ (this session launched $t: name the record for it)}"
 		else
 			say "session state cleared"
 		fi

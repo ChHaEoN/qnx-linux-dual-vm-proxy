@@ -1,4 +1,6 @@
 # lib-measure.sh -- the controls every A6 latency measurement shares.
+# KVM here boots our startup-qemu-virt; this is not a QNX-supported
+# configuration, and no timing claim attaches to the boot.
 #
 #   Sourced, not executed:   . "$(dirname "$0")/lib-measure.sh"
 #   Callers must then check: [ "${MEASURE_LIB_LOADED:-}" = 1 ] || exit 1
@@ -15,9 +17,8 @@
 # VERIFIED, RECORDED AS ABSENT, or the run REFUSES. Never skipped in silence.
 # Every serious measurement-tooling bug this project has found had the same
 # shape: a guard that failed quietly and let the run go on measuring something
-# other than what its files claimed. An adversarial review on 2026-09-21 found
-# 40 instances of that shape in the first draft of this file and the scripts on
-# it; the comments below name the ones it caught.
+# other than what its files claimed. The comments below name the failure
+# modes the controls are designed to catch.
 
 MEASURE_LIB_LOADED=1
 
@@ -34,7 +35,7 @@ die() { echo "FATAL: $*" >&2; exit 1; }
 # REVIEW FINDING: the completeness gate counted files by glob, and OUT was a
 # fixed path that nothing cleared. A probe that failed left the PREVIOUS run's
 # file for that (arm, round) in place, the count still came to k, and the
-# summary took a median over eleven new files and one old one -- possibly from
+# summary mixed old and new files -- possibly from
 # a different n, governor state or image -- while stamp.json described only the
 # new run. Reproduced. So: every run gets its own directory, and a directory
 # that already holds results is refused rather than reused.
@@ -648,6 +649,10 @@ m_round_order() {   # $1 round, then: first  middle...  last
 # docker.socket is active, activating or reloading (socket activation could start
 # dockerd mid-run, on any core; a socket on its way up or being reloaded is not yet
 # off). PLATFORM_POLICY=record only records, and is S6(c), not chosen.
+# PLATFORM_POLICY=g1 is gate G1's: Docker runs for the
+# gate, so the stamp REFUSES unless dockerd and containerd run within {3,5} and every running
+# container is too, read both as HostConfig.CpusetCpus (the request) and as its scope's
+# cpuset.cpus.effective (the truth). docker.socket may be active; shims are recorded only.
 #
 # Three functions, so the start of a run and its end read the host the same way:
 # _platform_gather / _platform_containers set the PLAT_* globals and never die,
@@ -813,18 +818,82 @@ _platform_json() {  # $1 = the policy word to record
 		"$PLAT_CONTD_EN" "$PLAT_CONTD_ACT" "$PLAT_DOCKERD_CPUS" "$PLAT_CONTD_CPUS" "$PLAT_SHIMS" "$PLAT_CONTAINERS" "$PLAT_VCAN"
 }
 
-# Sets the PLAT_* globals, or dies under the refuse policy. Called directly, never
+# The directory of the cgroup of the process whose pid is $1, from its /proc/<pid>/cgroup
+# line of the unified hierarchy, so either way Docker lays a container's scope out there
+# (system.slice/docker-<id>.scope, docker/<id>) is read. Prints nothing when it cannot be read.
+_g1_scope_dir() {   # $1 = pid
+	local line
+	while IFS= read -r line; do
+		case "$line" in
+			0::/*) printf '%s/fs/cgroup%s\n' "${SYS_ROOT:-/sys}" "${line#0::}"; return 0 ;;
+		esac
+	done 2>/dev/null < "${PROC_ROOT:-/proc}/$1/cgroup" || true
+}
+# 0 when a CPU list is not empty and names only cores of $2. _cores_within alone would pass an
+# empty list, and a container with no --cpuset-cpus has an empty request.
+_g1_on_cores() {    # $1 = core list  $2 = allowed core list
+	[ -n "$1" ] && _cores_within "$1" "$2"
+}
+# One reason per running container off $1 by either read, into G1_REASONS; the daemon asked as
+# _platform_containers asks it. Called directly: it sets a global.
+_g1_containers() {  # $1 = allowed core list
+	local cores="$1" ids id row req pid scope eff
+	local -a dk=(env -u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_CONFIG docker -H unix:///run/docker.sock)
+	G1_REASONS=""
+	if ! ids="$(timeout 10 "${dk[@]}" ps -q --no-trunc 2>/dev/null)" \
+		&& ! ids="$(sudo -n timeout 10 "${dk[@]}" ps -q --no-trunc 2>/dev/null)"; then
+		G1_REASONS="the running containers could not be listed"
+		return 0
+	fi
+	for id in $ids; do
+		if ! row="$(timeout 10 "${dk[@]}" inspect -f '{{.HostConfig.CpusetCpus}}|{{.State.Pid}}' "$id" 2>/dev/null)" \
+			&& ! row="$(sudo -n timeout 10 "${dk[@]}" inspect -f '{{.HostConfig.CpusetCpus}}|{{.State.Pid}}' "$id" 2>/dev/null)"; then
+			G1_REASONS="${G1_REASONS:+$G1_REASONS; }container $id could not be inspected"
+			continue
+		fi
+		req="${row%%|*}"; pid="${row##*|}"
+		_g1_on_cores "$req" "$cores" \
+			|| G1_REASONS="${G1_REASONS:+$G1_REASONS; }container $id has the request HostConfig.CpusetCpus '$req', outside {$cores}"
+		scope="$(_g1_scope_dir "$pid")"
+		eff=""
+		[ -z "$scope" ] || eff="$(cat "$scope/cpuset.cpus.effective" 2>/dev/null || true)"
+		_g1_on_cores "$eff" "$cores" \
+			|| G1_REASONS="${G1_REASONS:+$G1_REASONS; }container $id has the effective cpus '$eff' (its scope's cpuset.cpus.effective), outside {$cores}"
+	done
+}
+
+# Sets the PLAT_* globals, or dies under the refuse or g1 policy. Called directly, never
 # inside $(...): a die there would end only the subshell. Every reason is collected
 # before the die, so one refusal names everything that is wrong.
 m_platform_state() {
 	local host_cores="3,5" d lists cpus parts outside unreadable why reasons=""
 	case "$PLATFORM_POLICY" in
-		refuse|record) ;;
-		*) die "PLATFORM_POLICY='$PLATFORM_POLICY' is not a policy; use 'refuse' (default) or 'record' (S6(c) only)" ;;
+		refuse|record|g1) ;;
+		*) die "PLATFORM_POLICY='$PLATFORM_POLICY' is not a policy; use 'refuse' (default), 'record' (S6(c) only) or 'g1' (gate G1's)" ;;
 	esac
 	[ "${PROC_ROOT:-/proc}" = /proc ] || say "WARNING: PROC_ROOT overridden to $PROC_ROOT -- the platform check reads it; test use only"
 	[ "${SYS_ROOT:-/sys}" = /sys ] || say "WARNING: SYS_ROOT overridden to $SYS_ROOT -- test use only"
 	_platform_gather
+	if [ "$PLATFORM_POLICY" = g1 ]; then
+		for d in dockerd containerd; do
+			case "$d" in dockerd) lists="$PLAT_DOCKERD_CPUS" ;; *) lists="$PLAT_CONTD_CPUS" ;; esac
+			if [ "$lists" = "not running" ]; then
+				reasons="${reasons:+$reasons; }$d is not running, so it is not within {$host_cores}"
+				continue
+			fi
+			IFS=';' read -r -a parts <<< "$lists" || true
+			for cpus in "${parts[@]}"; do
+				if [ "$cpus" = unknown ] || ! _g1_on_cores "$cpus" "$host_cores"; then
+					reasons="${reasons:+$reasons; }$d is running on cores '$lists', outside {$host_cores}"
+					break
+				fi
+			done
+		done
+		_g1_containers "$host_cores"
+		[ -z "$G1_REASONS" ] || reasons="${reasons:+$reasons; }$G1_REASONS"
+		[ -z "$reasons" ] \
+			|| die "platform refused under PLATFORM_POLICY=g1: $reasons. Gate G1 keeps dockerd, containerd and every container on {$host_cores}."
+	fi
 	if [ "$PLATFORM_POLICY" = refuse ]; then
 		for d in dockerd containerd; do
 			case "$d" in dockerd) lists="$PLAT_DOCKERD_CPUS" ;; *) lists="$PLAT_CONTD_CPUS" ;; esac
@@ -1597,20 +1666,36 @@ m_sampler_start() {  # $1 = tag
 	# dead run cannot leave one behind for long.
 	ims="$(_ims_ceil)"
 	ceil=$(( (${N:-1000} + ${WARMUP:-200}) * ims / 1000 + ${PROBE_TIMEOUT_S:-10} + 120 ))
-	# FOUND ON THE BOARD, 2026-09-21, by the first smoke test -- the unit tests'
-	# sudo stub could not show it. The loop used to run as a background
-	# `sudo -n timeout ...` and be stopped with `sudo -n kill <sudo's pid>`. sudo
-	# before 1.9.13 -- the board then had 1.9.9 -- does not relay a signal sent from a
-	# process in sudo's OWN process group, and the script, both sudos and the
-	# kill all shared it: the stop was ignored, `wait` blocked until the 122 s
-	# ceiling, and the loop wrote on through it. Now a short sudo starts
-	# `timeout` in the background and prints its pid. timeout leads its own
-	# process group and forwards a TERM to all of it, so it is signalled directly.
+	# A sudo wrapper may not relay a signal from its own process group. A loop
+	# stopped through that wrapper can keep writing while wait holds the caller.
+	# A short sudo therefore starts timeout in the background and prints its pid.
+	# timeout leads its own group and receives the stop signal directly.
 	root="$(sudo -n bash -c 'timeout "$1" tegrastats --interval 500 > "$2" 2>/dev/null & echo $!' \
 		_ "$ceil" "$OUT/tegra-$t.log" 2>/dev/null)"
 	SAMPLER_ROOT="$SAMPLER_ROOT $root"
 	root="$(sudo -n bash -c 'timeout "$1" env LC_ALL=C bash -c "$2" _ "$3" "$4" "$5" > "$6" 2>/dev/null & echo $!' \
 		_ "$ceil" "$SAMPLER_LOOP" "$EMC_BPMP" "$EMC_CCF" "$GPU_DEVFREQ" "$OUT/clk-$t.log" 2>/dev/null)"
+	SAMPLER_ROOT="$SAMPLER_ROOT $root"
+}
+# Gate G1's clock sampler: SAMPLER_LOOP alone, on core 4, with the
+# arm's bound as its ceiling, in the same clk-*.log form, for the whole arm. Not m_sampler_start:
+# that ceiling comes from a ladder's N and interval, and it starts tegrastats as well. A clock
+# that cannot be read here (a host with no EMC node) leaves its field empty, as the loop does;
+# m_sampler_stop stops it. A GPU node that is absent leaves gpu_hz empty: never a refusal here.
+# _g1_gpu_node sets GPU_DEVFREQ, and gate G1's harness also calls it before the stamp, whose
+# sampler_paths names the node. Called directly: it sets a global.
+_g1_gpu_node() {
+	local d
+	GPU_DEVFREQ=""
+	for d in "$DEVFREQ_ROOT"/*; do
+		case "$(cat "$d/name" 2>/dev/null)$(basename "$d")" in *gpu*) GPU_DEVFREQ="$d/cur_freq"; break ;; esac
+	done
+}
+m_clock_sampler_start() {  # $1 = tag  $2 = ceiling, in seconds
+	local t="$1" ceil="$2" root
+	_g1_gpu_node
+	root="$(sudo -n bash -c 'timeout "$1" taskset -c 4 env LC_ALL=C bash -c "$2" _ "$3" "$4" "$5" > "$6" 2>/dev/null & echo $!' \
+		_ "$ceil" "$SAMPLER_LOOP" "$EMC_BPMP" "$EMC_CCF" "${GPU_DEVFREQ:-/nonexistent}" "$OUT/clk-$t.log" 2>/dev/null)"
 	SAMPLER_ROOT="$SAMPLER_ROOT $root"
 }
 # Returns non-zero if a sampler survived, and never dies: it also runs from the
@@ -1724,12 +1809,9 @@ m_build_cpuload() {  # $1 = source  $2 = binary to write
 # unloaded. Now a loaded arm is verified at both ends of its probe window, and a
 # GPU arm must SHOW the GPU busy, not just have a process alive.
 #
-# REVIEW FINDING: the load used to run its full duration -- ~17 s against a ~5 s
-# settle-plus-probe window -- then be waited for, so each loaded arm went on
-# heating a passively cooled board for ~10 s after measurement ended, and that
-# heat landed on the next arm. The load is now stopped as soon as the probe
-# finishes. Its duration argument stays generous only so it cannot run out
-# before the probe does.
+# A load left running after the probe can heat the following arm. Stop it
+# when the probe ends; its generous duration argument only keeps it from
+# ending before the probe.
 LOAD_PIDS=""
 m_load_start() {    # $1 log path, then the command and its arguments
 	local log="$1"; shift
@@ -1765,13 +1847,9 @@ m_load_stop() {
 }
 # GR3D busy percentage from one tegrastats line, or -1 if it cannot be read.
 #
-# FOUND ON THE FIRST REAL RUN, 2026-09-21: the first version piped the match
-# through `grep -oE '[0-9]+'`, which on "GR3D_FREQ 99%" also matches the 3
-# INSIDE "GR3D" -- so it returned "3" and "99" on two lines, the integer test
-# failed, and a busy GPU was reported as unreadable. It refused the run,
-# which is the right direction to fail, but a check that can never pass blocks
-# every run. The number is now taken as the field AFTER the label, and anything
-# that is not a single integer is rejected by name.
+# Matching every digit also takes the digit inside GR3D, instead of only
+# its value. Read the field after the label; reject anything that is not
+# one integer.
 m_gpu_busy_pct() {
 	local v
 	v="$(timeout 3 tegrastats --interval 1000 2>/dev/null | head -1 \

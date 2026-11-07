@@ -1,6 +1,9 @@
 # This .gitignore is conservative because the QNX NCEULA forbids redistributing
 # QNX binaries, IFS images, or compiled QNX components in any form. The patterns
 # below exist to make accidental commits of QNX-derived artifacts very hard.
+#
+# KVM here boots our startup-qemu-virt; this is not a QNX-supported
+# configuration, and no timing claim attaches to the boot.
 
 # QNX-derived binaries — NEVER commit
 *.bin
@@ -19,11 +22,8 @@ output/
 qnx800/
 qnx710/
 
-# Model weights — NEVER commit. Not a licence question first but a size one:
-# every quant of every candidate is 0.4-5 GB, so GitHub's 100 MB per-file block
-# would refuse the push only AFTER the blob was already in local history, which
-# is the position that cost a history rewrite on 2026-09-22. What the repo
-# records instead is the manifest: HF repo id, revision, filename, sha256.
+# Model weights stay outside the repository. The manifest records their
+# HF repo id, revision, filename and sha256.
 *.gguf
 *.safetensors
 *.onnx
@@ -46,6 +46,12 @@ ipc-test/qnx-safety-monitor/qnx-safety-monitor-live
 ipc-test/qnx-safety-monitor/qnx-safety-monitor-stamp
 ipc-test/qnx-safety-monitor/qnx-safety-monitor-bell
 ipc-test/qnx-safety-monitor/qnx-safety-monitor-unmask
+# The SDV direction's guest monitors (kind 4 VSS claims; the Autoware plan's control and gap
+# kinds), named before the first build, for the same reasons.
+ipc-test/qnx-safety-monitor/qnx-safety-monitor-vss
+ipc-test/qnx-safety-monitor/qnx-safety-monitor-carla
+ipc-test/qnx-safety-monitor/qnx-safety-monitor-ctl
+ipc-test/qnx-safety-monitor/qnx-safety-monitor-gap
 
 # Secrets / credentials / cloud
 .env
@@ -53,6 +59,13 @@ ipc-test/qnx-safety-monitor/qnx-safety-monitor-unmask
 !.env.example
 *.pem
 *.key
+# Device certificates (AWS IoT hands out *.pem.crt) and key stores
+*.crt
+*.p12
+*.pfx
+# The twin's device directory keeps its endpoint and names in this file (sdv/stack: --env-file). The stack
+# refuses a device directory inside the repo; this is for a copy made by hand.
+connector.env
 .ec2-instance-id
 .ec2-*.json
 .aws/
@@ -78,28 +91,20 @@ ipc-test/qnx-its-probe/qnx-its-probe-2v
 # Interview / application material: local only, never published (owner,
 # 2026-09-20 for the narrative, 2026-09-21 for the JD mapping).
 #
-# This hides the file from the tip only: it is present in 10 earlier commits of
-# this public repo. The owner reviewed that on 2026-09-20 and decided NOT to
-# rewrite history -- do not re-raise it. The reasoning, so it does not have to
-# be re-derived: the earliest commit carrying the file is the repo's FIRST one,
-# so a rewrite changes all 222 commit SHAs and breaks 62 commit references
-# across docs/ (findings.md 23, orin-native-port-plan.md 17, orin-port.md 11,
-# and others). Exposure is small (forks=0, stars=1, watchers=0) and the content
-# is interview prose, not a credential -- the risk is perception, not secrecy.
+# This hides the file from the tip only. The owner reviewed its earlier
+# publication and chose to keep the history; do not re-raise that decision.
+# Rewriting it would break the commit references in the public documentation.
 docs/interview-narrative.md
 # Same rule, same reason: architecture brief written for CV prep (2026-09-20).
 # This one has never been committed, so it leaves no history behind it.
 docs/cv-architecture-brief.md
 # Same rule, same reason: a table mapping a job description to repo artefacts.
-# Untracked from the tip on 2026-09-21; it remains in 5 earlier commits, and
-# history is not being rewritten -- see the note above. Its basename is also in
+# Untracked from the tip on 2026-09-21; history is kept -- see the note above.
+# Its basename is also in
 # claims_lib.LOCAL_ONLY so the prose scan skips it locally as CI does.
 docs/jd-mapping.md
-# Phase-0 session-resume prompt, unpublished 2026-09-21. It was an INSTRUCTION
-# to a reader -- "read CLAUDE.md", "test subagent_type: research", "5 commits
-# so far" against 248 -- naming three things the repo no longer has. A dated
-# record that mentions a removed file is correct; an instruction to use one is a
-# trap. Its one substantive line, the honest-framing rule, is now in README.
+# Phase-0 session-resume prompt: unpublished development instructions.
+# Current public state and the honest-framing rule belong in README.
 docs/onboarding-prompt.md
 # idlc-generated sources: regenerated at build time from av.idl, and they carry
 # no licence header of their own, so they are not committed.
@@ -200,22 +205,13 @@ orin-native/tools/memcanary-w
 # from QNX binaries and must never be committed.
 *.sym
 
-# The agent roster: removed from the public repo 2026-09-21 (owner). It described
-# a 14-role automotive-SDV team process that the work largely did not follow --
-# 22 of 248 commits mention an agent (git log --grep=agent -i), and the real
-# work used ad-hoc task
-# delegation. A document asserting an organisational structure the repo cannot
-# evidence is the same class of problem the claims gate exists to catch.
-# Both trees stay on disk so the subagent definitions keep working locally.
+# The agent roster is local development tooling. The public repository does
+# not assert a team structure from these definitions. Both trees stay local.
 agents/
 .claude/agents/
 
-# The AI briefings: unpublished 2026-09-21 (owner). They are development
-# tooling, and a repo should carry ONE public statement of current state --
-# README -- not two that can drift. Every fact in them is already public
-# elsewhere: the distinctive ones appear in 6 to 147 other files under docs/ and
-# results/. What is not public is the synthesis, which is the owner's work.
-# Both stay on disk, so Claude Code and Codex still load them.
+# AI briefings are private development tooling. README is the one public
+# statement of current state. Both files remain available to the local tools.
 CLAUDE.md
 AGENTS.md
 
@@ -234,3 +230,8 @@ results/gicv3-nisv-debug/
 results/orin-native-port/[0-9]*T-*/
 logs/sample-boot/*.log
 logs/sample-boot/*.txt
+
+# The SDV direction's generated and runtime output inside the tree: VSS-generated artefacts,
+# databroker/feeder/connector output, the local manifest and spool, Ditto and hawkBit data,
+# certificates. One ignored root; recordings live outside the repo (~/sdv-recordings/).
+sdv-out/

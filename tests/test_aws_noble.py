@@ -36,6 +36,9 @@ What these tests do NOT show: that the image launches, what its kernel calls the
 that its KVM counters read, that vsomeip builds there, or anything about a guest; nor that
 systemd on an instance answers as the stubs do, that its clock is ever stepped, or that either
 net fires. Those are the rehearsal session's to show.
+
+KVM here boots our startup-qemu-virt; this is not a QNX-supported
+configuration, and no timing claim attaches to the boot.
 """
 import gzip
 import hashlib
@@ -878,7 +881,7 @@ def test_the_capture_comment_names_the_package_version_user_empty_protects():
     """USER is emptied for the capture because the login, "ubuntu", stands inside the QEMU
     package's version. The comment said so with the 22.04 package's string alone."""
     text = _text(REMOTE)
-    at = text.index("USER= python3")
+    at = text.index("\n\tUSER= ")  # the line also sets CAPTURE_INCOMPLETE, before python3
     comment = text[text.rindex("\n\t# USER empty", 0, at):at]
     assert "0ubuntu" in comment and "24.04" in comment, comment
 
@@ -966,7 +969,6 @@ _V6_MASKED = [
     ("ADDR FE80::ABCD:1 UP", "ADDR <ipv6> UP"),
     ("2001:db8::2", "<ipv6>"),
     ("src=2001:db8::2,dst=2001:db8::3;", "src=<ipv6>,dst=<ipv6>;"),
-    ("listening on [::]:7100 and ::1", "listening on [<ipv6>]:7100 and <ipv6>"),   # the scan refuses these two as well
     # The scan's own limit, and so the redactor's: a scope whose two names are hex digits only
     # and that stands alone is an address by every rule here.
     ("ns a::b here", "ns <ipv6> here"),
@@ -976,12 +978,13 @@ _V6_MASKED_REDACTOR_ONLY = [
     ("fe80::5054:ff:fe11:1111 then fe80::5054:ff:fe11:1112", "fe80::5054:ff:fe11:1111 then <ipv6>"),
 ]
 _V6_KEPT = [
+    "listening on [::]:7100 and ::1",                         # unspecified and loopback: the scan keeps both
     "guest link fe80::5054:ff:fe11:1111/64 scope link",       # the guest's own, from its fixed MAC
     "guest link FE80::5054:FF:FE11:1111 up",
     "mac=52:54:00:11:11:11 set",                               # six pairs: a MAC, and the guest's
     "time 13:20:34 and 2026-10-08T13:20:34Z",
     "qemu 1:9.8.7+ds-0example1.23 installed",                  # a package version's epoch
-    "  TRACE_DATE:: Sun Sep 27 08:20:16 2026 TRACE_CYCLES_PER_SEC:: 31250000",
+    "  TRACE_DATE:: Thu Jan  1 00:00:00 2026 TRACE_CYCLES_PER_SEC:: 12345678",    # a traceprinter header's shape, made up
     "in client_endpoint_impl::send, a lone request waits",
     "std::string and x_::1 and tcp::7100",                     # glued to a word: not an address
     "kvm:kvm_mmio and sched:sched_switch fired",
@@ -1040,6 +1043,7 @@ def test_red_and_the_redactor_agree_on_an_ipv6_address(awk, line, want):
 @pytest.mark.parametrize("line,red_says", [
     ("guest link fe80::5054:ff:fe11:1111/64 scope link", "guest link <ipv6>/64 scope link"),
     ("in client_endpoint_impl::send, a lone request waits", "in client_endpoint_impl<ipv6>send, a lone request waits"),
+    ("listening on [::]:7100 and ::1", "listening on [<ipv6>]:7100 and <ipv6>"),   # the scan and the redactor keep both
 ])
 def test_red_masks_more_ipv6_shapes_than_the_redactor_which_handles_data(line, red_says):
     """The redactor's output is a record: it keeps the guest's own address and a C++ scope. red()'s
@@ -1102,7 +1106,7 @@ def test_the_readme_says_which_names_setup_may_print_for_the_tick_handler():
 # red(): a 12-digit run inside a longer token (found 2026-10-04)
 
 # red() and a sha256 that holds 12 digits in a row. upload prints inputs.txt through red(), and its
-# 12-digit rule took any such run between a letter and a letter: about 1 sha256 in 35 printed with <account> in it.
+# 12-digit rule took any such run between a letter and a letter: the hash printed with a masked digit run.
 _SHA12_MID = "ab123456789012cd" + "ef" * 24      # 64 hex characters, exactly 12 digits in a row, inside
 _SHA12_HEAD = "123456789012" + "ab" * 26         # at the token's head
 _SHA12_TAIL = "ab" * 26 + "123456789012"         # at its tail
@@ -1471,9 +1475,11 @@ def test_the_nets_constants_are_what_the_design_asks_for():
         "`wait` reads the file user-data writes, and no more of it than a record can be"
     assert body.count(_ud_const("DEADLINE")) >= 2, "the per-boot script reads the deadline user-data writes"
     assert _ud_const("PERBOOT") in driver
-    # The window `wait` holds the wall-clock poweroff to, where it is computed and where it is said.
-    d = re.search(r'SHUTDOWN_MIN_EXPECTED="\$\{SHUTDOWN_MIN_EXPECTED:-(\d+)\}"', driver)
+    # The window `wait` holds the wall-clock poweroff to, where it is computed and where it is said. Its minutes are the
+    # session state's (SDV Phase 7 WP6-T), and the default's for a state without them: userdata.sh's MIN.
+    d = re.search(r"^SESSION_MIN_DEFAULT=(\d+)$", driver, re.M)
     assert d and int(d.group(1)) == NETS_MIN
+    assert 'SHUTDOWN_MIN_EXPECTED="$(session_min_of)"' in driver
     assert '[ "$left" -gt $((SHUTDOWN_MIN_EXPECTED - 30)) ] && [ "$left" -le $((SHUTDOWN_MIN_EXPECTED + 1)) ]' in driver
     lo, hi = NETS_MIN - 29, NETS_MIN + 1
     assert "poweroff is %d-%d minutes ahead" % (lo, hi) in re.sub(r"\s*\n#\s*", " ", body), "user-data's header says another window"

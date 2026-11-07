@@ -26,6 +26,7 @@ SPLIT = b"\nset -u\n"
 
 PINS = {
     "run-arrival.sh": "eff1b72a5a501ad0b4b05efe7dd2c33143948cfecdba28f1d604ccf015f89229",
+    "run-aw-g1.sh": "1e2bee637447435df10822c1b431c4b5a93eacc3af5a9a67a346abb92e3a9e77",
     "run-bell.sh": "b86c64bb8107095a91ec985e85dba6a93ee5262c9caaea3649f73be9f2d09ee1",
     "run-bellrate.sh": "afe88399ed8ca907a283d47faf8cdf28129c8b67aa5aa0395800d5fbbe489d38",
     "run-bellrobust.sh": "453f5ee7806a30d58fc12c14c44d98981c5586827f00064db6d1259a4c10f33f",

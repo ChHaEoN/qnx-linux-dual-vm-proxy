@@ -1,0 +1,22 @@
+# requirements-dry.lock -- the environment camera_client.py's dry run uses on the PC (SDV plan Phase 7, WP9):
+# camera_client.py --frames DIR --dry, over a labelled set of simulated frames, needs cv2 to read each frame and
+# write the scratch, and nothing else. OpenCV headless 4.14.0.94 (no GUI libraries) and the one package it
+# requires, numpy (its requires_dist: numpy>=2 on Python 3.9 and later), each pinned exactly, with the sha256 of the
+# one file pip installs for it on WSL Ubuntu-24.04, CPython 3.12, x86_64 (PyPI's own digests). On any other
+# platform pip finds no file with a listed hash and stops: that is intended.
+#
+# For the PC's dry run only. The board's camera path uses its system python3 and apt's python3-opencv, never this
+# file, and no frame of a real camera is ever read through it.
+#
+# Build, in WSL (a user venv of its own; nothing system-wide):
+#   python3 -m venv ~/sdv-camera-venv
+#   ~/sdv-camera-venv/bin/pip install --require-hashes --no-deps -r orin-native/edge-llm/requirements-dry.lock
+#
+# --no-deps makes this file the whole resolution: a dependency missing here fails the install instead of being
+# fetched unpinned. Regenerate only when a pin changes, and record why.
+numpy==2.5.3 \
+    --hash=sha256:b7e18c623bb5c95acb3b3328861272816ba199fb531921c5d6d0b675f1fde9e3
+    # numpy-2.5.3-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+opencv-python-headless==4.14.0.94 \
+    --hash=sha256:211e581f5a4670acbbe08fff36a35e9946039d2eea28b80394632d036d1be527
+    # opencv_python_headless-4.14.0.94-cp37-abi3-manylinux_2_28_x86_64.whl
