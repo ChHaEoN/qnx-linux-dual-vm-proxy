@@ -1,0 +1,9 @@
+# v2.Dockerfile.in -- the drill's v2 of hard-brake-hazard (sdv/drill; SDV Phase 6 WP3): v1's image plus one layer.
+#
+# Project-written. build_drill.py writes this into a staged context outside the repo, with v1's tag put in after
+# FROM (a tag it has checked names v1's pinned or built ID), beside the app's own hazard.py edited in exactly two
+# constants (APP_VERSION, DECEL_OFF_MPS2). Nothing else changes: the user, the entrypoint, the environment and every
+# other file are v1's. The build passes --provenance=false --sbom=false, so the image is one manifest.
+FROM {base}
+LABEL org.opencontainers.image.version="1.1.0"
+COPY hazard.py /app/hazard.py

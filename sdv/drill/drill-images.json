@@ -1,0 +1,46 @@
+{
+ "format": 1,
+ "about": "The drill's arm64 images (sdv/drill/build_drill.py build --arch arm64 --write-pins; SDV Phase 6 WP3): v1 is a copy of sdv/stack/images.json's local.hard-brake-hazard.arm64 pin (tests/test_sdv_drill.py holds them equal), v2 is v1 plus one layer (hazard.py with APP_VERSION 1.1.0 and DECEL_OFF_MPS2 2.5), v3 is v2 with only its entrypoint changed to one that exits non-zero at once. Each id is the containerd store's ID of the built or loaded image (its manifest digest) and config_digest the identity every Phase 6 record carries; base is the pair it was made on.",
+ "app": "hard-brake-hazard",
+ "arm64": {
+  "1.0.0": {
+   "id": "sha256:1c8bc577d71b59de71b32e24f6a5c627e8357d9a3edcb95b988e178b50cf79d0",
+   "config_digest": "sha256:90f06851a5230e031635f811d1a4bf0abf3e9976ceadcfd16705ce1328235c9c",
+   "tag": "sdv-local/hard-brake-hazard:1.0.0-arm64",
+   "base": "images.json local.hard-brake-hazard.arm64"
+  },
+  "1.1.0": {
+   "id": "sha256:0183bb25e45e23913063db7f141ba587bde92dc4ebcfe9b2187cfc9568ce6f6f",
+   "config_digest": "sha256:c82d2a33a666a73b213b668852c7faade2ea1984ba0af80a125e0cdc15e7dcfe",
+   "tag": "sdv-drill/hard-brake-hazard:1.1.0-arm64",
+   "base": {
+    "id": "sha256:1c8bc577d71b59de71b32e24f6a5c627e8357d9a3edcb95b988e178b50cf79d0",
+    "config_digest": "sha256:90f06851a5230e031635f811d1a4bf0abf3e9976ceadcfd16705ce1328235c9c"
+   }
+  },
+  "1.2.0": {
+   "id": "sha256:b793eeaacaa7375acc0d720c103743748c4c5e4abf60685ce7d524ef3fb6b546",
+   "config_digest": "sha256:39b1d5fbbdf29b1ea39c15a50d8532dae5b2a44b03c75ec85bfb321e1ed168d1",
+   "tag": "sdv-drill/hard-brake-hazard:1.2.0-arm64",
+   "base": {
+    "id": "sha256:0183bb25e45e23913063db7f141ba587bde92dc4ebcfe9b2187cfc9568ce6f6f",
+    "config_digest": "sha256:c82d2a33a666a73b213b668852c7faade2ea1984ba0af80a125e0cdc15e7dcfe"
+   }
+  }
+ },
+ "edits": [
+  [
+   "APP_VERSION = \"1.0.0\"",
+   "APP_VERSION = \"1.1.0\""
+  ],
+  [
+   "DECEL_OFF_MPS2 = 3.0",
+   "DECEL_OFF_MPS2 = 2.5"
+  ]
+ ],
+ "v3_entrypoint": [
+  "python",
+  "-c",
+  "raise SystemExit(3)"
+ ]
+}

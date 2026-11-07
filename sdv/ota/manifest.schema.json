@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:sdv-local:schema:manifest:1",
+  "title": "Local deployment manifest, version 1",
+  "description": "One host's list of the container images and host units that may run on it, by identity (manifest-classes.md sections 3, 4 and 9). Read by the updater ota-lite (sdv/ota/ota_lite.py check and run), which acts on app-class entries only. Local only: the file never enters the repo, a registry, S3 or the twin. Does not demonstrate: that any listed image runs, or any secure OTA property; the manifest is an access-control list for one host's updater, nothing more.",
+  "$comment": "manifest-classes.md section 9 with exactly the changes of the Phase 6 specification (section 2.5): (1) the local-build pull carries the store's ID, store_id, because the updater cannot find a built image by its config digest; (2) image_id is the config digest everywhere (2.1); (3) the ecr pull's ref names the literal placeholder <registry> and the repository sdv-twin/<name>, and the updater puts the registry host in from a separate root-only file (owner decision D7: the account id stands in that one file per pulling host, never here). Checks the schema cannot express are the loader's (sdv/ota/ota_manifest.py).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["manifest_version", "host_role", "arch", "written", "components", "scenarios"],
+  "properties": {
+    "manifest_version": { "const": 1 },
+    "host_role": { "enum": ["pc", "a1-metal", "c7g-metal", "orin"] },
+    "arch": { "enum": ["amd64", "arm64"] },
+    "written": { "$ref": "#/$defs/date" },
+    "components": { "type": "array", "maxItems": 64, "items": { "$ref": "#/$defs/component" } },
+    "scenarios": { "type": "array", "maxItems": 64, "items": { "$ref": "#/$defs/scenario" } }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "date": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+    "name": { "type": "string", "maxLength": 32, "pattern": "^[a-z][a-z0-9]*(-[a-z][a-z0-9]*)*$" },
+    "scenario_name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,47}$" },
+    "path": { "type": "string", "pattern": "^(~|/)[A-Za-z0-9._/-]{1,255}$", "not": { "pattern": "(^|/)[.][.](/|$)" } },
+    "pull": {
+      "oneOf": [
+        { "type": "object", "additionalProperties": false, "required": ["via", "ref", "manifest_digest"],
+          "properties": { "via": { "const": "ecr" }, "ref": { "type": "string", "pattern": "^<registry>/sdv-twin/[a-z0-9][a-z0-9._-]*@sha256:[0-9a-f]{64}$" }, "manifest_digest": { "$ref": "#/$defs/sha256" } } },
+        { "type": "object", "additionalProperties": false, "required": ["via", "ref", "manifest_digest"],
+          "properties": { "via": { "const": "upstream" }, "ref": { "type": "string", "pattern": "^[a-z0-9.-]+/[a-z0-9._/-]+@sha256:[0-9a-f]{64}$" }, "manifest_digest": { "$ref": "#/$defs/sha256" } } },
+        { "type": "object", "additionalProperties": false, "required": ["via", "tar_path", "tar_sha256"],
+          "properties": { "via": { "const": "tar" }, "tar_path": { "$ref": "#/$defs/path" }, "tar_sha256": { "$ref": "#/$defs/sha256" } } },
+        { "type": "object", "additionalProperties": false, "required": ["via", "store_id"],
+          "properties": { "via": { "const": "local-build" }, "store_id": { "$ref": "#/$defs/sha256" } } }
+      ]
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "class", "form", "added"],
+      "properties": {
+        "name": { "$ref": "#/$defs/name" },
+        "class": { "enum": ["app", "platform"] },
+        "form": { "enum": ["container", "host-unit"] },
+        "image_id": { "$ref": "#/$defs/sha256" },
+        "pull": { "$ref": "#/$defs/pull" },
+        "app_version": { "type": "string", "pattern": "^(0|[1-9][0-9]{0,2})[.](0|[1-9][0-9]{0,2})[.](0|[1-9][0-9]{0,2})$" },
+        "allowed_scenarios": { "type": "array", "minItems": 1, "maxItems": 64, "uniqueItems": true, "items": { "$ref": "#/$defs/scenario_name" } },
+        "replay_source": { "const": true },
+        "unit": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,31}[.]service$" },
+        "files": { "type": "array", "minItems": 1, "maxItems": 16, "items": {
+          "type": "object", "additionalProperties": false, "required": ["path", "sha256"],
+          "properties": { "path": { "$ref": "#/$defs/path" }, "sha256": { "$ref": "#/$defs/sha256" } } } },
+        "added": { "$ref": "#/$defs/date" }
+      },
+      "allOf": [
+        { "if": { "properties": { "form": { "const": "container" } } },
+          "then": { "required": ["image_id", "pull"], "not": { "anyOf": [ { "required": ["files"] }, { "required": ["unit"] } ] } } },
+        { "if": { "properties": { "form": { "const": "host-unit" } } },
+          "then": { "required": ["files", "unit"], "properties": { "class": { "const": "platform" } },
+                    "not": { "anyOf": [ { "required": ["image_id"] }, { "required": ["pull"] }, { "required": ["replay_source"] } ] } } },
+        { "if": { "properties": { "class": { "const": "app" } } },
+          "then": { "required": ["app_version", "allowed_scenarios"], "properties": { "form": { "const": "container" } },
+                    "not": { "required": ["replay_source"] } } },
+        { "if": { "properties": { "class": { "const": "platform" } } },
+          "then": { "not": { "anyOf": [ { "required": ["allowed_scenarios"] }, { "required": ["app_version"] } ] } } }
+      ]
+    },
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "recording", "source", "profile_id", "ownership"],
+      "properties": {
+        "name": { "$ref": "#/$defs/scenario_name" },
+        "recording": { "type": "object", "additionalProperties": false, "required": ["path", "sha256", "format"],
+          "properties": { "path": { "$ref": "#/$defs/path" }, "sha256": { "$ref": "#/$defs/sha256" }, "format": { "const": "candump-log" } } },
+        "vss_csv_sha256": { "$ref": "#/$defs/sha256" },
+        "source": { "type": "object", "additionalProperties": false, "required": ["generator", "vehicle", "params"],
+          "properties": { "generator": { "enum": ["sigsim", "carla", "planning-sim"] },
+                          "vehicle": { "type": "object", "additionalProperties": false, "required": ["name", "wheelbase_mm"],
+                                       "properties": { "name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,47}$" },
+                                                       "wheelbase_mm": { "type": "integer", "minimum": 1000, "maximum": 6000 } } },
+                          "params": { "type": "object", "maxProperties": 8,
+                                      "additionalProperties": { "type": ["integer", "string"], "maxLength": 64 } },
+                          "rtf": { "type": "object", "additionalProperties": false, "required": ["min", "mean", "max"],
+                                   "properties": { "min": { "type": "number", "exclusiveMinimum": 0 },
+                                                   "mean": { "type": "number", "exclusiveMinimum": 0 },
+                                                   "max": { "type": "number", "exclusiveMinimum": 0 } } } },
+          "if": { "properties": { "generator": { "const": "carla" } } },
+          "then": { "required": ["rtf"] },
+          "else": { "not": { "required": ["rtf"] } } },
+        "profile_id": { "type": "integer", "minimum": 1, "maximum": 255 },
+        "ownership": { "type": "object", "additionalProperties": false, "required": ["file", "sha256"],
+          "properties": { "file": { "$ref": "#/$defs/path" }, "sha256": { "$ref": "#/$defs/sha256" } } }
+      }
+    }
+  }
+}
