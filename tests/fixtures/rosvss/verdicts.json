@@ -1,0 +1,23 @@
+{
+  "_about": "Synthetic /qnx_monitor/verdict objects (spec 2.6) for tests/test_sdv_rosvss.py: one of each message kind the claim node publishes. Every float is a binary32 value; the counters keep packed = replied + dropped + lost_on_reconnect and replied = accepted + rejected. Design values only, no run's output. A test sends each as json.dumps(obj, separators=(',', ':')), the key order as written here.",
+  "messages": {
+    "replied-accept": {"v": 1, "seq": 41, "profile": 1, "v_cmd": 2.5, "acc": 0.5, "jerk": null, "steer": 0.0625, "steer_rate": null,
+                       "interval_ms": 33, "verdict": 0, "reason": 0, "packed": 41, "replied": 40, "accepted": 40, "rejected": 0,
+                       "dropped": 1, "lost_on_reconnect": 0, "reconnects": 0, "connected": true},
+    "replied-reject": {"v": 1, "seq": 42, "profile": 1, "v_cmd": 30.5, "acc": -1.25, "jerk": 0.75, "steer": -0.125, "steer_rate": 0.25,
+                       "interval_ms": 34, "verdict": 1, "reason": 12, "packed": 42, "replied": 41, "accepted": 40, "rejected": 1,
+                       "dropped": 1, "lost_on_reconnect": 0, "reconnects": 0, "connected": true},
+    "dropped": {"v": 1, "seq": 43, "profile": 1, "v_cmd": 3.0, "acc": null, "jerk": null, "steer": 0.03125, "steer_rate": null,
+                "interval_ms": 33, "verdict": null, "reason": null, "packed": 43, "replied": 41, "accepted": 40, "rejected": 1,
+                "dropped": 2, "lost_on_reconnect": 0, "reconnects": 0, "connected": true},
+    "lost": {"v": 1, "seq": 44, "profile": 1, "v_cmd": 3.25, "acc": 0.125, "jerk": null, "steer": 0.0, "steer_rate": null,
+             "interval_ms": 33, "verdict": null, "reason": null, "packed": 44, "replied": 41, "accepted": 40, "rejected": 1,
+             "dropped": 2, "lost_on_reconnect": 1, "reconnects": 0, "connected": false},
+    "connection-change": {"v": 1, "seq": 0, "profile": 1, "v_cmd": 0.0, "acc": null, "jerk": null, "steer": 0.0, "steer_rate": null,
+                          "interval_ms": 0, "verdict": null, "reason": null, "packed": 44, "replied": 41, "accepted": 40, "rejected": 1,
+                          "dropped": 2, "lost_on_reconnect": 1, "reconnects": 1, "connected": true},
+    "injected-nan": {"v": 1, "seq": 45, "profile": 1, "v_cmd": null, "acc": null, "jerk": null, "steer": 0.0625, "steer_rate": null,
+                     "interval_ms": 33, "verdict": 1, "reason": 9, "packed": 45, "replied": 42, "accepted": 40, "rejected": 2,
+                     "dropped": 2, "lost_on_reconnect": 1, "reconnects": 1, "connected": true}
+  }
+}

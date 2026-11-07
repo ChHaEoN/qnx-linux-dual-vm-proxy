@@ -1,0 +1,138 @@
+{
+  "manifest_version": 1,
+  "host_role": "orin",
+  "arch": "arm64",
+  "written": "2099-01-02",
+  "components": [
+    {
+      "name": "hard-brake-hazard",
+      "class": "app",
+      "form": "container",
+      "image_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "pull": {
+        "via": "ecr",
+        "ref": "<registry>/sdv-twin/hard-brake-hazard@sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "manifest_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "app_version": "1.1.0",
+      "allowed_scenarios": ["20990101-sigsim-42", "20990101-sigsim-43-brake"],
+      "added": "2099-01-02"
+    },
+    {
+      "name": "hard-brake-hazard",
+      "class": "app",
+      "form": "container",
+      "image_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "pull": {
+        "via": "tar",
+        "tar_path": "~/sdv-images/hard-brake-hazard-1.0.0-arm64.tar",
+        "tar_sha256": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+      },
+      "app_version": "1.0.0",
+      "allowed_scenarios": ["20990101-sigsim-42"],
+      "added": "2099-01-01"
+    },
+    {
+      "name": "hard-brake-hazard",
+      "class": "app",
+      "form": "container",
+      "image_id": "sha256:9191919191919191919191919191919191919191919191919191919191919191",
+      "pull": {
+        "via": "local-build",
+        "store_id": "sha256:9292929292929292929292929292929292929292929292929292929292929292"
+      },
+      "app_version": "1.2.0",
+      "allowed_scenarios": ["20990101-sigsim-42"],
+      "added": "2099-01-03"
+    },
+    {
+      "name": "vss-claim-bridge",
+      "class": "platform",
+      "form": "container",
+      "image_id": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+      "pull": {
+        "via": "tar",
+        "tar_path": "~/sdv-images/vss-claim-bridge-0.1.0-arm64.tar",
+        "tar_sha256": "sha256:6666666666666666666666666666666666666666666666666666666666666666"
+      },
+      "added": "2099-01-01"
+    },
+    {
+      "name": "kuksa-databroker",
+      "class": "platform",
+      "form": "container",
+      "image_id": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+      "pull": {
+        "via": "upstream",
+        "ref": "ghcr.io/eclipse-kuksa/kuksa-databroker@sha256:8888888888888888888888888888888888888888888888888888888888888888",
+        "manifest_digest": "sha256:8888888888888888888888888888888888888888888888888888888888888888"
+      },
+      "added": "2099-01-01"
+    },
+    {
+      "name": "kuksa-can-provider",
+      "class": "platform",
+      "form": "container",
+      "image_id": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+      "pull": {
+        "via": "upstream",
+        "ref": "ghcr.io/eclipse-kuksa/kuksa-can-provider/can-provider@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "manifest_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "replay_source": true,
+      "added": "2099-01-01"
+    },
+    {
+      "name": "twin-connector",
+      "class": "platform",
+      "form": "container",
+      "image_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "pull": {
+        "via": "local-build",
+        "store_id": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "added": "2099-01-01"
+    },
+    {
+      "name": "ota-lite",
+      "class": "platform",
+      "form": "host-unit",
+      "unit": "ota-lite.service",
+      "files": [
+        { "path": "/usr/local/lib/ota-lite/ota_lite.py", "sha256": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" }
+      ],
+      "added": "2099-01-01"
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "20990101-sigsim-42",
+      "recording": {
+        "path": "~/sdv-recordings/20990101-sigsim-42/drive.log",
+        "sha256": "sha256:0101010101010101010101010101010101010101010101010101010101010101",
+        "format": "candump-log"
+      },
+      "vss_csv_sha256": "sha256:0202020202020202020202020202020202020202020202020202020202020202",
+      "source": { "generator": "sigsim", "vehicle": { "name": "sigsim-design-car", "wheelbase_mm": 2700 }, "params": { "seed": 42 } },
+      "profile_id": 1,
+      "ownership": {
+        "file": "~/sdv-recordings/20990101-sigsim-42/ownership.json",
+        "sha256": "sha256:0303030303030303030303030303030303030303030303030303030303030303"
+      }
+    },
+    {
+      "name": "20990101-sigsim-43-brake",
+      "recording": {
+        "path": "~/sdv-recordings/20990101-sigsim-43-brake/drive.log",
+        "sha256": "sha256:0404040404040404040404040404040404040404040404040404040404040404",
+        "format": "candump-log"
+      },
+      "source": { "generator": "carla", "vehicle": { "name": "vehicle.example.sedan", "wheelbase_mm": 2700 }, "params": { "version": "0.9.16", "town": "Town01", "seed": 7 }, "rtf": { "min": 0.5, "mean": 0.75, "max": 1.0 } },
+      "profile_id": 1,
+      "ownership": {
+        "file": "~/sdv-recordings/20990101-sigsim-43-brake/ownership.json",
+        "sha256": "sha256:0505050505050505050505050505050505050505050505050505050505050505"
+      }
+    }
+  ]
+}

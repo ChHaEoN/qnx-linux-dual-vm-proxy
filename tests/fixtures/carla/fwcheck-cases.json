@@ -1,0 +1,7312 @@
+{
+ "exe": "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe",
+ "wsl_alias": "vEthernet (WSL (Hyper-V firewall))",
+ "interpreters": [
+  "C:\\Program Files\\Python312\\python.exe",
+  "E:\\CARLA\\venv312\\Scripts\\python.exe"
+ ],
+ "about": "Project-written predicate cases shaped like fwcheck's PowerShell input; expected verdicts follow the predicate rules.",
+ "cases": [
+  {
+   "name": "scoped",
+   "what": "one TCP allow rule for the exe on 2000-2002 scoped to the WSL adapter's alias, unrelated rules beside it",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: PASS (windows-client)"
+    ],
+    "wsl": [
+     "fwcheck: PASS (wsl)"
+    ]
+   }
+  },
+  {
+   "name": "today",
+   "what": "a TCP rule and a UDP rule with remote Any, any port and profile Public",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-ue4-tcp}",
+      "DisplayName": "CARLA UE4",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Public",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{carla-ue4-udp}",
+      "DisplayName": "CARLA UE4",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Public",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "UDP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): P2: CARLA UE4",
+     "fwcheck: FAIL (windows-client): P2: CARLA UE4"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P2: CARLA UE4",
+     "fwcheck: FAIL (wsl): P2: CARLA UE4",
+     "fwcheck: FAIL (wsl): P3: (no WSL-scoped allow rule)"
+    ]
+   }
+  },
+  {
+   "name": "profile-default-allow",
+   "what": "a profile whose default inbound action is Allow",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Allow"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): P1: Public"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P1: Public"
+    ]
+   }
+  },
+  {
+   "name": "profile-disabled",
+   "what": "a profile that is not enabled",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "False",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): P1: Private"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P1: Private"
+    ]
+   }
+  },
+  {
+   "name": "remote-any",
+   "what": "an allow rule for the exe with remote Any and interface Any",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{carla-open}",
+      "DisplayName": "CARLA open",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): P2: CARLA open"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P2: CARLA open"
+    ]
+   }
+  },
+  {
+   "name": "udp",
+   "what": "a UDP allow rule for the exe, scoped to the WSL alias",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{carla-udp}",
+      "DisplayName": "CARLA udp",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "UDP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): P2: CARLA udp"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P2: CARLA udp"
+    ]
+   }
+  },
+  {
+   "name": "port-2000-other-program",
+   "what": "an allow rule on port 2000 for another program",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-on-2000}",
+      "DisplayName": "Example on 2000",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): P2: Example on 2000"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P2: Example on 2000"
+    ]
+   }
+  },
+  {
+   "name": "port-range-overlapping",
+   "what": "an allow rule for another program on a range that overlaps 2000-2002",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-range}",
+      "DisplayName": "Example range",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "1990-2000"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): P2: Example range"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P2: Example range"
+    ]
+   }
+  },
+  {
+   "name": "port-outside",
+   "what": "an allow rule for the exe with local ports beyond 2002",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{carla-wide}",
+      "DisplayName": "CARLA wide",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2010"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): P2: CARLA wide"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P2: CARLA wide"
+    ]
+   }
+  },
+  {
+   "name": "non-wsl-alias",
+   "what": "an allow rule for the exe scoped to another interface",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{carla-wifi}",
+      "DisplayName": "CARLA wifi",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Wi-Fi"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): P2: CARLA wifi"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P2: CARLA wifi"
+    ]
+   }
+  },
+  {
+   "name": "mixed-alias",
+   "what": "an allow rule for the exe scoped to the WSL alias and another",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{carla-two}",
+      "DisplayName": "CARLA two",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))",
+       "Wi-Fi"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): P2: CARLA two"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P2: CARLA two"
+    ]
+   }
+  },
+  {
+   "name": "exe-case",
+   "what": "the exe named in another letter case is the exe",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{carla-lower}",
+      "DisplayName": "CARLA lower",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "e:\\carla\\carla_0.9.16\\carlaue4\\binaries\\win64\\carlaue4-win64-shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): P2: CARLA lower"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P2: CARLA lower"
+    ]
+   }
+  },
+  {
+   "name": "address-scoped",
+   "what": "a rule scoped by remote address inside the WSL adapter's subnet",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-by-address}",
+      "DisplayName": "CARLA by address",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "192.0.2.0/24"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: PASS (windows-client)"
+    ],
+    "wsl": [
+     "fwcheck: PASS (wsl)"
+    ]
+   }
+  },
+  {
+   "name": "address-host-and-range",
+   "what": "remote addresses as a host and a range, both inside the subnet",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-by-hosts}",
+      "DisplayName": "CARLA by hosts",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "192.0.2.10",
+       "192.0.2.20-192.0.2.30"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: PASS (windows-client)"
+    ],
+    "wsl": [
+     "fwcheck: PASS (wsl)"
+    ]
+   }
+  },
+  {
+   "name": "address-outside",
+   "what": "a rule whose remote addresses reach outside the WSL adapter's subnet",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{carla-leaky}",
+      "DisplayName": "CARLA leaky",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "192.0.2.0/24",
+       "198.51.100.7"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): P2: CARLA leaky"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P2: CARLA leaky"
+    ]
+   }
+  },
+  {
+   "name": "address-localsubnet",
+   "what": "a rule scoped by the keyword LocalSubnet",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{carla-local}",
+      "DisplayName": "CARLA local",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "LocalSubnet"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): P2: CARLA local"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P2: CARLA local"
+    ]
+   }
+  },
+  {
+   "name": "address-wsl-down",
+   "what": "an address-scoped rule while no WSL adapter is up: its subnet cannot be read",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-by-address}",
+      "DisplayName": "CARLA by address",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "192.0.2.0/24"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": []
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): P2: CARLA by address"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P2: CARLA by address",
+     "fwcheck: FAIL (wsl): P3: (no WSL-scoped allow rule)"
+    ]
+   }
+  },
+  {
+   "name": "alias-wsl-down",
+   "what": "an alias-scoped rule while no WSL adapter is up",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": []
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: PASS (windows-client)"
+    ],
+    "wsl": [
+     "fwcheck: PASS (wsl)"
+    ]
+   }
+  },
+  {
+   "name": "disabled-open",
+   "what": "a disabled allow rule for the exe open to any address passes",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{carla-old}",
+      "DisplayName": "CARLA old",
+      "Enabled": "False",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{carla-old-udp}",
+      "DisplayName": "CARLA old udp",
+      "Enabled": "False",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "UDP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: PASS (windows-client)"
+    ],
+    "wsl": [
+     "fwcheck: PASS (wsl)"
+    ]
+   }
+  },
+  {
+   "name": "outbound-open",
+   "what": "an outbound rule is not an inbound rule",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{carla-out}",
+      "DisplayName": "CARLA out",
+      "Enabled": "True",
+      "Direction": "Outbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: PASS (windows-client)"
+    ],
+    "wsl": [
+     "fwcheck: PASS (wsl)"
+    ]
+   }
+  },
+  {
+   "name": "block-exe",
+   "what": "an enabled block rule for the exe: harmless for the Windows client, blocks WSL",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{carla-ue4}",
+      "DisplayName": "CARLA UE4",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Public",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: PASS (windows-client)"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P3: CARLA UE4"
+    ]
+   }
+  },
+  {
+   "name": "block-exe-disabled",
+   "what": "a disabled block rule for the exe blocks nothing",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{carla-ue4}",
+      "DisplayName": "CARLA UE4",
+      "Enabled": "False",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: PASS (windows-client)"
+    ],
+    "wsl": [
+     "fwcheck: PASS (wsl)"
+    ]
+   }
+  },
+  {
+   "name": "bypass-scoped",
+   "what": "an allow-bypass rule scoped as P2 wants is an allow rule, and not a block rule for P3",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-bypass}",
+      "DisplayName": "CARLA bypass",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "AllowBypass",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: PASS (windows-client)"
+    ],
+    "wsl": [
+     "fwcheck: PASS (wsl)"
+    ]
+   }
+  },
+  {
+   "name": "bypass-open",
+   "what": "an allow-bypass rule open to any address fails P2",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{carla-bypass-open}",
+      "DisplayName": "CARLA bypass open",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "AllowBypass",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): P2: CARLA bypass open"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P2: CARLA bypass open"
+    ]
+   }
+  },
+  {
+   "name": "no-p2-rule",
+   "what": "no rule for the exe at all: the Windows client passes, WSL has no way in",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: PASS (windows-client)"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P3: (no WSL-scoped allow rule)"
+    ]
+   }
+  },
+  {
+   "name": "unreadable-filter",
+   "what": "an enabled inbound allow rule whose filter could not be read is not judged as passing",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-unread}",
+      "DisplayName": "Example unread",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): read: Example unread"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): read: Example unread"
+    ]
+   }
+  },
+  {
+   "name": "tcp-by-number",
+   "what": "the scoped set plus a TCP allow rule for the exe whose protocol is given as the number 6, on 2000-2002 scoped to the WSL alias: the number is TCP",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{carla-six}",
+      "DisplayName": "CARLA six",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "6",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: PASS (windows-client)"
+    ],
+    "wsl": [
+     "fwcheck: PASS (wsl)"
+    ]
+   }
+  },
+  {
+   "name": "port-list",
+   "what": "the scoped set plus a TCP allow rule for the exe whose local ports are the list 2000, 2001, 2002 scoped to the WSL alias: a list inside the range is inside it",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{carla-list}",
+      "DisplayName": "CARLA list",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000",
+       "2001",
+       "2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: PASS (windows-client)"
+    ],
+    "wsl": [
+     "fwcheck: PASS (wsl)"
+    ]
+   }
+  },
+  {
+   "name": "ipv6-remote",
+   "what": "the scoped set plus a TCP allow rule for the exe on 2000-2002 for an IPv6 remote range on any interface: not inside the WSL adapter's IPv4 subnet, so P2 fails",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{carla-v6}",
+      "DisplayName": "CARLA v6",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "2001:db8::/32"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): P2: CARLA v6"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P2: CARLA v6"
+    ]
+   }
+  },
+  {
+   "name": "udp-other-port-not-judged",
+   "what": "the scoped set plus a UDP allow rule on port 53 for another program, open to any remote on any interface: it names neither the exe nor a port of 2000-2002, so no clause judges it",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-dns}",
+      "DisplayName": "Example dns",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "UDP",
+      "LocalPort": [
+       "53"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: PASS (windows-client)"
+    ],
+    "wsl": [
+     "fwcheck: PASS (wsl)"
+    ]
+   }
+  },
+  {
+   "name": "interpreter-allow-any",
+   "what": "the scoped set plus two allow rules for the client's base interpreter, Public, TCP and UDP, any port, any remote, any interface: P4 fails for each",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{py-tcp}",
+      "DisplayName": "python.exe",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Public",
+      "Program": [
+       "C:\\Program Files\\Python312\\python.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{py-udp}",
+      "DisplayName": "python.exe",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Public",
+      "Program": [
+       "C:\\Program Files\\Python312\\python.exe"
+      ],
+      "Protocol": "UDP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): P4: python.exe",
+     "fwcheck: FAIL (windows-client): P4: python.exe"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P4: python.exe",
+     "fwcheck: FAIL (wsl): P4: python.exe"
+    ]
+   }
+  },
+  {
+   "name": "interpreter-disabled",
+   "what": "the two interpreter rules of interpreter-allow-any, disabled: P4 passes",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{py-tcp}",
+      "DisplayName": "python.exe",
+      "Enabled": "False",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Public",
+      "Program": [
+       "C:\\Program Files\\Python312\\python.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{py-udp}",
+      "DisplayName": "python.exe",
+      "Enabled": "False",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Public",
+      "Program": [
+       "C:\\Program Files\\Python312\\python.exe"
+      ],
+      "Protocol": "UDP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: PASS (windows-client)"
+    ],
+    "wsl": [
+     "fwcheck: PASS (wsl)"
+    ]
+   }
+  },
+  {
+   "name": "interpreter-block",
+   "what": "a block rule for the client's base interpreter, any port: block rules pass P4",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{py-block}",
+      "DisplayName": "python block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Python312\\python.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: PASS (windows-client)"
+    ],
+    "wsl": [
+     "fwcheck: PASS (wsl)"
+    ]
+   }
+  },
+  {
+   "name": "interpreter-scoped-alias",
+   "what": "an allow rule for the venv's interpreter, TCP 8000, the WSL alias: P4 passes",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{py-tm}",
+      "DisplayName": "TM from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\venv312\\Scripts\\python.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "8000"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: PASS (windows-client)"
+    ],
+    "wsl": [
+     "fwcheck: PASS (wsl)"
+    ]
+   }
+  },
+  {
+   "name": "interpreter-scoped-address",
+   "what": "an allow rule for the base interpreter, TCP 8000, any interface, remote inside the WSL subnet: P4 passes",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{py-tm-addr}",
+      "DisplayName": "TM by address",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Python312\\python.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "8000"
+      ],
+      "RemoteAddress": [
+       "192.0.2.0/25"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: PASS (windows-client)"
+    ],
+    "wsl": [
+     "fwcheck: PASS (wsl)"
+    ]
+   }
+  },
+  {
+   "name": "interpreter-case",
+   "what": "an allow rule naming the base interpreter in other letter case and with forward slashes, any port: P4 fails",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{py-case}",
+      "DisplayName": "PY case",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:/PROGRAM FILES/PYTHON312/PYTHON.EXE"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): P4: PY case"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P4: PY case"
+    ]
+   }
+  },
+  {
+   "name": "interpreter-udp",
+   "what": "an allow rule for the venv's interpreter, UDP 8000, the WSL alias: not TCP, P4 fails",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{py-udp8000}",
+      "DisplayName": "TM udp",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\venv312\\Scripts\\python.exe"
+      ],
+      "Protocol": "UDP",
+      "LocalPort": [
+       "8000"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): P4: TM udp"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P4: TM udp"
+    ]
+   }
+  },
+  {
+   "name": "interpreter-other-port",
+   "what": "an allow rule for the venv's interpreter, TCP 9000, the WSL alias: not port 8000, P4 fails",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{py-9000}",
+      "DisplayName": "TM 9000",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\venv312\\Scripts\\python.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "9000"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): P4: TM 9000"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P4: TM 9000"
+    ]
+   }
+  },
+  {
+   "name": "interpreter-unscoped",
+   "what": "an allow rule for the venv's interpreter, TCP 8000, any interface and any remote: P4 fails",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{py-open}",
+      "DisplayName": "TM open",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\venv312\\Scripts\\python.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "8000"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): P4: TM open"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P4: TM open"
+    ]
+   }
+  },
+  {
+   "name": "interpreter-outside-address",
+   "what": "an allow rule for the base interpreter, TCP 8000, any interface, remote outside the WSL subnet: P4 fails",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{py-far}",
+      "DisplayName": "TM far",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Python312\\python.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "8000"
+      ],
+      "RemoteAddress": [
+       "198.51.100.0/24"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): P4: TM far"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P4: TM far"
+    ]
+   }
+  },
+  {
+   "name": "unbound-allow-all",
+   "what": "an allow rule that names no program, no service, no package and no Owner, any protocol, any port, any remote, any interface: P2 judges it (Any meets 2000-2002) and it fails, and P4 judges it (Any meets 8000) and it fails",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{allow-all}",
+      "DisplayName": "Allow everything",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "Any"
+      ],
+      "Protocol": "Any",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ],
+      "Service": [
+       "Any"
+      ],
+      "Package": "",
+      "Owner": ""
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): P2: Allow everything",
+     "fwcheck: FAIL (windows-client): P4: Allow everything"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P2: Allow everything",
+     "fwcheck: FAIL (wsl): P4: Allow everything"
+    ]
+   }
+  },
+  {
+   "name": "unbound-tcp-any-port",
+   "what": "an unbound TCP allow rule, ports Any, any remote, any interface: fails P2 and P4",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{tcp-any}",
+      "DisplayName": "Any TCP",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "Any"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ],
+      "Service": [
+       "Any"
+      ],
+      "Package": "",
+      "Owner": ""
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): P2: Any TCP",
+     "fwcheck: FAIL (windows-client): P4: Any TCP"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P2: Any TCP",
+     "fwcheck: FAIL (wsl): P4: Any TCP"
+    ]
+   }
+  },
+  {
+   "name": "unbound-no-service-read",
+   "what": "an unbound TCP allow rule on 2000 whose service, package and Owner were not read: counted as naming none, so P2 judges it, and it fails (any remote, any interface)",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{tcp-2000-bare}",
+      "DisplayName": "Bare 2000",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "Any"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): P2: Bare 2000"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P2: Bare 2000"
+    ]
+   }
+  },
+  {
+   "name": "unbound-scoped-2000",
+   "what": "an unbound TCP allow rule on 2000-2002 scoped to the WSL alias: P2 passes",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{tcp-2000-wsl}",
+      "DisplayName": "WSL 2000",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "Any"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ],
+      "Service": [
+       "Any"
+      ],
+      "Package": "",
+      "Owner": ""
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: PASS (windows-client)"
+    ],
+    "wsl": [
+     "fwcheck: PASS (wsl)"
+    ]
+   }
+  },
+  {
+   "name": "unbound-other-port",
+   "what": "an unbound TCP allow rule on port 80, any remote, any interface: neither 2000-2002 nor 8000, not judged",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{tcp-80}",
+      "DisplayName": "Web 80",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "Any"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "80"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ],
+      "Service": [
+       "Any"
+      ],
+      "Package": "",
+      "Owner": ""
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: PASS (windows-client)"
+    ],
+    "wsl": [
+     "fwcheck: PASS (wsl)"
+    ]
+   }
+  },
+  {
+   "name": "unbound-icmp",
+   "what": "an unbound ICMPv4 allow rule, ports Any, any remote: a protocol without ports, not judged",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{icmp}",
+      "DisplayName": "Ping",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "Any"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ],
+      "Service": [
+       "Any"
+      ],
+      "Package": "",
+      "Owner": ""
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: PASS (windows-client)"
+    ],
+    "wsl": [
+     "fwcheck: PASS (wsl)"
+    ]
+   }
+  },
+  {
+   "name": "unbound-tm-port",
+   "what": "an unbound TCP allow rule on 8000, any remote, any interface: P4 judges it and it fails",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{tcp-8000}",
+      "DisplayName": "Any 8000",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "Any"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "8000"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ],
+      "Service": [
+       "Any"
+      ],
+      "Package": "",
+      "Owner": ""
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): P4: Any 8000"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P4: Any 8000"
+    ]
+   }
+  },
+  {
+   "name": "store-app-owner",
+   "what": "an allow rule with no program but an Owner SID (a Store app's network-isolation rule), any port: not judged",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{store-owner}",
+      "DisplayName": "Store app",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "Any"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ],
+      "Service": [
+       "Any"
+      ],
+      "Package": "",
+      "Owner": "S-1-5-21-0-0-0-1001"
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: PASS (windows-client)"
+    ],
+    "wsl": [
+     "fwcheck: PASS (wsl)"
+    ]
+   }
+  },
+  {
+   "name": "store-app-package",
+   "what": "an allow rule with no program but a package, any port: not judged",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{store-pkg}",
+      "DisplayName": "Store package",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "Any"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ],
+      "Service": [
+       "Any"
+      ],
+      "Package": "S-1-15-2-0-0-0-0-0-0-0",
+      "Owner": ""
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: PASS (windows-client)"
+    ],
+    "wsl": [
+     "fwcheck: PASS (wsl)"
+    ]
+   }
+  },
+  {
+   "name": "service-rule",
+   "what": "an allow rule with no program that names a service, any port: not judged",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{svc}",
+      "DisplayName": "Example service",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "Any"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ],
+      "Service": [
+       "ExampleSvc"
+      ],
+      "Package": "",
+      "Owner": ""
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: PASS (windows-client)"
+    ],
+    "wsl": [
+     "fwcheck: PASS (wsl)"
+    ]
+   }
+  },
+  {
+   "name": "exe-name-elsewhere",
+   "what": "an allow rule for a program of the CARLA exe's file name at another path, any port, any remote: P2 judges it (a deliberate widening of 2.5, a FAIL only) and it fails",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{carla-copy}",
+      "DisplayName": "CARLA copy",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "D:\\Other\\CARLA_copy\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): P2: CARLA copy"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P2: CARLA copy"
+    ]
+   }
+  },
+  {
+   "name": "no-profiles",
+   "what": "the scoped set with no firewall profile read: nothing says the firewall is on, so P1 fails (the rules are fine)",
+   "doc": {
+    "profiles": [],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): P1: (no firewall profile read)"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P1: (no firewall profile read)"
+    ]
+   }
+  },
+  {
+   "name": "block-exe-wsl-alias",
+   "what": "the scoped set plus an enabled block rule for the exe, TCP 2000-2002, whose interface alias is the WSL adapter's only: harmless for the Windows client, and for WSL an explicit block that wins over the allow (P3)",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{carla-block-wsl}",
+      "DisplayName": "CARLA block on WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: PASS (windows-client)"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P3: CARLA block on WSL"
+    ]
+   }
+  },
+  {
+   "name": "p3-other-program-only",
+   "what": "the scoped case without its exe rule, plus a WSL-scoped TCP allow rule for another program on port 2000: P2 judges it (the other-program widening) and it passes, but it is not one of 2.5's own P2 rules, so --for wsl has no P2 rule (P3)",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{other-program-from-wsl}",
+      "DisplayName": "Other program from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\other.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: PASS (windows-client)"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P3: (no WSL-scoped allow rule)"
+    ]
+   }
+  },
+  {
+   "name": "p3-exe-copy-only",
+   "what": "the scoped case without its exe rule, plus a WSL-scoped TCP allow rule on 2000-2002 for a program of the exe's file name at another path: P2 judges it (the exe-name widening) and it passes, but it does not name the 0.9.16 exe by its path, so --for wsl has no P2 rule (P3)",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{carla-copy-from-wsl}",
+      "DisplayName": "CARLA copy from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "D:\\Other\\CARLA_copy\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: PASS (windows-client)"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P3: (no WSL-scoped allow rule)"
+    ]
+   }
+  },
+  {
+   "name": "exe-range-half-outside",
+   "what": "the scoped set plus an allow rule for the exe on 2000-2002 whose remote range runs from inside the WSL subnet to outside it, any interface: not inside the subnet, so P2 fails",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{exe-range-half-outside}",
+      "DisplayName": "CARLA range half outside",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "192.0.2.200-198.51.100.5"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): P2: CARLA range half outside"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P2: CARLA range half outside"
+    ]
+   }
+  },
+  {
+   "name": "exe-no-interface-read",
+   "what": "the scoped set plus an allow rule for the exe scoped by a remote address inside the WSL subnet whose interface filter was not read (an empty list): a failed read, not a pass",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{exe-no-interface-read}",
+      "DisplayName": "CARLA no interface read",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "192.0.2.10"
+      ],
+      "InterfaceAlias": []
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): read: CARLA no interface read"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): read: CARLA no interface read"
+    ]
+   }
+  },
+  {
+   "name": "exe-empty-port-value",
+   "what": "the scoped set plus an allow rule for the exe on the WSL alias whose local-port list holds only an empty string: no port was read, so a failed read",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{exe-empty-port-value}",
+      "DisplayName": "CARLA empty port",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       ""
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: FAIL (windows-client): read: CARLA empty port"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): read: CARLA empty port"
+    ]
+   }
+  },
+  {
+   "name": "block-exe-no-interface-read",
+   "what": "the scoped set plus an enabled block rule for the exe whose interface filter was not read: P3 counts it, since it may cover the WSL adapter; harmless for the Windows client",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{block-exe-no-interface-read}",
+      "DisplayName": "CARLA block no interface read",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "E:\\CARLA\\CARLA_0.9.16\\CarlaUE4\\Binaries\\Win64\\CarlaUE4-Win64-Shipping.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": []
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: PASS (windows-client)"
+    ],
+    "wsl": [
+     "fwcheck: FAIL (wsl): P3: CARLA block no interface read"
+    ]
+   }
+  },
+  {
+   "name": "p3-unbound-only",
+   "what": "the scoped set with its exe rule taken out and an unbound TCP allow rule on 2000-2002 scoped to the WSL alias in its place: P3 counts the unbound rule, one of spec 2.5's own P2 rules",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{tcp-2000-wsl}",
+      "DisplayName": "WSL 2000",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "Any"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ],
+      "Service": [
+       "Any"
+      ],
+      "Package": "",
+      "Owner": ""
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: PASS (windows-client)"
+    ],
+    "wsl": [
+     "fwcheck: PASS (wsl)"
+    ]
+   }
+  },
+  {
+   "name": "p3-exe-path-other-case",
+   "what": "the scoped set with its exe rule naming the exe's path in upper case and with forward slashes: P2 judges it as the exe's and P3 counts it (the path in any letter case)",
+   "doc": {
+    "profiles": [
+     {
+      "Name": "Domain",
+      "Enabled": "True",
+      "DefaultInboundAction": "NotConfigured"
+     },
+     {
+      "Name": "Private",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     },
+     {
+      "Name": "Public",
+      "Enabled": "True",
+      "DefaultInboundAction": "Block"
+     }
+    ],
+    "rules": [
+     {
+      "Name": "{carla-from-wsl}",
+      "DisplayName": "CARLA from WSL",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "E:/CARLA/CARLA_0.9.16/CARLAUE4/BINARIES/WIN64/CARLAUE4-WIN64-SHIPPING.EXE"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "2000-2002"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "vEthernet (WSL (Hyper-V firewall))"
+      ]
+     },
+     {
+      "Name": "{example-server}",
+      "DisplayName": "Example server",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{core-networking---echo-request}",
+      "DisplayName": "Core Networking - Echo Request",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Allow",
+      "Profile": "Any",
+      "Program": [
+       "System"
+      ],
+      "Protocol": "ICMPv4",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     },
+     {
+      "Name": "{example-block}",
+      "DisplayName": "Example block",
+      "Enabled": "True",
+      "Direction": "Inbound",
+      "Action": "Block",
+      "Profile": "Any",
+      "Program": [
+       "C:\\Program Files\\Example\\example-server.exe"
+      ],
+      "Protocol": "TCP",
+      "LocalPort": [
+       "Any"
+      ],
+      "RemoteAddress": [
+       "Any"
+      ],
+      "InterfaceAlias": [
+       "Any"
+      ]
+     }
+    ],
+    "wsl": [
+     {
+      "InterfaceAlias": "vEthernet (WSL (Hyper-V firewall))",
+      "IPAddress": "192.0.2.1",
+      "PrefixLength": 24
+     }
+    ]
+   },
+   "expect": {
+    "windows-client": [
+     "fwcheck: PASS (windows-client)"
+    ],
+    "wsl": [
+     "fwcheck: PASS (wsl)"
+    ]
+   }
+  }
+ ]
+}

@@ -1,0 +1,32 @@
+{
+ "_about": "A made-up thresholds document for the burst tool's tests: documentation values, no design the owner chose, no figure derive.py wrote.",
+ "burst": {
+  "bytes_per_publish": 102400,
+  "bytes_publishes": 25,
+  "bytes_total": 2560000,
+  "ceiling_bytes": 8388608,
+  "ceiling_minutes": 20,
+  "ceiling_publishes": 2000,
+  "ceiling_shadow_updates": 60,
+  "count_publish_bytes": 256,
+  "count_publishes": 1347,
+  "factor": 2,
+  "shadow_updates": 47,
+  "window_s": 60
+ },
+ "design": {
+  "cap_usd": 10.0,
+  "things": 1
+ },
+ "the_double_says": "ok",
+ "thresholds": {
+  "Firehose.IncomingBytes": 1234567,
+  "Firehose.IncomingRecords": 611,
+  "IoT.PublishIn.Success": 673,
+  "IoT.RuleAction.Failure": 1,
+  "IoT.RulesExecuted.per_5kb_unit": 659,
+  "IoT.RulesExecuted.per_execution": 611,
+  "IoT.UpdateThingShadow.Accepted": 23,
+  "Lambda.Errors": 1
+ }
+}

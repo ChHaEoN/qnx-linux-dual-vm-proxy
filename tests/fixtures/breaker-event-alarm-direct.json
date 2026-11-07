@@ -1,0 +1,42 @@
+{
+  "source": "aws.cloudwatch",
+  "alarmArn": "arn:aws:cloudwatch:us-east-1:123456789012:alarm:example-alarm",
+  "accountId": "123456789012",
+  "time": "2026-01-01T00:00:00.000+0000",
+  "region": "us-east-1",
+  "alarmData": {
+    "alarmName": "example-alarm",
+    "state": {
+      "value": "ALARM",
+      "reason": "A documentation example, written by hand from the documented direct-invoke shape. This fixture is not a captured event.",
+      "timestamp": "2026-01-01T00:00:00.000+0000"
+    },
+    "previousState": {
+      "value": "OK",
+      "reason": "A documentation example, written by hand.",
+      "reasonData": "A documentation example.",
+      "timestamp": "2025-12-31T23:55:00.000+0000"
+    },
+    "configuration": {
+      "description": "A documentation example.",
+      "metrics": [
+        {
+          "id": "m1",
+          "metricStat": {
+            "metric": {
+              "namespace": "AWS/Firehose",
+              "name": "IncomingRecords",
+              "dimensions": {
+                "DeliveryStreamName": "example-stream"
+              }
+            },
+            "period": 300,
+            "stat": "Sum",
+            "unit": "Count"
+          },
+          "returnData": true
+        }
+      ]
+    }
+  }
+}

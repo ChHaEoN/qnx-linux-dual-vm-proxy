@@ -1,0 +1,337 @@
+{"ceilings": {"bytes": 8388608, "minutes": 20, "publishes": 2000, "shadow_updates": 60}, "event": "start", "kind": "shadow", "t_mono": 0.0, "t_wall": "2026-09-21T14:13:20.000Z", "trickle_s": 10, "v": 1, "window_s": 60}
+{"connection": 1, "event": "connected", "t_mono": 1e-06, "t_wall": "2026-09-21T14:13:20.000Z", "v": 1}
+{"event": "burst-start", "kind": "shadow", "t_mono": 2e-06, "t_wall": "2026-09-21T14:13:20.000Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 3e-06, "t_wall": "2026-09-21T14:13:20.000Z", "v": 1}
+{"event": "outcome", "of": 3e-06, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 4e-06, "t_wall": "2026-09-21T14:13:20.000Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 0.851064, "t_wall": "2026-09-21T14:13:20.851Z", "v": 1}
+{"event": "outcome", "of": 0.851064, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 0.851065, "t_wall": "2026-09-21T14:13:20.851Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 1.702128, "t_wall": "2026-09-21T14:13:21.702Z", "v": 1}
+{"event": "outcome", "of": 1.702128, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 1.702129, "t_wall": "2026-09-21T14:13:21.702Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 2.553191, "t_wall": "2026-09-21T14:13:22.553Z", "v": 1}
+{"event": "outcome", "of": 2.553191, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 2.553192, "t_wall": "2026-09-21T14:13:22.553Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 3.404255, "t_wall": "2026-09-21T14:13:23.404Z", "v": 1}
+{"event": "outcome", "of": 3.404255, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 3.404256, "t_wall": "2026-09-21T14:13:23.404Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 4.255319, "t_wall": "2026-09-21T14:13:24.255Z", "v": 1}
+{"event": "outcome", "of": 4.255319, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 4.25532, "t_wall": "2026-09-21T14:13:24.255Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 5.106383, "t_wall": "2026-09-21T14:13:25.106Z", "v": 1}
+{"event": "outcome", "of": 5.106383, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 5.106384, "t_wall": "2026-09-21T14:13:25.106Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 5.957447, "t_wall": "2026-09-21T14:13:25.957Z", "v": 1}
+{"event": "outcome", "of": 5.957447, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 5.957448, "t_wall": "2026-09-21T14:13:25.957Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 6.808511, "t_wall": "2026-09-21T14:13:26.808Z", "v": 1}
+{"event": "outcome", "of": 6.808511, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 6.808512, "t_wall": "2026-09-21T14:13:26.808Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 7.659574, "t_wall": "2026-09-21T14:13:27.659Z", "v": 1}
+{"event": "outcome", "of": 7.659574, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 7.659575, "t_wall": "2026-09-21T14:13:27.659Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 8.510638, "t_wall": "2026-09-21T14:13:28.510Z", "v": 1}
+{"event": "outcome", "of": 8.510638, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 8.510639, "t_wall": "2026-09-21T14:13:28.510Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 9.361702, "t_wall": "2026-09-21T14:13:29.361Z", "v": 1}
+{"event": "outcome", "of": 9.361702, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 9.361703, "t_wall": "2026-09-21T14:13:29.361Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 10.212766, "t_wall": "2026-09-21T14:13:30.212Z", "v": 1}
+{"event": "outcome", "of": 10.212766, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 10.212767, "t_wall": "2026-09-21T14:13:30.212Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 11.06383, "t_wall": "2026-09-21T14:13:31.063Z", "v": 1}
+{"event": "outcome", "of": 11.06383, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 11.063831, "t_wall": "2026-09-21T14:13:31.063Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 11.914894, "t_wall": "2026-09-21T14:13:31.914Z", "v": 1}
+{"event": "outcome", "of": 11.914894, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 11.914895, "t_wall": "2026-09-21T14:13:31.914Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 12.765957, "t_wall": "2026-09-21T14:13:32.765Z", "v": 1}
+{"event": "outcome", "of": 12.765957, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 12.765958, "t_wall": "2026-09-21T14:13:32.765Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 13.617021, "t_wall": "2026-09-21T14:13:33.617Z", "v": 1}
+{"event": "outcome", "of": 13.617021, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 13.617022, "t_wall": "2026-09-21T14:13:33.617Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 14.468085, "t_wall": "2026-09-21T14:13:34.468Z", "v": 1}
+{"event": "outcome", "of": 14.468085, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 14.468086, "t_wall": "2026-09-21T14:13:34.468Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 15.319149, "t_wall": "2026-09-21T14:13:35.319Z", "v": 1}
+{"event": "outcome", "of": 15.319149, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 15.31915, "t_wall": "2026-09-21T14:13:35.319Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 16.170213, "t_wall": "2026-09-21T14:13:36.170Z", "v": 1}
+{"event": "outcome", "of": 16.170213, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 16.170214, "t_wall": "2026-09-21T14:13:36.170Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 17.021277, "t_wall": "2026-09-21T14:13:37.021Z", "v": 1}
+{"event": "outcome", "of": 17.021277, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 17.021278, "t_wall": "2026-09-21T14:13:37.021Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 17.87234, "t_wall": "2026-09-21T14:13:37.872Z", "v": 1}
+{"event": "outcome", "of": 17.87234, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 17.872341, "t_wall": "2026-09-21T14:13:37.872Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 18.723404, "t_wall": "2026-09-21T14:13:38.723Z", "v": 1}
+{"event": "outcome", "of": 18.723404, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 18.723405, "t_wall": "2026-09-21T14:13:38.723Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 19.574468, "t_wall": "2026-09-21T14:13:39.574Z", "v": 1}
+{"event": "outcome", "of": 19.574468, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 19.574469, "t_wall": "2026-09-21T14:13:39.574Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 20.425532, "t_wall": "2026-09-21T14:13:40.425Z", "v": 1}
+{"event": "outcome", "of": 20.425532, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 20.425533, "t_wall": "2026-09-21T14:13:40.425Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 21.276596, "t_wall": "2026-09-21T14:13:41.276Z", "v": 1}
+{"event": "outcome", "of": 21.276596, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 21.276597, "t_wall": "2026-09-21T14:13:41.276Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 22.12766, "t_wall": "2026-09-21T14:13:42.127Z", "v": 1}
+{"event": "outcome", "of": 22.12766, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 22.127661, "t_wall": "2026-09-21T14:13:42.127Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 22.978723, "t_wall": "2026-09-21T14:13:42.978Z", "v": 1}
+{"event": "outcome", "of": 22.978723, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 22.978724, "t_wall": "2026-09-21T14:13:42.978Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 23.829787, "t_wall": "2026-09-21T14:13:43.829Z", "v": 1}
+{"event": "outcome", "of": 23.829787, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 23.829788, "t_wall": "2026-09-21T14:13:43.829Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 24.680851, "t_wall": "2026-09-21T14:13:44.680Z", "v": 1}
+{"event": "outcome", "of": 24.680851, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 24.680852, "t_wall": "2026-09-21T14:13:44.680Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 25.531915, "t_wall": "2026-09-21T14:13:45.531Z", "v": 1}
+{"event": "outcome", "of": 25.531915, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 25.531916, "t_wall": "2026-09-21T14:13:45.531Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 26.382979, "t_wall": "2026-09-21T14:13:46.382Z", "v": 1}
+{"event": "outcome", "of": 26.382979, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 26.38298, "t_wall": "2026-09-21T14:13:46.382Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 27.234043, "t_wall": "2026-09-21T14:13:47.234Z", "v": 1}
+{"event": "outcome", "of": 27.234043, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 27.234044, "t_wall": "2026-09-21T14:13:47.234Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 28.085106, "t_wall": "2026-09-21T14:13:48.085Z", "v": 1}
+{"event": "outcome", "of": 28.085106, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 28.085107, "t_wall": "2026-09-21T14:13:48.085Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 28.93617, "t_wall": "2026-09-21T14:13:48.936Z", "v": 1}
+{"event": "outcome", "of": 28.93617, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 28.936171, "t_wall": "2026-09-21T14:13:48.936Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 29.787234, "t_wall": "2026-09-21T14:13:49.787Z", "v": 1}
+{"event": "outcome", "of": 29.787234, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 29.787235, "t_wall": "2026-09-21T14:13:49.787Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 30.638298, "t_wall": "2026-09-21T14:13:50.638Z", "v": 1}
+{"event": "outcome", "of": 30.638298, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 30.638299, "t_wall": "2026-09-21T14:13:50.638Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 31.489362, "t_wall": "2026-09-21T14:13:51.489Z", "v": 1}
+{"event": "outcome", "of": 31.489362, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 31.489363, "t_wall": "2026-09-21T14:13:51.489Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 32.340426, "t_wall": "2026-09-21T14:13:52.340Z", "v": 1}
+{"event": "outcome", "of": 32.340426, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 32.340427, "t_wall": "2026-09-21T14:13:52.340Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 33.191489, "t_wall": "2026-09-21T14:13:53.191Z", "v": 1}
+{"event": "outcome", "of": 33.191489, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 33.19149, "t_wall": "2026-09-21T14:13:53.191Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 34.042553, "t_wall": "2026-09-21T14:13:54.042Z", "v": 1}
+{"event": "outcome", "of": 34.042553, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 34.042554, "t_wall": "2026-09-21T14:13:54.042Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 34.893617, "t_wall": "2026-09-21T14:13:54.893Z", "v": 1}
+{"event": "outcome", "of": 34.893617, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 34.893618, "t_wall": "2026-09-21T14:13:54.893Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 35.744681, "t_wall": "2026-09-21T14:13:55.744Z", "v": 1}
+{"event": "outcome", "of": 35.744681, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 35.744682, "t_wall": "2026-09-21T14:13:55.744Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 36.595745, "t_wall": "2026-09-21T14:13:56.595Z", "v": 1}
+{"event": "outcome", "of": 36.595745, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 36.595746, "t_wall": "2026-09-21T14:13:56.595Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 37.446809, "t_wall": "2026-09-21T14:13:57.446Z", "v": 1}
+{"event": "outcome", "of": 37.446809, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 37.44681, "t_wall": "2026-09-21T14:13:57.446Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 38.297872, "t_wall": "2026-09-21T14:13:58.297Z", "v": 1}
+{"event": "outcome", "of": 38.297872, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 38.297873, "t_wall": "2026-09-21T14:13:58.297Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "burst", "t_mono": 39.148936, "t_wall": "2026-09-21T14:13:59.148Z", "v": 1}
+{"event": "outcome", "of": 39.148936, "path": "shadow", "phase": "burst", "result": "acked", "t_mono": 39.148937, "t_wall": "2026-09-21T14:13:59.148Z", "v": 1}
+{"event": "burst-end", "inside_window": true, "kind": "shadow", "met": true, "ratio": 1.0, "span_s": 39.149, "t_mono": 39.148938, "t_wall": "2026-09-21T14:13:59.148Z", "v": 1, "why": "complete"}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 49.148936, "t_wall": "2026-09-21T14:14:09.148Z", "v": 1}
+{"event": "outcome", "of": 49.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 49.148937, "t_wall": "2026-09-21T14:14:09.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 59.148936, "t_wall": "2026-09-21T14:14:19.148Z", "v": 1}
+{"event": "outcome", "of": 59.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 59.148937, "t_wall": "2026-09-21T14:14:19.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 69.148936, "t_wall": "2026-09-21T14:14:29.148Z", "v": 1}
+{"event": "outcome", "of": 69.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 69.148937, "t_wall": "2026-09-21T14:14:29.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 79.148936, "t_wall": "2026-09-21T14:14:39.148Z", "v": 1}
+{"event": "outcome", "of": 79.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 79.148937, "t_wall": "2026-09-21T14:14:39.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 89.148936, "t_wall": "2026-09-21T14:14:49.148Z", "v": 1}
+{"event": "outcome", "of": 89.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 89.148937, "t_wall": "2026-09-21T14:14:49.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 99.148936, "t_wall": "2026-09-21T14:14:59.148Z", "v": 1}
+{"event": "outcome", "of": 99.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 99.148937, "t_wall": "2026-09-21T14:14:59.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 109.148936, "t_wall": "2026-09-21T14:15:09.148Z", "v": 1}
+{"event": "outcome", "of": 109.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 109.148937, "t_wall": "2026-09-21T14:15:09.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 119.148936, "t_wall": "2026-09-21T14:15:19.148Z", "v": 1}
+{"event": "outcome", "of": 119.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 119.148937, "t_wall": "2026-09-21T14:15:19.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 129.148936, "t_wall": "2026-09-21T14:15:29.148Z", "v": 1}
+{"event": "outcome", "of": 129.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 129.148937, "t_wall": "2026-09-21T14:15:29.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 139.148936, "t_wall": "2026-09-21T14:15:39.148Z", "v": 1}
+{"event": "outcome", "of": 139.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 139.148937, "t_wall": "2026-09-21T14:15:39.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 149.148936, "t_wall": "2026-09-21T14:15:49.148Z", "v": 1}
+{"event": "outcome", "of": 149.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 149.148937, "t_wall": "2026-09-21T14:15:49.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 159.148936, "t_wall": "2026-09-21T14:15:59.148Z", "v": 1}
+{"event": "outcome", "of": 159.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 159.148937, "t_wall": "2026-09-21T14:15:59.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 169.148936, "t_wall": "2026-09-21T14:16:09.148Z", "v": 1}
+{"event": "outcome", "of": 169.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 169.148937, "t_wall": "2026-09-21T14:16:09.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 179.148936, "t_wall": "2026-09-21T14:16:19.148Z", "v": 1}
+{"event": "outcome", "of": 179.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 179.148937, "t_wall": "2026-09-21T14:16:19.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 189.148936, "t_wall": "2026-09-21T14:16:29.148Z", "v": 1}
+{"event": "outcome", "of": 189.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 189.148937, "t_wall": "2026-09-21T14:16:29.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 199.148936, "t_wall": "2026-09-21T14:16:39.148Z", "v": 1}
+{"event": "outcome", "of": 199.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 199.148937, "t_wall": "2026-09-21T14:16:39.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 209.148936, "t_wall": "2026-09-21T14:16:49.148Z", "v": 1}
+{"event": "outcome", "of": 209.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 209.148937, "t_wall": "2026-09-21T14:16:49.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 219.148936, "t_wall": "2026-09-21T14:16:59.148Z", "v": 1}
+{"event": "outcome", "of": 219.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 219.148937, "t_wall": "2026-09-21T14:16:59.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 229.148936, "t_wall": "2026-09-21T14:17:09.148Z", "v": 1}
+{"event": "outcome", "of": 229.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 229.148937, "t_wall": "2026-09-21T14:17:09.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 239.148936, "t_wall": "2026-09-21T14:17:19.148Z", "v": 1}
+{"event": "outcome", "of": 239.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 239.148937, "t_wall": "2026-09-21T14:17:19.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 249.148936, "t_wall": "2026-09-21T14:17:29.148Z", "v": 1}
+{"event": "outcome", "of": 249.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 249.148937, "t_wall": "2026-09-21T14:17:29.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 259.148936, "t_wall": "2026-09-21T14:17:39.148Z", "v": 1}
+{"event": "outcome", "of": 259.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 259.148937, "t_wall": "2026-09-21T14:17:39.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 269.148936, "t_wall": "2026-09-21T14:17:49.148Z", "v": 1}
+{"event": "outcome", "of": 269.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 269.148937, "t_wall": "2026-09-21T14:17:49.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 279.148936, "t_wall": "2026-09-21T14:17:59.148Z", "v": 1}
+{"event": "outcome", "of": 279.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 279.148937, "t_wall": "2026-09-21T14:17:59.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 289.148936, "t_wall": "2026-09-21T14:18:09.148Z", "v": 1}
+{"event": "outcome", "of": 289.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 289.148937, "t_wall": "2026-09-21T14:18:09.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 299.148936, "t_wall": "2026-09-21T14:18:19.148Z", "v": 1}
+{"event": "outcome", "of": 299.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 299.148937, "t_wall": "2026-09-21T14:18:19.148Z", "v": 1}
+{"connection": 1, "event": "cut", "t_mono": 309.148936, "t_wall": "2026-09-21T14:18:29.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 309.148937, "t_wall": "2026-09-21T14:18:29.148Z", "v": 1}
+{"connect": "held", "event": "outcome", "of": 309.148937, "path": "ingest", "phase": "trickle", "result": "refused", "t_mono": 309.148938, "t_wall": "2026-09-21T14:18:29.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 319.148936, "t_wall": "2026-09-21T14:18:39.148Z", "v": 1}
+{"connect": "held", "event": "outcome", "of": 319.148936, "path": "shadow", "phase": "trickle", "result": "refused", "t_mono": 319.148937, "t_wall": "2026-09-21T14:18:39.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 329.148936, "t_wall": "2026-09-21T14:18:49.148Z", "v": 1}
+{"connection": 2, "event": "connect-failed", "t_mono": 329.148937, "t_wall": "2026-09-21T14:18:49.148Z", "v": 1, "why": "refused"}
+{"connect": "refused", "event": "outcome", "of": 329.148936, "path": "ingest", "phase": "trickle", "result": "refused", "t_mono": 329.148938, "t_wall": "2026-09-21T14:18:49.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 339.148936, "t_wall": "2026-09-21T14:18:59.148Z", "v": 1}
+{"connection": 2, "event": "connect-failed", "t_mono": 339.148937, "t_wall": "2026-09-21T14:18:59.148Z", "v": 1, "why": "refused"}
+{"connect": "refused", "event": "outcome", "of": 339.148936, "path": "shadow", "phase": "trickle", "result": "refused", "t_mono": 339.148938, "t_wall": "2026-09-21T14:18:59.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 349.148936, "t_wall": "2026-09-21T14:19:09.148Z", "v": 1}
+{"connection": 2, "event": "connect-failed", "t_mono": 349.148937, "t_wall": "2026-09-21T14:19:09.148Z", "v": 1, "why": "refused"}
+{"connect": "refused", "event": "outcome", "of": 349.148936, "path": "ingest", "phase": "trickle", "result": "refused", "t_mono": 349.148938, "t_wall": "2026-09-21T14:19:09.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 359.148936, "t_wall": "2026-09-21T14:19:19.148Z", "v": 1}
+{"connection": 2, "event": "connected", "t_mono": 359.148937, "t_wall": "2026-09-21T14:19:19.148Z", "v": 1}
+{"connect": "opened", "event": "outcome", "of": 359.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 359.148938, "t_wall": "2026-09-21T14:19:19.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 369.148936, "t_wall": "2026-09-21T14:19:29.148Z", "v": 1}
+{"event": "outcome", "of": 369.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 369.148937, "t_wall": "2026-09-21T14:19:29.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 379.148936, "t_wall": "2026-09-21T14:19:39.148Z", "v": 1}
+{"event": "outcome", "of": 379.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 379.148937, "t_wall": "2026-09-21T14:19:39.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 389.148936, "t_wall": "2026-09-21T14:19:49.148Z", "v": 1}
+{"event": "outcome", "of": 389.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 389.148937, "t_wall": "2026-09-21T14:19:49.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 399.148936, "t_wall": "2026-09-21T14:19:59.148Z", "v": 1}
+{"event": "outcome", "of": 399.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 399.148937, "t_wall": "2026-09-21T14:19:59.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 409.148936, "t_wall": "2026-09-21T14:20:09.148Z", "v": 1}
+{"event": "outcome", "of": 409.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 409.148937, "t_wall": "2026-09-21T14:20:09.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 419.148936, "t_wall": "2026-09-21T14:20:19.148Z", "v": 1}
+{"event": "outcome", "of": 419.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 419.148937, "t_wall": "2026-09-21T14:20:19.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 429.148936, "t_wall": "2026-09-21T14:20:29.148Z", "v": 1}
+{"event": "outcome", "of": 429.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 429.148937, "t_wall": "2026-09-21T14:20:29.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 439.148936, "t_wall": "2026-09-21T14:20:39.148Z", "v": 1}
+{"event": "outcome", "of": 439.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 439.148937, "t_wall": "2026-09-21T14:20:39.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 449.148936, "t_wall": "2026-09-21T14:20:49.148Z", "v": 1}
+{"event": "outcome", "of": 449.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 449.148937, "t_wall": "2026-09-21T14:20:49.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 459.148936, "t_wall": "2026-09-21T14:20:59.148Z", "v": 1}
+{"event": "outcome", "of": 459.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 459.148937, "t_wall": "2026-09-21T14:20:59.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 469.148936, "t_wall": "2026-09-21T14:21:09.148Z", "v": 1}
+{"event": "outcome", "of": 469.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 469.148937, "t_wall": "2026-09-21T14:21:09.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 479.148936, "t_wall": "2026-09-21T14:21:19.148Z", "v": 1}
+{"event": "outcome", "of": 479.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 479.148937, "t_wall": "2026-09-21T14:21:19.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 489.148936, "t_wall": "2026-09-21T14:21:29.148Z", "v": 1}
+{"event": "outcome", "of": 489.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 489.148937, "t_wall": "2026-09-21T14:21:29.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 499.148936, "t_wall": "2026-09-21T14:21:39.148Z", "v": 1}
+{"event": "outcome", "of": 499.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 499.148937, "t_wall": "2026-09-21T14:21:39.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 509.148936, "t_wall": "2026-09-21T14:21:49.148Z", "v": 1}
+{"event": "outcome", "of": 509.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 509.148937, "t_wall": "2026-09-21T14:21:49.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 519.148936, "t_wall": "2026-09-21T14:21:59.148Z", "v": 1}
+{"event": "outcome", "of": 519.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 519.148937, "t_wall": "2026-09-21T14:21:59.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 529.148936, "t_wall": "2026-09-21T14:22:09.148Z", "v": 1}
+{"event": "outcome", "of": 529.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 529.148937, "t_wall": "2026-09-21T14:22:09.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 539.148936, "t_wall": "2026-09-21T14:22:19.148Z", "v": 1}
+{"event": "outcome", "of": 539.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 539.148937, "t_wall": "2026-09-21T14:22:19.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 549.148936, "t_wall": "2026-09-21T14:22:29.148Z", "v": 1}
+{"event": "outcome", "of": 549.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 549.148937, "t_wall": "2026-09-21T14:22:29.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 559.148936, "t_wall": "2026-09-21T14:22:39.148Z", "v": 1}
+{"event": "outcome", "of": 559.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 559.148937, "t_wall": "2026-09-21T14:22:39.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 569.148936, "t_wall": "2026-09-21T14:22:49.148Z", "v": 1}
+{"event": "outcome", "of": 569.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 569.148937, "t_wall": "2026-09-21T14:22:49.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 579.148936, "t_wall": "2026-09-21T14:22:59.148Z", "v": 1}
+{"event": "outcome", "of": 579.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 579.148937, "t_wall": "2026-09-21T14:22:59.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 589.148936, "t_wall": "2026-09-21T14:23:09.148Z", "v": 1}
+{"event": "outcome", "of": 589.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 589.148937, "t_wall": "2026-09-21T14:23:09.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 599.148936, "t_wall": "2026-09-21T14:23:19.148Z", "v": 1}
+{"event": "outcome", "of": 599.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 599.148937, "t_wall": "2026-09-21T14:23:19.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 609.148936, "t_wall": "2026-09-21T14:23:29.148Z", "v": 1}
+{"event": "outcome", "of": 609.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 609.148937, "t_wall": "2026-09-21T14:23:29.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 619.148936, "t_wall": "2026-09-21T14:23:39.148Z", "v": 1}
+{"event": "outcome", "of": 619.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 619.148937, "t_wall": "2026-09-21T14:23:39.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 629.148936, "t_wall": "2026-09-21T14:23:49.148Z", "v": 1}
+{"event": "outcome", "of": 629.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 629.148937, "t_wall": "2026-09-21T14:23:49.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 639.148936, "t_wall": "2026-09-21T14:23:59.148Z", "v": 1}
+{"event": "outcome", "of": 639.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 639.148937, "t_wall": "2026-09-21T14:23:59.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 649.148936, "t_wall": "2026-09-21T14:24:09.148Z", "v": 1}
+{"event": "outcome", "of": 649.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 649.148937, "t_wall": "2026-09-21T14:24:09.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 659.148936, "t_wall": "2026-09-21T14:24:19.148Z", "v": 1}
+{"event": "outcome", "of": 659.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 659.148937, "t_wall": "2026-09-21T14:24:19.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 669.148936, "t_wall": "2026-09-21T14:24:29.148Z", "v": 1}
+{"event": "outcome", "of": 669.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 669.148937, "t_wall": "2026-09-21T14:24:29.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 679.148936, "t_wall": "2026-09-21T14:24:39.148Z", "v": 1}
+{"event": "outcome", "of": 679.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 679.148937, "t_wall": "2026-09-21T14:24:39.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 689.148936, "t_wall": "2026-09-21T14:24:49.148Z", "v": 1}
+{"event": "outcome", "of": 689.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 689.148937, "t_wall": "2026-09-21T14:24:49.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 699.148936, "t_wall": "2026-09-21T14:24:59.148Z", "v": 1}
+{"event": "outcome", "of": 699.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 699.148937, "t_wall": "2026-09-21T14:24:59.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 709.148936, "t_wall": "2026-09-21T14:25:09.148Z", "v": 1}
+{"event": "outcome", "of": 709.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 709.148937, "t_wall": "2026-09-21T14:25:09.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 719.148936, "t_wall": "2026-09-21T14:25:19.148Z", "v": 1}
+{"event": "outcome", "of": 719.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 719.148937, "t_wall": "2026-09-21T14:25:19.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 729.148936, "t_wall": "2026-09-21T14:25:29.148Z", "v": 1}
+{"event": "outcome", "of": 729.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 729.148937, "t_wall": "2026-09-21T14:25:29.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 739.148936, "t_wall": "2026-09-21T14:25:39.148Z", "v": 1}
+{"event": "outcome", "of": 739.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 739.148937, "t_wall": "2026-09-21T14:25:39.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 749.148936, "t_wall": "2026-09-21T14:25:49.148Z", "v": 1}
+{"event": "outcome", "of": 749.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 749.148937, "t_wall": "2026-09-21T14:25:49.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 759.148936, "t_wall": "2026-09-21T14:25:59.148Z", "v": 1}
+{"event": "outcome", "of": 759.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 759.148937, "t_wall": "2026-09-21T14:25:59.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 769.148936, "t_wall": "2026-09-21T14:26:09.148Z", "v": 1}
+{"event": "outcome", "of": 769.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 769.148937, "t_wall": "2026-09-21T14:26:09.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 779.148936, "t_wall": "2026-09-21T14:26:19.148Z", "v": 1}
+{"event": "outcome", "of": 779.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 779.148937, "t_wall": "2026-09-21T14:26:19.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 789.148936, "t_wall": "2026-09-21T14:26:29.148Z", "v": 1}
+{"event": "outcome", "of": 789.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 789.148937, "t_wall": "2026-09-21T14:26:29.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 799.148936, "t_wall": "2026-09-21T14:26:39.148Z", "v": 1}
+{"event": "outcome", "of": 799.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 799.148937, "t_wall": "2026-09-21T14:26:39.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 809.148936, "t_wall": "2026-09-21T14:26:49.148Z", "v": 1}
+{"event": "outcome", "of": 809.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 809.148937, "t_wall": "2026-09-21T14:26:49.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 819.148936, "t_wall": "2026-09-21T14:26:59.148Z", "v": 1}
+{"event": "outcome", "of": 819.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 819.148937, "t_wall": "2026-09-21T14:26:59.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 829.148936, "t_wall": "2026-09-21T14:27:09.148Z", "v": 1}
+{"event": "outcome", "of": 829.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 829.148937, "t_wall": "2026-09-21T14:27:09.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 839.148936, "t_wall": "2026-09-21T14:27:19.148Z", "v": 1}
+{"event": "outcome", "of": 839.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 839.148937, "t_wall": "2026-09-21T14:27:19.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 849.148936, "t_wall": "2026-09-21T14:27:29.148Z", "v": 1}
+{"event": "outcome", "of": 849.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 849.148937, "t_wall": "2026-09-21T14:27:29.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 859.148936, "t_wall": "2026-09-21T14:27:39.148Z", "v": 1}
+{"event": "outcome", "of": 859.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 859.148937, "t_wall": "2026-09-21T14:27:39.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 869.148936, "t_wall": "2026-09-21T14:27:49.148Z", "v": 1}
+{"event": "outcome", "of": 869.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 869.148937, "t_wall": "2026-09-21T14:27:49.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 879.148936, "t_wall": "2026-09-21T14:27:59.148Z", "v": 1}
+{"event": "outcome", "of": 879.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 879.148937, "t_wall": "2026-09-21T14:27:59.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 889.148936, "t_wall": "2026-09-21T14:28:09.148Z", "v": 1}
+{"event": "outcome", "of": 889.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 889.148937, "t_wall": "2026-09-21T14:28:09.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 899.148936, "t_wall": "2026-09-21T14:28:19.148Z", "v": 1}
+{"event": "outcome", "of": 899.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 899.148937, "t_wall": "2026-09-21T14:28:19.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 909.148936, "t_wall": "2026-09-21T14:28:29.148Z", "v": 1}
+{"event": "outcome", "of": 909.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 909.148937, "t_wall": "2026-09-21T14:28:29.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 919.148936, "t_wall": "2026-09-21T14:28:39.148Z", "v": 1}
+{"event": "outcome", "of": 919.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 919.148937, "t_wall": "2026-09-21T14:28:39.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 929.148936, "t_wall": "2026-09-21T14:28:49.148Z", "v": 1}
+{"event": "outcome", "of": 929.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 929.148937, "t_wall": "2026-09-21T14:28:49.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 939.148936, "t_wall": "2026-09-21T14:28:59.148Z", "v": 1}
+{"event": "outcome", "of": 939.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 939.148937, "t_wall": "2026-09-21T14:28:59.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 949.148936, "t_wall": "2026-09-21T14:29:09.148Z", "v": 1}
+{"event": "outcome", "of": 949.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 949.148937, "t_wall": "2026-09-21T14:29:09.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 959.148936, "t_wall": "2026-09-21T14:29:19.148Z", "v": 1}
+{"event": "outcome", "of": 959.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 959.148937, "t_wall": "2026-09-21T14:29:19.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 969.148936, "t_wall": "2026-09-21T14:29:29.148Z", "v": 1}
+{"event": "outcome", "of": 969.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 969.148937, "t_wall": "2026-09-21T14:29:29.148Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 979.148936, "t_wall": "2026-09-21T14:29:39.148Z", "v": 1}
+{"event": "outcome", "of": 979.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 979.148937, "t_wall": "2026-09-21T14:29:39.148Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 989.148936, "t_wall": "2026-09-21T14:29:49.147Z", "v": 1}
+{"event": "outcome", "of": 989.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 989.148937, "t_wall": "2026-09-21T14:29:49.147Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 999.148936, "t_wall": "2026-09-21T14:29:59.147Z", "v": 1}
+{"event": "outcome", "of": 999.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 999.148937, "t_wall": "2026-09-21T14:29:59.147Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 1009.148936, "t_wall": "2026-09-21T14:30:09.147Z", "v": 1}
+{"event": "outcome", "of": 1009.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 1009.148937, "t_wall": "2026-09-21T14:30:09.147Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 1019.148936, "t_wall": "2026-09-21T14:30:19.147Z", "v": 1}
+{"event": "outcome", "of": 1019.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 1019.148937, "t_wall": "2026-09-21T14:30:19.147Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 1029.148936, "t_wall": "2026-09-21T14:30:29.147Z", "v": 1}
+{"event": "outcome", "of": 1029.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 1029.148937, "t_wall": "2026-09-21T14:30:29.147Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 1039.148936, "t_wall": "2026-09-21T14:30:39.147Z", "v": 1}
+{"event": "outcome", "of": 1039.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 1039.148937, "t_wall": "2026-09-21T14:30:39.147Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 1049.148936, "t_wall": "2026-09-21T14:30:49.147Z", "v": 1}
+{"event": "outcome", "of": 1049.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 1049.148937, "t_wall": "2026-09-21T14:30:49.147Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 1059.148936, "t_wall": "2026-09-21T14:30:59.147Z", "v": 1}
+{"event": "outcome", "of": 1059.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 1059.148937, "t_wall": "2026-09-21T14:30:59.147Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 1069.148936, "t_wall": "2026-09-21T14:31:09.147Z", "v": 1}
+{"event": "outcome", "of": 1069.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 1069.148937, "t_wall": "2026-09-21T14:31:09.147Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 1079.148936, "t_wall": "2026-09-21T14:31:19.147Z", "v": 1}
+{"event": "outcome", "of": 1079.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 1079.148937, "t_wall": "2026-09-21T14:31:19.147Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 1089.148936, "t_wall": "2026-09-21T14:31:29.147Z", "v": 1}
+{"event": "outcome", "of": 1089.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 1089.148937, "t_wall": "2026-09-21T14:31:29.147Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 1099.148936, "t_wall": "2026-09-21T14:31:39.147Z", "v": 1}
+{"event": "outcome", "of": 1099.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 1099.148937, "t_wall": "2026-09-21T14:31:39.147Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 1109.148936, "t_wall": "2026-09-21T14:31:49.147Z", "v": 1}
+{"event": "outcome", "of": 1109.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 1109.148937, "t_wall": "2026-09-21T14:31:49.147Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 1119.148936, "t_wall": "2026-09-21T14:31:59.147Z", "v": 1}
+{"event": "outcome", "of": 1119.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 1119.148937, "t_wall": "2026-09-21T14:31:59.147Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 1129.148936, "t_wall": "2026-09-21T14:32:09.147Z", "v": 1}
+{"event": "outcome", "of": 1129.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 1129.148937, "t_wall": "2026-09-21T14:32:09.147Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 1139.148936, "t_wall": "2026-09-21T14:32:19.147Z", "v": 1}
+{"event": "outcome", "of": 1139.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 1139.148937, "t_wall": "2026-09-21T14:32:19.147Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 1149.148936, "t_wall": "2026-09-21T14:32:29.147Z", "v": 1}
+{"event": "outcome", "of": 1149.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 1149.148937, "t_wall": "2026-09-21T14:32:29.147Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 1159.148936, "t_wall": "2026-09-21T14:32:39.147Z", "v": 1}
+{"event": "outcome", "of": 1159.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 1159.148937, "t_wall": "2026-09-21T14:32:39.147Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 1169.148936, "t_wall": "2026-09-21T14:32:49.147Z", "v": 1}
+{"event": "outcome", "of": 1169.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 1169.148937, "t_wall": "2026-09-21T14:32:49.147Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 1179.148936, "t_wall": "2026-09-21T14:32:59.147Z", "v": 1}
+{"event": "outcome", "of": 1179.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 1179.148937, "t_wall": "2026-09-21T14:32:59.147Z", "v": 1}
+{"event": "attempt", "path": "ingest", "phase": "trickle", "t_mono": 1189.148936, "t_wall": "2026-09-21T14:33:09.147Z", "v": 1}
+{"event": "outcome", "of": 1189.148936, "path": "ingest", "phase": "trickle", "result": "acked", "t_mono": 1189.148937, "t_wall": "2026-09-21T14:33:09.147Z", "v": 1}
+{"event": "attempt", "path": "shadow", "phase": "trickle", "t_mono": 1199.148936, "t_wall": "2026-09-21T14:33:19.147Z", "v": 1}
+{"event": "outcome", "of": 1199.148936, "path": "shadow", "phase": "trickle", "result": "acked", "t_mono": 1199.148937, "t_wall": "2026-09-21T14:33:19.147Z", "v": 1}
+{"event": "ceiling", "t_mono": 1200.0, "t_wall": "2026-09-21T14:33:19.998Z", "v": 1, "which": "minutes"}
+{"burst_met": true, "event": "stopped", "exit": 0, "signal": null, "t_mono": 1200.000001, "t_wall": "2026-09-21T14:33:19.998Z", "v": 1, "why": "time-ceiling"}

@@ -1,0 +1,15 @@
+{
+ "format": 1,
+ "about": "tests/test_sdv_drill.py's fixture of the file build_drill.py build --arch amd64 writes: documentation digests only.",
+ "arch": "amd64",
+ "images": {
+  "1.0.0": {"store_id": "sha256:ec5ace9881cffeedd180fbd988f5a2641a5d3b2754bbdb9ea2204d8c5ae38bcf",
+            "config_digest": "sha256:d2ef900503b1bee597c75100f046ccf1c1a33fae64ff148ed8e57011c9186221"},
+  "1.1.0": {"store_id": "sha256:f25810dcaf4d494f182df214a7f0364f75359ace577f803322eab0ee3a582147",
+            "config_digest": "sha256:887962d2f3d5b37ee261522016212a002b0839a8f8b1e050a050f7fefd9c2376"},
+  "1.2.0": {"store_id": "sha256:cd35a351c0d4ca29585f40d8ce060aff2fbc9621f39adeafd2e6b144126cd21f",
+            "config_digest": "sha256:88b4126f0a732049f990c7fcf70371a2b5a2a05cdf619d2d8e27289d3f97cc57"}
+ },
+ "bridge": {"store_id": "sha256:2769c3548e523dc4bb9ac89943b58f95b5358e31600be03c3bcadaeddfad2202",
+            "config_digest": "sha256:fdc39fd32462852de4ce1a7903c846f03c0992864987364904bfaa0a9155b889"}
+}

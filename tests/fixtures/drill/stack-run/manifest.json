@@ -1,0 +1,8 @@
+{
+ "format": 1,
+ "run": "20990101-ota-drill",
+ "host_role": "pc",
+ "app": "external",
+ "app_note": "a stack run without its app (tests/test_sdv_drill.py's fixture: documentation values only)",
+ "scenario_table": {"file": "ownership.json"}
+}

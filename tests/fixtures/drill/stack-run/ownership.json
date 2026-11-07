@@ -1,0 +1,11 @@
+{
+ "format": 1,
+ "scenario": "20990101-sigsim-42",
+ "recording": {"path": "~/sdv-recordings/20990101-sigsim-42/sigsim.log",
+               "sha256": "sha256:14e3acd4a38e045ade0121569a889a0478a21718525a71f75bb06e8f29dd97f4", "format": "candump-log"},
+ "dbc_sha256": "sha256:0e45fccbd1cad28cb317c8d457e5e9e42e8ada2cd0dddc6a7f9c6ba808ffbe26",
+ "source": {"generator": "sigsim", "vehicle": {"name": "sigsim-design-car", "wheelbase_mm": 2700},
+            "params": {"seed": 42, "timestamps": "simulation time from zero"}},
+ "profile_id": 1,
+ "rows": []
+}

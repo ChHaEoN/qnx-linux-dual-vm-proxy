@@ -1,0 +1,12 @@
+{"topic":"/localization/kinematic_state","recv_ns":1700000000000,"stamp_ns":1699990000000,"fields":{"v":2.0}}
+{"topic":"/vehicle/status/velocity_status","recv_ns":1700001000000,"stamp_ns":1700000500000,"fields":{"longitudinal_velocity":2.0,"heading_rate":0.0}}
+{"topic":"/control/command/control_cmd","recv_ns":1700005000000,"stamp_ns":1700004000000,"fields":{"velocity":2.5,"acceleration":0.5,"jerk":0.0,"is_defined_acceleration":true,"is_defined_jerk":false,"steering_tire_angle":0.0625,"steering_tire_rotation_rate":0.0,"is_defined_steering_tire_rotation_rate":false}}
+{"topic":"/vehicle/status/steering_status","recv_ns":1700006000000,"stamp_ns":1700005500000,"fields":{"steering_tire_angle":0.0625}}
+{"topic":"/vehicle/status/gear_status","recv_ns":1700007000000,"stamp_ns":1700006500000,"fields":{"report":2,"report_name":"DRIVE"}}
+{"topic":"/localization/kinematic_state","recv_ns":1700020000000,"stamp_ns":1700010000000,"fields":{"v":2.25}}
+{"topic":"/localization/acceleration","recv_ns":1700021000000,"stamp_ns":1700020500000,"fields":{"ax":0.5}}
+{"topic":"/control/command/control_cmd","recv_ns":1700055000000,"stamp_ns":1700034000000,"fields":{"velocity":2.75,"acceleration":0.5,"jerk":0.25,"is_defined_acceleration":true,"is_defined_jerk":true,"steering_tire_angle":0.0625,"steering_tire_rotation_rate":0.0,"is_defined_steering_tire_rotation_rate":false}}
+{"topic":"/localization/kinematic_state","recv_ns":1700056000000,"stamp_ns":1700046000000,"fields":{"v":9.0}}
+{"topic":"/control/command/control_cmd","recv_ns":1700085000000,"stamp_ns":1700064000000,"fields":{"velocity":3.0,"acceleration":0.0,"jerk":0.0,"is_defined_acceleration":false,"is_defined_jerk":false,"steering_tire_angle":-0.125,"steering_tire_rotation_rate":0.25,"is_defined_steering_tire_rotation_rate":true}}
+{"topic":"/control/command/control_cmd","recv_ns":1700300000000,"stamp_ns":1700094000000,"fields":{"velocity":3.0,"acceleration":0.0,"jerk":0.0,"is_defined_acceleration":false,"is_defined_jerk":false,"steering_tire_angle":0.0,"steering_tire_rotation_rate":0.0,"is_defined_steering_tire_rotation_rate":false}}
+{"summary":{"messages":{"/control/command/control_cmd":4,"/localization/kinematic_state":3,"/vehicle/status/velocity_status":1,"/vehicle/status/steering_status":1,"/vehicle/status/gear_status":1,"/localization/acceleration":1},"bag_sha256":{"fake_0.mcap":"1111111111111111111111111111111111111111111111111111111111111111","metadata.yaml":"0000000000000000000000000000000000000000000000000000000000000000"},"export_format":1}}

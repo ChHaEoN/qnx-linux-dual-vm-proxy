@@ -1,0 +1,35 @@
+{
+  "_note": "Fake ROS messages for tests/test_sdv_ctl.py, one per topic the export reads, in the shape of the messages the specification names (Phase 8 spec section 1 and 2.7), plus GearReport's named constants as the export resolves them. Synthetic field values; the gear constants are GearReport's public definition; nothing is read from a bag or a run. The tests turn each object into nested attribute objects.",
+  "gear_constants": {"NONE": 0, "NEUTRAL": 1, "DRIVE": 2, "DRIVE_2": 3, "REVERSE": 20, "REVERSE_2": 21, "PARK": 22, "LOW": 23, "LOW_2": 24},
+  "messages": {
+    "/control/command/control_cmd": {
+      "stamp": {"sec": 1700, "nanosec": 34000000},
+      "control_time": {"sec": 1700, "nanosec": 34000000},
+      "lateral": {"stamp": {"sec": 1700, "nanosec": 34000000}, "control_time": {"sec": 1700, "nanosec": 34000000},
+                  "steering_tire_angle": 0.125, "steering_tire_rotation_rate": 0.25, "is_defined_steering_tire_rotation_rate": true},
+      "longitudinal": {"stamp": {"sec": 1700, "nanosec": 34000000}, "control_time": {"sec": 1700, "nanosec": 34000000},
+                       "velocity": 2.75, "acceleration": 0.5, "jerk": 0.0, "is_defined_acceleration": true, "is_defined_jerk": false}
+    },
+    "/localization/kinematic_state": {
+      "header": {"stamp": {"sec": 1700, "nanosec": 10000000}, "frame_id": "map"},
+      "child_frame_id": "base_link",
+      "twist": {"twist": {"linear": {"x": 2.25, "y": 0.0, "z": 0.0}, "angular": {"x": 0.0, "y": 0.0, "z": 0.0}}}
+    },
+    "/vehicle/status/velocity_status": {
+      "header": {"stamp": {"sec": 1700, "nanosec": 500000}, "frame_id": "base_link"},
+      "longitudinal_velocity": 2.0, "lateral_velocity": 0.0, "heading_rate": 0.0625
+    },
+    "/vehicle/status/steering_status": {
+      "stamp": {"sec": 1700, "nanosec": 5500000},
+      "steering_tire_angle": 0.0625
+    },
+    "/vehicle/status/gear_status": {
+      "stamp": {"sec": 1700, "nanosec": 6500000},
+      "report": 20
+    },
+    "/localization/acceleration": {
+      "header": {"stamp": {"sec": 1700, "nanosec": 20500000}, "frame_id": "base_link"},
+      "accel": {"accel": {"linear": {"x": -0.375, "y": 0.0, "z": 0.0}, "angular": {"x": 0.0, "y": 0.0, "z": 0.0}}}
+    }
+  }
+}
