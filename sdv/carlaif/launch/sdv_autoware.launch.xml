@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  sdv_autoware.launch.xml - the Autoware side of the CARLA 0.10.0 closed loop (sdv/carlaif; SDV Phase 8 WP9 P2).
+
+  The WP9 specification's 2.3 and section 1's item 2 (the project's local design notes;
+  not in this tree). Run in aw-sim, a container of the Autoware image by its digest, under the project entrypoint:
+
+      ros2 launch /sdv/sdv/carlaif/launch/sdv_autoware.launch.xml map_path:=MAP_FOLDER
+
+  Autoware in planning-simulation mode with the CARLA interface as its simulator: autoware.launch.xml included as
+  planning_simulator.launch.xml includes it, inside an unscoped group ahead of the simulator component's include, with
+  every argument that file passes to the two includes at its value there, but for what this launch changes: sim time;
+  sensing, its drivers, localization and perception off; the vehicle on without its interface; no system monitor; the
+  dummy diagnostics publisher on; no RViz. The simulator component without its dummy vehicle, dummy perception or dummy
+  doors, localization by the API (the pose initializer), the tracker and prediction on, traffic-light recognition and the
+  scenario simulator's adapter off. The two auto-fix targets of the initial pose are the vector map, as that file sets
+  them, and scenario_simulation is false, which the simulator's files read and only that file declares. No upstream
+  launch or parameter file is changed.
+
+  twist2accel then gives /localization/acceleration from the interface's kinematic state, by its package's own launch and
+  parameter file, under sim time.
+
+  The perception path's cloud comes from the project's empty_cloud.py in a container of its own (aw-cloud), not from here.
+-->
+<launch>
+  <arg name="map_path" description="the Autoware map folder"/>
+
+  <let name="rviz_initial_pose_auto_fix_target" value="vector_map"/>
+  <let name="gnss_initial_pose_auto_fix_target" value="vector_map"/>
+  <let name="scenario_simulation" value="false"/>
+
+  <group scoped="false">
+    <include file="$(find-pkg-share autoware_launch)/launch/autoware.launch.xml">
+      <arg name="map_path" value="$(var map_path)"/>
+      <arg name="vehicle_model" value="sample_vehicle"/>
+      <arg name="sensor_model" value="sample_sensor_kit"/>
+      <arg name="data_path" value="$(env HOME)/autoware_data/ml_models"/>
+      <arg name="planning_module_preset" value="default"/>
+      <arg name="control_module_preset" value="default"/>
+      <arg name="launch_sensing" value="false"/>
+      <arg name="launch_sensing_driver" value="false"/>
+      <arg name="launch_localization" value="false"/>
+      <arg name="launch_perception" value="false"/>
+      <arg name="launch_vehicle" value="true"/>
+      <arg name="launch_vehicle_interface" value="false"/>
+      <arg name="system_run_mode" value="planning_simulation"/>
+      <arg name="launch_system_monitor" value="false"/>
+      <arg name="launch_dummy_diag_publisher" value="true"/>
+      <arg name="diagnostic_graph_aggregator_graph_path" value="$(find-pkg-share autoware_launch)/config/system/diagnostics/autoware-main.yaml"/>
+      <arg name="lanelet2_map_file" value="lanelet2_map.osm"/>
+      <arg name="pointcloud_map_file" value="pointcloud_map.pcd"/>
+      <arg name="rviz" value="false"/>
+      <arg name="rviz_config" value="$(find-pkg-share autoware_launch)/rviz/autoware.rviz"/>
+      <arg name="rviz_respawn" value="true"/>
+      <arg name="enable_all_modules_auto_mode" value="false"/>
+      <arg name="is_simulation" value="true"/>
+      <arg name="use_sim_time" value="true"/>
+    </include>
+  </group>
+
+  <group>
+    <include file="$(find-pkg-share autoware_launch)/launch/components/tier4_simulator_component.launch.xml">
+      <arg name="launch_dummy_perception" value="false"/>
+      <arg name="launch_dummy_vehicle" value="false"/>
+      <arg name="localization_sim_mode" value="api"/>
+      <arg name="launch_dummy_doors" value="false"/>
+      <arg name="launch_scenario_simulator_v2_adapter" value="false"/>
+      <arg name="perception/enable_detection_failure" value="true"/>
+      <arg name="perception/enable_object_recognition" value="true"/>
+      <arg name="perception/enable_traffic_light" value="false"/>
+      <arg name="dummy_traffic_light_mode" value="empty"/>
+      <arg name="perception/use_base_link_z" value="true"/>
+      <arg name="sensing/visible_range" value="300.0"/>
+      <arg name="vehicle_model" value="sample_vehicle"/>
+      <arg name="initial_engage_state" value="true"/>
+      <arg name="vehicle_info_param_file" value="$(find-pkg-share sample_vehicle_description)/config/vehicle_info.param.yaml"/>
+      <arg name="raw_vehicle_cmd_converter_param_path" value="$(find-pkg-share autoware_launch)/config/vehicle/raw_vehicle_cmd_converter/raw_vehicle_cmd_converter.param.yaml"/>
+      <arg name="data_path" value="$(env HOME)/autoware_data/ml_models"/>
+    </include>
+  </group>
+
+  <group>
+    <set_parameter name="use_sim_time" value="true"/>
+    <include file="$(find-pkg-share autoware_twist2accel)/launch/twist2accel.launch.xml">
+      <arg name="in_odom" value="/localization/kinematic_state"/>
+      <arg name="out_accel" value="/localization/acceleration"/>
+    </include>
+  </group>
+</launch>

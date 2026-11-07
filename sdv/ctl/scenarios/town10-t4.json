@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "name": "town10-t4",
+  "map": {
+    "name": "Town10HD-aw-n28",
+    "files": {
+      "lanelet2_map.osm": "37fe677164890fddbc256891ee04faeaf15e712434625de93d9b70366f79ee0d",
+      "map_projector_info.yaml": "a6fb6af33e164e61a075f9a79eeffa5eca3ead4435dc3de49e811525175b8307",
+      "pointcloud_map.pcd": "7ed7890ebe983b324758835336264dcc6b7f736e51498101262e91de49eee95b"
+    }
+  },
+  "initial_pose": {
+    "x": -55.61,
+    "y": -137.043,
+    "z": 0.0,
+    "yaw": -0.006144
+  },
+  "goal": {
+    "x": 65.235,
+    "y": -13.415,
+    "z": 0.0,
+    "yaw": 3.138818
+  },
+  "timeouts_s": {
+    "localize": 60,
+    "route": 60,
+    "engage": 120,
+    "arrive": 600
+  }
+}

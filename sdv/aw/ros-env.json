@@ -1,0 +1,6 @@
+{
+  "format": 1,
+  "ros_domain_id": 73,
+  "rmw": "rmw_cyclonedds_cpp",
+  "cyclonedds_single_host": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CycloneDDS xmlns=\"https://cdds.io/config\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/master/etc/cyclonedds.xsd\">\n  <Domain Id=\"any\">\n    <General>\n      <Interfaces>\n        <NetworkInterface name=\"lo\" multicast=\"false\"/>\n      </Interfaces>\n      <AllowMulticast>false</AllowMulticast>\n      <MaxMessageSize>65500B</MaxMessageSize>\n    </General>\n    <Internal>\n      <Watermarks>\n        <WhcHigh>500kB</WhcHigh>\n      </Watermarks>\n    </Internal>\n    <Discovery>\n      <ParticipantIndex>auto</ParticipantIndex>\n      <MaxAutoParticipantIndex>160</MaxAutoParticipantIndex>\n      <Peers>\n        <Peer address=\"127.0.0.1\"/>\n      </Peers>\n    </Discovery>\n  </Domain>\n</CycloneDDS>\n"
+}

@@ -1,0 +1,10 @@
+# wheel.lock -- the CARLA 0.10.0 client wheel of the interface's image, sdv-carlaif (sdv/carlaif; SDV Phase 8 WP9 P2)
+#
+# Local branch only. One pin: the Linux cp312 wheel of CARLA 0.10.0's Linux package (WP9a's read: tag
+# cp312-cp312-linux_x86_64, no Requires-Dist), by its sha256. build_image.py checks the file it is given against this
+# hash before staging it and again in the context, and the image installs it into its venv with
+#     pip install --no-index --no-deps --require-hashes --find-links <the staged wheel's folder> -r wheel.lock
+# so pip installs this file and nothing else, from nothing but the build context. amd64 only: no arm64 wheel exists.
+carla==0.10.0 \
+    --hash=sha256:b9a215f49f4e6c57160b53d95aa6507338d486a0171e744a31834cc5edc95d24
+    # carla-0.10.0-cp312-cp312-linux_x86_64.whl

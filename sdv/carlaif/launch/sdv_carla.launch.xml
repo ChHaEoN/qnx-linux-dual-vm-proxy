@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  sdv_carla.launch.xml - the vehicle side of the CARLA 0.10.0 closed loop (sdv/carlaif; SDV Phase 8 WP9 P2).
+
+  The WP9 specification's 2.3 (the project's local design notes; not in this tree). Run
+  in aw-carlaif, a container of the interface's image (sdv/carlaif/Dockerfile), with the overlay sourced as
+  build_image.py's LAUNCH_ENV gives it, so that both packages below resolve to the pin's share and the node's Python is
+  the venv's:
+
+      ros2 launch /sdv/sdv/carlaif/launch/sdv_carla.launch.xml host:=GATEWAY spawn_point:=X,Y,Z,ROLL,PITCH,YAW
+
+  host is the CARLA server's address, the default route's gateway read at run time (never a file in a tree); spawn_point
+  is sdv/carla/town10.py's string for the scenario's start (six numbers, degrees, the CARLA frame). Every other value is
+  fixed here, each named by the pinned code (carla_ros.py's parameter table): the taxi, the level, the synchronous step
+  of the generated contract (CARLA_STEP_MS / 1000), the substep left to a 0.10 server, the flat steering curve and the
+  physics nudge, the ground-truth localization and objects, the project's sensor mapping (IMU and GNSS only). Left at the
+  code's defaults: the wheel's maximum steer angle (the physics' value, on which the steering shim's constants rest), the
+  minimum positive throttle and the rendering switch.
+
+  The interface's actuation subscription and its steering report are remapped to the steering shim's topics
+  (sdv/steershim), so the shim stands between Autoware's converter and the interface in both directions. The converter
+  takes the pin's parameter file, whose map paths are substitutions, hence allow_substs.
+
+  Nothing else of the upstream launch starts here: no relay, no image republisher, no camera combiner, no E2E follower.
+-->
+<launch>
+  <arg name="host" description="the CARLA server's address: the default route's gateway, read at run time"/>
+  <arg name="spawn_point" description="x,y,z,roll,pitch,yaw in degrees and the CARLA frame (sdv/carla/town10.py spawn-point)"/>
+
+  <node pkg="autoware_carla_interface" exec="autoware_carla_interface" name="autoware_carla_interface" output="screen">
+    <param name="host" value="$(var host)"/>
+    <param name="port" value="2000"/>
+    <param name="timeout" value="20"/>
+    <param name="sync_mode" value="True"/>
+    <param name="fixed_delta_seconds" value="0.05"/>
+    <param name="carla_map" value="Carla/Maps/Town10HD_Opt"/>
+    <param name="ego_vehicle_role_name" value="ego_vehicle"/>
+    <param name="spawn_point" value="$(var spawn_point)"/>
+    <param name="vehicle_type" value="vehicle.taxi.ford"/>
+    <param name="use_traffic_manager" value="False"/>
+    <param name="max_real_delta_seconds" value="0.05"/>
+    <param name="tick_follower" value="False"/>
+    <param name="max_substep_delta_time" value="0.0"/>
+    <param name="publish_ground_truth_localization" value="true"/>
+    <param name="publish_ground_truth_objects" value="true"/>
+    <param name="sensor_mapping_file" value="$(dirname)/../config/sensor_mapping_sdv.yaml"/>
+    <param name="flatten_steering_curve" value="true"/>
+    <param name="wake_sleeping_physics" value="true"/>
+    <param name="use_sim_time" value="true"/>
+    <remap from="/control/command/actuation_cmd" to="/sdv/steershim/actuation_cmd"/>
+    <remap from="/vehicle/status/steering_status" to="/sdv/steershim/steering_status_raw"/>
+  </node>
+
+  <node pkg="autoware_raw_vehicle_cmd_converter" exec="autoware_raw_vehicle_cmd_converter_node" name="autoware_raw_vehicle_cmd_converter" output="screen">
+    <param from="$(find-pkg-share autoware_carla_interface)/config/raw_vehicle_cmd_converter.param.yaml" allow_substs="true"/>
+    <param name="use_sim_time" value="true"/>
+    <remap from="~/input/control_cmd" to="/control/command/control_cmd"/>
+    <remap from="~/input/odometry" to="/localization/kinematic_state"/>
+    <remap from="~/input/steering" to="/vehicle/status/steering_status"/>
+    <remap from="~/output/actuation_cmd" to="/control/command/actuation_cmd"/>
+  </node>
+</launch>
