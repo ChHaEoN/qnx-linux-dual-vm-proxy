@@ -1,0 +1,279 @@
+// slice.dbc -- the VSS slice's own minimal DBC (sdv/vss)
+//
+// Local branch only (decision 15). Self-written for a simulated vehicle; it describes no real
+// vehicle and is not derived from any production DBC (S4). Generic terms only, no result figures.
+// References to kind4-spec.md, pins.md, attribution-table.md, manifest-classes.md, decision numbers
+// and fact numbers are to the project's local design notes, which are not in this tree. Every number
+// below is a design value with its reason.
+//
+// Readers: the CAN provider (dbc2val, cantools 40.7.1 inside can-provider 0.5.0), sigsim and the
+// CARLA feeder (encode, cantools 44.1.0), vss_claim_bridge in its can and replay modes (decode,
+// cantools 44.1.0), and generate.py beside it, which reads the periods, factors and units with its
+// own minimal reader for the kind 4 constants it derives (sdv/vss/README.md). Both cantools
+// versions skip // comment lines (dbc_loader tokenizer SKIP rule, read at both tags 2026-09-30); a
+// tool that does not can have them stripped without loss, since the CM_ comments below carry each
+// signal's meaning.
+//
+// THE FIVE SIGNALS (plan Phase 1 step 4; the five kind 4 slots, plan 3.4)
+//   message 0x100 SliceDynamics, 8 bytes, every 20 ms
+//     LongVel         -> Vehicle.DualVm.Motion.LongitudinalVelocity (slot 0) and Vehicle.Speed
+//     LongAccel       -> Vehicle.Acceleration.Longitudinal          (slot 1)
+//     SteerAngleRow1  -> Vehicle.Chassis.Axle.Row1.SteeringAngle    (slot 2)
+//     YawRate         -> Vehicle.AngularVelocity.Yaw                (slot 3)
+//   message 0x101 SliceGear, 8 bytes, every 50 ms
+//     CurrentGear     -> Vehicle.Powertrain.Transmission.CurrentGear (slot 4)
+//   The mapping is overlay.vspec's dbc2vss. Signal names are unique across the file because the
+//   provider maps by signal name alone.
+//
+// CONVENTIONS -- the DBC carries VSS units and ISO 8855 signs, so the mapping is the identity
+//   Every unit string is the VSS 6.0 unit key verbatim (m/s, m/s^2, degrees, degrees/s), so a CI
+//   test can compare each DBC unit with the generated catalogue's unit (the five slot rows; the
+//   Vehicle.Speed row is not an identity, its transform abs(x) * 3.6 takes m/s to km/h, and
+//   attribution-table.md C4 checks its two ends separately). Signs are ISO 8855 (X forward, Y left,
+//   Z up): LongVel > 0 forward, LongAccel > 0 toward +X, SteerAngleRow1 > 0 left, YawRate > 0
+//   counterclockwise seen from above (overlay.vspec fixes the yaw sign). A source that
+//   works in other axes converts before encoding: sigsim is ISO 8855 natively; the CARLA feeder
+//   converts from CARLA's left-handed frame (F34; the Phase 1 sign tests pin it). The provider then
+//   forwards each value unchanged, and the bridge's can and replay modes decode this file to the
+//   same numbers its broker mode reads from the databroker.
+//
+// DESIGN VALUES AND REASONS
+//   Two messages, not five. v, delta and psi_dot share one message so that rule 26, which compares
+//     them at one instant, sees one simulation step's triple: with one message per signal the
+//     broker could hold v from step k beside psi_dot from step k-1 during a steering transient, a
+//     false 26 the rule's tolerance would then have to absorb. Four int16 fill exactly 8 bytes. The
+//     gear gets its own message so a recording can drop or delay the gear alone (flag b4 = 0, or a
+//     stale gear -> 22) and so the bridge's per-CAN-ID counts (can mode) separate the two. The
+//     torn-read window left is the provider's write of one decoded frame as five datapoints (how
+//     the provider batches them: UNVERIFIED).
+//   IDs 0x100 and 0x101, 11-bit standard. Arbitrary within the standard range; contiguous so one
+//     acceptance filter covers both; dynamics below gear so dynamics would win arbitration on a real
+//     bus. Nothing else transmits on the slice's vcan0.
+//   8-byte payloads. SliceDynamics is exactly four int16. SliceGear uses byte 0; bytes 1..7 are
+//     reserved and sent as zero, leaving room for a counter later without changing the length.
+//   Little-endian (Intel, @1) and signed (-). Little-endian like the kind 4 frame and cantools'
+//     default; signed because each of the five quantities has a sign.
+//   Periods: SliceDynamics 20 ms (50 Hz), SliceGear 50 ms (20 Hz). The gear is periodic like the
+//     rest, sent even when unchanged (plan Phase 1 step 4). This file is the single source of the
+//     periods and the factors: the kind 4 spec and its generator read them from here, never copy them.
+//     (1) SliceDynamics 20 ms: rule 26's error budget (kind4-spec.md section 7.4) assumes the sample
+//         skew between v, delta and psi_dot is at most one period of this message. One message makes
+//         the triple simultaneous in can and replay modes; in broker mode a bridge tick can still
+//         fall between the provider's writes of one frame's values and pair one frame's v with the
+//         previous frame's psi_dot. At 20 ms that term keeps the sigsim profile inside its tol with
+//         the spec's margin; at 50 ms it would not (the skew rows scale with the period). The guest
+//         does not enforce the assumption: the bridge counts every frame whose triple spans more
+//         than one period of this message plus a jitter margin (spread_exceeded), and attributes a 26
+//         to that spread only above a per-profile spread derived from the budget (kind4-spec.md
+//         section 14.2).
+//     (2) CARLA feeder: tick pacing and send policy. The step is the plan's fixed_delta_seconds,
+//         0.05 s: 50 ms of simulation time.
+//         PACING (design value). The feeder makes a new step CURRENT (the step its send timers fill
+//         frames from) at most once per step of wall time on its monotonic clock: at the later of
+//         the moment the step's values reached it and one step (50 ms) after the previous step
+//         became current. It calls world.tick() for the following step only after that, and it
+//         never catches up: a step that became current late does not shorten the wait for the next
+//         one. So the real-time factor (RTF, simulation time over wall time) of every step is at most
+//         1. Reason: steps then become current at least 50 ms of wall time apart against 20 ms
+//         frames, so every step reaches at least two SliceDynamics frames, no step is skipped, and
+//         two consecutive frames carry the same step or adjacent ones; a broker torn read then spans
+//         at most one step, which is what the CARLA rows of kind4-spec.md section 7.4 assume. A
+//         free-running tick would keep those rows valid only up to RTF 2.5 (50 / 20: above it two
+//         adjacent frames can carry steps two apart, and steps are skipped without reaching CAN or
+//         the recording), and at two steps the CARLA budget no longer closes (kind4-spec.md 7.4).
+//         SEND POLICY. The feeder sends both messages on wall-clock timers (20 ms and 50 ms) and fills
+//         each frame from the current step, so at RTF 1 a step appears in two or three consecutive
+//         SliceDynamics frames and every frame carries one step's values. A step is repeated only
+//         while it is no older than the REPEAT CAP = one step (50 ms of wall time) + 20 ms, counted on
+//         the feeder's monotonic clock from the moment the step became current (not from the moment
+//         its values arrived: a step held back by the pacing keeps its full repeat window); after
+//         that the feeder sends nothing until the next step becomes current. Reason for the cap: a
+//         repeated frame refreshes the age source (the SocketCAN receive time in can mode, the
+//         datapoint timestamp in broker mode), so without it a frozen or stalled simulator behind a
+//         live feeder would never age past AGE_MAX and reason 22, which exists for exactly that case
+//         (plan 3.4), would never fire. With it, a frozen simulator gives 22 within AGE_MAX plus one
+//         bridge tick after the age-source timestamp of the feeder's last frame (Phase 7 test,
+//         kind4-spec.md section 16.4). Reason for the 20 ms margin (one SliceDynamics period): a step
+//         may become current up to one frame late without leaving a gap in the stream; a larger
+//         margin would hide a stall for longer.
+//         RECORD. The feeder logs each step's RTF, computed from the simulator's own time: the
+//         simulation time the step's snapshot advanced (its elapsed_seconds delta, or the frame
+//         number delta x the step) over the wall time since the previous step became current, so a
+//         longer or skipped step raises it. It logs each gap too (a step that became current more
+//         than the repeat cap after the previous one, or that follows a skipped frame number), and
+//         records the run's RTF as {min, mean, max} (min and max over the steps, mean = total
+//         simulation time over total wall time). A recording keeps it in its scenario entry
+//         (manifest-classes.md section 4, source.rtf), and the header of every CARLA-sourced run,
+//         recorded or live, carries it (attribution-table.md, source_rtf). Its max is at most 1 by the
+//         pacing while every step advances one step of simulation time; a larger one means the pacing
+//         did not hold or the world advanced more than one step between two snapshots (a skipped
+//         frame), and the record-close check flags the run (attribution-table.md C12b).
+//         ONE SOURCE. The step lives in the kind 4 profile file beside AGE_MAX and A; the generator
+//         derives the repeat cap, the pacing interval and the real-time factors of (5) from it and
+//         from this file's periods, and the feeder imports them from the generated Python constants,
+//         never as literals (kind4-spec.md section 5.5). The simulator is tied to it the same way: at
+//         start the feeder reads world.get_settings() and refuses to start unless synchronous mode is
+//         on and fixed_delta_seconds equals the generated step. In a carla run (the feeder ticks the
+//         world) it applies the generated step itself (synchronous mode, that fixed_delta_seconds) and
+//         reads the settings back; in a carla-autoware run it only checks (kind4-spec.md sections 5.5
+//         and 15, test F1). Without the tie the RTF above would be computed from a constant, and a
+//         world running another step would leave the one-step skew rows of kind4-spec.md 7.4, k_attr
+//         and RTF_22 wrong while the logged maximum stayed at or below 1.
+//         In a carla-autoware run (Phase 8.5) the feeder is a read-only client and does not tick the
+//         world: the pacing is then the ticking client's to keep (Phase 8.0 settles how), and the
+//         recorded maximum is checked the same way. For such a source the broker-mode skew bound of
+//         rule 26 is one simulation step, not one period, and the kind 4 spec's CARLA budget uses that
+//         (section 7.4).
+//     (3) SliceGear 50 ms, not slower: with the kind 4 spec's AGE_MAX of 250 ms and its pipeline
+//         allowance A of 150 ms (the time the provider, broker and bridge, which run as Python and
+//         gRPC on cores 3 and 5 beside the rest of the host's userspace on the Orin, may take), one
+//         lost or late gear frame (age up to 2 x 50 ms) still leaves A. A 100 ms gear period would
+//         leave 50 ms.
+//     (4) The bridge's 10 Hz tick sees at least two fresh frames of each message.
+//     (5) The age check, as a CI test that reads GenMsgCycleTime from this file and AGE_MAX and A from
+//         the generated Python constants (both come from the kind 4 profile file):
+//             2 * max(GenMsgCycleTime) + A <= AGE_MAX          (2 * 50 + 150 = 250 = AGE_MAX)
+//         Equality passes because reason 22 rejects only an age above AGE_MAX. Every source sends on
+//         fixed wall-clock timers, so the periods do not stretch with a slow simulator and the check
+//         needs no real-time factor.
+//         A CARLA feed slower than real time keeps its periods, but the ages are wall-clock (plan
+//         3.4). Two derived values, generated beside the repeat cap from the step, the cap, AGE_MAX, A
+//         and this file's periods:
+//           GAP ONSET  RTF_GAP = step / cap = 50 / 70, about 0.71. Below it the next step becomes
+//                      current after the cap has run out, so each message has a gap per step.
+//           HONEST 22  RTF_22(m) = step / (AGE_MAX - A - 2 * P(m) + cap), per message m of period
+//                      P(m). Below it a value carried by m can, with its gap, age past AGE_MAX
+//                      honestly. Derivation: m's last frame of a step leaves at least cap - P(m)
+//                      after the step became current; the next step becomes current T = step / RTF
+//                      after it, and its first frame of m leaves within P(m); the new value may take
+//                      A to reach the bridge; so the held value's age reaches
+//                      T + 2 * P(m) + A - cap, which exceeds AGE_MAX once
+//                      T > AGE_MAX - A - 2 * P(m) + cap.
+//                        SliceDynamics (20 ms): 50 / 130, about 0.38
+//                        SliceGear     (50 ms): 50 / 70,  about 0.71
+//         The run-level value is the larger, SliceGear's 0.71, because a frame's age is its oldest
+//         used value's and every honest frame carries the gear. It equals the gap onset because
+//         AGE_MAX = 2 x 50 ms + A leaves SliceGear no slack, so any gap can take a gear value past
+//         AGE_MAX. So: a 22 in a CARLA-sourced run whose recorded minimum RTF is at or above 0.71 is a
+//         fault; below it a 22 may be by design. The bridge logs, for every frame it packs with an age
+//         above AGE_MAX, the slot whose value set that age (age_over_max, kind4-spec.md section 14.2):
+//         a 22 set by a SliceDynamics slot is by design only below 0.38, one set by the gear below
+//         0.71, and the feeder's gap log dates it. Replays follow the recorded timestamps, gaps
+//         included, so a recording carries the RTF it was made at (source.rtf) and a replay's 22s are
+//         read against it.
+//   Scaling and ranges: each raw field's full int16 range, so physical [min|max] = raw range x
+//     factor. Deliberately wider than any profile limit (plan 3.4): an injected over-limit value
+//     must survive cantools' range-checked encode and the broker to reach the guest as 23, 24 or 25,
+//     and the steering range far exceeds the plan's hard bound delta_max <= 57 degrees for every
+//     profile. The ranges are representation limits, not plausibility limits: plausibility is the
+//     guest's job. The ranges are written as the SG_ lines write them, [min|max]: int16 is asymmetric,
+//     so each maximum is one LSB short of its minimum's magnitude.
+//       LongVel         0.01 m/s        -> [-327.68|327.67] m/s      (1 cm/s resolution)
+//       LongAccel       0.001 m/s^2     -> [-32.768|32.767] m/s^2    (1 mm/s^2)
+//                       (a finer LSB than the others, because this range need only clear a_max,
+//                       which kind4-spec.md sets near 1 g)
+//       SteerAngleRow1  0.01 degrees    -> [-327.68|327.67] degrees
+//       YawRate         0.01 degrees/s  -> [-327.68|327.67] degrees/s
+//       CurrentGear     1               -> [-128|127] (the whole int8 of the VSS datatype)
+//   Resolution against rule 26's tol. The quantisation error of psi_dot_kin, half an LSB per input,
+//     is at most
+//         (180/pi) * tan(d_max) / L * 0.005  +  v_hi / L * sec^2(d_max) * 0.005  +  0.005   [deg/s]
+//     for a profile with wheelbase L [m], largest steering angle d_max and largest speed v_hi in
+//     rule 26's speed window (the three terms: speed, steering and yaw-rate LSBs). Illustration
+//     only, with values that belong to no profile (L 2.5 m, d_max 10 degrees, v_hi 30 m/s): about
+//     0.09 deg/s. The kind 4 spec's CI computes the bound for each compiled profile and requires it
+//     well below that profile's tol (plan 3.4 asks the same of the tan approximation). float32 in
+//     the kind 4 frame adds a relative error near 6e-8, negligible beside the LSB.
+//   Gear value table: -1 reverse, 0 neutral, 1 forward, the VSS 6.0 CurrentGear meaning (pins.md).
+//     No park entry: CurrentGear has no park value. sigsim and CARLA have no park state, so in
+//     their runs 0 is neutral only. A source that has one (Autoware, Phase 8) does not use this
+//     file: it reaches VSS through the ROS->VSS feeder (vss:provide) and reports park as 0, which
+//     then means neutral or park in that run (rule 27 never checks gear 0; overlay.vspec,
+//     CurrentGear). The table is documentation; the provider forwards the numeric value (no
+//     transform), and the bridge decodes with choices off. Any other value in -128..127 passes as a
+//     plain integer.
+//   No sentinel "not available" value. A signal the source cannot give is simply not sent; the
+//     bridge then has no value (flag bit 0) or an aging one (22). A reserved raw value would be a
+//     second way to say the same thing, and one more path for the modes to disagree.
+//
+// DOES NOT DEMONSTRATE
+//   No alive counter and no checksum: a production message would carry end-to-end protection; this
+//   file models none, so nothing built on it shows any. Staleness is caught only by the kind 4 age
+//   field and, in can mode, the bridge's per-ID frame counts. vcan and the provider's --dumpfile
+//   replay have no arbitration, no error frames, no bus timing and no IRQ; this file says nothing
+//   about a physical bus. Read by generate.py's minimal reader, and loaded by cantools 44.1.0 with
+//   strict=True by sigsim (plan Phase 1 step 5: its dbc, record and verify, which also check its
+//   periods and units against the generated contract). cantools 40.7.1, the version inside the CAN
+//   provider, has not loaded it: untried.
+
+VERSION ""
+
+
+NS_ :
+	NS_DESC_
+	CM_
+	BA_DEF_
+	BA_
+	VAL_
+	CAT_DEF_
+	CAT_
+	FILTER
+	BA_DEF_DEF_
+	EV_DATA_
+	ENVVAR_DATA_
+	SGTYPE_
+	SGTYPE_VAL_
+	BA_DEF_SGTYPE_
+	BA_SGTYPE_
+	SIG_TYPE_REF_
+	VAL_TABLE_
+	SIG_GROUP_
+	SIG_VALTYPE_
+	SIGTYPE_VALTYPE_
+	BO_TX_BU_
+	BA_DEF_REL_
+	BA_REL_
+	BA_DEF_DEF_REL_
+	BU_SG_REL_
+	BU_EV_REL_
+	BU_BO_REL_
+	SG_MUL_VAL_
+
+BS_:
+
+BU_: SIGSRC VSSRX
+
+
+BO_ 256 SliceDynamics: 8 SIGSRC
+ SG_ LongVel : 0|16@1- (0.01,0) [-327.68|327.67] "m/s" VSSRX
+ SG_ LongAccel : 16|16@1- (0.001,0) [-32.768|32.767] "m/s^2" VSSRX
+ SG_ SteerAngleRow1 : 32|16@1- (0.01,0) [-327.68|327.67] "degrees" VSSRX
+ SG_ YawRate : 48|16@1- (0.01,0) [-327.68|327.67] "degrees/s" VSSRX
+
+BO_ 257 SliceGear: 8 SIGSRC
+ SG_ CurrentGear : 0|8@1- (1,0) [-128|127] "" VSSRX
+
+
+
+CM_ "Minimal DBC of the VSS slice: a simulated vehicle, self-written, describes no real vehicle. Units are VSS unit keys; signs follow ISO 8855 (X forward, Y left, Z up).";
+CM_ BU_ SIGSRC "The signal source: the seeded kinematic simulator or the simulator feeder. Encodes in ISO 8855 axes and VSS units.";
+CM_ BU_ VSSRX "Any receiver: the CAN provider feeding the databroker, or the claim bridge decoding directly in its can and replay modes.";
+CM_ BO_ 256 "Vehicle dynamics of one simulation step. The four values belong to the same instant.";
+CM_ BO_ 257 "Current gear, sent periodically even when unchanged. Bytes 1 to 7 reserved, zero.";
+CM_ SG_ 256 LongVel "Signed longitudinal velocity along the vehicle X axis. Positive forward, negative reverse.";
+CM_ SG_ 256 LongAccel "Longitudinal acceleration along the vehicle X axis. Positive toward +X; braking while moving forward is negative.";
+CM_ SG_ 256 SteerAngleRow1 "Single-track model steering angle of the front axle. Positive left, negative right.";
+CM_ SG_ 256 YawRate "Yaw rate about the vehicle Z axis (up). Positive counterclockwise seen from above, that is yawing left.";
+CM_ SG_ 257 CurrentGear "Current gear. 0 neutral, positive forward gear number, negative reverse gear number. No park value.";
+BA_DEF_ BO_ "GenMsgCycleTime" INT 0 65535;
+BA_DEF_ BO_ "GenMsgSendType" ENUM "Cyclic","NoMsgSendType";
+BA_DEF_ "BusType" STRING ;
+BA_DEF_DEF_ "GenMsgCycleTime" 0;
+BA_DEF_DEF_ "GenMsgSendType" "NoMsgSendType";
+BA_DEF_DEF_ "BusType" "CAN";
+BA_ "BusType" "CAN";
+BA_ "GenMsgCycleTime" BO_ 256 20;
+BA_ "GenMsgSendType" BO_ 256 0;
+BA_ "GenMsgCycleTime" BO_ 257 50;
+BA_ "GenMsgSendType" BO_ 257 0;
+VAL_ 257 CurrentGear -1 "Reverse" 0 "Neutral" 1 "Forward" ;

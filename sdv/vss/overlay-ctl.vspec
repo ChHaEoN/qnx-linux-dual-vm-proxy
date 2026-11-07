@@ -1,0 +1,112 @@
+# overlay-ctl.vspec -- the ControlCommand layer of the project's VSS 6.0 overlay (sdv/vss; Phase 8)
+#
+# Like overlay.vspec, written to the same rules: generic SDV
+# terms only, no host names or addresses, no result figures, every design value's reason in a YAML
+# comment and never in a `description:`. References to pins.md, twin-allowlist.md and plan, decision
+# and fact numbers are to the project's local design notes, which are not in this tree.
+#
+# generate.py loads this layer and the project unit files for the databroker catalogues and kind 2
+# contract. The main id export and CAN mapping use overlay.vspec and the stock unit files alone.
+#
+# WHY A SEPARATE LAYER
+#   ControlCommand is Phase 8's (the observed kind 2 command values). Its units rad and m/s^3, and the
+#   quantity jerk, are not in VSS 6.0 (pins.md), so it needs units-project.yaml and
+#   quantities-project.yaml. A separate layer lets the main id export and CAN mapping keep the
+#   stock 6.0 unit files; the databroker and kind 2 exports load the project files.
+#
+# BUILD (from Phase 8 on; the rest of the command line is overlay.vspec's BUILD block)
+#   -u <v6.0>/spec/units.yaml -u units-project.yaml  -q <v6.0>/spec/quantities.yaml -q quantities-project.yaml
+#   -l overlay.vspec  -l overlay-ctl.vspec  -l vehicle-<source>.vspec
+#   It attaches under Vehicle.DualVm, which overlay.vspec defines, so it is loaded after it. A
+#   staticUID is computed per node, so adding this layer changes no existing node's UID and does not
+#   move the kind 4 catalogue digest (none of its nodes is a kind 4 slot).
+#
+# OFF THE TWIN
+#   Nothing under ControlCommand is on the twin allowlist v1 (twin-allowlist.md section 3): ProfileId
+#   and StampInterval are claim-protocol fields; any leaf added to the allowlist needs a new allowlist
+#   version and the owner's review, leaf by leaf.
+#
+# DOES NOT DEMONSTRATE
+#   That a generated value is right for a run, or that a claim is timely. The kind 2 claim itself
+#   never passes through the databroker (plan 3.2).
+
+# --- ControlCommand (Phase 8; S19 decides the units at Phase 8.0) -----------------------------
+#
+# The kind 2 command values as the claim node observes them at the gate output (old plan 2.2; plan
+# 3.5). All `type: sensor`, not actuator, for the plan's two reasons: nothing here actuates -- the
+# node only observes what the gate already sent -- and a v2 actuator carries Actuate forwarding
+# semantics (F19) that must not attach to an observation.
+# Written only by the ROS->VSS feeder, and only in runs where Autoware runs (Phase 8). The kind 2
+# claim itself never passes through the databroker (plan 3.2); these nodes serve the Linux-side
+# apps and the build-time contract (the kind 2 constants are generated from them, plan 3.5).
+# Units: S19's default -- rad and m/s^3 from units-project.yaml, so the values keep Autoware's
+# units (F13) and the node needs no conversion. S19's alternative (degrees and degrees/s) would
+# still need m/s^3 for jerk. No min/max: kind 2 limits live in its guest profiles (old plan 2.2).
+# v_meas (kind 2 p[41..44]) is not here: it maps to Motion.LongitudinalVelocity (plan 3.5).
+
+Vehicle.DualVm.ControlCommand:
+  type: branch
+  description: "Command values observed at the output of the planning stack's command gate. Observations,
+                not commands to this vehicle: nothing here actuates. Phase 8."
+
+Vehicle.DualVm.ControlCommand.Velocity:
+  type: sensor
+  datatype: float
+  unit: m/s
+  description: "Commanded longitudinal velocity, signed. Positive = forward."
+
+Vehicle.DualVm.ControlCommand.Acceleration:
+  type: sensor
+  datatype: float
+  unit: m/s^2
+  description: "Commanded longitudinal acceleration. Meaningful only while IsAccelerationDefined is true."
+
+Vehicle.DualVm.ControlCommand.IsAccelerationDefined:
+  type: sensor
+  datatype: boolean
+  description: "True when the observed command defines its acceleration."
+
+Vehicle.DualVm.ControlCommand.Jerk:
+  type: sensor
+  datatype: float
+  unit: m/s^3
+  description: "Commanded longitudinal jerk. Meaningful only while IsJerkDefined is true."
+
+Vehicle.DualVm.ControlCommand.IsJerkDefined:
+  type: sensor
+  datatype: boolean
+  description: "True when the observed command defines its jerk."
+
+Vehicle.DualVm.ControlCommand.SteeringTireAngle:
+  type: sensor
+  datatype: float
+  unit: rad
+  description: "Commanded tire steering angle of the single-track model. Positive = to the left,
+                as Vehicle.Chassis.Axle.Row1.SteeringAngle."
+
+Vehicle.DualVm.ControlCommand.SteeringTireRotationRate:
+  type: sensor
+  datatype: float
+  unit: rad/s
+  description: "Commanded rate of change of the tire steering angle. Meaningful only while
+                IsSteeringTireRotationRateDefined is true."
+
+Vehicle.DualVm.ControlCommand.IsSteeringTireRotationRateDefined:
+  type: sensor
+  datatype: boolean
+  description: "True when the observed command defines its steering rotation rate."
+
+# No min/max: kind 2 profile ids are the kind 2 spec's design values; a bound here would tie a new
+# profile to a catalogue change.
+Vehicle.DualVm.ControlCommand.ProfileId:
+  type: sensor
+  datatype: uint8
+  description: "Profile id the claim node put into the kind 2 claim."
+
+# uint16 ms because kind 2 p[45..46] is a uint16 in ms that saturates at its maximum.
+Vehicle.DualVm.ControlCommand.StampInterval:
+  type: sensor
+  datatype: uint16
+  unit: ms
+  description: "Difference between the stamps of this command and the previous one, saturated at the
+                datatype maximum. 0 for the first command."

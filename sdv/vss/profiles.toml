@@ -1,0 +1,398 @@
+# profiles.toml -- the kind 4 profile table and the pipeline constants beside it (sdv/vss)
+#
+# Project-authored inputs, not VSS-derived. Each comment distinguishes a design value or threshold
+# from a READ configuration value or PROBED source parameter; the
+# kind 4 wire specification (sections 5, 7.4, 8 and 15) and slice.dbc's DESIGN VALUES are the
+# project's local design notes these come from ("spec" below).
+#
+# ONE SOURCE, GENERATED BOTH WAYS. The guest judges with this table and the bridge counts rule-26
+# skips with it, so nobody keeps a second copy. generate.py reads this file together with the
+# overlay and slice.dbc and writes:
+#   vss_profiles.h   the compiled profiles only, as an X-macro table (the monitor's one lookup);
+#   vss_contract.py  every profile, every value below, and everything derived from them: the CARLA
+#                    feeder's pacing interval and repeat cap, RTF_GAP, RTF_22 per message and at run
+#                    level, the spread accounting threshold, each profile's rule-26 budget and
+#                    attribution spread. The monitor never uses A, the step or the envelope rows.
+# Periods and DBC factors are NOT here: slice.dbc is their one source, and generate.py reads them
+# from it.
+#
+# UNITS. Lengths mm; speeds m/s; accelerations m/s^2; angles degrees (single-track road-wheel
+# angles, not steering-wheel angles); angular rates deg/s; times ms; the understeer gradient deg/g.
+#
+# REFUSALS. generate.py exits 1 and writes nothing when (spec 5.4):
+#   - this file has an [invariants] table: the bounds below are constants of generate.py (L_MM_MIN,
+#     L_MM_MAX, DELTA_MAX_LIMIT_DEG, PSI_DOT_KIN_ERROR_BOUND, TOL_OVER_ERROR_MIN, with their reasons),
+#     never a setting of the file they check;
+#   - an id is not unique, not in 1..255, or is a reserved id;
+#   - l_mm is not an integer in L_MM_MIN..L_MM_MAX (1000..6000);
+#   - delta_max is not in (0, DELTA_MAX_LIMIT_DEG] (57 deg, the domain of the polynomial tan);
+#   - v_max, a_max, tol26 or v_tol is not > 0, or v26_lo >= v26_hi or v26_lo <= 0 (there is
+#     deliberately no v26_hi <= v_max: rule 23 precedes 26, so that part of the window is dead, not
+#     wrong; this keeps profile 2 "profile 1 except v_max");
+#   - tol26 < PSI_DOT_KIN_ERROR_BOUND x TOL_OVER_ERROR_MIN (1e-5 x 1e5);
+#   - a limit compared against an f32 field (v_max, a_max, delta_max, v26_lo, v26_hi, v_tol) is not
+#     exactly representable in binary32: "a value exactly at a limit is accepted" is only defined for
+#     an f32 limit (the Python test is struct.unpack("<f", struct.pack("<f", x))[0] == x);
+#   - ay26_max is neither "none" nor > 0;
+#   - a run type names more than one live-default profile;
+#   - a profile with stand-in values is marked compiled;
+#   - age_max_ms >= 0xFFFF, or 2 x the longest slice.dbc period + pipeline_allowance_ms > age_max_ms;
+#   - a profile's rule-26 budget keeps less than its envelope's margin_target over tol (spec 7.4);
+#   - a run type with a live-default profile has no vehicle layer in generate.py
+#     (VEHICLE_RUN_TYPES), or its live-default profile's l_mm is a stand-in;
+#   - a compiled profile on an envelope that holds a stand-in row, or an envelope's stand_in that is
+#     not a list of its own row names (Phase 8 WP3b);
+#   - a skew_ms row on an envelope that is not a planning-sim one (SKEW_ROW_ENVELOPES in
+#     generate.py), on one whose budget is not rows-summed, or that is not a positive whole ms;
+#   - a profile on a planning-sim envelope that is the live default of a run type whose rule-26
+#     triple does not come from the simulator's one timer (SKEW_ROW_RUN_TYPES in generate.py), or
+#     such a run type whose live default is on another envelope.
+#
+# PROBED. A value whose comment block starts with that word is set from a CARLA probe (Phase 7's
+# WP0; Phase 8's WP9a for profile 5; the readings are in the local notes, never here): it is held
+# only on its line here, tests/test_sdv_vss.py's PROBED holds the same value, and a re-read changes
+# those two places and regenerates.
+#
+# READ. A value whose comment block starts with that word is READ from the planning stack (Phase 8's
+# WP4a, its facts named "W4 <id>"; the readings are in the local notes): it is held only on its line
+# here, tests/test_sdv_vss.py's READ holds the same value, and a re-read changes those two places and
+# regenerates.
+#
+# STAND-IN. An envelope row whose comment block starts with that word is no reading of its vehicle:
+# the envelope lists it in its stand_in, and no profile on that envelope may be compiled until a
+# freeze (Phase 8's WP3c) replaces it with a read value and empties the list.
+
+format = 1
+
+# AGE_MAX, global, not per profile: it describes the pipeline (CAN periods, bridge), not the
+# vehicle. 2 x 50 ms + A: SliceGear's period (the longest in slice.dbc) twice, so one lost or late
+# gear frame is tolerated, plus A. Equality is allowed because reason 22 is age > AGE_MAX. Well under
+# the pause test's 1.5 s so "both paused" gives 22, and far below 0xFFFF so a saturated age always
+# fails 22. Moves only together with A, and only with a new guest image.
+age_max_ms = 250
+
+# A, the pipeline allowance: the time an honest value may take from its CAN frame to the bridge's
+# packing (the provider's decode and write, the databroker, the v2 subscription's delivery, the
+# bridge's scheduling alongside the host's other processes). An allowance, not a
+# measurement; it keeps AGE_MAX at half the 500 ms deadline, so a dead source is reported as stale on
+# the same time scale as a dead bridge is reported as a MISS. If honest data gets 22, that is a
+# finding; the first lever is slice.dbc's periods. Python module only.
+pipeline_allowance_ms = 150
+
+# The CARLA step: 50 ms of simulation time, the plan's fixed_delta_seconds 0.05. The unit of the
+# CARLA skew rows, the feeder's pacing interval and repeat cap, and profile 3's attribution spread.
+# The feeder refuses to start unless the world runs exactly this step in synchronous mode (spec 5.5).
+# Python module only.
+carla_step_ms = 50
+
+[rule26]
+# The joint-grid budget (CARLA profiles): points per axis over |v| in the window and delta in
+# 0..delta_max, the grid spec 7.4's numbers were computed on.
+grid_points = 401
+# Gravity in the understeer row (v / L) x gradient x a_y_kin / g: the value spec 7.4's numbers were
+# computed with (rounded standard gravity).
+g = 9.81
+# Largest number of steps k tried when looking for k_attr, the smallest whole number of steps whose
+# joint worst exceeds tol (spec 7.4). generate.py refuses if none up to this exceeds tol.
+k_attr_search_max = 20
+
+# Envelopes: the drives the rule-26 margins assume (spec 5.3). The sigsim rows are what sigsim's
+# self-consistency test asserts on every scripted drive. The CARLA rows are PROBED, fitted locally;
+# the readings are not published. Each uses the smallest one-decimal value at least 1.1 x the
+# largest input used for that row (Phase 7 spec 5 item 1).
+
+[envelopes.sigsim]
+# rows-summed: the budget rows are summed at their separate maxima, at the operating points spec 7.4
+# pins (delta-skew row at v = the window's v26_hi and delta = 0; v-skew row at the product bound
+# below; quantisation at (v26_hi, 0)); the skew is one period of the message carrying rule 26's
+# triple.
+budget = "rows-summed"
+# tol keeps at least this factor over the summed rows (spec 7.4). Emitted; the tests hold it.
+margin_target = 1.5
+# The sigsim design car: a mid-size passenger car; sigsim uses the same constant, so any value would
+# do as long as both agree. Must equal the L of every profile on this envelope (generate.py refuses
+# otherwise; spec 5.6).
+wheelbase_mm = 2700
+# Cruise: the v_max margin; the demo ODD's v_max sits below it.
+cruise_speed = 15.0
+# Turns at <= 5 m/s with |delta| <= 20 deg: the rule-26 window and tol.
+turn_speed_max = 5.0
+turn_steer_max = 20.0
+# The design car's single-track maximum steering angle; delta_max is this + 5 deg.
+steer_max = 35.0
+# Steering rate at the road wheel: the delta-skew row.
+steer_rate = 10.0
+# Longitudinal acceleration while steering: |a_x| x tan|delta| <= accel_while_steering x
+# tan(turn_steer_max) on every sample, which is what holds the v-skew row (spec 5.3).
+accel_while_steering = 3.0
+# Hardest braking, only at |delta| <= braking_steer_max: the a_max margin.
+braking_max = 6.0
+braking_steer_max = 10.0
+# Launch acceleration after a direction change: v_tol covers launch_accel x AGE_MAX of honest
+# wrong-direction speed (spec 8).
+launch_accel = 3.0
+# Reversing speed limit of the scripted drive: rule 27.
+reverse_speed_max = 2.0
+
+[envelopes.carla]
+# joint-grid: every row evaluated at one frame's operating point (v, delta) over the grid of
+# [rule26], restricted to a_y_kin <= the profile's ay26_max; the skew is k whole steps.
+budget = "joint-grid"
+# tol keeps at least this factor over the joint worst at one step (spec 7.4): less than sigsim's
+# because the rows are evaluated jointly, not summed at separate maxima. Emitted; the tests hold it.
+margin_target = 1.2
+# PROBED (WP0 F8), fitted locally; the readings are not published. Steering rate at the road
+# wheel (the delta-skew row).
+steer_rate = 9.2
+# PROBED (WP0 F8), fitted locally; the readings are not published. Longitudinal acceleration
+# while steering (the v-skew row).
+accel_while_steering = 1.5
+# PROBED (WP0 F8), fitted locally; the readings are not published. The launch after the reverse.
+# v_tol 1.0 covers launches up to 4 m/s^2 over AGE_MAX.
+launch_accel = 2.2
+# PROBED (WP0 F8), fitted locally; the readings are not published. The understeer row uses the
+# rule-26 residual against a_y. The joint grid extrapolates it linearly up to the a_y bound.
+understeer_gradient = 2.8
+
+[envelopes.planning-sim]
+# Autoware's planning simulator (Phase 8.1): sigsim's row set, bounding Autoware's commands as its
+# command gate limits them, since the simulator follows the gate's output. rows-summed as sigsim's:
+# the simulator's DELAY_STEER_ACC_GEARED model is a kinematic bicycle with first-order delays and no
+# slip (its source at 1.0.0, read by Phase 8's WP3b; local notes), so there is no understeer row.
+budget = "rows-summed"
+# As sigsim's (spec 7.4). Emitted; the tests hold it.
+margin_target = 1.5
+# READ (W4 P1): sample_vehicle's vehicle_info.wheel_base, 2.79 m, as profile 4's L (generate.py refuses
+# another).
+wheelbase_mm = 2790
+# READ (W4 P8): the planner's max_vel, 4.17 m/s, its top speed.
+cruise_speed = 4.17
+# READ (W4 P8): likewise; every turn is driven at or below the top speed.
+turn_speed_max = 4.17
+# Design: no read bounds how far Autoware steers while it accelerates, so the row takes the
+# simulator's own steering limit (steer_max): the v-skew row then follows from the gate's
+# acceleration bound and that limit alone, never from a guess about the route.
+turn_steer_max = 57.3
+# READ (W4 P9): the simulator's steer_lim, 1.0 rad, in degrees rounded up to a tenth. Its source clamps
+# the commanded angle to it and does not use max_steer_angle (0.70 rad), so the looser bound is the
+# simulator's; delta_max is this + 5 deg, capped at 57.
+steer_max = 57.3
+# READ (W4 P2): the gate's steer_rate_lim_for_steer_cmd, 1.0 rad/s, its loosest cell, in deg/s rounded
+# up to a tenth: the delta-skew row. The simulator's steering is a first-order lag of the gated
+# command, which moves no faster than the command does.
+steer_rate = 57.3
+# READ (W4 P2): the gate's lon_acc_lim_for_lon_vel, its loosest cell: |a_x| x tan|delta| <=
+# accel_while_steering x tan(turn_steer_max) on every sample, the v-skew row. Looser than the
+# planner's smoother (max_acc 1.0, W4 P8): the gate is what the simulator follows.
+accel_while_steering = 5.0
+# READ (W4 P2): the same bound, for braking (the gate's own emergency_acceleration, -2.4 m/s^2, W4 P4,
+# is inside it): the a_max margin.
+braking_max = 5.0
+# Design: no read bounds the angle Autoware brakes at, so the simulator's limit; a_max (10) keeps
+# twice braking_max at any angle.
+braking_steer_max = 57.3
+# READ (W4 P2): the same bound, for the launch after a direction change. v_tol 1.0 covers launches up
+# to 4 m/s^2 over AGE_MAX, less than this bound: a planning-sim run that reverses and launches at the
+# gate's full bound is outside rule 27's honest margin (WP4b's scenario drives forward only).
+launch_accel = 5.0
+# Design: no read bounds a reverse speed of its own; the planner's top speed bounds the speed in
+# either direction: rule 27.
+reverse_speed_max = 4.17
+# READ (W4 P9): the simulator's timer_sampling_time_ms. It publishes velocity, heading rate and
+# steering on that one timer, all three status topics from one node at 40 Hz (W4 G7), and no CAN
+# message carries rule 26's triple in a planning-sim run, so this skew replaces slice.dbc's period
+# for this envelope only (generate.py refuses the row on any other).
+skew_ms = 25
+
+[envelopes.carla010]
+# The CARLA 0.10.0 taxi (Phase 8.5), joint-grid as the carla envelope, with the same margin_target.
+# Its four rows are not read yet: each holds the carla envelope's value as a stand-in, so profile 5
+# stays uncompiled (generate.py refuses a compiled profile here) until WP3c's freeze sets each from
+# WP9's first honest drives by the carla rows' rule and empties stand_in.
+budget = "joint-grid"
+margin_target = 1.2
+stand_in = ["steer_rate", "accel_while_steering", "launch_accel", "understeer_gradient"]
+# STAND-IN (the carla envelope's row): the steering rate at the road wheel, the delta-skew row.
+steer_rate = 9.2
+# STAND-IN (the carla envelope's row): longitudinal acceleration while steering, the v-skew row.
+accel_while_steering = 1.5
+# STAND-IN (the carla envelope's row): the launch after the reverse, which v_tol covers.
+launch_accel = 2.2
+# STAND-IN (the carla envelope's row): the understeer row.
+understeer_gradient = 2.8
+
+# Profiles (spec 5.2). p[1] is an opaque key: ids are small integers assigned in the order profiles
+# are defined and never reused; a retired id stays retired so every record stays readable. One
+# profile = one source vehicle + one limit set; L never goes on the wire. A new source vehicle needs
+# a new profile, which needs a new guest image. compiled = true puts the profile into vss_profiles.h
+# (the guest's table); a profile with stand-in values stays Python-only until they are read.
+# ay26_max = "none" means rule 26 has no lateral-acceleration bound (0.0 in the generated tables).
+# live_default_for: the run types this profile is the launcher's live default for (at most one
+# profile per run type; a profile on a planning-sim envelope for planning-sim run types only, and
+# theirs on such an envelope).
+
+[[profiles]]
+id = 1
+source_vehicle = "sigsim-design-car"
+limit_set = "nominal"
+envelope = "sigsim"
+compiled = true
+stand_in = []
+# = the sigsim design car's wheelbase.
+l_mm = 2700
+# The design car's top speed; sigsim's cruise and town driving sit well inside; slice.dbc's range
+# extends beyond it so 23 can be injected.
+v_max = 40.0
+# Just above what tyre-road friction allows a road car on dry asphalt (mu about 1); sigsim's
+# braking and launch are well inside.
+a_max = 10.0
+# The design car's single-track maximum plus 5 deg; within generate.py's DELTA_MAX_LIMIT_DEG.
+delta_max = 40.0
+# Below 1 m/s rule 26 can barely detect anything while speed-sign flicker and skew dominate; 20 m/s
+# bounds the delta-skew row.
+v26_lo = 1.0
+v26_hi = 20.0
+# sigsim is a kinematic model: there is no understeer to bound, and a bound would only remove
+# detection.
+ay26_max = "none"
+# 1.5 x the summed worst honest error inside the sigsim envelope (spec 7.4).
+tol26 = 3.0
+# Covers the honest wrong-direction speed from gear-sample lag at the envelope's launch acceleration
+# over AGE_MAX, and any launch up to 4 m/s^2 (spec 8).
+v_tol = 1.0
+live_default_for = ["sigsim"]
+
+[[profiles]]
+id = 2
+source_vehicle = "sigsim-design-car"
+limit_set = "demo-odd"
+envelope = "sigsim"
+compiled = true
+stand_in = []
+l_mm = 2700
+# The only difference from profile 1: below sigsim's cruise, so honest cruise frames get 23, which
+# shows the monitor refusing real, uninjected data under a narrower operating domain.
+v_max = 10.0
+a_max = 10.0
+delta_max = 40.0
+v26_lo = 1.0
+v26_hi = 20.0
+ay26_max = "none"
+tol26 = 3.0
+v_tol = 1.0
+live_default_for = []
+# The bridge selects this profile only inside one bounded window per run, which it enforces and the
+# run header declares (the monitor cannot: v1 is stateless). Several one-second summary buckets for
+# the flood test, short enough that honest rejects do not dominate a record. Python module only.
+run_window_max_ms = 30000
+
+[[profiles]]
+id = 3
+source_vehicle = "carla-ego"
+limit_set = "nominal"
+envelope = "carla"
+# Frozen and compiled (Phase 7 WP2): in vss_profiles.h, so a guest image built from this generation
+# judges CARLA recordings under it, and its L is the carla vehicle layer's Wheelbase default. Its L
+# and delta_max, and the envelope's rows its budget rests on, are PROBED (see the header).
+compiled = true
+stand_in = []
+# PROBED (WP0 F7): the CARLA ego blueprint's wheelbase, the front-axle midpoint to the rear-axle
+# midpoint rounded to the nearest mm (Phase 1b's method; WP0's probe 5 re-read it).
+l_mm = 2819
+# As profile 1 (D7): a CARLA frame past these is a finding, never a reason to move them.
+v_max = 40.0
+a_max = 10.0
+# PROBED (WP0 F4, on F3's delta source, the front wheels' physics angle): min(57, ceil(that
+# source's single-track maximum + 5)), whole degrees, so it is exact in binary32; 57 is generate.py's
+# DELTA_MAX_LIMIT_DEG.
+delta_max = 57.0
+# The same lower edge as sigsim; the understeer error grows with v, and the a_y bound, not the
+# window, bounds the largest row.
+v26_lo = 1.0
+v26_hi = 10.0
+# Bounds the understeer row where the kinematic model is known to fail, and closes the budget
+# without touching tol; a zeroed yaw stays detectable across the window. The owner's 2.0 (D8), to be
+# narrowed in steps of 0.25 (then v26_hi in steps of 1 m/s), never tol, only as far as the joint-grid
+# budget needs to keep the envelope's margin_target (Phase 7 spec 5 item 2): on the PROBED values
+# above it needs no narrowing, and the same rule sets it again if a re-read changes them.
+ay26_max = 2.0
+# Fixed (spec 7.4; tol never moves): the budget keeps at least the envelope's margin_target over the
+# joint worst honest error at one step with the a_y bound.
+tol26 = 8.0
+# As profile 1; the CARLA launch acceleration it rests on is the envelope's PROBED row.
+v_tol = 1.0
+live_default_for = ["carla"]
+
+[[profiles]]
+id = 4
+source_vehicle = "autoware-sample-vehicle"
+limit_set = "nominal"
+envelope = "planning-sim"
+# The planning-sim vehicle the id was reserved for (Phase 8 WP3b): Autoware 1.9.0's sample_vehicle in
+# its planning simulator. Compiled: every value and every envelope row it rests on is READ or a design
+# value with its reason, so a guest image built from this generation judges planning-sim runs under it
+# (make ctl's image needs this row), and its L is the planning-sim vehicle layer's Wheelbase default.
+compiled = true
+stand_in = []
+# READ (W4 P1): sample_vehicle's vehicle_info.wheel_base, 2.79 m, as the gate, the controller and the
+# simulator run it.
+l_mm = 2790
+# As profile 1: a planning-sim frame past these is a finding, never a reason to move them.
+v_max = 40.0
+a_max = 10.0
+# READ (W4 P9): min(57, ceil(the source's single-track maximum + 5)), whole degrees, on the simulator's
+# steer_lim (1.0 rad): of it and vehicle_info's max_steer_angle (0.70 rad, W4 P1) the looser, as which
+# one clamps the simulated angle was not read in a run; the cap binds.
+delta_max = 57.0
+# The same lower edge as every profile.
+v26_lo = 1.0
+# READ (W4 P8): the smallest whole m/s above the planner's max_vel (4.17 m/s), so the window covers
+# every honest speed and no more.
+v26_hi = 5.0
+# The simulator is a kinematic bicycle (the planning-sim envelope's header): there is no understeer
+# to bound, and a bound would only remove detection, as sigsim's.
+ay26_max = "none"
+# The smallest one-decimal tol that keeps the planning-sim envelope's margin_target over its summed
+# rows at the envelope's skew (spec 7.4; Phase 8 spec-2 2.4); a re-read of a row sets it again by the
+# same rule.
+tol26 = 9.9
+# As profile 1 (the envelope's launch row says what it covers).
+v_tol = 1.0
+live_default_for = ["planning-sim"]
+
+[[profiles]]
+id = 5
+source_vehicle = "carla010-taxi"
+limit_set = "nominal"
+envelope = "carla010"
+# CARLA 0.10.0's vehicle.taxi.ford (Phase 8, D18). Its own values hold no stand-in, but the carla010
+# envelope's rows do, so it stays uncompiled (Python-only) until WP3c's freeze; its L is no stand-in,
+# so the carla-autoware vehicle layer carries it.
+compiled = false
+stand_in = []
+# PROBED (Phase 8 WP9a E4): the taxi's wheelbase by Phase 1b's road-feature method, rounded to the
+# nearest mm.
+l_mm = 2940
+# As profile 3 (D7).
+v_max = 40.0
+a_max = 10.0
+# PROBED (Phase 8 WP9a section 8): min(57, ceil(the front wheels' max_steer_angle + 5)), whole degrees;
+# the cap binds.
+delta_max = 57.0
+# As profile 3.
+v26_lo = 1.0
+v26_hi = 10.0
+# D8's value for profile 3, by the same rule: narrowed in steps of 0.25 (then v26_hi in steps of
+# 1 m/s), never tol, only as far as the joint-grid budget needs to keep the envelope's margin_target;
+# on the stand-in rows it needs no narrowing, and WP3c's freeze applies the rule again.
+ay26_max = 2.0
+# As profile 3 (spec 7.4; tol never moves).
+tol26 = 8.0
+v_tol = 1.0
+live_default_for = ["carla-autoware"]
+
+# Reserved ids: never bound in this table. 0 so a frame that forgot its profile is rejected with 8,
+# never judged against a default. (4 was reserved for the planning-sim vehicle until Phase 8's WP3b
+# bound it.)
+[reserved_ids]
+0 = "never bound: a frame without a profile is rejected with reason 8"

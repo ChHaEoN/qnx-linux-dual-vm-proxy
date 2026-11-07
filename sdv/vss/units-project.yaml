@@ -1,0 +1,27 @@
+# units-project.yaml -- units this project adds to VSS 6.0 (sdv/vss; Phase 8)
+#
+# pins.md, F and S numbers are the project's local design notes.
+# Loaded after the standard file: -u <v6.0>/spec/units.yaml -u units-project.yaml
+# Kept for Phase 8 only: needed only by Vehicle.DualVm.ControlCommand, which lives in the separate
+# layer overlay-ctl.vspec, and loaded only together with that layer, from Phase 8 on. Phases 1-7
+# build on the stock 6.0 unit file alone (overlay.vspec, BUILD). The unit choice is S19's
+# default (a custom unit file, so the kind 2 values keep the planning stack's units, F13); S19 is
+# decided at Phase 8.0 and may replace rad with degrees, but jerk needs m/s^3 either way.
+# Format copied from <v6.0>/spec/units.yaml. VSS 6.0 and 6.1 have neither unit (pins.md, F7). If a
+# later VSS release adds one under the same key, drop it here: a duplicate definition is at best
+# ambiguous (how vss-tools treats it is UNVERIFIED).
+# Does not demonstrate: that vss-tools 6.0.0 accepts these entries (Phase 8.0).
+
+rad:
+  definition: Angle measured in radians
+  unit: radian
+  quantity: angle
+  allowed-datatypes: ['numeric']
+
+# quantity `jerk` is not in 6.0's quantities.yaml; it is defined in quantities-project.yaml.
+# Whether vss-tools refuses a unit whose quantity is undefined: UNVERIFIED (so it is defined).
+m/s^3:
+  definition: Jerk measured in meters per second cubed
+  unit: meters per second cubed
+  quantity: jerk
+  allowed-datatypes: ['numeric']

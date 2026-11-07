@@ -1,0 +1,11 @@
+# quantities-project.yaml -- quantities this project adds to VSS 6.0 (sdv/vss; Phase 8)
+#
+# Loaded after the standard file:
+#   -q <v6.0>/spec/quantities.yaml -q quantities-project.yaml
+# Exists only for the unit m/s^3 in units-project.yaml (ControlCommand.Jerk, Phase 8, S19). Kept for
+# Phase 8 only: loaded only together with overlay-ctl.vspec, from Phase 8 on; Phases 1-7 build on the
+# stock 6.0 quantities file alone (overlay.vspec, BUILD).
+# Format copied from <v6.0>/spec/quantities.yaml. Does not demonstrate that vss-tools accepts it.
+
+jerk:
+  definition: Rate of change of acceleration with time

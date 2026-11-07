@@ -1,0 +1,126 @@
+# profiles-ctl.toml -- the kind 2 profile table and the constants of its rules (sdv/vss; Phase 8)
+#
+# Project-authored design data, not VSS-derived. Every value in this
+# file is either READ from the planning stack's released configuration (Autoware 1.9.0's planning
+# simulator and its gate, read in Phase 8's WP4a) or a design value; the comment beside each says which,
+# names its parameter and gives its reason. None is a figure of a run. "W4" names those configuration
+# reads (P1, P2, ...); "OP 2.2" and "D6" are the project's local
+# design notes; "spec 2.3" is the Phase 8 specification's section for this file.
+#
+# ONE SOURCE, GENERATED BOTH WAYS. The guest judges kind 2 with this table and the claim node's
+# reference judge with the same one, so nobody keeps a second copy. generate.py reads this file
+# together with overlay-ctl.vspec (the ControlCommand layer, whose seven slot UIDs make the digest) and
+# writes:
+#   vss_ctl.h    the slot UIDs, the digest, the constants and the compiled profiles as an X-macro table
+#                (monitor.c's ctl build, MONITOR_EXT_KINDS 0x14);
+#   vss_ctl.py   the same for Python (sdv/ctl), with every profile and its run window.
+#
+# UNITS (spec 2.3). Speeds m/s; accelerations m/s^2; jerk m/s^3; the steering tire angle rad (the
+# single-track model's, positive left); its rate rad/s; lengths mm; times ms.
+#
+# REFUSALS. generate.py exits 1 and writes nothing, before any vss-tools run, when:
+#   - this file is not TOML, or has an [invariants] table, or a key it does not know: the bounds below
+#     are constants of generate.py (CTL_STEER_MAX_LIMIT, CTL_DT_MAX_MS_MAX, L_MM_MIN, L_MM_MAX), never a
+#     setting of the file they check;
+#   - format is not 1; dt_max_ms is not an integer in 1..0xFFFE (a saturated interval, 0xFFFF, must
+#     always fail rule 11); tol17, overspeed_factor, overspeed_margin or rollback_v is not a finite
+#     number >= 0 (finite as a double, here and below: an integer past a double's range is not);
+#   - an id is not an integer in 1..255 (0 is never bound) or is repeated; source is neither
+#     "gate-dump" nor "design";
+#   - l_mm is not an integer in 1000..6000; a limit (v_max, a_max, jerk_max, steer_max,
+#     steer_rate_max, lat_acc_max) is not a finite number > 0; steer_max is outside (0, 1.0] rad (rule 17
+#     takes tan only inside [0, 1]);
+#   - v_max, a_max, jerk_max, steer_max or steer_rate_max is not exactly representable in binary32:
+#     each is compared with an f32 field widened exactly, so "a value exactly at the limit is accepted"
+#     is defined only for a binary32 limit (lat_acc_max is compared in double, with tol17 added);
+#   - run_window_max_ms is neither absent nor a positive integer; compiled is not a bool; stand_in names
+#     something that is not a field of the table;
+#   - a profile with stand-in values is compiled; profile 2 is compiled without run_window_max_ms; no
+#     profile is compiled.
+#
+# READ. A value whose comment block starts with that word is READ from the planning stack (W4): it is
+# held only on its line here, tests/test_sdv_vss_ctl.py's READ holds the same value, and a re-read
+# changes those two places and regenerates. A value the generator cannot take (outside a refusal's
+# range) goes to WP3c's freeze F-a with its reason, never into this file.
+
+format = 1
+
+# Rule 11's bound on the ROS stamp interval between two counted Controls, in ms. Design (spec 2.3): the
+# controller publishes every ctrl_period, 0.03 s (READ, W4 P6), and the gate forwards each one as it
+# comes (W4 G3, G4), so three periods and a margin, to 10 ms: it passes an interval with two Controls lost,
+# and sits below the claim path's 500 ms deadline and every intake pause, so the first Control after a
+# silence gets reason 11 by design. Below 0xFFFF, so a saturated interval always fails rule 11.
+dt_max_ms = 100
+
+# Rule 17's tolerance over lat_acc_max, m/s^2. Design (OP 2.2, spec 2.3): the gate bounds lateral
+# acceleration with the measured speed of its own instant (W4 P5), rule 17 with the odometry the claim
+# node paired inside its freshness window; the tolerance absorbs what the two speeds may differ by. A
+# tenth of profile 1's lat_acc_max, and with rollback_v OP 2.2's design pair.
+tol17 = 0.5
+
+# Rule 18, overspeed: |v_meas| > overspeed_factor x |v_cmd| + overspeed_margin. Design (OP 2.2): the
+# factor lets the measured speed run a fifth above the command, as a vehicle tracking it may.
+overspeed_factor = 1.2
+# Rule 18's margin, m/s. Design (OP 2.2): it keeps a command near 0 (a stop, a launch) from refusing a
+# vehicle that is still slowing down or starting to move.
+overspeed_margin = 2.0
+
+# Rule 19, rolling back: v_meas < -rollback_v while v_cmd >= 0, m/s. Design (OP 2.2): the vehicle moving
+# backwards faster than this while the command is not to reverse.
+rollback_v = 0.5
+
+# Profiles (spec 2.3). p[1] is an opaque key: ids are small integers assigned in the order profiles are
+# defined and never reused. compiled = true puts the profile into vss_ctl.h (the guest's table); a
+# profile with stand-in values stays Python-only until they are read. run_window_max_ms (absent for an
+# unbounded profile): the claim node selects the profile only inside one bounded window per run, which
+# it enforces (the monitor cannot: kind 2 v1 is stateless).
+
+[[profiles]]
+id = 1
+# The gate's own output limits (D6: "profile 1 from the dumped gate values, v1 the loosest cell"): the
+# claim is the gate's output, so the monitor judges it against what the gate passes.
+source = "gate-dump"
+compiled = true
+stand_in = []
+# READ (W4 P1): sample_vehicle's vehicle_info.wheel_base, 2.79 m, as the gate, the controller and the
+# simulator run with it.
+l_mm = 2790
+# READ (W4 P2): the gate's nominal filter, vel_lim. Not the transition filter's vel_lim (W4 P3), which
+# the gate applies only while the operation mode is in transition: honest commands stay under the
+# planner's top speed, so a reason 12 in a transition is a finding.
+v_max = 25.0
+# READ (W4 P2): the nominal filter's lon_acc_lim_for_lon_vel, its loosest cell. Judged only on frames
+# whose b0 is set: honest traffic of this release never sets it (W4 G9), an injection does.
+a_max = 5.0
+# READ (W4 P2): the nominal filter's lon_jerk_lim_for_lon_acc, its loosest cell (the near-stop row).
+# Judged only on frames whose b1 is set (W4 G9).
+jerk_max = 80.0
+# READ (W4 P2): the nominal filter's steer_cmd_lim, its loosest cell. The gate's limit and not the
+# vehicle's max_steer_angle (W4 P1), since the claim is the gate's output and the gate passes up to
+# this; so rule 15 cannot catch a command between the vehicle's angle and this one.
+steer_max = 1.0
+# READ (W4 P2): the nominal filter's steer_rate_lim_for_steer_cmd, its loosest cell. Judged only on
+# frames whose b2 is set (W4 G9).
+steer_rate_max = 1.0
+# READ (W4 P2): the nominal filter's lat_acc_lim_for_steer_cmd, its loosest cell.
+lat_acc_max = 5.0
+
+[[profiles]]
+id = 2
+# The demo profile: profile 1's vehicle and limits but for v_max, used only inside its window.
+source = "design"
+compiled = true
+stand_in = []
+l_mm = 2790
+# Design: under the planner's top speed, max_vel (READ, W4 P8), by about a quarter, so honest cruise
+# commands get reason 12 and launch and stopping ones do not: the monitor refusing real, uninjected
+# commands under a narrower operating domain.
+v_max = 3.0
+a_max = 5.0
+jerk_max = 80.0
+steer_max = 1.0
+steer_rate_max = 1.0
+lat_acc_max = 5.0
+# Design: as kind 4's profile 2 and WP2's demo rule, several one-second summary buckets for the flood
+# test, short enough that honest rejects do not dominate a record.
+run_window_max_ms = 30000

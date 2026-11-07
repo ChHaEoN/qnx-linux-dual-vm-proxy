@@ -1,0 +1,74 @@
+# uid-baseline.txt -- the committed staticUIDs of the SDV slice's VSS contract (sdv/vss)
+#
+# Written by `generate.py --accept-uid-change`, never by hand: a hand
+# edit that does not match what the generator writes fails the test that regenerates it. Every value
+# is a design value computed from the pinned inputs, never a measurement.
+#
+# WHAT IT IS. generate.py compares every generation with this file and refuses on any drift: a
+# staticUID of one of the five kind 4 slots or of any node of the project branch that changed, that
+# disappeared or that is new, or a catalogue digest that moved. No generated file is committed, so
+# without this file a fresh checkout has nothing to compare against, and an overlay edit that moves
+# a slot's staticUID (a unit, min or max on a slot; a renamed branch) would pass and silently change
+# the digest that a guest image is built with. The nodes are listed because a new node under
+# the project branch is a change of the contract too. `digest` is FNV-1 32 over the five slot UIDs
+# in slot order, as u32 little-endian (generate.py holds the definition); each other line is a node
+# path and its staticUID (upper-case hex, vss-tools' case-insensitive default).
+#
+# DOES NOT DEMONSTRATE. That any of these values is right, that a guest image built from them exists,
+# or that the databroker accepts them. It records what the pinned inputs produced when the file was
+# last written, so that the next change to them is a decision and not an accident.
+
+digest 0x4D68EA68
+Vehicle.Acceleration.Longitudinal 0xEC06F430
+Vehicle.AngularVelocity.Yaw 0x9D29F724
+Vehicle.Chassis.Axle.Row1.SteeringAngle 0x3F77B56B
+Vehicle.DualVm 0xD3048070
+Vehicle.DualVm.AppState 0xACD19B9A
+Vehicle.DualVm.AppState.HardBrakeHazard 0xF9EA582C
+Vehicle.DualVm.AppState.HardBrakeHazard.ActuateResult 0xE240625D
+Vehicle.DualVm.AppState.HardBrakeHazard.App 0xEE47302E
+Vehicle.DualVm.AppState.HardBrakeHazard.AppVersion 0x99E39BB0
+Vehicle.DualVm.AppState.HardBrakeHazard.ImageId 0x4DFC67ED
+Vehicle.DualVm.AppState.HardBrakeHazard.IsHazardRequested 0x20038780
+Vehicle.DualVm.AppState.HardBrakeHazard.SchemaVersion 0xAA92F1BB
+Vehicle.DualVm.AppState.HardBrakeHazard.Seq 0xEE0D2EB2
+Vehicle.DualVm.AppState.HardBrakeHazard.State 0x66292063
+Vehicle.DualVm.ControlCommand 0x7403047C
+Vehicle.DualVm.ControlCommand.Acceleration 0xDB13EF71
+Vehicle.DualVm.ControlCommand.IsAccelerationDefined 0x3072CE6B
+Vehicle.DualVm.ControlCommand.IsJerkDefined 0xE673978D
+Vehicle.DualVm.ControlCommand.IsSteeringTireRotationRateDefined 0x647B36BA
+Vehicle.DualVm.ControlCommand.Jerk 0x6FE77012
+Vehicle.DualVm.ControlCommand.ProfileId 0x6B66F5BC
+Vehicle.DualVm.ControlCommand.StampInterval 0x535FD435
+Vehicle.DualVm.ControlCommand.SteeringTireAngle 0x1D00205B
+Vehicle.DualVm.ControlCommand.SteeringTireRotationRate 0x649BD500
+Vehicle.DualVm.ControlCommand.Velocity 0x6BCCAA9E
+Vehicle.DualVm.Monitor 0x0DFFD408
+Vehicle.DualVm.Monitor.CtlClaim 0x3D6773D9
+Vehicle.DualVm.Monitor.CtlClaim.Accepted 0xE7C8E797
+Vehicle.DualVm.Monitor.CtlClaim.Dropped 0x3C067752
+Vehicle.DualVm.Monitor.CtlClaim.IsConnected 0x3B4417D6
+Vehicle.DualVm.Monitor.CtlClaim.LastSeq 0x221973F0
+Vehicle.DualVm.Monitor.CtlClaim.LostOnReconnect 0xCEB730E0
+Vehicle.DualVm.Monitor.CtlClaim.Packed 0x133F502A
+Vehicle.DualVm.Monitor.CtlClaim.Reason 0xA860C1E6
+Vehicle.DualVm.Monitor.CtlClaim.Reconnects 0xBB406D28
+Vehicle.DualVm.Monitor.CtlClaim.Rejected 0xEDA5A090
+Vehicle.DualVm.Monitor.CtlClaim.Replied 0x5E748B61
+Vehicle.DualVm.Monitor.CtlClaim.Verdict 0xF61607E1
+Vehicle.DualVm.Monitor.VssClaim 0x6B9F38F2
+Vehicle.DualVm.Monitor.VssClaim.Accepted 0x2219422E
+Vehicle.DualVm.Monitor.VssClaim.Dropped 0x431EBBD1
+Vehicle.DualVm.Monitor.VssClaim.IsConnected 0x43DF3F17
+Vehicle.DualVm.Monitor.VssClaim.LastSeq 0x620EC33B
+Vehicle.DualVm.Monitor.VssClaim.LostOnReconnect 0x4E1AA453
+Vehicle.DualVm.Monitor.VssClaim.Packed 0x259F5AEB
+Vehicle.DualVm.Monitor.VssClaim.Reason 0xC4DC8767
+Vehicle.DualVm.Monitor.VssClaim.Reconnects 0x2CC1F95D
+Vehicle.DualVm.Monitor.VssClaim.Rejected 0xE12185F5
+Vehicle.DualVm.Monitor.VssClaim.Replied 0x8A92B5D2
+Vehicle.DualVm.Monitor.VssClaim.Verdict 0xF88B1484
+Vehicle.DualVm.Motion 0x4FCE113C
+Vehicle.DualVm.Motion.LongitudinalVelocity 0xBA890F0E
+Vehicle.Powertrain.Transmission.CurrentGear 0x922EAF21

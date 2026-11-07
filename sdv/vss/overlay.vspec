@@ -1,0 +1,532 @@
+# overlay.vspec -- the project's main VSS 6.0 overlay (sdv/vss)
+#
+# Generic SDV terms only, no host names or addresses, no result
+# figures. References to pins.md, kind4-spec.md, appstate.schema.json, twin-allowlist.md,
+# CHANGES.md, decision numbers (OD, S) and fact numbers (F) are to the project's local design notes,
+# which are not in this tree. Every limit and rate in this file is a design value, and its reason
+# sits in a YAML comment -- never in a `description:`, because descriptions are exported into the
+# databroker JSON and read by apps and the twin connector. Descriptions carry only encoding
+# definitions (such as "0 = accepted").
+#
+# WHAT IT IS
+#   The one overlay on top of the VSS 6.0 standard catalogue (source tag v6.0, commit 20c609bf,
+#   archive sha256 db0d241d...; generate.py holds the full pins). It does four things:
+#     1. adds one project branch, Vehicle.DualVm, with three of the plan's four sub-branches:
+#          Motion          signed longitudinal velocity (kind 4 slot 0)
+#          Monitor         what the Linux-side claimants saw of the QNX guest's verdicts (local only)
+#          AppState        each app's heartbeat and own state (schema: appstate.schema.json)
+#        The fourth, ControlCommand (Phase 8: the observed kind 2 command values), is the separate
+#        layer overlay-ctl.vspec, loaded from Phase 8 on only;
+#     2. fixes the two conventions VSS 6.0 leaves open (see "CONVENTIONS FIXED HERE" below);
+#     3. carries the CAN mapping (`dbc2vss`) from slice.dbc onto the catalogue;
+#     4. nothing else: no standard node's type, datatype or unit is changed.
+#
+# BUILD (generate.py in this directory runs it; README.md)
+#   Phases 1-7, on the stock 6.0 unit and quantity files only, vss-tools 6.0.0, UIDs
+#   case-insensitive (the tool's default):
+#   vspec export id    --vspec <v6.0>/spec/VehicleSignalSpecification.vspec
+#                      -u <v6.0>/spec/units.yaml  -q <v6.0>/spec/quantities.yaml
+#                      -l overlay.vspec  -l vehicle-sigsim.vspec  -e dbc2vss  --strict  -o vss-ids.vspec
+#   vspec export json  (same inputs)  --pretty  -o vss-can-mapping.json
+#   vspec export id    (the stock tree alone, no overlay)  --strict
+#   vspec export id    (the first line's inputs)  -e staticUID
+#                      --validate-static-uid <previous vss-ids.vspec>  --validate-only
+#   The databroker exports also load ControlCommand and remove every `dbc2vss` key. The CAN mapping
+#   stays without that layer; it is not interchangeable with the databroker catalogue. Extended
+#   attributes are not staticUID inputs (F8).
+#   The databroker and kind 2 exports add the ControlCommand layer and its units:
+#                      -u units-project.yaml  -q quantities-project.yaml
+#                      -l overlay.vspec  -l overlay-ctl.vspec  -l vehicle-<source>.vspec
+#   - overlay-ctl.vspec attaches under Vehicle.DualVm, so it is loaded after overlay.vspec.
+#   - units-project.yaml / quantities-project.yaml exist only for overlay-ctl.vspec (rad, m/s^3 and
+#     the quantity jerk are not in 6.0; pins.md), so no build before Phase 8 depends on whether
+#     vss-tools accepts them (UNVERIFIED; S19 decides the units at Phase 8.0). Adding the layer adds
+#     nodes but changes no existing node's UID (a staticUID is computed per node), so the kind 4
+#     digest does not move.
+#   - vehicle-<source>.vspec is a one-node layer per source vehicle that sets
+#     Vehicle.Chassis.Wheelbase `default:` (6.0 ships default 0). `default` is not a staticUID input
+#     (F8), so it never moves the kind 4 digest. generate.py writes and loads one, vehicle-sigsim.vspec,
+#     after this overlay in every build from Phase 2 on (Phase 2 design decision g): the node's
+#     `default:` is the L of run type sigsim's live-default profile in profiles.toml, so the value is
+#     generated and written nowhere by hand, and generate.py checks that the node keeps the stock
+#     tree's staticUID. Its form:
+#         Vehicle.Chassis.Wheelbase:
+#           default: <the source vehicle's wheelbase in mm = its kind 4 profile's L>
+#     databroker 0.7.1 serves an attribute's catalogue default (Phase 1 stage 3, finding 2: 6.0's 0
+#     while no layer was loaded), so with the layer it serves the profile's L, which the claim bridge
+#     checks in broker mode (kind4-spec.md section 5.6). The attribution writer stays `catalogue`. No
+#     provider writes it.
+#
+# WHAT generate.py CHECKS ON THIS FILE (it refuses, exit 1 and nothing written, on any failure)
+#   - vss-tools runs under --strict: a name-style violation or an unknown attribute aborts.
+#   - Every entry here reaches the generated catalogue as written: its type, datatype, unit, min,
+#     max and allowed in the id output, its description, comment and `dbc2vss` in the mapping JSON.
+#     That covers the one entry on an instantiated path (Vehicle.Chassis.Axle.Row1.SteeringAngle)
+#     and the lower-case `allowed` lists, which match appstate.schema.json's enums.
+#   - Every standard node's staticUID equals an overlay-free build of the same tree, except
+#     Vehicle.Speed's (its `min: 0`), and every node the overlay adds lies under the project branch.
+#   - Vehicle.Speed itself is a sensor, a float, in km/h, with min 0.
+#   - Every `dbc2vss` signal is defined in slice.dbc.
+#   - No staticUID changed and none disappeared since the previous generation, unless the run is
+#     told to accept it (--accept-uid-change).
+#   - The five slot UIDs, every node of the project branch and the digest equal the committed
+#     uid-baseline.txt: a change, a removal or a new node there is refused unless the run is told
+#     to accept it (--accept-uid-change), which rewrites the baseline.
+
+# STATICUID AND THE KIND 4 CATALOGUE DIGEST (plan 3.3, F8)
+#   A node's staticUID hashes its name, datatype, type, unit, allowed, min and max -- not
+#   description, comment, default or any extended attribute. The kind 4 digest is FNV-1 32 over the
+#   five slot UIDs in slot order:
+#     slot 0  Vehicle.DualVm.Motion.LongitudinalVelocity          flag b0  p[25..28]
+#     slot 1  Vehicle.Acceleration.Longitudinal                    flag b1  p[29..32]
+#     slot 2  Vehicle.Chassis.Axle.Row1.SteeringAngle              flag b2  p[33..36]
+#     slot 3  Vehicle.AngularVelocity.Yaw                          flag b3  p[37..40]
+#     slot 4  Vehicle.Powertrain.Transmission.CurrentGear          flag b4  p[43]
+#   So in this file: the comments, the conventions and every `dbc2vss` block can change
+#   without touching the digest; renaming the project branch or giving a slot node a unit, min, max
+#   or allowed does change it (new guest image).
+#
+# NO MIN/MAX ON THE FIVE SLOT SIGNALS -- a design choice, two reasons
+#   1. The kind 4 limits (v_max, a_max, delta_max, tol, speed window, v_tol) belong to a profile
+#      compiled into the guest (plan 3.4), one per source vehicle. min/max are staticUID inputs, so
+#      a limit in the catalogue would tie a limit change to a digest change and a guest rebuild.
+#   2. If databroker enforces min/max on writes (UNVERIFIED for 0.7.1), the range injections that
+#      must reach the guest as reasons 23-25 would be refused at the broker and surface as a stale
+#      value (reason 22) instead. slice.dbc's ranges are deliberately wider than any profile limit
+#      for the same reason.
+#   min/max appear only where the plan asks for them (Monitor verdict and reason, uint8 with bounds
+#   instead of 6.1 enums, plan 3.3) and on Vehicle.Speed (below).
+#
+# CONVENTIONS FIXED HERE (VSS 6.0 states neither on the leaf; pins.md open points)
+#   Yaw sign. The leaf Vehicle.AngularVelocity.Yaw says only "rotation rate along Z (vertical)", but
+#   its parent branch Vehicle.AngularVelocity (spec/Vehicle/Vehicle.vspec L302-304 at v6.0) says
+#   "Axis definitions according to ISO 8855". That vehicle axis system is right-handed with X
+#   forward, Y left and Z up, so a positive rotation about Z is counterclockwise seen from above:
+#   positive yaw rate = yawing to the left. This overlay does not invent a convention; it writes the
+#   inherited one onto the leaf (as a `comment`, which is not a UID input -- the digest does not
+#   move). It agrees with Vehicle.Chassis.Axle.Row1.SteeringAngle in the same catalogue ("ISO 8855,
+#   positive = left") and with the single-track kinematic model the plan uses for rule 26:
+#       psi_dot = v_x * tan(delta) / L,  so  sign(psi_dot) = sign(v_x) * sign(delta)
+#   (forward with left steer yaws left; reversing with left steer yaws right). Rule 26 v1 compares
+#   magnitudes only (plan 3.4); this fixed sign is what a later direction check would use.
+#   Sources convert before encoding: sigsim works in ISO 8855 natively; CARLA is left-handed (F34),
+#   so its yaw rate and steering angle are expected to change sign in the feeder -- an inference,
+#   UNVERIFIED, pinned by the Phase 1 sign tests against real CARLA values in Phase 7.
+#
+#   Vehicle.Speed sign. Fixed as never negative: Vehicle.Speed = |v_x| in km/h. Reasons:
+#   (a) the plan already moved the signed quantity to Motion.LongitudinalVelocity because VSS 6.0's
+#       Vehicle.Speed has no min and no stated sign (F14); two signals carrying the same signed value
+#       in different units would only add a way to disagree;
+#   (b) in the kinematic model the sign lives in v_x, the ISO 8855 X component; speed is its
+#       magnitude, which is also what rule 26 uses (|v|);
+#   (c) the apps and the twin read Vehicle.Speed, and a reader that assumes speed >= 0 would
+#       misread a reversing vehicle; direction is read from Motion.LongitudinalVelocity or
+#       CurrentGear instead.
+#   Consequence of `min: 0`: min is a UID input, so this project's Vehicle.Speed UID differs from
+#   an unmodified 6.0 build. Vehicle.Speed is not a kind 4 slot (digest unaffected), and VSS
+#   releases ship no static-ID file to disagree with (F1). Whether databroker 0.7.1 refuses a
+#   negative write because of it: UNVERIFIED; the can-provider mapping in section 2 cannot produce
+#   one.
+#
+# DOES NOT DEMONSTRATE
+#   That databroker or the CAN provider load the generated output, or that any value is right.
+#   VSS is a data model, not a safety mechanism: every writer of these signals is on the untrusted
+#   Linux side, and the catalogue digest only catches an honest mismatch between two builds, never a
+#   dishonest writer.
+
+
+# ==================================================================================================
+# 1. The project branch
+# ==================================================================================================
+
+# Name `DualVm`: a design value, open under S4 (the plan leaves the overlay branch name to the
+# owner). Short, CamelCase so it passes the --strict naming check, and specific to this project so
+# it cannot collide with a future standard branch. It is part of every project node's name, and so
+# of Motion.LongitudinalVelocity's staticUID and the kind 4 digest: settle it before Phase 2 builds
+# ifs-vss.
+Vehicle.DualVm:
+  type: branch
+  description: "Project-specific signals of the dual-VM study. Not part of the VSS standard catalogue."
+
+
+# --- 1.1 Motion ----------------------------------------------------------------------------------
+
+Vehicle.DualVm.Motion:
+  type: branch
+  description: "Vehicle motion quantities the standard catalogue does not carry with a sign."
+
+# kind 4 slot 0 (flag b0, p[25..28], f32). m/s because the kind 4 rules and the kinematic model
+# work in SI units (plan 3.4). No min/max (see header). Written from slice.dbc's LongVel by
+# identity, so the broker, can and replay bridge modes all see the same number (the mapping's
+# design values are explained in section 2).
+Vehicle.DualVm.Motion.LongitudinalVelocity:
+  type: sensor
+  datatype: float
+  unit: m/s
+  description: "Signed longitudinal velocity of the vehicle along the ISO 8855 vehicle X axis.
+                Positive = moving forward. Negative = moving in reverse. Zero = standstill."
+  comment: "Vehicle.Speed carries the magnitude of this value in km/h and is never negative."
+  dbc2vss:
+    signal: LongVel
+    interval_ms: 0
+    on_change: false
+
+
+# --- 1.2 Monitor (local only; never reaches the twin -- plan 3.2, 3.8, S11) ----------------------
+#
+# One sub-branch per claimant, so the one-writer-per-signal rule holds (plan 3.2):
+#   VssClaim  written by vss_claim_bridge (kind 4, from Phase 2);
+#   CtlClaim  written by the ROS->VSS feeder (Phase 8), which copies what the kind 2 claim node
+#             publishes on /qnx_monitor/verdict -- the claim node itself never holds a KUKSA client
+#             (plan 3.2). Leaves that topic does not carry stay without a value; Phase 8.0 trims or
+#             confirms the set.
+# The two sub-branches have the same fixed leaf set.
+#
+# Design values:
+#   Verdict max 1 : the monitor writes only 0 (ACCEPT) or 1 (REJECT) into p[6].
+#   Reason  max 27: the plan's reason allocation -- 0-7 existing, 8-10 shared by kinds 2/3/4, 11-20
+#                   kinds 2/3, 21-27 kind 4 (plan 3.4). A new reason raises this max: that changes
+#                   the Monitor UIDs but not the guest (Monitor is not a kind 4 slot). A reply whose
+#                   reason is above the max is a protocol fault the claimant logs; it never clamps.
+#   Counters uint32: at the bridge's design rate of 10 Hz a uint32 lasts over 13 years.
+#   Accounting (plan 3.4, old plan 2.1; kind4-spec.md section 14.2 uses the same words):
+#   Packed = Replied + Dropped + LostOnReconnect, and Replied = Accepted + Rejected. Packed is what the
+#   plan's accounting calls the tick count; the bridge's timer ticks (Packed plus the ticks on which it
+#   held no value), its rule-26 skip counts and its spread count stay in its log and the run record.
+
+Vehicle.DualVm.Monitor:
+  type: branch
+  description: "What the Linux-side claimants saw of the QNX guest monitor's replies. Each value is
+                the claimant's own view, not the guest's judgement: liveness (MISS and RESTORED) is
+                authoritative only on the guest console. Local only."
+
+Vehicle.DualVm.Monitor.VssClaim:
+  type: branch
+  description: "The vehicle-state claim (kind 4), as vss_claim_bridge saw it."
+
+Vehicle.DualVm.Monitor.VssClaim.Verdict:
+  type: sensor
+  datatype: uint8
+  min: 0
+  max: 1
+  description: "Verdict byte of the last reply received. 0 = accepted, 1 = rejected."
+
+Vehicle.DualVm.Monitor.VssClaim.Reason:
+  type: sensor
+  datatype: uint8
+  min: 0
+  max: 27
+  description: "Reason byte of the last reply received. 0 when accepted."
+
+Vehicle.DualVm.Monitor.VssClaim.LastSeq:
+  type: sensor
+  datatype: uint64
+  description: "Sequence number of the last reply received."
+
+Vehicle.DualVm.Monitor.VssClaim.Packed:
+  type: sensor
+  datatype: uint32
+  description: "Claims the claimant packed to send since it started: replied, dropped from its own
+                queue, or lost on reconnect."
+
+Vehicle.DualVm.Monitor.VssClaim.Replied:
+  type: sensor
+  datatype: uint32
+  description: "Claims sent that received a reply."
+
+Vehicle.DualVm.Monitor.VssClaim.Accepted:
+  type: sensor
+  datatype: uint32
+  description: "Replies with verdict accepted."
+
+Vehicle.DualVm.Monitor.VssClaim.Rejected:
+  type: sensor
+  datatype: uint32
+  description: "Replies with verdict rejected."
+
+Vehicle.DualVm.Monitor.VssClaim.Dropped:
+  type: sensor
+  datatype: uint32
+  description: "Claims dropped by the claimant's own queue before sending."
+
+Vehicle.DualVm.Monitor.VssClaim.LostOnReconnect:
+  type: sensor
+  datatype: uint32
+  description: "Claims in flight when the connection closed; never answered."
+
+Vehicle.DualVm.Monitor.VssClaim.IsConnected:
+  type: sensor
+  datatype: boolean
+  description: "True while the claimant holds an open connection to the guest, in its own view."
+
+Vehicle.DualVm.Monitor.VssClaim.Reconnects:
+  type: sensor
+  datatype: uint32
+  description: "Connections the claimant opened after its first one."
+
+Vehicle.DualVm.Monitor.CtlClaim:
+  type: branch
+  description: "The control-command claim (kind 2), as reported by the kind 2 claim node and copied
+                by the ROS to VSS feeder. Phase 8."
+
+Vehicle.DualVm.Monitor.CtlClaim.Verdict:
+  type: sensor
+  datatype: uint8
+  min: 0
+  max: 1
+  description: "Verdict byte of the last reply received. 0 = accepted, 1 = rejected."
+
+Vehicle.DualVm.Monitor.CtlClaim.Reason:
+  type: sensor
+  datatype: uint8
+  min: 0
+  max: 27
+  description: "Reason byte of the last reply received. 0 when accepted."
+
+Vehicle.DualVm.Monitor.CtlClaim.LastSeq:
+  type: sensor
+  datatype: uint64
+  description: "Sequence number of the last reply received."
+
+Vehicle.DualVm.Monitor.CtlClaim.Packed:
+  type: sensor
+  datatype: uint32
+  description: "Claims the claimant packed to send since it started: replied, dropped from its own
+                queue, or lost on reconnect."
+
+Vehicle.DualVm.Monitor.CtlClaim.Replied:
+  type: sensor
+  datatype: uint32
+  description: "Claims sent that received a reply."
+
+Vehicle.DualVm.Monitor.CtlClaim.Accepted:
+  type: sensor
+  datatype: uint32
+  description: "Replies with verdict accepted."
+
+Vehicle.DualVm.Monitor.CtlClaim.Rejected:
+  type: sensor
+  datatype: uint32
+  description: "Replies with verdict rejected."
+
+Vehicle.DualVm.Monitor.CtlClaim.Dropped:
+  type: sensor
+  datatype: uint32
+  description: "Claims dropped by the claimant's own queue before sending."
+
+Vehicle.DualVm.Monitor.CtlClaim.LostOnReconnect:
+  type: sensor
+  datatype: uint32
+  description: "Claims in flight when the connection closed; never answered."
+
+Vehicle.DualVm.Monitor.CtlClaim.IsConnected:
+  type: sensor
+  datatype: boolean
+  description: "True while the claimant holds an open connection to the guest, in its own view."
+
+Vehicle.DualVm.Monitor.CtlClaim.Reconnects:
+  type: sensor
+  datatype: uint32
+  description: "Connections the claimant opened after its first one."
+
+
+# --- 1.3 AppState (the heartbeat; record schema: appstate.schema.json, version 1) ----------------
+#
+# One sub-branch per app, named from the app's manifest name by one exact rule: split the name on
+# '-', upper-case the first letter of each part, join the parts with nothing between them
+# (hard-brake-hazard -> HardBrakeHazard). App names match ^[a-z][a-z0-9]*(-[a-z][a-z0-9]*)*$ (every
+# part starts with a letter; manifest-classes.md), so the result passes the --strict naming check and
+# the rule is reversible: two app names never give one sub-branch. A pytest derives each AppState
+# sub-branch from its manifest name by this rule (twin-allowlist.md A7). Reason for one sub-branch
+# per app: the one-writer rule makes a flat AppState branch single-app by construction; a second app
+# would then have to rename the first app's leaves, which changes their UIDs and the connector's
+# allowlist. Each leaf is one property of appstate.schema.json, named by that property's x-vss-leaf
+# annotation (AppState.<App>.<Leaf>).
+#
+# HARD RULE (plan 3.2, 3.8, S11): no leaf here is derived from the Monitor branch or from anything
+# the guest produces -- neither from the value of a Monitor leaf nor from its freshness or absence.
+# Adding a leaf changes the schema version and the connector's field whitelist together, with the
+# S11 pytest.
+# Design values: heartbeat period 1 s and the health deadline are the schema's and Phase 6's; the
+# string leaves are bounded by the schema's enums and patterns, which the connector validates --
+# VSS 6.0 has `allowed` for enumerations but no pattern, so App, AppVersion and ImageId are bounded
+# only at the connector. `allowed` lists are the pre-6.1 mechanism, not the 6.1 enum type the plan
+# avoids (F15).
+
+Vehicle.DualVm.AppState:
+  type: branch
+  description: "Heartbeat and own state of each Linux-side app, one sub-branch per app. Contains
+                nothing derived from the Monitor branch."
+
+Vehicle.DualVm.AppState.HardBrakeHazard:
+  type: branch
+  description: "The hard-braking hazard-light app."
+
+Vehicle.DualVm.AppState.HardBrakeHazard.SchemaVersion:
+  type: sensor
+  datatype: uint8
+  description: "Version of the AppState record schema the app writes."
+
+Vehicle.DualVm.AppState.HardBrakeHazard.App:
+  type: sensor
+  datatype: string
+  description: "The app's name as in its manifest entry."
+
+Vehicle.DualVm.AppState.HardBrakeHazard.AppVersion:
+  type: sensor
+  datatype: string
+  description: "The app's own version, MAJOR.MINOR.PATCH, fixed at image build time."
+
+Vehicle.DualVm.AppState.HardBrakeHazard.ImageId:
+  type: sensor
+  datatype: string
+  description: "Image ID of the running container, passed in by whoever started it."
+
+Vehicle.DualVm.AppState.HardBrakeHazard.Seq:
+  type: sensor
+  datatype: uint32
+  description: "Heartbeat counter. 1 at the first heartbeat after each container start, then plus 1
+                per heartbeat. A decrease marks a restart."
+
+Vehicle.DualVm.AppState.HardBrakeHazard.State:
+  type: sensor
+  datatype: string
+  allowed: ['starting', 'running', 'degraded', 'stopping']
+  description: "The app's own lifecycle state, computed from its own process and its own non-Monitor
+                VSS inputs; never from the value or freshness of the Monitor branch."
+
+# Named IsHazardRequested (the schema property hazard_requested, whose x-vss-leaf names this leaf):
+# VSS names booleans Is..., and the vss-tools name-style check is expected to abort a
+# non-conforming name under --strict (F6).
+Vehicle.DualVm.AppState.HardBrakeHazard.IsHazardRequested:
+  type: sensor
+  datatype: boolean
+  description: "Value the app last requested through Actuate on Vehicle.Body.Lights.Hazard.IsSignaling.
+                False if it has requested nothing since start."
+
+Vehicle.DualVm.AppState.HardBrakeHazard.ActuateResult:
+  type: sensor
+  datatype: string
+  allowed: ['none', 'ok', 'unavailable', 'error']
+  description: "Outcome of the app's last Actuate call. none = no call since start."
+
+
+# --- 1.4 ControlCommand: not in this file ---------------------------------------------------------
+#
+# The fourth sub-branch, Vehicle.DualVm.ControlCommand (Phase 8), is the separate layer
+# overlay-ctl.vspec, loaded from Phase 8 on only, so that Phases 1-7 build on the stock 6.0 unit
+# files (see BUILD above).
+
+
+# ==================================================================================================
+# 2. Standard nodes: the conventions fixed here and the CAN mapping (dbc2vss) for slice.dbc
+# ==================================================================================================
+#
+# Each node appears ONCE in this file: YAML keeps only the last of two equal keys, so a second
+# entry for the same node would silently drop the first one's min or comment. (Separate -l layers
+# may each name the same node; that is how mapping.vspec would work if the mapping is split out.)
+#
+# type and datatype are restated exactly as in 6.0 (the provider's sample overlay does the same);
+# unit is inherited, not restated, so a typo here cannot silently change a slot's unit and UID.
+# generate.py compares every standard node of the generated catalogue with an overlay-free 6.0 build
+# and allows exactly one difference in the UID inputs: Vehicle.Speed min.
+#
+# dbc2vss: syntax per the can-provider 0.5.0 mapping README; semantics per its
+# dbcfeederlib/dbc2vssmapper.py at tag 0.5.0 (both read 2026-09-30). `-e dbc2vss` exports it.
+# Design values and reasons:
+#   interval_ms: 0 on every mapping. Omitting it means 1000 ms in the provider -- longer than any
+#     plausible AGE_MAX, so a stale-value reject (22) would follow in normal running. A value equal
+#     to the CAN period is no better: the provider skips a frame whenever it arrives less than
+#     interval_ms after the last forwarded one, so under ordinary jitter it drops every other frame
+#     and doubles the age. 0 forwards every received frame (slice.dbc sends SliceDynamics every
+#     20 ms and SliceGear every 50 ms). This is a forwarding policy, not a broker-capacity claim.
+#   on_change: false (the default, stated). With true, a signal that holds still -- the gear for a
+#     whole drive, the steering angle on a straight -- is never re-sent, and its age grows until the
+#     bridge rejects the frame with 22. Whether databroker re-timestamps a write of an identical
+#     value: UNVERIFIED (Phase 1; the age field depends on it).
+#   No `transform` on the five slot signals: slice.dbc carries the VSS unit and the ISO 8855 sign of
+#     each one, so the value passes unchanged, and the bridge's can and replay modes -- which decode
+#     slice.dbc themselves -- see the same number as its broker mode (one double rounded once to
+#     float32 on each path). A math transform here would have to be duplicated in the bridge, and
+#     the three modes could drift. For the gear, slice.dbc has a value table; with no transform the
+#     provider forwards the table entry's numeric value for a numeric datatype (dbc2vssmapper.py,
+#     transform_value), and an unlisted raw value passes through as a plain integer.
+#   Vehicle.Speed is fed from the same DBC signal as slot 0 (the mapper keys a list of VSS targets
+#     by DBC signal name), with math "abs(x) * 3.6": m/s to km/h, magnitude only. `abs` is in
+#     py-expression-eval 0.3.14's operator table (the version can-provider 0.5.0 pins in its
+#     requirements.txt; read from the PyPI wheel 2026-09-30, not executed). Operator precedence
+#     cannot change the result, since abs(x * 3.6) = abs(x) * 3.6. The Phase 1 mapping test runs it.
+#   DBC signal names are unique across slice.dbc because the provider maps by signal name alone.
+
+# kind 4 slot 1 (flag b1, p[29..32]); unit inherited: m/s^2. The sign is already defined by the
+# parent branch's ISO 8855 axes; written out because the app's hard-braking test depends on it.
+Vehicle.Acceleration.Longitudinal:
+  type: sensor
+  datatype: float
+  comment: "Positive = acceleration toward +X (forward). Braking while moving forward gives negative
+            values, braking while reversing gives positive values: deceleration along the direction
+            of travel is minus this value times the sign of the longitudinal velocity."
+  dbc2vss:
+    signal: LongAccel
+    interval_ms: 0
+    on_change: false
+
+# kind 4 slot 2 (flag b2, p[33..36]); unit inherited: degrees. 6.0 already states ISO 8855,
+# positive = left, so no comment is added; listed for its mapping only.
+Vehicle.Chassis.Axle.Row1.SteeringAngle:
+  type: sensor
+  datatype: float
+  dbc2vss:
+    signal: SteerAngleRow1
+    interval_ms: 0
+    on_change: false
+
+# kind 4 slot 3 (flag b3, p[37..40]); unit inherited: degrees/s. The fixed yaw sign (header).
+Vehicle.AngularVelocity.Yaw:
+  type: sensor
+  datatype: float
+  comment: "Sign per the ISO 8855 axes of the parent branch (right-handed, Z up): positive =
+            counterclockwise seen from above = yawing to the left; negative = yawing to the right.
+            Same convention as Vehicle.Chassis.Axle.Row1.SteeringAngle (positive = left)."
+  dbc2vss:
+    signal: YawRate
+    interval_ms: 0
+    on_change: false
+
+# kind 4 slot 4 (flag b4, p[43], i8); no unit. 6.0 meaning kept exactly (pins.md): 0 = neutral,
+# +n = forward gear n, -n = reverse gear n; CurrentGear has no park value (park exists only on the
+# actuator SelectedGear). sigsim and CARLA have no park state, so in their runs 0 is neutral only.
+# A source with a park state (Autoware, Phase 8) can only report it as 0, as the provider's sample
+# mapping does; 0 then means neutral or park in that run, and the run's attribution table notes it.
+# Rule 27 never checks gear 0, so the monitor is unaffected either way (kind4-spec.md section 8).
+Vehicle.Powertrain.Transmission.CurrentGear:
+  type: sensor
+  datatype: int8
+  comment: "0 is neutral. CurrentGear has no park value, so a source that has a park state reports
+            park as 0."
+  dbc2vss:
+    signal: CurrentGear
+    interval_ms: 0
+    on_change: false
+
+# Not a kind 4 slot; unit inherited: km/h. min 0 is the fixed decision (header); the same DBC
+# signal as slot 0, magnitude only.
+Vehicle.Speed:
+  type: sensor
+  datatype: float
+  min: 0
+  comment: "Never negative in this catalogue: the magnitude of the longitudinal velocity. The signed
+            value is Vehicle.DualVm.Motion.LongitudinalVelocity (m/s); the direction of travel is read
+            from it or from Vehicle.Powertrain.Transmission.CurrentGear."
+  dbc2vss:
+    signal: LongVel
+    interval_ms: 0
+    on_change: false
+    transform:
+      math: "abs(x) * 3.6"
+
+# Used unchanged, listed so the slice's whole surface is in one place:
+#   Vehicle.Body.Lights.Hazard.IsSignaling (actuator, boolean): the app Actuates it and the mock
+#     provider serves it (F19, F25). Not on CAN in the slice, so it has no mapping here.
+#   Vehicle.Chassis.Wheelbase (attribute, uint16, mm, default 0): set per source vehicle by
+#     vehicle-<source>.vspec (header); it must equal that vehicle's kind 4 profile L (plan 3.4 test).
