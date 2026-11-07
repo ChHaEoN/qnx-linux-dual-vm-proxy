@@ -1,0 +1,21 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "OneService",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "iot.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole",
+      "Condition": {
+        "StringEquals": {
+          "aws:SourceAccount": "@@ACCOUNT@@"
+        },
+        "ArnLike": {
+          "aws:SourceArn": "@@RULE_ARN@@"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "Rules": [
+    {
+      "ID": "telemetry-90-days",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "telemetry/"
+      },
+      "Expiration": {
+        "Days": 90
+      }
+    },
+    {
+      "ID": "errors-30-days",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "errors/"
+      },
+      "Expiration": {
+        "Days": 30
+      }
+    },
+    {
+      "ID": "athena-results-7-days",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "athena-results/"
+      },
+      "Expiration": {
+        "Days": 7
+      }
+    },
+    {
+      "ID": "incomplete-uploads-1-day",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": ""
+      },
+      "AbortIncompleteMultipartUpload": {
+        "DaysAfterInitiation": 1
+      }
+    }
+  ]
+}

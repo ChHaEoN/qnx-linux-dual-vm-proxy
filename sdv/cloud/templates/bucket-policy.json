@@ -1,0 +1,31 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyRequestsWithoutTls",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:*",
+      "Resource": [
+        "@@BUCKET_ARN@@",
+        "@@BUCKET_ARN@@/*"
+      ],
+      "Condition": {
+        "Bool": {
+          "aws:SecureTransport": "false"
+        }
+      }
+    },
+    {
+      "Sid": "DenyPutOutsideTheThreePrefixes",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:PutObject",
+      "NotResource": [
+        "@@BUCKET_ARN@@/telemetry/*",
+        "@@BUCKET_ARN@@/errors/*",
+        "@@BUCKET_ARN@@/athena-results/*"
+      ]
+    }
+  ]
+}

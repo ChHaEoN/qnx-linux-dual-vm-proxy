@@ -1,0 +1,15 @@
+{
+  "sql": "SELECT *, topic(1) AS thing, timestamp() AS rx_ms",
+  "awsIotSqlVersion": "2016-03-23",
+  "ruleDisabled": true,
+  "actions": [
+    {
+      "firehose": {
+        "roleArn": "@@RULE_ROLE_ARN@@",
+        "deliveryStreamName": "@@STREAM@@",
+        "separator": "\n",
+        "batchMode": false
+      }
+    }
+  ]
+}

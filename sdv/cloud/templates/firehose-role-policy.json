@@ -1,0 +1,34 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "Bucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetBucketLocation",
+        "s3:ListBucket",
+        "s3:ListBucketMultipartUploads"
+      ],
+      "Resource": "@@BUCKET_ARN@@"
+    },
+    {
+      "Sid": "Objects",
+      "Effect": "Allow",
+      "Action": [
+        "s3:AbortMultipartUpload",
+        "s3:GetObject",
+        "s3:PutObject"
+      ],
+      "Resource": [
+        "@@BUCKET_ARN@@/telemetry/*",
+        "@@BUCKET_ARN@@/errors/*"
+      ]
+    },
+    {
+      "Sid": "ErrorLog",
+      "Effect": "Allow",
+      "Action": "logs:PutLogEvents",
+      "Resource": "@@FIREHOSE_LOG_GROUP_ARN@@:log-stream:@@FIREHOSE_LOG_STREAM@@"
+    }
+  ]
+}

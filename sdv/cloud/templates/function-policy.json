@@ -1,0 +1,90 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "@@SID_BYTES@@",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "lambda.alarms.cloudwatch.amazonaws.com"
+      },
+      "Action": "lambda:InvokeFunction",
+      "Resource": "@@FUNCTION_ARN@@",
+      "Condition": {
+        "StringEquals": {
+          "AWS:SourceAccount": "@@ACCOUNT@@"
+        },
+        "ArnLike": {
+          "AWS:SourceArn": "@@ALARM_BYTES_ARN@@"
+        }
+      }
+    },
+    {
+      "Sid": "@@SID_RECORDS@@",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "lambda.alarms.cloudwatch.amazonaws.com"
+      },
+      "Action": "lambda:InvokeFunction",
+      "Resource": "@@FUNCTION_ARN@@",
+      "Condition": {
+        "StringEquals": {
+          "AWS:SourceAccount": "@@ACCOUNT@@"
+        },
+        "ArnLike": {
+          "AWS:SourceArn": "@@ALARM_RECORDS_ARN@@"
+        }
+      }
+    },
+    {
+      "Sid": "@@SID_SHADOW@@",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "lambda.alarms.cloudwatch.amazonaws.com"
+      },
+      "Action": "lambda:InvokeFunction",
+      "Resource": "@@FUNCTION_ARN@@",
+      "Condition": {
+        "StringEquals": {
+          "AWS:SourceAccount": "@@ACCOUNT@@"
+        },
+        "ArnLike": {
+          "AWS:SourceArn": "@@ALARM_SHADOW_ARN@@"
+        }
+      }
+    },
+    {
+      "Sid": "@@SID_PUBLISH@@",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "lambda.alarms.cloudwatch.amazonaws.com"
+      },
+      "Action": "lambda:InvokeFunction",
+      "Resource": "@@FUNCTION_ARN@@",
+      "Condition": {
+        "StringEquals": {
+          "AWS:SourceAccount": "@@ACCOUNT@@"
+        },
+        "ArnLike": {
+          "AWS:SourceArn": "@@ALARM_PUBLISH_ARN@@"
+        }
+      }
+    },
+    {
+      "Sid": "@@SID_FAILURE@@",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "lambda.alarms.cloudwatch.amazonaws.com"
+      },
+      "Action": "lambda:InvokeFunction",
+      "Resource": "@@FUNCTION_ARN@@",
+      "Condition": {
+        "StringEquals": {
+          "AWS:SourceAccount": "@@ACCOUNT@@"
+        },
+        "ArnLike": {
+          "AWS:SourceArn": "@@ALARM_FAILURE_ARN@@"
+        }
+      }
+    }
+  ]
+}

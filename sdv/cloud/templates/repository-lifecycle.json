@@ -1,0 +1,16 @@
+{
+  "rules": [
+    {
+      "rulePriority": 1,
+      "description": "keep the newest 10 images of the repository",
+      "selection": {
+        "tagStatus": "any",
+        "countType": "imageCountMoreThan",
+        "countNumber": "@@LIFECYCLE_KEEP@@"
+      },
+      "action": {
+        "type": "expire"
+      }
+    }
+  ]
+}

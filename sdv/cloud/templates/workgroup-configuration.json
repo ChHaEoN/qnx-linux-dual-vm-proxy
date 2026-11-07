@@ -1,0 +1,8 @@
+{
+  "ResultConfiguration": {
+    "OutputLocation": "s3://@@BUCKET@@/athena-results/"
+  },
+  "EnforceWorkGroupConfiguration": true,
+  "PublishCloudWatchMetricsEnabled": false,
+  "BytesScannedCutoffPerQuery": 100000000
+}

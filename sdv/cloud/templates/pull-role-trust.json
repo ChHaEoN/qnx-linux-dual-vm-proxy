@@ -1,0 +1,21 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "TheCredentialProvider",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "credentials.iot.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole",
+      "Condition": {
+        "StringEquals": {
+          "aws:SourceAccount": "@@ACCOUNT@@"
+        },
+        "ArnLike": {
+          "aws:SourceArn": "@@ROLE_ALIAS_ARN@@"
+        }
+      }
+    }
+  ]
+}

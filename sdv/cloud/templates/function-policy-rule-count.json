@@ -1,0 +1,22 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "@@SID_RULE_COUNT@@",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "lambda.alarms.cloudwatch.amazonaws.com"
+      },
+      "Action": "lambda:InvokeFunction",
+      "Resource": "@@FUNCTION_ARN@@",
+      "Condition": {
+        "StringEquals": {
+          "AWS:SourceAccount": "@@ACCOUNT@@"
+        },
+        "ArnLike": {
+          "AWS:SourceArn": "@@ALARM_RULE_COUNT_ARN@@"
+        }
+      }
+    }
+  ]
+}

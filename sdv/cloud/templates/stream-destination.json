@@ -1,0 +1,16 @@
+{
+  "RoleARN": "@@FIREHOSE_ROLE_ARN@@",
+  "BucketARN": "@@BUCKET_ARN@@",
+  "Prefix": "telemetry/dt=!{timestamp:yyyy-MM-dd}/",
+  "ErrorOutputPrefix": "errors/!{firehose:error-output-type}/dt=!{timestamp:yyyy-MM-dd}/",
+  "BufferingHints": {
+    "SizeInMBs": 5,
+    "IntervalInSeconds": 300
+  },
+  "CompressionFormat": "UNCOMPRESSED",
+  "CloudWatchLoggingOptions": {
+    "Enabled": true,
+    "LogGroupName": "@@FIREHOSE_LOG_GROUP@@",
+    "LogStreamName": "@@FIREHOSE_LOG_STREAM@@"
+  }
+}

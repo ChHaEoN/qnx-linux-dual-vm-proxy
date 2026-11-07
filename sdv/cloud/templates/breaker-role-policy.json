@@ -1,0 +1,45 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "Certificate",
+      "Effect": "Allow",
+      "Action": [
+        "iot:UpdateCertificate",
+        "iot:DetachPolicy",
+        "iot:DescribeCertificate"
+      ],
+      "Resource": "@@CERT_ARN@@"
+    },
+    {
+      "Sid": "Rule",
+      "Effect": "Allow",
+      "Action": [
+        "iot:DisableTopicRule",
+        "iot:GetTopicRule"
+      ],
+      "Resource": "@@RULE_ARN@@"
+    },
+    {
+      "Sid": "Connection",
+      "Effect": "Allow",
+      "Action": "iot:DeleteConnection",
+      "Resource": "@@CLIENT_ARN@@"
+    },
+    {
+      "Sid": "PolicyTargets",
+      "Effect": "Allow",
+      "Action": "iot:ListTargetsForPolicy",
+      "Resource": "@@POLICY_ARN@@"
+    },
+    {
+      "Sid": "Logs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "@@BREAKER_LOG_GROUP_ARN@@:log-stream:*"
+    }
+  ]
+}

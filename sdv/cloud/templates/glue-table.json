@@ -1,0 +1,62 @@
+{
+  "Name": "@@GLUE_TABLE@@",
+  "TableType": "EXTERNAL_TABLE",
+  "Parameters": {
+    "classification": "json",
+    "EXTERNAL": "TRUE",
+    "projection.enabled": "true",
+    "projection.dt.type": "date",
+    "projection.dt.format": "yyyy-MM-dd",
+    "projection.dt.range": "2026-01-01,NOW",
+    "projection.dt.interval": "1",
+    "projection.dt.interval.unit": "DAYS",
+    "storage.location.template": "s3://@@BUCKET@@/telemetry/dt=${dt}/"
+  },
+  "PartitionKeys": [
+    {
+      "Name": "dt",
+      "Type": "string"
+    }
+  ],
+  "StorageDescriptor": {
+    "Location": "s3://@@BUCKET@@/telemetry/",
+    "InputFormat": "org.apache.hadoop.mapred.TextInputFormat",
+    "OutputFormat": "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat",
+    "SerdeInfo": {
+      "SerializationLibrary": "org.openx.data.jsonserde.JsonSerDe",
+      "Parameters": {
+        "ignore.malformed.json": "true"
+      }
+    },
+    "Columns": [
+      {
+        "Name": "v",
+        "Type": "int"
+      },
+      {
+        "Name": "batch",
+        "Type": "bigint"
+      },
+      {
+        "Name": "paths",
+        "Type": "array<string>"
+      },
+      {
+        "Name": "rows",
+        "Type": "array<array<double>>"
+      },
+      {
+        "Name": "appstate",
+        "Type": "array<string>"
+      },
+      {
+        "Name": "thing",
+        "Type": "string"
+      },
+      {
+        "Name": "rx_ms",
+        "Type": "bigint"
+      }
+    ]
+  }
+}

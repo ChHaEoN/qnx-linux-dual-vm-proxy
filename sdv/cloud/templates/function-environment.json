@@ -1,0 +1,8 @@
+{
+  "Variables": {
+    "TWIN_CERTIFICATE_ARNS": "@@CERT_ARN@@",
+    "TWIN_CLIENT_IDS": "@@THING@@",
+    "TWIN_RULE": "@@RULE@@",
+    "TWIN_POLICY": "@@POLICY@@"
+  }
+}

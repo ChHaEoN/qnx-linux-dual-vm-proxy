@@ -1,0 +1,111 @@
+[
+  {
+    "Key": "bytes",
+    "AlarmName": "@@ALARM_BYTES@@",
+    "Namespace": "AWS/Firehose",
+    "MetricName": "IncomingBytes",
+    "Dimensions": [
+      {
+        "Name": "DeliveryStreamName",
+        "Value": "@@STREAM@@"
+      }
+    ],
+    "Statistic": "Sum",
+    "Period": 300,
+    "EvaluationPeriods": 1,
+    "DatapointsToAlarm": 1,
+    "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+    "Threshold": "@@THRESHOLD_BYTES@@",
+    "TreatMissingData": "notBreaching",
+    "ActionsEnabled": true,
+    "AlarmActions": "@@BREAKER_ACTIONS@@"
+  },
+  {
+    "Key": "records",
+    "AlarmName": "@@ALARM_RECORDS@@",
+    "Namespace": "AWS/Firehose",
+    "MetricName": "IncomingRecords",
+    "Dimensions": [
+      {
+        "Name": "DeliveryStreamName",
+        "Value": "@@STREAM@@"
+      }
+    ],
+    "Statistic": "Sum",
+    "Period": 300,
+    "EvaluationPeriods": 1,
+    "DatapointsToAlarm": 1,
+    "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+    "Threshold": "@@THRESHOLD_RECORDS@@",
+    "TreatMissingData": "notBreaching",
+    "ActionsEnabled": true,
+    "AlarmActions": "@@BREAKER_ACTIONS@@"
+  },
+  {
+    "Key": "shadow",
+    "AlarmName": "@@ALARM_SHADOW@@",
+    "Namespace": "AWS/IoT",
+    "MetricName": "UpdateThingShadow.Accepted",
+    "Dimensions": [
+      {
+        "Name": "Protocol",
+        "Value": "MQTT"
+      }
+    ],
+    "Statistic": "Sum",
+    "Period": 300,
+    "EvaluationPeriods": 1,
+    "DatapointsToAlarm": 1,
+    "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+    "Threshold": "@@THRESHOLD_SHADOW@@",
+    "TreatMissingData": "notBreaching",
+    "ActionsEnabled": true,
+    "AlarmActions": "@@BREAKER_ACTIONS@@"
+  },
+  {
+    "Key": "publish",
+    "AlarmName": "@@ALARM_PUBLISH@@",
+    "Namespace": "AWS/IoT",
+    "MetricName": "PublishIn.Success",
+    "Dimensions": [
+      {
+        "Name": "Protocol",
+        "Value": "MQTT"
+      }
+    ],
+    "Statistic": "Sum",
+    "Period": 300,
+    "EvaluationPeriods": 1,
+    "DatapointsToAlarm": 1,
+    "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+    "Threshold": "@@THRESHOLD_PUBLISH@@",
+    "TreatMissingData": "notBreaching",
+    "ActionsEnabled": true,
+    "AlarmActions": "@@BREAKER_ACTIONS@@"
+  },
+  {
+    "Key": "failure",
+    "AlarmName": "@@ALARM_FAILURE@@",
+    "Namespace": "AWS/IoT",
+    "MetricName": "Failure",
+    "Dimensions": [
+      {
+        "Name": "RuleName",
+        "Value": "@@RULE@@"
+      },
+      {
+        "Name": "ActionType",
+        "Value": "@@FAILURE_ACTION_TYPE@@"
+      }
+    ],
+    "Statistic": "Sum",
+    "Period": 300,
+    "EvaluationPeriods": 1,
+    "DatapointsToAlarm": 1,
+    "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+    "Threshold": "@@THRESHOLD_FAILURE@@",
+    "TreatMissingData": "notBreaching",
+    "ActionsEnabled": true,
+    "AlarmActions": "@@BREAKER_ACTIONS@@"
+  }
+]

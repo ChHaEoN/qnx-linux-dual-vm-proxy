@@ -1,0 +1,13 @@
+{
+  "format": 1,
+  "about": "What the pinned awsiotsdk wheel declares: the Name, Version, Requires-Python and every Requires-Dist header of its METADATA, bound to that one file by its sha256 (a py3-none-any wheel, the same file in both connector locks). SDV Phase 4 WP0. The locks are installed with pip --no-deps, which would not notice an awscrt this wheel does not declare, so tests/test_sdv_connector.py holds each lock's awscrt to requires_dist, and sdv/connector/lockcheck.py compares this record with the wheel itself when one has been downloaded. A new SDK pin means a new record, read from the new wheel.",
+  "name": "awsiotsdk",
+  "version": "1.31.0",
+  "wheel": "awsiotsdk-1.31.0-py3-none-any.whl",
+  "sha256": "ccc13b06fae815de223558da0b3354dfa310393cf196197ce3b4744204ec161a",
+  "requires_python": ">=3.8",
+  "requires_dist": [
+    "awscrt==0.36.1"
+  ],
+  "read": "2026-10-04"
+}

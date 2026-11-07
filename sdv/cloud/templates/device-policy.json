@@ -1,0 +1,51 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ConnectAsTheThing",
+      "Effect": "Allow",
+      "Action": "iot:Connect",
+      "Resource": "arn:aws:iot:@@REGION@@:@@ACCOUNT@@:client/@@THING@@",
+      "Condition": {
+        "Bool": {
+          "iot:Connection.Thing.IsAttached": "true"
+        }
+      }
+    },
+    {
+      "Sid": "Publish",
+      "Effect": "Allow",
+      "Action": "iot:Publish",
+      "Resource": [
+        "arn:aws:iot:@@REGION@@:@@ACCOUNT@@:topic/$aws/rules/@@RULE@@/@@THING@@",
+        "arn:aws:iot:@@REGION@@:@@ACCOUNT@@:topic/$aws/things/@@THING@@/shadow/name/vss/update",
+        "arn:aws:iot:@@REGION@@:@@ACCOUNT@@:topic/$aws/things/@@THING@@/shadow/name/config/update",
+        "arn:aws:iot:@@REGION@@:@@ACCOUNT@@:topic/$aws/things/@@THING@@/shadow/name/config/get"
+      ]
+    },
+    {
+      "Sid": "Subscribe",
+      "Effect": "Allow",
+      "Action": "iot:Subscribe",
+      "Resource": [
+        "arn:aws:iot:@@REGION@@:@@ACCOUNT@@:topicfilter/$aws/things/@@THING@@/shadow/name/config/get/accepted",
+        "arn:aws:iot:@@REGION@@:@@ACCOUNT@@:topicfilter/$aws/things/@@THING@@/shadow/name/config/get/rejected",
+        "arn:aws:iot:@@REGION@@:@@ACCOUNT@@:topicfilter/$aws/things/@@THING@@/shadow/name/config/update/delta",
+        "arn:aws:iot:@@REGION@@:@@ACCOUNT@@:topicfilter/$aws/things/@@THING@@/shadow/name/config/update/rejected",
+        "arn:aws:iot:@@REGION@@:@@ACCOUNT@@:topicfilter/$aws/things/@@THING@@/shadow/name/vss/update/rejected"
+      ]
+    },
+    {
+      "Sid": "Receive",
+      "Effect": "Allow",
+      "Action": "iot:Receive",
+      "Resource": [
+        "arn:aws:iot:@@REGION@@:@@ACCOUNT@@:topic/$aws/things/@@THING@@/shadow/name/config/get/accepted",
+        "arn:aws:iot:@@REGION@@:@@ACCOUNT@@:topic/$aws/things/@@THING@@/shadow/name/config/get/rejected",
+        "arn:aws:iot:@@REGION@@:@@ACCOUNT@@:topic/$aws/things/@@THING@@/shadow/name/config/update/delta",
+        "arn:aws:iot:@@REGION@@:@@ACCOUNT@@:topic/$aws/things/@@THING@@/shadow/name/config/update/rejected",
+        "arn:aws:iot:@@REGION@@:@@ACCOUNT@@:topic/$aws/things/@@THING@@/shadow/name/vss/update/rejected"
+      ]
+    }
+  ]
+}

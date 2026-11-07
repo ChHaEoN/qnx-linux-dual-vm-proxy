@@ -1,0 +1,11 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AssumeThePullRoleAlias",
+      "Effect": "Allow",
+      "Action": "iot:AssumeRoleWithCertificate",
+      "Resource": "@@ROLE_ALIAS_ARN@@"
+    }
+  ]
+}

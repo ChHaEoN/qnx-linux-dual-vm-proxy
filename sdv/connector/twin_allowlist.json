@@ -1,0 +1,22 @@
+{
+  "about": "The twin allowlist's source list, version 1 (SDV Phase 4 WP1). Project-written and reviewed: the exact VSS leaves that may reach the cloud twin, each with the type, datatype and unit it must have in the generated catalogue and the channels it goes out on (S: the `vss` named shadow, reported; T: batched telemetry). Its order is the order of the frozen tuple and of its digest. sdv/connector/gen_allowlist.py checks every entry against the generated catalogue and writes the frozen module sdv-out/twin/twin_allowlist.py, or refuses, naming the entry: an entry that is not a catalogue leaf, that differs in type, datatype or unit, that is a branch or holds a wildcard, or that lies under the branch the twin excludes or under ControlCommand. The set is attribution.ALLOWLIST_V1 (sdv/stack/attribution.py); tests/test_twin_allowlist.py holds the two equal. The eight AppState leaves go out only as one record that validates against appstate.schema.json (sdv/connector/appstate.py), never leaf by leaf. Changing this list is a new allowlist version with the owner's review of each added path; nothing under the excluded branch can be added by that process. Does not demonstrate: that a connector exists or keeps to it; anything against a malicious Linux side.",
+  "version": 1,
+  "entries": [
+    {"path": "Vehicle.DualVm.Motion.LongitudinalVelocity", "type": "sensor", "datatype": "float", "unit": "m/s", "channels": ["S", "T"]},
+    {"path": "Vehicle.Speed", "type": "sensor", "datatype": "float", "unit": "km/h", "channels": ["S", "T"]},
+    {"path": "Vehicle.Acceleration.Longitudinal", "type": "sensor", "datatype": "float", "unit": "m/s^2", "channels": ["S", "T"]},
+    {"path": "Vehicle.Chassis.Axle.Row1.SteeringAngle", "type": "sensor", "datatype": "float", "unit": "degrees", "channels": ["S", "T"]},
+    {"path": "Vehicle.AngularVelocity.Yaw", "type": "sensor", "datatype": "float", "unit": "degrees/s", "channels": ["S", "T"]},
+    {"path": "Vehicle.Powertrain.Transmission.CurrentGear", "type": "sensor", "datatype": "int8", "unit": null, "channels": ["S", "T"]},
+    {"path": "Vehicle.Body.Lights.Hazard.IsSignaling", "type": "actuator", "datatype": "boolean", "unit": null, "channels": ["S", "T"]},
+    {"path": "Vehicle.Chassis.Wheelbase", "type": "attribute", "datatype": "uint16", "unit": "mm", "channels": ["S"]},
+    {"path": "Vehicle.DualVm.AppState.HardBrakeHazard.SchemaVersion", "type": "sensor", "datatype": "uint8", "unit": null, "channels": ["S", "T"]},
+    {"path": "Vehicle.DualVm.AppState.HardBrakeHazard.App", "type": "sensor", "datatype": "string", "unit": null, "channels": ["S", "T"]},
+    {"path": "Vehicle.DualVm.AppState.HardBrakeHazard.AppVersion", "type": "sensor", "datatype": "string", "unit": null, "channels": ["S", "T"]},
+    {"path": "Vehicle.DualVm.AppState.HardBrakeHazard.ImageId", "type": "sensor", "datatype": "string", "unit": null, "channels": ["S", "T"]},
+    {"path": "Vehicle.DualVm.AppState.HardBrakeHazard.Seq", "type": "sensor", "datatype": "uint32", "unit": null, "channels": ["S", "T"]},
+    {"path": "Vehicle.DualVm.AppState.HardBrakeHazard.State", "type": "sensor", "datatype": "string", "unit": null, "channels": ["S", "T"]},
+    {"path": "Vehicle.DualVm.AppState.HardBrakeHazard.IsHazardRequested", "type": "sensor", "datatype": "boolean", "unit": null, "channels": ["S", "T"]},
+    {"path": "Vehicle.DualVm.AppState.HardBrakeHazard.ActuateResult", "type": "sensor", "datatype": "string", "unit": null, "channels": ["S", "T"]}
+  ]
+}

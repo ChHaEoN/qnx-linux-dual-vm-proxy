@@ -1,0 +1,27 @@
+{
+  "NoResourceType": [
+    "iot:ListRoleAliases"
+  ],
+  "Statement": [
+    {
+      "Sid": "PullRoleAlias",
+      "Effect": "Allow",
+      "Resource": "@@ROLE_ALIAS_ARN@@",
+      "Action": [
+        "iot:CreateRoleAlias",
+        "iot:DescribeRoleAlias",
+        "iot:DeleteRoleAlias"
+      ]
+    },
+    {
+      "Sid": "ReadAndPassThePullRole",
+      "Effect": "Allow",
+      "Resource": "@@PULL_ROLE_ARN@@",
+      "Action": [
+        "iam:GetRole",
+        "iam:GetRolePolicy",
+        "iam:PassRole"
+      ]
+    }
+  ]
+}

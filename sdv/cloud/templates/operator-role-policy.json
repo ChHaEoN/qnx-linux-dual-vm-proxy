@@ -1,0 +1,398 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "NoResourceType",
+      "Effect": "Allow",
+      "Resource": "*",
+      "Action": [
+        "iot:CreateCertificateFromCsr",
+        "iot:ListAttachedPolicies",
+        "iot:GetV2LoggingOptions",
+        "iot:SetV2LoggingOptions",
+        "iot:DescribeEndpoint",
+        "iot:ListThings",
+        "iot:ListCertificates",
+        "iot:ListPolicies",
+        "iot:ListTopicRules",
+        "iot:ListAuthorizers",
+        "iot:ListDomainConfigurations",
+        "s3:ListAllMyBuckets",
+        "s3:GetAccountPublicAccessBlock",
+        "logs:DescribeLogGroups",
+        "firehose:ListDeliveryStreams",
+        "glue:GetDatabases",
+        "athena:ListWorkGroups",
+        "lambda:ListFunctions",
+        "sns:ListTopics",
+        "cloudwatch:DescribeAlarms",
+        "cloudwatch:GetMetricData",
+        "cloudwatch:ListMetrics",
+        "tag:GetResources",
+        "ec2:DescribeSecurityGroups",
+        "cognito-identity:ListIdentityPools"
+      ]
+    },
+    {
+      "Sid": "Things",
+      "Effect": "Allow",
+      "Resource": "arn:aws:iot:@@REGION@@:@@ACCOUNT@@:thing/@@PREFIX@@*",
+      "Action": [
+        "iot:CreateThing",
+        "iot:DescribeThing",
+        "iot:DeleteThing",
+        "iot:ListThingPrincipals",
+        "iot:ListThingPrincipalsV2",
+        "iot:AttachThingPrincipal",
+        "iot:DetachThingPrincipal",
+        "iot:GetThingShadow",
+        "iot:UpdateThingShadow",
+        "iot:DeleteThingShadow",
+        "iot:ListNamedShadowsForThing"
+      ]
+    },
+    {
+      "Sid": "Certificates",
+      "Effect": "Allow",
+      "Resource": "arn:aws:iot:@@REGION@@:@@ACCOUNT@@:cert/*",
+      "Action": [
+        "iot:UpdateCertificate",
+        "iot:AttachPolicy",
+        "iot:DetachPolicy",
+        "iot:AttachThingPrincipal",
+        "iot:DetachThingPrincipal",
+        "iot:DescribeCertificate",
+        "iot:DeleteCertificate"
+      ]
+    },
+    {
+      "Sid": "Rules",
+      "Effect": "Allow",
+      "Resource": "arn:aws:iot:@@REGION@@:@@ACCOUNT@@:rule/@@PREFIX@@*",
+      "Action": [
+        "iot:CreateTopicRule",
+        "iot:GetTopicRule",
+        "iot:DeleteTopicRule",
+        "iot:EnableTopicRule",
+        "iot:DisableTopicRule",
+        "iot:TagResource"
+      ]
+    },
+    {
+      "Sid": "Policies",
+      "Effect": "Allow",
+      "Resource": "arn:aws:iot:@@REGION@@:@@ACCOUNT@@:policy/@@PREFIX@@*",
+      "Action": [
+        "iot:CreatePolicy",
+        "iot:GetPolicy",
+        "iot:DeletePolicy",
+        "iot:ListTargetsForPolicy",
+        "iot:AttachPolicy",
+        "iot:DetachPolicy",
+        "iot:TagResource"
+      ]
+    },
+    {
+      "Sid": "Clients",
+      "Effect": "Allow",
+      "Resource": "arn:aws:iot:@@REGION@@:@@ACCOUNT@@:client/@@PREFIX@@*",
+      "Action": [
+        "iot:DeleteConnection"
+      ]
+    },
+    {
+      "Sid": "Bucket",
+      "Effect": "Allow",
+      "Resource": "arn:aws:s3:::@@PREFIX@@*",
+      "Action": [
+        "s3:CreateBucket",
+        "s3:DeleteBucket",
+        "s3:ListBucket",
+        "s3:GetBucketLocation",
+        "s3:PutBucketPublicAccessBlock",
+        "s3:GetBucketPublicAccessBlock",
+        "s3:PutBucketOwnershipControls",
+        "s3:GetBucketOwnershipControls",
+        "s3:PutEncryptionConfiguration",
+        "s3:GetEncryptionConfiguration",
+        "s3:PutLifecycleConfiguration",
+        "s3:GetLifecycleConfiguration",
+        "s3:PutBucketPolicy",
+        "s3:GetBucketPolicy",
+        "s3:GetBucketPolicyStatus",
+        "s3:PutBucketTagging",
+        "s3:GetBucketTagging",
+        "s3:GetBucketVersioning",
+        "s3:GetObject",
+        "s3:DeleteObject"
+      ]
+    },
+    {
+      "Sid": "AthenaResults",
+      "Effect": "Allow",
+      "Resource": "@@BUCKET_ARN@@/athena-results/*",
+      "Action": [
+        "s3:PutObject"
+      ]
+    },
+    {
+      "Sid": "LogGroups",
+      "Effect": "Allow",
+      "Resource": [
+        "arn:aws:logs:@@REGION@@:@@ACCOUNT@@:log-group:@@PREFIX@@*",
+        "arn:aws:logs:@@REGION@@:@@ACCOUNT@@:log-group:/aws/lambda/@@PREFIX@@*",
+        "arn:aws:logs:@@REGION@@:@@ACCOUNT@@:log-group:@@IOT_LOG_GROUP@@*"
+      ],
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:DeleteLogGroup",
+        "logs:PutRetentionPolicy",
+        "logs:CreateLogStream",
+        "logs:DescribeLogStreams",
+        "logs:GetLogEvents",
+        "logs:FilterLogEvents",
+        "logs:TagResource"
+      ]
+    },
+    {
+      "Sid": "Stream",
+      "Effect": "Allow",
+      "Resource": "arn:aws:firehose:@@REGION@@:@@ACCOUNT@@:deliverystream/@@PREFIX@@*",
+      "Action": [
+        "firehose:CreateDeliveryStream",
+        "firehose:DescribeDeliveryStream",
+        "firehose:DeleteDeliveryStream",
+        "firehose:TagDeliveryStream"
+      ]
+    },
+    {
+      "Sid": "Glue",
+      "Effect": "Allow",
+      "Resource": [
+        "arn:aws:glue:@@REGION@@:@@ACCOUNT@@:catalog",
+        "arn:aws:glue:@@REGION@@:@@ACCOUNT@@:database/@@PREFIX@@*",
+        "arn:aws:glue:@@REGION@@:@@ACCOUNT@@:table/@@PREFIX@@*/*",
+        "arn:aws:glue:@@REGION@@:@@ACCOUNT@@:userDefinedFunction/@@PREFIX@@*/*"
+      ],
+      "Action": [
+        "glue:CreateDatabase",
+        "glue:GetDatabase",
+        "glue:DeleteDatabase",
+        "glue:CreateTable",
+        "glue:GetTable",
+        "glue:DeleteTable"
+      ]
+    },
+    {
+      "Sid": "Workgroup",
+      "Effect": "Allow",
+      "Resource": "arn:aws:athena:@@REGION@@:@@ACCOUNT@@:workgroup/@@PREFIX@@*",
+      "Action": [
+        "athena:CreateWorkGroup",
+        "athena:GetWorkGroup",
+        "athena:DeleteWorkGroup",
+        "athena:StartQueryExecution",
+        "athena:GetQueryExecution",
+        "athena:GetQueryResults",
+        "athena:StopQueryExecution",
+        "athena:TagResource"
+      ]
+    },
+    {
+      "Sid": "Function",
+      "Effect": "Allow",
+      "Resource": "arn:aws:lambda:@@REGION@@:@@ACCOUNT@@:function:@@PREFIX@@*",
+      "Action": [
+        "lambda:CreateFunction",
+        "lambda:GetFunction",
+        "lambda:DeleteFunction",
+        "lambda:InvokeFunction",
+        "lambda:GetPolicy",
+        "lambda:RemovePermission",
+        "lambda:PutFunctionConcurrency",
+        "lambda:GetFunctionConcurrency",
+        "lambda:DeleteFunctionConcurrency",
+        "lambda:ListFunctionUrlConfigs",
+        "lambda:TagResource"
+      ]
+    },
+    {
+      "Sid": "FunctionInvokedByAlarmsOnly",
+      "Effect": "Allow",
+      "Resource": "arn:aws:lambda:@@REGION@@:@@ACCOUNT@@:function:@@PREFIX@@*",
+      "Action": [
+        "lambda:AddPermission"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "lambda:Principal": "lambda.alarms.cloudwatch.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "Topic",
+      "Effect": "Allow",
+      "Resource": "arn:aws:sns:@@REGION@@:@@ACCOUNT@@:@@PREFIX@@*",
+      "Action": [
+        "sns:CreateTopic",
+        "sns:DeleteTopic",
+        "sns:GetTopicAttributes",
+        "sns:SetTopicAttributes",
+        "sns:ListSubscriptionsByTopic",
+        "sns:ConfirmSubscription",
+        "sns:Unsubscribe",
+        "sns:TagResource"
+      ]
+    },
+    {
+      "Sid": "TopicSubscribedByEmailOnly",
+      "Effect": "Allow",
+      "Resource": "arn:aws:sns:@@REGION@@:@@ACCOUNT@@:@@PREFIX@@*",
+      "Action": [
+        "sns:Subscribe"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "sns:Protocol": "email"
+        }
+      }
+    },
+    {
+      "Sid": "Alarms",
+      "Effect": "Allow",
+      "Resource": "arn:aws:cloudwatch:@@REGION@@:@@ACCOUNT@@:alarm:@@PREFIX@@*",
+      "Action": [
+        "cloudwatch:PutMetricAlarm",
+        "cloudwatch:DeleteAlarms",
+        "cloudwatch:SetAlarmState",
+        "cloudwatch:TagResource"
+      ]
+    },
+    {
+      "Sid": "PassTheRuleRole",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "@@RULE_ROLE_ARN@@",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "iot.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "PassTheFirehoseRole",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "@@FIREHOSE_ROLE_ARN@@",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "firehose.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "PassTheIotLoggingRole",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "@@IOT_LOGGING_ROLE_ARN@@",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "iot.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "PassTheBreakerRole",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "@@BREAKER_ROLE_ARN@@",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "lambda.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "ReadTheRoles",
+      "Effect": "Allow",
+      "Resource": [
+        "@@RULE_ROLE_ARN@@",
+        "@@FIREHOSE_ROLE_ARN@@",
+        "@@IOT_LOGGING_ROLE_ARN@@",
+        "@@BREAKER_ROLE_ARN@@",
+        "@@OPERATOR_ROLE_ARN@@"
+      ],
+      "Action": [
+        "iam:GetRole",
+        "iam:GetRolePolicy"
+      ]
+    },
+    {
+      "Sid": "ApiListings",
+      "Effect": "Allow",
+      "Resource": [
+        "arn:aws:apigateway:@@REGION@@::/restapis",
+        "arn:aws:apigateway:@@REGION@@::/apis"
+      ],
+      "Action": [
+        "apigateway:GET"
+      ]
+    },
+    {
+      "Sid": "DenyPublicPaths",
+      "Effect": "Deny",
+      "Resource": "*",
+      "Action": [
+        "lambda:CreateFunctionUrlConfig",
+        "lambda:UpdateFunctionUrlConfig",
+        "iot:CreateAuthorizer",
+        "iot:UpdateAuthorizer",
+        "iot:SetDefaultAuthorizer",
+        "iot:CreateDomainConfiguration",
+        "iot:UpdateDomainConfiguration",
+        "iot:CreateTopicRuleDestination",
+        "iot:UpdateTopicRuleDestination",
+        "iot:ConfirmTopicRuleDestination",
+        "apigateway:POST",
+        "apigateway:PUT",
+        "apigateway:PATCH",
+        "apigateway:DELETE",
+        "cognito-identity:CreateIdentityPool",
+        "cognito-identity:UpdateIdentityPool",
+        "cognito-identity:SetIdentityPoolRoles",
+        "cognito-idp:*",
+        "ecr-public:*",
+        "s3:PutAccountPublicAccessBlock",
+        "s3:PutBucketAcl",
+        "s3:PutObjectAcl",
+        "s3:PutObjectVersionAcl"
+      ]
+    },
+    {
+      "Sid": "DenySubscriptionsThatAreNotEmail",
+      "Effect": "Deny",
+      "Resource": "*",
+      "Action": [
+        "sns:Subscribe"
+      ],
+      "Condition": {
+        "StringNotEquals": {
+          "sns:Protocol": "email"
+        }
+      }
+    },
+    {
+      "Sid": "DenyInvokeGrantsToAnyoneButTheAlarms",
+      "Effect": "Deny",
+      "Resource": "*",
+      "Action": [
+        "lambda:AddPermission"
+      ],
+      "Condition": {
+        "StringNotEquals": {
+          "lambda:Principal": "lambda.alarms.cloudwatch.amazonaws.com"
+        }
+      }
+    }
+  ]
+}

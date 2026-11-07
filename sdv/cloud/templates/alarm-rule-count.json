@@ -1,0 +1,18 @@
+[
+  {
+    "Key": "rule-count",
+    "AlarmName": "@@ALARM_RULE_COUNT@@",
+    "Namespace": "AWS/IoT",
+    "MetricName": "@@RULE_COUNT_METRIC@@",
+    "Dimensions": "@@RULE_COUNT_DIMENSIONS@@",
+    "Statistic": "Sum",
+    "Period": 300,
+    "EvaluationPeriods": 1,
+    "DatapointsToAlarm": 1,
+    "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+    "Threshold": "@@THRESHOLD_RULE_COUNT@@",
+    "TreatMissingData": "notBreaching",
+    "ActionsEnabled": true,
+    "AlarmActions": "@@BREAKER_ACTIONS@@"
+  }
+]

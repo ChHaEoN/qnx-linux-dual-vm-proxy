@@ -1,0 +1,51 @@
+{
+  "NoResourceType": [
+    "ecr:GetAuthorizationToken",
+    "ecr:DescribeRegistry",
+    "ecr:GetRegistryPolicy",
+    "ecr:DescribePullThroughCacheRules",
+    "ecr:GetRegistryScanningConfiguration",
+    "ecr:DescribeRepositories",
+    "ecr-public:DescribeRepositories"
+  ],
+  "DenyPublicPaths": [
+    "ecr-public:BatchDeleteImage",
+    "ecr-public:CompleteLayerUpload",
+    "ecr-public:CreateRepository",
+    "ecr-public:DeleteRepository",
+    "ecr-public:DeleteRepositoryPolicy",
+    "ecr-public:InitiateLayerUpload",
+    "ecr-public:PutImage",
+    "ecr-public:PutRegistryCatalogData",
+    "ecr-public:PutRepositoryCatalogData",
+    "ecr-public:SetRepositoryPolicy",
+    "ecr-public:TagResource",
+    "ecr-public:UntagResource",
+    "ecr-public:UploadLayerPart"
+  ],
+  "Statement": [
+    {
+      "Sid": "EcrRepositories",
+      "Effect": "Allow",
+      "Resource": "@@ECR_REPOSITORIES_ARN@@",
+      "Action": [
+        "ecr:CreateRepository",
+        "ecr:DeleteRepository",
+        "ecr:TagResource",
+        "ecr:PutLifecyclePolicy",
+        "ecr:GetLifecyclePolicy",
+        "ecr:DeleteLifecyclePolicy",
+        "ecr:GetRepositoryPolicy",
+        "ecr:ListImages",
+        "ecr:DescribeImages",
+        "ecr:BatchDeleteImage",
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:InitiateLayerUpload",
+        "ecr:UploadLayerPart",
+        "ecr:CompleteLayerUpload",
+        "ecr:PutImage",
+        "ecr:BatchGetImage"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+{
+  "Name": "@@GLUE_DATABASE@@",
+  "Description": "the twin's telemetry batches (one JSON object a row)"
+}

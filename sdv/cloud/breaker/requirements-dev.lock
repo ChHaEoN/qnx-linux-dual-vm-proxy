@@ -1,0 +1,32 @@
+# requirements-dev.lock -- the breaker's second test tier, a DEV VENV ONLY (sdv/cloud/breaker; SDV Phase 4 WP7)
+#
+# Project lock. boto3 and what it needs, each a pure-Python wheel pinned by its sha256: what PyPI resolved for
+# boto3 on 2026-10-11. It is installed into ONE venv outside every work tree (~/sdv-breaker-dev-venv in WSL), with
+#     pip install --require-hashes --no-deps --only-binary=:all: -r requirements-dev.lock
+# and into nothing else: not CI's venv, not an image, not the function's zip, and no requirement file CI reads. The
+# zip is breaker.py alone; in the account the function runs on the runtime's own boto3, whose version nobody here
+# pins and which is first seen by the status invoke (the function status check).
+# What it is for: tests/test_sdv_breaker_model.py (opt-in) gives the function botocore's own clients with a Stubber
+# in front of each, offline, so that every call's argument names and types are held to this pin's service model.
+# Each file's sha256 was compared with the digest PyPI publishes for it when this file was written.
+boto3==1.43.111 \
+    --hash=sha256:c79994619c8d89e45f6fd0edc5c5b5a70c9358f00423f4c99cb64931f89ecf37
+    # boto3-1.43.111-py3-none-any.whl
+botocore==1.43.111 \
+    --hash=sha256:f1f4c28cb2a096bf246d0bb24cbb1a01c5cb696ef499fa71b155adda7b94c90b
+    # botocore-1.43.111-py3-none-any.whl
+jmespath==1.1.0 \
+    --hash=sha256:a5663118de4908c91729bea0acadca56526eb2698e83de10cd116ae0f4e97c64
+    # jmespath-1.1.0-py3-none-any.whl
+python-dateutil==2.9.0.post0 \
+    --hash=sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427
+    # python_dateutil-2.9.0.post0-py2.py3-none-any.whl
+s3transfer==0.19.2 \
+    --hash=sha256:d8168eccca828cbb2cd573675333f3bddd254313a9c42494b84c76b539e8ba25
+    # s3transfer-0.19.2-py3-none-any.whl
+six==1.17.0 \
+    --hash=sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274
+    # six-1.17.0-py2.py3-none-any.whl
+urllib3==2.8.0 \
+    --hash=sha256:0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3
+    # urllib3-2.8.0-py3-none-any.whl

@@ -1,0 +1,19 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AlarmsOfThisAccountPublish",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "cloudwatch.amazonaws.com"
+      },
+      "Action": "sns:Publish",
+      "Resource": "@@TOPIC_ARN@@",
+      "Condition": {
+        "StringEquals": {
+          "aws:SourceAccount": "@@ACCOUNT@@"
+        }
+      }
+    }
+  ]
+}
