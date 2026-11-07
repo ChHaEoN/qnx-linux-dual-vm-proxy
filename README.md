@@ -4,9 +4,8 @@ A **Digital Twin design** of NVIDIA DRIVE OS dual-VM partitioning — a QNX
 safety side beside a Linux general-purpose side — built on a Jetson Orin Nano
 dev kit and a Windows PC instead of DRIVE hardware. Nothing in it is certified.
 
-**This repository publishes no measured or functional results.** The QNX
-licence does not allow it without the rights holder's written approval; the
-results are kept locally. See [Results are held locally](#results-are-held-locally).
+**This repository publishes no measured results.** See
+[Results are held locally](#results-are-held-locally) for the publication scope.
 
 [docs/findings.md](docs/findings.md) is the authoritative, dated record;
 everything below is a summary that can lag it. Ids such as A4, M5-F, OD11 and
@@ -73,13 +72,39 @@ the results of any performance or functional evaluation of the software
 available to any third party without BlackBerry's prior written approval.
 That approval has not been obtained.
 
-So this repository publishes **no measured or functional results** — no
-latencies, boot times, rates, counts or pass/fail outcomes, on any leg or
-host — and no conclusions drawn from them. The run records, CSVs and logs are
-kept locally. What is published is the design, the source, the tooling, the
-measurement method, the pre-registered predictions, and the limitations. Where
-a document refers to a run, it names the run's record directory (for example
-`20260921T-a6-orin-pinned`) and says that it is held locally.
+So this repository publishes **no measured results** — no latencies, boot
+times, rates, sizes or counts, on any leg or host — and no conclusions drawn
+from them. A functional outcome of the project's own code (what the code does,
+and that it works on a named host) is stated without figures; that rests on
+the owner's reading of clause 4.6(i), not on the rights holder's approval.
+Functional findings about QNX's own components stay local, and so do the run
+records, CSVs and logs. What is published is the design, the source, the
+tooling, the measurement method, the pre-registered predictions, and the
+limitations. Where a document refers to a run, it names the run's record
+directory (for example `20260921T-a6-orin-pinned`) and says that it is held
+locally.
+
+---
+
+## The software-defined-vehicle study
+
+[`sdv/`](sdv/) studies a vehicle-signal slice beside the dual-VM proxy:
+a generated VSS contract, simulated inputs, a claim bridge and monitor,
+an application, an updater and a cloud connector. The Autoware path adds
+control claims. It is designed to check claim rules, stale inputs, fault
+injection and which signals may leave the host.
+
+In native tests, the project monitor judges the fixed claim corpus and the
+connector enforces its signal allowlist. Harness tests exercise the session
+and cleanup rules with stand-ins. These are functional outcomes of our code;
+they do not establish behaviour of QNX's own components or of a deployed
+vehicle. No measured result is published, and no certification, safety or
+real-time guarantee follows. The KVM guest boots a `startup-qemu-virt` that
+is ours, not a QNX-supported configuration; no timing claim attaches to that
+boot.
+
+Third-party inputs and pending licence checks are in
+[`sdv/licences.md`](sdv/licences.md).
 
 ---
 
@@ -253,8 +278,9 @@ proxy can and cannot demonstrate.
 is paired with what it does *not* demonstrate, and nothing is called working
 without a log, a number or a diff behind it. Where a limit is known but not
 quantified, it is named as unquantified rather than left out. With every
-result held locally, this README calls nothing working at all: it says what
-was built and run, never what came of it.
+measured result held locally, what this README calls working is a functional
+outcome of the project's own code, stated without a figure; it never reports
+what a measurement found.
 
 This table is the load-bearing part:
 
@@ -272,9 +298,9 @@ This table is the load-bearing part:
 | Certified bootloader chain | No SecureBoot, no measured boot, no chain-of-trust. The native leg's UEFI entry (M5-F) is an EFI loader of ours launched by hand from the firmware's Shell: not a supported, certified or unattended boot path. |
 
 One limit sits outside the table because it is not a DRIVE OS feature: no
-result of this project is published on any leg (see
-[Results are held locally](#results-are-held-locally)), so nothing in this
-repository lets a reader check one against data.
+measured result of this project is published on any leg, and no run record is
+(see [Results are held locally](#results-are-held-locally)), so nothing in
+this repository lets a reader check a result against data.
 
 These are deliberate. Documenting them precisely is the engineering point.
 
@@ -434,7 +460,7 @@ were written for was falsified by ADR-002 and is kept only for that lineage.
 
 **Hard prerequisite:** you must obtain your own QNX licence and install QNX
 SDP 8.0 yourself. This repo does not — and per the licence, cannot — ship any
-QNX SDK component or QNX-derived binary, and it publishes no evaluation result
+QNX SDK component or QNX-derived binary, and it publishes no measured result
 of the software (see [Results are held locally](#results-are-held-locally)).
 
 Board work needs a 3.3 V USB-TTL adapter on the Orin's J14 header (never a
@@ -449,10 +475,11 @@ after `kexec` — a hung run needs a physical power cycle.
 |---|---|
 | [`docs/`](docs/) | narrative, decisions, the dated record, the measurement design |
 | [`orin-native/`](orin-native/) | native-port source (shim, board directory, EFI loader, guest configs), A6's harnesses, the edge-AI service, SOME/IP tooling |
+| [`sdv/`](sdv/) | the software-defined-vehicle study: the generated VSS contract and its generator, the claim bridge, the slice stack and its apps, the updater and drill, the cloud connector and twin, the CARLA, feeder, control and Autoware pieces |
 | [`ipc-test/`](ipc-test/) | C99 IPC: the guest's safety monitor and its variants, echo and benchmark servers, host and Linux clients, shared-memory probes, the shared frame |
 | [`scripts/`](scripts/) | bring-up, QHV configs, twin sync and diff, AWS bare-metal tooling, the CI claims gate |
 | [`results/`](results/) | the results CSV schema and the native port's design and research records; run records are held locally |
-| [`tests/`](tests/) | unit tests for the harnesses' reporting and for the CI gate, on synthetic data |
+| [`tests/`](tests/) | unit tests for the harnesses' reporting, the SDV pieces and the CI gate, on synthetic data |
 
 **Start here:** [findings.md](docs/findings.md) is append-only, dated, and the
 record when anything else disagrees with it.
@@ -475,7 +502,8 @@ Personal project, built on my own time and hardware.
 
 ## License
 
-[MIT](LICENSE) for source code, scripts, and documentation in this repo.
+[MIT](LICENSE) for source code, scripts, and documentation in this repo;
+[NOTICE](NOTICE) gives the licence's scope.
 QNX SDP, QNX Everywhere, and Linux distributions referenced are subject to
 their respective licenses; this repo neither redistributes nor relicenses them.
 The user supplies their own QNX SDP 8.0 install under its own licence. Under
