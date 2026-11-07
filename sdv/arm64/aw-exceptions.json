@@ -1,0 +1,5 @@
+{
+  "format": 1,
+  "about": "Reviewed exceptions to sdv/arm64/awscan.py's A72 rule for the Autoware arm64 image (SDV Phase 8 WP6, spec-2 9.1). Each entry is exactly {layer_digest, path, reason, reviewer}: the digest of the layer the file was read from, its path in that layer as aw-scan.json names it, why its findings are set aside, and who reviewed it. An entry sets aside the findings of that file in that layer only, and one that sets nothing aside fails the scan. Entries are added only after the scan of the pulled image, each reviewed one by one in the local notes.",
+  "exceptions": []
+}

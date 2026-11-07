@@ -1,0 +1,64 @@
+{
+ "format": 1,
+ "note": "Phase 2 step 3's run specs (sdv/stack/step3.py; Phase 2 WP10). Every number here is a design value of the run (an offset on the recording, in ns from its first frame, on the bridge's tick grid; the pause test's 1.5 s is kind4-spec 15's), never a measurement. A step runs a quarter tick after its grid instant (step3.py, STEP PHASE); a window is half open; a reason is named as sdv/frame/rules.py names it.",
+ "specs": {
+  "honest": {
+   "what": "normal replay: every frame while the file plays is ACCEPTed (plan step 3, first item); after the file's end the held values age into 22 (the to_end run's windows, derived as sdv/inject/inject.py derives them)",
+   "recording": "honest",
+   "run": "to_end"
+  },
+  "injected-to-end": {
+   "what": "the injected recording played to its end: 23-27 in their windows, then 22 once the file has ended (plan step 3, second item)",
+   "recording": "injected",
+   "run": "to_end"
+  },
+  "injected-stop": {
+   "what": "the injected recording with the provider stopped at the events file's offset: 23-27 in their windows, then 22 (plan step 3, the provider stop); the stop realised per mode as the events file says",
+   "recording": "injected",
+   "run": "stop"
+  },
+  "inject": {
+   "what": "the bridge's injection mode (spec 14.4, P6; Phase 2 design decision l): NaN, a reserved flag bit, a wrong digest and profile byte 0, one frame each, two seconds apart on an honest recording",
+   "recording": "honest",
+   "run": "to_end",
+   "steps": [
+    {"at_ns": 10000000000, "call": "inject", "mode": "nan", "frames": 1},
+    {"at_ns": 12000000000, "call": "inject", "mode": "reserved", "frames": 1},
+    {"at_ns": 14000000000, "call": "inject", "mode": "digest", "frames": 1},
+    {"at_ns": 16000000000, "call": "inject", "mode": "profile0", "frames": 1}
+   ],
+   "windows": [
+    {"event": "inject-nan", "t0_ns": 10000000000, "t1_ns": 10300000000, "reason": "field-not-finite"},
+    {"event": "inject-reserved", "t0_ns": 12000000000, "t1_ns": 12300000000, "reason": "flags-invalid"},
+    {"event": "inject-digest", "t0_ns": 14000000000, "t1_ns": 14300000000, "reason": "vss-catalog-mismatch"},
+    {"event": "inject-profile0", "t0_ns": 16000000000, "t1_ns": 16300000000, "reason": "profile-unbound"}
+   ]
+  },
+  "pause-tick": {
+   "what": "the tick paused for 1.5 s with the intake running (spec 14.4, P8): MISS, the monitor closes the idle connection, the bridge sees the close and reconnects, and its first frame is ACCEPTed with a RESTORED line",
+   "recording": "honest",
+   "run": "to_end",
+   "steps": [
+    {"at_ns": 20000000000, "call": "pause_tick"},
+    {"at_ns": 21500000000, "call": "resume_tick"}
+   ],
+   "windows": [],
+   "sequence": "tick"
+  },
+  "pause-both": {
+   "what": "the tick and the intake both paused for 1.5 s, the tick resumed first (spec 14.4, P8): MISS and the close as above, then the first frame is 22 (its age above AGE_MAX), still life, so RESTORED too; ACCEPT again once the intake runs",
+   "recording": "honest",
+   "run": "to_end",
+   "steps": [
+    {"at_ns": 20000000000, "call": "pause_intake"},
+    {"at_ns": 20000000000, "call": "pause_tick"},
+    {"at_ns": 21500000000, "call": "resume_tick"},
+    {"at_ns": 21700000000, "call": "resume_intake"}
+   ],
+   "windows": [
+    {"event": "pause-both", "t0_ns": 20000000000, "t1_ns": 22000000000, "reason": "vss-stale"}
+   ],
+   "sequence": "both"
+  }
+ }
+}

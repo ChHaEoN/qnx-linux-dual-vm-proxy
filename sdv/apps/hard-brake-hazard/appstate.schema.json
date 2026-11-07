@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:sdv-local:schema:appstate:1",
+  "title": "AppState heartbeat, version 1",
+  "description": "The fixed record a containerised app publishes as its heartbeat and its own state (plan section 3.3 overlay sub-branch AppState; Phase 1 step 7; Phase 6 step 2 health check). The app writes each field as one leaf under its own sub-branch Vehicle.DualVm.AppState.<App> in the local databroker (<App> is derived from the manifest name by one rule: split on '-', upper-case the first letter of each part, join, so hard-brake-hazard gives HardBrakeHazard; names from the overlay draft, overlay.vspec); the twin connector assembles the leaves into this record, validates it against this schema, and forwards only a valid record (plan sections 3.2 and 3.8, S11). Design draft for Phase 0 step 6. Does NOT demonstrate: that any app runs, that the heartbeat is timely, or that an app cannot hide information in a permitted field -- the schema stops honest mistakes, not a malicious app (a boolean can carry one bit of anything). The data-flow proof is the Monitor-independence test in twin-allowlist.md.",
+  "$comment": "HARD RULE (plan sections 3.2, 3.8, S11): no field of this record is derived, directly or indirectly, from the Vehicle.DualVm.Monitor branch or from anything else the QNX guest produces -- neither from the value of a Monitor leaf nor from its freshness or absence (a stale or missing Monitor value means the bridge is disconnected, which is guest connection state) -- no verdict, reason, count, MISS or RESTORED, bridge or guest connection state, guest time, catalogue-digest match, or profile. An app may read the Monitor branch to display the last verdict locally; that value, and whether it is fresh, never reaches any field below, and the app's decisions never take either as an input. Design values, each with its reason: (1) heartbeat period 1 s -- short enough that the Phase 6 health check sees several heartbeats inside any deadline of a few seconds, long enough to bound the app's heartbeat traffic; the health deadline itself is Phase 6's design value. (2) Every string is an enum or a tight pattern with maxLength, and there is no free-text field: a free-text 'message' field would be a ready channel for a verdict. (3) The record is flat (no objects, no arrays): the twin flattens it into dotted keys in the vss shadow, whose document is limited to 8 KB and 8 levels (F84). (4) Largest valid record, serialised: under 320 bytes. (5) No cross-field invariant exists: each field is true on its own at the moment it was written, so a record assembled from leaves delivered one by one (a 'torn' read across two heartbeats) is still correct field by field. (6) No timestamp field: freshness is judged by the observer on its own clock from seq changing; the databroker's datapoint timestamps (Linux host clock) exist anyway, and no guest time may appear. Annotations: 'x-vss-leaf' (the leaf under Vehicle.DualVm, whose name the overlay draft owns and overrides) and 'x-provenance' (where the value comes from; allowed values: app-build, updater-start, app-runtime) are not validation keywords; draft 2020-12 validators ignore them, and the pytest reads them. Changing this schema means a new $id version and a new const in schema_version; the old text is overwritten, not annotated.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "app",
+    "app_version",
+    "image_id",
+    "seq",
+    "state",
+    "hazard_requested",
+    "actuate_result"
+  ],
+  "propertyNames": {
+    "type": "string",
+    "maxLength": 32,
+    "pattern": "^[a-z][a-z0-9_]{0,31}$",
+    "not": {
+      "pattern": "(verdict|reason|monitor|liveness|miss|restor|guest|qnx|claim|reject|accept|stamp|deadline|digest|profile|bridge|kind|t_in|t_out)"
+    },
+    "$comment": "Tripwire, coarse on purpose and failing closed (it would also block an innocent name such as transmission_mode or acceptance_level; rename such a field rather than loosen the list): with additionalProperties false an unknown name already fails; this makes a future edit that adds, say, last_verdict unusable, because every instance carrying it fails validation. The token list is lower-case only because the positive pattern already forces lower-case names (ECMA-262 regex has no inline case flag)."
+  },
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Version of this schema.",
+      "$comment": "A consumer (connector, updater, a later Athena query) must refuse a record whose version it does not know rather than guess at its fields. uint8 range is ample: a version changes only when the field set changes.",
+      "x-vss-leaf": "AppState.<App>.SchemaVersion (sensor, uint8)",
+      "x-provenance": "app-build"
+    },
+    "app": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z][a-z0-9]*)*$",
+      "maxLength": 32,
+      "description": "The app's name as its app-class entry in the local manifest (for example hard-brake-hazard).",
+      "$comment": "The health check and the twin have to know which app is speaking. A pattern, not an enum, so that adding an app does not change this schema; the updater's health check compares it with the manifest entry it started, and the connector checks that it names the sub-branch the record came from (split on '-', upper-case the first letter of each part, join). 32 characters: longer than any proposed name, short enough to keep the record small; lower-case words of letters and digits joined by single hyphens, each word starting with a letter, so it is a name, cannot carry prose, and maps to exactly one sub-branch (a word starting with a digit would lose its hyphen in the mapping: x-1a and x1a would both give X1a). Same pattern as the manifest's name.",
+      "x-vss-leaf": "AppState.<App>.App (sensor, string)",
+      "x-provenance": "app-build"
+    },
+    "app_version": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,2})[.](0|[1-9][0-9]{0,2})[.](0|[1-9][0-9]{0,2})$",
+      "maxLength": 11,
+      "description": "The app's own version, MAJOR.MINOR.PATCH, baked into the image at build time.",
+      "$comment": "Image IDs differ per architecture (the PC's amd64 build and the arm64 builds on a1.metal and the Orin are different images), so the Phase 6 drill's v1 -> v2 -> v3 -> rollback sequence can only be compared across the three hosts through a label that is the same on all of them. Core semver only: pre-release and build suffixes are free text. Three digits per part is a design bound that no drill will reach.",
+      "x-vss-leaf": "AppState.<App>.AppVersion (sensor, string)",
+      "x-provenance": "app-build"
+    },
+    "image_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "maxLength": 71,
+      "description": "The image ID (config digest) of the running container, passed in by whoever started it (the updater, or the dev loop by hand) as an environment variable at container start.",
+      "$comment": "The Phase 6 health check has to attribute a heartbeat to the container it just started; without this field a still-running old container, or the databroker's retained last value of a dead one, could pass the check for the new one. A container cannot read its own image ID from inside without docker.sock, which no container ever has (plan section 3.7), so the starter injects it. The image ID is the cross-path pin the manifest uses (plan 1.2).",
+      "x-vss-leaf": "AppState.<App>.ImageId (sensor, string)",
+      "x-provenance": "updater-start"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4294967295,
+      "description": "Heartbeat counter: 1 at the first heartbeat after each container start, plus 1 at every heartbeat.",
+      "$comment": "The databroker keeps a signal's last value after its provider dies, so a present AppState proves nothing; a seq that keeps changing, judged on the observer's own clock, does. A seq that goes back marks a restart. uint32 at the 1 s period lasts about 136 years, so no wrap handling is needed. Recommendation to the connector: a change of seq alone should not drive a vss shadow update (send it with the next other change, or at most once per 60 s): the send cadence bounds shadow traffic while keeping the counter available with the next state change.",
+      "x-vss-leaf": "AppState.<App>.Seq (sensor, uint32)",
+      "x-provenance": "app-runtime"
+    },
+    "state": {
+      "type": "string",
+      "enum": ["starting", "running", "degraded", "stopping"],
+      "description": "The app's own lifecycle state, computed from its own process and its own non-Monitor VSS inputs; never from the value or freshness of the Monitor branch. starting: connected to the databroker, subscriptions not yet serving values. running: serving. degraded: running, but one of its own non-Monitor VSS inputs (for hard-brake-hazard: Vehicle.DualVm.Motion.LongitudinalVelocity and Vehicle.Acceleration.Longitudinal) is missing or older than the app's own input deadline, or its last Actuate, if any, did not return ok. stopping: termination requested.",
+      "$comment": "The health check needs 'running'; 'degraded' lets a deliberately broken v3 show itself as broken rather than as dead. A Monitor value that is absent or stale (the bridge disconnected) is guest connection state, so it must never make the app 'degraded': test A8's absent-Monitor arm checks exactly that. An enum, because a free-text status is a channel.",
+      "x-vss-leaf": "AppState.<App>.State (sensor, string, allowed: starting, running, degraded, stopping)",
+      "x-provenance": "app-runtime"
+    },
+    "hazard_requested": {
+      "type": "boolean",
+      "description": "The value the app last requested through Actuate on Vehicle.Body.Lights.Hazard.IsSignaling; false if it has requested nothing since start.",
+      "$comment": "The app's own output (Phase 1 step 7), decided from two inputs only: the signed Vehicle.DualVm.Motion.LongitudinalVelocity and Vehicle.Acceleration.Longitudinal. Deceleration along the direction of travel is minus a_x times the sign of the velocity (overlay.vspec, Acceleration.Longitudinal): Vehicle.Speed is |v_x|, so an app using it could not tell braking in reverse (positive a_x) from accelerating forward. Set beside the allowlisted current value of IsSignaling, it shows whether the actuation path followed the app. Never decided or overridden from the Monitor branch.",
+      "x-vss-leaf": "AppState.<App>.IsHazardRequested (sensor, boolean)",
+      "x-provenance": "app-runtime"
+    },
+    "actuate_result": {
+      "type": "string",
+      "enum": ["none", "ok", "unavailable", "error"],
+      "description": "Outcome of the app's last Actuate call. none: no Actuate since start. ok: accepted. unavailable: the databroker reported that no provider serves the actuator (F19). error: any other failure.",
+      "$comment": "Distinguishes 'the app decided but the actuation path is absent' from 'the app never decided'. An enum, because a gRPC error text is free text and could carry anything the Linux side has seen.",
+      "x-vss-leaf": "AppState.<App>.ActuateResult (sensor, string, allowed: none, ok, unavailable, error)",
+      "x-provenance": "app-runtime"
+    }
+  },
+  "examples": [
+    {
+      "schema_version": 1,
+      "app": "hard-brake-hazard",
+      "app_version": "1.0.0",
+      "image_id": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "seq": 42,
+      "state": "running",
+      "hazard_requested": false,
+      "actuate_result": "none"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "about": "The host Python for the stack's host side on an aarch64 instance (SDV Phase 3 WP1; design default D5, owner decision 2026-10-02): a python-build-standalone CPython 3.12 install_only build for aarch64-unknown-linux-gnu, downloaded once on the PC from the release named here, its sha256 checked against that release's published SHA256SUMS line for the asset, and pinned here. It travels in the upload bundle (sdv/stack/bundle.py) under upload_name, because the asset's own name carries a '+' and the upload accepts only [A-Za-z0-9._-]; on the instance it is unpacked and `python -m venv` makes the venv the aarch64 sim lock is installed into (sdv/sim/requirements.aarch64.lock).",
+  "release": "20261001",
+  "asset": "cpython-3.12.15+20261001-aarch64-unknown-linux-gnu-install_only.tar.gz",
+  "python_version": "3.12.15",
+  "target": "aarch64-unknown-linux-gnu",
+  "flavor": "install_only",
+  "sha256": "6a1b2e68c6fe749b78bbacb8fa42ff9bc844a72de7ed3ee52428f09a42f2ffc1",
+  "bytes": 52319404,
+  "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261001/cpython-3.12.15%2B20261001-aarch64-unknown-linux-gnu-install_only.tar.gz",
+  "sums_url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261001/SHA256SUMS",
+  "sums_sha256": "3573468fd1f7973d1f0236e5bb0a3ba654f169a24a3d69252e77a80b70ffe2ab",
+  "upload_name": "cpython-3.12-aarch64-install_only.tar.gz",
+  "read": "2026-10-02"
+}

@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "about": "Where each DBC a recording names (its manifest line's source.params.dbc_sha256) was committed, so stack.py can name the exact command that exports it into ~/sdv-cache/dbc/<sha256>.dbc when that copy is missing. Project-written. Each entry was read with a read-only git on Windows (git rev-parse <commit>:<path>, and the export's sha256 checked); stack.py checks a cached copy against both hashes. A sha256 missing here is refused with the command that lists the candidate commits: the stack never picks one.",
+  "dbc": {
+    "c71a5137201fe04f4dedce8ad6e9bb518cac06a9bfbf991216aa68ed01e3243d": {
+      "commit": "8c59311bfa095ff4e481bad3f2d89ff1e307408a",
+      "path": "sdv/vss/slice.dbc",
+      "git_blob": "819c542a708f9fb9054e5e990c2f98650570ebbf",
+      "read": "2026-09-30"
+    },
+    "531b9369996fbd133ee2e94a2fe434900a485436338e96ea3515e1c6142907e0": {
+      "commit": "9263be944ef5f96264ee768ce2eb760bbbca056c",
+      "path": "sdv/vss/slice.dbc",
+      "git_blob": "699e723f86c4dfb5fd1d9ee1a909811dff40b1db",
+      "read": "2026-10-01"
+    }
+  }
+}

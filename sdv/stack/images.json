@@ -1,0 +1,183 @@
+{
+  "format": 1,
+  "about": "The slice stack's container images (sdv/stack). Project-written. Upstream images are pulled and run only as repo@index-digest; the digests are the Phase 0 pins (read 2026-09-30, identical on ghcr and the quay mirror), and each image's revision label must equal the pinned commit. Local images are built from a base pinned by digest and run by image ID. Under Docker Engine 29's containerd image store the local image ID of a pulled image is its index digest, not the config digest. Each local entry's arm64 member, and the top-level bridge entry, pin an arm64 build (SDV Phase 3 WP0, sdv/arm64/arm64.py build): its ID, which under that store is the built image's manifest digest, and the config digest, the identity no store changes, with the tag and the aarch64 lock it was built with. The top-level test_only entry (SDV Phase 4 WP0) pins images that only an opt-in test runs: the stack never pulls, starts, loads, bundles or scans them. The top-level connector entry (SDV Phase 4 WP3) pins the twin connector's two images in the bridge entry's shape, with the labels they were built with; the stack starts the amd64 one by ID only when a run asks for a connector, and no bundle or deploy set holds either.",
+  "upstream": {
+    "kuksa-databroker": {
+      "repo": "ghcr.io/eclipse-kuksa/kuksa-databroker",
+      "version": "0.7.1",
+      "index_digest": "sha256:529d8c6d3cc223362667672978bcb8f92c4d356b25aedd336e7a2e004d7279bd",
+      "amd64_manifest": "sha256:f999187600011dd41ef6191bdb46a7e4859989dc33306e39cdb2cbe9296a6ef5",
+      "arm64_manifest": "sha256:d5a3fa1a4fd93b9af72715a3baad287b4150dd5bc82c58d52750852c9c932633",
+      "revision": "a79e2420b319cedccd98298e2a75ee78cfca4b87"
+    },
+    "kuksa-can-provider": {
+      "repo": "ghcr.io/eclipse-kuksa/kuksa-can-provider/can-provider",
+      "version": "0.5.0",
+      "index_digest": "sha256:6a35726b3b81dec6414e62546b85350ff2aa5fee4109111a4f29ad424400915e",
+      "amd64_manifest": "sha256:27d575bcdc4e906069f2db17ffe314d61e8a5fb9248c2dd6f0eeb0e47c451487",
+      "arm64_manifest": "sha256:bfd53be8482643cb9b7b22fef73ab42e6b3ed1de9cd292273967de8b31ba336a",
+      "revision": "d03dd7db364dd1ce9f7d0c614d80ebf6642ad167"
+    },
+    "kuksa-csv-provider": {
+      "repo": "ghcr.io/eclipse-kuksa/kuksa-csv-provider/csv-provider",
+      "version": "0.4.6",
+      "index_digest": "sha256:ee5747dfafb08f056085b5c7d95fba1a12c33469f1be18d3c616b81936ae9116",
+      "amd64_manifest": "sha256:eb3d0f076642f880165a6deb0405ea8fb55dbb373995a3e682c1a6d3f104b352",
+      "arm64_manifest": "sha256:eafeebf5b510c969747b00ad35981cf30ca30e7462cfc716c7672b8d94eb0d4b",
+      "revision": "30a92880914bedd7f7adf06cb7707719daab3fd4",
+      "note": "Pinned and pulled for its identity; the image carries only the replayer, so the slice's recorder is this revision's recorder.py (sources.csv-recorder), run in the local image kuksa-csv-provider-recorder."
+    },
+    "kuksa-mock-provider": {
+      "repo": "ghcr.io/eclipse-kuksa/kuksa-mock-provider/mock-provider",
+      "version": "0.4.1",
+      "index_digest": "sha256:bc61857ab6b29f70332daa10b2cd835729cecd6605cc5fe48a35f9e0236c32bb",
+      "amd64_manifest": "sha256:6586bff9cc18c957897a0f9e32a4ebc105f680a9a49cd6b6f518d2dbd40ad25c",
+      "arm64_manifest": "sha256:9987ccdf62e2d57352116caeac84f4e5eb5c27190020296e0bf52fdefe82f994",
+      "revision": "eb60bbff8451d14537f0c56a173c6e927e80b859",
+      "note": "The last release (a pre-release); the plan names no version. Its /mock/mock.py is replaced by sdv/stack/mock/mock.py at run time."
+    }
+  },
+  "base": {
+    "python": {
+      "repo": "docker.io/library/python",
+      "tag": "3.12-slim",
+      "index_digest": "sha256:f77ac9e44ae96ef2c90b8053ea08c31f8be030f824196b0ae4db6d462c84e51f",
+      "amd64_manifest": "sha256:44ff437bba879d4941b710a369a8f19266aea34b29002807f0c487fabc9eec9b",
+      "arm64_manifest": "sha256:950206c37262dd86c55659797f6ee418fee30535072f65a82ed470d985f5cda5",
+      "version": "3.12.14-slim-trixie",
+      "read": "2026-09-30",
+      "arm64_read": "2026-10-02"
+    }
+  },
+  "sources": {
+    "csv-recorder": {
+      "url": "https://raw.githubusercontent.com/eclipse-kuksa/kuksa-csv-provider/30a92880914bedd7f7adf06cb7707719daab3fd4/recorder.py",
+      "commit": "30a92880914bedd7f7adf06cb7707719daab3fd4",
+      "path": "recorder.py",
+      "sha256": "092f8196098e9cd28571ec0d9dfbc91063f466f094d8524517af0c73cf4e8734",
+      "git_blob": "bc9a9965e20833fe4a521f83a0c44d1efb445639"
+    }
+  },
+  "local": {
+    "hard-brake-hazard": {
+      "class": "app",
+      "context": "sdv/apps/hard-brake-hazard",
+      "dockerfile": "sdv/apps/hard-brake-hazard/Dockerfile",
+      "tag": "sdv-local/hard-brake-hazard:1.0.0",
+      "app_version": "1.0.0",
+      "arm64": {
+        "id": "sha256:1c8bc577d71b59de71b32e24f6a5c627e8357d9a3edcb95b988e178b50cf79d0",
+        "config_digest": "sha256:90f06851a5230e031635f811d1a4bf0abf3e9976ceadcfd16705ce1328235c9c",
+        "tag": "sdv-local/hard-brake-hazard:1.0.0-arm64",
+        "lock": "sdv/apps/hard-brake-hazard/requirements.aarch64.lock"
+      }
+    },
+    "kuksa-csv-provider-recorder": {
+      "class": "platform",
+      "context": "~/sdv-cache/csv-recorder-0.4.6",
+      "dockerfile": "sdv/stack/recorder/Dockerfile",
+      "lock": "sdv/stack/recorder/requirements.lock",
+      "source": "csv-recorder",
+      "tag": "sdv-local/kuksa-csv-provider-recorder:0.4.6-30a92880",
+      "arm64": {
+        "id": "sha256:c369d1904c77970a4753e58dc1afb983486920678cb6914d9e7d5c24f03f33bf",
+        "config_digest": "sha256:0be6a06028df62d839322ed8b54309d752075c52df30baae3ea40264631a1bcc",
+        "tag": "sdv-local/kuksa-csv-provider-recorder:0.4.6-30a92880-arm64",
+        "lock": "sdv/stack/recorder/requirements.aarch64.lock"
+      }
+    }
+  },
+  "bridge": {
+    "about": "The claim bridge's arm64 image (sdv/bridge/build_image.py --arch arm64; SDV Phase 3 WP0), here and not under local, which build_local builds whole. It bakes in the generated contract: the labels are the generation it was built from, so a new generation means a rebuild and a new pin.",
+    "arm64": {
+      "id": "sha256:0a6637c2c7eb2a79746cbbd1c6e6ac603a8675af0eeb86475534a8b41a0825b3",
+      "config_digest": "sha256:f7307a7e2c53fb416c935fcc68a28fb6b85037bec3adc3d83cdc05f4a2e250e1",
+      "tag": "sdv-local/vss-claim-bridge:0.1.0-arm64",
+      "lock": "sdv/bridge/requirements.aarch64.lock"
+    },
+    "labels": {
+      "sdv.kind4.catalog_digest": "0x4D68EA68",
+      "sdv.kind4.contract_sha256": "e8dca2c0f3e0fd917af539c9831dabe6b571dffd4b1165a0eac8e085ffd48c9d",
+      "sdv.kind4.dbc_sha256": "531b9369996fbd133ee2e94a2fe434900a485436338e96ea3515e1c6142907e0"
+    }
+  },
+  "test_only": {
+    "eclipse-mosquitto": {
+      "repo": "docker.io/library/eclipse-mosquitto",
+      "version": "2.0.22",
+      "index_digest": "sha256:199ea8ef2e35ec2b1b37e59cfd1dbae538ed4dfa4a2251a121a52215a6248a21",
+      "amd64_manifest": "sha256:cba7cd79d4e48b2e668b599c100bc5bb612a2c85aada76ab5a27987ecc81e3d7",
+      "arm64_manifest": "sha256:0ceb78cee662befe83695d7bcbcf008304f74fa33e624776bde68ed8e54ba1d5",
+      "read": "2026-10-04",
+      "note": "The local MQTT broker of the twin connector's opt-in tests (sdv/connector/probes/probe.py; the broker tests of Phase 4 WP3): the transport only, no shadow service, no rules, no IoT policy. Pulled and run only as repo@index_digest, on an --internal Docker network with no published port, and removed after. Not under upstream: the stack never pulls or starts it, it is in no bundle and no deploy set, and it carries no revision label to check."
+    }
+  },
+  "connector": {
+    "about": "The twin connector's images (sdv/connector/build_image.py build --arch all --write-pins; SDV Phase 4 WP3), in the bridge entry's shape, one member per architecture. Each bakes in the frozen allowlist: the labels are the allowlist version and digest and the sha256 of the catalogue's id file it was generated from, so a new generation, a new allowlist or a changed connector module means a rebuild and new pins. Built locally and never pushed to any registry; in no bundle and no deploy set. The PC's opt-in runs start the amd64 image by this ID; the arm64 image is built under emulation, scanned, and runs nowhere before Phase 5.",
+    "amd64": {
+      "id": "sha256:a1fa3c723e0186bd918ee4a098d4b370c45e9da6c11ff2ab7f443d97fa4fd0ae",
+      "config_digest": "sha256:a4ce061ca88eb1b1404c8b101315e53a7139df866037dfa89f960a313b52e624",
+      "tag": "sdv-local/twin-connector:0.1.0",
+      "lock": "sdv/connector/requirements.lock"
+    },
+    "arm64": {
+      "id": "sha256:862c7ceb01227469c0b3b26e07ad75d0ce8ff403e25dee2b21c8025a26b29105",
+      "config_digest": "sha256:32ff1f14af2e443720a78470ef170980d33d860ea547995023ca324fe233bf81",
+      "tag": "sdv-local/twin-connector:0.1.0-arm64",
+      "lock": "sdv/connector/requirements.aarch64.lock"
+    },
+    "labels": {
+      "sdv.twin.allowlist_digest": "0x66104AF4",
+      "sdv.twin.allowlist_version": "1",
+      "sdv.twin.catalogue_sha256": "83fe361177a89171a2e3f06a2d1f325df1adfbdec0fddd43ecabebf60e4950a2"
+    }
+  },
+  "autoware": {
+    "about": "Autoware's Jazzy universe image, release 1.9.0 (SDV Phase 8; the Phase 8 specification's 2.6), pinned by the digests WP4a's pull read from the index (trust on first use: the first pull was by tag, every later one is by digest). Under the containerd image store the image ID is the index digest. Run only as repo@sha256:<digest>, only under the project entrypoint and flags (the image's own entrypoint never runs: it changes host network settings when it can); the stack never pulls, bundles, deploys or scans it as a slice image. The feeder's image (rosvss) is built from its amd64 manifest. arm64.pulled is filled when the arm64 image has been pulled and read back (WP6's one field).",
+    "repo": "ghcr.io/autowarefoundation/autoware",
+    "tag": "universe-jazzy-1.9.0",
+    "release": "1.9.0",
+    "trust": "first-use",
+    "index_digest": "sha256:2c3ae9b76b205f2bad7b4906e2096cd9929f44627aa87813faa6e366c21cc274",
+    "amd64": {
+      "manifest_digest": "sha256:e656efed42f68444bca718163619f3f47c3250ced658e4b2477799fc5c967d7b",
+      "image_id": "sha256:2c3ae9b76b205f2bad7b4906e2096cd9929f44627aa87813faa6e366c21cc274",
+      "store": "containerd",
+      "pulled": "2026-10-18"
+    },
+    "arm64": {
+      "manifest_digest": "sha256:596bf8a41a7957b8e57af02adf410d3ce65782f3f7afaa6ba3f8bef2db7e7919",
+      "pulled": "2026-10-20"
+    },
+    "entrypoint": "never run (2.12)"
+  },
+  "rosvss": {
+    "about": "The ROS->VSS feeder's image (sdv/rosvss/build_image.py; SDV Phase 8 WP3d), in the bridge entry's shape, amd64 only: built FROM the autoware entry's amd64 manifest digest, its ENTRYPOINT the project's (sdv/aw/aw-entrypoint.sh copied in), its user aw. Its ID is the built image's manifest digest under the containerd store; config_digest the identity no store changes. The labels are the base digest, the lock's sha256 and the digest of the staged sources, so a changed module, entrypoint or lock means a rebuild and a new pin. Built locally and never pushed; in no bundle and no deploy set; the stack starts it by this ID in a ros run only.",
+    "amd64": {
+      "id": "sha256:a5438102dbc27a1daccf0118b65b6b9493cf9f629a0442acd7a5d0fad1083448",
+      "config_digest": "sha256:d8eed18e073626cc6b56649aa23f471f16209c6a07bfa523278112823caa8f90",
+      "tag": "sdv-rosvss:local",
+      "lock": "sdv/rosvss/requirements.lock"
+    },
+    "labels": {
+      "sdv.rosvss.base_digest": "sha256:e656efed42f68444bca718163619f3f47c3250ced658e4b2477799fc5c967d7b",
+      "sdv.rosvss.lock_sha256": "d153c21b89190dbcceb528ce8d929cbe07d78567e7b76b41facdfb508694d846",
+      "sdv.rosvss.sources_sha256": "366db96324499ef25653f01f2086522591f7246d49bfab6ffa3e651c3c1a9216"
+    }
+  },
+  "carlaif": {
+    "about": "CARLA 0.10.0's ROS 2 interface image (sdv/carlaif/build_image.py; SDV Phase 8 WP9 P2), in the rosvss entry's shape, amd64 only: built FROM the autoware entry's amd64 manifest digest, the pinned package (sdv/carlaif/pin.json: autoware_universe's commit and the package's tree id) built by colcon into an overlay prefix of its own, the CARLA 0.10.0 client wheel (sdv/carlaif/wheel.lock) in a venv; its ENTRYPOINT the project's (sdv/aw/aw-entrypoint.sh copied in), its user aw. Its ID is the built image's manifest digest under the containerd store; config_digest the identity no store changes. The labels are the base digest, the pin (commit:tree), the digest of the staged project files and the wheel's sha256, so a changed pin, lock or entrypoint means a rebuild and a new pin. Run by this ID only, never by tag; built locally and never pushed; in no bundle and no deploy set; the stack never starts it.",
+    "amd64": {
+      "id": "sha256:e59f68ba9393fcd0e1f3c3c147dc983b441229544e623c050ba42c80a8725201",
+      "config_digest": "sha256:945a628388567d9648808000bbd4d65670069bcf7006ab096e988a013943a213",
+      "tag": "sdv-carlaif:local",
+      "lock": "sdv/carlaif/wheel.lock"
+    },
+    "labels": {
+      "sdv.carlaif.base_digest": "sha256:e656efed42f68444bca718163619f3f47c3250ced658e4b2477799fc5c967d7b",
+      "sdv.carlaif.pin": "94b8fbd3a8e4df661568270494369b06eb913d66:472ed962c44bdd6da71d32a5b8253a7fee6a5fc4",
+      "sdv.carlaif.sources_sha256": "b4bd2c5b3083825255862025697ef508410b2547d90f65513fd701c7cae7667d",
+      "sdv.carlaif.wheel_sha256": "b9a215f49f4e6c57160b53d95aa6507338d486a0171e744a31834cc5edc95d24"
+    }
+  }
+}

@@ -1,0 +1,41 @@
+# requirements.aarch64.lock -- the arm64 twin of requirements.lock: the environment sdv/sim/sigsim.py and the
+# stack's host side run in on an aarch64 Linux host (SDV Phase 3: a1.metal), with the same names and versions in the
+# same order (tests/test_sdv_arm64.py holds them equal), each with the sha256 of the one file pip installs for it on
+# CPython 3.12, Linux aarch64. The py3-none-any wheels are requirements.lock's files with their hashes; bitstruct and
+# wrapt are their cp312 manylinux aarch64 wheels. On any other platform pip finds no file with a listed hash and
+# stops: that is intended.
+#
+# Build (on the aarch64 host, with a CPython 3.12):
+#   python3.12 -m venv ~/sdv-sim-venv
+#   ~/sdv-sim-venv/bin/pip install --require-hashes --no-deps -r sdv/sim/requirements.aarch64.lock
+#
+# --no-deps makes this file the whole resolution, as for requirements.lock. Resolved 2026-10-02 with pip download
+# --platform manylinux2014_aarch64 --python-version 3.12 --implementation cp --abi cp312 --only-binary=:all:
+# --no-deps, each file's sha256 equal to the digest PyPI publishes for it.
+argparse-addons==0.12.0 \
+    --hash=sha256:48b70ecd719054fcb0d7e6f25a1fecc13607aac61d446e83f47d211b4ead0d61
+    # argparse_addons-0.12.0-py3-none-any.whl
+bitstruct==8.23.0 \
+    --hash=sha256:122cfe63b4e2a3a48d11338d8028e083ad0c3ab9c7831b8c8ac1ce5ba81c5197
+    # bitstruct-8.23.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl
+cantools==44.1.0 \
+    --hash=sha256:41b6f3edf173b7d79354331d4b619f0fad28a9473e4a4a2bdd2ef75156c920a8
+    # cantools-44.1.0-py3-none-any.whl
+crccheck==1.3.1 \
+    --hash=sha256:1680c9a7bb1ca4bec45fa19b8ca64319f10d2ce4eb8b0d25d51cb99a20ca0108
+    # crccheck-1.3.1-py3-none-any.whl
+packaging==26.3 \
+    --hash=sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c
+    # packaging-26.3-py3-none-any.whl
+python-can==4.6.1 \
+    --hash=sha256:17f95255868a95108dcfcb90565a684dad32d5a3ebb35afd14f739e18c84ff6c
+    # python_can-4.6.1-py3-none-any.whl
+textparser==0.26.2 \
+    --hash=sha256:e14ec4fd58d3515d897196a71f4ccf8d354f5c5c6b87910571b4d250de073c4b
+    # textparser-0.26.2-py3-none-any.whl
+typing-extensions==4.16.0 \
+    --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8
+    # typing_extensions-4.16.0-py3-none-any.whl
+wrapt==1.17.3 \
+    --hash=sha256:3af60380ba0b7b5aeb329bc4e402acd25bd877e98b3727b0135cb5c2efdaefe9
+    # wrapt-1.17.3-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl

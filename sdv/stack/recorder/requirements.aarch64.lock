@@ -1,0 +1,65 @@
+# requirements.aarch64.lock -- the VSS-layer recorder image's Python packages for linux/arm64 (sdv/stack/recorder)
+#
+# Project-written (SDV Phase 3 WP0). The same pinned versions and hashes as
+# sdv/apps/hard-brake-hazard/requirements.aarch64.lock (tests/test_sdv_stack.py holds the pins equal), and the
+# same names and versions as this directory's requirements.lock (tests/test_sdv_arm64.py): kuksa-client 0.6.0
+# (the plan's pin; the csv-provider repository's requirements.txt at commit 30a92880 declares ~= 0.5.2 and
+# recorder.py itself names no version) and everything pip resolves for it, each with the sha256 of the one wheel
+# pip installs for it on CPython 3.12, Linux aarch64 (the arm64 manifest of the pinned python:3.12-slim base).
+# The py3-none-any wheels are requirements.lock's files with their hashes; grpcio, grpcio-tools, protobuf,
+# websockets and wcwidth are their cp312 or abi3 manylinux aarch64 wheels. sdv/stack/stack.py's
+# build_local_arm64 stages this file as the build context's requirements.lock, where the Dockerfile installs it with
+#     pip install --require-hashes --no-deps --only-binary=:all: -r requirements.lock
+# so pip installs these files and nothing else. Resolved 2026-10-02 with pip download for cp312
+# manylinux2014_aarch64, each file's sha256 equal to the digest PyPI publishes for it.
+cmd2==4.2.4 \
+    --hash=sha256:f08af122f1e027cd19a5f015dbb7228d5c389955669731b5b83ee7feedd20f31
+    # cmd2-4.2.4-py3-none-any.whl
+grpcio==1.84.0 \
+    --hash=sha256:fbdbcd06986ede3ce584083b1dc2afe6808e8943e5cf50ad11183c03aceda25a
+    # grpcio-1.84.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.whl
+grpcio-tools==1.82.1 \
+    --hash=sha256:75856fb0ba6a574e62b02473b10cb2479356b5db07c39ef8209395105608dc5e
+    # grpcio_tools-1.82.1-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.whl
+jsonpath-ng==1.8.0 \
+    --hash=sha256:b8dde192f8af58d646fc031fac9c99fe4d00326afc4148f1f043c601a8cfe138
+    # jsonpath_ng-1.8.0-py3-none-any.whl
+kuksa-client==0.6.0 \
+    --hash=sha256:be1066840ef9d0877caa3a26ac2412eaf6e0e961fca5fd0e160182235c8dfac0
+    # kuksa_client-0.6.0-py3-none-any.whl
+markdown-it-py==4.2.0 \
+    --hash=sha256:9f7ebbcd14fe59494226453aed97c1070d83f8d24b6fc3a3bcf9a38092641c4a
+    # markdown_it_py-4.2.0-py3-none-any.whl
+mdurl==0.1.2 \
+    --hash=sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8
+    # mdurl-0.1.2-py3-none-any.whl
+prompt-toolkit==3.0.53 \
+    --hash=sha256:01c0891d7f9237d5e339f7d3e42cdae80b7534abb1c7c0e3352efba6231492f2
+    # prompt_toolkit-3.0.53-py3-none-any.whl
+protobuf==7.36.2 \
+    --hash=sha256:e11e1f0180583a2af89db6a2ecd9e8dc40aa6d2988ca175bfd0e6d12ea72d74e
+    # protobuf-7.36.2-cp310-abi3-manylinux2014_aarch64.whl
+pygments==2.21.0 \
+    --hash=sha256:2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9
+    # pygments-2.21.0-py3-none-any.whl
+pyperclip==1.11.0 \
+    --hash=sha256:299403e9ff44581cb9ba2ffeed69c7aa96a008622ad0c46cb575ca75b5b84273
+    # pyperclip-1.11.0-py3-none-any.whl
+rich==15.0.0 \
+    --hash=sha256:33bd4ef74232fb73fe9279a257718407f169c09b78a87ad3d296f548e27de0bb
+    # rich-15.0.0-py3-none-any.whl
+rich-argparse==1.8.0 \
+    --hash=sha256:d2a3ce7854654e2253c578763ab0a32f05016f23a55fadba7b9a91b6c0e92142
+    # rich_argparse-1.8.0-py3-none-any.whl
+setuptools==84.0.0 \
+    --hash=sha256:51a52592b3b99e102b609654876bd65f19f999935166d1352678931132b0c670
+    # setuptools-84.0.0-py3-none-any.whl
+typing-extensions==4.16.0 \
+    --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8
+    # typing_extensions-4.16.0-py3-none-any.whl
+wcwidth==0.9.1 \
+    --hash=sha256:b5da43d6967668982e44a52fb551967d293f86d26cd86036ac95bbdd34394ed9
+    # wcwidth-0.9.1-cp310-abi3-manylinux2014_aarch64.manylinux_2_17_aarch64.whl
+websockets==17.1 \
+    --hash=sha256:d41ef69d5416fbc1d98cf96c37be6192d10fd101c3e0f8b3ddc36e09432b3c08
+    # websockets-17.1-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl
