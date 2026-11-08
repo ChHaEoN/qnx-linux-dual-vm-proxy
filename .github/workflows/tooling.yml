@@ -15,7 +15,10 @@ permissions:
 
 jobs:
   python:
-    runs-on: ubuntu-latest
+    # Pinned, like the tooling below: ubuntu-latest moved to Ubuntu 26.04, where the bare-metal
+    # tests of GNU timeout's signal and process-group behaviour fail. The instance's image, and
+    # the local WSL run, are Ubuntu 24.04.
+    runs-on: ubuntu-24.04
     env:
       PYTHONDONTWRITEBYTECODE: '1'
       SDV_REQUIRE_GEN: '1'
