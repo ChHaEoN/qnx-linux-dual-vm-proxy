@@ -11,8 +11,8 @@
 > safety case** and makes **no ASIL claim** about the deployed system. ASIL tags
 > are carried forward from the FuSa-Analysis worksheet purely so traceability
 > reads correctly; they are illustrative. Every mechanism below is paired with
-> an explicit statement of what it does **not** demonstrate, per the
-> honest-framing rule in [README](../../README.md).
+> an explicit statement of what it does **not** demonstrate (the project's
+> honest-framing rule).
 
 - **Role:** FuSa-Design (ISO 26262 Part 3/4/5/6 architect, study-level)
 - **Date:** 2026-06-11
