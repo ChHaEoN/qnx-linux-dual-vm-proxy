@@ -59,8 +59,8 @@ substrates:
   project's sense, a QHV host plus guest, and QHV cannot run under KVM at all.
   The §5 records stay architecture-version history.
   Non-metal Graviton still has no `/dev/kvm` (the t4g.small probe stands),
-  `c7g.metal` — the closer core match — stays quota-blocked at 64 vCPU, and
-  `a1.metal` is Cortex-A72 against the Orin's A78AE, so even a revived pair
+  `c7g.metal`, the closer core match, has since served only as a test bed for
+  the SDV sessions, and `a1.metal` is Cortex-A72 against the Orin's A78AE, so even a revived pair
   would differ in a *bundle*, not in one variable (§1a). Every
   QHV boot and QHV IPC number attributed to the cloud leg (A1) was
   produced on the Windows box; the Phase-4 boot-time table names it
@@ -339,7 +339,7 @@ hardware-timed *hypervisor* number, which stays deferred; any claim about A6's
 GPU half, since `a1.metal` has no GPU; and any single-variable reading, because
 A72 against A78AE is a five-year micro-architectural gap inside a host bundle
 that also differs in kernel. `c7g.metal` (Neoverse-V1) would be the closer core
-match and stays quota-blocked at 64 vCPU against a 32-vCPU account limit.
+match; it has since served only as a test bed for the SDV sessions.
 
 ### Status: run 2026-09-20
 

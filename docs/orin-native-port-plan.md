@@ -15,6 +15,9 @@ guest follows, and then one campaign runs on a frozen reference architecture v1.
 **2026-09-27 (owner):** measured results and functional outcomes stay local. This plan keeps its designs,
 procedures, risks and decisions; the outcome of every run is held locally, and run records are named by
 directory or file name only (§9).
+**2026-11-03 (owner):** a functional outcome of the project's own code (what it does, and that it works on a
+named host) may be stated publicly without figures. This rests on the owner's reading of 4.6(i), not on the
+rights holder's approval. Functional findings about QNX's own components, run records, CSVs and logs stay local.
 
 Evidence classes are used on every load-bearing statement: **VERIFIED** (seen — file:line, command output,
 live-board capture), **VENDOR_CLAIM** (a document says so), **HYPOTHESIS** (reasoned, untested),
@@ -1090,6 +1093,10 @@ documentation.
 **Owner decision, 2026-09-27:** measured results and functional outcomes stay local. The public tree carries no
 measured result and no functional outcome of any run, on any leg or host; run records are named by directory or
 file name only and are held locally.
+
+**Owner decision, 2026-11-03:** a functional outcome of the project's own code (what it does, and that it works on
+a named host) may be stated publicly without figures, on the owner's reading of 4.6(i), not on the rights holder's
+approval. Functional findings about QNX's own components, run records, CSVs and logs stay local.
 
 - **4.1(iii)** — modifying Source-Code-supplied Software for a Non-Commercial Target System, with no hardware
   list, covers the whole board directory and any local patch to Apache-2.0-headed library sources. The result

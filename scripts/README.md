@@ -187,6 +187,11 @@ scp qnx-safety-vm/output/disk-qemu         ubuntu@<runtime-host>:~/output/
 
 ### 6. Set up the host bridge (runtime host)
 
+> `setup-bridge.sh` and `launch-linux-vm.sh` belong to the **Orin** path, not the
+> cloud leg: the cloud dual-VM-over-a-bridge topology they were written for was
+> falsified by [ADR-002](../docs/phase2-topology-decision.md), and steps 6-7 are
+> kept only for that lineage.
+
 ```bash
 sudo ./setup-bridge.sh
 ```

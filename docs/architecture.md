@@ -191,7 +191,8 @@ On 2026-09-21 the attribution ladder of A6 was run on `a1.metal` too, over TCP
 (`20260921T-ladder-a1metal`, held locally), and on 2026-09-22 the Orin's
 notified-shared-memory ladder was run there: TCP, the D-udp rung, and polled and
 notified shared memory (`20260922T-a6-a1metal-kick`, held locally). No
-throughput figure has been taken on a cloud host, and no figure on any cloud
-host other than `a1.metal` (a `t4g.small` was only probed for `/dev/kvm`).
-`c7g.metal`, the closer core match, stays quota-blocked at 64 vCPU against a
-32-vCPU account limit.
+throughput figure has been taken on a cloud host, and a `t4g.small` was only
+probed for `/dev/kvm`. `c7g.metal` has since been a test bed for the SDV
+sessions: the vehicle-signal suite, the over-the-air drill and Autoware's
+planning simulator, each with its claims judged in the guest (records held
+locally).

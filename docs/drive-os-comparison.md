@@ -8,14 +8,16 @@ It is deliberately not a sales pitch. The goal is calibration: a reader should
 leave knowing which claims here are real, which are qualitatively suggestive,
 and which are off-limits.
 
-> **Status (2026-09-27): measured and functional results are held locally.**
+> **Status: measured results are held locally.**
 > NC QDL v7 clause 4.6(i) forbids making the results of any performance or
 > functional evaluation of the QNX software available to a third party without
 > BlackBerry's prior written approval, which has not been obtained. Every
-> figure, every functional outcome and every verdict that rests on one has
-> therefore been withdrawn from this public file; the verdicts and their
-> evidence are kept locally. What remains is the design: what DRIVE OS does,
-> what this project built, and the verdicts that follow from design alone.
+> figure, and every verdict that rests on one, is held locally with its
+> evidence. Since 2026-11-03 a functional outcome of the project's own code is
+> stated without figures, on the owner's reading of the clause, not on the
+> rights holder's approval; functional findings about QNX's own components stay
+> local. What remains here is the design: what DRIVE OS does, what this
+> project built, and the verdicts that follow from design alone.
 > OD10 (2026-09-20) settled the campaign's shape (A6 measures under KVM only,
 > the TCG twin legs are withdrawn) and OD11 (2026-09-21) its sample sizes.
 
@@ -70,6 +72,14 @@ Columns are the project's architecture ids, from the plan's
 | **Boot sequencing** | HV brings up Safety → Compute with cross-checks | L4T boots first — it is the host — then QNX starts as a KVM guest launched by a shell command from L4T userspace. The bring-up was segment-timed on two hosts (record `20260920T-kvm-twin`, held locally). | **Verdict and evidence held locally.** By design **the order is inverted** (Compute must be fully up first, because it is the host), nothing enforces it, and there are **no cross-checks, no health gate and no fail-to-safe**. The timing design starts its clock at QEMU exec, so the Compute side's own boot is never measured. |
 | **Bootloader chain** | SecureBoot → measured boot → HV → guest IPLs | JetPack UEFI with Secure Boot **off** → L4T → QEMU `-kernel` loads the IFS directly. No guest IPL and no HV stage. New in A6: the project owns the startup board stage. | **Cannot** — no root of trust at any stage on any leg: nothing signed, nothing measured, no fuse- or TPM-anchored anchor. A6 has *fewer* stages than DRIVE OS, not more. (The second host used on 2026-09-20, AWS `a1.metal`, has no JetPack UEFI and no L4T at all — a different pre-QEMU chain entirely.) |
 | **Real-time guarantees** | Certified RT on the Safety partition | QNX latency under host load was measured on hardware with the governor pinned (records `20260919T-saturation` and `20260919T-native-cmp`, held locally). | **Cannot** — no bound, no WCET argument, no deadline, and the guest is **never configured for real time** (`monitor.c` is pure POSIX at default priority, so QNX's priority scheme and FIFO scheduling are untouched by every measurement here). Its vCPU threads are scheduled by a general-purpose Linux kernel, and the saturation run is designed to measure **interference reaching the Safety partition**; it cannot show freedom from it. |
+
+Outside the table, and not emulated by any leg:
+- **NVDLA and PVA**: the deep-learning and vision accelerators have no QEMU model.
+- **MIPI CSI-2 camera ingest**: QEMU's `virt` machine has no camera serial-link
+  model; the edge-AI service's camera is a USB camera on L4T.
+- **The FSI's Cortex-R52 lockstep cluster**: no Functional Safety Island.
+- **Process evidence**: no MISRA-C compliance and no ISO 26262 work products;
+  SDP 8.0 is not QNX OS for Safety.
 
 ---
 

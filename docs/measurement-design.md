@@ -195,6 +195,12 @@ only the buffer size and the echo length change.
   it is the control the reference papers lack.
 - **Sweep the offered rate** — 0.2, 0.5, 1, 2, 5, 10 ms spacing — and treat the
   2 ms spacing as a constant under test rather than a setting.
+- **Stamp the platform** into every record: `nvpmodel`, the L4T release and the
+  kernel's `CONFIG_HZ`; sample the memory-controller clock per window under any
+  GPU load.
+- **Drop the page cache** before GPU memory work, and record that it was done.
+- **No SSH polling of the board during a run**: a new login's work lands in the
+  tail. Watch from the session that launched the run.
 
 ### 3.6 Reporting
 
@@ -205,6 +211,8 @@ only the buffer size and the echo length change.
   carries no estimate of its own spread; publish the per-run maximum as a k-sample set
   — min, median and max *of the k maxima* — rather than a single p99.9 number.
 - **"Largest observed value", never "worst case".** Nothing here bounds a tail.
+- **An effect is the median of paired within-round differences**, never a
+  difference of medians.
 - **A per-arm configuration table** in every run record: frame size, interval, n,
   k, warm-up, guest vCPU count and memory, QEMU version and full launch line,
   virtio/tap/bridge configuration, governor before and after, the pinning map.
@@ -217,6 +225,17 @@ locally) raised the question of how much of the boot metric is the fixed 5-secon
 coincidence argument. **The direct test is to change the constant**: rebuild with the timeout at two
 other values, boot twice at each, and show the metric moves by the predicted
 amount. Measurement should falsify a claim, not accumulate agreement with it.
+
+### 3.8 Pre-registration and record names
+
+- Each hypothesis-driven harness states its question, its predictions with
+  thresholds (P1, P2, ...) and its validity checks (M1, M2, ...) in its own
+  header, and is committed before any run of it, smoke runs included. The
+  predictions are not amended afterwards; the record says when a smoke run
+  contradicted one.
+- A demo and a latency run are always separate runs.
+- A run's record directory is named `2026MMDDT-...`: the date, then the
+  architecture, the host and the experiment. Every record is held locally.
 
 ## 4. What this design still cannot do
 
