@@ -29,9 +29,10 @@ two sides stay in sync, and how the twin diff is measured.
 
 ## 1. What is being twinned
 
-The project mirrors the *software-layer behaviour* of an NVIDIA
-DRIVE OS dual-VM partition across two physically distinct host
-substrates:
+The project mirrors the *software-layer behaviour* of a QNX partition
+beside a Linux partition on one SoC (the pattern
+[architecture.md](architecture.md) describes) across two physically
+distinct host substrates:
 
 - **Cloud / x86 twin** — *designed* as AWS Graviton (c7g.large arm64,
   Ubuntu 22.04); **as built, this leg runs on the local Windows host.**

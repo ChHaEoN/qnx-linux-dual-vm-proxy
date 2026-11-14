@@ -1,8 +1,8 @@
 # qnx-linux-dual-vm-proxy
 
-A study of DRIVE OS-style dual-VM partitioning on a Jetson Orin Nano: Linux (L4T) keeps the metal and the GPU, and
-QNX SDP 8.0 runs beside it as a KVM guest with a safety monitor. Nothing in it is certified, and no measured result is
-published (see [Limits](#limits-and-results-policy)).
+A study of a QNX safety partition beside Linux on one SoC, a Jetson Orin Nano: Linux (L4T) keeps the metal and the
+GPU, and QNX SDP 8.0 runs beside it as a KVM guest with a safety monitor. Nothing in it is certified, and no measured
+result is published (see [Limits](#limits-and-results-policy)).
 
 <!-- The Phase badge is generated from the Status table by scripts/ci/render_badges.py and checked by
      .github/workflows/claims-gate.yml. Change the table and re-run `python scripts/ci/render_badges.py --write`.

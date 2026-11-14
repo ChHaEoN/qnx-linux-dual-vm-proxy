@@ -16,18 +16,29 @@ put together, and what the IPC path physically is on each one.
 
 ## What is being proxied
 
-DRIVE OS partitions a single Tegra-class SoC across two guests under NVIDIA's
-Type-1 hypervisor:
+The pattern is a mixed-criticality one: a QNX safety partition beside a Linux
+compute partition on one SoC, under a Type-1 hypervisor that keeps them apart:
 
 ```
- NVIDIA DRIVE OS  (Orin / Thor silicon)  --  none of this is in this project
- ├── NVIDIA Hypervisor (Type-1)           <- certified partition isolation
- │   ├── Safety guest   QNX OS for Safety (QOS)        <- ASIL-D path
- │   │                  FuSa monitors, Cortex-R52 FSI bridge
- │   └── Compute guest  Linux                          <- AVOS / DriveWorks
- │                      CUDA, NVDLA, PVA, MIPI camera, vGPU
- └── Inter-VM IPC       hypervisor-mediated shared memory + mailbox interrupts
+ the pattern proxied (Tegra-class silicon)  --  none of this is in this project
+ ├── Type-1 hypervisor                      <- certified partition isolation
+ │   ├── Safety partition   QNX OS for Safety (QOS)    <- ASIL-D path
+ │   │                      FuSa monitors, Cortex-R52 FSI bridge
+ │   └── Compute partition  Linux                      <- the AV stack
+ │                          CUDA, NVDLA, PVA, MIPI camera, vGPU
+ └── Inter-VM IPC           hypervisor-mediated shared memory + mailbox interrupts
 ```
+
+NVIDIA DRIVE OS supplies the platform pieces this picture names on DRIVE AGX
+hardware: its Type-1 hypervisor, the safety island, and the GPU, display and
+storage servers that guests share. Its public documentation runs one guest OS
+on that hypervisor, QNX or Linux, not both
+([6.0.4](https://developer.nvidia.com/docs/drive/drive-os/archives/6.0.4/linux/sdk/common/topics/archi/PlatformSoftwareStacks1.html),
+[7.0.3](https://developer.nvidia.com/docs/drive/drive-os/7.0.3/public/drive-os-linux-sdk/core-concepts/FoundationServicesStack1.html)),
+and NVIDIA's forum names dual QNX as its multi-guest configuration. A QNX guest
+beside a Linux guest is the pattern this project proxies, not a documented
+DRIVE OS configuration; DRIVE OS is the reference for the pieces
+[drive-os-comparison.md](drive-os-comparison.md) compares one by one.
 
 Three things make that real and are absent here: a **certified** Type-1
 partitioner enforcing mixed-criticality isolation, **FSI lockstep and camera
