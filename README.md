@@ -78,7 +78,7 @@ The full comparison with DRIVE OS is in [drive-os-comparison.md](docs/drive-os-c
 | **3b** — Native QNX on the Orin, then A6 | 🟡 in progress; results held locally | [the plan](docs/orin-native-port-plan.md) |
 | **4** — Twin diff + DRIVE OS comparison | ✅ closed; results held locally | [drive-os-comparison.md](docs/drive-os-comparison.md) |
 | **5** — FuSa & Cybersecurity overlay | ⬜ not started as a dedicated phase | [fusa/](docs/fusa/), [cyber/](docs/cyber/) |
-| **6** — Polish, public README, demo | 🟡 in progress | — |
+| **6** — Polish, public README | 🟡 in progress | — |
 | **7** _(stretch)_ — Multi-SoC / domain convergence | ⬜ feasibility frozen, not built | [future-multi-soc.md](docs/future-multi-soc.md) |
 
 ---
