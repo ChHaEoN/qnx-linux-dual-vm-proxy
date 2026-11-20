@@ -3,7 +3,7 @@
 The PC side of the slice, run from one script in WSL Ubuntu-24.04's Docker Engine: a KUKSA databroker
 loaded with the generated VSS catalogue, the CAN provider feeding it from `slice.dbc` and a sigsim
 recording, a mock provider serving the hazard-light actuator, a VSS-layer recorder, and the first app
-(`sdv/apps/hard-brake-hazard`). No QNX, no board, no cloud.
+(`sdv/apps/hard-brake-hazard`). The default local path starts no QNX guest, board or cloud resource.
 
 ## What is here
 
@@ -157,7 +157,8 @@ ends; a step-3 run keeps it ticking.
   without Wheelbase's default into databroker 0.7.1 and checks that it serves the default, and nothing
   without one.
 - **The exit status**: `replay` exits 0 only when every gate of `replay_gates()` holds: the values, decisions
-  and lights, all three listener snapshots, the bus frames for vcan, C12b, and the bridge's own result.
+  and lights, all three listener snapshots, the bus frames for vcan, C12b, and the bridge's own result. A
+  `carla-autoware` replay has no decisions or lights gate (its own section below).
 - **Without a bridge** `time_sync.age_clock` is null, as `profile_id`, `profile_source` and `age_max_ms` are:
   nothing reads an age. That is this stack's reading; attribution-table 3.1 defines `age_clock` only as the
   clock the bridge reads on.
@@ -220,8 +221,8 @@ One invocation is one bridge mode and a run directory; each spec (and each `--re
 The run is judged by the QNX guest's vss monitor, which `ifs-vss.build` starts as `qnx-safety-monitor 7160 svc 500`.
 A functional mode: judged by the guest over br0, no timing.
 
-- **The monitor.** Nothing is built or started for it. The bridge's `--host` is `--guest-host` (default
-  `192.168.100.10`, the guest's address on br0); an address that is not IPv4, or is loopback, is refused, and so is one
+- **The monitor.** Nothing is built or started for it. The bridge's `--host` is `--guest-host`, the guest's
+  IPv4 address on br0; an address that is not IPv4, or is loopback, is refused, and so is one
   of this host's own addresses unless `SDV_HOST_ROLE` is `pc` (where the stand-in guest is this host). The run
   manifest's component `vss-monitor-guest` is the image's file name and sha256, the host and `host_local` (whether it is
   this host's own; null when the addresses cannot be read), port 7160 and `7160 svc 500`. The listener check allows
@@ -299,6 +300,35 @@ a member of `CONTAINERS` and not of the six of Phase 1, so the listener rule cov
   (`tests/test_sdv_connector_broker.py`, `SDV_CONNECTOR_BROKER=1`) run the slice beside a local test broker and
   read it there. Nor that the start spacing holds across hosts, state directories or connectors started by hand.
 
+## A fleet (SDV plan Video 3, fleet P1): `fleet.py`
+
+    ~/sdv-sim-venv/bin/python sdv/stack/fleet.py check --car A=REC_DIR --car B=REC_DIR [--car C=REC_DIR]
+    SDV_CONNECTOR_IMAGE=<image ID> SDV_DEVICE_DIR_A=<directory> SDV_DEVICE_DIR_B=<directory> [SDV_DEVICE_DIR_C=<directory>] \
+      ~/sdv-sim-venv/bin/python sdv/stack/fleet.py run --name NAME --car A=REC_DIR --car B=REC_DIR [--car C=REC_DIR]
+
+`fleet.py` replays two or three recordings at once on the PC, each with its own connector and device directory: cars
+A, B and C, as stack instances 1, 2 and 3. Its module docstring holds every refusal and the record word for word.
+
+- **`check`** writes nothing and prints one line a car, with `moves` and `distinct`. A car moves when its first and
+  its last sample above 0.1 m/s are at least 40 s apart, by the log's own times.
+- **Each car** is `stack.py replay --name <NAME>-<L> --feed vcan --bridge none --connector` with
+  `SDV_STACK_INSTANCE=<k>`. Its container names end in `-f<k>`, its interface is `vcanf<k>`, its databroker is on
+  port 55560 + k and its mock provider on port 50060 + k, and each of its containers carries `sdv.stack.instance=<k>`.
+- **The gate.** The cars' feeds start once `<run>/gate/go` is there. A car that ends before go, or is not ready within
+  `GATE_WAIT_S`, aborts the fleet (`<run>/gate/abort`).
+- **The start spacing:** one fleet start per 120 s (`<STATE>/fleet/started.json`). Car A shares the one-car run's
+  stamp; cars B and C have their own (`<STATE>/fleet/car-<L>`).
+- **The record** is `<run>/fleet.json`, the run being `SDV_RUNS/<YYYYMMDD>-<NAME>`. It names each car's
+  `vss-witness.jsonl`, the input of `trip_summary.py --local`. It holds no device directory's path and no value of
+  `connector.env`; the cars' logs are masked, and a run directory that holds one is not ok.
+- **A recording's log** must end at least 10 s inside its own bound on its player (the player's bound, under the
+  rules the stack keeps, below); `run` refuses a car whose log does not, or whose bound the stack refuses, before
+  anything is written.
+- **The opt-in local test** is `SDV_FLEET_BROKER=1` with `tests/test_sdv_fleet_broker.py`: three cars at a local test
+  broker, nothing pulled.
+- **Does not demonstrate** the cloud, any timing or the PC's capacity. A one-stack run started during a fleet
+  removes the fleet's containers, so nothing else runs then.
+
 ## SDV Phase 6 (WP2): the app's image ID, `--app external`, the host's spool and status, the marker
 
     ~/sdv-sim-venv/bin/python sdv/stack/stack.py up --feed vcan --app external [--connector]
@@ -346,13 +376,13 @@ recording is a file Phase 7's encoder wrote from a recorded CARLA take (`sdv/car
 starts nothing of CARLA.
 
 - **The recording kinds.** A recording's run type is its manifest line's `source.generator`. Its log is the basename of
-  the line's `recording.path`, and must be the generator's: `sigsim.log` for `sigsim`, `carla.log` for `carla`
-  (`sdv/inject/inject.py`'s `LOG_NAMES`; `bundle.py` keeps a copy and `stack.py` reads that one, held equal by a test).
-  Any other pair, another name or another generator is refused, and the refusal names both the generator and the log.
-  The log must hash to the line's sha256 and to `<log>.sha256`'s, which names no file but the log. The stack,
-  `step3.py`, the bundle and setup apply this one rule (`bundle.py`'s `log_name_of`) and none of them reads the form of
-  the path: `inject.py` checks a scenario entry path for the recordings it writes, and a sigsim recording that
-  `sigsim.py record` wrote under a relative `--out` runs as it did before Phase 7.
+  the line's `recording.path`, and must be the generator's: `sigsim.log` for `sigsim`, `carla.log` for `carla` and for
+  `carla-autoware` (the next section) (`sdv/inject/inject.py`'s `LOG_NAMES`; `bundle.py` keeps a copy and `stack.py`
+  reads that one, held equal by a test). Any other pair, another name or another generator is refused, and the refusal
+  names both the generator and the log. The log must hash to the line's sha256 and to `<log>.sha256`'s, which names no
+  file but the log. The stack, `step3.py`, the bundle and setup apply this one rule (`bundle.py`'s `log_name_of`) and
+  none of them reads the form of the path: `inject.py` checks a scenario entry path for the recordings it writes, and a
+  sigsim recording that `sigsim.py record` wrote under a relative `--out` runs as it did before Phase 7.
 - **Staging.** The log is staged in the run's `in/` under its own name. The dumpfile feed, replay mode's `--log`, the
   player, the bus check and every record name it by that name.
 - **The run type's generation pair.** A sigsim run uses exactly what it used before: `manifest.json`'s `vehicle_layer`
@@ -371,7 +401,10 @@ starts nothing of CARLA.
   `attribution.py`'s. `loadcheck`, and so the exit test's last step, also loads a CARLA run's staged catalogue, beside
   the generation's sigsim one. In guest mode the run manifest's `vss-monitor-guest` component names the build file of
   the image that ran: `ifs-vss.build` for `ifs-vss.bin`, `ifs-vss-carla.build` for `ifs-vss-carla.bin`, `ifs-ctl.build`
-  for `ifs-ctl.bin` (Phase 8 WP5: its :7160 runs the ctl build, which judges kind 4 as the vss build does), and for
+  for `ifs-ctl.bin` (Phase 8 WP5: its :7160 runs the ctl build, which judges kind 4 as the vss build does),
+  `ifs-ctl-p5.build` for `ifs-ctl-p5.bin` (Phase 8.5 WP9c: ifs-ctl.bin's twin whose monitor compiles kind 4's profile
+  5), `ifs-lane.build` for `ifs-lane.bin` (SDV Phase 9 C2b LB: ifs-ctl-p5.bin's twin whose monitor also compiles kind 6,
+  the lane claim (MONITOR_EXT_KINDS=0x54, `make lane`), and serves it on :7170 `svc 500` and :7171 `stamp`), and for
   any other image no build file of this tree.
 - **Provenance.** For a sigsim recording, whether the current `sdv/sim/sigsim.py` made it. For a CARLA recording,
   whether the current `sdv/carla` modules and `sdv/sim/carla_iso.py` are the ones its trip's `encoder_sha256` names. An
@@ -391,6 +424,47 @@ starts nothing of CARLA.
   and setup's recorded profiles list the recording's profile. `v1` and `v2` plan, stage and record as before.
 - **Does not demonstrate** anything about CARLA, the drive or vehicle dynamics (a recorded file is replayed), that a
   host replays the CARLA pair (Phase 7's WP5b, WP6 and WP7), the live path (WP3c), or any timing.
+
+## A carla-autoware recording (SDV Phase 8 WP9 P4)
+
+`sdv/carla/encode010.py` writes a third kind of recording: a passive CARLA 0.10.0 take, the drive Autoware made. Its
+manifest line's generator, and so its run type, is `carla-autoware`; its log is `carla.log`; its profile is the line's,
+profile 5. The stack replays the file as it replays the other two kinds and starts nothing of CARLA, Autoware or ROS.
+For this run type alone:
+
+- **No seed.** The encoder writes none, so none is read. A `seed` in the line's params is not read as one, the
+  context's and the run manifest's seed are null, and `--seed` is refused.
+- **No hazard window is judged.** The trip scripts no hard brake: it is one `passive` segment. `summary.json` needs the
+  line's name and well-formed `trip.segments` (each `[name, start_ms, end_ms]`, `0 <= start_ms <= end_ms`), and its
+  frame counts must still be the decoded log's. No window is derived (`replaycheck.anchor_windows` gives the anchor
+  alone), and the decision function's switches on the decoded recording are recorded, not held to a window. A replay's
+  decisions and its light are reported with `ok` null and `judged` false, `replay_gates()` has no `decisions` and no
+  `lights` entry, and the verdict's `lights_in_window` reads `not judged`.
+- **The oracle is the attribution rows, the counts and the run header.**
+  - The rows: the scenario checks, and one more, `C2-carla-autoware` (`check_can_path`). Every standard signal, the
+    five slots and `Vehicle.Speed`, has exactly one row; the CAN provider writes it from a CAN signal the mapping names;
+    its upstream is the recording's feeder; and no row names the ROS->VSS feeder. On the drive itself that feeder
+    writes only the overlay (`sdv/rosvss/mapping.py`'s `carla-autoware` write set), and a replay starts none.
+  - The counts: the values (`values_equal_decoded`: the recorder, the witness and the app's inputs, count for count),
+    the listeners, the bus frames on vcan and `same_behaviour` stay gates.
+  - The header: C10, C12a (its `source_rtf` must be the scenario entry's) and C8 at the start, and C12b at record
+    close, which fails on an rtf max above 1. This run type's verdict reads C12b too (`header_checks_at_close`).
+- **The rows' upstream** is `carla-feeder (<version>, <map>, <vehicle>)`, from the line's `version`, `map` and vehicle.
+- **The generation's pair** is `vehicle_layers.carla-autoware` and `databroker_catalogues.carla-autoware`; a generation
+  without them refuses the recording before anything is written.
+- **Provenance** is reported against `encode010.py`'s own `ENCODER_MODULES` (`CARLA010_ENCODER_MODULES`, held equal by a
+  test), under a CARLA recording's key and items. Against `encode.py`'s list it could never read equal.
+- **Two forms.** `replay --feed dumpfile` with no bridge runs whatever the profile's state. With a bridge, here
+  `replay --feed vcan --bridge broker`, the run is refused before anything is written while the line's profile is not
+  compiled into the generation's table. Once it is compiled, the Wheelbase prediction, C12a's compiled check and C12b's
+  console and bridge items apply as in any bridge run.
+- **Not changed.** A sigsim and a CARLA recording are read as before: each needs its seed and its one hard brake.
+  `sdv/inject/inject.py` names `carla-autoware` in its table and refuses every such source, with or without an rtf. No
+  plan and no recording of the bundle, the suite or setup is a `carla-autoware` one.
+- **Does not demonstrate** that the app switched the light when it should have on such a drive (not judged), nor that
+  the mock provider's writes or the app's actuations succeeded (the mock log's clean check was part of the light gate,
+  which is not read), anything about Autoware, CARLA or the drive, that the ROS->VSS feeder wrote only the overlay while
+  the drive went (the replay starts no feeder), that any host replays such a recording, or any timing.
 
 ## The ros feed (SDV Phase 8 WP3d): `up --feed ros`
 
@@ -488,6 +562,11 @@ Only from the recording directory, which the stack reads and never writes:
   must be the manifest line's and the decoded log's, or the run is refused. The live trip script is
   never run: the run manifest records summary.json's path and sha256, the manifest line, and whether
   the current `sdv/sim/sigsim.py` is still the file that made the recording (reported, not required).
+- A carla-autoware recording (`sdv/carla/encode010.py`'s) has no seed in its manifest line and no
+  hard brake in its trip. Its `summary.json` must carry the line's name, well-formed `trip.segments`
+  and the decoded log's frame count per message. No window is derived from it and the run manifest's
+  `expected.windows` says `judged: false`. See the section
+  `A carla-autoware recording (SDV Phase 8 WP9 P4)`.
 - The DBC is staged only from `~/sdv-cache/dbc/<sha256>.dbc`, checked against the line's sha256 and
   the git blob id in `dbc-sources.json`. The working copy of `slice.dbc` is never staged: others edit
   it, and its hash and comment-free body are only reported. When the cached copy is missing, the run
@@ -526,6 +605,11 @@ Only from the recording directory, which the stack reads and never writes:
   check refuses the run. It is written into the run's directory with the image ID of every writer.
 - **A fresh stack per replay.** The databroker keeps last values; nothing from one replay reaches the
   next.
+- **The player's bound.** A replay's player (python-can's on `vcan0`; on the dumpfile feed, the wait for the
+  provider's end of the log) is bounded by the log's own span, its first to its last frame, plus 30 s, rounded up
+  to a whole second and at most 900 s (`player_bound_s`). A longer log, or one with no frame, not in time order
+  (a frame stamped before the one ahead of it) or that cannot be read, is refused before the replay starts, with
+  nothing started.
 
 ## The exit test
 
@@ -590,7 +674,7 @@ The record's own gates determine its coverage; the recorder alone cannot establi
 
 Any timing: the replays are paced by wall clock, and every window carries a mapping allowance of one
 dynamics period. CAN arbitration, error frames or bus timing: vcan has none and `--dumpfile` never
-touches a bus. Anything about the QNX guest: no claim bridge runs, and the Monitor branch stays
+touches a bus. Anything about the QNX guest on the default local path: no claim bridge runs, and the Monitor branch stays
 empty. That the one-writer rule held while a run went: the databroker runs without authorization, so
 the table is a checked declaration, not an enforcement; the witness sees values, not who wrote them.
 That the databroker accepted each write the mock provider made: the gate reads the mock's own log,

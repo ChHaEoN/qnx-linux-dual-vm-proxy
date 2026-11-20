@@ -90,14 +90,14 @@
   "bridge": {
     "about": "The claim bridge's arm64 image (sdv/bridge/build_image.py --arch arm64; SDV Phase 3 WP0), here and not under local, which build_local builds whole. It bakes in the generated contract: the labels are the generation it was built from, so a new generation means a rebuild and a new pin.",
     "arm64": {
-      "id": "sha256:0a6637c2c7eb2a79746cbbd1c6e6ac603a8675af0eeb86475534a8b41a0825b3",
-      "config_digest": "sha256:f7307a7e2c53fb416c935fcc68a28fb6b85037bec3adc3d83cdc05f4a2e250e1",
+      "id": "sha256:942a547bfae49b443d11983cb7aad4b1056806cdeb302fdbd9240e025d8a0fa7",
+      "config_digest": "sha256:a6f0a090f123a55645aabff00da2cad8fd49fcd6ab1feae8cb8d349bea51011d",
       "tag": "sdv-local/vss-claim-bridge:0.1.0-arm64",
       "lock": "sdv/bridge/requirements.aarch64.lock"
     },
     "labels": {
       "sdv.kind4.catalog_digest": "0x4D68EA68",
-      "sdv.kind4.contract_sha256": "e8dca2c0f3e0fd917af539c9831dabe6b571dffd4b1165a0eac8e085ffd48c9d",
+      "sdv.kind4.contract_sha256": "70604d3dae589fb98e92bdb4e050b0637996f72483fecae00077ef34174deee5",
       "sdv.kind4.dbc_sha256": "531b9369996fbd133ee2e94a2fe434900a485436338e96ea3515e1c6142907e0"
     }
   },
@@ -179,5 +179,23 @@
       "sdv.carlaif.sources_sha256": "b4bd2c5b3083825255862025697ef508410b2547d90f65513fd701c7cae7667d",
       "sdv.carlaif.wheel_sha256": "b9a215f49f4e6c57160b53d95aa6507338d486a0171e744a31834cc5edc95d24"
     }
+  },
+  "zenoh": {
+    "about": "zenoh-bridge-ros2dds transport bridge, run by digest; the stack never pulls, bundles, deploys or scans it. The image's own entrypoint runs and sets nothing.",
+    "repo": "eclipse/zenoh-bridge-ros2dds",
+    "release": "1.10.2",
+    "trust": "first-use",
+    "index_digest": "sha256:0183b7e83790a8c57a069743776c2d913041760eb19e64d8cc4fbf7374269034",
+    "amd64": {
+      "manifest_digest": "sha256:2b9334911f293cff196735280bbc1f3333ec7d64f509d6d88b944e55bd10bbb6",
+      "image_id": "sha256:2b9334911f293cff196735280bbc1f3333ec7d64f509d6d88b944e55bd10bbb6",
+      "store": "containerd",
+      "pulled": "2026-11-02"
+    },
+    "arm64": {
+      "manifest_digest": "sha256:b0d4a734fb340949fd6d52648c4b2f834edd80f43898764b0b7c6f2e7f854e65",
+      "pulled": null
+    },
+    "entrypoint": "the image's /entrypoint.sh"
   }
 }

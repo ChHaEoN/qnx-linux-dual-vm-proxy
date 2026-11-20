@@ -46,24 +46,51 @@ THE RECORDING (SDV_RECORDING, a sigsim or a CARLA recording directory; read, nev
   with the Windows command that exports it from the commit dbc-sources.json names.
 
 RECORDING KINDS AND RUN TYPES (SDV Phase 7 WP3b; spec-2 2.1, 2.2)  A recording's run type is its line's source.generator:
-  sigsim, whose log is sigsim.log, or carla, whose log is carla.log (LOG_NAMES, bundle.py's copy of sdv/inject/inject.py's
-  table, held equal by a test). The log is the basename of the line's recording.path; any other pair, another name or
-  another generator is refused naming both. That is the one rule of the stack, step3.py, bundle.py and setup's
-  vss_setup.py alike: the form of the path is not read (sdv/inject/inject.py, which writes a rewrite's line, checks it
-  is a scenario entry path), so a sigsim recording sigsim.py wrote under a relative --out runs as it did before Phase 7.
-  The log is staged under its own name in in/, and the dumpfile feed, replay
-  mode's --log, the player and every record name it so. The run uses the generation's pair for its run type: a sigsim run
-  exactly today's (manifest.json's vehicle_layer and vss-databroker.json, whatever else the generation holds), a carla run
-  vehicle_layers.carla and databroker_catalogues.carla, each file checked against the manifest's outputs. The run type's
-  catalogue is staged as in/vss-databroker.json (the containers' argument vectors unchanged), and its vehicle layer is the
-  one the scenario table's Wheelbase row and the run manifest's catalogue name. A generation without vehicle_layers (one
-  made before Phase 7's freeze) runs sigsim only: a CARLA recording is refused there before anything is written. The run
-  header's run_type is the generator, its feed recording, its profile the line's, its source_rtf the line's source.rtf for
-  carla and null for sigsim; the scenario entry's source is the line's, rtf included, so C12a holds (attribution.py's CARLA
-  checks are unchanged). The CAN provider's rows name the run type's upstream (attribution-table section 4): sigsim's
-  `sigsim seed N` as attribution.py writes it, a CARLA run's `carla-feeder (<version>, <town>, seed N, <vehicle>)` from
-  its line (with_provider_upstream). loadcheck, and so exit-test's last step, loads a CARLA run's staged catalogue too,
-  beside the generation's sigsim one. A sigsim run's in/, argument vectors and records are what they were before Phase 7.
+  sigsim, whose log is sigsim.log, or carla, whose log is carla.log, or carla-autoware, whose log is carla.log too and
+  which is read as the next section says (LOG_NAMES, bundle.py's copy of sdv/inject/inject.py's table, held equal by a
+  test). The log is the basename of the line's recording.path; any other pair, another name or another generator is
+  refused naming both. That is the one rule of the stack, step3.py, bundle.py and setup's vss_setup.py alike: the form of
+  the path is not read (sdv/inject/inject.py, which writes a rewrite's line, checks it is a scenario entry path), so a
+  sigsim recording sigsim.py wrote under a relative --out runs as it did before Phase 7. The log is staged under its own
+  name in in/, and the dumpfile feed, replay mode's --log, the player and every record name it so. The run uses the
+  generation's pair for its run type: a sigsim run exactly today's (manifest.json's vehicle_layer and vss-databroker.json,
+  whatever else the generation holds), a carla run vehicle_layers.carla and databroker_catalogues.carla, each file checked
+  against the manifest's outputs. The run type's catalogue is staged as in/vss-databroker.json (the containers' argument
+  vectors unchanged), and its vehicle layer is the one the scenario table's Wheelbase row and the run manifest's catalogue
+  name. A generation without vehicle_layers (one made before Phase 7's freeze) runs sigsim only: a CARLA recording is
+  refused there before anything is written. The run header's run_type is the generator, its feed recording, its profile
+  the line's, its source_rtf the line's source.rtf for carla and null for sigsim; the scenario entry's source is the
+  line's, rtf included, so C12a holds (attribution.py's CARLA checks are unchanged). The CAN provider's rows name the run
+  type's upstream (attribution-table section 4): sigsim's `sigsim seed N` as attribution.py writes it, a CARLA run's
+  `carla-feeder (<version>, <town>, seed N, <vehicle>)` from its line (with_provider_upstream). loadcheck, and so
+  exit-test's last step, loads a CARLA run's staged catalogue too, beside the generation's sigsim one. A sigsim run's in/,
+  argument vectors and records are what they were before Phase 7.
+
+A CARLA-AUTOWARE RECORDING (SDV Phase 8 WP9 P4)  A third kind: sdv/carla/encode010.py's recording of a passive CARLA
+  0.10.0 take, the drive Autoware made (run type carla-autoware, its log carla.log, its profile the line's, 5). It runs on
+  the generation's carla-autoware pair and is read as a carla recording is, but for this run type alone:
+  - no seed: the encoder writes none, so none is read (one in the line's params is not read as one), the context's and
+    the run manifest's seed are null, and a --seed on the command line is refused;
+  - no hazard window is judged: the trip scripts no hard brake (one passive segment), so summary.json needs the line's
+    name and well-formed segments only (each [name, start_ms, end_ms], 0 <= start_ms <= end_ms), no window is derived
+    (replaycheck.anchor_windows: the anchor alone) and the decision function's switches on the decoded recording are
+    recorded, not held to one. A replay's decisions and its light are reported with ok null, replay's gates have no
+    decisions and no lights entry, and the verdict's lights_in_window reads `not judged`;
+  - the oracle is the attribution rows, the counts and the run header. The rows: the scenario checks and one more,
+    C2-carla-autoware (check_can_path): every standard signal (the five slots and Vehicle.Speed) has one row, written by
+    the CAN provider from a CAN signal the mapping names, its upstream the recording's feeder, and no row names the
+    ROS->VSS feeder, which writes only the overlay in this run type and is no part of a replay. The counts: the values
+    (recorder, witness and the app's inputs, count for count), the listeners, the bus frames and the same behaviour, all
+    gates as before. The header: C10, C12a (source_rtf the scenario entry's) and C8 at the start, C12b at close (an rtf
+    max above 1 fails it), which this run type's verdict reads too (header_checks_at_close);
+  - the CAN provider's rows name `carla-feeder (<version>, <map>, <vehicle>)`, from the line's version, map and vehicle;
+  - the provenance is reported against encode010.py's own module list (CARLA010_ENCODER_MODULES), under a carla
+    recording's key and items;
+  - a bridge (--bridge broker here, step3.py's modes) is refused before anything is written while the line's profile is
+    not compiled into the generation's table. So two forms run: `replay --feed dumpfile` with no bridge, whatever the
+    profile's state, and `replay --feed vcan --bridge broker` once the profile is compiled, where the Wheelbase
+    prediction, C12a's compiled check and C12b's console and bridge items apply as in any bridge run.
+  A sigsim and a carla recording are read as before: each needs its seed and its one hard brake.
 
 LIVE (SDV Phase 7 WP3c; spec-2 2.4)  `live` plays no recording: the stack's up path on the vcan feed (every container, the
   app included), the CAN provider on vcan0, the bridge in broker or can mode and the native `7160 svc 500` monitor, while
@@ -154,6 +181,10 @@ FEEDS (both replay one recording, identified by its sha256)
             binds 127.0.0.1 only.
   Each replay starts a fresh stack: the databroker keeps last values, and a value left from one
   replay must not reach the next.
+  The player's bound (player_bound_s): the vcan feed's player runs, and the dumpfile feed's wait for the provider's
+  end of the log waits, for the log's own span (its first to its last frame) plus PLAYER_HEADROOM_S (30 s), rounded up
+  to a whole second and at most PLAYER_BOUND_MAX_S (900 s); a longer log, or one with no frame, not in time order or
+  that cannot be read, is refused before anything of the replay is made or started.
   Broker mode (--bridge broker) needs the vcan feed: the dumpfile feed's --network none leaves the
   databroker's namespace with loopback only, so a bridge there could reach the databroker but never the
   monitor on the host's :7160 (the alternative, the native monitor inside that namespace, is not built).
@@ -288,13 +319,41 @@ TWIN CONTROL (SDV Phase 6 WP2; owner decision D11)  While the twin-control marke
   so is a Context with a bridge (step3.py makes its own), and the bridge's own start refuses first thing. A run with no
   bridge does not look.
 
+INSTANCE (video 3's fleet, package P1; sdv/stack/fleet.py starts one replay a car)  SDV_STACK_INSTANCE is read at import with
+  SDV_GEN to SDV_CACHE. Unset or empty, every constant, container name, label, port, interface, argument vector, docker call
+  and record is a one-stack run's, as before. 1, 2 or 3 is instance k: every name of NAMES and CONTAINERS gains -f<k>
+  (sdv-stack-connector-f2), the interface is vcanf<k>, the databroker's port 55560 + k (BROKER follows it) and the mock
+  provider's MOCK_PORT 50060 + k (50053 unset), every container carries --label sdv.stack.instance=<k> beside the run label,
+  remove_stack() removes only the containers labelled sdv.stack.instance=<k>, and the connector's run arguments gain
+  -e SDV_TWIN_DATABROKER=127.0.0.1:<55560 + k>, its own databroker over the image's default. Any other value is refused by
+  main() before anything is written, and the constants stay a one-stack run's. An instance run is `replay --feed vcan
+  --bridge none --connector` with --images build on SDV_HOST_ROLE=pc: main() refuses every other command (down and live
+  too), feed, bridge mode, a run without the connector, --images loaded and every other role, each in its own words and
+  before anything is pulled, written or started. down and the one-stack runs still remove every labelled container, a
+  fleet's included. SDV_STACK_FEED_GATE, taken only with an instance (alone it is refused), is the fleet's gate: the
+  absolute path of an existing directory outside the repo. Once the start checks pass and before the CAN provider starts,
+  the replay writes <gate>/ready-<k> ({"instance": k, "ready_ms": the host's wall clock in ms}, by write-then-rename) and
+  starts the feed only once <gate>/go exists. <gate>/abort, or GATE_WAIT_S (600 s, a design value) with no go, is a
+  StackError naming the gate, which ends the replay through its finally: collect, and this instance's containers removed
+  by docker rm -f (nothing is stopped first, so a ready car's connector ends without its stop document). An instance run's
+  result.json carries gate: {ready_ms, go_seen_ms}, go_seen_ms null when no gate was given (the feed then starts at once).
+  Does not demonstrate: that the cars' feeds start at one instant (each starts after the one go), any timing, the PC's
+  capacity, or anything of the cloud; and a one-stack run started while a fleet runs removes the fleet's containers: the
+  rule is that nothing else runs. Nor a refusal outside main(): only stack.py's main() refuses SDV_STACK_INSTANCE, so a
+  leftover one in the environment of a module that imports stack.py (sdv/stack/step3.py, sdv/arm64/arm64.py) gives it an
+  instance's names, its vcanf<k> and a remove_stack() of that instance alone.
+
 Does not demonstrate: any timing (the replays are paced by wall clock and every window carries a
 mapping allowance), CAN arbitration, error frames or bus timing (vcan has none; --dumpfile never
 touches a bus), anything about the QNX guest in native mode (the bridge mode's monitor is the native build of the
 same source, not the guest), or that the table's one-writer rule held while a run went (the databroker runs
 without authorization). For a CARLA recording: anything about CARLA, the drive or vehicle dynamics (the stack replays a
-recorded file as it replays sigsim's), or that a guest image lists profile 3 (C12b reads that at record close). In guest
-mode: any timing; the guest's boot, io-sock or its image beyond the image's sha256.
+recorded file as it replays sigsim's), or that a guest image lists profile 3 (C12b reads that at record close). For a
+carla-autoware recording also: that the app switched the light when it should have on that drive (no hazard window is
+judged), nor that the mock provider's writes or the app's actuations succeeded (the mock log's clean check was part of
+the light gate, which is not read), anything about Autoware or the drive, or that the ROS->VSS feeder wrote only the
+overlay while the drive went (the replay starts no feeder; its rows say who writes what in the replay). In guest mode:
+any timing; the guest's boot, io-sock or its image beyond the image's sha256.
 With --connector: anything about the far end the connector talks to (the stack starts it and reads its exit status and
 its log's first and last lines; what arrived is the far end's to say), or that the start spacing holds across hosts or
 state directories. With a cpuset or a hook: that docker kept a container on those CPUs, or that QEMU's pin held (the
@@ -353,6 +412,15 @@ RECORDING_DIR = Path(os.environ.get("SDV_RECORDING", "~/sdv-recordings/20260930-
 RUNS = Path(os.environ.get("SDV_RUNS", "~/sdv-runs")).expanduser()
 CACHE = Path(os.environ.get("SDV_CACHE", "~/sdv-cache")).expanduser()
 SIM_PY = Path(os.environ.get("SDV_SIM_VENV", "~/sdv-sim-venv")).expanduser() / "bin" / "python"
+# A fleet car's instance (module docstring, INSTANCE; sdv/stack/fleet.py): 1, 2 or 3, read here with the rest. Unset or empty,
+# every name, port, interface, label and argument vector is a one-stack run's; any other value is main()'s to refuse, and the
+# constants then stay today's. The gate is taken only with an instance (main() refuses it alone).
+INSTANCE_ENV = "SDV_STACK_INSTANCE"
+FEED_GATE_ENV = "SDV_STACK_FEED_GATE"
+INSTANCE_RAW = os.environ.get(INSTANCE_ENV, "")
+INSTANCE: Optional[int] = int(INSTANCE_RAW) if INSTANCE_RAW in ("1", "2", "3") else None
+FEED_GATE_RAW: Optional[str] = os.environ.get(FEED_GATE_ENV)
+SUFFIX = "" if INSTANCE is None else "-f%d" % INSTANCE      # on every container's name in an instance run
 
 # Recording kinds (module docstring, RECORDING KINDS AND RUN TYPES; spec-2 2.1): a recording's log by its line's
 # source.generator, read from bundle.py (sdv/inject/inject.py's LOG_NAMES, held equal by tests/test_sdv_stack.py).
@@ -362,6 +430,19 @@ SIGSIM_CATALOGUE = "vss-databroker.json"      # a sigsim run's catalogue; every 
 # equal by tests/test_sdv_stack.py): the CARLA provenance, reported as sigsim's is (carla_provenance).
 CARLA_ENCODER_MODULES = ("sdv/carla/encode.py", "sdv/carla/sendpolicy.py", "sdv/carla/drive.py", "sdv/carla/worldtie.py",
                          "sdv/sim/carla_iso.py")
+# A carla-autoware recording (module docstring, A CARLA-AUTOWARE RECORDING; SDV Phase 8 WP9 P4): the run type, the modules
+# that encode one (sdv/carla/encode010.py's ENCODER_MODULES, held equal by tests/test_sdv_stack.py), the standard signals
+# its oracle holds to the CAN path (sdv/rosvss/mapping.py's STANDARD, held equal by the same file) and that check's name.
+CARLA_AUTOWARE = "carla-autoware"
+CARLA010_ENCODER_MODULES = ("sdv/carla/encode010.py", "sdv/carla/encode.py", "sdv/carla/follow010.py", "sdv/carla/sendpolicy.py",
+                            "sdv/carla/worldtie.py", "sdv/sim/carla010_iso.py")
+STANDARD_SIGNALS = tuple(attr.SLOT_PATHS) + (attr.SPEED,)
+CAN_PATH_CHECK = "C2-carla-autoware"
+NOT_JUDGED = rc.NOT_JUDGED                    # how a record names the light gate of a replay with no hazard window
+HAZARD_WINDOW_NOTE = ("not judged: a carla-autoware recording's trip scripts no hard brake, so no window is derived; the gates "
+                      "are the values, the listeners, the same behaviour (exit-test), the bus frames (vcan), the bridge's result (with one) "
+                      "and the run header's checks")
+NO_SEED_FROM = "none: a carla-autoware recording has no seed (sdv/carla/encode010.py writes none) and none is read"
 HOST_ROLE_ENV = "SDV_HOST_ROLE"               # the run's host role (module docstring, HOST ROLE)
 HOST_ROLES = ("pc", "a1-metal", "c7g-metal", "orin")   # attribution-table: a role, never a hostname
 DEFAULT_HOST_ROLE = "pc"
@@ -371,19 +452,22 @@ AFTER_START_ENV = "SDV_AFTER_START"           # a command line (shlex, never a s
 CPUSET_FORBIDDEN = (0, 1, 2, 4)               # on the Orin QEMU's cores (0-2) and the probe's (4): no container runs there
 AFTER_START_KEY = "after_start"               # a replay's and a step-3 run's result: the hook's records, in start order
 PC_ONLY = ("loadcheck", "ageprobe", "wheelbaseprobe", "exit-test")    # the PC's probes (exit-test ends with loadcheck): not on orin
-BROKER_HOST, BROKER_PORT = "127.0.0.1", 55555
+FLEET_BROKER_PORT_BASE, FLEET_MOCK_PORT_BASE = 55560, 50060    # INSTANCE: instance k's databroker and mock provider ports, base + k
+BROKER_HOST, BROKER_PORT = "127.0.0.1", (55555 if INSTANCE is None else FLEET_BROKER_PORT_BASE + INSTANCE)
 BROKER = "%s:%d" % (BROKER_HOST, BROKER_PORT)
-VCAN = "vcan0"
+MOCK_PORT = 50053 if INSTANCE is None else FLEET_MOCK_PORT_BASE + INSTANCE     # the mock provider's port (MOCK_ADDR)
+VCAN = "vcan0" if INSTANCE is None else "vcanf%d" % INSTANCE
 FEEDS = ("dumpfile", "vcan")
 LABEL = "sdv.stack.run"
+INSTANCE_LABEL = "sdv.stack.instance"         # INSTANCE: on every container of an instance run, beside LABEL
 WITNESS = "vss-witness"      # a reader, not a writer: it has no row in the attribution table
 NAMES = {
-    attr.DATABROKER: "sdv-stack-databroker",
-    attr.MOCK_PROVIDER: "sdv-stack-mock-provider",
-    attr.RECORDER: "sdv-stack-recorder",
-    WITNESS: "sdv-stack-witness",
-    attr.APP: "sdv-stack-app",
-    attr.CAN_PROVIDER: "sdv-stack-can-provider",
+    attr.DATABROKER: "sdv-stack-databroker" + SUFFIX,
+    attr.MOCK_PROVIDER: "sdv-stack-mock-provider" + SUFFIX,
+    attr.RECORDER: "sdv-stack-recorder" + SUFFIX,
+    WITNESS: "sdv-stack-witness" + SUFFIX,
+    attr.APP: "sdv-stack-app" + SUFFIX,
+    attr.CAN_PROVIDER: "sdv-stack-can-provider" + SUFFIX,
 }
 WITNESS_LOG = "vss-witness.jsonl"
 WITNESS_CAPACITY = rc.WITNESS_CAPACITY      # witness.py's BUFFER_SIZE + 1: how the databroker names its lags ('capacity 1001')
@@ -416,15 +500,15 @@ BRIDGE_NOTES_GUEST = {
     "replay": "replay mode (the bridge reads the recording itself, no databroker), judged by the QNX guest's vss monitor over br0 (SDV "
               "Phase 3 WP2); bypasses the VSS API; a functional mode: no timing",
 }
-BRIDGE_CONTAINER = "sdv-stack-bridge"
+BRIDGE_CONTAINER = "sdv-stack-bridge" + SUFFIX
 # The twin connector (module docstring, twin-connector; SDV Phase 4 WP3). Not in NAMES: the six of Phase 1 stay six.
-CONNECTOR = "twin-connector"                  # manifest-classes: platform class. A reader: no row in the attribution table
-CONNECTOR_CONTAINER = "sdv-stack-connector"
+CONNECTOR = "twin-connector"                  # component class: platform. A reader: no row in the attribution table
+CONNECTOR_CONTAINER = "sdv-stack-connector" + SUFFIX
 CONTAINERS = dict(NAMES, **{attr.BRIDGE: BRIDGE_CONTAINER, CONNECTOR: CONNECTOR_CONTAINER})      # every container a run may start
 CONNECTOR_IMAGE_ENV = "SDV_CONNECTOR_IMAGE"   # the connector image's ID (sdv/connector/build_image.py prints it)
 DEVICE_DIR_ENV = "SDV_DEVICE_DIR"             # the device directory: the key, the certificate, the CA file, connector.env
 CONNECTOR_ENV_FILE = "connector.env"          # in the device directory: the endpoint and the two names, for --env-file
-# The connector's three mounts and no other (manifest-classes.md sections 5 to 7): where each lies in the container.
+# The connector's three mounts and no other: where each lies in the container.
 CONNECTOR_MOUNTS = {"spool": "/run/sdv-local/spool/v1", "status": "/run/sdv-local/status/v1", "device": "/run/sdv-local/device"}
 CONNECTOR_LABELS = ("sdv.twin.allowlist_version", "sdv.twin.allowlist_digest", "sdv.twin.catalogue_sha256")
 CONNECTOR_STOP_S = 30      # its stop's grace (a design value): the last flush is two publishes, each waited for (sdv/connector/limits.py)
@@ -436,9 +520,9 @@ CONNECTOR_NEEDS_VCAN = ("--connector needs --feed vcan: the dumpfile feed's name
                         "could read the databroker but never reach its far end; the vcan feed puts every container in the host's "
                         "namespace")
 CONNECTOR_NOT_WITH_GUEST = ("--connector is refused with the guest monitor mode: nothing the QNX monitor produces goes to the cloud "
-                            "(owner decision S11), and until Phase 5 brings its own evidence no connector runs beside a QNX guest")
+                            "(owner decision S11), and this stack refuses a connector beside its guest monitor mode")
 CONNECTOR_NOT_LOADED = ("--connector is refused with --images loaded: an aarch64 host's connector is Phase 5's (its arm64 image is "
-                        "pinned in images.json, connector.arm64, and runs nowhere yet)")
+                        "pinned in images.json, connector.arm64)")
 # SDV Phase 6 WP2 (module docstring, APP, HOST SPOOL AND STATUS, TWIN CONTROL; Phase 6 spec 2.2 and 2.7).
 APP_MODES = ("stack", "external")             # up --app: this run starts the app (Phase 1's way), or something outside the stack does
 APP_NOTES = {
@@ -479,11 +563,15 @@ MONITOR_MODES = ("native", "guest")
 LOCAL_MONITOR_HOST = "127.0.0.1"              # native mode: the bridge reaches the native monitor on the host's loopback
 # What starts the guest's monitor as `7160 svc 500`, by the image's file name: the build file that made it (ifs-vss.bin
 # Phase 2's, ifs-vss-carla.bin plan carla's, spec-2 2.3; ifs-ctl.bin Phase 8 WP5's, whose :7160 runs the ctl build,
-# kind 4 judged by the vss build's code, spec-2 2.1); tests/test_sdv_stack.py holds the table to every build file of
-# the tree that starts the vss monitor so. Any other image names none of them (GUEST_IMAGE_OTHER_BUILD).
+# kind 4 judged by the vss build's code, spec-2 2.1; ifs-ctl-p5.bin WP9 WP9c's, ifs-ctl.bin's twin whose monitor
+# compiles kind 4's profile 5; ifs-lane.bin C2b LB's, ifs-ctl-p5.bin's with kind 6, the
+# lane claim, compiled and served on :7170 and :7171 besides); tests/test_sdv_stack.py holds the table to every build
+# file of the tree that starts the vss monitor so. Any other image names none of them (GUEST_IMAGE_OTHER_BUILD).
 GUEST_IMAGE_BUILDS = {"ifs-vss.bin": "ipc-test/qnx-safety-monitor/ifs-vss.build",
                       "ifs-vss-carla.bin": "ipc-test/qnx-safety-monitor/ifs-vss-carla.build",
-                      "ifs-ctl.bin": "ipc-test/qnx-safety-monitor/ifs-ctl.build"}
+                      "ifs-ctl.bin": "ipc-test/qnx-safety-monitor/ifs-ctl.build",
+                      "ifs-ctl-p5.bin": "ipc-test/qnx-safety-monitor/ifs-ctl-p5.build",
+                      "ifs-lane.bin": "ipc-test/qnx-safety-monitor/ifs-lane.build"}
 GUEST_IMAGE_OTHER_BUILD = "the image's own build file, not one this tree names"
 # The clock each bridge mode reads its ages on (attribution-table 3.1, time_sync.age_clock), named as the
 # header names it. broker: the adapter expects the databroker's receipt stamp on CLOCK_REALTIME;
@@ -504,6 +592,8 @@ SETTLE_S = 2.0         # after the app's stop, for its final heartbeat to reach 
 VCAN_READY_S = 3.0     # after the provider opened vcan0, before the player starts
 AFTER_START_TIMEOUT_S = 30.0    # SDV_AFTER_START's bound per container (the board's re-pin reads and pins a few threads)
 AFTER_START_KEPT = 5            # the last lines of the hook's stdout, and of its stderr, kept in each record
+PLAYER_HEADROOM_S = 30          # past the log's own span (player_bound_s): python-can's start before its first frame, its own tail
+PLAYER_BOUND_MAX_S = 900        # a ceiling on any one replay's player: half of fleet.py's CAR_TIMEOUT_S, a whole car run's 1800 s
 
 # The live run (module docstring, LIVE; SDV Phase 7 WP3c, spec-2 2.4).
 LIVE_FEED = "live"                            # the run header's feed
@@ -564,16 +654,16 @@ ROS_FEED_PUBLISHERS: Dict[str, Dict[str, Any]] = {
                              "history": "KEEP_LAST", "depth": 10, "durability": "VOLATILE"},
 }
 ROS_NEEDS_PLANNING_SIM = ("--feed ros needs --run-type planning-sim: a carla-autoware drive's standard signals come from the CAN "
-                          "path, and the feeder writes only the overlay there (spec-2 2.5); sigsim and carla replay recordings")
+                          "path, and the feeder writes only the overlay there; sigsim and carla replay recordings")
 RUN_TYPE_NEEDS_ROS = ("--run-type is the ros feed's (up --feed ros --run-type planning-sim): every other feed's run type is its "
                       "recording's")
-ROS_NOT_REPLAYED = ("--feed ros is up's alone: replay and exit-test replay a recording, and the ros feed plays none (spec-2 2.5)")
-ROS_NO_APP = "--app with --feed ros: a planning-sim run starts no app (spec-2 2.5)"
-ROS_NO_CONNECTOR = "--connector with --feed ros: a planning-sim run starts no twin connector (spec-2 2.5)"
+ROS_NOT_REPLAYED = ("--feed ros is up's alone: replay and exit-test replay a recording, and the ros feed plays none")
+ROS_NO_APP = "--app with --feed ros: a planning-sim run starts no app"
+ROS_NO_CONNECTOR = "--connector with --feed ros: a planning-sim run starts no twin connector"
 ROS_NO_SEED = "--seed with --feed ros: the ros feed plays no recording, so it has no seed to check"
-ROS_NOT_LOADED = ("--images loaded with --feed ros: the feeder's image is amd64 only (spec-2 section 0 item 5), and the ros feed "
+ROS_NOT_LOADED = ("--images loaded with --feed ros: the feeder's image is amd64 only, and the ros feed "
                   "runs on the PC")
-ROS_PC_ONLY = ("--feed ros on %s=%%s: the feeder's image is amd64 only (spec-2 section 0 item 5), and the ros feed runs on the PC"
+ROS_PC_ONLY = ("--feed ros on %s=%%s: the feeder's image is amd64 only, and the ros feed runs on the PC"
                % HOST_ROLE_ENV)
 MONITOR_NEEDS_BROKER = ("--monitor and the guest options with --feed ros need --bridge broker: without a bridge no claim is "
                         "judged")
@@ -1088,9 +1178,9 @@ def _read_recording_file(rec_dir: Path, name: str) -> bytes:
 
 def recording_identity(rec_dir: Path) -> Dict[str, Any]:
     """The recording and its manifest line (module docstring, RECORDING KINDS AND RUN TYPES): its log is the one the
-    line names by its generator (bundle.log_name_of: sigsim.log or carla.log; any other pair or name refused naming
-    both), whose sha256 must equal the line's and the one <log>.sha256 lists, which names no file but the log. The run
-    type is the line's generator."""
+    line names by its generator (bundle.log_name_of: sigsim.log, or carla.log for carla and carla-autoware; any other
+    pair or name refused naming both), whose sha256 must equal the line's and the one <log>.sha256 lists, which names no
+    file but the log. The run type is the line's generator."""
     raw_line = _read_recording_file(rec_dir, "manifest-line.json")
     line = json.loads(raw_line.decode("ascii"))
     name, why = bd.log_name_of(line)
@@ -1127,11 +1217,41 @@ def recording_seed(line: Dict[str, Any], cli_seed: Optional[int]) -> int:
     return seed
 
 
+def is_passive(run_type: Any) -> bool:
+    """Whether a recording's run type is the one read with no seed, no hard brake and no hazard window (module docstring,
+    A CARLA-AUTOWARE RECORDING): carla-autoware alone. A sigsim and a carla recording need all three."""
+    return run_type == CARLA_AUTOWARE
+
+
+def refuse_cli_seed(cli_seed: Optional[int]) -> None:
+    """A carla-autoware recording has no seed to agree with: a --seed is refused, as a disagreeing one is elsewhere."""
+    if cli_seed is not None:
+        raise StackError("--seed %d: a carla-autoware recording has no seed (its manifest line names none: "
+                         "sdv/carla/encode010.py), so leave --seed out" % cli_seed)
+
+
+def passive_summary(rec_dir: Path, raw: bytes, summary: Dict[str, Any], trip: Dict[str, Any], line: Dict[str, Any]) -> Dict[str, Any]:
+    """recording_summary for a carla-autoware recording (sdv/carla/encode010.py's summary.json): its name must be the
+    manifest line's and its trip.segments a list of [name, start_ms, end_ms] with at least one segment, each with
+    0 <= start_ms <= end_ms (the log's clock starts at 0). No seed is read (the encoder writes none) and no hard brake is
+    looked for: the trip is the drive Autoware made, and no window is derived from it (hard_brake_ms None)."""
+    if summary.get("name") != line["name"]:
+        raise StackError("summary.json does not describe this recording: name %r, the manifest line's %r" % (summary.get("name"), line["name"]))
+    segs = trip["segments"]
+    if not segs or not all(isinstance(s, list) and len(s) == 3 and isinstance(s[0], str)
+                           and all(isinstance(x, int) and not isinstance(x, bool) for x in s[1:]) and 0 <= s[1] <= s[2]
+                           for s in segs):
+        raise StackError("summary.json: trip.segments is not a list of [name, start_ms, end_ms] with 0 <= start_ms <= end_ms and at "
+                         "least one segment: %r" % (segs[:3],))
+    return {"path": str(rec_dir / "summary.json"), "sha256": hashlib.sha256(raw).hexdigest(), "trip": trip, "hard_brake_ms": None}
+
+
 def recording_summary(rec_dir: Path, line: Dict[str, Any]) -> Dict[str, Any]:
     """summary.json, which sigsim wrote into the recording directory with the recording: its trip
     (trip.segments is what the windows are derived from) must be the manifest line's -- same name,
     same seed -- and have exactly one hard-brake segment. Its message counts are checked against
-    the decoded log by check_summary_counts once the log is decoded."""
+    the decoded log by check_summary_counts once the log is decoded. A carla-autoware recording's is
+    read by passive_summary instead: no seed, no hard brake."""
     raw = _read_recording_file(rec_dir, "summary.json")
     try:
         summary = json.loads(raw.decode("utf-8"))
@@ -1140,6 +1260,8 @@ def recording_summary(rec_dir: Path, line: Dict[str, Any]) -> Dict[str, Any]:
     trip = summary.get("trip") if isinstance(summary, dict) else None
     if not isinstance(trip, dict) or not isinstance(trip.get("segments"), list):
         raise StackError("summary.json has no trip.segments")
+    if is_passive(line["source"]["generator"]):
+        return passive_summary(rec_dir, raw, summary, trip, line)
     seed = line["source"]["params"]["seed"]
     problems = []
     if summary.get("name") != line["name"]:
@@ -1183,33 +1305,44 @@ def sigsim_provenance(line: Dict[str, Any], path: Path = SIGSIM) -> Dict[str, An
             "note": "reported only: the windows come from the recording's summary.json, never from running sigsim"}
 
 
-def carla_provenance(trip: Dict[str, Any], repo: Path = REPO) -> Dict[str, Any]:
+def carla_provenance(trip: Dict[str, Any], repo: Path = REPO, modules: Sequence[str] = CARLA_ENCODER_MODULES) -> Dict[str, Any]:
     """Whether the sdv/carla modules and sdv/sim/carla_iso.py that encoded a CARLA recording (its trip's encoder_sha256)
     are now the files of CARLA_ENCODER_MODULES. Reported, never required, as sigsim's is: nothing of a run comes from
     running the encoder. A trip that names none (an injected rewrite drops it: sdv/inject/inject.py TRIP_KEPT) reports
-    None."""
+    None. modules: the list the trip's hashes are compared with (passive_provenance gives a carla-autoware recording's)."""
     want = trip.get("encoder_sha256") if isinstance(trip.get("encoder_sha256"), dict) else None
     now: Dict[str, Optional[str]] = {}
-    for rel in CARLA_ENCODER_MODULES:
+    for rel in modules:
         try:
             now[rel] = sha256_file(repo / rel)
         except OSError:
             now[rel] = None
-    return {"files": list(CARLA_ENCODER_MODULES), "recording_encoder_sha256": want, "current_sha256": now,
+    return {"files": list(modules), "recording_encoder_sha256": want, "current_sha256": now,
             "current_equals_recording": want is not None and want == now,
             "note": "reported only: the windows come from the recording's summary.json, never from running the encoder"}
+
+
+def passive_provenance(trip: Dict[str, Any], repo: Path = REPO) -> Dict[str, Any]:
+    """carla_provenance for a carla-autoware recording: sdv/carla/encode010.py's trip hashes its own module list
+    (CARLA010_ENCODER_MODULES), so against encode.py's list current_equals_recording could never be true. The same items,
+    reported under the same key; its note names no window, since none is derived for this run type."""
+    return dict(carla_provenance(trip, repo, CARLA010_ENCODER_MODULES),
+                note="reported only: nothing of a run comes from running the encoder")
 
 
 def provider_upstream(line: Dict[str, Any], seed: int) -> str:
     """The upstream of the CAN provider's rows for the recording's run type (attribution-table section 4, its column of
     the run type): sigsim's is attribution.scenario_rows' own `sigsim seed N`; a CARLA recording's is the feeder's,
     `carla-feeder (<version>, <town>, seed N, <vehicle>)`, from its line (sdv/carla/encode.py's params and source vehicle;
-    a value the line lacks reads `?`)."""
+    a value the line lacks reads `?`). A carla-autoware recording's has no seed and names the line's map:
+    `carla-feeder (<version>, <map>, <vehicle>)` (sdv/carla/encode010.py's params; the seed given is not read)."""
     source = line["source"]
     if source["generator"] == "sigsim":
         return "sigsim seed %d" % seed
     params = source.get("params") if isinstance(source.get("params"), dict) else {}
     vehicle = source.get("vehicle") if isinstance(source.get("vehicle"), dict) else {}
+    if is_passive(source["generator"]):
+        return "carla-feeder (%s, %s, %s)" % (params.get("version", "?"), params.get("map", "?"), vehicle.get("name", "?"))
     return "carla-feeder (%s, %s, seed %d, %s)" % (params.get("version", "?"), params.get("town", "?"), seed, vehicle.get("name", "?"))
 
 
@@ -1221,6 +1354,41 @@ def with_provider_upstream(rows: List[Dict[str, Any]], line: Dict[str, Any], see
     if want == sigsim:
         return rows
     return [dict(r, upstream=want) if r["writer"] == attr.CAN_PROVIDER and r["upstream"] == sigsim else r for r in rows]
+
+
+def check_can_path(rows: Sequence[Dict[str, Any]], mapping: Dict[str, Dict[str, Any]], upstream: str) -> attr.Check:
+    """The oracle of a carla-autoware replay on its rows (module docstring, A CARLA-AUTOWARE RECORDING): every standard
+    signal (STANDARD_SIGNALS: what the ROS->VSS feeder writes on the planning simulator and must not write in this run
+    type) has exactly one row, written by the CAN provider from a CAN signal the mapping names, with the recording's
+    feeder as its upstream; and no row names the ROS->VSS feeder as its writer (a replay starts none)."""
+    problems = []
+    for path in STANDARD_SIGNALS:
+        got = [r for r in rows if r["path"] == path]
+        if len(got) != 1:
+            problems.append("%s has %d rows, not one" % (path, len(got)))
+            continue
+        r = got[0]
+        if r["writer"] != attr.CAN_PROVIDER or not str(r["ingress"]).startswith("can:") or path not in mapping:
+            problems.append("%s is written by %s (ingress %s%s), not by the CAN provider from a CAN signal the mapping names"
+                            % (path, r["writer"], r["ingress"], "" if path in mapping else "; no dbc2vss entry"))
+        elif r["upstream"] != upstream:
+            problems.append("%s names the upstream %r, not the recording's %r" % (path, r["upstream"], upstream))
+    fed = sorted(r["path"] for r in rows if r["writer"] == attr.FEEDER)
+    if fed:
+        problems.append("the ROS->VSS feeder is named as the writer of %s: a replay starts no feeder" % ", ".join(fed))
+    return (CAN_PATH_CHECK, not problems, "every standard signal is the CAN provider's, from the recording's feeder; no row is the "
+            "ROS->VSS feeder's" if not problems else "; ".join(problems))
+
+
+def refuse_uncompiled_profile(bridge: str, profile_id: Any, contract: Any) -> None:
+    """A carla-autoware recording with a bridge (module docstring, A CARLA-AUTOWARE RECORDING): refused while the line's
+    profile is not in the generation's compiled table, before anything is written. C12a would refuse the same run at its
+    start, once the stack is up. A profile_id that is no integer (JSON's true, which equals 1; 5.0) is in no table."""
+    compiled = tuple(getattr(contract, "COMPILED_PROFILE_IDS", ()))
+    if isinstance(profile_id, bool) or not isinstance(profile_id, int) or profile_id not in compiled:
+        raise StackError("--bridge %s: profile %r (the carla-autoware recording's) is not compiled into this generation's table "
+                         "%s, so no monitor built from it holds the profile and C12a would refuse the run at its start. Replay "
+                         "the recording without a bridge, or on a generation that compiles the profile" % (bridge, profile_id, list(compiled)))
 
 
 def dbc_body(text: str) -> str:
@@ -1944,6 +2112,93 @@ def connector_checks(ctx: Any, feed: str) -> None:
         raise spacing_refusal(left)
 
 
+# --- INSTANCE: one car of a fleet (module docstring, INSTANCE; video 3's fleet, sdv/stack/fleet.py) -------------------------
+
+GATE_WAIT_S = 600.0           # how long a car waits at the fleet's gate for go once it is ready (a design value; fleet.py's too)
+GATE_POLL_S = 0.2             # how often it looks
+GATE_READY, GATE_GO, GATE_ABORT = "ready-%d", "go", "abort"      # the gate's files: this car's, and the fleet's two
+
+
+def instance_labels() -> List[str]:
+    """The label every container of an instance run carries beside LABEL; none in a one-stack run."""
+    return [] if INSTANCE is None else ["--label", "%s=%d" % (INSTANCE_LABEL, INSTANCE)]
+
+
+def feed_gate() -> Optional[Path]:
+    """SDV_STACK_FEED_GATE as read at import: None when unset; else the absolute path of an existing directory outside the
+    repo, refused otherwise. A refusal names the variable, never its value."""
+    if FEED_GATE_RAW is None:
+        return None
+    d = Path(FEED_GATE_RAW)
+    if not FEED_GATE_RAW or not d.is_absolute() or not d.is_dir():
+        raise StackError("%s must be the absolute path of an existing directory: the fleet's gate, which sdv/stack/fleet.py makes in "
+                         "its run directory" % FEED_GATE_ENV)
+    if inside_repo(d):
+        raise StackError("%s names a directory inside the repo: the fleet's gate lies in its run directory, outside it" % FEED_GATE_ENV)
+    return d
+
+
+def instance_refusals(a: argparse.Namespace) -> None:
+    """What main() refuses for INSTANCE, before anything is pulled, written or started: an instance other than 1, 2 or 3; the
+    gate without an instance; in an instance run any command but replay, a feed other than vcan, a bridge, no connector,
+    --images loaded, a host role other than pc, and a gate that is not an existing absolute directory outside the repo. Each
+    in its own words, naming SDV_STACK_INSTANCE (the gate's own, SDV_STACK_FEED_GATE)."""
+    if INSTANCE_RAW and INSTANCE is None:
+        raise StackError("%s=%r: 1, 2 or 3 (a fleet car's instance, which sdv/stack/fleet.py sets), or unset for a one-stack run"
+                         % (INSTANCE_ENV, INSTANCE_RAW))
+    if INSTANCE is None:
+        if FEED_GATE_RAW is not None:
+            raise StackError("%s is taken only with %s (a fleet car's run, which sdv/stack/fleet.py starts): unset it for this run"
+                             % (FEED_GATE_ENV, INSTANCE_ENV))
+        return
+    who = "%s=%d, a fleet car's run (sdv/stack/fleet.py)," % (INSTANCE_ENV, INSTANCE)
+    if a.cmd != "replay":
+        raise StackError("%s is a `replay` alone, never `%s`: every other command is a one-stack run's" % (who, a.cmd))
+    if a.feed != "vcan":
+        raise StackError("%s needs --feed vcan: each car's provider and player run on its own vcanf%d in the host's namespace, the one "
+                         "its connector reaches out of" % (who, INSTANCE))
+    if a.bridge != "none":
+        raise StackError("%s takes --bridge none alone: a fleet runs no bridge and no vss monitor, and nothing the QNX monitor produces "
+                         "goes to the cloud (owner decision S11)" % who)
+    if not a.connector:
+        raise StackError("%s needs --connector: each car of a fleet is a twin connector's run, one device identity a car" % who)
+    if a.images != "build":
+        raise StackError("%s takes --images build alone: an aarch64 host's connector is Phase 5's" % who)
+    try:
+        role: Optional[str] = host_role()
+    except StackError:
+        role = None
+    if role != "pc":
+        raise StackError("%s runs on %s=pc alone: the fleet's ports and interfaces are the PC's" % (who, HOST_ROLE_ENV))
+    feed_gate()
+
+
+def gate_wait(gate: Optional[Path], k: int) -> Dict[str, Optional[int]]:
+    """INSTANCE's gate, once the start checks passed and before the CAN provider starts: the moment this car is ready (the
+    host's wall clock, ms) and, with a gate, ready-<k> written there by write-then-rename and the feed held until the
+    fleet's go is there. abort, or GATE_WAIT_S with no go, is a StackError naming the gate, which ends the replay through its
+    finally (collect, and this instance's containers removed by docker rm -f; nothing is stopped first). Without a gate the
+    feed starts at once (go_seen_ms null)."""
+    ready = wall_ms()
+    rec: Dict[str, Optional[int]] = {"ready_ms": ready, "go_seen_ms": None}
+    if gate is None:
+        return rec
+    tmp = gate / (".%s.tmp" % (GATE_READY % k))
+    tmp.write_text(json.dumps({"instance": k, "ready_ms": ready}, sort_keys=True) + "\n", encoding="utf-8")
+    os.replace(str(tmp), str(gate / (GATE_READY % k)))
+    end = time.monotonic() + GATE_WAIT_S
+    while True:
+        if (gate / GATE_ABORT).exists():
+            raise StackError("the fleet's gate %s (%s) holds %s: this car's feed is not started" % (gate, FEED_GATE_ENV, GATE_ABORT))
+        if (gate / GATE_GO).exists():
+            rec["go_seen_ms"] = wall_ms()
+            return rec
+        if time.monotonic() >= end:
+            raise StackError("no %s in the fleet's gate %s (%s) within %d s: this car's feed is not started"
+                             % (GATE_GO, gate, FEED_GATE_ENV, GATE_WAIT_S))
+        time.sleep(GATE_POLL_S)
+
+
 def build_native_monitor(out: Path) -> Dict[str, Any]:
     """monitor.c's vss build for the host (build-monitor-native.sh with MONITOR_EXT_KINDS=0x10), into out, a path in
     the run directory: never the script's default OUT, whose source guard protects the ladder's host arm."""
@@ -2050,11 +2305,16 @@ class Context:
         # the recording, its manifest line and its summary: refused before anything is pulled or written
         rec = recording_identity(RECORDING_DIR)
         line = rec["manifest_line"]
-        seed = recording_seed(line, self.cli_seed)
+        # a carla-autoware recording (module docstring, A CARLA-AUTOWARE RECORDING): no seed, no hard brake, no window
+        passive = is_passive(rec["run_type"])
+        if passive:
+            refuse_cli_seed(self.cli_seed)
+        seed: Optional[int] = None if passive else recording_seed(line, self.cli_seed)
         self.seed = seed
         summ = recording_summary(RECORDING_DIR, line)
         # the provenance, reported as sigsim's is for either kind (module docstring, THE RECORDING)
-        provenance = {"sigsim": sigsim_provenance(line)} if rec["run_type"] == "sigsim" else {"carla": carla_provenance(summ["trip"])}
+        provenance = ({"sigsim": sigsim_provenance(line)} if rec["run_type"] == "sigsim" else
+                      {"carla": passive_provenance(summ["trip"])} if passive else {"carla": carla_provenance(summ["trip"])})
         dbc = resolve_dbc(line["source"]["params"]["dbc_sha256"])
         # the run type's catalogue and vehicle layer (RECORDING KINDS AND RUN TYPES): refused here, before anything is written
         pair = generation_pair(generation_manifest(), rec["run_type"])
@@ -2063,6 +2323,8 @@ class Context:
         self.run_type, self.log_name, self.catalogue_file = rec["run_type"], rec["log_name"], pair["catalogue"]
         self.catalogue_tree = json.loads((GEN / pair["catalogue"]).read_text(encoding="utf-8"))
         self.catalogue = attr.leaf_nodes(self.catalogue_tree)
+        if passive and self.bridge != "none":
+            refuse_uncompiled_profile(self.bridge, line.get("profile_id"), self.contract)
         self.wheelbase: Optional[Dict[str, Any]] = None
         if self.bridge == "broker":
             # Spec 5.6, both branches, predicted from the catalogue the stack stages: a served value other than the
@@ -2109,29 +2371,37 @@ class Context:
         frame_counts = check_summary_counts(summ["trip"], self.decoded["frames"])
         dyn = self.contract.RULE26_DBC_MESSAGE
         try:
-            self.windows = rc.expected_windows(summ["trip"], self.decoded["frames"], self.mapping[rc.V_PATH]["signal"],
-                                               int(self.contract.DBC_PERIOD_MS[dyn]))
+            self.windows = (rc.anchor_windows(self.decoded["frames"], self.mapping[rc.V_PATH]["signal"], int(self.contract.DBC_PERIOD_MS[dyn]))
+                            if passive else
+                            rc.expected_windows(summ["trip"], self.decoded["frames"], self.mapping[rc.V_PATH]["signal"],
+                                                int(self.contract.DBC_PERIOD_MS[dyn])))
         except ValueError as exc:         # e.g. the vehicle never moves again after the hard brake
             raise StackError("the windows cannot be derived from summary.json and the decoded recording: %s" % exc) from exc
         self.windows["summary_sha256"] = summ["sha256"]
         self.prediction = rc.predict(self.decoded["frames"], self.mapping[rc.V_PATH]["signal"], self.mapping[rc.A_PATH]["signal"], self.hz)
-        pred_ok = (len(self.prediction) == 2 and self.prediction[0]["hazard"] and not self.prediction[1]["hazard"]
-                   and rc.in_window(self.prediction[0]["t_rec_ms"], self.windows["on_window_ms"])
-                   and rc.in_window(self.prediction[1]["t_rec_ms"], self.windows["off_window_ms"]))
+        # a carla-autoware recording: the prediction is recorded and held to no window (none is derived)
+        pred_ok = passive or (len(self.prediction) == 2 and self.prediction[0]["hazard"] and not self.prediction[1]["hazard"]
+                              and rc.in_window(self.prediction[0]["t_rec_ms"], self.windows["on_window_ms"])
+                              and rc.in_window(self.prediction[1]["t_rec_ms"], self.windows["off_window_ms"]))
         if not pred_ok:
             raise StackError("the decision function applied to the decoded recording does not switch once inside the "
                              "windows summary.json gives: %s vs %s" % (self.prediction, self.windows))
         # the scenario table and its checks
         self.bridge_writes = bridge_writes(self.contract) if self.bridge == "broker" else []
+        # attribution.scenario_rows labels the CAN provider's rows `sigsim seed N`, which with_provider_upstream replaces for
+        # any other run type: a recording without a seed gives it 0, a label no row keeps
+        row_seed = 0 if seed is None else seed
         self.rows = with_provider_upstream(attr.scenario_rows(self.catalogue, self.mapping, self.dbc, self.mock_writes, attr.APP,
-                                                              self.hz.WRITES, list(MONITOR_DISPLAY), self.recorded, seed,
+                                                              self.hz.WRITES, list(MONITOR_DISPLAY), self.recorded, row_seed,
                                                               bridge_writes=self.bridge_writes,
-                                                              vehicle_layer=layer["file"] if layer else None), line, seed)
+                                                              vehicle_layer=layer["file"] if layer else None), line, row_seed)
         write_sets: Dict[str, Iterable[str]] = {attr.CAN_PROVIDER: list(self.mapping), attr.MOCK_PROVIDER: self.mock_writes,
                                                 attr.APP: list(self.hz.WRITES)}
         if self.bridge_writes:
             write_sets[attr.BRIDGE] = list(self.bridge_writes)
         checks = attr.check_rows(self.rows, self.catalogue, self.mapping, self.dbc, write_sets, attr.APP, bridge_mode=self.bridge)
+        if passive:
+            checks.append(check_can_path(self.rows, self.mapping, provider_upstream(line, row_seed)))
         line = rec["manifest_line"]
         self.scenario = {
             "format": 1,
@@ -2175,13 +2445,15 @@ class Context:
             "recording": dict({
                 "dir": rec["dir"], "sha256": rec["sha256"], "manifest_line": line,
                 "manifest_line_sha256": rec["manifest_line_sha256"],
-                "seed": seed, "seed_from": "the manifest line (source.params.seed)", "cli_seed": self.cli_seed,
+                "seed": seed, "seed_from": NO_SEED_FROM if passive else "the manifest line (source.params.seed)", "cli_seed": self.cli_seed,
                 "summary": {"path": summ["path"], "sha256": summ["sha256"], "hard_brake_ms": summ["hard_brake_ms"],
                             "frames_per_message": frame_counts},
             }, **provenance),
             "dbc": dbc,
             "staged_inputs_sha256": self.staged,
-            "expected": {"windows": self.windows, "windows_from": "summary.json %s (trip.segments) and the decoded recording" % summ["sha256"],
+            "expected": {"windows": self.windows,
+                         "windows_from": ("no hazard window is judged: summary.json %s scripts no hard brake; the anchor is the decoded "
+                                          "recording's" if passive else "summary.json %s (trip.segments) and the decoded recording") % summ["sha256"],
                          "prediction": self.prediction,
                          "counts": {p: len(v) for p, v in self.decoded["values"].items()}, "half_lsb": self.decoded["half_lsb"]},
             "scenario_table": {"file": "ownership.json", "sha256": "sha256:" + self.ownership_sha256,
@@ -2394,7 +2666,8 @@ class LiveContext(Context):
 # --- one stack ----------------------------------------------------------------------------------
 
 def remove_stack() -> None:
-    ids = docker("ps", "-aq", "--filter", "label=" + LABEL).stdout.split()
+    """Every container carrying the stack's label, a fleet's included; in an instance run (INSTANCE) that instance's alone."""
+    ids = docker("ps", "-aq", "--filter", "label=" + (LABEL if INSTANCE is None else "%s=%d" % (INSTANCE_LABEL, INSTANCE))).stdout.split()
     if ids:
         docker("rm", "-f", *ids, timeout=120)
 
@@ -2489,14 +2762,14 @@ class NativeMonitor:
 def start(ctx: Context, component: str, feed: str, replay_dir: Path, run_label: str) -> str:
     name = CONTAINERS[component]
     ids = ctx.image_ids()
-    base = ["run", "-d", "--name", name, "--label", "%s=%s" % (LABEL, run_label)] + common_flags(ctx) + net_of(feed, component)
+    base = ["run", "-d", "--name", name, "--label", "%s=%s" % (LABEL, run_label)] + instance_labels() + common_flags(ctx) + net_of(feed, component)
     uid = "%d:%d" % (os.getuid(), os.getgid())
     if component == attr.DATABROKER:
         args = base + ["--read-only", "-e", "KUKSA_DATABROKER_ADDR=" + BROKER_HOST, "-v", "%s:/in:ro" % ctx.in_dir,
                        upstream_ref(ctx.images, component), "--vss", "/in/vss-databroker.json",
                        "--address", BROKER_HOST, "--port", str(BROKER_PORT), "--insecure"]
     elif component == attr.MOCK_PROVIDER:
-        args = base + ["-e", "VDB_ADDRESS=" + BROKER, "-e", "MOCK_ADDR=%s:50053" % BROKER_HOST,
+        args = base + ["-e", "VDB_ADDRESS=" + BROKER, "-e", "MOCK_ADDR=%s:%d" % (BROKER_HOST, MOCK_PORT),
                        "-v", "%s:/mock/mock.py:ro" % MOCK_FILE, upstream_ref(ctx.images, component)]
     elif component == attr.RECORDER:
         args = base + ["--read-only", "--user", uid, "-v", "%s:/out" % replay_dir, ids[component],
@@ -2541,7 +2814,7 @@ def start(ctx: Context, component: str, feed: str, replay_dir: Path, run_label: 
         if script.is_file():
             args += ["--script", "/script.json"]
     elif component == CONNECTOR:
-        # Three mounts and no other (manifest-classes.md sections 5 to 7), each with --mount, which refuses a missing
+        # Three mounts and no other, each with --mount, which refuses a missing
         # source where -v would make a directory: the spool (read-write: the spool record and the connector's own start
         # stamp), the status (read-only: the updater's record), the device directory (read-only). The spool and the
         # status are the replay's own directories, or the host's (HOST SPOOL AND STATUS: SDV_SPOOL_DIR, SDV_STATUS_DIR) at
@@ -2561,8 +2834,10 @@ def start(ctx: Context, component: str, feed: str, replay_dir: Path, run_label: 
         args = base + ["--read-only", "--user", uid, "--restart", "no",
                        "--mount", "type=bind,src=%s,dst=%s" % (spool, CONNECTOR_MOUNTS["spool"]),
                        "--mount", "type=bind,src=%s,dst=%s,readonly" % (status, CONNECTOR_MOUNTS["status"]),
-                       "--mount", "type=bind,src=%s,dst=%s,readonly" % (device, CONNECTOR_MOUNTS["device"]),
-                       "--env-file", str(device / CONNECTOR_ENV_FILE), ids[component]]
+                       "--mount", "type=bind,src=%s,dst=%s,readonly" % (device, CONNECTOR_MOUNTS["device"])]
+        if INSTANCE is not None:          # INSTANCE: its own databroker, not the image's default 127.0.0.1:55555
+            args += ["-e", "SDV_TWIN_DATABROKER=" + BROKER]
+        args += ["--env-file", str(device / CONNECTOR_ENV_FILE), ids[component]]
     else:
         raise StackError("unknown component %s" % component)
     docker(*args)
@@ -2586,7 +2861,7 @@ def ensure_vcan() -> Dict[str, Any]:
     run(["sudo", "-n", "modprobe", "vcan"])
     run(["sudo", "-n", "ip", "link", "add", "dev", VCAN, "type", "vcan"])
     run(["sudo", "-n", "ip", "link", "set", "up", VCAN])
-    return {"created": True, "how": "sudo -n modprobe vcan; ip link add dev vcan0 type vcan; ip link set up vcan0"}
+    return {"created": True, "how": "sudo -n modprobe vcan; ip link add dev %s type vcan; ip link set up %s" % (VCAN, VCAN)}
 
 
 class VcanCapture:
@@ -2622,6 +2897,36 @@ class VcanCapture:
 def log_frames(path: Path) -> List[Tuple[int, bytes]]:
     import can  # type: ignore[import-not-found]
     return [(m.arbitration_id, bytes(m.data)) for m in can.LogReader(str(path))]
+
+
+def player_bound_s(log: Path) -> int:
+    """A replay's bound on its player, in whole seconds: the log's span from its first to its last frame as the stack
+    decodes it (python-can's reader, in replaycheck.decode_recording's milliseconds), plus PLAYER_HEADROOM_S, rounded up.
+    The file is read once and nothing is written. A StackError naming the log's file name, never its path, when the bound
+    is over PLAYER_BOUND_MAX_S, or when the log holds no frame, is not in time order (a frame stamped before the one ahead
+    of it: python-can's player plays to the latest stamp, so its first to its last frame would not bound it; frames of one
+    stamp are in order) or cannot be read."""
+    try:
+        import can  # type: ignore[import-not-found]
+    except ImportError:
+        raise StackError("the recording's log %s cannot be read: python-can (the sim venv's) is not importable" % log.name) from None
+    try:
+        with can.LogReader(str(log)) as reader:
+            stamps = [float(m.timestamp) for m in reader]
+    except Exception as exc:          # whatever the reader raises on a file it cannot read (its words may hold the path)
+        raise StackError("the recording's log %s cannot be read (%s): its player has no bound" % (log.name, type(exc).__name__)) from None
+    if not stamps:
+        raise StackError("the recording's log %s holds no frame: its player has no bound" % log.name)
+    if any(b < a for a, b in zip(stamps, stamps[1:])):
+        raise StackError("the recording's log %s is not in time order (a frame is stamped before the one ahead of it): its player "
+                         "has no bound" % log.name)
+    span_ms = int(round((stamps[-1] - stamps[0]) * 1000.0))
+    bound = -(-(span_ms + PLAYER_HEADROOM_S * 1000) // 1000)
+    if bound > PLAYER_BOUND_MAX_S:
+        raise StackError("the recording's log %s is too long to replay: its player's bound (its span plus PLAYER_HEADROOM_S, rounded "
+                         "up) would be %d s, over PLAYER_BOUND_MAX_S (%d s), so the replay is refused before it starts"
+                         % (log.name, bound, PLAYER_BOUND_MAX_S))
+    return bound
 
 
 def up(ctx: Context, feed: str, replay_dir: Path, run_label: str, header: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -2891,6 +3196,7 @@ def replay_once(ctx: Context, feed: str, replay_id: str) -> Dict[str, Any]:
         raise StackError(BROKER_NEEDS_VCAN)
     if has_connector(ctx) and feed != "vcan":
         raise StackError(CONNECTOR_NEEDS_VCAN)
+    bound_s = player_bound_s(ctx.in_dir / log_of(ctx))      # before anything of the replay is made or started: a log over the ceiling ends here
     run_label = "%s/%s" % (ctx.run_dir.name, replay_id)
     result: Dict[str, Any] = {"replay": replay_id, "feed": feed, "bridge_mode": ctx.bridge}
     new_hook_records(ctx)
@@ -2916,6 +3222,8 @@ def replay_once(ctx: Context, feed: str, replay_id: str) -> Dict[str, Any]:
         failed = [c for c in checks if not c[1]]
         if failed or not info["listeners"]["ok"]:
             raise StackError("refused to start the feed: %s %s" % (failed, info["listeners"]))
+        if INSTANCE is not None:          # INSTANCE: the fleet's gate, after the start checks and before the feed
+            result["gate"] = gate_wait(feed_gate(), INSTANCE)
         dyn_count = len(ctx.decoded["values"][rc.V_PATH])
         gear_path = attr.SLOT_PATHS[4]
         gear_count = len(ctx.decoded["values"][gear_path])
@@ -2929,7 +3237,7 @@ def replay_once(ctx: Context, feed: str, replay_id: str) -> Dict[str, Any]:
             time.sleep(VCAN_READY_S)
             listeners_now(info, feed, "_feed", allowances(ctx))
             write_json(replay_dir / "listeners.json", info)
-            wait_log(NAMES[attr.CAN_PROVIDER], r"Replayed all messages from CAN log file", 300)
+            wait_log(NAMES[attr.CAN_PROVIDER], r"Replayed all messages from CAN log file", bound_s)
         else:
             wait_log(NAMES[attr.CAN_PROVIDER], r"Starting to receive CAN messages|Using DBC reader", START_TIMEOUT_S)
             time.sleep(VCAN_READY_S)
@@ -2937,7 +3245,7 @@ def replay_once(ctx: Context, feed: str, replay_id: str) -> Dict[str, Any]:
             write_json(replay_dir / "listeners.json", info)
             capture = VcanCapture()
             clock["player_start_realtime_ns"] = time.time_ns()
-            p = run([str(SIM_PY), "-m", "can.player", "-i", "socketcan", "-c", VCAN, str(ctx.in_dir / log_of(ctx))], check=False, timeout=300)
+            p = run([str(SIM_PY), "-m", "can.player", "-i", "socketcan", "-c", VCAN, str(ctx.in_dir / log_of(ctx))], check=False, timeout=bound_s)
             clock["player_end_realtime_ns"] = time.time_ns()
             if ctx.bridge != "none":
                 # The recording is over: stop the bridge now (SIGTERM: its drain and summary). From here on the provider
@@ -2999,10 +3307,17 @@ def replay_once(ctx: Context, feed: str, replay_id: str) -> Dict[str, Any]:
     return result
 
 
+def window_judged(r: Dict[str, Any]) -> bool:
+    """Whether a replay's result is judged on its hazard windows: every one but a carla-autoware replay's, which analyse()
+    marks (hazard_window: NOT_JUDGED)."""
+    return r.get("hazard_window") != NOT_JUDGED
+
+
 def replay_gates(r: Dict[str, Any]) -> Dict[str, bool]:
     """`stack.py replay`'s exit status, gate by gate, from one replay's result: Phase 1's value, decision and light
     gates, the three listener snapshots (the PID allowance applied in each), the bus frames for vcan, C12b, and with a
-    bridge its own result. The same listener and bus gates as exit-test's verdict()."""
+    bridge its own result. The same listener and bus gates as exit-test's verdict(). A carla-autoware replay has no
+    decision and no light gate (module docstring, A CARLA-AUTOWARE RECORDING); every other gate is its own too."""
     gates = {
         "values": bool(r["values"]["ok"] and r["witness_values"]["ok"] and r["app_values"]["ok"]),
         "decisions": bool(r["decisions"]["ok"]),
@@ -3010,6 +3325,8 @@ def replay_gates(r: Dict[str, Any]) -> Dict[str, bool]:
         "listeners": all(r.get(k, {}).get("ok", False) for k in ("listeners", "listeners_feed", "listeners_end")),
         "c12b": bool(r["c12b"][1]),
     }
+    if not window_judged(r):          # a carla-autoware replay: no hazard window, so no decision and no light gate
+        del gates["decisions"], gates["lights"]
     if r["feed"] == "vcan":
         gates["bus_frames_identical"] = bool(r.get("vcan_capture", {}).get("identical", False))
     if r.get("bridge_mode", "none") != "none":
@@ -3313,7 +3630,11 @@ def analyse(ctx: Context, replay_dir: Path) -> Dict[str, Any]:
     app_seen = {p: [r["value"] for r in recs if r.get("event") == "input" and r.get("path") == p] for p in ctx.hz.INPUTS}
     app_values = rc.compare_values({p: ctx.decoded["values"][p] for p in ctx.hz.INPUTS},
                                    {p: ctx.decoded["half_lsb"][p] for p in ctx.hz.INPUTS}, app_seen, 0)
-    anchor_rec = int(ctx.windows["anchor"]["t_rec_ms"])
+    # a carla-autoware recording's windows (rc.anchor_windows) are not judged, and a take that never moves has no anchor:
+    # nothing is then mapped onto recording time, and the 0 below is read by no one
+    judged = rc.windows_judged(ctx.windows)
+    anchor = ctx.windows["anchor"]["t_rec_ms"]
+    anchor_rec = int(anchor) if anchor is not None else 0
     first_v = [r for r in recs if r.get("event") == "input" and r.get("path") == rc.V_PATH and r.get("value") not in (None, 0, 0.0)]
     mock_log = (replay_dir / ("%s.log" % attr.MOCK_PROVIDER)).read_text(encoding="utf-8")
     fed = docker_log_times(mock_log, r"Feeding 'Vehicle\.Body\.Lights\.Hazard\.IsSignaling' with value (True|False)")
@@ -3335,16 +3656,16 @@ def analyse(ctx: Context, replay_dir: Path) -> Dict[str, Any]:
     logged_dec = [(d["hazard"], d["trigger"], d["v"], d["a"]) for d in app["decisions"]]
     mock_clean = rc.mock_log_clean(mock_log)
     mock_offending = rc.mock_log_offending(mock_log)
-    mock_ok = rc.mock_gate(mock_writes, ctx.windows, mock_clean)
+    mock_ok: Optional[bool] = rc.mock_gate(mock_writes, ctx.windows, mock_clean) if judged else None
     # the recorder's own hazard rows against the two lossless sources: the lags the databroker logged
     # for capacity-1 subscribers, less those the recorder's CAN-fed rows already account for
     recorder_light = rc.recorder_light_view(rows, t_anchor_csv, mock_writes, app["actuations"], max(0, v1_lags - values["unrecorded_total"]),
                                             ctx.windows, anchor_rec)
-    return {
+    out: Dict[str, Any] = {
         "values": values,
         "witness_values": witness,
         "app_values": app_values,
-        "anchor": {"csv_found": t_anchor_csv is not None, "app_found": app["anchor_found"], "t_rec_ms": anchor_rec},
+        "anchor": {"csv_found": t_anchor_csv is not None, "app_found": app["anchor_found"], "t_rec_ms": None if anchor is None else anchor_rec},
         "lights": {"mock_log": {"ok": mock_ok, "clean": mock_clean, "writes": mock_writes,
                                 "offending_lines": mock_offending[:MOCK_OFFENDING_KEPT], "offending_total": len(mock_offending),
                                 "note": "the mock provider's own 'Feeding' lines, timed by dockerd's receive stamp, mapped with the app's anchor: "
@@ -3363,6 +3684,10 @@ def analyse(ctx: Context, replay_dir: Path) -> Dict[str, Any]:
         "app_errors": app["errors"],
         "behaviour_key": rc.behaviour_key(logged_dec, app["actuations"], mock_writes, appstate),
     }
+    if not judged:
+        out["lights"]["mock_log"]["judged"] = False
+        out["hazard_window"] = NOT_JUDGED
+    return out
 
 
 def verdict(ctx: Context, results: List[Dict[str, Any]], feed: str, n: int) -> Dict[str, Any]:
@@ -3371,8 +3696,12 @@ def verdict(ctx: Context, results: List[Dict[str, Any]], feed: str, n: int) -> D
     provider's own writes inside their windows, with a mock log that holds nothing but INFO records
     (the mock logs a write before it makes it), and `same_behaviour` is the behaviour key equal across
     the replays: neither reads the recorder's hazard rows (lights.recorder is reported, and only
-    counted here)."""
+    counted here). A carla-autoware run (every replay marked by analyse(): no hazard window) reports
+    `lights_in_window` as NOT_JUDGED, which is no boolean and so no gate, says why (`hazard_window`),
+    and takes the run header's check at each record close, C12b, as a gate (`header_checks_at_close`):
+    its oracle is the rows, the counts and the header."""
     rs = [r for r in results if r["feed"] == feed]
+    unjudged = bool(rs) and not any(window_judged(r) for r in rs)
     keys = [json.dumps(r["behaviour_key"], sort_keys=True) for r in rs]
     same = len(set(keys)) == 1 and len(rs) == n
     windows = all(r["decisions"]["ok"] and r["lights"]["mock_log"]["ok"] for r in rs)
@@ -3380,12 +3709,15 @@ def verdict(ctx: Context, results: List[Dict[str, Any]], feed: str, n: int) -> D
     witness = all(r["witness_values"]["ok"] for r in rs)
     app_inputs = all(r["app_values"]["ok"] for r in rs)
     listeners = all(r.get(k, {}).get("ok", False) for r in rs for k in ("listeners", "listeners_feed", "listeners_end"))
-    out = {"feed": feed, "replays": len(rs), "same_behaviour": same, "lights_in_window": windows,
+    out = {"feed": feed, "replays": len(rs), "same_behaviour": same, "lights_in_window": NOT_JUDGED if unjudged else windows,
            "values_equal_decoded": recorder and witness and app_inputs,
            "recorder_values_aligned": recorder, "witness_values_exact": witness, "app_inputs_exact": app_inputs,
            "recorder_values_exact_replays": sum(1 for r in rs if r["values"]["exact"]),
            "recorder_lights_consistent_replays": sum(1 for r in rs if r["lights"]["recorder"]["consistent"]["ok"]),   # a count: reported, not a gate
            "only_loopback_listeners": listeners}
+    if unjudged:
+        out["hazard_window"] = HAZARD_WINDOW_NOTE
+        out["header_checks_at_close"] = all(bool(r.get("c12b", ("C12b", False))[1]) for r in rs)
     if feed == "vcan":
         out["bus_frames_identical"] = all(r.get("vcan_capture", {}).get("identical", False) for r in rs)
     out["ok"] = all(v for k, v in out.items() if isinstance(v, bool))       # every boolean above; the count is reported
@@ -3648,9 +3980,9 @@ def host_check_read(run_dir: Path, name: str) -> str:
     try:
         p = hostcheck_run([])
     except (OSError, subprocess.SubprocessError) as exc:
-        raise StackError("the host check (sdv/aw/hostcheck.sh, spec-2 2.12) could not be run: %s" % (exc,)) from None
+        raise StackError("the host check (sdv/aw/hostcheck.sh) could not be run: %s" % (exc,)) from None
     if p.returncode != 0 or not p.stdout.startswith("format="):
-        raise StackError("the host check (sdv/aw/hostcheck.sh, spec-2 2.12) cannot be read (exit %d): %s" % (
+        raise StackError("the host check (sdv/aw/hostcheck.sh) cannot be read (exit %d): %s" % (
             p.returncode, (p.stderr or p.stdout).strip()[-300:] or "no output"))
     (run_dir / name).write_text(p.stdout, encoding="utf-8")
     return p.stdout
@@ -3695,7 +4027,7 @@ def load_ros_env() -> Dict[str, Any]:
     if not (isinstance(env, dict) and env.get("format") == 1 and isinstance(env.get("ros_domain_id"), int)
             and not isinstance(env.get("ros_domain_id"), bool) and isinstance(env.get("rmw"), str)
             and isinstance(env.get("cyclonedds_single_host"), str)):
-        raise StackError("sdv/aw/ros-env.json is not spec-2 2.7's {format 1, ros_domain_id, rmw, cyclonedds_single_host}")
+        raise StackError("sdv/aw/ros-env.json does not have the required shape {format 1, ros_domain_id, rmw, cyclonedds_single_host}")
     return env
 
 
@@ -3738,7 +4070,7 @@ def rosvss_image(images: Dict[str, Any]) -> Dict[str, Any]:
     pin, want, base = entry.get("amd64") or {}, entry.get("labels") or {}, (aw.get("amd64") or {}).get("manifest_digest")
     if not (isinstance(pin.get("id"), str) and want and isinstance(base, str)):
         raise StackError("images.json has no rosvss.amd64 pin, rosvss labels or autoware.amd64 manifest digest: build the feeder's "
-                         "image with sdv/rosvss/build_image.py and pin it (spec-2 2.6)")
+                         "image with sdv/rosvss/build_image.py and pin it")
     if want.get("sdv.rosvss.base_digest") != base:
         raise StackError("images.json's rosvss labels name the base %s, its autoware.amd64 manifest digest is %s" % (
             want.get("sdv.rosvss.base_digest"), base))
@@ -3749,7 +4081,7 @@ def rosvss_image(images: Dict[str, Any]) -> Dict[str, Any]:
     if info.get("Id") != pin["id"]:
         raise StackError("images.json's rosvss.amd64 names %s, whose image ID is %s" % (pin["id"], info.get("Id")))
     if info.get("Architecture") != "amd64":
-        raise StackError("the feeder's image %s is linux/%s, not amd64 (its one architecture, spec-2 section 0 item 5)" % (
+        raise StackError("the feeder's image %s is linux/%s, not amd64 (its one architecture)" % (
             pin["id"], info.get("Architecture")))
     config = info.get("Config") or {}
     labels = config.get("Labels") or {}
@@ -3758,11 +4090,11 @@ def rosvss_image(images: Dict[str, Any]) -> Dict[str, Any]:
         raise StackError("the feeder's image %s does not carry images.json's rosvss labels: %s" % (pin["id"], wrong))
     entrypoint = config.get("Entrypoint")
     if entrypoint != [AW_ENTRYPOINT]:
-        raise StackError("the feeder's image %s has the entrypoint %r, not the project's [%r]: the base's would run (spec-2 2.12)"
+        raise StackError("the feeder's image %s has the entrypoint %r, not the project's [%r]: the base's would run"
                          % (pin["id"], entrypoint, AW_ENTRYPOINT))
     user = str(config.get("User") or "")
     if user.split(":")[0] != AW_USER:
-        raise StackError("the feeder's image %s runs as %r, root or no user of its own: its image names %s (spec-2 2.12)"
+        raise StackError("the feeder's image %s runs as %r, root or no user of its own: its image names %s"
                          % (pin["id"], user, AW_USER))
     tagged, _why = inspect_image(pin["tag"])
     if tagged is not None and tagged.get("Id") != pin["id"]:
@@ -3799,7 +4131,7 @@ def run_opt_values(args: Sequence[str], long: str, short: Optional[str] = None) 
 
 
 def aw_argv_problems(argv: Sequence[str]) -> List[str]:
-    """What spec-2 2.12 forbids in a `docker run` of a container from the Autoware image or built on it, read from its
+    """The flags forbidden in a `docker run` of a container from the Autoware image or built on it, read from its
     argument vector, each option in every form docker takes (run_opt_values): --privileged; --cap-add of any capability;
     less than --cap-drop ALL; no --security-opt no-new-privileges; another user than --user aw (-u counted), or a second;
     the host's pid, ipc, user, uts or cgroup namespace (HOST_NAMESPACES); a mount of /proc or /sys (or below either), as
@@ -3868,7 +4200,7 @@ def start_feeder(ctx: Any, up_dir: Path, run_label: str) -> str:
     argv = feeder_argv(ctx, up_dir, run_label)
     bad = aw_argv_problems(argv)
     if bad:
-        raise StackError("the feeder's docker run is refused (spec-2 2.12): %s" % "; ".join(bad))
+        raise StackError("the feeder's docker run is refused: %s" % "; ".join(bad))
     (up_dir / ROS_LOG_DIR_NAME).mkdir(parents=True, exist_ok=True)
     docker(*argv)
     run_after_start(ctx, FEEDER_CONTAINER)
@@ -3927,7 +4259,7 @@ class RosContext(Context):
         compiled = tuple(getattr(c, "COMPILED_PROFILE_IDS", ()))
         if self.bridge == "broker" and pid not in compiled:
             raise StackError("--bridge broker with --feed ros needs profile %d (the planning-sim live default) compiled, and the "
-                             "generation compiles %s: the bridge and the monitor would give every frame reason 8 (spec-2 2.5)"
+                             "generation compiles %s: the bridge and the monitor would give every frame reason 8"
                              % (pid, list(compiled)))
         dbc_sha = (man.get("inputs") or {}).get("slice.dbc")
         if not isinstance(dbc_sha, str):
@@ -3942,7 +4274,7 @@ class RosContext(Context):
         self.ros_env = load_ros_env()
         if host_uid() != AW_UID:
             raise StackError("the host user's uid %d is not the feeder image's aw (uid %d): the run's up/ros-log, the host user's "
-                             "directory, would not be aw's to write (spec-2 2.12: never mode 777)" % (host_uid(), AW_UID))
+                             "directory, would not be aw's to write (never mode 777)" % (host_uid(), AW_UID))
         feeder = rosvss_image(self.images)
         feeder_writes = sorted(rosvss_mapping().write_set(ROS_RUN_TYPE))
         self.bridge_writes = bridge_writes(c) if self.bridge == "broker" else []
@@ -3983,7 +4315,7 @@ class RosContext(Context):
         self.manifest = {
             "format": 1, "run": self.run_dir.name, "utc_prepared": utc_now(), "host_role": self.host_role,
             "placement": placement_record(self.cpuset, self.after_start), "run_type": ROS_RUN_TYPE, "feed": ROS_FEED,
-            "app": None, "app_note": "a ros run starts no app (spec-2 2.5)",
+            "app": None, "app_note": "a ros run starts no app",
             "stack_files": {str(p.relative_to(REPO)): sha256_file(p) for p in sorted(
                 [HERE / "stack.py", HERE / "attribution.py", IMAGES_FILE, WITNESS_FILE, HOSTCHECK, ROS_ENV_FILE, AW_DIR / "aw-entrypoint.sh",
                  ROSVSS_DIR / "mapping.py", ROSVSS_DIR / "Dockerfile", ROSVSS_DIR / "requirements.lock", HERE / "recorder" / "Dockerfile",
@@ -4011,7 +4343,7 @@ class RosContext(Context):
                         "stack starts neither of those, and the ROS logs stay in up/ros-log, never captured"},
             "staged_inputs_sha256": self.staged,
             "scenario_table": {"file": "ownership.json", "sha256": "sha256:" + self.ownership_sha256,
-                               "note": "the planning-sim table (attribution.py, spec-2 2.5)"},
+                               "note": "the planning-sim table (attribution.py)"},
             "scenario_checks": [list(ch) for ch in checks],
             "time_sync": dict(time_sync(), age_clock=age_clock(self.bridge)),
         }
@@ -4224,11 +4556,11 @@ def ros_runs_left() -> List[Path]:
 def refuse_ros_runs_left() -> None:
     """A ros up while a ros run is left is refused: its sweep would remove that run's feeder and with it the label
     down finds the run by, but neither stop the native monitor the run left (which holds :7160) nor read its host check
-    after the sweep (spec-2 2.12)."""
+    after the sweep."""
     left = ros_runs_left()
     if left:
         raise StackError("a ros run is still up (%s): stack.py down first, which stops its native monitor and reads its host "
-                         "check after the sweep; this up's sweep would do neither (spec-2 2.12)" % ", ".join(str(p) for p in left))
+                         "check after the sweep; this up's sweep would do neither" % ", ".join(str(p) for p in left))
 
 
 def down_ros(runs: Sequence[Path]) -> None:
@@ -4247,7 +4579,7 @@ def down_ros(runs: Sequence[Path]) -> None:
         else:
             problems.append("%s: %s" % (run_dir.name, host_check_words(rec)))
     if problems:
-        raise StackError("the ros run's host check failed (spec-2 2.12): %s" % "; ".join(problems))
+        raise StackError("the ros run's host check failed: %s" % "; ".join(problems))
 
 
 def ros_cli_refusals(a: argparse.Namespace) -> None:
@@ -4313,7 +4645,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         s = sub.add_parser(cmd)
         s.add_argument("--name", default={"exit-test": "phase1-exit"}.get(cmd, cmd))
         s.add_argument("--seed", type=int, default=None,
-                       help="optional: refused unless it equals the recording's seed (its manifest line), which is the one used")
+                       help="optional: refused unless it equals the recording's seed (its manifest line), which is the one used; a carla-autoware "
+                            "recording has no seed, so any --seed is refused for it")
         s.add_argument("--images", choices=IMAGE_MODES, default="build",
                        help="build (default): pull the upstream images and build the local ones; loaded: an aarch64 host whose "
                             "images were pulled and loaded before the run, inspected here and never pulled or built")
@@ -4350,6 +4683,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     lv.add_argument("--feeder-out", required=True, help="the take's directory the feeder will write (it must not exist yet)")
     lv.add_argument("--native", action="store_true", help="the native vss monitor `7160 svc 500`: the one monitor a live run has")
     a = ap.parse_args(argv)
+    instance_refusals(a)                    # INSTANCE: before anything is pulled, written or started (down and live included)
     if a.cmd == "down":
         ros_runs = ros_runs_left()          # read before the sweep: the ros runs whose host check down reads after it
         stop_bridge_and_witness(ros_runs)   # SIGTERM before the sweep's kill: the bridge's summary.json, then the witness's stop record
@@ -4414,6 +4748,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print("connector: %s" % json.dumps({k: r["connector"].get(k) for k in ("ok", "exit", "exit_means", "events", "counters")},
                                                sort_keys=True))
         gates = replay_gates(r)
+        if not window_judged(r):
+            print("hazard window: %s" % HAZARD_WINDOW_NOTE)
         print("gates: %s" % json.dumps(gates, sort_keys=True))
         return 0 if all(gates.values()) else 1
     results = []

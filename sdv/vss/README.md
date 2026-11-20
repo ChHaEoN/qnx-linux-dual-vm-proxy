@@ -33,8 +33,8 @@ or nothing:
 | `vss-ids.vspec` | the id exporter's output: every node with its staticUID (case-insensitive, vss-tools' default), without the `ControlCommand` layer |
 | `vss-can-mapping.json` | the JSON catalogue with the `dbc2vss` mapping: the CAN provider's mapping file, without the `ControlCommand` layer |
 | `vss-databroker.json` | the same catalogue with the `ControlCommand` layer and without `dbc2vss`: the databroker's `--vss` catalogue for run type `sigsim` (the stack's). The stack starts the databroker on this file (`sdv/stack/stack.py`, `--vss`); the CAN mapping no longer serves the same nodes (it carries no `ControlCommand`), so it is not interchangeable with it |
-| `vss-databroker-carla.json` | the databroker catalogue exported with run type `carla`'s vehicle layer instead: `vss-databroker.json` but for the Wheelbase default. Nothing loads it yet (the stack's CARLA runs are Phase 7's later work) |
-| `vss-databroker-planning-sim.json`, `vss-databroker-carla-autoware.json` | the same for run types `planning-sim` (Autoware's planning simulator; the stack's `ros` feed, Phase 8 WP3d) and `carla-autoware` (the CARLA 0.10.0 closed loop, Phase 8.5): `vss-databroker.json` but for the Wheelbase default. Nothing loads either yet |
+| `vss-databroker-carla.json` | the databroker catalogue exported with run type `carla`'s vehicle layer instead: `vss-databroker.json` but for the Wheelbase default |
+| `vss-databroker-planning-sim.json`, `vss-databroker-carla-autoware.json` | the same for run types `planning-sim` (Autoware's planning simulator; the stack's `ros` feed, Phase 8 WP3d) and `carla-autoware` (the CARLA 0.10.0 closed loop, Phase 8.5): `vss-databroker.json` but for the Wheelbase default |
 | `vehicle-sigsim.vspec`, `vehicle-carla.vspec`, `vehicle-planning-sim.vspec`, `vehicle-carla-autoware.vspec` | the per-vehicle layers (kind 4 wire specification 5.6 and 14.5; Phase 2 design decision g), one per run type with a live default: one node, `Vehicle.Chassis.Wheelbase` with its catalogue `default:` set to the L of that run type's live-default profile in `profiles.toml`, loaded after the overlay. VSS 6.0's default is 0, and the databroker serves an attribute's catalogue default, so without the layer a broker-mode claim bridge reads 0 and refuses to start. A databroker serves one Wheelbase, so each layer has its own catalogue. Generated, never written by hand: the value is the profile's, so it is no literal anywhere. `default` is not a staticUID input, and the generator checks, on each layer's own exports, that the node keeps the stock tree's staticUID and that the default reached the JSON |
 | `vss_contract.h` | the monitor's contract: the five kind 4 slots' staticUIDs, the catalogue digest, AGE_MAX, the conversion constants |
 | `vss_profiles.h` | the compiled profiles as an X-macro table (profiles with stand-in values stay out) |
@@ -138,7 +138,7 @@ window. Both are compiled. A profile with stand-in values is never compiled: it 
 only. The kind 4 outputs and the kind 4 digest do not depend on any kind 2 input:
 `vss_contract.h`, the vehicle layers, `vss-can-mapping.json` and `vss-ids.vspec` are byte for byte what
 the tree generated before the layer joined, and `vss_profiles.h` and `vss_contract.py` are what the
-last kind 4 profile change wrote (profiles 4 and 5, below); a test holds each one's sha256. `make ctl`
+last kind 4 profile change wrote (profile 5's freeze, below); a test holds each one's sha256. `make ctl`
 (the monitor's Makefile) and `build-monitor-native.sh` with `MONITOR_EXT_KINDS=0x14` build the ctl
 monitor from these headers; `make ctl` stops on a generation whose `vss_profiles.h` holds no profile 4
 row, which this one holds.
@@ -194,14 +194,13 @@ profile's L, so its catalogue is `vss-databroker.json` but for the Wheelbase def
   read for this package). The envelope is rows-summed with sigsim's margin, and its `skew_ms` row (the
   simulator publishes the three rule-26 inputs on one timer) replaces `slice.dbc`'s period for this
   envelope alone; tol26 is the smallest one-decimal value that keeps the margin over the summed rows.
-- **Profile 5** (`carla010-taxi`, the `carla010` envelope) is **not compiled**: it is in
-  `vss_contract.py` only, and a guest built from this generation answers it with reason 8. Its own
-  values hold no stand-in (its L and `delta_max` are `PROBED` from WP9a's CARLA 0.10.0 reads, the rest
-  are profile 3's), so the carla-autoware layer carries its L; but the four rows of its joint-grid
-  envelope are **stand-ins**, the `carla` envelope's values, listed in the envelope's `stand_in` and
-  marked `STAND-IN`. Its budget's margin is computed and held on them, so it says nothing yet about the
-  taxi. WP3c's freeze sets each row from WP9's first honest drives, by the `carla` rows' rule, empties
-  `stand_in`, applies the a_y narrowing rule again and compiles the profile (a new pin of the bridge).
+- **Profile 5** (`carla010-taxi`, the `carla010` envelope) was **not compiled** by this package: it
+  was in `vss_contract.py` only, and a guest built from that generation answers it with reason 8. Its
+  own values hold no stand-in (its L and `delta_max` are `PROBED` from WP9a's CARLA 0.10.0 reads, the
+  rest are profile 3's), so the carla-autoware layer carries its L; but the four rows of its joint-grid
+  envelope were **stand-ins**, the `carla` envelope's values, listed in the envelope's `stand_in` and
+  marked `STAND-IN`, until WP3c's freeze (next section) set each row, removed `stand_in`, applied the
+  a_y narrowing rule again and compiled the profile.
 - New refusals: a compiled profile on an envelope that holds a stand-in row; a `skew_ms` row on any
   envelope but a planning-sim one; a profile on a planning-sim envelope that is the live default of any
   run type but a planning-sim one, and a planning-sim run type whose live default is on another
@@ -220,15 +219,52 @@ stays inside the gate's limits (inferred for a first-order lag), that the summed
 honest error at large steering angles (the rows-summed method takes the delta-skew row at a straight
 wheel), or anything about the 0.10.0 taxi's envelope.
 
-Two runs over the same inputs are byte-identical: no output carries a timestamp, an absolute path
+## Profile 5, frozen (Phase 8 WP3c F-c)
+
+Profile 5 is the CARLA 0.10.0 taxi's (`carla010-taxi`, the `carla010` envelope, run type
+`carla-autoware`'s live default). From WP3b until this freeze its envelope's rows were stand-ins and
+it stayed Python-only. The freeze changed:
+
+- it is **compiled**: `vss_profiles.h` and `COMPILED_PROFILE_IDS` hold it, so a guest image built from
+  this generation judges carla-autoware recordings under it (images built before the freeze answer it
+  with reason 8); the carla-autoware layer carries its L as before;
+- the `carla010` envelope's four rows are marked `PROBED` in `profiles.toml`, each by the `carla` rows'
+  rule (the smallest one-decimal value at least 1.1 times the worst read) on WP9's first honest drives
+  (P3), with the road-wheel angle from the 0.10.0 law the recordings use. The budget's two skew rows,
+  the steering rate and the acceleration while steering, were read inside rule 26's window only,
+  the speeds at which the joint grid evaluates them, and the launch row without the interface's first
+  steps from rest; that reading of the rule is the owner's choice, made after the reads were seen. The rows were
+  fitted locally; the readings are not published. Each row is held only on its line there and once in
+  `tests/test_sdv_vss.py`'s
+  `PROBED`; the envelope has no `stand_in` list any more;
+- its a_y bound is the owner's value, which the narrowing rule keeps: on the frozen rows the joint-grid
+  budget keeps the envelope's `margin_target` without narrowing. Tol, the window, `v_max`, `a_max` and
+  `v_tol` did not move. Its attribution spread is now one CARLA step (two on the stand-ins), which the
+  bridge reads per profile;
+- outputs: `vss_profiles.h`, `vss_contract.py` and `manifest.json` changed; every other output and
+  `uid-baseline.txt` are byte for byte what the tree generated before (a test holds the sigsim, carla
+  and kind 2 outputs' sha256), and neither digest nor the twin's allowlist moved. The claim bridge's
+  image bakes in `vss_contract.py`, so it was rebuilt from this generation and its pin in
+  `sdv/stack/images.json` re-pinned;
+- `make ctl-p5` (the monitor's Makefile) builds profile 5's guest monitor from the generation
+  `CTL_P5_GEN` names, and needs profile 5's row and kind 2's profile 1 in it, which this generation
+  holds.
+
+It does not show that any row bounds a drive beyond the calibration inputs, that the understeer row is free
+of the law's own error (it carries it), that a recording or a
+guest judges anything under the frozen profile (the package judged none), or that the reading inside
+the window is the right one (it is a decision).
+
+Repeated runs over the same inputs are byte-identical: no output carries a timestamp, an absolute path
 or run state.
 
 ## Tests
 
 `tests/test_sdv_vss.py`. The pure checks (FNV-1 vectors, the DBC reader, the profile invariants and
 their constants, the derived constants and the margin refusal, profile 3's freeze and its `PROBED`
-values, profiles 4 and 5 with their `READ`, `PROBED` and stand-in values, the planning-sim skew and the
-two refusals beside it, the per-run-type layers, the sha256, commit, `.fidl` and early profile-file refusals, the
+values, profiles 4 and 5 with their `READ` and `PROBED` values (profile 5's freeze, and the stand-in
+refusal on a list the test sets), the planning-sim skew and the two refusals beside it, the per-run-type
+layers, the sha256, commit, `.fidl` and early profile-file refusals, the
 forbidden digests, the venv check on a fake venv, the drift rules and `uid-baseline.txt` itself) run
 anywhere with Python 3.11 or later (the fake venv's python is a `#!/bin/sh` shim, so those tests need a
 POSIX shell and skip on Windows). The generation tests need the venv above and skip cleanly without it;

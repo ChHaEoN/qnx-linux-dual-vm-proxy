@@ -44,8 +44,9 @@ RECORDINGS (SDV Phase 7 WP3b; spec-2 2.1 and 2.3)  The plans' recordings (PLAN_R
   table): v1 and v2 replay the sigsim pair, 20260930-sigsim-1b and its injected twin 20261002-sigsim-1b-inj4; carla replays
   the CARLA pair, CARLA_HONEST (20261019-carla-1, the name Phase 7 WP5a recorded) and its twin CARLA_HONEST-inj. The bundle
   carries all four, each once, so that one bundle serves every plan. A recording's log is the basename of its manifest
-  line's recording.path, which must be its source.generator's (LOG_NAMES: sigsim.log for sigsim, carla.log for carla,
-  sdv/inject/inject.py's table); any other pair, another name or another generator is refused naming both.
+  line's recording.path, which must be its source.generator's (LOG_NAMES: sigsim.log for sigsim, carla.log for carla and
+  for carla-autoware, sdv/inject/inject.py's table); any other pair, another name or another generator is refused naming
+  both.
 
 VERIFY  bundle.json's `pins` against the repo's own images.json and python-aarch64.json (a bundle built from another pin
   set is named, whatever its content). Every member against bundle.json (its name in [A-Za-z0-9._-], its role, bytes and
@@ -109,7 +110,7 @@ REC_TAR = "rec-%s.tar"
 # A recording's log by its manifest line's source.generator (spec-2 2.1; module docstring, RECORDINGS): the basename of
 # the line's recording.path is its generator's. sdv/inject/inject.py's LOG_NAMES, held equal by tests/test_sdv_stack.py
 # (this module is standard library only, so it keeps its own copy); stack.py reads it from here.
-LOG_NAMES = {"sigsim": "sigsim.log", "carla": "carla.log"}
+LOG_NAMES = {"sigsim": "sigsim.log", "carla": "carla.log", "carla-autoware": "carla.log"}
 CARLA_HONEST = "20261019-carla-1"             # the honest CARLA recording Phase 7 WP5a recorded (spec-2 2.3): a name, not a result
 # The plans' recordings (spec-2 2.3), each plan's honest one and its injected twin: v1 and v2 share the sigsim pair, carla
 # replays the CARLA pair. orin-native/gpu-concurrency/vss_suite.py holds the same table (tests/test_vss_harness.py holds

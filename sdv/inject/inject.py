@@ -100,13 +100,13 @@ line form and channel), its .sha256, summary.json and the manifest line, written
 source's cut to the fields that still describe the file, since the rewrite moves no frame (TRIP_KEPT: segments,
 message counts, periods, duration, seed, the source's params, profile and wheelbase, and a CARLA trip's rtf,
 timestamps and gaps -- the gaps are where the log's schedule had no frame, which the rewrite leaves where they were,
-and a replay's 22s are read against the gaps and the rtf together, manifest-classes.md section 4); the fields that
+and a replay's 22s are read against the gaps and the rtf together); the fields that
 describe the drive's values (ranges, gear changes, clamps, violations and the like) or a CARLA take and its encoding
 are dropped and named in rewrite.trip_fields_dropped, beside the rewrite's provenance. The manifest line is the
 source's with its own name, path and sha256, and three source.params entries naming the rewrite (REWRITE_PARAMS:
 rewrite_of, the source's name; rewrite_of_sha256, the source log's sha256; rewrite_events_sha256, events.json's
 sha256), which must keep source.params within the scenario entry's eight short values, each an integer or a string
-(manifest-classes.md sections 4 and 9): a source whose params would break them, or already carry one of the three, is
+(the scenario-entry rules): a source whose params would break them, or already carry one of the three, is
 refused before anything is written. A path under ~/sdv-recordings keeps that ~ form in the line, as sigsim's do. The
 line's recording.path, the source's and the new one's, is a scenario entry path (SCENARIO_PATH: from ~ or /, no ..
 segment); a destination whose path would not be one is refused before it is created.
@@ -114,14 +114,15 @@ segment); a destination whose path would not be one is refused before it is crea
 A CARLA SOURCE (Phase 7 WP3a). A CARLA recording (Phase 7 WP1's sdv/carla/encode.py, source.generator carla) is read
 and rewritten as a sigsim one is, by every rule above unchanged; only its log's name, its rtf and its steps.jsonl
 differ. A recording's log is the basename of its manifest line's recording.path, which must be its generator's
-(LOG_NAMES: sigsim.log for sigsim, carla.log for carla), with <log>.sha256 beside it, whose name, where it gives one,
-is the log's; another name or another generator is refused, and the new recording keeps the source's log name. A
+(LOG_NAMES: sigsim.log for sigsim, carla.log for carla and for carla-autoware, the stack's one table, though a
+carla-autoware source is refused here, with or without an rtf), with <log>.sha256 beside it, whose name, where it gives
+one, is the log's; another name or another generator is refused, and the new recording keeps the source's log name. A
 carla source carries source.rtf and a sigsim source none ({min, mean, max}, each a number above 0, min <= mean <=
-max: manifest-classes.md section 4), and summary.json's trip rtf, where the trip has one, is the line's. The rtf is
+max), and summary.json's trip rtf, where the trip has one, is the line's. The rtf is
 copied unchanged into the new line, since the rewrite moves no frame, and recorded in events.json's rewritten_from
 (a carla source's only, so a sigsim rewrite's bytes do not change); `check` holds the new line's rtf to that record
 always, and to the source's when the source is there: the run launcher copies it into every run header's source_rtf
-(manifest-classes.md section 4, C12a), so a changed one would mislabel every run. A CARLA line's five params and the
+(the scenario-entry contract, C12a), so a changed one would mislabel every run. A CARLA line's five params and the
 rewrite's three make the scenario entry's eight. steps.jsonl, the take's steps beside a CARLA log, is not copied: the
 rewritten log cannot be made again from it, and summary.json says so (rewrite.not_copied). The judge is the generated
 table's compiled profiles, as for sigsim, so a CARLA recording under profile 3 is rewritten once the generation
@@ -157,9 +158,9 @@ DESIGN VALUES. The quantities the events are built from are of five kinds, kept 
       they sit beyond their limits by INJECT_FACTOR's free quarter instead.
   Fixed elsewhere, and no design value of this tool: the svc port in the offline bridge's configuration (SVC_PORT,
     specification 13; offline nothing is opened), source.params' limits and the name pattern (PARAMS_MAX and
-    NAME_PATTERN: manifest-classes.md section 4; PARAM_LEN_MAX: the maxLength of its section 9 schema), source.rtf's
-    form (RTF_KEYS, the same section), a scenario entry's path (SCENARIO_PATH and DOTDOT_SEGMENT: the section 9
-    schema's path), the file names the stack reads and the CARLA encoder writes (LOG_NAMES), and the fake clock's start
+    NAME_PATTERN; PARAM_LEN_MAX: the scenario entry's string-length limit), source.rtf's form (RTF_KEYS), a scenario
+    entry's path (SCENARIO_PATH and DOTDOT_SEGMENT), the file names the stack reads and the CARLA encoder writes
+    (LOG_NAMES), and the fake clock's start
     (CLOCK0_NS, any value: the replay is relative to its own anchor).
   22 is realised in the injected recording itself, not in a recording of its own: the stop needs honest frames before
     it and the five events' windows apart from it, which this file has after its last event; the to_end run of the
@@ -201,18 +202,20 @@ RECORDINGS = Path("~/sdv-recordings")
 LOG_NAME = "sigsim.log"                      # a sigsim recording's log: the file name the stack reads in a recording directory
 CARLA_LOG_NAME = "carla.log"                 # a CARLA recording's log (sdv/carla/encode.py)
 # A recording's log by its source.generator: its line's recording.path's basename (module docstring, A CARLA SOURCE).
-LOG_NAMES = {"sigsim": LOG_NAME, "carla": CARLA_LOG_NAME}
+LOG_NAMES = {"sigsim": LOG_NAME, "carla": CARLA_LOG_NAME, "carla-autoware": CARLA_LOG_NAME}
+# The table's generators whose recordings this tool does not rewrite (read_source): the table names them for the stack.
+NOT_REWRITTEN = ("carla-autoware",)
 STEPS_NAME = "steps.jsonl"                   # the take's steps beside a CARLA log: never copied (A CARLA SOURCE)
 MANIFEST_NAME = "manifest-line.json"
 SUMMARY_NAME = "summary.json"
 EVENTS_NAME = "events.json"
 EVENTS_FORMAT = 2
-NAME_PATTERN = re.compile(r"[a-z0-9][a-z0-9-]{0,47}")      # a manifest-line name (manifest-classes.md section 4)
-PARAMS_MAX = 8                               # source.params: at most eight values (manifest-classes.md section 4)
-PARAM_LEN_MAX = 64                           # each a short string or an integer (manifest-classes.md section 9 schema)
+NAME_PATTERN = re.compile(r"[a-z0-9][a-z0-9-]{0,47}")      # a manifest-line name
+PARAMS_MAX = 8                               # source.params: at most eight values
+PARAM_LEN_MAX = 64                           # each a short string or an integer
 REWRITE_PARAMS = ("rewrite_of", "rewrite_of_sha256", "rewrite_events_sha256")    # the source.params a rewrite adds
-RTF_KEYS = ("min", "mean", "max")            # source.rtf, a carla source's only (manifest-classes.md section 4)
-SCENARIO_PATH = re.compile(r"(~|/)[A-Za-z0-9._/-]{1,255}")       # a scenario entry's path (manifest-classes.md section 9 schema)
+RTF_KEYS = ("min", "mean", "max")            # source.rtf, a carla source's only
+SCENARIO_PATH = re.compile(r"(~|/)[A-Za-z0-9._/-]{1,255}")       # a scenario entry's path
 DOTDOT_SEGMENT = re.compile(r"(^|/)[.][.](/|$)")                 # ... which holds no .. segment (the same schema)
 MS = 1_000_000
 US = 1000
@@ -381,7 +384,7 @@ class Source:
 
 
 def is_scenario_path(path: Any) -> bool:
-    """A scenario entry's path (manifest-classes.md section 9's schema): ~ or /, then 1 to 255 characters of
+    """A scenario entry's path: ~ or /, then 1 to 255 characters of
     [A-Za-z0-9._/-], with no .. segment."""
     return isinstance(path, str) and SCENARIO_PATH.fullmatch(path) is not None and DOTDOT_SEGMENT.search(path) is None
 
@@ -394,11 +397,12 @@ def log_name_of(line: Dict[str, Any]) -> str:
     path = rec.get("path") if isinstance(rec, dict) else None
     gen = source.get("generator") if isinstance(source, dict) else None
     if not isinstance(gen, str) or gen not in LOG_NAMES:
-        raise InjectError("the source's generator is %r: this tool reads %s recordings only" % (gen, " and ".join(sorted(LOG_NAMES))))
+        rewritten = " and ".join(sorted(g for g in LOG_NAMES if g not in NOT_REWRITTEN))     # read_source's words: it rewrites these
+        raise InjectError("the source's generator is %r: this tool reads %s recordings only" % (gen, rewritten))
     if not isinstance(path, str) or not path:
         raise InjectError("the manifest line names no recording.path")
     if not is_scenario_path(path):
-        raise InjectError("the recording.path %r is not a scenario entry path (manifest-classes.md section 9)" % path)
+        raise InjectError("the recording.path %r is not a scenario entry path" % path)
     name = PurePosixPath(path).name
     if name != LOG_NAMES[gen]:
         raise InjectError("the recording's log is %r: a %s recording's log is %s, and no other name is read" % (name, gen, LOG_NAMES[gen]))
@@ -410,13 +414,13 @@ def _positive(x: Any) -> bool:
 
 
 def rtf_problems(source: Dict[str, Any]) -> List[str]:
-    """source.rtf as the scenario entry has it (manifest-classes.md section 4, and its loader's check): required
+    """source.rtf as the scenario entry has it (the scenario-entry contract and its loader's check): required
     exactly for a carla source; exactly min, mean and max, each a number above 0, with min <= mean <= max."""
     gen = source.get("generator")
     if gen != "carla":
         return ["a %s source carries an rtf: only a carla recording has one" % gen] if "rtf" in source else []
     if "rtf" not in source:
-        return ["a carla source has no rtf (manifest-classes.md section 4)"]
+        return ["a carla source has no rtf"]
     rtf = source["rtf"]
     if not isinstance(rtf, dict) or set(rtf) != set(RTF_KEYS):
         return ["the rtf %r is not {min, mean, max}" % (rtf,)]
@@ -430,9 +434,9 @@ def rtf_problems(source: Dict[str, Any]) -> List[str]:
 
 def params_problems(params: Any) -> List[str]:
     """A source's params against the scenario entry's limits once the rewrite's three (REWRITE_PARAMS) are added: at
-    most PARAMS_MAX values, each an integer or a string, a string at most PARAM_LEN_MAX characters (manifest-classes.md
-    sections 4 and 9; the schema bounds no integer, and neither does this), and none of the three already there (a
-    rewrite of a rewrite: manifest_line keeps the same check as the write-time guard). A bool is no integer here:
+    most PARAMS_MAX values, each an integer or a string, a string at most PARAM_LEN_MAX characters (integers have no
+    bound), and none of the three already there (a rewrite of a rewrite: manifest_line keeps the same check as the
+    write-time guard). A bool is no integer here:
     JSON's true is not a number. read_source refuses params that are not an object first; the guard below is for a
     direct caller."""
     if not isinstance(params, dict):
@@ -459,7 +463,8 @@ def read_source(src_dir: Path) -> Source:
     <log>.sha256's, which names no file but the log (a bare hash is read as the stack reads it); summary.json names the
     line's recording and seed; a carla source carries its rtf, a sigsim one none (rtf_problems), and summary.json's
     trip rtf, where the trip has one, is the line's. source.params that is not an object is refused before the seed is
-    read in it. Read only."""
+    read in it. A carla-autoware source is refused whatever its line carries (NOT_REWRITTEN: its log name is in the table
+    for the stack, and the rtf rule alone would pass a line without an rtf). Read only."""
     src_dir = Path(src_dir)
     raw: Dict[str, bytes] = {}
 
@@ -497,6 +502,9 @@ def read_source(src_dir: Path) -> Source:
         problems.append("summary.json's trip is not the manifest line's seed %r" % (seed,))
     if line.get("recording", {}).get("format") != "candump-log":
         problems.append("the recording's format is %r, not candump-log" % (line.get("recording", {}).get("format"),))
+    if line["source"]["generator"] in NOT_REWRITTEN:
+        problems.append("a %s source is not rewritten by this tool: it rewrites sigsim and carla recordings only"
+                        % line["source"]["generator"])
     problems += rtf_problems(line["source"])
     trip = summary.get("trip")
     if isinstance(trip, dict) and "rtf" in trip and trip["rtf"] != line["source"].get("rtf"):
@@ -1141,7 +1149,7 @@ def write(b: Built, dest: Path) -> Dict[str, Any]:
     if dest.name != b.name:
         raise InjectError("refused: the directory %s is not named %s" % (dest, b.name))
     if not is_scenario_path(path_form(dest / b.source.log_name)):     # else check, and the manifest's loader, refuse it
-        raise InjectError("refused: the new recording's path %r is not a scenario entry path (manifest-classes.md section 9)"
+        raise InjectError("refused: the new recording's path %r is not a scenario entry path"
                           % path_form(dest / b.source.log_name))
     source_unchanged(b.source)
     os.mkdir(dest)                                  # exclusive: an existing directory is somebody's recording (FileExistsError)

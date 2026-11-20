@@ -6,6 +6,10 @@ needs cantools and python-can (the sim venv, sdv/sim/requirements.lock) and impo
   expected_windows   the windows the hazard lights must switch in, derived from the trip the
                      recording was made from (the recording directory's summary.json, trip.segments)
                      and the decoded recording -- never from a run, never from re-running sigsim.
+  anchor_windows,    what a recording with no hazard window to judge gives instead (run type carla-autoware,
+  windows_judged     sdv/carla/encode010.py's passive take: no scripted hard brake): the anchor alone, marked
+                     `judged: false`. window_verdict and recorder_light_view then report the decisions and the
+                     light without a verdict on them (ok and in_window None), and stack.py reads no light gate.
   predict            the app's own decision function (hazard.py) applied to the decoded recording,
                      one evaluation per input value in the provider's write order: the samples at
                      which the app should switch.
@@ -139,6 +143,30 @@ def expected_windows(trip: Dict[str, Any], frames: Sequence[Tuple[int, str, Dict
         "anchor": {"what": "first non-zero %s" % v_signal, "t_rec_ms": first_motion[0]},
         "mapping_allowance_ms": dyn_period_ms,
     }
+
+
+NOT_JUDGED = "not judged"           # how a record names a gate that a recording without hazard windows does not have
+
+
+def anchor_windows(frames: Sequence[Tuple[int, str, Dict[str, Any]]], v_signal: str, dyn_period_ms: int) -> Dict[str, Any]:
+    """expected_windows' shape for a recording whose trip scripts no hard brake (run type carla-autoware: one passive
+    segment, the drive Autoware made): no window, `judged` false, and the anchor the replay's times are mapped by, the
+    first non-zero velocity of the decoded recording (None when the vehicle never moves; nothing is then mapped)."""
+    first_motion = [t for t, _name, dec in frames if v_signal in dec and dec[v_signal] != 0.0]
+    return {
+        "source": "the decoded recording alone: no hazard window is judged (the trip scripts no %r)" % HARD_BRAKE_LABEL,
+        "judged": False,
+        "hard_brake_ms": None,
+        "on_window_ms": None,
+        "off_window_ms": None,
+        "anchor": {"what": "first non-zero %s" % v_signal, "t_rec_ms": first_motion[0] if first_motion else None},
+        "mapping_allowance_ms": dyn_period_ms,
+    }
+
+
+def windows_judged(windows: Dict[str, Any]) -> bool:
+    """Whether a context's windows are ones to judge a replay by: expected_windows' are, anchor_windows' are not."""
+    return windows.get("judged", True) is not False
 
 
 def predict(frames: Sequence[Tuple[int, str, Dict[str, Any]]], v_signal: str, a_signal: str, hz: Any) -> List[Dict[str, Any]]:
@@ -441,6 +469,8 @@ def window_verdict(decisions: Sequence[Dict[str, Any]], windows: Dict[str, Any])
     offs = [d for d in decisions if not d["hazard"]]
     on_t = ons[0]["t_rec_ms"] if ons else None
     off_t = offs[0]["t_rec_ms"] if offs else None
+    if not windows_judged(windows):       # no window to hold them to (anchor_windows): the decisions are reported
+        return {"ok": None, "judged": False, "n_on": len(ons), "n_off": len(offs), "on_t_rec_ms": on_t, "off_t_rec_ms": off_t}
     ok = (len(ons) == 1 and len(offs) == 1 and in_window(on_t, windows["on_window_ms"]) and in_window(off_t, windows["off_window_ms"])
           and not (math.isnan(on_t or 0.0)))
     return {"ok": ok, "n_on": len(ons), "n_off": len(offs), "on_t_rec_ms": on_t, "off_t_rec_ms": off_t}
@@ -517,15 +547,18 @@ def recorder_light_view(rows: Sequence[Dict[str, Any]], t_anchor: Optional[float
     current rows against the mock provider's writes and its target rows against the app's actuations,
     each a subsequence of them (compare_values) with no more rows missing than allowed_misses, the
     updates the databroker says its capacity-1 subscribers missed that the recorder's other rows did
-    not already account for. Reported, never part of a replay's verdict."""
+    not already account for. Reported, never part of a replay's verdict. Windows that are not to be judged
+    (anchor_windows): in_window is None."""
     current = series(rows, hazard_path)
     targets = [v for _t, v in series(rows, hazard_path, "target")]
     lights = [{"value": v, "t_rec_ms": None if t_anchor is None else to_rec_ms(t, t_anchor, anchor_rec_ms)} for t, v in current]
     changes = [x for i, x in enumerate(lights) if i == 0 or x["value"] != lights[i - 1]["value"]]
     on = [x for x in changes if x["value"] is True]
     off = [x for x in changes[1:] if x["value"] is False]
-    in_windows = (len(on) == 1 and len(off) == 1 and in_window(on[0]["t_rec_ms"], windows["on_window_ms"])
-                  and in_window(off[0]["t_rec_ms"], windows["off_window_ms"]) and changes[0]["value"] is False)
+    in_windows: Optional[bool] = None
+    if windows_judged(windows):
+        in_windows = (len(on) == 1 and len(off) == 1 and in_window(on[0]["t_rec_ms"], windows["on_window_ms"])
+                      and in_window(off[0]["t_rec_ms"], windows["off_window_ms"]) and changes[0]["value"] is False)
     consistent = compare_values({"current": [m["value"] for m in mock_writes], "target": [a["value"] for a in actuations]},
                                 {"current": 0.0, "target": 0.0}, {"current": [v for _t, v in current], "target": targets},
                                 allowed_misses)

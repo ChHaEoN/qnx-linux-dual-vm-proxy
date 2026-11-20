@@ -49,9 +49,10 @@
 #     such a run type whose live default is on another envelope.
 #
 # PROBED. A value whose comment block starts with that word is set from a CARLA probe (Phase 7's
-# WP0; Phase 8's WP9a for profile 5; the readings are in the local notes, never here): it is held
-# only on its line here, tests/test_sdv_vss.py's PROBED holds the same value, and a re-read changes
-# those two places and regenerates.
+# WP0; Phase 8's WP9a for profile 5, and Phase 8's WP3c F-c for the carla010 envelope's rows, read on
+# WP9's P3 drives; the readings are in the local notes, never here): it is held only on its line here,
+# tests/test_sdv_vss.py's PROBED holds the same value, and a re-read changes those two places and
+# regenerates.
 #
 # READ. A value whose comment block starts with that word is READ from the planning stack (Phase 8's
 # WP4a, its facts named "W4 <id>"; the readings are in the local notes): it is held only on its line
@@ -206,20 +207,31 @@ skew_ms = 25
 
 [envelopes.carla010]
 # The CARLA 0.10.0 taxi (Phase 8.5), joint-grid as the carla envelope, with the same margin_target.
-# Its four rows are not read yet: each holds the carla envelope's value as a stand-in, so profile 5
-# stays uncompiled (generate.py refuses a compiled profile here) until WP3c's freeze sets each from
-# WP9's first honest drives by the carla rows' rule and empties stand_in.
+# Its four rows were stand-ins (the carla envelope's values) until Phase 8's WP3c F-c read them on
+# WP9's first honest drives, by the carla rows' rule through spec-2 2.9's law (the road-wheel angle
+# from the applied steer, as the recordings carry it); the readings are local, never here. The two
+# skew rows were read inside rule 26's window only, since the joint grid evaluates them only there,
+# and the launch without the interface's first steps from rest, which lie below the window; that is
+# the owner's reading of the rule, chosen after the reads were seen (the rule read over every step
+# gives other rows; local notes).
 budget = "joint-grid"
 margin_target = 1.2
-stand_in = ["steer_rate", "accel_while_steering", "launch_accel", "understeer_gradient"]
-# STAND-IN (the carla envelope's row): the steering rate at the road wheel, the delta-skew row.
-steer_rate = 9.2
-# STAND-IN (the carla envelope's row): longitudinal acceleration while steering, the v-skew row.
-accel_while_steering = 1.5
-# STAND-IN (the carla envelope's row): the launch after the reverse, which v_tol covers.
-launch_accel = 2.2
-# STAND-IN (the carla envelope's row): the understeer row.
-understeer_gradient = 2.8
+# PROBED (Phase 8 WP3c F-c), fitted locally; the readings are not published.
+# The steering rate at the road wheel, the delta-skew row; read inside rule 26's window (the owner's
+# reading, chosen after the reads were seen).
+steer_rate = 18.1
+# PROBED (Phase 8 WP3c F-c), fitted locally; the readings are not published.
+# Longitudinal acceleration while steering, the v-skew row (|a_x| on the steered steps, as the carla
+# row's was computed); read inside rule 26's window (the owner's reading, chosen after the reads).
+accel_while_steering = 2.3
+# PROBED (Phase 8 WP3c F-c), fitted locally; the readings are not published.
+# The launch from rest (no drive reversed), without the interface's first steps from rest (the
+# owner's reading, chosen after the reads). v_tol 1.0 covers launches up to 4 m/s^2 over AGE_MAX.
+launch_accel = 0.8
+# PROBED (Phase 8 WP3c F-c), fitted locally; the readings are not published.
+# The understeer row: the absolute rule-26 residual against a_y on steady steps. The joint grid
+# extrapolates it linearly up to the a_y bound; it carries the law's own error.
+understeer_gradient = 4.8
 
 # Profiles (spec 5.2). p[1] is an opaque key: ids are small integers assigned in the order profiles
 # are defined and never reused; a retired id stays retired so every record stays readable. One
@@ -365,10 +377,12 @@ id = 5
 source_vehicle = "carla010-taxi"
 limit_set = "nominal"
 envelope = "carla010"
-# CARLA 0.10.0's vehicle.taxi.ford (Phase 8, D18). Its own values hold no stand-in, but the carla010
-# envelope's rows do, so it stays uncompiled (Python-only) until WP3c's freeze; its L is no stand-in,
-# so the carla-autoware vehicle layer carries it.
-compiled = false
+# CARLA 0.10.0's vehicle.taxi.ford (Phase 8, D18). Frozen and compiled (Phase 8 WP3c F-c): in
+# vss_profiles.h, so a guest image built from this generation judges carla-autoware recordings under
+# it (make ctl-p5's image needs this row), and its L is the carla-autoware vehicle layer's Wheelbase
+# default. Its L and delta_max, and the envelope's rows its budget rests on, are PROBED (see the
+# header).
+compiled = true
 stand_in = []
 # PROBED (Phase 8 WP9a E4): the taxi's wheelbase by Phase 1b's road-feature method, rounded to the
 # nearest mm.
@@ -383,8 +397,9 @@ delta_max = 57.0
 v26_lo = 1.0
 v26_hi = 10.0
 # D8's value for profile 3, by the same rule: narrowed in steps of 0.25 (then v26_hi in steps of
-# 1 m/s), never tol, only as far as the joint-grid budget needs to keep the envelope's margin_target;
-# on the stand-in rows it needs no narrowing, and WP3c's freeze applies the rule again.
+# 1 m/s), never tol, only as far as the joint-grid budget needs to keep the envelope's margin_target
+# (Phase 7 spec 5 item 2): on the PROBED rows above it needs no narrowing, and the same rule sets it
+# again if a re-read changes them.
 ay26_max = 2.0
 # As profile 3 (spec 7.4; tol never moves).
 tol26 = 8.0
