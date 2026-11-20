@@ -42,7 +42,7 @@ project's own code.
 | The partition: QEMU with KVM on L4T hosting the QNX guest, with a `startup-qemu-virt` rebuilt from board source | [`orin-native/`](orin-native/), [`scripts/orin/`](scripts/orin/) |
 | The safety monitor: pure POSIX C, ACCEPT or REJECT with a named reason for each claim in a fixed frame, plus a liveness deadline | [`ipc-test/qnx-safety-monitor/`](ipc-test/qnx-safety-monitor/) |
 | IPC across the boundary: TCP and UDP over virtio-net; shared memory over `ivshmem`, polled or notified (virtio console, doorbell, MSI-X through the GIC ITS); SOME/IP with vsomeip; a Cyclone DDS variant | [`ipc-test/`](ipc-test/), [`orin-native/someip/`](orin-native/someip/) |
-| The SDV slice: a VSS contract generated from pinned inputs, a claim bridge and claim node, a first app, digest-pinned containers with an OTA updater, and a minimal AWS IoT twin | [`sdv/`](sdv/) |
+| The SDV slice: a VSS contract generated from pinned inputs, a claim bridge and claim node, a first app, digest-pinned containers with an OTA updater, a minimal AWS IoT twin, a lane claim kind, and a std-only Rust port of the kind 4 codec | [`sdv/`](sdv/) |
 | An edge-AI service on the Linux side: a resident vision-language model on the GPU | [`orin-native/edge-llm/`](orin-native/edge-llm/) |
 | A measurement method with pre-registered predictions per harness | [measurement-design.md](docs/measurement-design.md) |
 | Bare-metal AWS tooling for test sessions | [`scripts/aws/`](scripts/aws/) |
