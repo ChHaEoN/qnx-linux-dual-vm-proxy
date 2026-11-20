@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """npc010.py -- one stopped NPC on CARLA 0.10.0, for the drive whose ego must stop behind it (sdv/carla).
 
-The Phase 8 WP9 specification's section 1 item 9 and section 4's P1 row (the project's local
-design notes; not in this tree). Runs on Windows in E:\\CARLA\\venv312-010 against the 0.10.0 server on the same PC, after
+The stopped-NPC rules are from the project's local design notes, not in this tree.
+Runs on Windows in E:\\CARLA\\venv312-010 against the 0.10.0 server on the same PC, after
 Autoware's interface has attached and before the first route; standard library and this directory only, and `carla` imported
 inside main, so the tests import this module without it.
 
@@ -13,13 +13,16 @@ REFUSED BEFORE CONNECTING (exit 2, nothing written), by either command: a host o
 --for windows-client not passing, or not run (off Windows the gate cannot run, and this client has no other place). By place: a
 spawn that is no index from 0 up, a hold that is no positive time, a --out that exists or lies inside a git work tree.
 
-PLACE. Client and server must both be 0.10.0, the level Carla/Maps/Town10HD_Opt, exactly one actor must carry role_name
-ego_vehicle (so the interface has attached) and none role_name npc; else it is refused with exit 1 and nothing placed, as is a
-spawn index the level lacks, a blueprint it lacks, a spawn that fails, and a bounding box with no size (the gap would then read
-between origins). It spawns one actor, BLUEPRINT vehicle.lincoln.mkz with role_name npc (never ego_vehicle, so follow010.py's
-one-ego rule holds), at the level's spawn point N as the level gives it; no sensor. It applies brake 1.0 and hand brake once and
-never again: a car that later moves was pushed, and its transform says so. No world.tick (the interface ticks), no
-apply_settings, load_world or get_trafficmanager, no autopilot (FORBIDDEN).
+PLACE. Client and server must both be 0.10.0 and the level Carla/Maps/Town10HD_Opt. Then, before its first actor read, it waits
+for one tick, wait_for_tick(CLIENT_TIMEOUT_S), and uses that tick's snapshot for nothing but its arrival: a client's actor list is
+the last world snapshot it has received, and a client new to a synchronous world may hold none yet (INFERRED; unread in 0.10.0's
+LibCarla), so a read at once could find no ego at all. Then exactly one actor must carry role_name ego_vehicle (so the interface
+has attached) and none role_name npc; else it is refused with exit 1 and nothing placed, as is no tick within CLIENT_TIMEOUT_S
+(the interface is not ticking), a spawn index the level lacks, a blueprint it lacks, a spawn that fails, and a bounding box with
+no size (the gap would then read between origins). It spawns one actor, BLUEPRINT vehicle.lincoln.mkz with role_name npc (never
+ego_vehicle, so follow010.py's one-ego rule holds), at the level's spawn point N as the level gives it; no sensor. It applies
+brake 1.0 and hand brake once and never again: a car that later moves was pushed, and its transform says so. No world.tick (the
+interface ticks), no apply_settings, load_world or get_trafficmanager, no autopilot (FORBIDDEN).
 
 THE HOLD. Then it waits for a tick through wait_for_tick, which reads and never advances the world (INFERRED, not read: a spawned
 actor's transform may read zero until the tick after its spawn, so the first sample follows one), and each WRITE_PERIOD_S writes
@@ -33,11 +36,13 @@ by its own centre, half extents and its actor's transform, projected on the NPC'
 less the ego's foremost. Never between origins. Positive with the ego behind; zero or negative once the boxes overlap along the
 road, whether by contact, alongside or having passed.
 
-THE END. destroy, from a second process, takes every actor of role_name npc and no other, and exits 0 when it destroyed one and
-the server said so, 1 otherwise; place sees it at its next sample and exits 0 (end reason destroyed). place also ends on a hold
-past --hold-s (hold-limit), a tick that does not come within TICK_TIMEOUT_S (no-tick), a failed read (error), a failed write
-(error) and a Ctrl-C (interrupted): it destroys its NPC, says on the last line whether it could, and exits 1, or 130 for the
-Ctrl-C. Should the end line's own write fail as well, the OSError leaves main (a traceback, exit 1), the NPC destroyed before it.
+THE END. destroy, from a second process, waits for one tick as place does, then takes every actor of role_name npc and no other,
+and exits 0 when it destroyed one and the server said so, 1 otherwise; no tick within CLIENT_TIMEOUT_S is exit 1 with nothing
+destroyed, its stderr saying it could not read the world (a world not read says nothing of its actors, so never that none is
+there). place sees the destroy at its next sample and exits 0 (end reason destroyed). place also ends on a hold past --hold-s
+(hold-limit), a tick that does not come within TICK_TIMEOUT_S (no-tick), a failed read (error), a failed write (error) and a
+Ctrl-C (interrupted): it destroys its NPC, says on the last line whether it could, and exits 1, or 130 for the Ctrl-C. Should the
+end line's own write fail as well, the OSError leaves main (a traceback, exit 1), the NPC destroyed before it.
 A Ctrl-C between the spawn and the hold destroys the NPC too and exits 130, stderr saying so as there is no end line. One that
 lands in a destroy is said on the end line (destroy_error, exit 130) and not retried, and one inside the spawn_actor call leaves
 this client no actor to destroy: either can leave the NPC, so the run's end runs destroy whatever place said (with none left its
@@ -77,7 +82,7 @@ BLUEPRINT = "vehicle.lincoln.mkz"      # a design value of item 9
 ROLE_NAME = "npc"                      # never EGO_ROLE_NAME: follow010.py follows the one actor of that role
 EGO_ROLE_NAME = "ego_vehicle"
 # Design values, each with its reason.
-CLIENT_TIMEOUT_S = 20.0     # the interface's own client timeout, as follow010.py's
+CLIENT_TIMEOUT_S = 20.0     # the interface's own client timeout, as follow010.py's; also the wait for the first tick
 TICK_TIMEOUT_S = 60.0       # no tick for this long: the interface is gone or held up, far past one step under load
 WRITE_PERIOD_S = 1.0        # the specification's "each second"
 HOLD_S_DEFAULT = 1800.0     # well over a drive's four timeouts in sum (town10.py's); a run that dies leaves no client behind
@@ -137,6 +142,15 @@ def _pose(t: Any) -> Pose:
 
 def _of_role(world: Any, role: str) -> List[Any]:
     return [a for a in world.get_actors() if dict(a.attributes).get("role_name") == role]
+
+
+def _first_tick(world: Any) -> Optional[str]:
+    """One tick's snapshot before the first actor read (the module's PLACE): None when it came, else why not."""
+    try:
+        world.wait_for_tick(CLIENT_TIMEOUT_S)
+    except RuntimeError as e:          # CARLA's client time-out
+        return "no tick came within CLIENT_TIMEOUT_S (%r s): the interface is not ticking (%s)" % (CLIENT_TIMEOUT_S, e)
+    return None
 
 
 def _connect(carla: Any, host: str) -> Any:
@@ -238,6 +252,9 @@ def place(carla: Any, host: str, index: int, out: Path, hold_s: float, clock: Ca
     level = world.get_map().name
     if level != MAP:
         raise NpcRefused("the level is %s, not %s" % (level, MAP))
+    no_tick = _first_tick(world)
+    if no_tick:
+        raise NpcRefused(no_tick)
     egos = _of_role(world, EGO_ROLE_NAME)
     if len(egos) != 1:
         raise NpcRefused("%d actors carry role_name %r: place after the interface has attached, beside exactly one" % (len(egos), EGO_ROLE_NAME))
@@ -298,7 +315,12 @@ def _finish(npc: Any, reason: str, error: Optional[str]) -> Dict[str, Any]:
 
 def destroy(carla: Any, host: str) -> int:
     client = _connect(carla, host)
-    found = _of_role(client.get_world(), ROLE_NAME)
+    world = client.get_world()
+    unseen = _first_tick(world)
+    if unseen:                         # never "no actor": a world not read says nothing of its actors
+        print("npc010.py: could not read the world: %s; nothing is destroyed" % unseen, file=sys.stderr)
+        return 1
+    found = _of_role(world, ROLE_NAME)
     if not found:
         print("npc010.py: no actor carries role_name %r" % ROLE_NAME, file=sys.stderr)
         return 1

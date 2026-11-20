@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """follow010.py -- the Phase 8 passive take: follow the ego of CARLA 0.10.0 while Autoware's interface ticks (sdv/carla).
 
-Phase 8 spec-2 2.9 and 10.1 item 1 (D17: CARLA 0.10.0). Runs on Windows in
+The passive-take rules are from the project's local design notes, not in this tree. Runs on Windows in
 E:\\CARLA\\venv312-010 (CPython 3.12, the carla 0.10.0 win wheel, nothing else) against the 0.10.0 server on the same PC,
 while Autoware's CARLA interface drives the ego and ticks the world; standard library and this package only, and `carla`
 imported inside main, so the tests import this module without it. carla_capture.py stays Phase 7's 0.9.16 capture.
@@ -12,9 +12,13 @@ imported inside main, so the tests import this module without it. carla_capture.
 PASSIVE: the follower changes nothing in the world. It never calls apply_settings, tick, load_world,
 apply_physics_control, apply_control, set_target_velocity, spawn_actor or get_trafficmanager (FORBIDDEN): the interface
 owns the world's settings, its ticking, the map, the ego and its control. It reads get_physics_control() once, at attach
-(a read: WP9a's E13 concerns the apply). It follows every frame through world.on_tick(), since wait_for_tick() reports
-only the frames that arrive while it is awaited (the interface's own follower code says so, Phase 8 W: I5); the client's
-timeout is set explicitly (CLIENT_TIMEOUT_S), and no call it makes has another timeout to set.
+(a read: WP9a's E13 concerns the apply). At attach, after the settings and before its first actor read, it waits for one
+tick, world.wait_for_tick(CLIENT_TIMEOUT_S), a read that never advances the world, and uses that tick's snapshot for
+nothing but its arrival: a client's actor list is the last world snapshot it has received, and a client new to a
+synchronous world may hold none yet (INFERRED; unread in 0.10.0's LibCarla), so a read at once could find no actor at all.
+It follows every frame through world.on_tick(), registered after that wait, since wait_for_tick() reports only the frames
+that arrive while it is awaited (the interface's own follower code says so, Phase 8 W: I5); the client's timeout is set
+explicitly (CLIENT_TIMEOUT_S), and the one call with a timeout of its own, that wait, is given the same.
 
 REFUSED BEFORE CONNECTING (exit 2, nothing written): a name that is not <yyyymmdd>-carla010-<n>[suffix] (n a decimal with no
 leading zero; the suffix and the whole name as sigsim's rule; a calendar date), a pattern Phase 7's NAME_RE cannot match,
@@ -22,19 +26,20 @@ so a 0.10.0 take is never read as a 0.9.16 one; on Windows, a host other than 12
 --for windows-client that does not pass (P4 applied: the follower runs no Traffic Manager, but the gate is checked
 whole); a take directory under TAKE_ROOT that exists or lies inside a git work tree; no generated contract.
 REFUSED AFTER CONNECTING (the take is written, marked refused with its reason, and nothing is encoded from it; exit 1):
-client and server not both 0.10.0; not exactly one actor whose role_name is ROLE_NAME; that actor not BLUEPRINT; the
-world not synchronous, or fixed_delta_seconds not CARLA_STEP_MS / 1000, at attach, at any re-read (every REREAD_FRAMES
-frames) or at the end (once more after the last frame, so no frame lies after the last read: the settings are read,
-never applied); the vehicle's own steering-curve points (the curve as read, after the client class's default prefix, W9
-E11) not the interface's flattening carla010_iso.FLAT_CURVE (W9 E14: so the speed attenuation of the shipped curve, E12,
-never enters a take); a frame whose number is not the previous one's plus one, or that is not one step of simulation
+client and server not both 0.10.0; no tick within CLIENT_TIMEOUT_S of the wait at attach (the interface is not ticking);
+not exactly one actor whose role_name is ROLE_NAME; that actor not BLUEPRINT; the world not synchronous, or
+fixed_delta_seconds not CARLA_STEP_MS / 1000, at attach, at any re-read (every REREAD_FRAMES frames) or at the end (once
+more after the last frame, so no frame lies after the last read: the settings are read, never applied); the vehicle's own
+steering-curve points (the curve as read, after the client class's default prefix, W9 E11) not the interface's flattening
+carla010_iso.FLAT_CURVE (W9 E14: so the speed attenuation of the shipped curve, E12, never enters a take); a frame whose
+number is not the previous one's plus one, or that is not one step of simulation
 (step_problem: its own delta_seconds, and its elapsed time since the previous frame's, each sendpolicy.step_advance_ns of
 one CARLA_STEP_MS), so a world whose step changes is refused at the first frame of the new step; a listening socket of
 this client's process at the start or the end (no Traffic Manager, W9 S10), or a read of them that fails
 (LISTENERS_PS: every listener read, this pid's kept, the cmdlet stopping on any error). The substep is recorded, never
 refused (W9 E30). The map is recorded; the encoder refuses another level.
 
-THE TAKE (TAKE_ROOT/<name>/, a new directory: Phase 7 spec 2.2's shape): steps.jsonl, one compact object per frame the
+THE TAKE (TAKE_ROOT/<name>/, a new directory): steps.jsonl, one compact object per frame the
 interface ticked, with STEP_KEYS -- Phase 7's keys but wheel_deg (the conversion uses commanded steer): i,
 frame, elapsed_s, t_vals_ns (the follower's clock when its tick callback read the frame) and t_cur_ns (when the step
 becomes current by the send policy: sendpolicy.became_current, as a live sender would send it; the follower paces
@@ -51,16 +56,15 @@ line, this file's sha256, completed, refused, errors.
 THE END (ENDS): the ego gone from a tick's snapshot (the interface's cleanup destroys it), no frame for IDLE_TIMEOUT_S,
 or --max-frames frames: each ends a completed take, once the world settings read at the end hold. A Ctrl-C ends it with
 130 and the take is not completed, also one during the end listener read (the record and its sums are still written); no
-tick at all within IDLE_TIMEOUT_S of attaching is an error. The cleanup removes the tick callback, and that is all: the
-follower spawned nothing and set nothing.
+frame through on_tick() within IDLE_TIMEOUT_S of attaching (the wait's tick came, then none) is an error, and no tick at all
+is refused at the wait. The cleanup removes the tick callback, and that is all: the follower spawned nothing and set nothing.
 
-DOES NOT DEMONSTRATE: vehicle dynamics, that Autoware drives the taxi (WP9's 5a shows it or not), or any timing: the clock
+DOES NOT DEMONSTRATE: vehicle dynamics, that Autoware drives the taxi, or any timing: the clock
 stamps the frames as the follower saw them and the send policy schedules them, nothing more. Nor that a world which
 leaves the tie and comes back between two reads, with its step unchanged, is seen (asynchronous mode at the same step
 changes no frame). Nor what the 0.10.0 server does to its settings when the interface disconnects: the interface leaves
 them as they are (W: I6), but were the server to make itself asynchronous then, a take that ends after the disconnect
-would be refused at its end read (WP9's first take shows which). The listener read was run on this PC only as a probe,
-never from venv312-010 against a server.
+would be refused at its end read. The offline tests do not establish listener-read behavior against a live server.
 """
 from __future__ import annotations
 
@@ -355,6 +359,11 @@ def take(name: str, *, carla: Any, take_root: Path, host: str, contract: Any, cl
         world = client.get_world()
         rec["map"] = world.get_map().name
         read_settings("attach", None)
+        try:
+            world.wait_for_tick(CLIENT_TIMEOUT_S)     # one tick's snapshot before the first actor read (PASSIVE)
+        except RuntimeError as e:                     # CARLA's client time-out
+            raise FollowRefused("no tick came within CLIENT_TIMEOUT_S (%r s) of attaching: the interface is not ticking (%s)"
+                                % (CLIENT_TIMEOUT_S, e)) from e
         egos = [x for x in world.get_actors() if dict(x.attributes).get("role_name") == ROLE_NAME]
         if len(egos) != 1:
             raise FollowRefused("%d actors carry role_name %r: exactly one is followed" % (len(egos), ROLE_NAME))
