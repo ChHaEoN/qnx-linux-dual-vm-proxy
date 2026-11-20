@@ -1,0 +1,14 @@
+# claimrs: the kind 4 claim codec and a blocking svc client in Rust, std only (sdv/claimrs; SDV Phase 9,
+# rustcpp R1). No dependencies of any kind: every cargo call runs --locked --offline (README.md).
+[package]
+name = "claimrs"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Kind 4 claim codec and svc probe for the QNX monitor's L4T side (study code, std only)"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[profile.release]
+overflow-checks = true
