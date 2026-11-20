@@ -97,7 +97,7 @@ the honest spec in replay mode against a stand-in guest: the native vss monitor 
 stdout relayed into a console file salted as QEMU's serial log is, reached at WSL's eth0 IPv4; then `compare --modes
 replay`. It skips without a non-loopback IPv4 on eth0.
 
-The cases include design values, generated values, synthetic inputs and record-derived regression inputs.
+The cases include design values, generated values, synthetic inputs and regression inputs.
 What this does NOT show: any timing; the QNX guest, io-sock or the image (the stand-in is the native
 build); that br0 to the guest behaves as WSL's eth0; that a live mode samples as replay does (the integration test's
 and the records' business).
@@ -1350,7 +1350,7 @@ def _through_doc(through_ns, run="to_end", events_file=True):
 # (run_through_ns, the end the rule gives): off the grid, the first grid instant at or past it plus one tick; on it, one
 # tick after it, as before
 END_RULE = [
-    pytest.param(300_920 * MS, 301_100 * MS, id="carla-honest"),        # record-derived case; off the grid
+    pytest.param(300_920 * MS, 301_100 * MS, id="off-grid-20ms"),        # off the grid by 20 ms
     pytest.param(300_900 * MS + 1, 301_100 * MS, id="1ns-past"),
     pytest.param(301_000 * MS - 1, 301_100 * MS, id="1ns-before"),
     pytest.param(300_950 * MS, 301_100 * MS, id="half-tick-past"),
@@ -1477,12 +1477,13 @@ NEEDS_SIGSIM_PAIR = pytest.mark.skipif(not all((d / "manifest-line.json").is_fil
                                        not (SIGSIM_PAIR[1] / "events.json").is_file(),
                                        reason="needs the sigsim pair %s and %s (read only)" % SIGSIM_PAIR)
 SIX = ("honest", "inject", "pause-tick", "pause-both", "injected-to-end", "injected-stop")
-# _plan_digest of each group of plans (SIX in every mode, in that order), taken with the reference step3.py on the
-# original recordings. Regenerate the digest only with that reference and those recordings.
+# _plan_digest of each group of plans (SIX in every mode, in that order), taken with the reference step3.py on the two
+# pairs, their injected recordings as re-made for WP3c F-c's contract (2026-11-14). Regenerate the digest only with that
+# reference and those recordings.
 FAD47A99_PLANS = {
-    "sigsim": "94d6521eb50e3d7f73da29b9efee5d8da7af8da84598518864efa3324b1a472e",             # every plan, whole
-    "carla-stop": "e1855dd6fbfdd79dce3a362727423720888ccd26722210952d430000c8316207",         # the injected-stop plans, whole
-    "carla-but-the-end": "05289de4a6a617f931c1deabc99a68d52a5da018e120cea6592070efe01b67fb",  # every plan, less its end
+    "sigsim": "f04926118461282223dd3dd033735fb74c9442faf7ba3eee8e5372252f5d17e8",             # every plan, whole
+    "carla-stop": "f8ac9b6ac368d10583c2a777fd7d7098d9522007f714b9bcca45ed983493e288",         # the injected-stop plans, whole
+    "carla-but-the-end": "8c46b5c45f01c5c06fdebce7f906eba63193ea5f619f55c32c1f2eaaf74853bb",  # every plan, less its end
 }
 
 
@@ -1511,17 +1512,18 @@ def _pair_plans(pair):
 
 
 @NEEDS_SIGSIM_PAIR
-def test_the_sigsim_pairs_plans_are_fad47a99s_byte_for_byte():
+def test_the_sigsim_pairs_plans_are_the_references_byte_for_byte():
     """The sigsim pair's run-through offsets are on the grid. Every plan matches the reference, with its end one tick
     after the offset."""
     plans = _pair_plans(SIGSIM_PAIR)
     ends = {(p["run"], p["run_through_ns"], p["end_offset_ns"]) for p in plans}
-    assert ends == {("to_end", 45_900 * MS, 46_000 * MS), ("stop", 38_400 * MS, 38_500 * MS)}, ends
+    assert all(p["run_through_ns"] % TICK == 0 for p in plans)
+    assert ends == {(p["run"], p["run_through_ns"], p["run_through_ns"] + TICK) for p in plans}, ends
     assert _plan_digest(plans) == FAD47A99_PLANS["sigsim"]
 
 
 @NEEDS_CARLA_PAIR
-def test_the_carla_pairs_to_end_plans_end_past_the_first_grid_instant_and_its_stop_plans_are_fad47a99s():
+def test_the_carla_pairs_to_end_plans_end_past_the_first_grid_instant_and_its_stop_plans_are_the_references():
     """WP5a's pair: every plan is the reference's but for its end; a to_end run's run_through_ns is off the grid and its end
     a tick past the first grid instant at or past it, which the model reads in replay before the end (with the reference
     end it does not); the stop runs' run_through_ns is on the grid, their plans the reference's byte for byte."""

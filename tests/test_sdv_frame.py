@@ -72,21 +72,28 @@ def demo():
 
 
 def ay_bounded():
-    """The compiled profile row with an a_y bound: profile 3, the CARLA ego's, compiled since Phase 7 WP2 froze it (before,
-    a test bound it with extra_ids, which prof() still does for an uncompiled id). Since Phase 8's WP3b profile 5, the
-    CARLA 0.10.0 taxi's, has an a_y bound too but stays uncompiled until WP3c, so the guest's table holds one bounded row
-    and the cases that judge under it take that one (test_reason_8 holds profile 5 unbound)."""
-    ids = [int(r["id"]) for r in C.PROFILES if r["ay26_max"] is not None and r["compiled"]]
+    """The CARLA ego's compiled profile row with an a_y bound: profile 3, compiled since Phase 7 WP2 froze it (before, a
+    test bound it with extra_ids, which prof() still does for an uncompiled id). Since Phase 8's WP3c F-c profile 5, the
+    CARLA 0.10.0 taxi's, is compiled with an a_y bound too, so the guest's table holds two bounded rows (ay_bounded_ids());
+    the cases that judge under one of them mean the CARLA ego's, and take it by its source vehicle, never by the order of
+    the table."""
+    ids = [int(r["id"]) for r in C.PROFILES if r["ay26_max"] is not None and r["compiled"] and r["source_vehicle"] == "carla-ego"]
     assert len(ids) == 1, ids
     return ids[0]
+
+
+def ay_bounded_ids():
+    """Every compiled profile row with an a_y bound, in id order: since Phase 8's WP3c F-c profile 3 (the CARLA ego's) and
+    profile 5 (the CARLA 0.10.0 taxi's). The cases that hold a property of every bounded row the guest judges take these."""
+    return sorted(int(r["id"]) for r in C.PROFILES if r["ay26_max"] is not None and r["compiled"])
 
 
 def uncompiled_contract():
     """(contract, id): a stand-in for the generated contract with one more row, generated but not compiled (a stand-in
     L), under the first id no row and no reservation takes. From Phase 7 WP2, which compiled profile 3, until Phase 8's
-    WP3b added profile 5 (uncompiled, on stand-in envelope rows) no generated row was uncompiled; the cases of an
-    uncompiled row (reason 8 for it, extra_ids binding it) use this one as well, so they hold whatever a freeze compiles:
-    the a_y-bounded row's limits, its own source vehicle."""
+    WP3b added profile 5 (uncompiled on stand-in envelope rows until WP3c F-c compiled it) no generated row was uncompiled,
+    and since F-c none is; the cases of an uncompiled row (reason 8 for it, extra_ids binding it) use this one, so they
+    hold whatever a freeze compiles: the CARLA ego's a_y-bounded row's limits, its own source vehicle."""
     used = {int(r["id"]) for r in C.PROFILES} | set(C.RESERVED_PROFILE_IDS)
     sid = min(set(range(1, 256)) - used)
     base = next(r for r in C.PROFILES if int(r["id"]) == ay_bounded())
@@ -503,12 +510,12 @@ def test_tables_bind_compiled_profiles_only():
     for pid, p in t.profiles.items():
         assert p.l_mm == rows[pid]["l_mm"] and p.tol26 == rows[pid]["tol26"]
         assert p.ay26_max == (rows[pid]["ay26_max"] or 0.0)
-    # extra_ids binds a generated but uncompiled row with its own a_y bound, and only when named: profile 5 (Phase 8 WP3b,
-    # uncompiled until WP3c), and a synthetic row, which holds whatever a freeze compiles.
+    # Profile 5 (the CARLA 0.10.0 taxi's), uncompiled from Phase 8's WP3b until WP3c F-c, is compiled: the plain tables bind
+    # it with its own a_y bound, no extra_ids needed. extra_ids binds a generated but uncompiled row, and only when named: a
+    # synthetic row, which holds whatever a freeze compiles.
     p5 = rows[5]
-    assert p5["compiled"] is False and 5 not in t.profiles
-    bound5 = tables(extra_ids=(5,)).profiles
-    assert bound5[5].ay26_max == p5["ay26_max"] > 0 and bound5[5].l_mm == p5["l_mm"] and bound5[5].tol26 == p5["tol26"]
+    assert p5["compiled"] is True and 5 in t.profiles and 5 in C.COMPILED_PROFILE_IDS
+    assert t.profiles[5].ay26_max == p5["ay26_max"] > 0 and t.profiles[5].l_mm == p5["l_mm"] and t.profiles[5].tol26 == p5["tol26"]
     syn, sid = uncompiled_contract()
     srow = syn.PROFILES[-1]
     assert sid not in rules.Tables.from_contract(syn).profiles
@@ -516,6 +523,16 @@ def test_tables_bind_compiled_profiles_only():
     assert sid in bound and bound[sid].ay26_max == srow["ay26_max"] > 0 and bound[sid].l_mm == srow["l_mm"]
     with pytest.raises(ValueError, match="reserved"):
         tables(profiles=[rules.Profile(0, rules.L_MM_MIN, 1.0, 1.0, 1.0, 1.0, 2.0, 0.0, 1.0, 1.0)])
+
+
+@NEEDS_CONTRACT
+def test_the_a_y_bounded_helpers_name_the_carla_egos_row_and_every_bounded_row():
+    """ay_bounded() is the CARLA ego's row (run type carla's live default) whatever else the table holds; since Phase 8's
+    WP3c F-c ay_bounded_ids() is that row and profile 5 (run type carla-autoware's live default), both compiled with a
+    bound, so a case meant for profile 3 never judges under the taxi's limits and a case meant for every bounded row takes
+    both."""
+    assert ay_bounded() == C.LIVE_DEFAULT_PROFILE["carla"]
+    assert ay_bounded_ids() == sorted({C.LIVE_DEFAULT_PROFILE["carla"], C.LIVE_DEFAULT_PROFILE["carla-autoware"]}) == [ay_bounded(), 5]
 
 
 @NEEDS_CONTRACT
@@ -595,12 +612,14 @@ def test_reason_8():
     absent = [i for i in range(1, 256) if i not in in_table and i not in C.RESERVED_PROFILE_IDS]
     for pid in tuple(C.RESERVED_PROFILE_IDS) + (absent[0], absent[-1]):     # reserved, and ids nothing defines
         assert judge(honest(profile=pid)) == reject(8), pid
-    uncompiled = [r["id"] for r in C.PROFILES if not r["compiled"]]
-    assert 5 in uncompiled, "premise (Phase 8 WP3b): profile 5 is generated but not compiled until WP3c's freeze"
-    for pid in uncompiled:
+    # Profile 5 (the CARLA 0.10.0 taxi's) was generated but not compiled from Phase 8's WP3b until WP3c F-c compiled it: no
+    # longer 8, judged as every compiled profile.
+    assert 5 in C.COMPILED_PROFILE_IDS, "Phase 8 WP3c F-c compiled profile 5"
+    assert judge(honest(profile=5)) == ACCEPT
+    for pid in [r["id"] for r in C.PROFILES if not r["compiled"]]:      # none since F-c; any later generated uncompiled row
         assert judge(honest(profile=pid)) == reject(8), pid              # as the specification's Phase 2 guest will
         assert judge(honest(profile=pid), tables(extra_ids=(pid,))) == ACCEPT
-    # The same holds on a synthetic uncompiled row, whatever a freeze compiles.
+    # The same holds on a synthetic uncompiled row, whatever a freeze compiles: 8 unless named in extra_ids.
     syn, sid = uncompiled_contract()
     assert judge(honest(profile=sid), rules.Tables.from_contract(syn)) == reject(8)
     assert judge(honest(profile=sid), rules.Tables.from_contract(syn, extra_ids=(sid,))) == ACCEPT
@@ -771,13 +790,13 @@ def test_reason_26_tol_edges():
 
 @NEEDS_CONTRACT
 def test_reason_26_ay_bound_edges():
-    """C11: under each a_y-bounded profile (profile 3, compiled since Phase 7 WP2, and since Phase 8's WP3b profile 5,
-    uncompiled until WP3c; extra_ids binds either), a_y_kin just below the bound is judged and just above it skipped,
-    placed by bisecting binary32 delta at a fixed binary32 v."""
+    """C11: under each a_y-bounded profile (profile 3, compiled since Phase 7 WP2, and profile 5, compiled since Phase 8's
+    WP3c F-c: both in the plain tables, as any later uncompiled bounded row is with extra_ids), a_y_kin just below the bound
+    is judged and just above it skipped, placed by bisecting binary32 delta at a fixed binary32 v."""
     bounded = [int(r["id"]) for r in C.PROFILES if r["ay26_max"] is not None]
-    assert ay_bounded() in bounded and 5 in bounded
+    assert ay_bounded_ids() == [ay_bounded(), 5] and set(ay_bounded_ids()) <= set(bounded)
     for aid in bounded:
-        t = tables(extra_ids=(aid,))
+        t = tables(extra_ids=() if aid in C.COMPILED_PROFILE_IDS else (aid,))
         p = t.profiles[aid]
         assert p.ay26_max > 0
         wild = 250.0

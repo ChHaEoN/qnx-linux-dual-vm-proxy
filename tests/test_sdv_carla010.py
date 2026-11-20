@@ -1,6 +1,7 @@
-"""The CARLA 0.10.0 path of sdv/carla (SDV plan Phase 8 WP9b, spec-2 sections 2.9, 10.1 and 10.2):
+"""The CARLA 0.10.0 path of sdv/carla (SDV plan Phase 8 WP9b):
 carla010_iso.py's conventions and steering law, follow010.py's passive take, encode010.py's carla-autoware recording,
-gpucheck.py's read and refusals, and fwcheck.py's --carla choice.
+gpucheck.py's read and refusals, and fwcheck.py's --carla choice. The rules come from the project's local design
+notes, not in this tree.
 
 No CARLA, GPU, PowerShell or network is used: the follower runs against tests/fixtures/carla010/fake_carla010.py, a
 stand-in for the `carla` 0.10.0 client module whose fake clock drives a fake interface that ticks the world; gpucheck and
@@ -371,7 +372,8 @@ def test_each_step_is_one_frame_from_on_tick_with_the_ego_s_raw_readings_and_its
 def test_the_follower_never_makes_a_forbidden_call_and_sets_its_client_timeout_first(tmp_path):
     """It never applies settings, ticks, loads a world, applies physics or a control, sets a velocity, spawns or asks for a
     Traffic Manager (spec-2 10.1 item 1): the fake records each such call before it raises. The client's timeout is set
-    explicitly before any other call (W9 S6); the physics control is read once, at attach (W9 E13 concerns the apply)."""
+    explicitly before any other call (W9 S6); the physics control is read once, at attach (W9 E13 concerns the apply). The
+    order gains WP9 P3's one wait_for_tick, made once and before on_tick() is registered."""
     assert follow.FORBIDDEN == ("apply_settings", "tick", "load_world", "apply_physics_control", "apply_control",
                                 "set_target_velocity", "spawn_actor", "get_trafficmanager")
     rc, carla, take = run_follow(tmp_path)
@@ -382,6 +384,7 @@ def test_the_follower_never_makes_a_forbidden_call_and_sets_its_client_timeout_f
     assert carla.sim.client_timeout == follow.CLIENT_TIMEOUT_S
     assert calls.count("get_physics_control") == 1 and calls.count("on_tick") == 1 and calls.count("remove_on_tick") == 1
     assert calls.index("get_physics_control") < calls.index("on_tick") and carla.sim.callbacks == {}
+    assert calls.count("wait_for_tick") == 1 and calls.index("wait_for_tick") < calls.index("on_tick")
 
 
 def test_the_client_timeout_is_the_interface_s_20_seconds_not_a_timeout_that_expires_at_once():
@@ -431,6 +434,77 @@ def test_a_take_refused_at_attach_records_why_and_follows_nothing(tmp_path, what
     assert rc == 1 and cap["completed"] is False and cap["refused"] and said in cap["refused"], cap["refused"]
     assert read_steps(take) == [] and "on_tick" not in carla.sim.calls and cap["steps"] == 0
     assert not set(carla.sim.calls) & set(fake.FORBIDDEN + fake.ALSO_REFUSED)
+
+
+# WP9 P3's attach fix: one wait for a tick before the first actor read. A client's actor list is the last snapshot it has
+# received; the fake's snapshot_pending world reads no actor until a tick has delivered one (its THE FIRST SNAPSHOT).
+
+@NEEDS_CONTRACT
+def test_the_attach_reads_the_versions_map_and_settings_then_waits_for_one_tick_then_reads_the_actors(tmp_path):
+    """The attach's order (the module's PASSIVE): versions, map, settings, one world.wait_for_tick(CLIENT_TIMEOUT_S), the
+    actors, the rest; the wait made once, with CLIENT_TIMEOUT_S its argument, before on_tick() is registered."""
+    rc, carla, take = run_follow(tmp_path)
+    assert rc == 0, read_capture(take)["refused"]
+    calls = carla.sim.calls
+    assert calls.count("wait_for_tick") == 1 and carla.sim.wait_timeouts == [follow.CLIENT_TIMEOUT_S], carla.sim.wait_timeouts
+    order = ["get_client_version", "get_server_version", "get_world", "get_map", "get_settings", "wait_for_tick", "get_actors",
+             "get_physics_control", "on_tick"]
+    at = [calls.index(c) for c in order]
+    assert at == sorted(at), list(zip(order, at))
+
+
+@NEEDS_CONTRACT
+def test_a_client_with_no_snapshot_yet_attaches_after_its_one_wait_and_follows_the_frames_on_tick_brings(tmp_path):
+    """No actor is read until a tick has delivered a snapshot: the one wait takes the interface's next tick, whose snapshot the
+    follower uses for nothing but its arrival, so the ego is found and the take completes; its frames are on_tick()'s, from
+    the tick after the wait's."""
+    rc, carla, take = run_follow(tmp_path, snapshot_pending=True)
+    cap = read_capture(take)
+    assert rc == 0 and cap["completed"] is True and cap["refused"] is None and cap["errors"] == [], (cap["refused"], cap["errors"])
+    assert cap["ego_id"] == carla.sim.ego.id and carla.sim.wait_timeouts == [follow.CLIENT_TIMEOUT_S]
+    first = fake.FAKE_START_FRAME + 2                      # the wait's own tick, frame + 1, is no step
+    assert [s["frame"] for s in read_steps(take)] == list(range(first, first + carla.sim.ticks_planned - 1))
+
+
+@NEEDS_CONTRACT
+def test_no_tick_within_client_timeout_s_at_attach_is_a_refusal_recorded_as_the_other_refusals_after_connecting(tmp_path, capsys):
+    """No tick at all and no snapshot held: the wait times out after CLIENT_TIMEOUT_S of the clock (RuntimeError, as CARLA's
+    client) and the take is refused with its own words, exit 1, before any actor read. Its capture.json is the one a
+    refusal at the actor read leaves but for the reason: nothing else is written for it."""
+    rc, carla, take = run_follow(tmp_path, snapshot_pending=True, ticks=0)
+    cap = read_capture(take)
+    assert rc == 1 and cap["completed"] is False and cap["errors"] == [], cap["errors"]
+    words = "no tick came within CLIENT_TIMEOUT_S (%r s) of attaching: the interface is not ticking" % follow.CLIENT_TIMEOUT_S
+    assert cap["refused"].startswith(words), cap["refused"]
+    assert "follow010.py: refused: " + words in capsys.readouterr().err
+    assert "get_actors" not in carla.sim.calls and "on_tick" not in carla.sim.calls and read_steps(take) == []
+    assert carla.sim.wait_timeouts == [follow.CLIENT_TIMEOUT_S] and carla.clock.now - 7_000 * MS >= follow.CLIENT_TIMEOUT_S * 1e9
+    sums = "".join("%s  %s\n" % (_sha(take / n), n) for n in ("steps.jsonl", "script.jsonl", "capture.json"))
+    assert (take / "take.sha256").read_text(encoding="ascii") == sums
+    rc, _carla, other = run_follow(tmp_path / "other", actors=())
+    ref = read_capture(other)
+    assert rc == 1 and "exactly one" in ref["refused"]
+    assert {k: v for k, v in cap.items() if k != "refused"} == {k: v for k, v in ref.items() if k != "refused"}
+
+
+@NEEDS_CONTRACT
+def test_a_ctrl_c_inside_the_wait_at_attach_ends_the_take_with_130_before_any_actor_read(tmp_path):
+    """The Ctrl-C arrives in the tick the one wait takes: not a refusal, an interrupted take with its record, and no actor
+    read and no on_tick registered."""
+    rc, carla, take = run_follow(tmp_path, snapshot_pending=True, interrupt_at=0)
+    cap = read_capture(take)
+    assert rc == 130 and cap["completed"] is False and cap["refused"] is None, (rc, cap["refused"])
+    assert cap["errors"] == ["KeyboardInterrupt: interrupted"], cap["errors"]
+    assert "get_actors" not in carla.sim.calls and "on_tick" not in carla.sim.calls
+    assert (take / "take.sha256").is_file()
+
+
+def test_the_passive_paragraph_says_the_one_wait_at_attach_and_why_and_its_refusal_is_listed():
+    doc = re.sub(r"\s+", " ", follow.__doc__)
+    passive = doc[doc.index("PASSIVE:"):doc.index("REFUSED BEFORE CONNECTING")]
+    assert "wait_for_tick(CLIENT_TIMEOUT_S)" in passive and "first actor read" in passive and "snapshot" in passive, passive
+    after = doc[doc.index("REFUSED AFTER CONNECTING"):doc.index("THE TAKE")]
+    assert "no tick" in after and "CLIENT_TIMEOUT_S" in after, after
 
 
 @NEEDS_CONTRACT
@@ -1347,8 +1421,8 @@ def test_the_encoder_reuses_encode_py_read_only_and_never_imports_carla_iso():
 @NEEDS_CONTRACT
 @NEEDS_SIM_VENV
 def test_record_and_verify_with_cantools_and_python_can_against_the_real_generation(tmp_path):
-    """End to end in the sim venv on the real generation (profile 5 uncompiled there until WP3c): recorded, marked not
-    compiled, verified; a damaged log fails regenerated_identical."""
+    """End to end in the sim venv on the real generation: recorded and verified, with the generated profile's compilation
+    status checked; a damaged log fails regenerated_identical."""
     rc, take = make_take(tmp_path)
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", SDV_GEN=str(vf.contract_path().parent))
 

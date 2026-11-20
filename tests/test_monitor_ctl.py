@@ -31,8 +31,9 @@ is tested, and how:
   REJECT line and a pending summary flushed right before `udp done:`, and a new bucket after a silence of 1.3 s
   (the limiter is given the monitor's clock).
 - The text: each ctl flush hook stands as three lines right before the vss hook, seven of them and none elsewhere;
-  outside the 0x04 blocks and the deviation, monitor.c is the reference blob's text with only comments changed (section
-  3 item 3: the base value below is that text's sha256), and the deviation is its seven lines word for word; no
+  outside the 0x04 blocks, kind 6's 0x40 blocks (C2b S3) and the deviation, monitor.c is the reference blob's text with
+  only comments and the switch's value check changed (section 3 item 3: the base value below is that text's sha256),
+  and the deviation is its seven lines word for word; no
   <math.h> anywhere, no libm in the ctl build (readelf); the ctl unit clean under -Wpedantic.
 - One exchange end to end on loopback with the ctl build in `PORT svc 500`: a kind 2 reply, a LIVENESS MISS after a
   silence, RESTORED on the next frame.
@@ -117,13 +118,17 @@ FORMAT_ERROR = "vss_ctl.h is not ctl contract format 1"
 DT_MAX_ERROR = "VSS_CTL_DT_MAX_MS is below 0xFFFF: a saturated interval (0xFFFF) fails rule 11"
 
 GUARD = "#if defined(MONITOR_EXT_KINDS) && (MONITOR_EXT_KINDS & 0x04)"
+LANE_GUARD = "#if defined(MONITOR_EXT_KINDS) && (MONITOR_EXT_KINDS & 0x40)"    # kind 6's (C2b S3): stripped too
 DEVIATION_FIRST = "/* A deviation from section 11 (Phase 2 design decision d)"
 # Section 3 item 3's base value: strip_kind2() applied to ipc-test/qnx-safety-monitor/monitor.c at the reference commit
 # BASE_COMMIT (its blob exported with git cat-file on the Windows side, before any edit of the file, by the same function
 # copied into a script outside the tree), then moved for the later comment-only edits (the KVM caveat, the threshold
-# comments, the accepted socket's flag and the vlm bound's wording); the C tokens are unchanged.
+# comments, the accepted socket's flag and the vlm bound's wording); the C tokens are unchanged. Re-pinned for C2b S3
+# (the strip of the 0x40 blocks leaves the earlier pinned text as it was): the one change outside the 0x04 and 0x40
+# blocks and the deviation is the switch's value check, which also takes 0x50 and 0x54 and whose #error names the five
+# values, and the comments that name kind 6 (the header's kind list, the switch's).
 BASE_COMMIT = "9d83ab91"
-BASE_STRIPPED_SHA256 = "6dbadc1d76afd7d412f292b5e79959d570f7c05ec4fa312a96ca579f152cbd2b"
+BASE_STRIPPED_SHA256 = "96b1a3cd1ea13088792138e40c632ea98eda01189fe64f3520c11e1850e87173"
 # Section 3 item 2's lines, the one stretch outside the 0x04 blocks that is not the reference blob's text. strip_kind2() removes
 # it from its first line through the #endif of the not-implemented #error, so its own text is pinned here word for word.
 DEVIATION = ("/* A deviation from section 11 (Phase 2 design decision d), narrowed in Phase 8",
@@ -1593,11 +1598,13 @@ def _closing_endif(lines, start, depth):
 
 def strip_kind2(text):
     """monitor.c without the deviation (its comment's first line through the #endif that closes the not-implemented
-    #error) and without every block opened by GUARD through its matching #endif: section 3 item 3's removal.
-    Returns the rest and the removed ranges (1-based, inclusive)."""
+    #error) and without every block opened by GUARD, or by kind 6's LANE_GUARD (C2b S3), through its matching #endif:
+    section 3 item 3's removal. Returns the rest and the removed ranges (1-based, inclusive)."""
     lines = text.split("\n")
     spelt = [i + 1 for i, ln in enumerate(lines) if "MONITOR_EXT_KINDS & 0x04" in ln and ln != GUARD]
     assert not spelt, "a 0x04 guard not spelt exactly as section 2.1's line, at line(s) %s" % spelt
+    spelt = [i + 1 for i, ln in enumerate(lines) if "MONITOR_EXT_KINDS & 0x40" in ln and ln != LANE_GUARD]
+    assert not spelt, "a 0x40 guard not spelt exactly as LANE_GUARD's line, at line(s) %s" % spelt
     first = [i for i, ln in enumerate(lines) if ln.startswith(DEVIATION_FIRST)]
     err = [i for i, ln in enumerate(lines) if _directive(ln) == "error" and "not implemented" in ln]
     assert len(first) == 1 and len(err) == 1 and first[0] < err[0], (first, err)
@@ -1609,7 +1616,7 @@ def strip_kind2(text):
         if first[0] <= i <= end:
             i += 1
             continue
-        if lines[i] == GUARD:
+        if lines[i] in (GUARD, LANE_GUARD):
             j = _closing_endif(lines, i, 0)
             removed.append((i + 1, j + 1))
             i = j + 1

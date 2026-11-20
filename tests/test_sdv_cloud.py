@@ -2737,7 +2737,7 @@ def test_a_certificate_whose_reply_was_refused_is_torn_down_by_its_id_and_one_wi
 
 def test_an_approval_printed_under_one_role_and_profile_is_none_under_another(rig: Rig) -> None:
     """The hard review's SHOULD 3 (c06, c06b). The role and the profile were in no hash and bound to no state: after one
-    `twinctl literals` under another role and profile, the approval printed under the first let six creates through
+    `twinctl literals` under another role and profile, the approval printed under the first let creates through
     under the second."""
     first = rig.shown("apply", "bucket")
     other = {"TWIN_PROFILE": PROFILE_2, "TWIN_OPERATOR_ROLE": ROLE_2}
@@ -3920,7 +3920,7 @@ def test_the_table_of_the_functions_own_sentence_forms_is_what_breaker_py_can_ra
     syntax tree, with every word it can put into a `%s`. A sentence added to breaker.py fails this test until the table
     has it; a table entry no sentence of breaker.py matches fails it too."""
     forms, heads, whys = breaker_forms()
-    assert len(forms) == 17 == len(set(forms)) == len(TW.OWN_CLAUSES) and sorted(heads) == [
+    assert len(forms) == 22 == len(set(forms)) == len(TW.OWN_CLAUSES) and sorted(heads) == [     # fleet P2: the pairs' five sentences
         "the %s did not complete: %d failure(s): %s", "the breaker stopped on an error no step names (%s): look at the state by hand"]
     used = set()
     for form in forms:
@@ -3946,7 +3946,7 @@ def test_the_table_of_the_functions_own_sentence_forms_is_what_breaker_py_can_ra
 
 def test_the_one_slot_of_the_functions_own_sentences_that_is_no_fixed_word_takes_the_class_name_of_an_error_and_not_the_rules_name(
         tmp_path: Path) -> None:
-    """burst-verify-r1, problem 13 (its walk, walk-1.txt). The sentence for an error no step names holds the one slot of the
+    """The sentence for an error no step names holds the one slot of the
     table that is neither a fixed word nor a count: the error's class, by its name. The table took ANY identifier there,
     and the rule's name (the prefix and `_telemetry`) is one: the message was printed with it, and what kept the name off
     the terminal was the redactor's mask of the prefix, not the table. The slot is held now to the name an error's class
@@ -3989,8 +3989,8 @@ def test_the_one_slot_of_the_functions_own_sentences_that_is_no_fixed_word_takes
 
 @pytest.mark.parametrize("what", ["trip", "dry-trip"])
 def test_error_said_prints_a_clause_of_the_function_in_every_form_with_every_word_and_count_as_the_one_sentence(tmp_path: Path, what: str) -> None:
-    """burst-spec, h3 item 7 (the same cases as the table test above, taken through error_said(), which is all either command
-    prints of a function error): every one of breaker.py's 17 sentence forms, with every word it can put into it and a count of
+    """The same cases as the table test above, taken through error_said(), which is all either command
+    prints of a function error: every one of breaker.py's 22 sentence forms, with every word it can put into it and a count of
     one, two and three figures, as the only clause of a message with the head and the count that are its own: printed whole,
     as the function wrote it, and by nothing else. Then every message of the list of what is NOT in its forms, under the
     function's own type, for both commands: the read-by-hand sentence, the command's own name in front."""
@@ -4010,7 +4010,7 @@ def test_error_said_prints_a_clause_of_the_function_in_every_form_with_every_wor
                 message = "the trip did not complete: 1 failure(s): " + clause
                 assert said(message) == OWN_SAID % (what, message, "payload-trip.json"), message
                 seen += 1
-    assert len(forms) == 17 and seen == 3 * sum(len(clause_words(form, whys)) for form in forms) > 3 * len(forms)
+    assert len(forms) == 22 and seen == 3 * sum(len(clause_words(form, whys)) for form in forms) > 3 * len(forms)     # fleet P2: 17 and the pairs' 5
     for case in OUTSIDE_ITS_FORMS:
         text = said(case)
         assert text == what + NOT_ITS_FORMS[len("trip"):] and text.startswith(what + ": the function's error is of the kind BreakerError"), (
@@ -4114,9 +4114,8 @@ def test_the_breakers_zip_is_built_by_a_command_of_its_own(rig: Rig, tmp_path: P
 
 
 # ================================================================================================= guards of the driver's WP7 parts
-# WP7-verify-r2#3: ten of that stage's own mutants of the parts of twinctl.py WP7 changed lived in the whole file. Each is on a
-# guard for an input the real function, the real SDK or a state this driver wrote does not give, or on a line of words; none
-# showed the code wrong. Each is held below by the one thing it changes (the last two by what the state holds afterwards).
+# Regression cases for guards on inputs the function, SDK or an unedited state does not give, and for the driver's text.
+# Each holds the one thing it changes; the final cases also hold what the state records afterwards.
 
 def test_build_breaker_takes_a_handler_at_the_top_of_the_source_and_no_nested_one(rig: Rig, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """WP7-verify-r2#3 (T01). A function nested in another, or a method of a class, is not what the handler setting
@@ -5898,7 +5897,7 @@ FIXED_SALT = hashlib.sha256(b"a test's salt, fixed so that a render's hash can b
 
 def renders_of(rig: Rig, tmp: Path, rehearsal: bool = False, env: Optional[Dict[str, str]] = None,
                only: Optional[Any] = None) -> Dict[str, str]:
-    """EVERY STEP'S RENDER, ONE DIGEST A STEP (Phase 6 spec section 5, item 1): of the hash `apply` prints (render_hash over the
+    """EVERY STEP'S RENDER, ONE DIGEST A STEP: of the hash `apply` prints (render_hash over the
     creates of the strict render), the hash `teardown` prints (over the deletes of the render a teardown makes) and the reads
     and the listing `status`, `verify-gone` and `plan` send, in a copy of the rig whose salt is FIXED_SALT and with the rig's
     own directory written as <base> (the one part of a call that moves with the test's directory, on either platform); and
@@ -5959,7 +5958,8 @@ def outputs_of(rig: Rig, tmp: Path) -> Dict[str, str]:
 
 # What `renders_of` and `outputs_of` gave at the baseline recorded before any edit of Phase 6 WP4 (the
 # source comparison uses these tests' names, inputs and stub). The function pins include the publication scrub's
-# comment/docstring-only breaker source change, because its zip holds those bytes. Every other render pin is retained.
+# comment/docstring-only breaker source change, and video 3 fleet P2's (the breaker's pairs and its time for a set of cars),
+# because its zip holds those bytes. Every other render pin is retained.
 # `status`, `exit-checks`, the teardown's order, `verify-gone`, `plan` and `literals` keep their output pins while
 # neither TWIN_ECR nor TWIN_PULL_ROLE is given.
 HELD_RENDERS: Dict[str, Dict[str, str]] = {
@@ -5970,7 +5970,7 @@ HELD_RENDERS: Dict[str, Dict[str, str]] = {
         "alarms": "be0985d920d1306dfcd7da38", "attachments": "6a545eb26a4bdfab2ed65be6", "breaker-log": "50eb8be37d3c93c17356b001",
         "breaker-role": "ff8750e242bbac07a51911ea", "bucket": "c2468954899ef2576b0f819f", "bucket-objects": "d29dbbf789c7a4024184ef16",
         "certificate": "69f5d958b0d287178e31fc70", "dry-trip": "20f1349f6f72f05e3b80d57d", "firehose-log": "b27f58761077a8d69bd380aa",
-        "firehose-role": "52b4063fc0dd410031a14239", "function": "1679ef280c645d7436d66502",
+        "firehose-role": "52b4063fc0dd410031a14239", "function": "6c542199ccba5afb28732d6e",
         "function-concurrency": "5c23891335a46ae6c96b0cde", "function-policy": "fc64402f0278e78b65efad7a",
         "function-status": "542638ef90824ac0721e569d", "glue": "6005f8206c1392f53b3b31ba",
         "go-live-certificate": "d622ea0bf70d89506c99f298", "go-live-rule": "ca6a41e0ac33922663fad61d",
@@ -5986,7 +5986,7 @@ HELD_RENDERS: Dict[str, Dict[str, str]] = {
         "alarm-test-shadow": "ea123ebba523f6b55df1f505", "alarms": "eb8944fba45677a635e68c43", "attachments": "6a545eb26a4bdfab2ed65be6",
         "breaker-log": "50eb8be37d3c93c17356b001", "breaker-role": "ff8750e242bbac07a51911ea", "bucket": "c2468954899ef2576b0f819f",
         "bucket-objects": "d29dbbf789c7a4024184ef16", "certificate": "69f5d958b0d287178e31fc70", "dry-trip": "20f1349f6f72f05e3b80d57d",
-        "firehose-log": "b27f58761077a8d69bd380aa", "firehose-role": "52b4063fc0dd410031a14239", "function": "1679ef280c645d7436d66502",
+        "firehose-log": "b27f58761077a8d69bd380aa", "firehose-role": "52b4063fc0dd410031a14239", "function": "6c542199ccba5afb28732d6e",
         "function-concurrency": "5c23891335a46ae6c96b0cde", "function-policy": "fc64402f0278e78b65efad7a",
         "function-status": "542638ef90824ac0721e569d", "glue": "6005f8206c1392f53b3b31ba",
         "go-live-certificate": "d622ea0bf70d89506c99f298", "go-live-rule": "ca6a41e0ac33922663fad61d",
@@ -6002,7 +6002,7 @@ HELD_RENDERS: Dict[str, Dict[str, str]] = {
         "alarms": "be0985d920d1306dfcd7da38", "attachments": "4eebedafe2a7b510ca7e32d4", "breaker-log": "50eb8be37d3c93c17356b001",
         "breaker-role": "46b0f093626945e1a223ed7c", "bucket": "c2468954899ef2576b0f819f", "bucket-objects": "d29dbbf789c7a4024184ef16",
         "certificate": "3a04a3140ad836f9e344efbb", "dry-trip": "20f1349f6f72f05e3b80d57d", "firehose-log": "b27f58761077a8d69bd380aa",
-        "firehose-role": "52b4063fc0dd410031a14239", "function": "e79ed8fe1e219fb2ce3792c6",
+        "firehose-role": "52b4063fc0dd410031a14239", "function": "cd01347b5714db94cf98a986",
         "function-concurrency": "5c23891335a46ae6c96b0cde", "function-policy": "fc64402f0278e78b65efad7a",
         "function-status": "542638ef90824ac0721e569d", "glue": "6005f8206c1392f53b3b31ba",
         "go-live-certificate": "a02d59eb96e3d873c5834ecd", "go-live-rule": "ca6a41e0ac33922663fad61d",
@@ -6029,7 +6029,7 @@ HELD_OUTPUTS: Dict[str, str] = {
 @pytest.mark.parametrize("variant", sorted(HELD_RENDERS))
 def test_every_existing_step_renders_as_at_the_image_transport_baseline_without_a_new_key(variant: str, started: Rig, built: Rig,
                                                                                        tmp_path: Path) -> None:
-    """Phase 6 spec section 5, item 1: with TWIN_ECR unset and no TWIN_PULL_ROLE, every existing step's render, its hash as `apply`
+    """With TWIN_ECR unset and no TWIN_PULL_ROLE, every existing step's render, its hash as `apply`
     and `teardown` print it, its reads and its listing keep the held pins, the operator role's policy among them; the
     calls outside the table too. The function zip's pin includes the publication scrub's prose-only source change. Held
     from the started and built rig, without the notice, with row 19's readings and for the rehearsal's set."""
@@ -7221,7 +7221,7 @@ def test_the_docstring_the_readme_and_the_names_template_say_what_phase6_wp4_add
                  "TWIN_ECR=0 takes effect only once no ECR step stands",
                  "held while any pull step is on record: once apply pull-role has read the role, for good (twinctl never deletes it)",
                  "Its tag is made and not read back by the step, as no step of the twin reads its tag back",
-                 "whether ECR answers that listing to this policy is first seen at B2, under the remade policy",
+                 "Whether ECR answers that listing to this policy is first seen at B2, under the remade policy",
                  "The push is on record before it is sent (sending), and stays there however it ended",
                  "An image with no other name than the registry's reference is refused before anything is tagged (push-image-unnamed), so "
                  "that the rmi only ever untags",
@@ -7236,7 +7236,7 @@ def test_the_docstring_the_readme_and_the_names_template_say_what_phase6_wp4_add
                  "TWIN_OPERATOR_ROLE's does; once nothing stands, literals and then baseline --again take new names.",
                  "TWIN_ECR=0 takes effect only once no ECR step stands",
                  "Bound once pull-thing is recorded, and held while that step is on record.",
-                 "Only if B3 finds that a certificate attached to no thing gets no credentials (wp0-facts C9)"):
+                 "Only if a certificate attached to no thing gets no credentials"):
         assert said in example, said
     # what the texts said before the fix, and no longer may (verify#3: wider than the code)
     assert "while one stands, every command but trip is refused" not in example

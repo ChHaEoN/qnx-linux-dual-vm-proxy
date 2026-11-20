@@ -33,6 +33,14 @@ def test_classes_and_scoring():
 
 
 ORDER = ["U", "N", "C", "M", "T", "S"]
+# The injector's burst length (burst_inject.c's default burst_ms = 3.0, which the run below takes): C, M, T and S
+# each loop until their planned end, so a burst's dur_us is never below it, whatever the load.
+PLANNED_US = 3000.0
+# A generous outer bound, named as such, on the shortest of the four: under load
+# a burst's wall time is the scheduler's and leaves any tight window (2500..3600 us was one), while a length the
+# four share (burst_ms, the end act() computes) stretches all four, so this catches 3 ms bursts run for a second
+# or more. One kind's own loop running past its end is not caught here.
+OUTER_US = 1_000_000.0
 
 
 def _run(out, k, slow=("U", "M", "T"), null_slow=False, logins=0, short=None, n=1000, warm=200, seed=8):
@@ -111,6 +119,7 @@ def test_a_slow_null_window_a_short_burst_or_a_login_voids(tmp_path):
 
 @pytest.mark.skipif(CC is None or sys.platform.startswith("win"), reason="needs a POSIX C compiler")
 def test_the_injector_builds_and_logs_every_kind(tmp_path):
+    assert "burst_ms = 3.0;" in open(SRC, encoding="utf-8").read()  # the default PLANNED_US names
     exe = tmp_path / "bi"
     subprocess.run([CC, "-O2", "-o", str(exe), SRC], check=True)
     (tmp_path / "zone").mkdir()
@@ -122,7 +131,11 @@ def test_the_injector_builds_and_logs_every_kind(tmp_path):
                     "--seqnum", str(tmp_path / "seq")], check=True, timeout=30)
     rows = [json.loads(l) for l in (tmp_path / "log").read_text().splitlines()]
     assert sorted(x["kind"] for x in rows) == sorted(ORDER)
-    assert all(2500 <= x["dur_us"] <= 3600 and x["iters"] > 0 for x in rows if x["kind"] in "CMTS")
+    assert [x["i"] for x in rows] == list(range(len(ORDER))), rows
+    assert all(a["t_ns"] < b["t_ns"] for a, b in zip(rows, rows[1:])), rows
+    bursts = [x for x in rows if x["kind"] in "CMTS"]
+    assert len(bursts) == 4 and all(x["dur_us"] >= PLANNED_US and x["iters"] > 0 for x in bursts), bursts
+    assert min(x["dur_us"] for x in bursts) < OUTER_US, bursts
 
 
 def test_the_injector_source_allocates_before_the_round_and_marks_each_action():

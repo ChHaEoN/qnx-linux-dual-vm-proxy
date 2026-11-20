@@ -54,8 +54,8 @@ and writes only under pytest's tmp_path:
   written: params that would exceed eight with the rewrite's three, a value over 64 characters or one that is neither
   an integer nor a string, params that are not an object (an InjectError, on the command line too, not a traceback),
   a carla source with no rtf, a malformed one or one that is not its summary.json's trip rtf, a sigsim source with
-  one, a log name that is not its generator's, a recording.path that is not a scenario entry path
-  (manifest-classes.md section 9), and a .sha256 that names another file; a destination whose path is not a scenario
+  one, a log name that is not its generator's, a recording.path that is not a scenario entry path,
+  and a .sha256 that names another file; a destination whose path is not a scenario
   entry path is refused before it is created. The stack's own checks read and validate the CARLA rewrite by the
   log its manifest line names.
 - Refusals: an existing destination (left as it was), one inside the repository, a source whose log does not match its
@@ -109,12 +109,12 @@ SRC = Path(os.environ.get("SDV_INJECT_SOURCE", "~/sdv-recordings/20260930-sigsim
 NAME = "20261002-sigsim-1b-inj4"
 MADE = Path("~/sdv-recordings").expanduser() / NAME
 # events.json names the inject.py that made the reference recording. The recording was regenerated on 2026-10-18
-# with the frozen profile 3 generation because check verifies the generation's contract. The pre-freeze copy is an
-# archive. A sigsim rewrite moves no
+# with the frozen profile 3 generation because check verifies the generation's contract, and re-made for each later
+# contract, last on 2026-11-14 for WP3c F-c's contract. The pre-freeze copy is an archive. A sigsim rewrite moves no
 # frame, so the re-made recording is the frozen one but for this hash, the contract's and what follows from them, as
 # test_a_sigsim_rewrite_is_the_wp10_recording_byte_for_byte_but_for_two_hashes holds of a fresh rewrite. A generation with
 # another contract sha256 needs inj4 re-made again, and a re-made inj4 names the tool that re-made it: change this constant with it.
-WP10_TOOL_SHA256 = "4038e6f04091bcd989b042625581c010013b0d9934ec0f6ad32ac0f462c78425"
+WP10_TOOL_SHA256 = "2ebe59ff598cfea535e3220b60ff156e4d14bd1ea81d0c463057ecd910915648"
 SIGSIM_REWRITE_KEYS = {"from", "events", "events_sha256", "tool", "trip_fields_dropped", "note"}     # summary.json's rewrite
 CARLA_LOG = "carla.log"
 CARLA_TOWN, CARLA_VERSION, CARLA_BLUEPRINT = "Town01", "0.9.16", "vehicle.toyota.prius"     # a CARLA line's (spec 2.1, 2.3)
@@ -508,7 +508,7 @@ def test_the_new_directory_passes_the_stacks_provenance_checks_and_keeps_the_app
     assert params["rewrite_events_sha256"] == hashlib.sha256((made.dir / "events.json").read_bytes()).hexdigest()
     assert len(params) <= inj.PARAMS_MAX and all(len(str(v)) <= inj.PARAM_LEN_MAX for v in params.values())
     assert set(line) == set(src_line) and set(line["source"]) == set(src_line["source"])
-    assert "rtf" not in line["source"]                          # a sigsim line has none (manifest-classes.md section 4)
+    assert "rtf" not in line["source"]                          # a sigsim line has none
     assert "rtf" not in made.doc["rewritten_from"]              # nor does a sigsim rewrite's events.json
     assert line["source"]["vehicle"] == src_line["source"]["vehicle"] and line["profile_id"] == src_line["profile_id"]
     assert line["recording"]["path"] == str(made.dir / "sigsim.log")
@@ -697,6 +697,7 @@ def test_a_sigsim_rewrite_is_the_wp10_recording_byte_for_byte_but_for_two_hashes
     assert dump_doc(old["events.json"]) == raw["events.json"] and dump_doc(old["summary.json"]) == raw["summary.json"]
     assert dump_line(old["manifest-line.json"]) == raw["manifest-line.json"]
     assert old["events.json"]["tool"]["sha256"] == WP10_TOOL_SHA256
+    assert old["summary.json"]["rewrite"]["tool"] == {"path": "sdv/inject/inject.py", "sha256": WP10_TOOL_SHA256}
     tool = {"path": "sdv/inject/inject.py", "sha256": inj.tool_sha256()}
     want_events = dict(old["events.json"], tool=tool, contract=dict(old["events.json"]["contract"], sha256=vb.contract_sha256(C)))
     new_events = (made.dir / "events.json").read_bytes()
@@ -966,8 +967,8 @@ def test_check_refuses_a_carla_rewrite_whose_events_file_has_no_rtf_record(made,
                  id="two-values"),
 ])
 def test_a_source_whose_params_would_break_the_scenario_entrys_limits_is_refused_before_anything_is_written(made, tmp_path, extra, why):
-    """Spec 6 item 2: source.params at most eight (manifest-classes.md section 4) once the rewrite's three are added,
-    each an integer or a string, a string at most 64 characters (its section 9 schema): refused by build, before any
+    """Spec 6 item 2: source.params at most eight once the rewrite's three are added,
+    each an integer or a string, a string at most 64 characters: refused by build, before any
     directory exists (the source itself checks)."""
     src = carla_shaped(tmp_path, extra_params=extra)
     inj.read_source(src)
@@ -977,7 +978,7 @@ def test_a_source_whose_params_would_break_the_scenario_entrys_limits_is_refused
 
 
 def test_a_param_is_an_integer_of_any_size_or_a_string():
-    """The scenario entry's params are integers or strings (manifest-classes.md section 9: type [integer, string]): a
+    """The scenario entry's params are integers or strings: a
     bool (an int to Python, not to JSON), a float (1.0 too), null, a list or an object is refused, each key named. The
     schema bounds no integer, so neither does this: a 70-digit integer is taken, as zero and a negative one are."""
     assert inj.params_problems({"seed": 10 ** 70, "town": "Town01", "zero": 0, "below": -1}) == []
@@ -1016,7 +1017,7 @@ def test_a_summary_that_is_not_an_object_is_refused(made, tmp_path, body):
 
 
 def test_a_param_of_exactly_64_characters_is_accepted(made, tmp_path):
-    """The 64-character limit is inclusive (manifest-classes.md section 9's maxLength): a CARLA source whose town is 64
+    """The 64-character limit is inclusive (the scenario entry's maxLength): a CARLA source whose town is 64
     characters long is rewritten, and its new line carries the value unchanged."""
     src = carla_shaped(tmp_path, extra_params={"town": "t" * 64})
     name = src.name + "-inj"
@@ -1027,7 +1028,7 @@ def test_a_param_of_exactly_64_characters_is_accepted(made, tmp_path):
 
 
 def test_the_params_limits_are_inclusive():
-    """manifest-classes.md section 4's eight values and section 9's maxLength of 64, both inclusive, held without a
+    """The scenario entry's eight values and maxLength of 64, both inclusive, held without a
     fixture: the sigsim source's own params are five, two of them 64 characters long, so under a mutant that makes
     either limit exclusive every fixture errors at setup and no test fails."""
     five = {"a": 1, "b": 2, "c": 3, "d": 4, "e": "t" * 64}
@@ -1075,7 +1076,7 @@ def test_a_source_that_already_carries_a_rewrite_param_is_refused_before_anythin
     pytest.param("carla", ["max", "mean", "min"], r"is not \{min, mean, max\}", id="key-name-list"),
 ])
 def test_a_missing_or_malformed_rtf_is_refused(made, tmp_path, generator, rtf, why):
-    """source.rtf as the scenario entry has it (manifest-classes.md section 4): required exactly for a carla source,
+    """source.rtf as the scenario entry has it: required exactly for a carla source,
     {min, mean, max}, each a number above 0, min <= mean <= max. Refused when the source is read."""
     log = CARLA_LOG if generator == "carla" else "sigsim.log"
     src = carla_shaped(tmp_path, generator=generator, log=log, rtf=rtf)
@@ -1111,7 +1112,7 @@ def test_a_carla_source_whose_summary_rtf_is_not_its_lines_is_refused(made, tmp_
     pytest.param({"max": 1.4, "mean": 1.1, "min": 0.6}, id="max-above-1"),
 ])
 def test_an_rtf_at_the_rules_edges_is_read(tmp_path, rtf):
-    """source.rtf's rule at its edges (manifest-classes.md section 4): min <= mean <= max holds with equality, an
+    """source.rtf's rule at its edges: min <= mean <= max holds with equality, an
     integer is a number, and a max above 1 is not refused here (C12b flags every run of it): each is read."""
     src = carla_shaped(tmp_path, rtf=rtf)
     assert inj.read_source(src).line["source"]["rtf"] == rtf
@@ -1134,6 +1135,8 @@ def test_a_carla_trip_without_an_rtf_is_read(tmp_path):
                  id="carla-sigsim-log"),
     pytest.param("planning-sim", CARLA_LOG, "the source's generator is 'planning-sim': this tool reads carla and sigsim "
                  "recordings only", id="planning-sim"),
+    pytest.param("carla-autoware", "sigsim.log", "the recording's log is 'sigsim.log': a carla-autoware recording's log is carla.log",
+                 id="carla-autoware-sigsim-log"),
     pytest.param("sigsim", CARLA_LOG, "the recording's log is 'carla.log': a sigsim recording's log is sigsim.log", id="sigsim-carla-log"),
     pytest.param("carla", "CARLA.log", "the recording's log is 'CARLA.log': a carla recording's log is carla.log", id="carla-upper-case"),
     pytest.param("carla", "carla.log.txt", "the recording's log is 'carla.log.txt': a carla recording's log is carla.log", id="carla-suffix"),
@@ -1148,6 +1151,38 @@ def test_a_log_name_that_is_not_its_generators_is_refused(made, tmp_path, genera
     assert [p.name for p in tmp_path.iterdir()] == [src.name]
 
 
+def test_the_table_names_carla_autoware_but_a_carla_autoware_source_is_still_refused(made, tmp_path):
+    """Phase 8 WP9 P4: the log-name table takes carla-autoware with carla.log because the stack reads the one table
+    (tests/test_sdv_stack.py and tests/test_vss_harness.py hold the three copies equal). That does not open this tool to
+    such a source: its line carries an rtf (sdv/carla/encode010.py always writes one), and the rtf rule still says only
+    a carla recording has one. Nothing is written."""
+    assert inj.LOG_NAMES == {"sigsim": "sigsim.log", "carla": "carla.log", "carla-autoware": "carla.log"}
+    src = carla_shaped(tmp_path, generator="carla-autoware")
+    assert inj.log_name_of(jload(src / "manifest-line.json")) == CARLA_LOG
+    with pytest.raises(inj.InjectError, match="a carla-autoware source carries an rtf: only a carla recording has one"):
+        inj.build(src, src.name + "-inj", made.db, C, bs.SLICE_DBC)
+    assert [p.name for p in tmp_path.iterdir()] == [src.name]
+
+
+def test_a_carla_autoware_source_is_refused_with_or_without_an_rtf_and_nothing_is_written(made, tmp_path):
+    """Phase 8 WP9 P4: the rtf rule refuses a non-carla source only when its line carries an rtf, so with the table widened
+    a carla-autoware line without one would be read and rewritten, where before the widening its generator was refused.
+    read_source refuses the generator itself: build and check both, with an rtf or without, and nothing is written. The
+    module docstring says the same."""
+    for i, rtf in enumerate((None, SYN_RTF)):
+        root = tmp_path / str(i)
+        root.mkdir()
+        src = carla_shaped(root, generator="carla-autoware", rtf=rtf)
+        assert ("rtf" in jload(src / "manifest-line.json")["source"]) is (rtf is not None)
+        for call, args in ((inj.build, (src, src.name + "-inj", made.db, C, bs.SLICE_DBC)), (inj.check, (src, made.db, C, bs.SLICE_DBC))):
+            with pytest.raises(inj.InjectError, match="a carla-autoware source is not rewritten by this tool"):
+                call(*args)
+        assert [p.name for p in root.iterdir()] == [src.name]
+    doc = " ".join((inj.__doc__ or "").split())
+    assert "a carla-autoware source is refused here, with or without an rtf" in doc
+    assert "is refused here by the rtf rule below" not in doc
+
+
 @pytest.mark.parametrize("generator", [pytest.param(["carla"], id="a-list"), pytest.param({"carla": 1}, id="an-object"),
                                        pytest.param(None, id="null")])
 def test_a_generator_that_is_not_a_string_is_refused(made, tmp_path, generator):
@@ -1158,6 +1193,22 @@ def test_a_generator_that_is_not_a_string_is_refused(made, tmp_path, generator):
     (src / "manifest-line.json").write_bytes(dump_line(dict(line, source=dict(line["source"], generator=generator))))
     with pytest.raises(inj.InjectError, match="this tool reads carla and sigsim recordings only"):
         inj.build(src, src.name + "-inj", made.db, C, bs.SLICE_DBC)
+    assert [p.name for p in tmp_path.iterdir()] == [src.name]
+
+
+def test_the_unknown_generators_refusal_names_only_the_generators_this_tool_rewrites(made, tmp_path):
+    """Phase 8's fourth NIT package (A2): a generator outside the log-name table is refused naming the generators this
+    tool reads and rewrites, the table's less NOT_REWRITTEN (carla and sigsim), so its words agree with read_source's
+    refusal of a carla-autoware source; the table itself still names carla-autoware for the stack. Nothing is written."""
+    assert set(inj.NOT_REWRITTEN) and set(inj.NOT_REWRITTEN) < set(inj.LOG_NAMES)
+    src = carla_shaped(tmp_path, generator="planning-sim", log=CARLA_LOG)
+    with pytest.raises(inj.InjectError) as refused:
+        inj.build(src, src.name + "-inj", made.db, C, bs.SLICE_DBC)
+    said = str(refused.value)
+    assert said == "the source's generator is 'planning-sim': this tool reads carla and sigsim recordings only", said
+    named = said.split("this tool reads ", 1)[1][:-len(" recordings only")].split(" and ")
+    assert named == sorted(set(inj.LOG_NAMES) - set(inj.NOT_REWRITTEN)), named
+    assert [g for g in inj.NOT_REWRITTEN if g in said] == [], "no generator this tool refuses to rewrite is named"
     assert [p.name for p in tmp_path.iterdir()] == [src.name]
 
 
@@ -1186,7 +1237,7 @@ def test_a_carla_source_whose_sha256_file_does_not_hold_is_refused(made, tmp_pat
 
 
 def test_a_scenario_entry_path_is_the_schemas():
-    """manifest-classes.md section 9's path: ~ or /, then 1 to 255 characters of [A-Za-z0-9._/-], and no .. segment
+    """The scenario entry's path: ~ or /, then 1 to 255 characters of [A-Za-z0-9._/-], and no .. segment
     (both ends of the 255 held; a name of three dots is no .. segment)."""
     ok = ["~/sdv-recordings/n/carla.log", "/tmp/pytest-of-u/pytest-1/rec0/n/sigsim.log", "/" + "d/" * 123 + "carla.log",
           "~/a/.../carla.log", "/a"]
@@ -1205,7 +1256,7 @@ def test_a_scenario_entry_path_is_the_schemas():
     pytest.param("/" + "d/" * 128 + "carla.log", id="too-long"),
 ])
 def test_a_recording_path_that_is_not_a_scenario_entry_path_is_refused(made, tmp_path, path):
-    """The line's recording.path is a scenario entry's path (manifest-classes.md section 9) whose basename is the log:
+    """The line's recording.path is a scenario entry's path whose basename is the log:
     one that is not is refused when the source is read, though its basename is carla.log and the log is there and
     hashes as the line says. (Its directory is not held to where the source lies: a recording may be copied.)"""
     src = carla_shaped(tmp_path, path=path)

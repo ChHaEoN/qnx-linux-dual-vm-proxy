@@ -1,7 +1,7 @@
 """vss-repin.sh (plan Phase 5 WP2): the one re-pin of QEMU's threads to QEMU's
 cores, used by both vss harnesses in Orin mode (VSS_REPIN, `vss-repin.sh boot` after each boot) and by the stack after
-every container it starts (SDV_AFTER_START, the container's name as the tag). No git
-runs here.
+every container it starts (SDV_AFTER_START, the container's name as the tag); VSS_REPIN_CORES names other cores for
+QEMU (unset, 0-2), and neither vss harness nor the stack sets it. No git runs here.
 
 THE RIG. A copy of the script whose /proc is a fake tree of the test (its PROC= line changed in the copy): one directory
 per QEMU process and one task directory per thread, each with a status file whose Cpus_allowed_list a test sets. Stubs
@@ -246,9 +246,43 @@ def test_qemus_cores_are_one_design_value_and_nothing_is_written(tmp_path):
     with open(SCRIPT, encoding="utf-8") as f:
         text = f.read()
     code = [re.sub(r"\s+#\s.*$", "", ln) for ln in text.splitlines() if not ln.lstrip().startswith("#")]
-    assert [ln for ln in code if "0-2" in ln] == ["QEMU_CORES=0-2"], [ln for ln in code if "0-2" in ln]
+    assert [ln for ln in code if "0-2" in ln] == ['QEMU_CORES="${VSS_REPIN_CORES-0-2}"'], [ln for ln in code if "0-2" in ln]
     r = Repin(tmp_path)
     r.qemu(4242, THREADS)
     p, _calls = r.run("boot", pids="4242")
     assert p.returncode == 0 and os.listdir(str(r.cwd)) == [] and os.listdir(str(r.home)) == []
     assert ">" not in "".join(ln.replace(">/dev/null", "").replace("2>&1", "") for ln in code), "no redirect into a file"
+
+
+def test_vss_repin_cores_names_qemus_cores_for_the_pins_the_read_back_and_the_line(tmp_path):
+    """VSS_REPIN_CORES set to other cores (4-5 here): every thread pinned to those cores and read back on them;
+    a thread on 0-2 is off them before."""
+    r = Repin(tmp_path)
+    r.qemu(4242, {4242: "0-2", 4243: "0-5", 4250: "4-5", 4251: "0,1,2"})
+    p, calls = r.run("boot", pids="4242", VSS_REPIN_CORES="4-5")
+    assert p.returncode == 0, (p.stdout, p.stderr)
+    assert _one_line(p) == ("repin tag=boot cores=4-5 qemu=4242 threads=4 off_before=3 pin_failed=0 gone=0 threads_after=4 off_after=0 "
+                            "on_cores=yes")
+    assert all(r.affinity(4242, t) == "4-5" for t in (4242, 4243, 4250, 4251))
+    assert sorted(c[2] for c in calls if c[0] == "sudo") == ["-n taskset -pc 4-5 %d" % t for t in (4242, 4243, 4250, 4251)]
+
+
+@pytest.mark.parametrize(
+    "value, shown",
+    [("", ""), ("a", "?"), ("5-4", "5-4"), ("3;5", "3?5"), ("0-", "0-"), ("1-2-3", "1-2-3"), ("4-5;", "4-5?"), ("0-2,", "0-2,")],
+    ids=["empty", "letter", "descending", "semicolon", "open-range", "two-dashes", "trailing-semicolon", "trailing-comma"],
+)
+def test_a_vss_repin_cores_that_is_not_a_cpu_list_is_refused_before_pgrep(tmp_path, value, shown):
+    r = Repin(tmp_path)
+    r.qemu(4242, THREADS)
+    p, calls = r.run("boot", pids="4242", VSS_REPIN_CORES=value)
+    assert p.returncode == 2 and _one_line(p) == "repin error=usage: VSS_REPIN_CORES='%s' is not a CPU list" % shown, (p.returncode, p.stdout)
+    assert calls == [], "no pgrep and no sudo"
+    assert r.affinity(4242, 4243) == "0-5"
+
+
+def test_a_tag_that_is_not_one_word_is_refused_before_vss_repin_cores_is_read(tmp_path):
+    """A guard (green before and after): the TAG's check stays first."""
+    r = Repin(tmp_path)
+    p, calls = r.run("a b", pids="4242", VSS_REPIN_CORES="a")
+    assert p.returncode == 2 and _one_line(p).startswith("repin error=usage: vss-repin.sh TAG") and calls == [], p.stdout

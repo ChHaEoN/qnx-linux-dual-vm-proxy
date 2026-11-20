@@ -81,7 +81,8 @@ VSS_FLAGS = DEFAULT_FLAGS + ("-ffp-contract=off", "-DMONITOR_EXT_KINDS=0x10")
 # on it in both units. Nothing is compiled to code here; the builds keep their own gnu99.
 PEDANTIC_FLAGS = ("-fsyntax-only", "-std=gnu11", "-Wpedantic", "-Werror")
 
-SWITCH_ERROR = "MONITOR_EXT_KINDS must be 0x10 (vss), 0x14 (ctl) or 0x1C (gap)"
+# C2b S3 (was "... 0x10 (vss), 0x14 (ctl) or 0x1C (gap)"): the one #error line names the two lane values too.
+SWITCH_ERROR = "MONITOR_EXT_KINDS must be 0x10 (vss), 0x14 (ctl), 0x1C (gap), 0x50 (vss and lane) or 0x54 (ctl and lane)"
 NOT_IMPLEMENTED = "not implemented"
 FORMAT_ERROR = "is not contract format 1"
 FLT_EVAL_ERROR = "needs __FLT_EVAL_METHOD__ defined and 0"
@@ -130,10 +131,11 @@ def native_vss(tmp_path_factory):
 
 # ============================================================ C5: the switch's values
 
-@pytest.mark.parametrize("value", ["0x00", "0x04", "0x08", "0x18", "0x1D", "0x20", None])
+@pytest.mark.parametrize("value", ["0x00", "0x04", "0x08", "0x18", "0x1D", "0x20", "0x40", "0x5C", None])
 def test_c5_every_other_defined_value_stops_with_the_switch_error(value, tmp_path):
     # None is a bare -DMONITOR_EXT_KINDS, which gcc defines as 1. 0x18 and 0x1D carry bit 4, so they also
-    # reach the generated includes; the value check comes first and must fire whatever follows.
+    # reach the generated includes; the value check comes first and must fire whatever follows. C2b S3: 0x40 (kind 6
+    # without kind 4's helpers) and 0x5C (gap and lane) are refused too; 0x50 and 0x54 are tests/test_monitor_lane.py's.
     define = "-DMONITOR_EXT_KINDS" if value is None else "-DMONITOR_EXT_KINDS=" + value
     r = _compile_object(_gcc(), DEFAULT_FLAGS + ("-ffp-contract=off", define), tmp_path)
     assert r.returncode != 0 and SWITCH_ERROR in r.stderr, r.stderr
@@ -430,12 +432,16 @@ def test_the_makefile_keeps_cflags_and_the_six_recipes_textually():
         assert text.count(rule) == 1, "the vss rules are unchanged: " + rule
     cflags = [ln for ln in text.splitlines() if ln.startswith("CFLAGS")]
     assert cflags == [CFLAGS_LINE], "never put the switch (or any -D) in CFLAGS"
-    # -D stands in the three extension-kind recipes alone (Phase 7 WP4a added vss-carla's, Phase 8 WP1b ctl's): the two
-    # vss ones exactly the vss flags, ctl's exactly those with its switch value and its contract directory.
+    # -D stands in the five extension-kind recipes alone (Phase 7 WP4a added vss-carla's, Phase 8 WP1b ctl's,
+    # Phase 8.5 WP9c ctl-p5's and C2b LB lane's): the two vss ones carry exactly the vss flags, ctl's exactly those with
+    # its switch value and its contract directory, ctl-p5's is ctl's with its own contract directory, CTL_P5_GEN, and
+    # lane's is ctl-p5's with its own switch value, 0x54, and its own contract directory, LANE_GEN.
     ctl_recipe = VSS_RECIPE.replace("-DMONITOR_EXT_KINDS=0x10 -I$(VSS_GEN)", "-DMONITOR_EXT_KINDS=0x14 -I$(CTL_GEN)")
     assert ctl_recipe != VSS_RECIPE
     defines = [ln for ln in text.splitlines() if "-D" in ln and not ln.startswith("#")]
-    assert defines == [VSS_RECIPE, VSS_CARLA_RECIPE, ctl_recipe], defines
+    p5_recipe = ctl_recipe.replace(" -I$(CTL_GEN) ", " -I$(CTL_P5_GEN) ")
+    lane_recipe = p5_recipe.replace("-DMONITOR_EXT_KINDS=0x14 -I$(CTL_P5_GEN) ", "-DMONITOR_EXT_KINDS=0x54 -I$(LANE_GEN) ")
+    assert defines == [VSS_RECIPE, VSS_CARLA_RECIPE, ctl_recipe, p5_recipe, lane_recipe], defines
 
 
 # ============================================================ Phase 7 WP4a: make vss-carla (the profile-3 build)
@@ -855,10 +861,10 @@ def test_c32_the_native_script_builds_the_ctl_monitor_to_its_own_out_with_vss_ct
 
 
 def test_c32_every_extension_kind_build_line_carries_ffp_contract_off():
-    # Was test_c32_both_vss_build_lines_carry_ffp_contract_off (Phase 8 WP1b): the Makefile's
-    # three (vss, Phase 7's vss-carla and Phase 8's ctl) and the native script's switch line.
+    # Was test_c32_both_vss_build_lines_carry_ffp_contract_off (Phase 8 WP1b): the Makefile's five (vss, Phase 7's
+    # vss-carla, Phase 8's ctl, Phase 8.5 WP9c's ctl-p5 and C2b LB's lane) and the native script's switch line.
     mk = [ln for ln in MAKEFILE.read_text(encoding="ascii").splitlines() if "-DMONITOR_EXT_KINDS" in ln]
-    assert len(mk) == 3 and all(ln.startswith("\t$(CC) ") and "-ffp-contract=off" in ln for ln in mk), mk
+    assert len(mk) == 5 and all(ln.startswith("\t$(CC) ") and "-ffp-contract=off" in ln for ln in mk), mk
     sh = [ln.strip() for ln in NATIVE.read_text(encoding="ascii").splitlines() if ln.strip().startswith('"${CC}"')]
     assert len(sh) == 2, sh
     assert sh[0] == DEFAULT_GCC_LINE, "the default gcc line is today's, textually"

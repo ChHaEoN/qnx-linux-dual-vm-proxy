@@ -50,6 +50,8 @@ ACCOUNT = "123456789012"
 RULE = "example_rule"
 POLICY = "example-device-policy"
 CLIENT = "example-thing"
+CLIENT_2 = "example-thing-two"                  # video 3 fleet P2: a second car's client id and its own policy
+POLICY_2 = "example-device-policy-2"
 CERT_1 = "0123456789abcdef" * 4
 CERT_2 = "fedcba9876543210" * 4
 PACKAGES = ("boto3", "botocore", "s3transfer", "jmespath", "dateutil", "six", "urllib3")
@@ -242,6 +244,34 @@ def test_a_whole_trip_passes_the_stubber_call_by_call(sdk: Sdk, breaker: Any, ce
         # function reads the response it carries, never the class
         assert (call["answer"], call["code"], call["http"]) == ("error", "ResourceNotFoundException", 404)
         assert call["type"] in ("ClientError", "ResourceNotFoundException")
+
+
+def test_the_fleets_pairs_pass_the_stubber_call_by_call(sdk: Sdk, breaker: Any) -> None:
+    """Video 3 fleet P2: two certificates, each with its own policy (TWIN_POLICY one name per certificate, in its order). Each detach
+    carries its pair's policy, and each distinct policy is listed once, every call held to the pinned model."""
+    iot, data = clients(sdk, breaker)
+    pairs = [(CERT_1, POLICY), (CERT_2, POLICY_2)]
+    env_ = {"TWIN_CERTIFICATE_ARNS": ",".join(arn(c) for c, _p in pairs), "TWIN_CLIENT_IDS": "%s,%s" % (CLIENT, CLIENT_2), "TWIN_RULE": RULE,
+            "TWIN_POLICY": ",".join(p for _c, p in pairs)}
+    with sdk.Stubber(iot) as stub, sdk.Stubber(data) as data_stub:
+        stub.add_response("disable_topic_rule", {}, {"ruleName": RULE})
+        for cert, _policy in pairs:
+            stub.add_response("update_certificate", {}, {"certificateId": cert, "newStatus": "INACTIVE"})
+        for client in (CLIENT, CLIENT_2):
+            data_stub.add_client_error("delete_connection", service_error_code="ResourceNotFoundException", http_status_code=404,
+                                       expected_params={"clientId": client})
+        for cert, policy in pairs:
+            stub.add_response("detach_policy", {}, {"policyName": policy, "target": arn(cert)})
+        for cert, _policy in pairs:
+            stub.add_response("describe_certificate", description(cert, "INACTIVE"), {"certificateId": cert})
+        for _cert, policy in pairs:
+            stub.add_response("list_targets_for_policy", {"targets": []}, {"policyName": policy, "pageSize": breaker.PAGE})
+        stub.add_response("get_topic_rule", {"rule": {"ruleName": RULE, "ruleDisabled": True}}, {"ruleName": RULE})
+        record = breaker.run({"manual": "trip"}, env_, iot, data, sdk=sdk.boto3.__version__, log=lambda entry: None)
+        stub.assert_no_pending_responses()
+        data_stub.assert_no_pending_responses()
+    assert record["cut"] is True and record["failures"] == [] and record["counts"]["policies"] == 2
+    assert record["counts"]["calls"] == 3 * 2 + 2 + 2 + 2
 
 
 def test_the_status_passes_the_stubber_and_reads_the_models_replies(sdk: Sdk, breaker: Any) -> None:

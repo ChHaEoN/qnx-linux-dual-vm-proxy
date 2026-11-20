@@ -493,17 +493,27 @@ def test_c12_rule_27(vss, vss_udp, pid):
 
 def test_c13_profile_ids(vss, vss_udp):
     """Reason 8 for 0, the reserved ids, the first id no row defines (5 until Phase 8's WP3b gave it to profile 5), 255,
-    and every generated but uncompiled row (profile 5 until WP3c's freeze); every compiled profile accepted."""
+    and every generated but uncompiled row (profile 5 from WP3b until WP3c F-c compiled it; none since); every compiled
+    profile accepted, profile 5 among them. An uncompiled row is an id the C table does not carry, so the real build shows
+    its 8 on the synthetic one (tsf.uncompiled_contract(): the oracle judges it with that contract) whatever a freeze
+    compiles, beside the ids no row defines."""
     bound = set(COMPILED)
     absent = min(i for i in range(1, 256) if i not in {int(r["id"]) for r in C.PROFILES} | set(C.RESERVED_PROFILE_IDS))
     assert not {0, absent, 255} & bound
+    assert 5 in bound, "Phase 8 WP3c F-c compiled profile 5"
     uncompiled = {int(r["id"]) for r in C.PROFILES if not r["compiled"]}
-    assert 5 in uncompiled, "premise (Phase 8 WP3b): profile 5 is generated but not compiled"
     unbound = sorted({0, absent, 255} | set(C.RESERVED_PROFILE_IDS) | uncompiled)
     cases = [("id %d" % i, honest(i), reject(8)) for i in unbound]
     cases += [("id %d, an empty frame" % i, frame(i), reject(8)) for i in unbound]
     cases += [("id %d" % i, honest(i), ACCEPT) for i in COMPILED]
     three_way(vss, vss_udp, cases)
+    syn, sid = tsf.uncompiled_contract()
+    assert sid not in bound and not syn.PROFILES[-1]["compiled"]
+    t = rules.Tables.from_contract(syn)
+    three_way(vss, vss_udp, [("synthetic uncompiled id %d" % sid, honest(sid), reject(8)),
+                             ("synthetic uncompiled id %d, an empty frame" % sid, frame(sid), reject(8)),
+                             ("profile 5 beside it", honest(5), ACCEPT)], t=t)
+    assert rules.judge_frame(honest(sid), rules.Tables.from_contract(syn, extra_ids=(sid,))) == ACCEPT
 
 
 def test_c14_the_catalogue_digest(vss, vss_udp):

@@ -4676,14 +4676,31 @@ _G1_IFS = "ifs-ctl.bin"
 _AW_G1 = "HARNESS=run-aw-g1.sh IMAGE=%s PLAN=rehearsal VSS_HOST=c7g-metal" % _G1_IFS
 
 
+_G1_PLANS = "run-aw-g1.sh needs PLAN=rehearsal or PLAN=p6a here"
+# p6a, the second plan the harness phase takes for run-aw-g1.sh on a bare-metal host; it passes no other word to the harness
+_AW_G1_P6A = _AW_G1.replace("PLAN=rehearsal", "PLAN=p6a")
+
+
 @needs_bash
 @pytest.mark.parametrize("words, msg", [
-    (_AW_G1.replace(" PLAN=rehearsal", ""), "run-aw-g1.sh needs PLAN=rehearsal here"),
-    (_AW_G1.replace("PLAN=rehearsal", "PLAN=main"), "run-aw-g1.sh needs PLAN=rehearsal here"),
+    (_AW_G1.replace(" PLAN=rehearsal", ""), _G1_PLANS),
+    (_AW_G1.replace("PLAN=rehearsal", "PLAN=main"), _G1_PLANS),
+    (_AW_G1.replace("PLAN=rehearsal", "PLAN=sizing"), _G1_PLANS),
+    (_AW_G1.replace("PLAN=rehearsal", "PLAN=demo"), _G1_PLANS),
+    (_AW_G1.replace("PLAN=rehearsal", "PLAN=P6A"), _G1_PLANS),
+    (_AW_G1.replace("PLAN=rehearsal", "PLAN=p6a-x"), _G1_PLANS),
     (_AW_G1.replace("c7g-metal", "a1-metal"), "run-aw-g1.sh takes VSS_HOST=c7g-metal only (given: a1-metal)"),
     (_AW_G1.replace("VSS_HOST=c7g-metal", "VSS_HOST=orin"), "VSS_HOST=orin is not a bare-metal AWS host"),
-], ids=["no-plan", "plan-main", "a1-metal", "orin"])
-def test_run_aw_g1_takes_the_rehearsal_on_c7g_metal_only(tmp_path, words, msg):
+    (_AW_G1_P6A.replace("c7g-metal", "a1-metal"), "run-aw-g1.sh takes VSS_HOST=c7g-metal only (given: a1-metal)"),
+    (_AW_G1_P6A + " G1_FORM=B", "LADDER_ENV word 'G1_FORM=B' is not one the harness phase reads"),
+    (_AW_G1_P6A + " G1_CONT_CORES=0-3", "LADDER_ENV word 'G1_CONT_CORES=0-3' is not one the harness phase reads"),
+    (_AW_G1_P6A + " G1_QEMU_CORES=4-5", "LADDER_ENV word 'G1_QEMU_CORES=4-5' is not one the harness phase reads"),
+    (_AW_G1_P6A + " G1_RECORDER_CORE=4", "LADDER_ENV word 'G1_RECORDER_CORE=4' is not one the harness phase reads"),
+    (_AW_G1.replace("PLAN=rehearsal", "PLAN=guest-stopped"), _G1_PLANS),
+    (_AW_G1.replace("PLAN=rehearsal", "PLAN=g2"), _G1_PLANS),
+], ids=["no-plan", "plan-main", "plan-sizing", "plan-demo", "plan-P6A", "plan-p6a-x", "a1-metal", "orin", "p6a-a1-metal",
+        "p6a-g1-form", "p6a-cont-cores", "p6a-qemu-cores", "p6a-recorder-core", "plan-guest-stopped", "plan-g2"])
+def test_run_aw_g1_takes_the_rehearsal_or_p6a_on_c7g_metal_only(tmp_path, words, msg):
     w, stub = _aw_w(tmp_path, ifs=_G1_IFS)
     _c7g_setup_done(w)
     _laid(w, stem="aw-setup", lines=["status=DONE"], done=True)
@@ -4736,6 +4753,43 @@ def test_capture_takes_an_aw_g1_stem_by_the_whitelist_with_g1_json_as_its_eviden
     assert "aw-g1: DONE" in (pub / "capture.log").read_text(encoding="utf-8")
 
 
+# A p6a record holds a unit's record under each raw/<unit>/, one level deeper than an arm's; capture.py's four whitelist lines
+# (01-honest, 02-honest, 03-honest, 04-inject) publish it, and nothing of a bag, which stays in the harness's working
+# directory.
+_P6A_UNITS = ("01-honest", "02-honest", "03-honest", "04-inject")
+_P6A_UNIT_FILES = ("arm.tsv", "placement.tsv", "drives.tsv", "drives/d001/scenario.jsonl", "drives/d001/exit", "drives/driver-d001.log",
+                   "claim/run/replies.jsonl", "claim-node.log", "diag/diag.jsonl", "sim-launch.log", "guest-console.log")
+
+
+def test_capture_takes_a_p6a_record_whole_by_the_whitelist_and_nothing_deeper_elsewhere(tmp_path):
+    rec = tmp_path / "rec"
+    d = rec / "aw-g1"
+    _write(d / "status", "status=DONE")
+    (d / "done").touch()
+    for rel in ("host-before.txt", "host-after.txt", "run.log", "detach.log"):
+        _write(d / rel, "a line")
+    _write(d / "raw" / "g1.json", json.dumps({"harness": "run-aw-g1.sh", "status": "DONE", "plan": "p6a"}), newline=False)
+    for rel in ("arm.tsv", "manifest.tsv", "guest-console.log"):
+        _write(d / "raw" / rel, "a line")
+    _write(d / "raw" / "p6a.json", json.dumps({"plan": "p6a"}), newline=False)
+    want = []
+    for u in _P6A_UNITS:
+        for rel in _P6A_UNIT_FILES + (("export.jsonl",) if u.endswith("-honest") else ()):
+            _write(d / "raw" / u / rel, json.dumps({"seq": 1}) if rel.endswith(".jsonl") else "a line")
+            want.append("aw-g1/raw/%s/%s" % (u, rel))
+    left_out = ("other/claim/run/replies.jsonl", "01-honest/claim/run/x/deeper.jsonl", "02-inject/claim/run/replies.jsonl")
+    for rel in left_out:
+        _write(d / "raw" / rel, json.dumps({"seq": 1}))
+    pub = tmp_path / "pub"
+    r = _vss_capture(rec, pub)
+    assert r.returncode == 0, r.stdout + r.stderr
+    got = _published(pub)
+    for rel in want + ["aw-g1/raw/p6a.json", "aw-g1/raw/manifest.tsv"]:
+        assert rel in got, (rel, got)
+    for rel in left_out:                    # 02-inject is none of the four whitelisted unit names
+        assert "aw-g1/raw/" + rel not in got, (rel, got)
+
+
 _STUB_AW_RUN = r'''#!/usr/bin/env bash
 mkdir -p "$OUT"
 env -0 | sort -z > "$OUT/env-whole.bin"
@@ -4785,6 +4839,27 @@ def test_the_aw_harnesses_run_detached_once_per_session_with_aw_in_and_their_hos
         _write(w / "repo" / "orin-native" / "gpu-concurrency" / h, "exit 0")
         r = _vss_phase(w, stub, "harness", "HARNESS=%s IMAGE=ifs-bell.bin" % h)
         assert r.returncode != 0 and "vss-session exists" in r.stdout + r.stderr, (h, r.stdout + r.stderr)
+
+
+@needs_bash
+@needs_proc_interrupts
+def test_run_aw_g1_p6a_runs_detached_with_plan_p6a_and_no_g1_word(tmp_path):
+    """The harness phase with LADDER_ENV="HARNESS=run-aw-g1.sh IMAGE=ifs-ctl.bin PLAN=p6a VSS_HOST=c7g-metal" and nothing more,
+    after setup and run-aw-setup.sh ended DONE: the harness detached into rec/aw-g1 with PLAN=p6a, VSS_HOST=c7g-metal, the session's image,
+    and no G1_ word in its environment (the phase passes none)."""
+    w, stub = _aw_w(tmp_path, harness_body=_STUB_AW_RUN, ifs=_G1_IFS)
+    r = _vss_phase(w, stub, "harness", (_SETUP + " VSS_HOST=c7g-metal").replace("ifs-vss.bin", _G1_IFS))
+    assert r.returncode == 0 and _wait_for(w / "rec" / "vss-setup" / "done"), r.stdout + r.stderr
+    r = _vss_phase(w, stub, "harness", _AW_SETUP.replace("ifs-vss.bin", _G1_IFS))
+    assert r.returncode == 0 and _wait_for(w / "rec" / "aw-setup" / "done"), r.stdout + r.stderr
+    r = _vss_phase(w, stub, "harness", _AW_G1_P6A)
+    d = w / "rec" / "aw-g1"
+    out = r.stdout + r.stderr
+    assert r.returncode == 0 and "started run-aw-g1.sh, detached, into" in out and _wait_for(d / "done"), out
+    env = _whole_env(d / "raw" / "env-whole.bin")
+    img = str(w / "img" / _G1_IFS)
+    assert (env.get("PLAN"), env.get("VSS_HOST"), env.get("IFS_BIN")) == ("p6a", "c7g-metal", img), env
+    assert not [k for k in env if k.startswith("G1_")], env
 
 
 @needs_bash

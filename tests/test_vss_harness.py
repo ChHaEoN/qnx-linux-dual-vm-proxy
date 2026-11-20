@@ -299,15 +299,18 @@ exit 0
 ''',
     "sync": 'stub_log sync "$@"\n',
     "df": r'''stub_log df "$@"
-printf '%s\n' "Filesystem      Size  Used Avail Use% Mounted on" "/dev/root        31G  9.1G   22G  30% /"
+# stand-in values
+printf '%s\n' "Filesystem      Size  Used Avail Use% Mounted on" "/dev/root        99G  1.1G   88G  11% /"
 ''',
     "free": r'''stub_log free "$@"
+# stand-in values
 printf '%s\n' "               total        used        free      shared  buff/cache   available" \
-	"Mem:          31800        2100       27000           2        2700       29300"
+	"Mem:          99999        1111       88888           1        2222       77777"
 ''',
     "du": r'''stub_log du "$@"
 root_or "du: cannot read directory '/var/lib/docker': Permission denied" 1
-printf '2.1G\t/var/lib/docker\n1.5G\t/var/lib/containerd\n'
+# stand-in values
+printf '9.9G\t/var/lib/docker\n8.8G\t/var/lib/containerd\n'
 ''',
     "uname": r'''stub_log uname "$@"
 [ "$*" = -r ] && { echo "6.8.0-1063-aws"; exit 0; }
@@ -354,7 +357,7 @@ echo "console: ${LOG}"
 echo "qemu pid: 4242"
 echo "waiting for the guest to answer on 192.168.100.10 ..."
 if [ "${STUB_BOOT:-ok}" = fail ]; then echo "ERROR: guest did not answer on :7100 within 60s. Console tail:" >&2; exit 1; fi
-echo "guest up after 7s (monitor answering on :7100)"
+echo "guest up after 12345s (monitor answering on :7100)"
 '''
 
 # latency_probe.py, a stand-in printing the real one's RESULT and summary lines with values no output may carry.
@@ -474,7 +477,7 @@ def _write(p, text, mode=None):
         os.chmod(str(p), mode)
 
 
-REC_LOGS = {"sigsim": "sigsim.log", "carla": "carla.log"}      # a recording's log by its generator, this file's spelling
+REC_LOGS = {"sigsim": "sigsim.log", "carla": "carla.log", "carla-autoware": "carla.log"}      # a recording's log by its generator
 CARLA_PAIR = ("20261019-carla-1", "20261019-carla-1-inj")          # the honest CARLA recording and its injected twin
 
 
@@ -824,7 +827,7 @@ def test_the_guest_boots_with_c12b_lines_readiness_and_both_smokes(done):
     probes = [c[2] for c in done.calls if c[0] == "latency_probe"]
     assert probes == ["--host %s --port 7100 --n 20 --warmup 0" % GUEST] * 2
     launch = (done.rig.out / "guest" / "00-setup-launch.log").read_text(encoding="utf-8")
-    assert "guest up (monitor answering on :7100)" in launch and "after 7s" not in launch, "the boot time only under operational_s"
+    assert "guest up (monitor answering on :7100)" in launch and "after 12345s" not in launch, "the boot time only under operational_s"
     assert done.facts("after-docker")["guest_stopped"] is True and not (done.rig.stub / "state" / "qemu").exists()
     console = (done.rig.out / "guest" / "00-setup-console.log").read_bytes()
     assert console == _console(), "the raw console, as QEMU wrote it"
@@ -1618,10 +1621,12 @@ def test_the_rules_reading_records_the_profile_list_its_lines_agree_on(tmp_path,
 @pytest.mark.parametrize("line, out, rc", [
     (_rec_line("20261019-carla-1"), "carla.log", 0),
     (_rec_line("20260930-sigsim-1b"), "sigsim.log", 0),
+    (_rec_line("20261102-carla010-1", gen="carla-autoware"), "carla.log", 0),
+    (_rec_line("20261102-carla010-1", gen="carla-autoware", log="sigsim.log"), "'carla-autoware' with the log 'sigsim.log'", 1),
     (_rec_line("20261019-carla-1", log="sigsim.log"), "'carla' with the log 'sigsim.log'", 1),
     (_rec_line("x", gen="vtd"), "'vtd' with the log 'sigsim.log'", 1),
     (json.dumps({"name": "x", "source": {"generator": "carla"}}).encode(), "'carla' with the log None", 1),
-], ids=["carla", "sigsim", "carla-sigsim-log", "another-generator", "no-path"])
+], ids=["carla", "sigsim", "carla-autoware", "carla-autoware-sigsim-log", "carla-sigsim-log", "another-generator", "no-path"])
 def test_the_log_reading_prints_the_log_a_recordings_line_names_or_refuses_naming_both(tmp_path, line, out, rc):
     d = tmp_path / "rec"
     d.mkdir()
@@ -1659,6 +1664,7 @@ def test_the_harness_log_table_is_the_injectors():
     finally:
         sys.dont_write_bytecode = saved
     assert _module(TOOL, "_vss_setup_for_test").LOG_NAMES == inject.LOG_NAMES
+    assert inject.LOG_NAMES == {"sigsim": "sigsim.log", "carla": "carla.log", "carla-autoware": "carla.log"}      # SDV Phase 8 WP9 P4
 
 
 def test_setups_log_rule_is_the_bundles_whatever_the_form_of_the_path(tmp_path):
@@ -1669,7 +1675,7 @@ def test_setups_log_rule_is_the_bundles_whatever_the_form_of_the_path(tmp_path):
     forms = ["~/sdv-recordings/x/%s", "/home/u/rec/x/%s", "sdv-out/rec/x/%s", "%s", "/tmp/my rec/%s", "/home/u/sdv_recordings/x/%s",
              "../other/%s"]
     lines = [{"name": "x", "recording": {"path": form % log}, "source": {"generator": gen}}
-             for form in forms for gen in ("sigsim", "carla", "vtd") for log in ("sigsim.log", "carla.log", "drive.log")]
+             for form in forms for gen in ("sigsim", "carla", "carla-autoware", "vtd") for log in ("sigsim.log", "carla.log", "drive.log")]
     lines += [{"name": "x", "recording": {}, "source": {"generator": "sigsim"}}, {"name": "x", "source": {"generator": "carla"}}]
     taken = 0
     for i, line in enumerate(lines):
@@ -1680,7 +1686,7 @@ def test_setups_log_rule_is_the_bundles_whatever_the_form_of_the_path(tmp_path):
         want, want_why = bundle.log_name_of(line)
         assert got == want, (line, got, why, want, want_why)
         taken += got is not None
-    assert taken == 2 * len(forms)
+    assert taken == 3 * len(forms)          # sigsim.log for sigsim; carla.log for carla and for carla-autoware (SDV Phase 8 WP9 P4)
 
 
 def test_a_smoke_whose_monitor_rejected_a_frame_fails(tmp_path):
@@ -1924,7 +1930,7 @@ echo "waiting for the guest to answer on 192.168.100.10 ..."
 if [ -n "${STUB_BOOT_FAIL:-}" ] && printf '%s' "$LOG" | grep -qE "$STUB_BOOT_FAIL"; then
 	echo "ERROR: guest did not answer on :7100 within 60s. Console tail:" >&2; exit 1
 fi
-echo "guest up after 7s (monitor answering on :7100)"
+echo "guest up after 12345s (monitor answering on :7100)"
 '''
 
 _SUITE_VENV_PYTHON = r'''#!/usr/bin/env bash
@@ -2541,7 +2547,7 @@ def test_suite_qemu_is_stopped_after_every_boot_and_every_unit_runs_under_its_ca
     for x in r.suite["runs"]:
         assert x["booted"] is True and x["boot_exit"] == 0 and x["qemu_stopped"] is True, x
     launch = (r.rig.out / "guest" / "01-honest-broker-launch.log").read_text(encoding="utf-8")
-    assert "guest up (monitor answering on :7100)" in launch and "after 7s" not in launch
+    assert "guest up (monitor answering on :7100)" in launch and "after 12345s" not in launch
 
 
 def test_suite_readiness_is_one_connect_and_close_inside_the_guests_deadline(v2):
@@ -3139,18 +3145,18 @@ DAEMON_JSON = (b'{\n    "runtimes": {\n        "nvidia": {\n            "args": 
                b'            "path": "nvidia-container-runtime"\n        }\n    }\n}\n')
 REPIN_OK = "repin tag=boot cores=0-2 qemu=4242 threads=7 off_before=7 pin_failed=0 gone=0 threads_after=7 off_after=0 on_cores=yes"
 A1_GOLDEN = {        # (sha256 of _a1_digest's text, its line count), the reference harnesses in these rigs
-    "setup": ("589a61f0ac9a39a478dbf91fee74d22499ec3ec4953bd23a31eff6488ad604c6", 202),
-    "suite-v1": ("81f168ab890d29aad865baf627fb43b2df020ffbeda45f4b548ee28a959aa271", 73),
-    "suite-v2": ("e4fc9b41de6dd0b09d212a07f31b381e452f53b34434b8fd9ba6461afd8ffdf7", 610),
+    "setup": ("67e32ccf6f3e146b377d75c9dc80754123b56e4c1558e04f79298b18c5a74975", 202),
+    "suite-v1": ("f7aa9cfb3277334eea4af584ff206e240fa6c12dad53539f38f3bdf501d79ad1", 73),
+    "suite-v2": ("7a9c55341a359c9d49e9aebc307cd063f7888e14bcb9623ef79031e2df194c07", 610),
 }
 # ORIN UNCHANGED (2026-10-17, beside VSS_HOST=c7g-metal). ORIN_GOLDEN is A1_GOLDEN's kind for the Orin mode's runs in these
 # rigs (orin_done's setup, orin_v2's suite, an Orin v1), with the login of the mode's `id -nG <login>` normalized as well.
 # It was taken with the reference harnesses, tools and deadline library in these rigs, the tree before c7g-metal existed,
 # so a change to a call or a file of an Orin run changes it. Regenerate it only that way.
 ORIN_GOLDEN = {      # (sha256 of _a1_digest(login=True)'s text, its line count), the reference harnesses in these rigs
-    "setup": ("f85f918adb13f15c0f5065a3242356e7b44eff54fefd83f607a7411384c4c26a", 195),
-    "suite-v1": ("c2fc3eede6213c16b0b6d2ee15e0acf9b1bf2d32023f7b77b9963f2e2da194ab", 80),
-    "suite-v2": ("cf1161d6dc986054835e758e1e75b5b3c5370b18249d06c27eb77a961ef7292e", 460),
+    "setup": ("e12f774f6654253ba1e5abf589965558e895df8119c5fb86be6cf01473764a3b", 195),
+    "suite-v1": ("8e270742aae8edc61d062abeb1d2864d36c64c6849bc3f208fd956b072f79f2b", 80),
+    "suite-v2": ("dac7f7aab1817e498520e76f30cc0a53c0b99021dfc025427b0d1fca6c3c1dce", 460),
 }
 
 # VSS_REPIN, a stand-in: one line as vss-repin.sh prints it, exit 3 while no QEMU "runs", exit 1 when STUB_REPIN_RC=1

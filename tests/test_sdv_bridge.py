@@ -33,9 +33,11 @@ the monitor; sdv/bridge/reasonsets.py holds Phase 2 step 3's event-to-reason com
   outstanding or queued at a stop is lost), holds one reply until the tick is paused (P8: that reply releases
   nothing queued before the pause), never answers on its first connection (P7: the peer sees the bridge close it
   500 ms after its frame, then a new connection), answers one frame invalidly or twice (reply_invalid and
-  stray_bytes, each closing the connection), or meets a lock held elsewhere (P16: each lock-busy attempt a
-  connection closed unused, the next one only after the logged backoff); against a listener whose accept queue
-  is full, so a connect stays pending: no lock while it is pending, and the connect timeout ends it (P16, P7).
+  stray_bytes, each closing the connection), sits behind a send that fails once (EPIPE or a short count: the
+  connection closed by that reason, its frame lost, never dropped), or meets a lock held elsewhere (P16: each
+  lock-busy attempt a connection closed unused, the next one only after the logged backoff); against a listener
+  whose accept queue is full, so a connect stays pending: no lock while it is pending, and the connect timeout
+  ends it (P16, P7).
 - The scenario lock's path (P16): by default created if absent; in either setting a path that is not a regular
   file (/dev/null, a FIFO) refused; with SDV_SCENARIO_LOCK_MUST_EXIST=1 (the image's setting) only the designated
   path, existing, a regular file and a mount point -- here a tmp path and a mountinfo file standing in for
@@ -696,7 +698,17 @@ def test_p7_a_restarted_monitor_is_reconnected(live):
     assert n["peer_checks"] >= n["sends"]
 
 
+# the closes a dead monitor's end makes (a reset, an EOF, a send into either); never the bridge's own: reply-timeout, invalid reply, stray bytes
+DEAD_END = ("recv failed", "peer closed", "peer-closed", "send failed", "short send")
+
+
 def test_p7_a_frame_in_flight_when_the_monitor_dies_is_lost_on_reconnect(live):
+    """The frame outstanding when the monitor is killed is the first frame lost, by the connection's death and never by the reply
+    timeout, and the bridge reconnects to the monitor that comes back. K4 (NIT package 8): a killed monitor's listening socket can
+    outlive its connection for a moment, as the process is torn down after the reset, so the bridge's at-once reconnect can complete
+    into it, send the next frame and be reset with it. So what the bridge controls is held, not one loss and one reconnect: every loss
+    and every close but the stop's is a dead end's, no frame is lost but at such a close (no more losses than closes, each for a
+    close's reason), each such close is followed by one reconnect, and the restarted monitor sees one connection."""
     b, mon, _src = live()
     wait_until(lambda: len(accepted_after(b, 0)) >= 3, what="ACCEPTs")
     mon.signal(signal.SIGSTOP)
@@ -706,15 +718,26 @@ def test_p7_a_frame_in_flight_when_the_monitor_dies_is_lost_on_reconnect(live):
     time.sleep(0.1)
     assert b.counters()["lost_on_reconnect"] == 0 and b._out is not None and b._out.seq == in_flight
     mon.kill()
-    wait_until(lambda: b.counters()["lost_on_reconnect"] == 1, timeout=1, what="the frame counted lost when the connection dies")
+    # one or more: a second loss can follow the first at once (the docstring), between two of this wait's reads. On the record, not
+    # the counter: core.lost counts the frame before it logs it, so a read of the log right after the count can find none yet
+    wait_until(lambda: len(b.log.find("lost")) >= 1, timeout=1, what="the frame counted lost when the connection dies")
     lost = b.log.find("lost")
-    assert [e["seq"] for e in lost] == [in_flight] and lost[0]["why"] != "reply-timeout"
+    assert lost[0]["seq"] == in_flight and lost[0]["why"].startswith(DEAD_END), lost
+    n0 = len(mon.lines)
     mon.start()
     before = last_seq(b)
     wait_until(lambda: len(accepted_after(b, before)) >= 2, timeout=6, what="ACCEPTs after the restart")
     s = ended(b)
+    mon.wait_for("monitor: client done:", after=n0)    # the restarted monitor's end of the connection the stop closed
     n = s["counters"]
-    assert n["reply_timeouts"] == 0 and n["lost_on_reconnect"] == 1 and n["reconnects"] == 1
+    lost = b.log.find("lost")
+    closes = [e for e in b.log.find("closed") if e["why"] != "stop"]
+    assert all(e["why"].startswith(DEAD_END) for e in lost + closes), (lost, closes)
+    seqs = [e["seq"] for e in lost]
+    assert seqs == sorted(set(seqs)) and n["lost_on_reconnect"] == len(lost), (seqs, n)
+    assert len(lost) <= len(closes) and {e["why"] for e in lost} <= {e["why"] for e in closes}, (lost, closes)   # each loss at a close
+    assert n["reply_timeouts"] == 0 and closes and n["reconnects"] == len(closes), (n, closes)
+    assert mon.count("monitor: client done:", after=n0) == 1, mon.text()
 
 
 def test_p7_a_peer_that_never_replies_is_closed_after_the_reply_timeout(live, lock):
@@ -828,6 +851,59 @@ def test_p7_the_peer_closed_check_runs_before_every_send(lock):
         assert s["counters"]["replied"] == 1 and vb.updater_check(lock)
     finally:
         fake.close()
+
+
+class SendFailsOnce:
+    """A connected socket whose first send fails as a send into a dead peer's connection does: EPIPE raised, or a short count
+    (half the frame, nothing sent). Every other call is the socket's own."""
+
+    def __init__(self, sock, how):
+        self._sock, self._how = sock, how
+
+    def send(self, data):
+        how, self._how = self._how, None
+        if how == "epipe":
+            raise BrokenPipeError(errno.EPIPE, "the stand-in's broken pipe")
+        if how == "short":
+            return len(data) // 2
+        return self._sock.send(data)
+
+    def __getattr__(self, name):
+        return getattr(self._sock, name)
+
+
+@pytest.mark.parametrize("how, why", [("epipe", "send failed: EPIPE"), ("short", "short send of 32 bytes")], ids=["epipe", "short-send"])
+def test_p7_a_send_that_fails_closes_the_connection_and_its_frame_is_lost_not_dropped(lock, how, why):
+    """DK2 (NIT package 8), white-box: a send that fails (EPIPE, or a short count) closes the connection by that reason with nothing
+    outstanding, and its frame is lost for the same reason, never dropped; the next frame goes to a new connection, where it is
+    answered, and the run holds spec 14.2's identity."""
+    fake = FakeMonitor(accept_all)
+    try:
+        b = vb.Bridge(cfg(fake.port, lock_path=lock), vb.QueueSource(), contract=C)     # never started: driven by hand
+        _connected_by_hand(b)
+        b._sock = SendFailsOnce(b._sock, how)
+        b.core.tick(honest_snap(), 10**12, time.monotonic_ns())
+        b._try_send(time.monotonic_ns())
+        assert [(e["why"], e["outstanding"]) for e in b.log.find("closed")] == [(why, None)], b.log.find("closed")
+        assert [(e["seq"], e["why"]) for e in b.log.find("lost")] == [(1, why)] and b.log.find("dropped") == []
+        n = b.counters()
+        assert (n["lost_on_reconnect"], n["drop"], n["sends"], b._state) == (1, 0, 0, vb.DISCONNECTED), n
+        b.core.tick(honest_snap(), 10**12, time.monotonic_ns())
+        end = time.monotonic() + 2                        # the reconnect, after one tick's backoff
+        while b.counters()["sends"] == 0 and time.monotonic() < end:
+            b._wait(0.05)
+            b._try_send(time.monotonic_ns())
+        assert b.counters()["sends"] == 1 and b.counters()["connects"] == 2, b.counters()
+        end = time.monotonic() + 2
+        while b._out is not None and time.monotonic() < end:
+            b._wait(0.05)
+        b._close("test end")
+        s = ended(b)
+    finally:
+        fake.close()
+    n = s["counters"]
+    assert (n["packed"], n["replied"], n["drop"], n["lost_on_reconnect"]) == (2, 1, 0, 1), n
+    assert [len(c["frames"]) for c in fake.conns] == [0, 1], fake.conns
 
 
 def _connected_by_hand(b):
@@ -1366,6 +1442,12 @@ def test_p15_attribution_against_the_profiles_generated_spread():
     assert spread4 == math.ceil(b4["attribution_spread_exact_ms"]) > b4["skew_ms"] and spread4 != C.ATTRIBUTION_SPREAD_MS[nominal()]
     c4 = core(cfg(profile_id=pid4))
     assert _attributed(c4, 2 * spread4)[0] is False and _attributed(c4, 2 * spread4 + 2)[0] is True  # spread: no, + 1 ms: yes
+    # Profile 5 (Phase 8 WP3c F-c, compiled): joint-grid as profile 3, its spread (k_attr - 1) CARLA steps of its own budget.
+    pid5 = C.LIVE_DEFAULT_PROFILE["carla-autoware"]
+    spread5 = C.ATTRIBUTION_SPREAD_MS[pid5]
+    assert pid5 in C.COMPILED_PROFILE_IDS and spread5 == (C.RULE26_BUDGET[pid5]["k_attr"] - 1) * C.CARLA_STEP_MS > 0
+    c5 = core(cfg(profile_id=pid5))
+    assert _attributed(c5, 2 * spread5)[0] is False and _attributed(c5, 2 * spread5 + 2)[0] is True  # spread: no, + 1 ms: yes
 
 
 @tsv.NEEDS_TOML
@@ -1727,6 +1809,10 @@ def _refused(match, contract=None, **kw):
 
 
 def test_p17_the_bridge_refuses_a_profile_that_is_0_or_not_in_the_generated_table():
+    """The bridge refuses profile 0, an id no generated row defines, one past a byte, a generated row the guest's table does
+    not carry (each generated uncompiled row, none since Phase 8's WP3c F-c compiled profile 5, and a synthetic one, which
+    holds the refusal whatever a freeze compiles), an unknown mode and a declared wheelbase that is not the profile's L;
+    every compiled profile binds, profile 5 among them."""
     ids = {r["id"] for r in C.PROFILES}
     absent = next(i for i in range(1, 256) if i not in ids)
     _refused("reserved and never bound", profile_id=0)
@@ -1734,10 +1820,15 @@ def test_p17_the_bridge_refuses_a_profile_that_is_0_or_not_in_the_generated_tabl
     if 255 not in ids:
         _refused("not in the generated profile table", profile_id=255)
     _refused("not a profile id", profile_id=256)
-    uncompiled_ids = [r["id"] for r in C.PROFILES if not r["compiled"]]
-    assert 5 in uncompiled_ids, "premise (Phase 8 WP3b): profile 5 is generated but not compiled until WP3c's freeze"
-    for uncompiled in uncompiled_ids:
+    # Generated but uncompiled rows (profile 5 from Phase 8's WP3b until WP3c F-c compiled it; none since) are refused.
+    for uncompiled in [r["id"] for r in C.PROFILES if not r["compiled"]]:
         _refused("generated but not compiled", profile_id=uncompiled, source_vehicle=vehicle(uncompiled))
+    # Profile 5 binds, as every compiled profile does, with its own L as the declared vehicle's wheelbase.
+    assert 5 in C.COMPILED_PROFILE_IDS, "Phase 8 WP3c F-c compiled profile 5"
+    for pid in C.COMPILED_PROFILE_IDS:
+        tables, problems = vb.bind(cfg(free_port(), profile_id=pid), C)
+        assert problems == [] and tables is not None and tables.profiles[pid].l_mm == vehicle(pid)["wheelbase_mm"], (pid, problems)
+    _refused("not profile 5's L", profile_id=5, source_vehicle=dict(vehicle(5), wheelbase_mm=vehicle(5)["wheelbase_mm"] + 1))
     syn, sid = tsf.uncompiled_contract()                                                 # and a synthetic one, whatever a freeze compiles
     srow = syn.PROFILES[-1]
     _refused("profile %d is generated but not compiled" % sid, contract=syn, profile_id=sid,

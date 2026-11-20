@@ -1,5 +1,5 @@
-"""5b's stopped NPC (sdv/carla/npc010.py): SDV plan Phase 8 WP9 P1, the WP9 specification's section 1 item 9 and section 4's P1
-row.
+"""5b's stopped NPC (sdv/carla/npc010.py): SDV plan Phase 8 WP9 P1. The stopped-NPC rules come from the project's local
+design notes, not in this tree.
 
 What is tested, and how. npc010.py runs against tests/fixtures/npc010/fake_npc_carla.py on a fake clock: no CARLA, GPU or
 PowerShell runs in any test.
@@ -137,7 +137,8 @@ def test_the_brake_and_the_hand_brake_are_applied_once_on_the_npc_before_any_tic
     assert len(sim.controls) == 1
     actor_id, c = sim.controls[0]
     assert actor_id == 1001 and (c.throttle, c.steer, c.brake, c.hand_brake) == (0.0, 0.0, 1.0, True)
-    assert sim.calls.index("spawn_actor:vehicle.lincoln.mkz") < sim.calls.index("apply_control:1001") < sim.calls.index("wait_for_tick")
+    waits = [k for k, x in enumerate(sim.calls) if x == "wait_for_tick"]      # gains WP9 P3's attach wait, before the spawn
+    assert waits[0] < sim.calls.index("spawn_actor:vehicle.lincoln.mkz") < sim.calls.index("apply_control:1001") < waits[1]
 
 
 def test_the_clients_timeouts_are_explicit_and_the_clients_comes_first(npc, tmp_path):
@@ -145,13 +146,22 @@ def test_the_clients_timeouts_are_explicit_and_the_clients_comes_first(npc, tmp_
     assert rc == 0
     assert sim.calls[0] == "connect:127.0.0.1:2000" and sim.calls[1] == "set_timeout"
     assert sim.client_timeout == npc.CLIENT_TIMEOUT_S == 20.0
-    assert set(sim.tick_timeouts) == {npc.TICK_TIMEOUT_S} and npc.TICK_TIMEOUT_S > 0
+    # the waits in order: WP9 P3's attach wait first, with the client's timeout, then the hold's
+    assert sim.tick_timeouts[0] == npc.CLIENT_TIMEOUT_S and set(sim.tick_timeouts[1:]) == {npc.TICK_TIMEOUT_S} and npc.TICK_TIMEOUT_S > 0
 
 
 def test_place_makes_no_forbidden_call_at_run_time(npc, tmp_path):
     rc, sim, _out, _s = _place(npc, tmp_path, _world())
     assert rc == 0
     assert not set(sim.calls) & set(fake.FORBIDDEN), sorted(set(sim.calls) & set(fake.FORBIDDEN))
+
+
+def test_the_forbidden_list_is_held_word_for_word_and_the_one_wait_is_no_part_of_it(npc):
+    """WP9 P3's attach fix adds a wait_for_tick, a read that never advances the world, and changes no name of this list."""
+    assert npc.FORBIDDEN == ("tick", "apply_settings", "load_world", "reload_world", "get_trafficmanager", "set_autopilot", "on_tick",
+                             "try_spawn_actor", "apply_physics_control", "set_target_velocity", "apply_batch", "apply_batch_sync",
+                             "enable_constant_velocity")
+    assert not {"wait_for_tick", "get_actors"} & set(npc.FORBIDDEN + fake.FORBIDDEN)
 
 
 def _source_tree():
@@ -427,6 +437,13 @@ def _no_leak(run):
         return run()
     except KeyboardInterrupt:
         pytest.fail("a Ctrl-C left main as a KeyboardInterrupt, with no exit status of its own")
+
+
+def test_a_ctrl_c_inside_the_wait_at_place_exits_130_with_nothing_placed(npc, tmp_path, capsys):
+    sim = _world(snapshot_pending=True, interrupt_at=0)
+    rc, _sim, out, _s = _no_leak(lambda: _place(npc, tmp_path, sim, frames=None))
+    assert rc == 130 and sim.spawned == [] and not out.exists()
+    assert "interrupted" in capsys.readouterr().err
 
 
 def test_a_ctrl_c_in_the_first_control_destroys_the_npc_and_exits_130(npc, tmp_path, monkeypatch, capsys):
@@ -773,6 +790,80 @@ def test_a_destroy_beside_a_hold_ends_the_hold_with_exit_0(npc, tmp_path):
     sim.on_frame = on_frame
     rc, _sim, out, _s = _place(npc, tmp_path, sim)
     assert rc == 0 and _lines(out)[-1]["reason"] == "destroyed" and sim.destroyed == [1001]
+
+
+# =================================================================================================================
+# WP9 P3's attach fix: one wait for a tick before the first actor read, at place and at destroy. A client's actor list is the
+# last snapshot it has received; the fake's snapshot_pending world reads no actor until a frame has delivered one.
+# =================================================================================================================
+
+NO_TICK = "no tick came within CLIENT_TIMEOUT_S (20.0 s): the interface is not ticking"
+
+
+def test_place_waits_for_one_tick_with_the_client_timeout_before_its_first_actor_read(npc, tmp_path):
+    rc, sim, _out, _s = _place(npc, tmp_path, _world())
+    assert rc == 0
+    waits = [k for k, x in enumerate(sim.calls) if x == "wait_for_tick"]
+    assert sim.calls.index("get_world") < waits[0] < sim.calls.index("get_actors"), sim.calls[:8]
+    assert sim.tick_timeouts[0] == npc.CLIENT_TIMEOUT_S
+
+
+def test_a_client_with_no_snapshot_yet_places_one_npc_after_its_one_wait(npc, tmp_path, capsys):
+    """The wait takes one frame and the ego is there: one NPC placed and held, its samples the hold's frames after the wait's."""
+    sim = _world(snapshot_pending=True)
+    rc, _sim, out, _s = _place(npc, tmp_path, sim, frames=4)
+    assert rc == 0, capsys.readouterr().err
+    lines = _lines(out)
+    assert len(sim.spawned) == 1 and sim.destroyed == [1001] and sim.tick_timeouts[0] == npc.CLIENT_TIMEOUT_S
+    assert [x["kind"] for x in lines] == ["placed", "sample", "sample", "end"] and lines[-1]["reason"] == "destroyed"
+    assert [x["frame"] for x in lines if x["kind"] == "sample"] == [4002, 4003]
+
+
+@pytest.mark.parametrize("held", [False, True], ids=["no-snapshot-no-frame", "snapshot-held-server-gone"])
+def test_no_tick_at_place_is_a_refusal_with_its_own_words_and_nothing_placed(npc, tmp_path, capsys, held):
+    """No tick within CLIENT_TIMEOUT_S, with no snapshot held, or with one held from a server that no longer answers (its
+    actors readable, so a place that went on would spawn): exit 1, its own words, nothing spawned or written, no actor read."""
+    sim = _world(server_gone=True) if held else _world(snapshot_pending=True, frames_left=0)
+    rc, _sim, out, _s = _place(npc, tmp_path, sim, frames=None)
+    err = capsys.readouterr().err
+    assert rc == 1 and "npc010.py: refused: " + NO_TICK in err, err
+    assert sim.spawned == [] and sim.controls == [] and sim.destroyed == [] and not out.exists() and "get_actors" not in sim.calls
+    assert sim.tick_timeouts == [npc.CLIENT_TIMEOUT_S]
+
+
+def test_destroy_waits_for_one_tick_and_with_no_snapshot_yet_finds_and_destroys_the_npc(npc, capsys):
+    sim = _world(snapshot_pending=True)
+    placed = sim.add_ego(x=19.0, role="npc", type_id="vehicle.lincoln.mkz")
+    assert _destroy(npc, sim) == 0, capsys.readouterr().err
+    assert sim.destroyed == [placed.id] and sim.tick_timeouts == [npc.CLIENT_TIMEOUT_S]
+    assert sim.calls.index("get_world") < sim.calls.index("wait_for_tick") < sim.calls.index("get_actors")
+    assert "destroyed 1 of 1" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("held", [False, True], ids=["no-snapshot-no-frame", "snapshot-held-server-gone"])
+def test_a_destroy_that_gets_no_tick_says_it_could_not_read_the_world_destroys_nothing_and_exits_1(npc, capsys, held):
+    """Never "no actor": a destroy that cannot see the world does not know whether the NPC is there."""
+    sim = _world(server_gone=True) if held else _world(snapshot_pending=True, frames_left=0)
+    sim.add_ego(x=19.0, role="npc", type_id="vehicle.lincoln.mkz")
+    rc = _destroy(npc, sim)
+    err = capsys.readouterr().err
+    assert rc == 1 and "npc010.py: could not read the world: " + NO_TICK in err, err
+    assert "no actor" not in err and sim.destroyed == [] and len(sim.actors) == 2 and "get_actors" not in sim.calls
+
+
+def test_a_ctrl_c_inside_the_wait_at_destroy_exits_130_and_destroys_nothing(npc, capsys):
+    sim = _world(snapshot_pending=True, interrupt_at=0)
+    sim.add_ego(x=19.0, role="npc", type_id="vehicle.lincoln.mkz")
+    rc = _no_leak(lambda: _destroy(npc, sim))
+    assert rc == 130 and sim.destroyed == []
+    assert "interrupted" in capsys.readouterr().err
+
+
+def test_the_place_and_end_texts_say_the_one_wait_and_why():
+    doc = _doc()
+    place, end = doc[doc.index("PLACE."):doc.index("THE HOLD.")], doc[doc.index("THE END."):doc.index("Design values")]
+    assert "wait_for_tick(CLIENT_TIMEOUT_S)" in place and "first actor read" in place and "snapshot" in place, place
+    assert "could not read the world" in end and "CLIENT_TIMEOUT_S" in end, end
 
 
 # =================================================================================================================

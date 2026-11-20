@@ -9,6 +9,13 @@ fake interface: each wait_for_tick is one frame, advances the elapsed time and c
 the ego or to destroy an actor. As the client is understood (INFERRED, unread), a spawned actor's transform reads all zero until
 the first tick after its spawn (the client's snapshot of it does not exist yet). The bounding boxes are this file's design values;
 none is a reading of CARLA's.
+
+THE FIRST SNAPSHOT (this file's own, not LibCarla's): a client's actor list is the last world snapshot it holds. By default the
+client holds one when its world is made, so its actors are there at once, and a wait_for_tick that comes before any actor read and
+any other wait on that world is answered with that snapshot at once (unless the server is gone): no frame passes and on_frame is
+not called, so every frame a test counts is as before the client waited (a simplification: CARLA's own wait always waits for the
+next tick). With `snapshot_pending` the client holds none: get_actors reads an empty list until a frame after its world was made
+delivers one, and every wait is one frame, as above. Every wait's `seconds` is recorded in order (`tick_timeouts`).
 """
 from __future__ import annotations
 
@@ -129,6 +136,9 @@ class Map:
 class World:
     def __init__(self, sim: "Sim") -> None:
         self.sim = sim
+        self.born_frame = sim.frame       # a frame after this one hands a client with snapshot_pending its first snapshot
+        self.read = False                 # an actor read was made on this world
+        self.waited = False               # a wait_for_tick was made on this world
 
     def get_map(self) -> Map:
         return Map(self.sim)
@@ -138,6 +148,9 @@ class World:
 
     def get_actors(self) -> ActorList:
         self.sim.calls.append("get_actors")
+        self.read = True
+        if self.sim.snapshot_pending and self.sim.frame == self.born_frame:
+            return ActorList()                                  # no snapshot yet: the client knows no actor
         return ActorList(self.sim.actors)
 
     def spawn_actor(self, bp: Blueprint, transform: Transform, *a: Any, **k: Any) -> Actor:
@@ -153,6 +166,10 @@ class World:
     def wait_for_tick(self, seconds: float = 10.0) -> Any:
         self.sim.calls.append("wait_for_tick")
         self.sim.tick_timeouts.append(seconds)
+        held = not self.sim.snapshot_pending and not self.read and not self.waited
+        self.waited = True
+        if held and not self.sim.server_gone:      # THE FIRST SNAPSHOT: the one this client holds, at once
+            return types.SimpleNamespace(frame=self.sim.frame, timestamp=types.SimpleNamespace(elapsed_seconds=self.sim.elapsed))
         if self.sim.server_gone or self.sim.frames_left == 0:
             raise RuntimeError("time-out while waiting for the simulator")
         if self.sim.interrupt_at is not None and self.sim.frame - self.sim.start_frame >= self.sim.interrupt_at:
@@ -220,6 +237,7 @@ class Sim:
         self.destroy_answers_false = False
         self.npc_box: Any = None
         self.on_frame: Optional[Callable[["Sim"], None]] = None
+        self.snapshot_pending = False  # the client holds no snapshot yet (THE FIRST SNAPSHOT)
 
     def forbidden(self, name: str) -> Callable[..., Any]:
         def call(*a: Any, **k: Any) -> Any:

@@ -58,14 +58,22 @@ run types planning-sim and carla-autoware, each with its vehicle layer (the L of
 databroker catalogue; profile 4 (the planning simulator's sample vehicle) compiled on values WP4a read in the running
 simulator, each held once in profiles.toml under a `# READ (` line and once here in READ, with the planning-sim
 envelope's skew row (the simulator's timer, which replaces slice.dbc's period for that envelope alone) and the smallest
-one-decimal tol26 that keeps the envelope's margin; profile 5 (the CARLA 0.10.0 taxi) uncompiled, its L and delta_max
-in PROBED, on the carla010 envelope whose four rows are stand-ins (the carla envelope's values) until WP3c's freeze; the
-two new refusals (a compiled profile on an envelope that holds a stand-in row; a skew_ms row on an envelope that is not a
-planning-sim one), with the skew row tied to the run types whose rule-26 triple comes from one timer (SKEW_ROW_RUN_TYPES:
-a profile on a planning-sim envelope is the live default of those only, and theirs stands on one); the margin refusal for
-both new profiles. Against a generation: every sigsim and carla output and both kind 2 files byte for byte what this
-package's base tree generated (BASE_P8_SHA256), the two new layers and catalogues, and profile 4 in the
-generated tables with profile 5 left out of the C one.
+one-decimal tol26 that keeps the envelope's margin; profile 5 (the CARLA 0.10.0 taxi), its L and delta_max in PROBED, on
+the carla010 envelope, whose four rows were stand-ins (the carla envelope's values) and the profile uncompiled until
+WP3c's freeze (below); the two new refusals (a compiled profile on an envelope that holds a stand-in row; a skew_ms row on
+an envelope that is not a planning-sim one), with the skew row tied to the run types whose rule-26 triple comes from one
+timer (SKEW_ROW_RUN_TYPES: a profile on a planning-sim envelope is the live default of those only, and theirs stands on
+one); the margin refusal for both new profiles. Against a generation: every sigsim and carla output and both kind 2 files
+byte for byte what this package's base tree generated (BASE_P8_SHA256), the two new layers and catalogues, and profile 4
+in the generated tables (profile 5 joined them at the freeze).
+
+Phase 8 WP3c F-c (the freeze of profile 5; local notes, the envelope read and the owner's reading of it) adds, pure: the
+carla010 envelope's four rows PROBED, each by the carla rows' rule on WP9's first honest drives through spec-2 2.9's law,
+held once in profiles.toml under a `# PROBED (Phase 8 WP3c F-c)` line and once here in PROBED, the envelope with no
+stand_in key and no `# STAND-IN (` line left in the file; profile 5 compiled, its own values unchanged and its a_y bound
+D8's narrowed by Phase 7's rule only as far as the budget on the frozen rows needs; the stand-in refusal still shown, on a
+stand-in list the test sets. Against a generation: profiles 1-5 in both tables, and vss_contract.py and vss_profiles.h
+re-recorded in BASE_KIND4_SHA256 as the freeze's generation writes them.
 
 The confidentiality check reads its literals from a local file (SDV_CONFIDENTIAL_LITERALS, default
 ~/sdv-cache/confidential-literals.txt) that never enters the repo, and skips when there is none.
@@ -117,10 +125,10 @@ MAPPED = ("Vehicle.DualVm.Motion.LongitudinalVelocity", "Vehicle.Speed", "Vehicl
           "Vehicle.Chassis.Axle.Row1.SteeringAngle", "Vehicle.AngularVelocity.Yaw",
           "Vehicle.Powertrain.Transmission.CurrentGear")
 
-# PROBED: profile 3's values, with the provenance markers F7, F4 and F8. The envelope rows were fitted locally;
-# the readings are not published. This dict is the tests' one copy, and profiles.toml marks
-# each key with a line starting `# PROBED (` right above it: a re-read changes this dict and those lines, and the
-# generation is made again; no other test holds them (each reads the profile file or the generation).
+# PROBED: profile 3's values, with the provenance markers F7, F4 and F8, and profile 5's with its envelope's (Phase 8 WP9a,
+# WP3c F-c). The envelope rows were fitted locally; the readings are not published. This dict is the tests' one copy, and
+# profiles.toml marks each key with a line starting `# PROBED (` right above it: a re-read changes this dict and those
+# lines, and the generation is made again; no other test holds them (each reads the profile file or the generation).
 PROBED = {
     ("profiles.3", "l_mm"): 2819,                       # F7: the ego blueprint's wheelbase, mm
     ("profiles.3", "delta_max"): 57.0,                  # F4's rule on F3's source: min(57, ceil(single-track maximum + 5))
@@ -130,6 +138,13 @@ PROBED = {
     ("envelopes.carla", "understeer_gradient"): 2.8,    # F8, the understeer row: likewise
     ("profiles.5", "l_mm"): 2940,                       # Phase 8 WP9a E4: the 0.10.0 taxi's wheelbase, mm (spec-2 2.4)
     ("profiles.5", "delta_max"): 57.0,                  # Phase 8 WP9a section 8: the same rule on the taxi; the cap binds
+    # Phase 8 WP3c F-c: the carla rows' rule (F8's) over WP9's first honest drives through spec-2 2.9's law, the two skew
+    # rows read inside rule 26's window and the launch without the first steps from rest (the owner's reading, chosen after
+    # the reads were seen).
+    ("envelopes.carla010", "steer_rate"): 18.1,             # F-c, the delta-skew row: inside rule 26's window
+    ("envelopes.carla010", "accel_while_steering"): 2.3,    # F-c, the v-skew row (|a_x| while steering): inside the window
+    ("envelopes.carla010", "launch_accel"): 0.8,            # F-c, the launch from rest: without the interface's first steps
+    ("envelopes.carla010", "understeer_gradient"): 4.8,     # F-c, the understeer row: the absolute residual against a_y
 }
 # READ: the values profile 4 and the planning-sim envelope rest on, from WP4a's reads of Autoware 1.9.0's planning
 # simulator (the named configuration parameters; spec-2 2.4). This dict is the tests' one copy. profiles.toml marks
@@ -153,8 +168,9 @@ READ = {
 P8_RUN_TYPES = ("planning-sim", "carla-autoware")
 P8_CATALOGUES = {"planning-sim": "vss-databroker-planning-sim.json", "carla-autoware": "vss-databroker-carla-autoware.json"}
 P8_LAYERS = ("vehicle-planning-sim.vspec", "vehicle-carla-autoware.vspec")
-# Spec-2 2.4: the carla010 envelope's four rows are stand-ins, the carla envelope's values, until WP3c's freeze.
-CARLA010_STAND_IN = ("steer_rate", "accel_while_steering", "launch_accel", "understeer_gradient")
+# Spec-2 2.4 and section 6: the carla010 envelope's four rows, stand-ins (the carla envelope's values) until Phase 8's WP3c
+# F-c froze them (PROBED above); a test that shows the stand-in refusal sets this list on the envelope itself.
+CARLA010_FROZEN = ("steer_rate", "accel_while_steering", "launch_accel", "understeer_gradient")
 # The planning-sim envelope's margin over its summed rows (spec-2 2.4, sigsim's), and tol26's step (one decimal).
 PLANNING_SIM_MARGIN = 1.5
 TOL26_STEP = 0.1
@@ -173,14 +189,15 @@ BASE_SIGSIM_SHA256 = {
     "vss_contract.h": "1942767ac4a6915a2fda17fc312be52076cb6218e28f020eaaa4cdc41ce09a67",
 }
 # The two kind 4 files a kind 4 profile change moves. WP1b recorded them from Phase 8's base tree
-# before its kind 2 contract joined, which had to leave them byte for byte (spec-2 2.2). WP3b's profiles 4 and 5 move both
-# (spec-2 2.2: profile 4's row in vss_profiles.h, both profiles and their envelopes in vss_contract.py), so they are
-# recorded again here as WP3b's generation writes them: the kind 2 inputs and any later change that is not a kind 4
-# profile change must still leave them byte for byte. WP3c's freeze of profile 5 moves them again and records them again.
-# tests/test_sdv_vss_ctl.py holds the rest of WP1b's unchanged set.
+# before its kind 2 contract joined, which had to leave them byte for byte (spec-2 2.2). WP3b's profiles 4 and 5 moved both
+# (spec-2 2.2: profile 4's row in vss_profiles.h, both profiles and their envelopes in vss_contract.py), and WP3c F-c's
+# freeze of profile 5 moved them again (spec-2 section 6: profile 5's row in vss_profiles.h; its compiled flag, its
+# envelope's PROBED rows, its budget and attribution spread in vss_contract.py), so they are recorded again here as F-c's
+# generation writes them: the kind 2 inputs and any later change that is not a kind 4 profile change must still leave
+# them byte for byte. tests/test_sdv_vss_ctl.py holds the rest of WP1b's unchanged set.
 BASE_KIND4_SHA256 = {
-    "vss_contract.py": "e8dca2c0f3e0fd917af539c9831dabe6b571dffd4b1165a0eac8e085ffd48c9d",
-    "vss_profiles.h": "cd43b20eb0550fb7d67857a4e8a4275edd9d834697bc846a1ab16530439e4d63",
+    "vss_contract.py": "70604d3dae589fb98e92bdb4e050b0637996f72483fecae00077ef34174deee5",
+    "vss_profiles.h": "b389c52a548a9a8b06c79847d6d62adf5e05b699c0c44372713d398461571409",
 }
 # Every output the two run types must leave byte for byte (spec-2 2.2: every sigsim and carla output, vss_ctl.h and
 # vss_ctl.py), from a generation of the unedited WP3b base tree. The databroker
@@ -697,9 +714,9 @@ def test_there_is_one_vehicle_layer_per_run_type_with_a_live_default():
 @NEEDS_TOML
 def test_the_planning_sim_and_carla_autoware_layers_carry_profile_4s_and_profile_5s_l():
     """Spec-2 2.1 and 2.2: each new run type's layer is the Wheelbase default its live-default profile's L names (profile 4's
-    READ L for planning-sim, profile 5's PROBED L for carla-autoware: profile 5 is uncompiled, but its L is no stand-in, so
-    its layer stands), found here independently of generate.py; both layer files and both catalogues are outputs, under
-    exactly 2.1's names, after the sigsim and carla ones."""
+    READ L for planning-sim, profile 5's PROBED L for carla-autoware: its layer stood while profile 5 was uncompiled, its L
+    being no stand-in, and stands now that Phase 8's WP3c F-c compiled it), found here independently of generate.py; both
+    layer files and both catalogues are outputs, under exactly 2.1's names, after the sigsim and carla ones."""
     doc = _profiles()
     layers = gen.vehicle_layers(doc)
     want = {"planning-sim": (4, READ[("profiles.4", "l_mm")], "autoware-sample-vehicle"),
@@ -1168,7 +1185,7 @@ def test_rule_26s_inputs_must_share_one_dbc_message():
 def test_a_budget_that_does_not_close_is_refused(pid):
     """tol below the honest worst at one skew: sigsim's rows at one period (spec 7.4's 1.5 deg/s), profile 3's joint worst
     at one step (a tenth below it, so the case holds whatever a re-read makes the PROBED values); since Phase 8's WP3b
-    profile 4's summed rows at the planning-sim skew and profile 5's joint worst on its stand-in rows, each a tenth below."""
+    profile 4's summed rows at the planning-sim skew and profile 5's joint worst, each a tenth below."""
     doc = copy.deepcopy(_profiles())
     tol = 1.5 if pid == 1 else 0.9 * gen.derive(doc, _dbc(), SLOT_SIGNALS)["rule26_budget"][pid]["total"]
     _p(doc, pid).update(tol26=tol)
@@ -1181,8 +1198,8 @@ def test_a_budget_that_does_not_close_is_refused(pid):
 def test_a_margin_below_the_envelopes_target_is_refused(pid):
     """Spec 7.4 and Phase 7 spec 5 item 2: a budget that closes (tol above the honest worst) with less than its
     envelope's margin_target over it is refused by the generator, not only by a test of the profile file. Since Phase 8's
-    WP3b for both new profiles too (spec-2 section 4 item 2): profile 4 on the planning-sim envelope, compiled, and profile
-    5 on its stand-in rows, uncompiled."""
+    WP3b for both new profiles too (spec-2 section 4 item 2): profile 4 on the planning-sim envelope and profile 5 on the
+    carla010 envelope, both compiled."""
     doc = copy.deepcopy(_profiles())
     b = gen.derive(doc, _dbc(), SLOT_SIGNALS)["rule26_budget"][pid]
     tol = 0.99 * b["margin_target"] * b["total"]
@@ -1234,17 +1251,18 @@ def test_a_margin_exactly_at_the_envelopes_target_is_accepted(monkeypatch):
 
 @NEEDS_TOML
 def test_only_fully_defined_profiles_are_compiled():
-    """Since Phase 8's WP3b profiles 1-4 are compiled and profile 5 is not: its own values hold no stand-in, but its
-    envelope's rows do (spec-2 2.4), so the profile with every value read and every row it rests on read is the compiled
-    set. A synthetic stand-in row beside them passes the file's invariants uncompiled and never joins it."""
+    """Since Phase 8's WP3c F-c profiles 1-5 are compiled: profile 5's own values held no stand-in, and the freeze set its
+    envelope's rows (spec-2 section 6), so every profile has every value and every row it rests on read and no envelope
+    holds a stand-in row. A synthetic stand-in row beside them passes the file's invariants uncompiled and never joins
+    the compiled set."""
     doc = copy.deepcopy(_profiles())
-    assert [p["id"] for p in gen.compiled_profiles(doc)] == [1, 2, 3, 4]
+    assert [p["id"] for p in gen.compiled_profiles(doc)] == [1, 2, 3, 4, 5]
     assert all(not p["stand_in"] and not doc["envelopes"][p["envelope"]].get("stand_in") for p in gen.compiled_profiles(doc))
-    assert _p(doc, 5)["compiled"] is False and doc["envelopes"][_p(doc, 5)["envelope"]]["stand_in"]
+    assert [name for name, env in doc["envelopes"].items() if "stand_in" in env] == []
     row = _stand_in_row(doc)
     doc["profiles"].append(row)
     assert gen.check_profiles(doc, _dbc()) == []
-    assert [p["id"] for p in gen.compiled_profiles(doc)] == [1, 2, 3, 4] and row["id"] not in (1, 2, 3, 4, 5)
+    assert [p["id"] for p in gen.compiled_profiles(doc)] == [1, 2, 3, 4, 5] and row["id"] not in (1, 2, 3, 4, 5)
 
 
 # ============================================================ pure: profile 3 frozen (Phase 7 WP2; spec 5 items 1 and 2)
@@ -1296,8 +1314,9 @@ def _probed_lines(text, marker=_MARKER):
 
 @NEEDS_TOML
 def test_the_probed_values_are_marked_in_the_profile_file_and_held_once():
-    """Phase 7 spec 5 item 1: every value WP0's probes set is marked `# PROBED (` in profiles.toml, holds there what
-    PROBED holds, and no row still waits for a probe; the envelope rows say where they come from and carry no reading."""
+    """Phase 7 spec 5 item 1: every value WP0's probes set (and Phase 8's WP9a and WP3c F-c for profile 5) is marked
+    `# PROBED (` in profiles.toml, holds there what PROBED holds, and no row still waits for a probe; the envelope rows say
+    where they come from and carry no reading."""
     text = (VSSDIR / "profiles.toml").read_text(encoding="utf-8")
     marked = _probed_lines(text)
     assert marked == PROBED and all(type(marked[k]) is type(v) for k, v in PROBED.items())
@@ -1308,14 +1327,18 @@ def test_the_probed_values_are_marked_in_the_profile_file_and_held_once():
         if _MARKER.match(line) and "F8" in line:
             assert "fitted locally; the readings are not published" in line, line
     assert sum(1 for line in text.splitlines() if _MARKER.match(line) and "F8" in line) == len(rows) == 4
-    # Profile 5's two (Phase 8 WP3b) name WP9a's facts, and the carla010 envelope's rows are no PROBED value: they are
-    # stand-ins, marked so (test_profile_5_is_uncompiled_on_its_stand_in_envelope).
+    # Profile 5's two (Phase 8 WP3b) name WP9a's facts.
     assert [k for k in PROBED if k[0] == "profiles.5"] == [("profiles.5", "l_mm"), ("profiles.5", "delta_max")]
     for line in text.splitlines():
         if _MARKER.match(line) and "WP9a" in line:
             assert line.startswith("# PROBED (Phase 8 WP9a "), line
     assert sum(1 for line in text.splitlines() if _MARKER.match(line) and "WP9a" in line) == 2
-    assert not [k for k in PROBED if k[0] == "envelopes.carla010"]
+    # The carla010 envelope's four rows (Phase 8 WP3c F-c; stand-ins before it) are PROBED, each under exactly spec 2.1's
+    # first line, which carries no reading; the rows' own comment lines say what each bounds and by which rule.
+    assert [k for (table, k) in PROBED if table == "envelopes.carla010"] == list(CARLA010_FROZEN)
+    fc = [line for line in text.splitlines() if _MARKER.match(line) and "WP3c F-c" in line]
+    assert fc == ["# PROBED (Phase 8 WP3c F-c), fitted locally; the readings are not published."] * len(CARLA010_FROZEN), fc
+    assert {k for k in marked if k[0] == "envelopes.carla010"} == {("envelopes.carla010", k) for k in CARLA010_FROZEN}
     # Each L is the one of them no other number of these files stands for: written once in the profile file, once in this
     # file's PROBED, and in no other file this package owns.
     for key in (("profiles.3", "l_mm"), ("profiles.5", "l_mm")):
@@ -1629,37 +1652,120 @@ def test_a_live_default_that_parts_the_skew_row_from_its_run_type_is_refused_bef
 
 
 @NEEDS_TOML
-def test_profile_5_is_uncompiled_on_its_stand_in_envelope():
-    """Spec-2 2.4 (D18): the CARLA 0.10.0 taxi on the carla010 envelope, uncompiled until WP3c. Its own values hold no
-    stand-in: L and delta_max PROBED, the rest profile 3's (v_max and a_max D7's, the window, tol26 and v_tol); its a_y
-    bound D8's narrowed by the same rule (test_profile_5s_budget_...). The envelope's four rows are stand-ins, the carla
-    envelope's values, listed in its stand_in and each marked `# STAND-IN (` in the file. Run type carla-autoware's live
-    default."""
+def test_profile_5_is_frozen_and_compiled_on_its_probed_rows():
+    """Spec-2 2.4 (D18) and section 6's F-c: the CARLA 0.10.0 taxi on the carla010 envelope, compiled since Phase 8's WP3c
+    F-c. Its own values are what they were before the freeze: L and delta_max PROBED (WP9a), the rest profile 3's (v_max and
+    a_max D7's, the window, tol26 and v_tol), no other key; its a_y bound D8's narrowed by the same rule
+    (test_profile_5s_budget_...). The envelope's four rows are PROBED (the carla rows' rule on WP9's first honest drives),
+    each held in PROBED and marked in the file; the envelope has the carla envelope's keys and no stand_in, and no
+    `# STAND-IN (` line is left in the file. Run type carla-autoware's live default."""
     doc = _profiles()
     p, three = _p(doc, 5), _p(doc, 3)
     assert (p["source_vehicle"], p["limit_set"], p["envelope"]) == ("carla010-taxi", "nominal", "carla010")
-    assert p["compiled"] is False and p["stand_in"] == [] and p["live_default_for"] == ["carla-autoware"]
+    assert p["compiled"] is True and p["stand_in"] == [] and p["live_default_for"] == ["carla-autoware"]
     assert p["l_mm"] == PROBED[("profiles.5", "l_mm")] and p["delta_max"] == PROBED[("profiles.5", "delta_max")]
     assert float(p["delta_max"]).is_integer() and p["delta_max"] <= gen.DELTA_MAX_LIMIT_DEG
     assert (p["v_max"], p["a_max"], p["v26_lo"], p["v26_hi"], p["tol26"], p["v_tol"]) == (40.0, 10.0, 1.0, 10.0, 8.0, 1.0)
-    assert all(p[k] == three[k] for k in ("v_max", "a_max", "v26_lo", "v26_hi", "tol26", "v_tol"))
+    assert all(p[k] == three[k] for k in ("v_max", "a_max", "v26_lo", "v26_hi", "tol26", "v_tol")) and set(p) == set(three)
     env, carla = doc["envelopes"]["carla010"], doc["envelopes"]["carla"]
     assert (env["budget"], env["margin_target"]) == ("joint-grid", 1.2) and "skew_ms" not in env and "wheelbase_mm" not in env
-    assert tuple(env["stand_in"]) == CARLA010_STAND_IN
-    assert {k: v for k, v in env.items() if k != "stand_in"} == carla
+    assert "stand_in" not in env and set(env) == set(carla) == {"budget", "margin_target"} | set(CARLA010_FROZEN)
+    assert {k: env[k] for k in CARLA010_FROZEN} == {k: PROBED[("envelopes.carla010", k)] for k in CARLA010_FROZEN}
     text = (VSSDIR / "profiles.toml").read_text(encoding="utf-8")
-    assert _probed_lines(text, _STAND_IN_MARKER) == {("envelopes.carla010", k): carla[k] for k in CARLA010_STAND_IN}
+    assert {k: v for k, v in _probed_lines(text).items() if k[0] == "envelopes.carla010"} == \
+        {("envelopes.carla010", k): env[k] for k in CARLA010_FROZEN}
+    assert not [ln for ln in text.splitlines() if _STAND_IN_MARKER.match(ln)]
     assert [p["id"] for p in doc["profiles"] if p["envelope"] == "carla010"] == [5]
     assert gen.check_profiles(doc, _dbc()) == []
+    # The comments spec 2.1-2.3 ask for: the envelope's header (the reading, local), the PROBED paragraph, profile 5's own.
+    head = text.split("\n[envelopes.carla010]\n", 1)[1].split("\nbudget = ", 1)[0]
+    assert "WP3c F-c" in head and "the readings are local" in head and "after the reads were seen" in head, head
+    probed = text.split("\n# PROBED. ", 1)[1].split("\n#\n", 1)[0]
+    assert "WP3c F-c for the carla010 envelope's rows" in probed, probed
+    own = text.split("\nid = 5\n", 1)[1].split("\ncompiled = ", 1)[0]
+    assert "Frozen and compiled (Phase 8 WP3c F-c)" in own, own
+    # Spec 2.1 with B (why the window), 2.2 (make ctl-p5's row; the a_y comment on the frozen rows), 2.3 (STAND-IN stays).
+    assert "since the joint grid evaluates them only there" in head and "\n# skew rows were read inside rule 26's window only," in head, head
+    assert "make ctl-p5's image needs this row" in own, own
+    lines5 = text.split("\nid = 5\n", 1)[1].split("\n")
+    at = next(i for i, ln in enumerate(lines5) if ln.startswith("ay26_max = "))
+    note = []
+    while at > 0 and lines5[at - 1].startswith("#"):
+        at -= 1
+        note.insert(0, lines5[at])
+    assert "on the PROBED rows above it needs no narrowing" in " ".join(note) and "stand-in" not in " ".join(note), note
+    assert "\n# STAND-IN. An envelope row whose comment block starts with that word is no reading of its vehicle:\n" in text
+
+
+# What each frozen carla010 row's comment block says after spec 2.1's PROBED line: what the row bounds and how the rule was
+# read for it (the owner's reading chosen after the reads were seen, which the comments say).
+_FC_ROW_WORDS = {
+    "steer_rate": ("the delta-skew row", "inside rule 26's window", "the owner's reading", "after the reads"),
+    "accel_while_steering": ("the v-skew row", "inside rule 26's window", "the owner's reading", "after the reads"),
+    "launch_accel": ("launch from rest", "without the interface's first steps from rest", "the owner's reading",
+                     "after the reads", "v_tol 1.0 covers launches up to 4 m/s^2 over AGE_MAX"),
+    "understeer_gradient": ("understeer row", "absolute", "extrapolates it linearly up to the a_y bound", "the law's own error"),
+}
+# A take's or a record's name (a date, then "-carla" or "T-"), and a figure with its unit when it has one.
+_TAKE_OR_RECORD = re.compile(r"\d{8}(?:-carla|T)")
+_FIGURE = re.compile(r"\d+(?:\.\d+)*(?:\s*(?:deg/s|deg/g|deg|m/s\^2|m/s|km/h|mm|ms|g)\b)?")
 
 
 @NEEDS_TOML
-def test_profile_5s_budget_keeps_its_envelopes_margin_on_the_stand_ins_with_d8s_bound_narrowed_only_as_needed():
-    """Spec-2 section 4 item 2: profile 5's joint-grid margin, computed on the stand-in rows (informative until WP3c), must
-    hold; its a_y bound is the widest quarter step from D8's that keeps it (Phase 7 spec 5 item 2's rule, as profile 3's),
-    and tol and v26_hi are not what moved."""
+@pytest.mark.parametrize("row", CARLA010_FROZEN)
+def test_each_frozen_carla010_row_says_what_it_bounds_and_how_its_rule_was_read(row):
+    """Spec 2.1 and section 13's D2: each carla010 row's comment block is exactly spec 2.1's PROBED line, then what the row
+    bounds and how the carla rows' rule was read for it: the two skew rows inside rule 26's window, the launch without the
+    interface's first steps from rest (so the carla launch row's v_tol sentence holds for it too), each the owner's reading
+    chosen after the reads; the understeer row as an absolute value, carrying the law's own error. The block carries no
+    reading, no take or record name and no figure (spec 2.1 and section 10) but the launch block's v_tol sentence, which is
+    a design sentence (the carla launch row's) and is held true here for the row, not only present."""
+    text = (VSSDIR / "profiles.toml").read_text(encoding="utf-8").split("\n[envelopes.carla010]\n", 1)[1].split("\n[", 1)[0]
+    lines = text.splitlines()
+    at = [i for i, ln in enumerate(lines) if ln.startswith("%s = " % row)]
+    assert len(at) == 1, (row, at)
+    block, i = [], at[0] - 1
+    while i >= 0 and lines[i].startswith("#"):
+        block.insert(0, lines[i])
+        i -= 1
+    assert block[0] == "# PROBED (Phase 8 WP3c F-c), fitted locally; the readings are not published.", block
+    body = " ".join(ln[2:] for ln in block[1:])
+    assert not [words for words in _FC_ROW_WORDS[row] if words not in body], (row, body)
+    # Spec 2.1: no take or record name, and no figure but the launch block's v_tol sentence ("rule 26" is a name).
+    assert not _TAKE_OR_RECORD.search(body), (row, body)
+    figs = _FIGURE.findall(re.sub(r"\brule[- ]26\b", "rule", body))
+    assert figs == (["1.0", "4 m/s^2"] if row == "launch_accel" else []), (row, figs)
+    if row == "launch_accel":
+        doc = _profiles()
+        v_tol, age_s = _p(doc, 5)["v_tol"], doc["age_max_ms"] / 1000.0
+        assert "v_tol %.1f covers launches up to %g m/s^2 over AGE_MAX" % (v_tol, v_tol / age_s) in body, body
+        assert doc["envelopes"]["carla010"]["launch_accel"] * age_s <= v_tol, "the block's v_tol sentence holds for the row"
+
+
+def test_the_readmes_profile_5_section_carries_no_reading():
+    """Spec 3a item 4 and section 10: README's F-c section says how the rows were read and that the readings are local; it
+    carries no reading, no take or record name and no figure with a unit, and its only decimal figures are the 0.10.0 law's
+    version and the carla rows' factor 1.1 (a reading written without its unit would be a third)."""
+    text = (VSSDIR / "README.md").read_text(encoding="utf-8")
+    sec = text.split("\n## Profile 5, frozen (Phase 8 WP3c F-c)\n", 1)[1].split("\n## ", 1)[0]
+    assert "fitted locally; the readings are not published." in " ".join(sec.split()), sec
+    # Spec 3a item 4: the one make ctl-p5 sentence (WP9c's fable#7), what the section does not show, the bullet above it.
+    assert "`make ctl-p5`" in sec and "`CTL_P5_GEN`" in sec, sec
+    assert "\nIt does not show that any row bounds a drive beyond the calibration inputs" in sec, sec
+    assert "the `carla010` envelope) was **not compiled** by this package" in " ".join(text.split()), "the Profiles 4 and 5 bullet"
+    assert not _TAKE_OR_RECORD.search(sec), sec
+    assert [f for f in _FIGURE.findall(sec) if not re.fullmatch(r"[\d.]+", f)] == []
+    assert sorted({f for f in _FIGURE.findall(sec) if "." in f}) == ["0.10.0", "1.1"]
+
+
+@NEEDS_TOML
+def test_profile_5s_budget_keeps_its_envelopes_margin_on_the_frozen_rows_with_d8s_bound_narrowed_only_as_needed():
+    """Spec-2 section 4 item 2 and section 6's F-c: profile 5's joint-grid margin on the PROBED rows must hold; its a_y bound
+    is the widest quarter step from D8's that keeps it (Phase 7 spec 5 item 2's rule, as profile 3's: a bound narrowed
+    further than the budget needs, or widened past it or past D8's, is refused here), and tol and v26_hi are not what moved.
+    The attribution spread follows the budget's k_attr (k_attr - 1 steps)."""
     doc = _profiles()
-    want = _widest_closing_ay(doc, 5)
+    want = _widest_closing_ay(_with_probed(doc), 5)
     assert want is not None, "no a_y step closes profile 5's budget: the v26_hi step, then the owner's call"
     p = _p(doc, 5)
     assert p["ay26_max"] == want <= D8_AY26_MAX and gen.f32_exact(want)
@@ -1667,8 +1773,10 @@ def test_profile_5s_budget_keeps_its_envelopes_margin_on_the_stand_ins_with_d8s_
         wider = copy.deepcopy(doc)
         _p(wider, 5)["ay26_max"] = want + AY26_STEP
         assert _one_step_margin(wider, 5) < doc["envelopes"]["carla010"]["margin_target"]
-    b = gen.derive(doc, _dbc(), SLOT_SIGNALS)["rule26_budget"][5]
+    d = gen.derive(doc, _dbc(), SLOT_SIGNALS)
+    b = d["rule26_budget"][5]
     assert b["method"] == "joint-grid" and b["margin"] >= b["margin_target"] == 1.2
+    assert b["k_attr"] >= 2 and d["attribution_spread_ms"][5] == (b["k_attr"] - 1) * doc["carla_step_ms"]
     assert (p["tol26"], p["v26_hi"]) == (8.0, 10.0)
 
 
@@ -1676,20 +1784,25 @@ def test_profile_5s_budget_keeps_its_envelopes_margin_on_the_stand_ins_with_d8s_
 def test_a_compiled_profile_on_an_envelope_that_holds_a_stand_in_row_is_refused():
     """Spec-2 2.4's first new refusal: profile 5 compiled while the carla010 envelope holds stand-in rows is refused, the
     message naming the profile, the envelope and its rows; so is a compiled profile 3 once its own envelope lists a row as a
-    stand-in. With the list emptied (what WP3c's freeze does, beside the rows) profile 5 compiles."""
+    stand-in. Since Phase 8's WP3c F-c the real envelope holds no stand_in key, so the test sets the list itself (the
+    rows as they were until the freeze); uncompiled beside that list, profile 5 passes, as it did then; and with the
+    list emptied, or the key absent (the file as it stands), profile 5 compiles."""
     doc = copy.deepcopy(_profiles())
-    _p(doc, 5)["compiled"] = True
-    want = "profile 5: compiled on envelope carla010, which holds stand-in rows (%s)" % ", ".join(CARLA010_STAND_IN)
+    assert "stand_in" not in doc["envelopes"]["carla010"] and _p(doc, 5)["compiled"] is True
+    doc["envelopes"]["carla010"]["stand_in"] = list(CARLA010_FROZEN)
+    want = "profile 5: compiled on envelope carla010, which holds stand-in rows (%s)" % ", ".join(CARLA010_FROZEN)
     assert want in gen.check_profiles(doc, _dbc())
     with pytest.raises(gen.Refusal, match=re.escape(want)):
         gen.derive(doc, _dbc(), SLOT_SIGNALS)
+    _p(doc, 5)["compiled"] = False
+    assert gen.check_profiles(doc, _dbc()) == []
     doc = copy.deepcopy(_profiles())
     doc["envelopes"]["carla"]["stand_in"] = ["understeer_gradient"]
     assert "profile 3: compiled on envelope carla, which holds stand-in rows (understeer_gradient)" in gen.check_profiles(doc, _dbc())
     doc = copy.deepcopy(_profiles())
     doc["envelopes"]["carla010"]["stand_in"] = []
-    _p(doc, 5)["compiled"] = True
-    assert gen.check_profiles(doc, _dbc()) == []
+    assert _p(doc, 5)["compiled"] is True and gen.check_profiles(doc, _dbc()) == []
+    assert gen.check_profiles(_profiles(), _dbc()) == []
 
 
 @NEEDS_TOML
@@ -2304,26 +2417,30 @@ def test_the_planning_sim_and_carla_autoware_layers_and_catalogues_are_generated
 
 
 @NEEDS_VENV
-def test_profile_4_is_compiled_into_the_generated_tables_and_profile_5_is_python_only(baseline):
-    """Spec-2 2.2: vss_profiles.h gains profile 4's row and no profile 5 row (make ctl's row-4 guard reads the first, and a
-    guest built from this generation answers profile 5 with reason 8); vss_contract.py lists both, each equal to its
-    profiles.toml row, with both run types' live defaults, profile 4's summed rows at the planning-sim skew, both margins
-    kept, and the two envelopes with their skew row and stand-in list; 0 is the one reserved id left."""
+def test_profiles_4_and_5_are_compiled_into_the_generated_tables(baseline):
+    """Spec-2 2.2 and section 6's F-c: vss_profiles.h holds profile 4's row (make ctl's row-4 guard reads it) and, since
+    Phase 8's WP3c F-c, profile 5's (make ctl-p5's row-5 guard reads it, and a guest built from this generation judges
+    profile 5 instead of answering it with reason 8), each once, its L the profile's PROBED or READ value; vss_contract.py
+    lists both compiled, each equal to its profiles.toml row, with both run types' live defaults, profile 4's summed rows at
+    the planning-sim skew, both margins kept, the planning-sim envelope with its skew row and the carla010 envelope with its
+    PROBED rows and no stand-in list; 0 is the one reserved id left."""
     mod, doc, out = baseline["mod"], _profiles(), baseline["out"]
-    assert mod.COMPILED_PROFILE_IDS == (1, 2, 3, 4) and mod.RESERVED_PROFILE_IDS == (0,)
+    assert mod.COMPILED_PROFILE_IDS == (1, 2, 3, 4, 5) and mod.RESERVED_PROFILE_IDS == (0,)
     assert mod.LIVE_DEFAULT_PROFILE == {"sigsim": 1, "carla": 3, "planning-sim": 4, "carla-autoware": 5}
     rows = {r["id"]: r for r in mod.PROFILES}
     assert sorted(rows) == [1, 2, 3, 4, 5]
     for pid in (4, 5):
         p = _p(doc, pid)
         assert all(rows[pid][k] == p[k] for k in ("l_mm", "v_max", "a_max", "delta_max", "v26_lo", "v26_hi", "tol26", "v_tol")), pid
-        assert rows[pid]["compiled"] is p["compiled"] and rows[pid]["stand_in"] == () and rows[pid]["envelope"] == p["envelope"]
+        assert rows[pid]["compiled"] is p["compiled"] is True and rows[pid]["stand_in"] == () and rows[pid]["envelope"] == p["envelope"]
     assert rows[4]["ay26_max"] is None and rows[5]["ay26_max"] == _p(doc, 5)["ay26_max"]
     macros = _c_macros(out / "vss_profiles.h")
-    assert macros["VSS_PROFILE_COUNT"] == "4u" and macros["VSS_PROFILE_IDS"] == '"1 2 3 4"'
+    assert macros["VSS_PROFILE_COUNT"] == "5u" and macros["VSS_PROFILE_IDS"] == '"1 2 3 4 5"'
     text = (out / "vss_profiles.h").read_text(encoding="utf-8")
-    assert text.count("X(4u, %du, " % _p(doc, 4)["l_mm"]) == 1 and "X(5u," not in text
-    assert mod.ENVELOPES["planning-sim"]["skew_ms"] == 25 and tuple(mod.ENVELOPES["carla010"]["stand_in"]) == CARLA010_STAND_IN
+    assert text.count("X(4u, %du, " % READ[("profiles.4", "l_mm")]) == 1 and text.count("X(5u, %du, " % PROBED[("profiles.5", "l_mm")]) == 1
+    assert text.count("X(5u,") == 1
+    assert mod.ENVELOPES["planning-sim"]["skew_ms"] == 25 and "stand_in" not in mod.ENVELOPES["carla010"]
+    assert {k: mod.ENVELOPES["carla010"][k] for k in CARLA010_FROZEN} == {k: PROBED[("envelopes.carla010", k)] for k in CARLA010_FROZEN}
     assert mod.RULE26_BUDGET[4]["skew_ms"] == 25 and mod.RULE26_BUDGET[4]["margin"] >= mod.ENVELOPES["planning-sim"]["margin_target"]
     assert mod.RULE26_BUDGET[5]["margin"] >= mod.ENVELOPES["carla010"]["margin_target"]
 
@@ -2331,8 +2448,8 @@ def test_profile_4_is_compiled_into_the_generated_tables_and_profile_5_is_python
 @NEEDS_VENV
 def test_the_kind_2_contract_leaves_vss_contract_py_and_vss_profiles_h_byte_for_byte(baseline):
     """Spec-2 2.2 (Phase 8 WP1b): vss_contract.py and vss_profiles.h are, byte for byte, what the last kind 4 profile
-    change wrote, beside the kind 2 contract (BASE_KIND4_SHA256: since Phase 8's WP3b its profiles 4 and 5; the manifest
-    records the same)."""
+    change wrote, beside the kind 2 contract (BASE_KIND4_SHA256: since Phase 8's WP3c F-c the freeze of profile 5; the
+    manifest records the same)."""
     out = baseline["out"]
     assert {name: hashlib.sha256((out / name).read_bytes()).hexdigest() for name in BASE_KIND4_SHA256} == BASE_KIND4_SHA256
     manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
@@ -2383,8 +2500,8 @@ def test_the_manifest_keeps_its_vehicle_layer_and_names_each_run_types_layer_and
 def test_profile_3_is_compiled_into_the_generated_tables(baseline):
     """The freeze reaches both constant files: profile 3 in vss_profiles.h's table (the guest's) and in
     COMPILED_PROFILE_IDS, with its a_y bound; its row equal to profiles.toml's. Since Phase 8's WP3b profile 4 joins both
-    after it (test_profile_4_is_compiled_into_the_generated_tables_and_profile_5_is_python_only), so this holds profile 3's
-    place: in both, and run type carla's live default."""
+    after it, and since WP3c F-c profile 5 (test_profiles_4_and_5_are_compiled_into_the_generated_tables), so this holds
+    profile 3's place: in both, and run type carla's live default."""
     mod, doc = baseline["mod"], _profiles()
     assert mod.COMPILED_PROFILE_IDS[:3] == (1, 2, 3) and mod.LIVE_DEFAULT_PROFILE["carla"] == 3
     row = next(r for r in mod.PROFILES if r["id"] == 3)

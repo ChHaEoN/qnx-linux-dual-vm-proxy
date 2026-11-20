@@ -13,14 +13,23 @@ time one step more -- and calls every on_tick callback with the world's snapshot
 after `ticks` ticks, so a follower then sees no tick; `ego_gone_at` destroys the ego before that tick's snapshot, and
 `settings_at` changes the world's settings at a tick (another client applying them).
 
+THE FIRST SNAPSHOT (this file's own, not LibCarla's): a client's actor list is the last world snapshot it holds. By default
+the client holds one when its world is made, so its actors are there at once, and a wait_for_tick that comes before any
+actor read and any other wait on that world is answered with that snapshot at once: no tick passes, so every frame a test
+counts is as before the follower waited (a simplification: CARLA's own wait always waits for the next tick). With
+`snapshot_pending` the client holds none: get_actors reads an empty list until a tick after its world was made (a wait's or
+the clock's) delivers one, and wait_for_tick waits on the fake clock for the interface's next tick (the world ticked once,
+before any callback of the follower's exists), or, when none comes within its `seconds`, moves the clock by them and raises
+RuntimeError, as CARLA's client does on its time-out. Every wait's `seconds` is recorded in order (`sim.wait_timeouts`).
+
 THE MODEL (a test's own, not CARLA's physics): a kinematic single-track car in CARLA's axes as WP9a read them --
 left-handed, x forward, y right, z up; yaw, steer and the angular velocity's z positive turning right (clockwise seen
 from above); degrees, deg/s, m/s. The effective wheel angle is FAKE_LAW_DEG x s x |s| and the yaw rate v tan(angle) /
 FAKE_WHEELBASE_M: both this file's design values, chosen near the steering law and the wheelbase profile 5 holds so that
 a take of it passes the kind 4 rules under that profile; neither is a measurement. get_wheel_steer_angle always returns
-0.0, as WP9a read it on 0.10.0. get_control reports the script's control and the gear of a fake automatic gearbox: 0 at
+0.0 in this fake. get_control reports the script's control and the gear of a fake automatic gearbox: 0 at
 rest, 1 up to FAKE_SHIFT_MS, 2 above, -1 in reverse (`gear_at` overrides it at a tick, for a gear that disagrees with
-reverse). The vehicle physics read back has no wheel position (as WP9a read the 0.10.0 client), each wheel's
+reverse). The vehicle physics read back has no wheel position (matching the client interface), each wheel's
 max_steer_angle, and the steering curve as the client reads it: the class default's points first, then the vehicle's own
 (`curve`, by default the interface's flattening behind that prefix).
 
@@ -52,7 +61,7 @@ FAKE_START_ELAPSED = 12.5
 FORBIDDEN = ("apply_settings", "tick", "load_world", "apply_physics_control", "apply_control", "set_target_velocity",
              "spawn_actor", "get_trafficmanager")
 ALSO_REFUSED = ("reload_world", "try_spawn_actor", "set_autopilot", "destroy", "apply_batch", "apply_batch_sync",
-                "wait_for_tick", "enable_constant_velocity")
+                "enable_constant_velocity")
 
 
 class Forbidden(RuntimeError):
@@ -277,7 +286,7 @@ class Sim:
                  tick_wall_ns: Optional[Callable[[int], int]] = None, frame_jump_at: Optional[int] = None,
                  ego_gone_at: Optional[int] = None, script: Callable[[int], Dict[str, Any]] = default_script,
                  gear_at: Optional[Dict[int, int]] = None, w_scale: float = 1.0, physics_raises: bool = False,
-                 interrupt_at: Optional[int] = None) -> None:
+                 interrupt_at: Optional[int] = None, snapshot_pending: bool = False) -> None:
         self.clock = clock
         self.client_version, self.server_version = client_version, server_version
         self.map_name = map_name
@@ -293,6 +302,8 @@ class Sim:
         self.w_scale = w_scale                 # the angular velocity's z times this (a test's fault: another unit)
         self.physics_raises = physics_raises
         self.interrupt_at = interrupt_at       # a Ctrl-C delivered inside that tick
+        self.snapshot_pending = snapshot_pending   # the client holds no snapshot yet (THE FIRST SNAPSHOT)
+        self.wait_timeouts: List[float] = []
         self.calls: List[str] = []
         self.client_timeout: Optional[float] = None
         self.frame = FAKE_START_FRAME
@@ -344,6 +355,12 @@ class Sim:
 class World:
     def __init__(self, sim: Sim) -> None:
         self.sim = sim
+        self.born_frame = sim.frame       # a tick after this frame hands a client with snapshot_pending its first snapshot
+        self.read = False                 # an actor read was made on this world
+        self.waited = False               # a wait_for_tick was made on this world
+
+    def _snap(self) -> WorldSnapshot:
+        return WorldSnapshot(self.sim.frame, self.sim.elapsed, self.sim.step_s(), [a.id for a in self.sim.actors if a.alive])
 
     def get_settings(self) -> WorldSettings:
         self.sim.call("get_settings")
@@ -355,11 +372,30 @@ class World:
 
     def get_actors(self, ids: Any = None) -> ActorList:
         self.sim.call("get_actors")
+        self.read = True
+        if self.sim.snapshot_pending and self.sim.frame == self.born_frame:
+            return ActorList()                                  # no snapshot yet: the client knows no actor
         return ActorList(a for a in self.sim.actors if a.alive)
 
     def get_snapshot(self) -> WorldSnapshot:
         self.sim.call("get_snapshot")
-        return WorldSnapshot(self.sim.frame, self.sim.elapsed, self.sim.step_s(), [a.id for a in self.sim.actors if a.alive])
+        return self._snap()
+
+    def wait_for_tick(self, seconds: float = 10.0) -> WorldSnapshot:
+        """THE FIRST SNAPSHOT in the module docstring; the default `seconds` is the client's own."""
+        sim = self.sim
+        sim.call("wait_for_tick")
+        sim.wait_timeouts.append(seconds)
+        held = not sim.snapshot_pending and not self.read and not self.waited
+        self.waited = True
+        if held:
+            return self._snap()
+        deadline = sim.clock.now + max(0, int(math.ceil(float(seconds) * 1e9)))
+        if sim.ticks < sim.ticks_planned and sim.next_tick_ns <= deadline:
+            sim.advance_to(sim.next_tick_ns)
+            return self._snap()
+        sim.advance_to(deadline)
+        raise RuntimeError("fake: time-out of %dms while waiting for the simulator" % int(round(float(seconds) * 1000)))
 
     def on_tick(self, callback: Callable[[Any], None]) -> int:
         self.sim.call("on_tick")

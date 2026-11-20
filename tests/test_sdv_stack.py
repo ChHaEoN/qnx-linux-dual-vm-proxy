@@ -103,6 +103,17 @@ Pure tests (standard library; no Docker, no databroker, no bus):
     held to the build files that start the vss monitor; loadcheck loading a CARLA run's staged catalogue beside the
     generation's sigsim one (a sigsim run's four as before); a CARLA run's CAN provider rows naming the carla feeder
     (version, town, seed, vehicle) as their upstream, every other column attribution.py's own;
+  * a carla-autoware recording (SDV Phase 8 WP9 P4), sdv/carla/encode010.py's, on synthetic
+    recordings and generations and on encode010's own recording of tests/test_sdv_carla010.py's fake take: its log
+    carla.log by the one table (any other name refused naming both), read without a seed (one on the command line refused,
+    one in the line not read as one) and without a hard brake or a window, a sigsim or a carla recording still needing
+    both; the generation's carla-autoware pair staged; the CAN provider's rows naming the feeder with the line's map and no
+    seed; the oracle on the rows (every standard signal, sdv/rosvss/mapping.py's list, from the CAN path, no row of the
+    ROS->VSS feeder) failing on each way a row can be off it; a bridge refused while the line's profile is not compiled, and
+    the Wheelbase, C12a's compiled check and C12b's console and bridge operands applying when it is; the provenance against
+    encode010's module list; the light and the decisions reported as not judged by replaycheck, analyse, replay's gates and
+    the verdict, the values, the listeners, the bus frames, the bridge, the same behaviour and C12b (an RTF max above 1)
+    staying gates; both forms through replay_once with every outside call replaced;
   * the ros feed (SDV Phase 8 WP3d; spec-2 2.5, 2.6, 2.12 and 5), on a synthetic planning-sim generation, synthetic
     images.json pins and a replaced docker, host check, native monitor, pulls and builds: attribution.py's planning-sim
     table (the feeder for the slots, Vehicle.Speed and every ControlCommand and CtlClaim leaf, the bridge or none for
@@ -122,7 +133,7 @@ Pure tests (standard library; no Docker, no databroker, no bus):
     cannot be read refusing the run, a failed start swept with the host check read after, a changed setting named; down
     removing the feeder with the rest, reading the host check and failing on a change, and stopping a left native
     monitor only while its pid runs its binary; the feeder's topics and QoS against W4's publishers, read from WP3a's
-    unchanged modules; the CAN-provider fix's five test-only NITs (its critic's proposal).
+    unchanged modules; the CAN-provider fix's test-only NITs (its critic's proposal).
 
 Tests that need the generated catalogue (sdv-out/gen, sdv/vss/README.md) skip without it; the one
 that reads the real recording directory (read-only) skips without it, and so does the one that reads WP5a's CARLA
@@ -519,7 +530,9 @@ def test_docker_log_times():
 SEGMENTS = [["cruise", 0, 100], ["hard brake", 100, 160], ["stopped", 160, 200], ["reverse", 200, 260]]
 
 
-SYN_LOGS = {"sigsim": "sigsim.log", "carla": "carla.log"}      # a recording's log by its generator (spec-2 2.1), this file's spelling
+# a recording's log by its generator (spec-2 2.1; carla-autoware: Phase 8 WP9 P4), this file's spelling
+SYN_LOGS = {"sigsim": "sigsim.log", "carla": "carla.log", "carla-autoware": "carla.log"}
+SYN_TAXI_L_MM = 2222           # a third vehicle's wheelbase: the synthetic profile 5's L (a carla-autoware recording's)
 
 
 def _recording(tmp_path, seed=7, name="20260101-sigsim-7", **over):
@@ -531,7 +544,11 @@ def _recording(tmp_path, seed=7, name="20260101-sigsim-7", **over):
     carla writes a CARLA recording's line: profile 3, the carla vehicle at SYN_OTHER_L_MM, the encoder's five params
     and an rtf, which its trip carries too, with encoder_sha256 when given); log, the file the log is written to (by
     default the generator's); path_log, the basename the line's recording.path names (by default log); listed_name,
-    the file name <log>.sha256 gives after the hash."""
+    the file name <log>.sha256 gives after the hash.
+    SDV Phase 8 WP9 P4: gen carla-autoware writes the line and the trip sdv/carla/encode010.py writes: profile 5, the
+    taxi at SYN_TAXI_L_MM, five params naming a map and no seed, an rtf (rtf replaces it), and a trip with no seed, the
+    line's params and, unless segments is given, one passive segment; line_seed adds a seed to the line's params, and
+    trip_seed one to the trip, which the encoder never writes."""
     d = tmp_path / name
     d.mkdir()
     gen = over.get("gen", "sigsim")
@@ -547,6 +564,15 @@ def _recording(tmp_path, seed=7, name="20260101-sigsim-7", **over):
                            "params": {"catalog_digest": SYN_DIGEST, "dbc_sha256": over.get("dbc_sha", "e5" * 32), "seed": seed,
                                       "town": "Town01", "version": "0.9.16"},
                            "rtf": dict(RTF)}}
+    elif gen == "carla-autoware":
+        aw_params = {"catalog_digest": SYN_DIGEST, "dbc_sha256": over.get("dbc_sha", "e5" * 32), "map": "Carla/Maps/Town10HD_Opt",
+                     "steer_law": "-70*s*|s| deg on the curve (0,1),(120,1)", "version": "0.10.0"}
+        if "line_seed" in over:
+            aw_params["seed"] = over["line_seed"]
+        line = {"name": name, "profile_id": 5,
+                "recording": {"format": "candump-log", "path": path, "sha256": over.get("line_sha", sha)},
+                "source": {"generator": gen, "params": aw_params, "rtf": dict(over.get("rtf", RTF)),
+                           "vehicle": {"name": "vehicle.taxi.ford", "wheelbase_mm": SYN_TAXI_L_MM}}}
     else:
         line = {"name": name, "profile_id": 1,
                 "recording": {"format": "candump-log", "path": path, "sha256": over.get("line_sha", sha)},
@@ -556,8 +582,14 @@ def _recording(tmp_path, seed=7, name="20260101-sigsim-7", **over):
     (d / (log_name + ".sha256")).write_text("%s  %s\n" % (over.get("listed_sha", sha), over.get("listed_name", log_name)), encoding="ascii")
     trip = {"seed": over.get("trip_seed", seed), "params": over["params"] if "params" in over else {"seed": over.get("params_seed", seed)},
             "segments": over.get("segments", SEGMENTS), "messages": over.get("messages", {"SliceDynamics": 2})}
-    if gen == "carla":
-        trip["rtf"] = dict(RTF)
+    if gen == "carla-autoware":
+        trip = {"segments": over.get("segments", [["passive", 0, 260]]), "messages": over.get("messages", {"SliceDynamics": 2}),
+                "params": dict(line["source"]["params"]), "profile_id": 5, "profile_compiled": False, "wheelbase_mm": SYN_TAXI_L_MM,
+                "rtf": dict(line["source"]["rtf"]), "timestamps": "feeder send schedule from zero"}
+        if "trip_seed" in over:
+            trip["seed"] = over["trip_seed"]
+    if gen in ("carla", "carla-autoware"):
+        trip.setdefault("rtf", dict(RTF))
         if "encoder_sha256" in over:
             trip["encoder_sha256"] = over["encoder_sha256"]
     if trip["segments"] is None:
@@ -852,7 +884,7 @@ def _prepare_rig(tmp_path, monkeypatch, hard_brake=(100, 160), seed=7, bridge=Fa
     profile 3, and beside vehicle_layer (sigsim's, layer_default, SYN_L_MM unless given) the manifest names
     vehicle_layers {sigsim, carla} and databroker_catalogues {sigsim, carla}, the carla catalogue serving profile 3's L
     (SYN_OTHER_L_MM) as its Wheelbase default, each file listed in its outputs. rec_over takes _recording's gen, log,
-    path_log, listed_name and encoder_sha256 too."""
+    path_log, listed_name and encoder_sha256 too, and segments (the trip's, in place of the four with the hard brake)."""
     if frozen and layer_default is None:
         layer_default = SYN_L_MM
     cat, mapping, _dbc = _synthetic()
@@ -864,7 +896,8 @@ def _prepare_rig(tmp_path, monkeypatch, hard_brake=(100, 160), seed=7, bridge=Fa
     dbc_sha = hashlib.sha256(TINY_DBC).hexdigest()
     segments = [[n, *(hard_brake if n == "hard brake" else (a, b))] for n, a, b in SEGMENTS]
     rec_over.setdefault("messages", {"SliceDynamics": len(_trip_frames())})
-    rec, _line, _sha = _recording(tmp_path, seed=seed, dbc_sha=dbc_sha, segments=segments, **rec_over)
+    rec_over.setdefault("segments", segments)
+    rec, _line, _sha = _recording(tmp_path, seed=seed, dbc_sha=dbc_sha, **rec_over)
     gen = tmp_path / "gen"
     gen.mkdir()
     (gen / "vss-databroker.json").write_text(json.dumps(_nest(cat)), encoding="utf-8")
@@ -4288,7 +4321,8 @@ def _replay_fakes(monkeypatch, log, seen):
     for name, fn in (("up", fake_up), ("listeners_now", listeners_now), ("wait_log", lambda *a, **kw: None),
                      ("wait_for", lambda *a, **kw: None), ("stop_containers", lambda ctx: None), ("collect", lambda rd: {}),
                      ("remove_stack", lambda: seen.append("remove")), ("analyse", lambda ctx, rd: {}),
-                     ("record_close", lambda header, rd, console=None: ("C12b", True, "synthetic"))):
+                     ("record_close", lambda header, rd, console=None: ("C12b", True, "synthetic")),
+                     ("player_bound_s", lambda log: 300)):          # the bound's own tests: tests/test_sdv_stack_playerbound.py
         monkeypatch.setattr(stack, name, fn)
     monkeypatch.setattr(stack, "VCAN_READY_S", 0.0)
     for name, fn in (("check_recording", lambda header, sha, dbc: ("C10", True, "synthetic")), ("run_rows", lambda rows, ids: []),
@@ -4405,7 +4439,7 @@ def test_step3_keeps_the_hook_key_with_no_record_when_a_run_stops_before_its_fir
 
 
 # --- SDV Phase 6 WP2: the app's image identity, the app outside the stack, host spool and status, the marker ---------
-# spec.md 2.1, 2.2, 2.7 and section 4 items 5-9. Against a replaced docker and synthetic contexts: nothing here starts a
+# Against a replaced docker and synthetic contexts: nothing here starts a
 # container, writes under /run or reads this host's own marker (the autouse fixture above points the variable elsewhere).
 COMMON_PHASE1 = ["--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--log-opt", "max-size=10m", "--memory", "512m",
                  "--memory-swap", "512m"]
@@ -5559,7 +5593,7 @@ def test_the_stacks_log_table_is_the_injectors_and_its_encoder_modules_the_encod
     """Spec-2 2.1: one table, spelled once more in bundle.py (standard library only, Python 3.10) and held equal here;
     the stack reads it through bundle.py. The encoder modules the CARLA provenance reports are sdv/carla/encode.py's."""
     inj = _inject_module()
-    assert stack.bd.LOG_NAMES == inj.LOG_NAMES == {"sigsim": "sigsim.log", "carla": "carla.log"}
+    assert stack.bd.LOG_NAMES == inj.LOG_NAMES == {"sigsim": "sigsim.log", "carla": "carla.log", "carla-autoware": "carla.log"}
     assert stack.LOG_NAMES is stack.bd.LOG_NAMES
     tree = ast.parse((REPO / "sdv" / "carla" / "encode.py").read_text(encoding="utf-8"))
     mods = [ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign)
@@ -5987,7 +6021,9 @@ def test_the_real_carla_pair_passes_the_stacks_recording_checks():
     ("ifs-vss.bin", "ipc-test/qnx-safety-monitor/ifs-vss.build"),
     ("ifs-vss-carla.bin", "ipc-test/qnx-safety-monitor/ifs-vss-carla.build"),
     ("ifs-ctl.bin", "ipc-test/qnx-safety-monitor/ifs-ctl.build"),
-], ids=["ifs-vss", "ifs-vss-carla", "ifs-ctl"])
+    ("ifs-ctl-p5.bin", "ipc-test/qnx-safety-monitor/ifs-ctl-p5.build"),
+    ("ifs-lane.bin", "ipc-test/qnx-safety-monitor/ifs-lane.build"),
+], ids=["ifs-vss", "ifs-vss-carla", "ifs-ctl", "ifs-ctl-p5", "ifs-lane"])
 def test_a_guest_components_started_by_names_the_build_file_of_its_image(tmp_path, monkeypatch, image, build):
     """Guest mode's component names the build file that made the image it ran (spec-2 2.3: plan carla's image is
     ifs-vss-carla.bin), never ifs-vss.build for every image."""
@@ -6014,7 +6050,7 @@ def test_the_guest_build_table_is_every_build_file_that_starts_the_vss_monitor()
     start = re.compile(r"^/proc/boot/qnx-safety-monitor 7160 svc 500 &$", re.M)
     starts = sorted("ipc-test/qnx-safety-monitor/" + p.name for p in d.glob("*.build")
                     if start.search(p.read_text(encoding="utf-8", errors="replace")))
-    assert sorted(stack.GUEST_IMAGE_BUILDS.values()) == starts and len(starts) == 3, starts
+    assert sorted(stack.GUEST_IMAGE_BUILDS.values()) == starts and len(starts) == 5, starts
     assert all(Path(image).suffix == ".bin" and Path(image).stem == Path(build).stem for image, build in stack.GUEST_IMAGE_BUILDS.items())
 
 
@@ -6891,7 +6927,7 @@ def test_a_feeder_docker_run_with_a_forbidden_flag_is_refused_before_docker_runs
     assert problems and any(why in p for p in problems), problems
     monkeypatch.setattr(stack, "feeder_argv", lambda c, d, label: bad)
     (ctx.run_dir / "up").mkdir(parents=True, exist_ok=True)
-    with pytest.raises(stack.StackError, match="2.12"):
+    with pytest.raises(stack.StackError, match="the feeder's docker run is refused"):
         stack.start_feeder(ctx, ctx.run_dir / "up", "x/up")
     assert not rig.fake.runs()
 
@@ -7766,6 +7802,851 @@ def test_the_none_mode_table_gives_the_bridge_nothing_though_its_rows_and_write_
     assert checks[attr.PLANNING_SIM_CHECK][1] is False and "the table's writer is none" in checks[attr.PLANNING_SIM_CHECK][2], checks
     broker = attr.check_planning_sim(rows, cat, ws, PS_LAYER, bridge_mode="broker", witnessed=owned)
     assert all(c[1] for c in broker), broker
+
+
+# --- a carla-autoware recording (SDV Phase 8 WP9 P4) ---------------------------------------
+# sdv/carla/encode010.py's recording of a passive CARLA 0.10.0 take: run type carla-autoware, its log carla.log, no seed, its
+# params naming a map, its trip one passive segment. The stack replays it with no hazard window judged: the oracle is the
+# attribution rows, the counts and the run header. Everything below is synthetic or a stand-in; nothing starts.
+
+AW = "carla-autoware"
+AW_NAME = "20260101-carla010-t4"
+AW_LAYER, AW_CATALOGUE = "vehicle-carla-autoware.vspec", "vss-databroker-carla-autoware.json"     # generate.py's names
+AW_UPSTREAM = "carla-feeder (0.10.0, Carla/Maps/Town10HD_Opt, vehicle.taxi.ford)"
+AW_VEHICLE = {"name": "vehicle.taxi.ford", "wheelbase_mm": SYN_TAXI_L_MM}
+AW_IN = ["can-provider.ini", "carla.log", "slice.dbc", "vss-can-mapping.json", "vss-databroker.json"]
+
+
+def _aw_contract(compiled):
+    """The frozen synthetic contract with profile 5 (the taxi's, carla-autoware's live default), compiled or not."""
+    return FROZEN_CONTRACT_PY + (
+        'PROFILES = PROFILES + ({"id": 5, "l_mm": %d, "source_vehicle": "carla010-taxi"},)\n'
+        "COMPILED_PROFILE_IDS = %r\n"
+        'LIVE_DEFAULT_PROFILE = dict(LIVE_DEFAULT_PROFILE, **{"carla-autoware": 5})\n' % (SYN_TAXI_L_MM, (1, 2, 3, 5) if compiled else (1, 2, 3)))
+
+
+def _aw_rig(tmp_path, monkeypatch, compiled=False, values=False, **over):
+    """_prepare_rig's frozen generation with a carla-autoware recording (_recording's gen) and the carla-autoware pair
+    generate.py writes beside the others: its vehicle layer and its catalogue, serving profile 5's L, each among the
+    manifest's outputs; the contract holds profile 5, compiled or not. values: the decode stand-in gives the synthetic
+    trip's values (_syn_ctx), so that a replay's files (_syn_replay) can be judged against it."""
+    over.setdefault("segments", [["passive", 0, 260]])
+    rig = _prepare_rig(tmp_path, monkeypatch, frozen=True, gen=AW, name=AW_NAME, **over)
+    (rig.gen / "vss_contract.py").write_text(_aw_contract(compiled), encoding="utf-8")
+    flat = attr.leaf_nodes(json.loads((rig.gen / "vss-databroker.json").read_text(encoding="utf-8")))
+    flat[attr.WHEELBASE] = dict(flat[attr.WHEELBASE], default=SYN_TAXI_L_MM)
+    (rig.gen / AW_CATALOGUE).write_text(json.dumps(_nest(flat)), encoding="utf-8")
+    (rig.gen / AW_LAYER).write_text("Vehicle.Chassis.Wheelbase:\n  default: %d\n" % SYN_TAXI_L_MM, encoding="utf-8")
+    man = json.loads((rig.gen / "manifest.json").read_text(encoding="utf-8"))
+    man["vehicle_layers"][AW] = {"file": AW_LAYER, "run_type": AW, "profile_id": 5, "source_vehicle": "carla010-taxi",
+                                 "path": "Vehicle.Chassis.Wheelbase", "default": SYN_TAXI_L_MM}
+    man["databroker_catalogues"][AW] = AW_CATALOGUE
+    for f in (AW_LAYER, AW_CATALOGUE):
+        data = (rig.gen / f).read_bytes()
+        man["outputs"][f] = {"sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}
+    (rig.gen / "manifest.json").write_text(json.dumps(man), encoding="utf-8")
+    if values:
+        def syn_decode(log_path, dbc_path, mapping, _transforms):
+            syn = _syn_ctx().decoded
+            vals: Dict[str, List[Any]] = {p: [] for p in mapping}
+            vals.update(syn["values"])
+            return {"values": vals, "half_lsb": {p: 0.005 for p in mapping}, "frames": syn["frames"]}
+        monkeypatch.setattr(rc, "decode_recording", syn_decode)
+    return rig
+
+
+def _aw(tmp_path, monkeypatch, bridge="none", **kw):
+    rig = _aw_rig(tmp_path, monkeypatch, **kw)
+    ctx, man = _prepare(rig, "w", bridge=bridge)
+    return rig, ctx, man
+
+
+def _ast_tuple(path, name):
+    """A module-level tuple assignment of a source file, read without importing it."""
+    tree = ast.parse(Path(path).read_text(encoding="utf-8"))
+    got = [ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign) and [getattr(t, "id", None) for t in n.targets] == [name]]
+    assert len(got) == 1, (path, name, got)
+    return got[0]
+
+
+def test_the_log_table_holds_carla_autoware_and_the_010_encoder_modules_are_encode010s():
+    """The one log-name table takes carla-autoware with carla.log (the three copies are held equal by
+    test_the_stacks_log_table_is_the_injectors... and tests/test_vss_harness.py); the modules a carla-autoware recording's
+    provenance is reported against are sdv/carla/encode010.py's own list, not encode.py's."""
+    assert stack.LOG_NAMES[AW] == "carla.log" and stack.CARLA_AUTOWARE == AW
+    assert stack.CARLA010_ENCODER_MODULES == _ast_tuple(REPO / "sdv" / "carla" / "encode010.py", "ENCODER_MODULES")
+    assert stack.CARLA010_ENCODER_MODULES != stack.CARLA_ENCODER_MODULES
+    src = (REPO / "sdv" / "carla" / "encode010.py").read_text(encoding="utf-8")
+    assert 'RUN_TYPE = "carla-autoware"' in src and "LOG_NAME = encode.LOG_NAME" in src
+
+
+def test_a_carla_autoware_recording_gives_its_identity_by_its_carla_log(tmp_path):
+    d, line, sha = _recording(tmp_path, gen=AW, name=AW_NAME)
+    rec = stack.recording_identity(d)
+    assert (rec["log_name"], rec["run_type"], rec["sha256"], rec["log"]) == ("carla.log", AW, sha, str(d / "carla.log"))
+    assert rec["manifest_line"] == line and "seed" not in line["source"]["params"] and line["source"]["params"]["map"]
+
+
+@pytest.mark.parametrize("log", ["sigsim.log", "drive.log", "carla010.log", "carla-autoware.log", "CARLA.log"])
+def test_a_carla_autoware_recording_whose_log_is_not_carla_log_is_refused_naming_both(tmp_path, log):
+    d, _line, _sha = _recording(tmp_path, gen=AW, name=AW_NAME, log=log)
+    with pytest.raises(stack.StackError) as exc:
+        stack.recording_identity(d)
+    assert "'carla-autoware'" in str(exc.value) and repr(log) in str(exc.value) and "carla.log" in str(exc.value), str(exc.value)
+
+
+def test_a_carla_autoware_summary_needs_no_seed_and_no_hard_brake(tmp_path):
+    """encode010's trip: no seed, the line's params, one passive segment. Its name must still be the line's and its
+    segments a list of [name, start_ms, end_ms]."""
+    d, line, _sha = _recording(tmp_path, gen=AW, name=AW_NAME)
+    summ = stack.recording_summary(d, line)
+    assert summ["hard_brake_ms"] is None and summ["trip"]["segments"] == [["passive", 0, 260]] and "seed" not in summ["trip"]
+    assert summ["sha256"] == hashlib.sha256((d / "summary.json").read_bytes()).hexdigest()
+    for i, (over, match) in enumerate([
+            ({"summary_name": "20260101-carla010-t5"}, "does not describe this recording: name"),
+            ({"segments": None}, "no trip.segments"),
+            ({"segments": [["passive", 0]]}, "not a list of"),
+            ({"segments": [["passive", 0, 260, 9]]}, "not a list of"),
+            ({"segments": [["passive", 0, "late"]]}, "not a list of"),
+            ({"segments": [7]}, "not a list of"),
+            ({"segments": [[5, 0, 260]]}, "not a list of"),
+            ({"segments": [["passive", True, 260]]}, "not a list of"),
+            ({"segments": []}, "not a list of"),
+            ({"no_summary": True}, "no readable summary.json"),
+            ({"summary_raw": '{"name": "x", "trip": {"seg'}, "not valid JSON")]):
+        (tmp_path / str(i)).mkdir()
+        bad, bline, _ = _recording(tmp_path / str(i), gen=AW, name=AW_NAME, **over)
+        with pytest.raises(stack.StackError, match=match):
+            stack.recording_summary(bad, bline)
+    # a trip that happens to hold a hard brake is read as any other: no window is derived for this run type
+    (tmp_path / "hb").mkdir()
+    hb, hline, _ = _recording(tmp_path / "hb", gen=AW, name=AW_NAME, segments=SEGMENTS)
+    assert stack.recording_summary(hb, hline)["hard_brake_ms"] is None
+
+
+def test_a_carla_autoware_recording_prepares_without_a_seed_a_hard_brake_or_a_window(tmp_path, monkeypatch):
+    rig, ctx, man = _aw(tmp_path, monkeypatch)
+    in_dir = rig.runs / "w" / "in"
+    assert sorted(os.listdir(in_dir)) == AW_IN
+    assert (in_dir / "vss-databroker.json").read_bytes() == (rig.gen / AW_CATALOGUE).read_bytes()
+    assert rig.seen["log"] == in_dir / "carla.log"
+    assert (ctx.run_type, ctx.log_name, ctx.seed, ctx.wheelbase) == (AW, "carla.log", None, None)
+    rec = man["recording"]
+    assert rec["seed"] is None and rec["cli_seed"] is None and "no seed" in rec["seed_from"]
+    assert rec["summary"]["hard_brake_ms"] is None and rec["summary"]["frames_per_message"] == {"SliceDynamics": len(_trip_frames())}
+    exp = man["expected"]
+    assert exp["windows"]["judged"] is False and exp["windows"]["hard_brake_ms"] is None
+    assert exp["windows"]["on_window_ms"] is None and exp["windows"]["off_window_ms"] is None
+    assert exp["windows"]["anchor"]["t_rec_ms"] == 0 and exp["windows"]["summary_sha256"] == rec["summary"]["sha256"]
+    assert "no hazard window is judged" in exp["windows_from"]
+    assert exp["prediction"] == ctx.prediction, "the app's decisions on the decoded recording are reported, not held to a window"
+    cat = man["catalogue"]
+    assert cat["databroker_json_sha256"] == "sha256:" + stack.sha256_file(rig.gen / AW_CATALOGUE)
+    assert cat["vehicle_layer_sha256"] == "sha256:" + stack.sha256_file(rig.gen / AW_LAYER)
+    own = json.loads((rig.runs / "w" / "ownership.json").read_text(encoding="utf-8"))
+    assert [r["ingress"] for r in own["rows"] if r["path"] == attr.WHEELBASE] == ["catalogue:" + AW_LAYER]
+    assert own["source"]["rtf"] == RTF and own["profile_id"] == 5 and own["source"]["vehicle"] == AW_VEHICLE
+    assert not [c for c in man["scenario_checks"] if not c[1]], man["scenario_checks"]
+    assert [c[0] for c in man["scenario_checks"]].count(stack.CAN_PATH_CHECK) == 1
+
+
+def test_a_sigsim_or_carla_prepare_carries_no_carla_autoware_check_and_its_windows_are_judged(tmp_path, monkeypatch):
+    (tmp_path / "s").mkdir()
+    (tmp_path / "c").mkdir()
+    rig = _prepare_rig(tmp_path / "s", monkeypatch, frozen=True)
+    ctx, man = _prepare(rig, "s")
+    assert stack.CAN_PATH_CHECK not in [c[0] for c in man["scenario_checks"]] and "judged" not in ctx.windows
+    assert man["recording"]["seed"] == 7 and man["recording"]["seed_from"] == "the manifest line (source.params.seed)"
+    assert man["recording"]["summary"]["hard_brake_ms"] == [100, 160]
+    _rig, ctx, man = _frozen_carla(tmp_path / "c", monkeypatch)
+    assert stack.CAN_PATH_CHECK not in [c[0] for c in man["scenario_checks"]] and "judged" not in ctx.windows
+    assert man["expected"]["windows_from"].startswith("summary.json ") and ctx.seed == 7
+
+
+@pytest.mark.parametrize("cli_seed", [7, 0])
+def test_a_seed_on_the_command_line_is_refused_for_a_carla_autoware_recording_before_anything_is_written(tmp_path, monkeypatch, cli_seed):
+    rig = _aw_rig(tmp_path, monkeypatch)
+    with pytest.raises(stack.StackError, match="--seed %d.*carla-autoware recording has no seed" % cli_seed):
+        _prepare(rig, "w", cli_seed=cli_seed)
+    assert not (rig.runs / "w").exists() and "log" not in rig.seen
+
+
+def test_a_seed_param_in_a_carla_autoware_line_is_not_read_as_a_seed(tmp_path, monkeypatch):
+    """encode010 writes no seed. A line that carries one anyway is not read as a seeded recording: no seed in the context,
+    the manifest or the rows' upstream, and a trip seed that disagrees with it is not compared."""
+    rig, ctx, man = _aw(tmp_path, monkeypatch, line_seed=7, trip_seed=9)
+    assert ctx.seed is None and man["recording"]["seed"] is None
+    can = [r for r in ctx.rows if r["writer"] == attr.CAN_PROVIDER]
+    assert can and {r["upstream"] for r in can} == {AW_UPSTREAM}
+    assert not [r for r in ctx.rows if "seed" in r["upstream"]], [r["upstream"] for r in ctx.rows]
+
+
+def _drop_seed(rec_dir):
+    """A sigsim or carla recording directory rewritten with no seed in its line's params nor in its trip."""
+    line = json.loads((rec_dir / "manifest-line.json").read_text(encoding="ascii"))
+    del line["source"]["params"]["seed"]
+    (rec_dir / "manifest-line.json").write_text(json.dumps(line), encoding="ascii")
+    summ = json.loads((rec_dir / "summary.json").read_text(encoding="utf-8"))
+    del summ["trip"]["seed"]
+    summ["trip"]["params"] = {}
+    (rec_dir / "summary.json").write_text(json.dumps(summ), encoding="utf-8")
+
+
+@pytest.mark.parametrize("gen", ["sigsim", "carla"])
+def test_a_sigsim_or_carla_recording_without_a_seed_is_still_refused_before_anything_is_written(tmp_path, monkeypatch, gen):
+    """Only carla-autoware is read without a seed: a sigsim or a carla recording whose line names none does not prepare
+    (the read of source.params.seed is as it was: a KeyError where the key is missing, a StackError where it is no
+    integer), and no run directory is made."""
+    rig = _prepare_rig(tmp_path, monkeypatch, frozen=True, **({"gen": "carla", "name": "20260101-carla-7"} if gen == "carla" else {}))
+    _drop_seed(rig.rec)
+    with pytest.raises((stack.StackError, KeyError)):
+        _prepare(rig, "c")
+    assert not (rig.runs / "c").exists() and "log" not in rig.seen
+
+
+@pytest.mark.parametrize("gen", ["sigsim", "carla"])
+def test_a_sigsim_or_carla_recording_without_its_hard_brake_is_still_refused_before_anything_is_written(tmp_path, monkeypatch, gen):
+    kw = {"gen": "carla", "name": "20260101-carla-7"} if gen == "carla" else {}
+    rig = _prepare_rig(tmp_path, monkeypatch, frozen=True, segments=[["passive", 0, 260]], **kw)
+    with pytest.raises(stack.StackError, match="0 'hard brake' segments"):
+        _prepare(rig, "c")
+    assert not (rig.runs / "c").exists() and "log" not in rig.seen
+
+
+def test_a_carla_autoware_runs_can_provider_rows_name_the_feeder_without_a_seed_and_with_the_lines_map(tmp_path, monkeypatch):
+    rig, ctx, _man = _aw(tmp_path, monkeypatch)
+    own = json.loads((rig.runs / "w" / "ownership.json").read_text(encoding="utf-8"))
+    can = [r for r in own["rows"] if r["writer"] == attr.CAN_PROVIDER]
+    assert can and [r["upstream"] for r in can] == [AW_UPSTREAM] * len(can), [r["upstream"] for r in can]
+    assert not [r for r in own["rows"] if "sigsim" in r["upstream"] or "seed" in r["upstream"]], own["rows"]
+    line = json.loads((rig.rec / "manifest-line.json").read_text(encoding="ascii"))
+    assert stack.provider_upstream(line, 0) == AW_UPSTREAM
+    bare = dict(line, source={"generator": AW})
+    assert stack.provider_upstream(bare, 0) == "carla-feeder (?, ?, ?)"
+    plain = attr.scenario_rows(ctx.catalogue, ctx.mapping, ctx.dbc, ctx.mock_writes, attr.APP, ctx.hz.WRITES, list(stack.MONITOR_DISPLAY),
+                               ctx.recorded, 0, bridge_writes=ctx.bridge_writes, vehicle_layer=AW_LAYER)
+    assert [dict(r, upstream=None) for r in own["rows"]] == [dict(r, upstream=None) for r in plain]
+
+
+def test_the_standard_signals_are_the_ros_feeders_planning_sim_set_less_its_carla_autoware_set():
+    """R-att's clause: in run type carla-autoware the CAN path writes the standard signals and the ROS->VSS feeder only the
+    overlay. The stack's list of those signals is sdv/rosvss/mapping.py's (read, unchanged)."""
+    m = _rosvss_module("mapping")
+    assert set(stack.STANDARD_SIGNALS) == set(m.STANDARD) == set(m.write_set(m.PLANNING_SIM)) - set(m.write_set(m.CARLA_AUTOWARE))
+    assert len(stack.STANDARD_SIGNALS) == len(set(stack.STANDARD_SIGNALS)) == 6
+
+
+def test_the_oracle_on_the_rows_fails_when_a_standard_signal_is_not_from_the_can_path(tmp_path, monkeypatch):
+    _rig, ctx, _man = _aw(tmp_path, monkeypatch)
+    good = stack.check_can_path(ctx.rows, ctx.mapping, AW_UPSTREAM)
+    assert good[0] == stack.CAN_PATH_CHECK and good[1] is True, good
+
+    def edited(path, **change):
+        return [dict(r, **change) if r["path"] == path else r for r in ctx.rows]
+    for path in stack.STANDARD_SIGNALS:
+        for change, why in (({"writer": attr.FEEDER, "ingress": "ros:/vehicle/status/velocity_status"}, "ros-vss-feeder"),
+                            ({"writer": "none", "ingress": "-"}, "none"),
+                            ({"writer": attr.MOCK_PROVIDER, "ingress": "vss:provide"}, attr.MOCK_PROVIDER),
+                            ({"ingress": "vss:provide"}, "vss:provide"),
+                            ({"upstream": "sigsim seed 0"}, "sigsim seed 0")):
+            c = stack.check_can_path(edited(path, **change), ctx.mapping, AW_UPSTREAM)
+            assert c[1] is False and path in c[2] and why in c[2], (path, change, c)
+        missing = stack.check_can_path([r for r in ctx.rows if r["path"] != path], ctx.mapping, AW_UPSTREAM)
+        assert missing[1] is False and path in missing[2], missing
+        twice = stack.check_can_path(ctx.rows + [r for r in ctx.rows if r["path"] == path], ctx.mapping, AW_UPSTREAM)
+        assert twice[1] is False and path in twice[2], twice
+        unmapped = stack.check_can_path(ctx.rows, {p: b for p, b in ctx.mapping.items() if p != path}, AW_UPSTREAM)
+        assert unmapped[1] is False and path in unmapped[2], unmapped
+    # the ROS->VSS feeder writes nothing in a replay: a row of its own anywhere fails the check
+    hazard_row = hazard.BRANCH + "." + hazard.LEAVES[0][1]
+    c = stack.check_can_path(edited(hazard_row, writer=attr.FEEDER), ctx.mapping, AW_UPSTREAM)
+    assert c[1] is False and hazard_row in c[2], c
+
+
+def test_prepare_refuses_a_carla_autoware_run_whose_table_has_a_standard_signal_off_the_can_path(tmp_path, monkeypatch):
+    """A generation whose CAN mapping does not feed Vehicle.Speed: the table gives it no CAN provider row, the oracle on
+    the rows fails, and prepare refuses with that check alone."""
+    rig = _aw_rig(tmp_path, monkeypatch)
+    tree = json.loads((rig.gen / "vss-can-mapping.json").read_text(encoding="utf-8"))
+    del tree["Vehicle"]["children"]["Speed"]["dbc2vss"]
+    (rig.gen / "vss-can-mapping.json").write_text(json.dumps(tree), encoding="utf-8")
+    with pytest.raises(stack.StackError, match="scenario table checks failed") as exc:
+        _prepare(rig, "w")
+    assert stack.CAN_PATH_CHECK in str(exc.value) and "Vehicle.Speed" in str(exc.value)
+    failed = [c for c in json.loads((rig.runs / "w" / "manifest.json").read_text(encoding="utf-8"))["scenario_checks"] if not c[1]]
+    assert [c[0] for c in failed] == [stack.CAN_PATH_CHECK], failed
+
+
+def test_the_run_header_of_a_carla_autoware_dumpfile_replay_without_a_bridge(tmp_path, monkeypatch):
+    """R-att's form, --feed dumpfile --bridge none, with profile 5 uncompiled: the bridge items null, run_type and
+    source_rtf the line's, C12a holding the header's source_rtf to the scenario entry's."""
+    _rig, ctx, _man = _aw(tmp_path, monkeypatch)
+    h = ctx.run_header("dumpfile-1", "dumpfile")
+    assert (h["run_type"], h["feed"], h["bridge_mode"], h["profile_id"], h["profile_source"], h["age_max_ms"]) == (
+        AW, "recording", "none", None, None, None)
+    assert h["source_rtf"] == RTF and h["source_vehicle"] == AW_VEHICLE and h["time_sync"]["age_clock"] is None
+    assert h["run_id"].endswith("-vss-%s-dumpfile-1" % AW_NAME)
+    assert ctx.check_header(h)[1], ctx.check_header(h)
+    for bad in (dict(h, source_rtf=None), dict(h, source_rtf=dict(RTF, max=0.99)), dict(h, run_type="sigsim")):
+        assert not ctx.check_header(bad)[1], bad
+    assert attr.check_recording(h, ctx.staged["carla.log"], ctx.scenario["dbc_sha256"])[1]
+    assert stack.record_close(h, tmp_path / "nothing")[1] and h["header_check"] == "ok"
+
+
+@pytest.mark.parametrize("mode", ["broker", "can", "replay"])
+def test_a_bridge_is_refused_for_a_carla_autoware_recording_whose_profile_is_not_compiled(tmp_path, monkeypatch, mode):
+    """A synthetic generation with profile 5 uncompiled: a guest's or the native monitor's table does not
+    hold it, so a run with a bridge is refused before anything is written, in each bridge mode (step3.py's included)."""
+    rig = _aw_rig(tmp_path, monkeypatch, compiled=False)
+    with pytest.raises(stack.StackError, match="--bridge %s: profile 5 .*is not compiled" % mode):
+        _prepare(rig, "w", bridge=mode)
+    assert not (rig.runs / "w").exists() and "log" not in rig.seen
+
+
+def test_the_uncompiled_profile_refusal_holds_for_a_line_without_a_profile_a_contract_without_a_table_and_a_guest(tmp_path, monkeypatch):
+    """The refusal reads the line's own profile and the generation's own table, in any monitor mode, and is not tied to 5."""
+    # (a) a line with no profile_id is in no table, though profile 5 is compiled
+    rig = _aw_rig(tmp_path, monkeypatch, compiled=True)
+    line_path = rig.rec / "manifest-line.json"
+    line = json.loads(line_path.read_text(encoding="ascii"))
+    del line["profile_id"]
+    line_path.write_text(json.dumps(line), encoding="ascii")
+    with pytest.raises(stack.StackError, match="--bridge broker: profile None .*is not compiled"):
+        _prepare(rig, "w", bridge="broker")
+    assert not (rig.runs / "w").exists() and "log" not in rig.seen
+    # (b) a contract with no COMPILED_PROFILE_IDS compiles nothing
+    with pytest.raises(stack.StackError, match="is not compiled"):
+        stack.refuse_uncompiled_profile("broker", 5, types.SimpleNamespace())
+    # (c) a profile the generation does compile is not refused by this rule (the frozen contract compiles 1, 2 and 3)
+    (tmp_path / "c").mkdir()
+    rig3 = _aw_rig(tmp_path / "c", monkeypatch, compiled=False)
+    _aw_line(rig3, profile_id=3)
+    try:
+        _prepare(rig3, "w", bridge="can")
+    except stack.StackError as exc:
+        assert "is not compiled" not in str(exc), str(exc)
+    # (d) in guest mode too, before the run directory is made
+    (tmp_path / "d").mkdir()
+    rig_g = _aw_rig(tmp_path / "d", monkeypatch, compiled=False)
+    console, image = _guest_files(tmp_path / "d")
+    ctx = stack.Context(rig_g.runs / "g", None, "broker", monitor="guest", guest_host=GUEST, guest_console=console, guest_image=image)
+    with pytest.raises(stack.StackError, match="--bridge broker: profile 5 .*is not compiled"):
+        ctx.prepare(pull=False, build=False)
+    assert not (rig_g.runs / "g").exists()
+
+
+def test_the_run_header_of_a_carla_autoware_broker_replay_with_profile_5_compiled(tmp_path, monkeypatch):
+    """The native check's form, --feed vcan --bridge broker: the Wheelbase the staged catalogue serves is profile 5's L,
+    the header carries profile 5 from the scenario entry, and C12a's compiled check applies."""
+    _rig, ctx, man = _aw(tmp_path, monkeypatch, bridge="broker", compiled=True)
+    assert ctx.wheelbase == dict(ctx.wheelbase, served=True, value_mm=SYN_TAXI_L_MM, l_mm=SYN_TAXI_L_MM), ctx.wheelbase
+    assert man["bridge"]["wheelbase"] == ctx.wheelbase and "C3" in [c[0] for c in man["scenario_checks"]]
+    assert not [c for c in man["scenario_checks"] if not c[1]], man["scenario_checks"]
+    assert [c for c in man["scenario_checks"] if c[0] == stack.CAN_PATH_CHECK and c[1] is True], man["scenario_checks"]
+    h = ctx.run_header("vcan-1", "vcan")
+    assert (h["run_type"], h["feed"], h["bridge_mode"], h["profile_id"], h["profile_source"], h["age_max_ms"]) == (
+        AW, "recording", "broker", 5, "scenario", SYN_AGE_MAX_MS)
+    assert h["source_rtf"] == RTF and ctx.check_header(h)[1], ctx.check_header(h)
+    ctx.contract.COMPILED_PROFILE_IDS = (1, 2, 3)
+    c12a = ctx.check_header(h)
+    assert not c12a[1] and "profile 5 is not compiled" in c12a[2], c12a
+
+
+def test_the_sigsim_or_carla_catalogue_for_a_carla_autoware_broker_run_would_be_refused(tmp_path, monkeypatch):
+    rig, ctx, _man = _aw(tmp_path, monkeypatch, bridge="broker", compiled=True)
+    for other in ("vss-databroker.json", CARLA_CATALOGUE):
+        tree = json.loads((rig.gen / other).read_text(encoding="utf-8"))
+        with pytest.raises(stack.StackError, match="not the profile's L"):
+            stack.served_wheelbase(tree, SYN_TAXI_L_MM, AW_VEHICLE, None)
+
+
+def test_a_carla_autoware_recordings_provenance_is_reported_against_encode010s_modules(tmp_path, monkeypatch):
+    """encode010's trip hashes its own module list. Against sdv/carla/encode.py's list current_equals_recording could
+    never be true for such a trip; against encode010's it is true exactly when the files are the ones that encoded it.
+    Reported as carla's is (the same key and items), never required."""
+    now = {m: stack.sha256_file(REPO / m) for m in stack.CARLA010_ENCODER_MODULES}
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    (tmp_path / "c").mkdir()
+    _rig, _ctx, man = _aw(tmp_path / "a", monkeypatch, encoder_sha256=now)
+    prov = man["recording"]["carla"]
+    assert "sigsim" not in man["recording"]
+    assert prov["files"] == list(stack.CARLA010_ENCODER_MODULES) and prov["current_sha256"] == now
+    assert prov["recording_encoder_sha256"] == now and prov["current_equals_recording"] is True
+    assert "window" not in prov["note"] and "reported only" in prov["note"]
+    other = dict(now, **{"sdv/carla/encode010.py": "0" * 64})
+    _rig, _ctx, man = _aw(tmp_path / "b", monkeypatch, encoder_sha256=other)
+    assert man["recording"]["carla"]["current_equals_recording"] is False
+    _rig, _ctx, man = _aw(tmp_path / "c", monkeypatch)
+    assert man["recording"]["carla"]["recording_encoder_sha256"] is None and man["recording"]["carla"]["current_equals_recording"] is False
+    # a carla recording's stays against encode.py's list, with its note
+    carla = stack.carla_provenance({"encoder_sha256": now})
+    assert carla["files"] == list(stack.CARLA_ENCODER_MODULES) and carla["current_equals_recording"] is False
+    assert carla["note"] == "reported only: the windows come from the recording's summary.json, never from running the encoder"
+
+
+def test_a_carla_autoware_recording_on_a_generation_without_its_pair_is_refused_before_anything_is_written(tmp_path, monkeypatch):
+    rig = _prepare_rig(tmp_path, monkeypatch, frozen=True, gen=AW, name=AW_NAME, segments=[["passive", 0, 260]])
+    with pytest.raises(stack.StackError, match="the generation has no carla-autoware vehicle layer"):
+        _prepare(rig, "w")
+    assert not (rig.runs / "w").exists() and "log" not in rig.seen
+
+
+def test_loadcheck_on_a_carla_autoware_run_also_loads_the_catalogue_the_run_staged(tmp_path, monkeypatch):
+    (tmp_path / "w").mkdir()
+    rig, ctx, _man = _aw(tmp_path / "w", monkeypatch)
+    _s2_cache(stack.CACHE)
+    seen: List[Any] = []
+    monkeypatch.setattr(stack, "load_catalogue", lambda _ctx, name, path, _probe, _out: seen.append((name, Path(path))) or {"name": name})
+    stack.loadcheck(ctx, tmp_path / "out")
+    assert seen[:2] == [("6.0-databroker", rig.gen / "vss-databroker.json"), ("6.0-databroker-carla-autoware", rig.gen / AW_CATALOGUE)], seen
+    assert [n for n, _p in seen[2:]] == ["6.0-mapping", "6.1-mapping", "6.1-databroker"]
+
+
+# --- no hazard window is judged: replaycheck's and analyse's part ---
+
+def test_anchor_windows_give_the_anchor_and_no_window():
+    frames = _trip_frames()
+    w = rc.anchor_windows(frames, "LongVel", 20)
+    assert w["judged"] is False and (w["hard_brake_ms"], w["on_window_ms"], w["off_window_ms"]) == (None, None, None)
+    assert w["anchor"] == {"what": "first non-zero LongVel", "t_rec_ms": 0} and w["mapping_allowance_ms"] == 20
+    assert "no hazard window is judged" in w["source"]
+    assert rc.windows_judged(w) is False and rc.windows_judged(rc.expected_windows({"segments": SEGMENTS}, frames, "LongVel", 20)) is True
+    late = [(t, n, dict(d, LongVel=0.0 if t < 60 else 3.0)) for t, n, d in frames]
+    assert rc.anchor_windows(late, "LongVel", 20)["anchor"]["t_rec_ms"] == 60
+    reverse = [(t, n, dict(d, LongVel=0.0 if t < 80 else -2.0)) for t, n, d in frames]
+    assert rc.anchor_windows(reverse, "LongVel", 20)["anchor"]["t_rec_ms"] == 80, "a reverse first motion is the anchor too"
+    still = [(t, n, dict(d, LongVel=0.0)) for t, n, d in frames]
+    assert rc.anchor_windows(still, "LongVel", 20)["anchor"]["t_rec_ms"] is None, "a take that never moves has no anchor, and is not refused"
+
+
+def test_the_window_verdict_and_the_recorders_view_report_not_judged_without_windows(tmp_path):
+    w = rc.anchor_windows(_trip_frames(), "LongVel", 20)
+    for decisions in ([], [{"hazard": True, "t_rec_ms": 100.0}, {"hazard": False, "t_rec_ms": 160.0}],
+                      [{"hazard": True, "t_rec_ms": 5.0}] * 3):
+        v = rc.window_verdict(decisions, w)
+        assert v["ok"] is None and v["judged"] is False
+        assert (v["n_on"], v["n_off"]) == (sum(1 for d in decisions if d["hazard"]), sum(1 for d in decisions if not d["hazard"]))
+    (tmp_path / "r.csv").write_text(_syn_recorder_csv(), encoding="utf-8")
+    rows = rc.read_recorder_csv(tmp_path / "r.csv")
+    mock = [{"value": False, "t_rec_ms": -2000.0}, {"value": True, "t_rec_ms": 105.0}, {"value": False, "t_rec_ms": 165.0}]
+    acts = [{"value": True, "result": "ok"}, {"value": False, "result": "ok"}]
+    t_anchor = rc.anchor_time(rc.series(rows, rc.V_PATH))
+    view = rc.recorder_light_view(rows, t_anchor, mock, acts, 0, w, 0)
+    assert view["in_window"] is None and view["consistent"]["ok"] and [c["value"] for c in view["changes"]] == [False, True, False]
+    judged = rc.recorder_light_view(rows, t_anchor, mock, acts, 0, rc.expected_windows({"segments": SEGMENTS}, _trip_frames(), "LongVel", 20), 0)
+    assert judged["in_window"] is True and judged["changes"] == view["changes"] and judged["consistent"] == view["consistent"]
+
+
+def _aw_syn_ctx():
+    """_syn_ctx with a carla-autoware recording's windows: the anchor and nothing to judge."""
+    ctx = _syn_ctx()
+    ctx.windows = rc.anchor_windows(ctx.decoded["frames"], "LongVel", 20)
+    return ctx
+
+
+def test_analyse_reports_the_light_and_the_decisions_as_not_judged_for_a_recording_without_windows(tmp_path):
+    ctx = _aw_syn_ctx()
+    r = _syn_result(ctx, _syn_replay(tmp_path, "a"))
+    assert r["hazard_window"] == stack.NOT_JUDGED == "not judged"
+    assert r["decisions"]["ok"] is None and r["decisions"]["judged"] is False and (r["decisions"]["n_on"], r["decisions"]["n_off"]) == (1, 1)
+    mock = r["lights"]["mock_log"]
+    assert mock["ok"] is None and mock["judged"] is False and mock["clean"] is True
+    assert [m["value"] for m in mock["writes"]] == [False, True, False]
+    assert r["lights"]["recorder"]["in_window"] is None and r["lights"]["recorder"]["consistent"]["ok"]
+    assert r["values"]["ok"] and r["witness_values"]["ok"] and r["app_values"]["ok"] and r["app_decisions_reproduced_offline"]
+    judged = _syn_result(_syn_ctx(), _syn_replay(tmp_path, "j"))
+    assert "hazard_window" not in judged and judged["decisions"]["ok"] is True and "judged" not in judged["decisions"]
+    assert _key(r) == _key(judged), "the behaviour key reads no window"
+    # what a judged replay's window gates refuse is reported here and refuses nothing: no switch at all, a light that
+    # never came on, a mock log with an error in it
+    for i, kw in enumerate(({"mock": ((-2.0, False),)}, {"mock": ((-2.0, False), (5.0, True), (9.0, False))},
+                            {"mock_after": {1: MOCK_ERROR}})):
+        other = _syn_result(ctx, _syn_replay(tmp_path, "o%d" % i, **kw))
+        assert other["decisions"]["ok"] is None and other["lights"]["mock_log"]["ok"] is None
+        assert all(stack.replay_gates(dict(other, bridge_mode="none", c12b=["C12b", True, ""])).values())
+    # a take that never moves has no anchor: the replay is still judged on its values
+    ctx.windows = dict(ctx.windows, anchor={"what": "first non-zero LongVel", "t_rec_ms": None})
+    still = _syn_result(ctx, _syn_replay(tmp_path, "s"))
+    assert still["anchor"]["t_rec_ms"] is None and still["values"]["ok"] and still["witness_values"]["ok"]
+
+
+def _aw_gated(**kw):
+    """_gated_result as a carla-autoware replay's: the light and the decisions not judged."""
+    r = _gated_result(**kw)
+    if "decisions" not in kw:
+        r["decisions"] = {"ok": None, "judged": False, "n_on": 0, "n_off": 0}
+    if "lights" not in kw:
+        r["lights"] = {"mock_log": {"ok": None, "judged": False, "clean": True}}
+    r["hazard_window"] = stack.NOT_JUDGED
+    return r
+
+
+@pytest.mark.parametrize("args, failed", [
+    ({}, []),
+    ({"witness_values": {"ok": False}}, ["values"]),
+    ({"values": {"ok": False}}, ["values"]),
+    ({"app_values": {"ok": False}}, ["values"]),
+    ({"listeners_end": {"ok": False}}, ["listeners"]),
+    ({"vcan_capture": {"identical": False}}, ["bus_frames_identical"]),
+    ({"bridge": {"ok": False}}, ["bridge"]),
+    ({"c12b": ["C12b", False, "source_rtf max 1.2 > 1: the feeder's pacing did not hold"]}, ["c12b"]),
+])
+def test_replay_gates_of_a_carla_autoware_replay_have_no_decision_or_light_gate_and_keep_every_other(args, failed):
+    gates = stack.replay_gates(_aw_gated(**args))
+    assert sorted(k for k, v in gates.items() if not v) == failed, gates
+    assert set(gates) == {"values", "listeners", "c12b", "bus_frames_identical", "bridge"}
+    none = stack.replay_gates(_aw_gated(feed="dumpfile", mode="none"))
+    assert none == {"values": True, "listeners": True, "c12b": True}
+    # only the marker of a replay with no window lifts the two gates: a judged replay whose gates read None fails them
+    judged = _aw_gated()
+    del judged["hazard_window"]
+    assert stack.replay_gates(judged)["decisions"] is False and stack.replay_gates(judged)["lights"] is False
+
+
+def _aw_result(**over):
+    """_replay_result as a carla-autoware replay's (verdict()'s input): not judged, with its C12b."""
+    r = _replay_result(decisions={"ok": None, "judged": False}, lights={"mock_log": {"ok": None, "judged": False},
+                                                                        "recorder": {"consistent": {"ok": True}}},
+                       hazard_window=stack.NOT_JUDGED, c12b=["C12b", True, "checked source_rtf"])
+    r.update(over)
+    return r
+
+
+def test_the_verdict_of_a_carla_autoware_run_reports_the_light_as_not_judged_and_keeps_every_other_gate():
+    good = [_aw_result() for _ in range(3)]
+    v = stack.verdict(None, good, "dumpfile", 3)
+    assert v["ok"] is True and v["lights_in_window"] == "not judged" and v["hazard_window"].startswith("not judged")
+    assert v["same_behaviour"] and v["values_equal_decoded"] and v["only_loopback_listeners"] and v["header_checks_at_close"] is True
+    for key in ("values", "witness_values", "app_values"):
+        bad = stack.verdict(None, good[:2] + [_aw_result(**{key: {"ok": False, "exact": False}})], "dumpfile", 3)
+        assert bad["ok"] is False and bad["values_equal_decoded"] is False, key
+    for key in ("listeners", "listeners_feed", "listeners_end"):
+        assert stack.verdict(None, good[:2] + [_aw_result(**{key: {"ok": False}})], "dumpfile", 3)["ok"] is False, key
+    other_key = stack.verdict(None, good[:2] + [_aw_result(behaviour_key={"decisions": []})], "dumpfile", 3)
+    assert other_key["ok"] is False and other_key["same_behaviour"] is False
+    assert stack.verdict(None, good[:2], "dumpfile", 3)["ok"] is False, "a replay short"
+    vcan = [_aw_result(feed="vcan", vcan_capture={"identical": True}) for _ in range(2)]
+    assert stack.verdict(None, vcan, "vcan", 2)["ok"] is True
+    assert stack.verdict(None, vcan[:1] + [_aw_result(feed="vcan", vcan_capture={"identical": False})], "vcan", 2)["ok"] is False
+    # the run header at close (C12b) is part of this run type's oracle: a failed or a missing one fails the verdict
+    failed = stack.verdict(None, good[:2] + [_aw_result(c12b=["C12b", False, "source_rtf max 1.2 > 1"])], "dumpfile", 3)
+    assert failed["ok"] is False and failed["header_checks_at_close"] is False
+    no_close = [{k: x for k, x in _aw_result().items() if k != "c12b"}]
+    assert stack.verdict(None, good[:2] + no_close, "dumpfile", 3)["ok"] is False
+    # a judged run's verdict is what it was: its keys, and a replay whose window gates read None among judged ones fails
+    judged = stack.verdict(None, [_replay_result() for _ in range(3)], "dumpfile", 3)
+    assert judged["lights_in_window"] is True and "hazard_window" not in judged and "header_checks_at_close" not in judged
+    mixed = stack.verdict(None, [_replay_result(), _replay_result(), _aw_result()], "dumpfile", 3)
+    assert mixed["ok"] is False and mixed["lights_in_window"] is False
+    empty = stack.verdict(None, [], "dumpfile", 1)
+    assert "hazard_window" not in empty and empty["lights_in_window"] is True
+
+
+def test_an_rtf_max_above_1_fails_a_carla_autoware_replay_at_close_and_its_verdict(tmp_path, monkeypatch):
+    """C12a holds the header's source_rtf to the scenario entry's, whatever it is; C12b at record close refuses a max above
+    1 (attribution.py's, unchanged). Both the replay command's gates and the exit test's verdict read it for this run type."""
+    _rig, ctx, _man = _aw(tmp_path, monkeypatch, rtf=dict(RTF, max=1.2))
+    h = ctx.run_header("dumpfile-1", "dumpfile")
+    assert h["source_rtf"]["max"] == 1.2 and ctx.check_header(h)[1]
+    close = stack.record_close(h, tmp_path / "nothing")
+    assert close[1] is False and "source_rtf max 1.2 > 1" in close[2] and h["header_check"].startswith("failed C12b: ")
+    r = _aw_gated(feed="dumpfile", mode="none", c12b=list(close))
+    assert stack.replay_gates(r) == {"values": True, "listeners": True, "c12b": False}
+    v = stack.verdict(None, [_aw_result(c12b=list(close))], "dumpfile", 1)
+    assert v["ok"] is False and v["header_checks_at_close"] is False and v["values_equal_decoded"] is True
+
+
+HAZARD_NOTE = ("not judged: a carla-autoware recording's trip scripts no hard brake, so no window is derived; the gates are the "
+               "values, the listeners, the same behaviour (exit-test), the bus frames (vcan), the bridge's result (with one) and "
+               "the run header's checks")
+
+
+def test_the_hazard_window_note_is_held_where_the_exit_tests_record_writes_it_and_where_replay_prints_it(
+        tmp_path, monkeypatch, capsys):
+    """Phase 8's fourth NIT package (A3): HAZARD_WINDOW_NOTE's words, "(exit-test)" among them (the same behaviour is a gate
+    of exit-test's verdict over its replays, not of one replay's), where exit-test's record writes it (exit-test.json's
+    verdict, and the verdicts it prints) and where `stack.py replay` prints it; a judged replay prints no such line."""
+    assert stack.HAZARD_WINDOW_NOTE == HAZARD_NOTE and "the same behaviour (exit-test)" in stack.HAZARD_WINDOW_NOTE
+
+    class FakeContext:
+        def __init__(self, run_dir, seed, bridge):
+            self.run_dir, self.bridge = run_dir, bridge
+            run_dir.mkdir(parents=True)
+
+        def prepare(self, images="build"):
+            return {}
+
+    got: Dict[str, Any] = {}
+    monkeypatch.delenv(stack.HOST_ROLE_ENV, raising=False)
+    monkeypatch.setattr(stack, "RUNS", tmp_path / "runs")
+    monkeypatch.setattr(stack, "Context", FakeContext)
+    monkeypatch.setattr(stack, "replay_once", lambda _ctx, feed, rid: got["r"](feed, rid))
+    monkeypatch.setattr(stack, "loadcheck", lambda _ctx, _out: {"ok": True})
+    got["r"] = lambda feed, rid: _aw_result(feed=feed, replay=rid, feed_wall_s=1.0, app_decisions_reproduced_offline=True,
+                                            app_inputs_received=1, containers={})
+    capsys.readouterr()
+    assert stack.main(["exit-test", "--feeds", "dumpfile", "--replays", "2", "--name", "e"]) == 0
+    printed = capsys.readouterr().out
+    record = json.loads(next((tmp_path / "runs").glob("*-e")).joinpath("exit-test.json").read_text(encoding="utf-8"))
+    assert [v["hazard_window"] for v in record["verdicts"]] == [HAZARD_NOTE], record["verdicts"]
+    assert '"hazard_window": %s' % json.dumps(HAZARD_NOTE) in printed, printed
+    got["r"] = lambda feed, rid: _aw_gated(feed=feed, mode="none")
+    assert stack.main(["replay", "--feed", "dumpfile", "--name", "r"]) == 0
+    assert "\nhazard window: %s\n" % HAZARD_NOTE in capsys.readouterr().out
+    got["r"] = lambda feed, rid: _gated_result(feed=feed, mode="none")
+    assert stack.main(["replay", "--feed", "dumpfile", "--name", "j"]) == 0
+    assert "hazard window" not in capsys.readouterr().out
+
+
+# --- both forms through replay_once, every outside call replaced ---
+
+def _aw_replay(tmp_path, monkeypatch, ctx, feed, syn=None, console=None, bridge_records=None):
+    """replay_once on a prepared carla-autoware context with Docker, the player, the bus capture, the waits and the
+    listener reads replaced. The stop writes what a replay leaves (_syn_replay's five files; with a bridge the monitor's
+    console and the bridge's log), and analyse, C10, C12a, C8's rows, C12b and the gates are the stack's own."""
+    ctx.components = {w: {"image_id": IMG} for w in (attr.CAN_PROVIDER, attr.MOCK_PROVIDER, attr.APP, attr.RECORDER, attr.BRIDGE)}
+    seen: Dict[str, Any] = {"started": [], "played": [], "removed": 0}
+    src = _syn_replay(tmp_path, "left-%s" % feed, **(syn or {}))
+
+    def fake_up(c, f, rd, label, header=None):
+        rd.mkdir(parents=True, exist_ok=True)
+        seen["rd"], seen["header"] = rd, header
+        return {"feed": f, "listeners_before": {}, "listeners": {"ok": True}}
+
+    def listeners_now(info, f, suffix, allowed=()):
+        info["listeners" + suffix] = {"ok": True}
+
+    def stop(c):
+        for f in src.iterdir():
+            shutil.copyfile(f, seen["rd"] / f.name)
+        if console is not None:
+            (seen["rd"] / "monitor.log").write_text(console, encoding="utf-8")
+        if bridge_records is not None:
+            (seen["rd"] / "bridge").mkdir(exist_ok=True)
+            (seen["rd"] / "bridge" / "bridge.jsonl").write_text("".join(json.dumps(x) + "\n" for x in bridge_records), encoding="utf-8")
+
+    class Capture:
+        def close(self):
+            return [(0x100, b"\0" * 8)]
+
+    for name, fn in (("up", fake_up), ("listeners_now", listeners_now), ("wait_log", lambda *a, **kw: None),
+                     ("wait_for", lambda *a, **kw: None), ("stop_containers", stop), ("collect", lambda rd: {}),
+                     ("remove_stack", lambda: seen.update(removed=seen["removed"] + 1)),
+                     ("start", lambda c, comp, f, rd, label: seen["started"].append(comp) or ""),
+                     ("running_images", lambda: {w: IMG for w in ctx.components}),
+                     ("docker", lambda *a, **_kw: subprocess.CompletedProcess(a, 0, "", "")),
+                     ("run", lambda cmd, **_kw: seen["played"].append(list(cmd)) or subprocess.CompletedProcess(cmd, 0, "", "")),
+                     ("log_frames", lambda path: [(0x100, b"\0" * 8)]), ("VcanCapture", Capture),
+                     ("bridge_result", lambda rd, clock, wb=None: {"ok": True, "wheelbase": wb}),
+                     ("player_bound_s", lambda log: 300)):          # the bound's own tests: tests/test_sdv_stack_playerbound.py
+        monkeypatch.setattr(stack, name, fn)
+    monkeypatch.setattr(stack, "VCAN_READY_S", 0.0)
+    monkeypatch.setattr(stack.time, "sleep", lambda _s: None)
+    r = stack.replay_once(ctx, feed, "%s-1" % feed)
+    return r, seen
+
+
+def test_a_carla_autoware_dumpfile_replay_without_a_bridge_is_judged_by_rows_counts_and_header(tmp_path, monkeypatch):
+    """R-att's form on stand-ins: --feed dumpfile --bridge none, profile 5 uncompiled. The gates are the values, the
+    listeners and C12b; no decision or light gate; the table written with the replay names the CAN provider for every
+    standard signal, the feeder as its upstream, and carries the scenario check that says so."""
+    if not hasattr(os, "getuid"):
+        pytest.skip("POSIX only (the stack runs in WSL)")
+    rig, ctx, _man = _aw(tmp_path, monkeypatch, values=True)
+    r, seen = _aw_replay(tmp_path, monkeypatch, ctx, "dumpfile")
+    assert seen["started"] == [attr.CAN_PROVIDER] and seen["played"] == [] and seen["removed"] == 1
+    gates = stack.replay_gates(r)
+    assert gates == {"values": True, "listeners": True, "c12b": True}, (gates, r["c12b"])
+    assert r["hazard_window"] == "not judged" and r["decisions"]["ok"] is None and r["lights"]["mock_log"]["ok"] is None
+    assert r["bridge_mode"] == "none" and "bridge" not in r and "vcan_capture" not in r
+    rd = rig.runs / "w" / "dumpfile-1"
+    table = json.loads((rd / "attribution.json").read_text(encoding="utf-8"))
+    assert table["header"]["run_type"] == AW and table["header"]["source_rtf"] == RTF and table["header"]["header_check"] == "ok"
+    assert [c[0] for c in table["checks"]] == ["C10", "C12a", "C8", "C12b"] and all(c[1] for c in table["checks"]), table["checks"]
+    assert [c for c in table["scenario_checks"] if c[0] == stack.CAN_PATH_CHECK and c[1] is True]
+    by_path = {row["path"]: row for row in table["rows"]}
+    for p in stack.STANDARD_SIGNALS:
+        assert (by_path[p]["writer"], by_path[p]["upstream"], by_path[p]["writer_image_id"]) == (attr.CAN_PROVIDER, AW_UPSTREAM, IMG)
+    assert json.loads((rd / "result.json").read_text(encoding="utf-8"))["hazard_window"] == "not judged"
+    v = stack.verdict(ctx, [r], "dumpfile", 1)
+    assert v["ok"] is True and v["lights_in_window"] == "not judged" and v["values_equal_decoded"] is True
+
+
+def test_a_carla_autoware_dumpfile_replay_whose_witness_missed_a_value_fails_though_no_window_is_judged(tmp_path, monkeypatch):
+    if not hasattr(os, "getuid"):
+        pytest.skip("POSIX only (the stack runs in WSL)")
+    _rig, ctx, _man = _aw(tmp_path, monkeypatch, values=True)
+    r, _seen = _aw_replay(tmp_path, monkeypatch, ctx, "dumpfile", syn={"witness": "torn"})
+    assert stack.replay_gates(r)["values"] is False and r["witness_values"]["ok"] is False
+    v = stack.verdict(ctx, [r], "dumpfile", 1)
+    assert v["ok"] is False and v["values_equal_decoded"] is False and v["lights_in_window"] == "not judged"
+
+
+def test_a_carla_autoware_vcan_replay_with_the_bridge_and_profile_5_compiled_keeps_the_bridges_checks(tmp_path, monkeypatch):
+    """The native check's form on stand-ins: --feed vcan --bridge broker with profile 5 compiled. Beside the dumpfile
+    form's gates: the bus frames, the bridge's result (handed the predicted Wheelbase record) and C12b's console and
+    bridge-log operands, which must name profile 5."""
+    if not hasattr(os, "getuid"):
+        pytest.skip("POSIX only (the stack runs in WSL)")
+    rig, ctx, man = _aw(tmp_path, monkeypatch, bridge="broker", compiled=True, values=True)
+    console = _monitor_rules_line(profiles="1 2 3 5") + "\n"
+    records = [_connect(profile_id=5)]
+    r, seen = _aw_replay(tmp_path, monkeypatch, ctx, "vcan", console=console, bridge_records=records)
+    assert seen["started"] == [attr.CAN_PROVIDER] and len(seen["played"]) == 1 and seen["played"][0][-1] == str(ctx.in_dir / "carla.log")
+    gates = stack.replay_gates(r)
+    assert gates == {"values": True, "listeners": True, "c12b": True, "bus_frames_identical": True, "bridge": True}, (gates, r["c12b"])
+    assert r["bridge"]["wheelbase"] == man["bridge"]["wheelbase"] and r["bridge"]["wheelbase"]["value_mm"] == SYN_TAXI_L_MM
+    table = json.loads((rig.runs / "w" / "vcan-1" / "attribution.json").read_text(encoding="utf-8"))
+    assert (table["header"]["profile_id"], table["header"]["profile_source"], table["header"]["bridge_mode"]) == (5, "scenario", "broker")
+    assert [c for c in table["scenario_checks"] if c[0] == stack.CAN_PATH_CHECK and c[1] is True]
+    assert "1 vss rules line(s), 1 bridge connect record(s)" in r["c12b"][2] and "source_rtf" in r["c12b"][2]
+    # the same replay with a console that does not list profile 5, or a bridge that connected on another profile
+    for i, (con, recs, why) in enumerate(((_monitor_rules_line(profiles="1 2 3") + "\n", records, "do not list the header's profile 5"),
+                                          (console, [_connect(profile_id=3)], "bridge connect: profile_id 3"))):
+        ctx2 = stack.Context(rig.runs / ("x%d" % i), None, "broker")
+        ctx2.prepare(pull=False, build=False)
+        (tmp_path / ("x%d" % i)).mkdir()
+        r2, _ = _aw_replay(tmp_path / ("x%d" % i), monkeypatch, ctx2, "vcan", console=con, bridge_records=recs)
+        assert stack.replay_gates(r2)["c12b"] is False and why in r2["c12b"][2], r2["c12b"]
+
+
+def test_the_replay_command_on_a_carla_autoware_recording_exits_by_its_gates_and_says_no_window_is_judged(tmp_path, monkeypatch, capsys):
+    class FakeContext:
+        def __init__(self, run_dir, seed, bridge):
+            self.run_dir, self.bridge = run_dir, bridge
+
+        def prepare(self, images="build"):
+            return {}
+
+    got = {"r": _aw_gated(feed="dumpfile", mode="none")}
+    monkeypatch.setattr(stack, "RUNS", tmp_path / "runs")
+    monkeypatch.setattr(stack, "Context", FakeContext)
+    monkeypatch.setattr(stack, "replay_once", lambda _ctx, _feed, _rid: got["r"])
+    assert stack.main(["replay", "--feed", "dumpfile", "--name", "a"]) == 0
+    out = capsys.readouterr().out
+    assert "hazard window: not judged" in out and '"c12b": true' in out and '"decisions"' not in out.split("gates: ")[1]
+    got["r"] = _aw_gated(feed="dumpfile", mode="none", witness_values={"ok": False})
+    assert stack.main(["replay", "--feed", "dumpfile", "--name", "b"]) == 1
+    got["r"] = _aw_gated(feed="dumpfile", mode="none", c12b=["C12b", False, "source_rtf max 1.2 > 1"])
+    assert stack.main(["replay", "--feed", "dumpfile", "--name", "c"]) == 1
+    got["r"] = _gated_result(feed="dumpfile", mode="none")
+    capsys.readouterr()
+    assert stack.main(["replay", "--feed", "dumpfile", "--name", "d"]) == 0
+    assert "hazard window" not in capsys.readouterr().out, "a judged replay prints what it printed"
+
+
+def test_the_readme_and_the_docstring_say_how_a_carla_autoware_recording_is_replayed():
+    """sdv/stack/README.md's carla-autoware section and stack.py's docstring: the run type and its log, no seed, no hazard
+    window judged and what the oracle is instead, both forms, the bridge refused while profile 5 is uncompiled, the
+    provenance against encode010's modules, and what the replay does not show (the words in any letter case)."""
+    for text in (" ".join((STACK_DIR / "README.md").read_text(encoding="utf-8").lower().split()), " ".join(stack.__doc__.lower().split())):
+        for words in ("carla-autoware", "encode010.py", "no seed", "no hazard window is judged", "--feed dumpfile", "--feed vcan --bridge broker",
+                      "not compiled", "carla-feeder (<version>, <map>, <vehicle>)", "lights_in_window", "not judged", stack.CAN_PATH_CHECK,
+                      "ROS->VSS feeder"):
+            assert words.lower() in text, words
+
+
+def _aw_line(rig, **over):
+    """Rewrite the rig's manifest line with `over` in it (the stack reads the line, and holds no hash of it but its own)."""
+    p = rig.rec / "manifest-line.json"
+    p.write_text(json.dumps(dict(json.loads(p.read_text(encoding="ascii")), **over)), encoding="ascii")
+
+
+@pytest.mark.parametrize("pid", [True, False, 1.0, 5.0, "5"])
+def test_a_profile_id_that_is_no_integer_is_refused_as_uncompiled_whatever_it_compares_equal_to(pid):
+    """JSON's true equals 1 in a tuple test, and 5.0 equals 5: neither is a profile id, so with a bridge neither passes
+    as the compiled profile it compares equal to. An integer in the table still passes."""
+    contract = types.SimpleNamespace(COMPILED_PROFILE_IDS=(1, 2, 3, 5))
+    with pytest.raises(stack.StackError, match=r"--bridge broker: profile %s .*is not compiled" % re.escape(repr(pid))):
+        stack.refuse_uncompiled_profile("broker", pid, contract)
+    for ok in (1, 5):
+        stack.refuse_uncompiled_profile("broker", ok, contract)
+
+
+def test_a_carla_autoware_line_whose_profile_id_is_true_is_refused_with_a_bridge_as_uncompiled(tmp_path, monkeypatch):
+    """The same through prepare, on a generation that compiles profiles 1, 2 and 3: the refusal is the compiled check's
+    (not the Wheelbase prediction's with profile 1's L), before anything is written."""
+    rig = _aw_rig(tmp_path, monkeypatch, compiled=False)
+    _aw_line(rig, profile_id=True)
+    with pytest.raises(stack.StackError, match="--bridge broker: profile True .*is not compiled"):
+        _prepare(rig, "w", bridge="broker")
+    assert not (rig.runs / "w").exists() and "log" not in rig.seen
+
+
+def test_a_carla_autoware_summarys_segments_hold_their_times_in_order(tmp_path):
+    """A segment is [name, start_ms, end_ms] on the log's clock, which starts at 0: an end before its start, or a time
+    before 0, is no segment sdv/carla/encode010.py writes, and is refused though no window is derived from it. A segment
+    of one step (start = end) and one that starts later are read."""
+    for i, (segs, bad) in enumerate([([["passive", 260, 0]], True), ([["passive", -5, -1]], True), ([["passive", -1, 260]], True),
+                                     ([["passive", 0, 260], ["passive", 300, 280]], True),
+                                     ([["passive", 0, 0]], False), ([["passive", 20, 260]], False)]):
+        (tmp_path / str(i)).mkdir()
+        d, line, _ = _recording(tmp_path / str(i), gen=AW, name=AW_NAME, segments=segs)
+        if bad:
+            with pytest.raises(stack.StackError, match=r"not a list of \[name, start_ms, end_ms\] with 0 <= start_ms <= end_ms"):
+                stack.recording_summary(d, line)
+        else:
+            assert stack.recording_summary(d, line)["trip"]["segments"] == segs
+
+
+def test_the_limits_of_a_carla_autoware_replay_name_the_mock_writes_and_the_injectors_refusal():
+    """What the docs must not overstate. A carla-autoware replay reads ok whatever the mock provider's log or the app's
+    actuations say (the clean-log check was part of the light gate, which is not read): README's limits bullet and the
+    docstring's limits sentence name it. README says of sdv/inject/inject.py what holds: it refuses every such source."""
+    readme = " ".join((STACK_DIR / "README.md").read_text(encoding="utf-8").split())
+    for text in (readme, " ".join((stack.__doc__ or "").split())):
+        assert ("nor that the mock provider's writes or the app's actuations succeeded (the mock log's clean check was part of the "
+                "light gate, which is not read)") in text
+    assert "and refuses every such source, with or without an rtf" in readme
+    assert "still refuses such a source by its rtf rule" not in readme
+
+
+@NEEDS_GEN
+def test_encode010s_recording_of_a_fake_passive_take_prepares_against_this_trees_generation(tmp_path, monkeypatch):
+    """sdv/carla/encode010.py's own recording (tests/test_sdv_carla010.py's fake 0.10.0 world and take, its stand-ins for
+    cantools and python-can) against this tree's generation, as R-att's form prepares it: no seed, no window, the rows'
+    upstream from the encoder's own constants, the oracle on the real mapping's rows, the provenance equal to the files
+    that just encoded it, and C12a on the header. With a bridge it prepares exactly when this generation compiles the
+    line's profile."""
+    t10 = importlib.import_module("test_sdv_carla010")
+    tp7 = importlib.import_module("test_sdv_phase7_contract")
+    if t10.GEN is None or tp7.C is None or AW not in getattr(t10.GEN, "LIVE_DEFAULT_PROFILE", {}):
+        pytest.skip("needs the generated contract with the carla-autoware run type (sdv-out/gen)")
+    rc_take, take = t10.make_take(tmp_path)
+    assert rc_take == 0
+    out = tmp_path / "rec" / t10.NAME
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(t10.enc, "load_dbc", lambda contract, path=None: t10.tsc.FakeDb())
+        mp.setattr(t10.enc, "read_log", t10.tsc.fake_read_log)
+        res = t10.enc.record(take, out, t10.NAME, contract=t10.GEN)
+    assert res["recorded"] is True and res["verify"]["ok"] is True, res["verify"]["problems"]
+    line = json.loads((out / "manifest-line.json").read_text(encoding="ascii"))
+    assert line["source"]["generator"] == AW and "seed" not in line["source"]["params"] and "town" not in line["source"]["params"]
+    assert [s[0] for s in res["trip"]["segments"]] == ["passive"] and "seed" not in res["trip"]
+    db = tp7.StandInDB(tp7.tsbs.SLICE_TEXT)
+    ctx, man = _real_gen_prepare(out, db, tmp_path / "none", monkeypatch, bridge="none")
+    assert sorted(os.listdir(tmp_path / "none" / "runs" / "r" / "in")) == AW_IN
+    gm = json.loads((GEN / "manifest.json").read_text(encoding="utf-8"))
+    assert (tmp_path / "none" / "runs" / "r" / "in" / "vss-databroker.json").read_bytes() == (GEN / gm["databroker_catalogues"][AW]).read_bytes()
+    assert (ctx.run_type, ctx.seed, ctx.windows["judged"]) == (AW, None, False)
+    want = "carla-feeder (%s, %s, %s)" % (t10.enc.VERSION, t10.enc.MAP, t10.enc.BLUEPRINT)
+    can = [r for r in ctx.rows if r["writer"] == attr.CAN_PROVIDER]
+    assert {r["path"] for r in can} >= set(stack.STANDARD_SIGNALS) and {r["upstream"] for r in can} == {want}
+    assert not [c for c in man["scenario_checks"] if not c[1]], man["scenario_checks"]
+    assert [c for c in man["scenario_checks"] if c[0] == stack.CAN_PATH_CHECK]
+    prov = man["recording"]["carla"]
+    assert prov["current_equals_recording"] is True and set(prov["recording_encoder_sha256"]) == set(t10.enc.ENCODER_MODULES)
+    h = ctx.run_header("dumpfile-1", "dumpfile")
+    assert (h["run_type"], h["profile_id"], h["source_rtf"]) == (AW, None, line["source"]["rtf"]) and ctx.check_header(h)[1]
+    compiled = line["profile_id"] in tuple(tp7.C.COMPILED_PROFILE_IDS)
+    if compiled:
+        bctx, _bman = _real_gen_prepare(out, db, tmp_path / "broker", monkeypatch, bridge="broker")
+        assert bctx.check_header(bctx.run_header("vcan-1", "vcan"))[1]
+    else:
+        with pytest.raises(stack.StackError, match="is not compiled"):
+            _real_gen_prepare(out, db, tmp_path / "broker", monkeypatch, bridge="broker")
+        assert not (tmp_path / "broker" / "runs").exists()
 
 
 # --- the exit test (opt-in) -----------------------------------------------------------------------

@@ -19,6 +19,11 @@ What is held here (the breaker contract, and what the package's brief added)
                     event whose own reading raises): the rules never raise.
   the trip          the calls, their arguments and their order, for one certificate and for two; DeleteConnection
                     after every certificate is INACTIVE; the policy by the environment's name.
+  the pairs         TWIN_POLICY is one name or one per certificate in its order; each certificate's own policy is
+                    detached; one listing per distinct policy; the count is taken over the entries as given, and the
+                    pairs are made before duplicates are dropped. Any other count, an empty entry or a certificate
+                    with two policies detaches nothing. counts.policies appears only when P > 1. A trip makes
+                    3C + K + P + 2 calls; the time is 45 s for the largest set and 30 s for the one-car twin.
   the verdict       the read-backs give it. One step fails: the others run and it raises at the end. A second
                     delivery is harmless, also when the service answers an error for work already done. A cut that
                     is not there raises although every call was accepted; so does a read-back that could not be
@@ -97,8 +102,13 @@ RULE = "example_rule"
 POLICY = "example-device-policy"
 CLIENT = "example-thing"
 CLIENT_2 = "example-thing-two"
+CLIENT_3 = "example-thing-three"
 CERT_1 = "0123456789abcdef" * 4
 CERT_2 = "fedcba9876543210" * 4
+CERT_3 = "00112233445566778899aabbccddeeff" * 2
+CERT_4 = "0f1e2d3c4b5a6978" * 4
+POLICY_2 = "example-device-policy-2"                # the fleet's pairs (video 3 fleet P2): car k's own policy
+POLICY_3 = "example-device-policy-3"
 REQUEST = "an-example-request-id"
 ALARM = "example-alarm"                         # the alarm's name in both fixture files
 SDK = "9.9.9"
@@ -138,19 +148,23 @@ def sns_text(*texts: str) -> Dict[str, Any]:
 
 
 # A JSON text nested deeper than the interpreter's reader goes: json.loads raises RecursionError on it, which is no
-# ValueError (WP7-verify-r2's SHOULD 1; 200 KB, under what an event may hold). The depth is far past every limit seen.
+# ValueError. This synthetic message is deliberately nested beyond the JSON reader's recursion limit.
 DEEP = "[" * 100000 + "]" * 100000
 
 
 class Rig:
-    """A small account, the two fake clients over it, and the function's environment."""
+    """A small account, the two fake clients over it, and the function's environment. With `policies` (one name a
+    certificate, in its order) each certificate carries its own policy and TWIN_POLICY names them in that order: the
+    fleet's pairs. Without, the one policy of every certificate, as the one-car twin has it."""
 
     def __init__(self, certs: Sequence[str] = (CERT_1,), clients: Sequence[str] = (CLIENT,), live: bool = True,
-                 connected: Sequence[str] = (), old_sdk: bool = False) -> None:
+                 connected: Sequence[str] = (), old_sdk: bool = False, policies: Optional[Sequence[str]] = None) -> None:
         self.certs, self.clients = list(certs), list(clients)
+        own = list(policies) if policies is not None else [POLICY] * len(self.certs)
+        assert len(own) == len(self.certs)
         self.account: Dict[str, Any] = {
-            "account": ACCOUNT, "region": REGION, "rules": {RULE: {"ruleDisabled": not live}}, "policies": {POLICY: {}},
-            "certs": {c: {"status": "ACTIVE" if live else "INACTIVE", "policies": [POLICY] if live else []} for c in certs},
+            "account": ACCOUNT, "region": REGION, "rules": {RULE: {"ruleDisabled": not live}}, "policies": {p: {} for p in [POLICY] + own},
+            "certs": {c: {"status": "ACTIVE" if live else "INACTIVE", "policies": [p] if live else []} for c, p in zip(self.certs, own)},
             "connections": list(connected)}
         self.calls: List[List[Any]] = []
         self.faults: List[Dict[str, Any]] = []
@@ -158,7 +172,7 @@ class Rig:
         self.iot = STUB.FakeIot(self.account, self.calls, self.faults)
         self.data = (STUB.FakeIotDataOld if old_sdk else STUB.FakeIotData)(self.account, self.calls, self.faults)
         self.env = {"TWIN_CERTIFICATE_ARNS": ",".join(arn(c) for c in certs), "TWIN_CLIENT_IDS": ",".join(clients), "TWIN_RULE": RULE,
-                    "TWIN_POLICY": POLICY}
+                    "TWIN_POLICY": POLICY if policies is None else ",".join(policies)}
 
     def run(self, event: Any, **change: Optional[str]) -> Dict[str, Any]:
         env = {k: v for k, v in dict(self.env, **change).items() if v is not None}
@@ -175,16 +189,21 @@ class Rig:
         return bool(a["rules"][RULE]["ruleDisabled"]) and all(c == {"status": "INACTIVE", "policies": []} for c in a["certs"].values())
 
 
-def writes(certs: Sequence[str], clients: Sequence[str] = (CLIENT,)) -> List[List[Any]]:
+def writes(certs: Sequence[str], clients: Sequence[str] = (CLIENT,), policies: Optional[Sequence[str]] = None) -> List[List[Any]]:
+    own = list(policies) if policies is not None else [POLICY] * len(certs)
     out: List[List[Any]] = [["iot", "disable_topic_rule", {"ruleName": RULE}]]
     out += [["iot", "update_certificate", {"certificateId": c, "newStatus": "INACTIVE"}] for c in certs]
     out += [["iot-data", "delete_connection", {"clientId": k}] for k in clients]
-    return out + [["iot", "detach_policy", {"policyName": POLICY, "target": arn(c)}] for c in certs]
+    return out + [["iot", "detach_policy", {"policyName": p, "target": arn(c)}] for c, p in zip(certs, own)]
 
 
-def reads(certs: Sequence[str]) -> List[List[Any]]:
+def reads(certs: Sequence[str], policies: Optional[Sequence[str]] = None) -> List[List[Any]]:
+    """The read-backs: each certificate, ONE listing of the targets per distinct policy (in the order they are first named),
+    the rule."""
+    distinct = list(dict.fromkeys(policies)) if policies is not None else [POLICY]
     out: List[List[Any]] = [["iot", "describe_certificate", {"certificateId": c}] for c in certs]
-    return out + [["iot", "list_targets_for_policy", {"policyName": POLICY, "pageSize": 250}], ["iot", "get_topic_rule", {"ruleName": RULE}]]
+    return out + [["iot", "list_targets_for_policy", {"policyName": p, "pageSize": 250}] for p in distinct] + [
+        ["iot", "get_topic_rule", {"ruleName": RULE}]]
 
 
 WRITES = ("disable_topic_rule", "update_certificate", "delete_connection", "detach_policy")
@@ -386,6 +405,143 @@ def test_the_policy_is_detached_by_the_name_the_environment_gives_and_no_name_st
     assert not re.search(r"arn:aws|[0-9]{12}|[0-9a-f]{32}", source)
 
 
+# ================================================================================================= the fleet's pairs (video 3 fleet P2)
+
+PAIRS = [([CERT_1, CERT_2], [CLIENT, CLIENT_2], [POLICY, POLICY_2]),
+         ([CERT_1, CERT_2, CERT_3], [CLIENT, CLIENT_2, CLIENT_3], [POLICY, POLICY_2, POLICY_3])]
+
+
+@pytest.mark.parametrize("certs,clients,policies", PAIRS, ids=["two-cars", "three-cars"])
+def test_each_certificate_has_its_own_policy_detached_and_each_policy_is_listed_once(certs: List[str], clients: List[str],
+                                                                                     policies: List[str]) -> None:
+    """fleet P2: TWIN_POLICY with one name per entry of TWIN_CERTIFICATE_ARNS, in its order, is the pairs. Each
+    certificate's own policy is detached from it, and nothing else; the read-back lists each distinct policy once, and each
+    certificate is judged against its own policy's targets. The count is 3C + K + P + 2, and the record says P when P > 1."""
+    rig = Rig(certs, clients, connected=clients[:1], policies=policies)
+    record = rig.run({"manual": "trip"})
+    assert rig.calls == writes(certs, clients, policies) + reads(certs, policies)
+    assert [c[2] for c in rig.calls if c[1] == "detach_policy"] == [{"policyName": p, "target": arn(c)} for c, p in zip(certs, policies)]
+    assert rig.is_cut() and record["cut"] is True and record["failures"] == []
+    assert record["counts"] == {"certificates": len(certs), "client_ids": len(clients), "policies": len(policies), "unusable_certificates": 0,
+                                "calls": 3 * len(certs) + len(clients) + len(policies) + 2, "failures": 0}
+    assert len(rig.calls) == record["counts"]["calls"]
+    assert record["certificates"] == [{"write": "ok", "state": "INACTIVE", "detach": "ok", "policy": "detached"} for _c in certs]
+    log, = rig.logs
+    assert log["acts_on"]["policy"] == policies and log["acts_on"]["certificates"] == [arn(c) for c in certs]
+    assert not held(json.dumps(record))
+
+
+def test_one_name_for_several_certificates_is_the_one_car_form_and_its_record_has_no_count_of_policies() -> None:
+    """The one-name form, today's: the twin's policy from each certificate, one listing, and a record with no `policies`."""
+    rig = Rig([CERT_1, CERT_2], [CLIENT, CLIENT_2])
+    record = rig.run({"manual": "trip"})
+    assert rig.calls == writes([CERT_1, CERT_2], [CLIENT, CLIENT_2]) + reads([CERT_1, CERT_2])
+    assert "policies" not in record["counts"] and record["counts"]["calls"] == 3 * 2 + 2 + 3 and rig.logs[0]["acts_on"]["policy"] == POLICY
+    # one name per certificate that is the same name twice is one policy: one listing, and no count of policies either
+    same = Rig([CERT_1, CERT_2], [CLIENT, CLIENT_2], policies=[POLICY, POLICY])
+    record = same.run({"manual": "trip"})
+    assert same.calls == writes([CERT_1, CERT_2], [CLIENT, CLIENT_2]) + reads([CERT_1, CERT_2]) and "policies" not in record["counts"]
+
+
+def test_the_one_name_form_with_several_certificates_reads_each_fleet_certificate_detached_while_its_own_policy_stays() -> None:
+    """Why fleet-active-k's pre holds counts.policies (S9): with one name, the twin's policy is detached from a fleet certificate
+    that never carried it, and the one listing reads it "detached" while car k's own policy stays attached. The record then has
+    no `policies`, which is how twinctl tells that form from the pairs."""
+    rig = Rig([CERT_1, CERT_2], [CLIENT, CLIENT_2], policies=[POLICY, POLICY_2])
+    record = rig.run({"manual": "trip"}, TWIN_POLICY=POLICY)
+    assert record["cut"] is True and "policies" not in record["counts"]
+    assert rig.account["certs"][CERT_2]["policies"] == [POLICY_2]               # the fleet certificate's own policy: still attached
+
+
+@pytest.mark.parametrize("given,certs", [("%(p)s,%(p2)s,%(p3)s", [CERT_1, CERT_2]), ("%(p)s,%(p2)s", [CERT_1, CERT_2, CERT_3])],
+                         ids=["three-names-two-certificates", "two-names-three-certificates"])
+def test_a_count_of_policies_that_is_neither_one_nor_the_certificates_detaches_nothing_and_the_other_steps_run(given: str,
+                                                                                                             certs: List[str]) -> None:
+    rig = Rig(certs, [CLIENT], connected=[CLIENT])
+    value = given % {"p": POLICY, "p2": POLICY_2, "p3": POLICY_3}
+    message = raises(rig, {"manual": "trip"}, TWIN_POLICY=value)
+    names = value.count(",") + 1
+    assert "TWIN_POLICY names %d policies for %d certificates" % (names, len(certs)) in message and "1 failure(s)" in message
+    assert rig.ops() == (["disable_topic_rule"] + ["update_certificate"] * len(certs) + ["delete_connection"]
+                         + ["describe_certificate"] * len(certs) + ["get_topic_rule"])      # steps 1 to 3, and no detach: never guessed at
+    record = rig.logs[0]["record"]
+    assert record["cut"] is False and [c["detach"] for c in record["certificates"]] == ["not-attempted"] * len(certs)
+    assert [c["policy"] for c in record["certificates"]] == ["not-read"] * len(certs)
+    assert all(rig.account["certs"][c]["policies"] == [POLICY] for c in certs)  # nothing was detached
+
+
+def test_the_count_is_over_the_entries_as_given_and_an_unusable_entrys_pair_is_left_out() -> None:
+    rig = Rig([CERT_1, CERT_2], [CLIENT], policies=[POLICY, POLICY_3])
+    message = raises(rig, {"manual": "trip"}, TWIN_CERTIFICATE_ARNS="%s,not-an-arn,%s" % (arn(CERT_1), arn(CERT_2)),
+                     TWIN_POLICY="%s,%s,%s" % (POLICY, POLICY_2, POLICY_3))
+    assert message == "the trip did not complete: 1 failure(s): 1 of the entries of TWIN_CERTIFICATE_ARNS are no certificate's ARN"
+    detaches = [c[2] for c in rig.calls if c[1] == "detach_policy"]
+    assert detaches == [{"policyName": POLICY, "target": arn(CERT_1)}, {"policyName": POLICY_3, "target": arn(CERT_2)}]
+    assert [c[2]["policyName"] for c in rig.calls if c[1] == "list_targets_for_policy"] == [POLICY, POLICY_3]
+    assert rig.is_cut() and rig.logs[0]["record"]["counts"]["policies"] == 2
+
+
+def test_the_pairs_are_made_before_duplicates_are_dropped() -> None:
+    """A pair given twice is one pair; one certificate given with two policies is a failure, and no detach is attempted."""
+    twice = Rig([CERT_1], [CLIENT])
+    record = twice.run({"manual": "trip"}, TWIN_CERTIFICATE_ARNS="%s,%s" % (arn(CERT_1), arn(CERT_1)), TWIN_POLICY="%s,%s" % (POLICY, POLICY))
+    assert twice.calls == writes([CERT_1]) + reads([CERT_1]) and record["failures"] == [] and record["counts"]["certificates"] == 1
+    two = Rig([CERT_1], [CLIENT], policies=[POLICY])
+    two.account["policies"][POLICY_2] = {}
+    message = raises(two, {"manual": "trip"}, TWIN_CERTIFICATE_ARNS="%s,%s" % (arn(CERT_1), arn(CERT_1)), TWIN_POLICY="%s,%s" % (POLICY, POLICY_2))
+    assert "TWIN_POLICY gives one certificate two policies" in message and "1 failure(s)" in message
+    assert "detach_policy" not in two.ops() and "list_targets_for_policy" not in two.ops() and two.account["certs"][CERT_1]["policies"] == [POLICY]
+    assert two.account["certs"][CERT_1]["status"] == "INACTIVE" and two.logs[0]["record"]["cut"] is False
+
+
+@pytest.mark.parametrize("value", ["%(p)s,,%(p3)s", "%(p)s,%(p2)s,", ",%(p2)s,%(p3)s", "%(p)s, ,%(p3)s"])
+def test_an_empty_entry_of_twin_policy_is_a_failure_and_no_detach_is_attempted(value: str) -> None:
+    rig = Rig([CERT_1, CERT_2, CERT_3], [CLIENT], policies=[POLICY, POLICY_2, POLICY_3])
+    message = raises(rig, {"manual": "trip"}, TWIN_POLICY=value % {"p": POLICY, "p2": POLICY_2, "p3": POLICY_3})
+    assert "an entry of TWIN_POLICY is empty" in message and "1 failure(s)" in message
+    assert "detach_policy" not in rig.ops() and "list_targets_for_policy" not in rig.ops() and rig.logs[0]["record"]["cut"] is False
+
+
+def test_more_policies_than_the_time_is_counted_for_are_all_acted_on_and_it_raises() -> None:
+    certs = [CERT_1, CERT_2, CERT_3, CERT_4]
+    policies = [POLICY, POLICY_2, POLICY_3, "example-device-policy-4"]
+    assert len(policies) == B.MAX_POLICIES + 1
+    rig = Rig(certs, [CLIENT], policies=policies)
+    message = raises(rig, {"manual": "trip"})
+    assert "TWIN_POLICY names 4 policies, more than the %d the function's time is counted for" % B.MAX_POLICIES in message
+    assert rig.calls == writes(certs, [CLIENT], policies) + reads(certs, policies) and rig.is_cut()
+
+
+def test_a_policy_whose_targets_cannot_be_read_is_said_by_its_number_and_the_others_are_judged() -> None:
+    rig = Rig([CERT_1, CERT_2, CERT_3], [CLIENT], policies=[POLICY, POLICY_2, POLICY_3])
+    rig.fault("list_targets_for_policy", code="AccessDeniedException", status=403)          # the first listing, the twin's policy's
+    message = raises(rig, {"manual": "trip"})
+    assert message == "the trip did not complete: 1 failure(s): policy 1 of 3: its targets could not be read"
+    record = rig.logs[0]["record"]
+    assert [c["policy"] for c in record["certificates"]] == ["not-read", "detached", "detached"] and record["cut"] is False
+    # with one policy the sentence is today's
+    one = Rig([CERT_1, CERT_2], [CLIENT])
+    one.fault("list_targets_for_policy", code="AccessDeniedException", status=403)
+    assert raises(one, {"manual": "trip"}).endswith(": the policy's targets could not be read")
+
+
+def test_each_certificate_is_judged_against_its_own_policys_targets() -> None:
+    """A detach of car k's policy that is accepted and changes nothing: car k's certificate is the one still attached, read in
+    its own policy's listing; the twin's certificate, in the twin's, is detached."""
+    rig = Rig([CERT_1, CERT_2], [CLIENT], policies=[POLICY, POLICY_2])
+    rig.fault("detach_policy", ignored=True)                                     # the first detach (the twin's certificate's) changes nothing
+    message = raises(rig, {"manual": "trip"})
+    assert message == "the trip did not complete: 1 failure(s): certificate 1 of 2: the policy is still attached"
+    assert [c["policy"] for c in rig.logs[0]["record"]["certificates"]] == ["attached", "detached"]
+    # a fleet certificate that ALSO carries the twin's policy: no pair names that one for it, and it is not read as attached either,
+    # since each certificate is judged in its own policy's listing (the twin's policy is not car k's)
+    other = Rig([CERT_1, CERT_2], [CLIENT], policies=[POLICY, POLICY_2])
+    other.account["certs"][CERT_2]["policies"].append(POLICY)
+    record = other.run({"manual": "trip"})
+    assert record["failures"] == [] and record["cut"] is True
+    assert other.account["certs"][CERT_2]["policies"] == [POLICY] and other.account["certs"][CERT_1]["policies"] == []
+
+
 # ================================================================================================= the status
 
 def test_the_manual_status_reads_only_and_reports_the_sdk() -> None:
@@ -424,11 +580,10 @@ def test_the_status_raises_also_when_every_value_is_there_and_every_state_was_re
     """WP7-critic, ledger WP7#10 (critic#1; the critic's own drive, S2 and S3). The docstring said the status "raises only when a
     read-back could not be made or an environment value is missing". It raises also on a list of certificates longer than the
     time is counted for and on an entry that is no certificate's ARN, with no value missing: and makes no write on either."""
-    cert_3 = "00112233445566778899aabbccddeeff" * 2
-    rig = Rig([CERT_1, CERT_2, cert_3])
+    rig = Rig([CERT_1, CERT_2, CERT_3, CERT_4])                                # fleet P2: one more than the three cars of the largest set
     assert len(rig.certs) == B.MAX_CERTIFICATES + 1
     message = raises(rig, {"manual": "status"})
-    assert message == ("the status did not complete: 1 failure(s): TWIN_CERTIFICATE_ARNS names 3 certificates, more than the %d the "
+    assert message == ("the status did not complete: 1 failure(s): TWIN_CERTIFICATE_ARNS names 4 certificates, more than the %d the "
                        "function's time is counted for" % B.MAX_CERTIFICATES)
     assert not [c for c in rig.calls if c[1] in WRITES] and rig.logs[0]["mode"] == "status"
     unusable = Rig()
@@ -718,12 +873,12 @@ def test_the_rule_and_the_policy_go_into_the_calls_without_the_blanks_around_the
 
 
 def test_more_certificates_than_the_time_is_counted_for_are_all_acted_on_and_it_raises() -> None:
-    certs = [CERT_1, CERT_2, "0f1e2d3c4b5a6978" * 4]
+    certs = [CERT_1, CERT_2, CERT_3, CERT_4]                                     # fleet P2: the largest set is three cars
     assert len(certs) == B.MAX_CERTIFICATES + 1
     rig = Rig(certs)
     message = raises(rig, {"manual": "trip"})
     assert rig.calls == writes(certs) + reads(certs) and rig.is_cut() and "more than the %d" % B.MAX_CERTIFICATES in message
-    clients = [CLIENT, CLIENT_2, "example-thing-three"]
+    clients = [CLIENT, CLIENT_2, CLIENT_3, "example-thing-four"]
     rig = Rig([CERT_1], clients)
     message = raises(rig, {"manual": "trip"})
     assert rig.calls == writes([CERT_1], clients) + reads([CERT_1]) and rig.is_cut() and "more than the %d" % B.MAX_CLIENT_IDS in message
@@ -1006,14 +1161,27 @@ def test_the_handler_makes_its_two_clients_in_one_place_with_short_time_outs_and
     assert log["request_id"] == REQUEST and log["invoked_by"] == "alarm" and log["alarm"] == ALARM and log["record"] == record
     # the time the function has, counted: every call of the largest set it takes, each as long as a silent endpoint lets it
     # last when its name resolves to the number of addresses the file names (the connect time-out is per address)
-    calls = 3 * B.MAX_CERTIFICATES + B.MAX_CLIENT_IDS + 3
-    largest = Rig([CERT_1, CERT_2][:B.MAX_CERTIFICATES], [CLIENT, CLIENT_2][:B.MAX_CLIENT_IDS])
+    # (fleet P2: the largest set is three cars, each with its own policy: 3C + K + P + 2 calls)
+    calls = 3 * B.MAX_CERTIFICATES + B.MAX_CLIENT_IDS + B.MAX_POLICIES + 2
+    largest = Rig([CERT_1, CERT_2, CERT_3][:B.MAX_CERTIFICATES], [CLIENT, CLIENT_2, CLIENT_3][:B.MAX_CLIENT_IDS],
+                  policies=[POLICY, POLICY_2, POLICY_3][:B.MAX_POLICIES])
     largest.run({"manual": "trip"})
     assert len(largest.calls) == calls
     assert counted(B.ADDRESSES) == calls * B.ATTEMPTS * (B.ADDRESSES * B.CONNECT_TIMEOUT_S + B.READ_TIMEOUT_S) + B.RESERVE_S <= B.FUNCTION_TIMEOUT_S
-    assert B.ATTEMPTS == 1 and B.CONNECT_TIMEOUT_S > 0 and B.READ_TIMEOUT_S > 0 and B.RESERVE_S >= 5 and B.MAX_CERTIFICATES >= 2
+    assert B.ATTEMPTS == 1 and B.CONNECT_TIMEOUT_S > 0 and B.READ_TIMEOUT_S > 0 and B.RESERVE_S >= 5 and B.MAX_CERTIFICATES >= 3
+    assert B.MAX_CERTIFICATES == B.MAX_CLIENT_IDS == B.MAX_POLICIES == 3
+    # THE DRIVER'S TWO TIME-OUTS (design values): the one-car twin keeps its 30 s, a set of two or three cars has the file's time.
+    # Each is the create call's and the read-back's, by one function of the set's size
     driver = (REPO / "sdv" / "cloud" / "twinctl.py").read_text(encoding="utf-8")
-    assert '"--timeout", "%d"' % B.FUNCTION_TIMEOUT_S in driver and '"Timeout": %d' % B.FUNCTION_TIMEOUT_S in driver
+    assert TW.ONE_CAR_TIMEOUT_S == 30 and TW.FLEET_TIMEOUT_S == B.FUNCTION_TIMEOUT_S == 45
+    assert [TW.function_timeout(n) for n in (1, 2, 3)] == [30, 45, 45]
+    assert '"--timeout", str(function_timeout(' in driver and '"Timeout": function_timeout(' in driver
+    for cars in (1, 2, 3):                      # each set's count at or under the time it is given
+        assert counted(B.ADDRESSES, cars, cars, cars) <= TW.function_timeout(cars), cars
+    assert counted(B.ADDRESSES, 2, 2, 2) > TW.ONE_CAR_TIMEOUT_S                  # two cars need more than the one car's 30 s
+    assert TW.BREAKER_CALL_S == B.ATTEMPTS * (B.ADDRESSES * B.CONNECT_TIMEOUT_S + B.READ_TIMEOUT_S) and TW.BREAKER_RESERVE_S == B.RESERVE_S
+    for cars in (1, 2, 3):
+        assert TW.breaker_counted_s(cars, cars, cars) == counted(B.ADDRESSES, cars, cars, cars), cars
     assert TW.HANDLER == "breaker.handler" and callable(B.handler)
 
 
@@ -1054,13 +1222,15 @@ def test_a_failed_calls_journal_entry_keeps_the_errors_class_beside_what_the_ser
     assert [e for e in log["calls"] if e["answer"] == "ok"] and not [e for e in log["calls"] if e["answer"] == "ok" and "type" in e]
 
 
-def counted(addresses: int, certificates: Optional[int] = None, client_ids: Optional[int] = None) -> int:
+def counted(addresses: int, certificates: Optional[int] = None, client_ids: Optional[int] = None, policies: Optional[int] = None) -> int:
     """THE TIME IT HAS, as the module's docstring counts it: every call of a trip, each as long as an endpoint that answers
     nothing lets it last when its name resolves to `addresses` addresses (the connect time-out once per address, the read
-    time-out once), and the reserve. For the largest set the time is counted for, unless another is given."""
+    time-out once), and the reserve. For the largest set the time is counted for, unless another is given. A trip makes
+    3C + K + P + 2 calls (fleet P2: P the distinct policies; with one, 3C + K + 3)."""
     c = B.MAX_CERTIFICATES if certificates is None else certificates
     k = B.MAX_CLIENT_IDS if client_ids is None else client_ids
-    return int((3 * c + k + 3) * B.ATTEMPTS * (addresses * B.CONNECT_TIMEOUT_S + B.READ_TIMEOUT_S) + B.RESERVE_S)
+    p = B.MAX_POLICIES if policies is None else policies
+    return int((3 * c + k + p + 2) * B.ATTEMPTS * (addresses * B.CONNECT_TIMEOUT_S + B.READ_TIMEOUT_S) + B.RESERVE_S)
 
 
 def test_the_time_is_counted_for_the_addresses_the_file_names_and_no_call_is_said_to_be_bounded() -> None:
@@ -1072,13 +1242,14 @@ def test_the_time_is_counted_for_the_addresses_the_file_names_and_no_call_is_sai
     assert isinstance(B.ADDRESSES, int) and not isinstance(B.ADDRESSES, bool) and B.ADDRESSES >= 1
     # it holds for the number the file names and for not one more: the constant is the largest the function's time covers
     assert counted(B.ADDRESSES) <= B.FUNCTION_TIMEOUT_S < counted(B.ADDRESSES + 1)
-    assert counted(B.ADDRESSES, 1, 1) <= B.FUNCTION_TIMEOUT_S         # the twin as decided: one certificate, one client id
+    assert counted(B.ADDRESSES, 1, 1, 1) <= TW.ONE_CAR_TIMEOUT_S           # the twin as decided: one certificate, one client id, one policy
+    assert counted(B.ADDRESSES, 1, 1, 1) == 22 and counted(B.ADDRESSES) == 42 and counted(B.ADDRESSES + 1) == 59      # timeout arithmetic
     doc = " ".join(str(B.__doc__).split())
     time = doc[doc.index("THE TIME IT HAS"):doc.index("WHAT IT RETURNS, RAISES AND LOGS")]
-    for gone in ("whatever its endpoint does", "one call ends within 2 s"):
+    for gone in ("whatever its endpoint does", "one call ends within 2 s", "3C + K + 3 calls", "8 s of the 30"):
         assert gone not in doc, gone
     for said in ("per ADDRESS", "ADDRESSES = %d" % B.ADDRESSES, "per read of the socket", "the runtime ends the function", "Errors metric",
-                 "A3 row 13"):
+                 "A3 row 13", "3C + K + P + 2 calls", "17 calls", "42 s", "at 45 s", "runs at 30 s", "7 calls"):
         assert said in time, said
     readme = " ".join((REPO / "sdv" / "cloud" / "README.md").read_text(encoding="utf-8").split())
     its_time = readme[readme.index("**Its time is counted"):readme.index("**What it returns and raises")]

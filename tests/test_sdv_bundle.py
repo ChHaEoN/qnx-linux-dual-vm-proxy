@@ -105,7 +105,8 @@ MEMBERS = ("sdv-arm64-images.tar", "sdv-gen.tar", "rec-20260930-sigsim-1b.tar", 
 PLAN_RECORDINGS = {"v1": {"honest": "20260930-sigsim-1b", "injected": "20261002-sigsim-1b-inj4"},
                    "v2": {"honest": "20260930-sigsim-1b", "injected": "20261002-sigsim-1b-inj4"},
                    "carla": {"honest": "20261019-carla-1", "injected": "20261019-carla-1-inj"}}
-REC_LOGS = {"sigsim": "sigsim.log", "carla": "carla.log"}     # a recording's log by its generator (spec-2 2.1), this file's spelling
+# a recording's log by its generator (spec-2 2.1; carla-autoware since Phase 8 WP9 P4), this file's spelling
+REC_LOGS = {"sigsim": "sigsim.log", "carla": "carla.log", "carla-autoware": "carla.log"}
 
 
 def sha(data: bytes) -> str:
@@ -669,6 +670,8 @@ def test_a_carla_recording_whose_log_is_not_its_lines_is_refused(tmp_path, chang
     ("20261019-carla-1", {"path": "~/sdv-recordings/20261019-carla-1/sigsim.log"}, ("'carla'", "'sigsim.log'")),
     ("20260930-sigsim-1b", {"path": "~/sdv-recordings/20260930-sigsim-1b/carla.log"}, ("'sigsim'", "'carla.log'")),
     ("20261019-carla-1", {"path": "~/sdv-recordings/20261019-carla-1/drive.log"}, ("'carla'", "'drive.log'")),
+    ("20261019-carla-1", {"generator": "carla-autoware", "path": "~/sdv-recordings/20261019-carla-1/drive.log"}, ("'carla-autoware'", "'drive.log'")),
+    ("20260930-sigsim-1b", {"generator": "carla-autoware"}, ("'carla-autoware'", "'sigsim.log'")),
     ("20260930-sigsim-1b", {"generator": "vtd"}, ("'vtd'", "'sigsim.log'")),
     ("20261019-carla-1", {"generator": None}, ("None", "'carla.log'")),
     ("20261019-carla-1", {"path": None}, ("'carla'", "None")),
@@ -676,6 +679,28 @@ def test_a_carla_recording_whose_log_is_not_its_lines_is_refused(tmp_path, chang
 def test_a_mismatched_generator_and_log_is_refused_naming_both(tmp_path, name, line_change, both):
     problems = bundle.recording_contents(name, _rec_files(tmp_path, name, **line_change))[1]
     assert [p for p in problems if all(w in p for w in both)], problems
+
+
+def test_a_carla_autoware_recording_is_read_by_its_carla_log_and_by_no_other_name(tmp_path):
+    """Phase 8 WP9 P4: the table takes carla-autoware (sdv/carla/encode010.py's recordings) with carla.log, so the one rule
+    reads such a recording's log; any other name is refused naming both, as for the other two generators. No plan and no
+    recording of the bundle is one (PLAN_RECORDINGS and RECORDINGS are what they were)."""
+    name = "20261102-carla010-1"
+    d = tmp_path / name
+    make_recording(d, name, "a" * 64, events=False, gen="carla-autoware")
+    files = {p.name: p.read_bytes() for p in d.iterdir()}
+    line = json.loads(files["manifest-line.json"])
+    assert bundle.log_name_of(line) == ("carla.log", None)
+    info, bad = bundle.recording_contents(name, files)
+    assert bad == [] and (info["log"], info["log_sha256"]) == ("carla.log", sha(files["carla.log"]))
+    for other in ("sigsim.log", "drive.log", "carla-autoware.log", "CARLA.log"):
+        wrong = json.loads(files["manifest-line.json"])
+        wrong["recording"]["path"] = "~/sdv-recordings/%s/%s" % (name, other)
+        got, why = bundle.log_name_of(wrong)
+        assert got is None and "'carla-autoware'" in why and repr(other) in why and "carla.log" in why, why
+        problems = bundle.recording_contents(name, dict(files, **{"manifest-line.json": json.dumps(wrong).encode()}))[1]
+        assert [p for p in problems if "'carla-autoware'" in p and repr(other) in p], problems
+    assert set(bundle.PLAN_RECORDINGS) == {"v1", "v2", "carla"} and not [r for r in bundle.RECORDINGS if "carla010" in r]
 
 
 @POSIX
