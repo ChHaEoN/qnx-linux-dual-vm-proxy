@@ -7,8 +7,9 @@ sdv/cloud/templates/breaker-role-policy.json. Restoring is the owner's, by hand 
 
 WHAT IT IS
   One file: the standard library, and the runtime's own boto3, imported in one place (_clients) so that the module
-  loads where no SDK is installed. python3.12 on arm64, 128 MB, 30 s (design values; the driver's create call holds
-  them). handler(event, context) makes the two clients and hands them to run(event, env, iot, iot_data): the event,
+  loads where no SDK is installed. python3.12 on arm64, 128 MB, 30 s for the one-car twin and 45 s for a set of two or
+  three cars (design values; the driver's create call holds them). handler(event, context) makes the two clients and
+  hands them to run(event, env, iot, iot_data): the event,
   the environment and the clients are arguments, which is how the tests give the function theirs. The zip is this
   one file under the name the handler `breaker.handler` asks for; sdv/cloud/twinctl.py builds it.
 
@@ -19,6 +20,14 @@ WHAT IT IS
     TWIN_RULE               the topic rule
     TWIN_POLICY             the device policy. No chosen name stands in this file: IAM scopes the detach to the
                             certificate, never to the policy, so THIS CODE selects the policy, by this name alone.
+                            Either ONE name, the policy of every certificate (the one-car twin), or exactly one name
+                            per entry of TWIN_CERTIFICATE_ARNS, comma-separated, in its order: THE PAIRS (the fleet,
+                            each car's certificate with its own policy). The pairs are counted over the certificate
+                            list's entries as they are given, an entry that is no certificate's ARN among them (its
+                            pair is passed over, as the entry is), and made before a repeated entry is dropped: a
+                            pair given twice is one pair, one certificate given with two policies is a failure. Any
+                            other count, an empty entry, or that one certificate with two policies is a failure, and
+                            no detach is attempted: a pairing is never guessed at, as an unusable ARN is not.
 
 THE EVENT RULES (one table; tests/test_sdv_breaker.py tests every row)
      the event                                                               what invoked it   what is done
@@ -48,8 +57,9 @@ THE STEPS of a trip, in this order
   2  UpdateCertificate to INACTIVE, each certificate   no new connection
   3  DeleteConnection, each client id                  the connection that stands is closed; after 2, so that the
                                                        client cannot come back
-  4  DetachPolicy, the one policy, each certificate    the slowest cut, kept as depth
-  5  the read-backs: DescribeCertificate for each certificate, ListTargetsForPolicy on the one policy, GetTopicRule
+  4  DetachPolicy, each certificate's policy           the slowest cut, kept as depth (the one policy, or each pair's)
+  5  the read-backs: DescribeCertificate for each certificate, ListTargetsForPolicy once for each distinct policy,
+     GetTopicRule; each certificate is judged against its own policy's targets
   6  one log record of the end state
   EVERY STEP IS ATTEMPTED WHATEVER HAPPENED TO THE OTHERS, and the function raises at the end if anything failed.
   A missing environment value stops no step whose own inputs are there (raising before the first call would fail
@@ -76,20 +86,23 @@ THE VERDICT: THE READ-BACKS GIVE IT, NOT A CALL'S ERROR CODE
   the time is counted for).
 
 THE TIME IT HAS (design values, counted here; nothing was measured)
-  botocore's defaults would let one silent endpoint take the whole 30 s before a later step is attempted. Each
-  client is made with connect_timeout 1 s, read_timeout 1 s and ONE attempt. THAT BOUNDS NO CALL BY ITSELF. The
+  botocore's defaults would let one silent endpoint take the function's whole time before a later step is attempted.
+  Each client is made with connect_timeout 1 s, read_timeout 1 s and ONE attempt. THAT BOUNDS NO CALL BY ITSELF. The
   connect time-out is per ADDRESS: the SDK's HTTP layer (urllib3, as read in the dev venv's pin) tries every address
   the endpoint's name resolves to in turn, each with the whole second, so an endpoint that drops every packet costs
   one call N s of connecting when its name resolves to N addresses. And the read time-out is per read of the
   socket, not per reply.
   THE COUNT IS MADE FOR ONE ADDRESS PER NAME (ADDRESSES = 1) and a reply that comes in one read: a call then ends
-  within 2 s. A trip over C certificates and K client ids makes 3C + K + 3 calls. Counted for C = 2 and K = 2 at
-  most: 11 calls, 22 s, which leaves 8 s of the 30 for the cold start and the log record. For the twin as decided
-  (one of each) it is 7 calls, 14 s. A longer list is still acted on, writes first, and is a failure.
+  within 2 s. A trip over C certificates, K client ids and P distinct policies makes 3C + K + P + 2 calls (with one
+  policy, 3C + K + 3). Counted for the largest set, three cars (C = K = P = 3): 17 calls, 34 s, and with the 8 s kept
+  for the cold start and the log record 42 s, which the function's time holds at 45 s (FUNCTION_TIMEOUT_S, the
+  driver's create call for two or three cars). The one-car twin runs at 30 s, where its 7 calls fit (14 s, 22 s with
+  the reserve); two cars need more than 30 s (12 calls, 32 s), so two or three cars are given the 45 s. A longer list
+  is still acted on, writes first, and is a failure.
   WHAT IS NOT HELD. With N addresses behind a name a call may wait N s to connect and 1 s to read, and the same
-  count is (3C + K + 3) * (N + 1) s and the reserve: over the 30 s from N = 2 on for the largest set, from N = 3 on
-  for the twin as decided. There the runtime ends the function at its 30 s: the steps it had not begun are NOT
-  attempted, no log record of the end state is written, and the signs that are left are the function's Errors
+  count is (3C + K + P + 2) * (N + 1) s and the reserve: over the 45 s from N = 2 on for the largest set, over the
+  30 s from N = 3 on for the twin as decided. There the runtime ends the function at its time-out: the steps it had
+  not begun are NOT attempted, no log record of the end state is written, and the signs that are left are the function's Errors
   metric (a time-out counts in it, from memory; with the notice topic its alarm notifies the owner) and the
   runtime's own line in the log. No write could have landed on an endpoint that answers on no address either. How
   many addresses the two endpoints' names resolve to inside the runtime is not established: A3 row 13's notes
@@ -104,11 +117,13 @@ WHAT IT RETURNS, RAISES AND LOGS
   event or of the request: the driver keeps the payload in its state directory, `trip --capture` copies it, and an
   error's message comes back in the payload too. Fields: v, mode (trip | status | none), invoked_by, alarm_state,
   boto3 (the runtime's version), has_delete_connection, rule {write, state}, certificates [{write, state, detach,
-  policy}], connections [{write}], counts {certificates, client_ids, unusable_certificates, calls, failures}, cut
-  (what the three read-backs show, and only that), failures.
+  policy}], connections [{write}], counts {certificates, client_ids, unusable_certificates, calls, failures, and
+  policies, the distinct policies, only when there is more than one}, cut (what the three read-backs show, and only
+  that), failures. With one policy the record is the one-car twin's, byte for byte.
   The LOG record, one JSON line on standard output, stays inside the account and names what was acted on: the
-  request's id, what invoked the function (and the alarm's name as the event gives it), the rule, the policy, the
-  certificates, the client ids, every call with the service's own error code and HTTP status, and the record.
+  request's id, what invoked the function (and the alarm's name as the event gives it), the rule, the policy (the one
+  name, or with more than one name the names as given), the certificates, the client ids, every call with the
+  service's own error code and HTTP status, and the record.
 
 NO SEAM. Nothing an event or an environment variable holds changes what the function acts on, where its calls go,
 or whether it acts, beyond the table and the four variables above: no dry-run switch, no endpoint, no override. The
@@ -135,14 +150,15 @@ import sys
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 ENV = ("TWIN_CERTIFICATE_ARNS", "TWIN_CLIENT_IDS", "TWIN_RULE", "TWIN_POLICY")
-FUNCTION_TIMEOUT_S = 30                         # the driver's create call: --timeout
+FUNCTION_TIMEOUT_S = 45                         # the driver's create call for two or three cars: --timeout (one car: 30)
 CONNECT_TIMEOUT_S = 1
 READ_TIMEOUT_S = 1
 ATTEMPTS = 1                                    # no retry inside the SDK: the time is counted on it
 ADDRESSES = 1                                   # per endpoint name: the connect time-out is spent once per address it resolves to
 RESERVE_S = 8                                   # the cold start and the log record
-MAX_CERTIFICATES = 2                            # (3 * 2 + 2 + 3) calls * (1 + 1) s + 8 s = 30 s
-MAX_CLIENT_IDS = 2
+MAX_CERTIFICATES = 3                            # (3 * 3 + 3 + 3 + 2) calls * (1 + 1) s + 8 s = 42 s, under the 45 s
+MAX_CLIENT_IDS = 3
+MAX_POLICIES = 3
 PAGE = 250                                      # the policy's targets in one page; a listing that goes on is no read
 
 STATES = ("ALARM", "OK", "INSUFFICIENT_DATA")
@@ -273,7 +289,10 @@ def _made(journal: List[Dict[str, Any]]) -> int:
 # --------------------------------------------------------------------------------------------------- what it acts on
 
 class _Inputs:
-    """The four environment values, read once. A value that is unset, empty or blank is missing."""
+    """The four environment values, read once. A value that is unset, empty or blank is missing. TWIN_POLICY is one name
+    or THE PAIRS (the module's docstring): `policy_of` is each certificate's policy, in the certificates' order, or None
+    for every one of them when the pairing cannot be used (`pairing` then says why, as a failure); `policies` the distinct
+    policies of the certificates, in the order they are first named, each listed once in the read-back."""
 
     def __init__(self, env: Mapping[str, str]) -> None:
         def value(key: str) -> Optional[str]:
@@ -282,21 +301,35 @@ class _Inputs:
 
         self.rule = value("TWIN_RULE")
         self.policy = value("TWIN_POLICY")
+        names = [name.strip() for name in self.policy.split(",")] if self.policy is not None else []
         self.clients: List[str] = []
         for entry in (value("TWIN_CLIENT_IDS") or "").split(","):
             if entry.strip() and entry.strip() not in self.clients:
                 self.clients.append(entry.strip())
+        # the pairs are counted over the entries AS GIVEN, an unusable one among them, and made before a repeated entry is dropped
+        entries = [entry.strip() for entry in (value("TWIN_CERTIFICATE_ARNS") or "").split(",") if entry.strip()]
+        self.counted = (len(names), len(entries))                    # (the names TWIN_POLICY gives, the certificate entries as given)
+        self.pairing: Optional[str] = None                           # why the pairing cannot be used: empty | count | twice
+        if "" in names:
+            self.pairing = "empty"
+        elif len(names) > 1 and len(names) != len(entries):
+            self.pairing = "count"
         self.certificates: List[Tuple[str, str]] = []                # (the ARN as given, the id its end holds)
+        self.policy_of: List[Optional[str]] = []                     # each certificate's policy, in the same order
         self.unusable = 0
-        for entry in (value("TWIN_CERTIFICATE_ARNS") or "").split(","):
-            entry = entry.strip()
+        for i, entry in enumerate(entries):
             match = _CERTIFICATE.fullmatch(entry)
-            if not entry:
-                continue
+            own = None if self.pairing is not None or not names else (names[0] if len(names) == 1 else names[i])
             if match is None:
-                self.unusable += 1                                   # never guessed at, never passed to a call
+                self.unusable += 1                                   # never guessed at, never passed to a call; its pair goes with it
             elif (entry, match.group(1)) not in self.certificates:
                 self.certificates.append((entry, match.group(1)))
+                self.policy_of.append(own)
+            elif self.policy_of[self.certificates.index((entry, match.group(1)))] != own and self.pairing is None:
+                self.pairing = "twice"
+        if self.pairing is not None:
+            self.policy_of = [None] * len(self.certificates)         # no detach is attempted, and no policy is listed
+        self.policies: List[str] = list(dict.fromkeys(p for p in self.policy_of if p is not None))
 
     def failures(self) -> List[str]:
         out = []
@@ -316,6 +349,14 @@ class _Inputs:
         elif len(self.certificates) > MAX_CERTIFICATES:
             out.append("TWIN_CERTIFICATE_ARNS names %d certificates, more than the %d the function's time is counted for"
                        % (len(self.certificates), MAX_CERTIFICATES))
+        if self.pairing == "empty":
+            out.append("an entry of TWIN_POLICY is empty")
+        elif self.pairing == "count":
+            out.append("TWIN_POLICY names %d policies for %d certificates" % self.counted)
+        elif self.pairing == "twice":
+            out.append("TWIN_POLICY gives one certificate two policies")
+        elif len(self.policies) > MAX_POLICIES:
+            out.append("TWIN_POLICY names %d policies, more than the %d the function's time is counted for" % (len(self.policies), MAX_POLICIES))
         return out
 
 
@@ -330,25 +371,26 @@ def _cut(journal: List[Dict[str, Any]], inputs: _Inputs, iot: Any, iot_data: Any
         out["certificates"].append(_send(journal, "iot", iot, "update_certificate", certificateId=certificate, newStatus="INACTIVE"))
     for client_id in inputs.clients:
         out["connections"].append(_send(journal, "iot-data", iot_data, "delete_connection", clientId=client_id))
-    for arn, _certificate in inputs.certificates:
-        out["detach"].append(_send(journal, "iot", iot, "detach_policy", policyName=inputs.policy, target=arn) if inputs.policy is not None else None)
+    for (arn, _certificate), policy in zip(inputs.certificates, inputs.policy_of):
+        # each certificate's OWN policy (the one name, or its pair's); none when the pairing cannot be used: never guessed at
+        out["detach"].append(_send(journal, "iot", iot, "detach_policy", policyName=policy, target=arn) if policy is not None else None)
     return out
 
 
 def _read_back(journal: List[Dict[str, Any]], inputs: _Inputs, iot: Any) -> Dict[str, Any]:
-    """Step 5. What could not be read is None, and stays so: nothing here is taken from a call that did not answer."""
-    out: Dict[str, Any] = {"certificates": [], "targets": None, "disabled": None}
+    """Step 5. What could not be read is None, and stays so: nothing here is taken from a call that did not answer. The
+    targets are read once for each distinct policy, by its name: {policy: its targets, or None}."""
+    out: Dict[str, Any] = {"certificates": [], "targets": {}, "disabled": None}
     for _arn, certificate in inputs.certificates:
         how, _word, _gone, reply = _send(journal, "iot", iot, "describe_certificate", certificateId=certificate)
         described = reply.get("certificateDescription") if how == "ok" and isinstance(reply, dict) else None
         status = described.get("status") if isinstance(described, dict) else None
         out["certificates"].append(status if isinstance(status, str) and status else None)
-    if inputs.policy is not None and inputs.certificates:
-        how, _word, _gone, reply = _send(journal, "iot", iot, "list_targets_for_policy", policyName=inputs.policy, pageSize=PAGE)
+    for policy in inputs.policies:
+        how, _word, _gone, reply = _send(journal, "iot", iot, "list_targets_for_policy", policyName=policy, pageSize=PAGE)
         targets = reply.get("targets") if how == "ok" and isinstance(reply, dict) else None
         whole = isinstance(reply, dict) and not reply.get("nextMarker")          # a listing that goes on is not judged
-        if whole and isinstance(targets, list) and all(isinstance(target, str) for target in targets):
-            out["targets"] = list(targets)
+        out["targets"][policy] = list(targets) if whole and isinstance(targets, list) and all(isinstance(t, str) for t in targets) else None
     if inputs.rule is not None:
         how, _word, _gone, reply = _send(journal, "iot", iot, "get_topic_rule", ruleName=inputs.rule)
         rule = reply.get("rule") if how == "ok" and isinstance(reply, dict) else None
@@ -402,10 +444,11 @@ def _assemble(mode: str, inputs: _Inputs, sent: Optional[Dict[str, Any]], back: 
         elif why == "uncut":
             failures.append("the rule is not disabled")
     certificates = []
-    unread_targets = False
+    unread_targets: List[str] = []                                   # the policies whose targets a certificate's verdict could not read
     for i, (_arn, certificate) in enumerate(inputs.certificates):
         status = back["certificates"][i]
-        attached = _attached(back["targets"], certificate)
+        policy = inputs.policy_of[i]
+        attached = _attached(back["targets"].get(policy) if policy is not None else None, certificate)      # in ITS OWN policy's listing
         entry: Dict[str, Any] = {"state": _state_word(status), "policy": "not-read" if attached is None else ("attached" if attached else "detached")}
         write = sent["certificates"][i] if sent is not None else None
         detach = sent["detach"][i] if sent is not None else None
@@ -420,17 +463,20 @@ def _assemble(mode: str, inputs: _Inputs, sent: Optional[Dict[str, Any]], back: 
             failures.append("certificate %d of %d: its state could not be read" % (i + 1, n))
         elif why == "uncut":
             failures.append("certificate %d of %d is not INACTIVE" % (i + 1, n))
-        if inputs.policy is None:
-            continue                                                 # said once, as the missing value
+        if policy is None:
+            continue                                                 # said once, as the missing value or the pairing that cannot be used
         why = _judge(detach, attached is not None, attached is False or not trip)
         if why in _WHY:
             failures.append("certificate %d of %d: the call that detaches the policy %s" % (i + 1, n, _WHY[why]))
         elif why == "unread":
-            unread_targets = True
+            unread_targets.append(policy)
         elif why == "uncut":
             failures.append("certificate %d of %d: the policy is still attached" % (i + 1, n))
-    if unread_targets:
+    if unread_targets and len(inputs.policies) == 1:
         failures.append("the policy's targets could not be read")
+    for p, policy_name in enumerate(inputs.policies if len(inputs.policies) > 1 else []):
+        if policy_name in unread_targets:
+            failures.append("policy %d of %d: its targets could not be read" % (p + 1, len(inputs.policies)))
     connections = []
     for i, done in enumerate(sent["connections"] if sent is not None else []):
         how, _word, gone, _reply = done
@@ -444,8 +490,9 @@ def _assemble(mode: str, inputs: _Inputs, sent: Optional[Dict[str, Any]], back: 
             connections.append({"write": done[1]})
             failures.append("client %d of %d: the call that deletes its connection %s"
                             % (i + 1, len(inputs.clients), _WHY.get(how, "was answered with an error")))
-    cut = bool(inputs.certificates) and disabled is True and back["targets"] is not None and all(
-        back["certificates"][i] == "INACTIVE" and _attached(back["targets"], c) is False for i, (_a, c) in enumerate(inputs.certificates))
+    cut = bool(inputs.certificates) and disabled is True and all(
+        inputs.policy_of[i] is not None and back["certificates"][i] == "INACTIVE"
+        and _attached(back["targets"].get(inputs.policy_of[i]), c) is False for i, (_a, c) in enumerate(inputs.certificates))
     return {"rule": rule, "certificates": certificates, "connections": connections, "cut": cut}, failures
 
 
@@ -466,9 +513,12 @@ def _work(event: Any, env: Mapping[str, str], iot: Any, iot_data: Any, sdk: str,
         record.update(parts)
     record["counts"] = {"certificates": len(inputs.certificates), "client_ids": len(inputs.clients), "unusable_certificates": inputs.unusable,
                         "calls": _made(journal), "failures": len(failures)}
+    if len(inputs.policies) > 1:                                     # the fleet's pairs: with one policy the record is the one-car twin's
+        record["counts"]["policies"] = len(inputs.policies)
     record["failures"] = list(failures)
+    named = inputs.policy if inputs.counted[0] <= 1 else [name.strip() for name in str(inputs.policy).split(",")]
     entry = {"breaker": 1, "request_id": request_id, "invoked_by": invoked_by, "alarm": alarm, "alarm_state": alarm_state, "mode": mode,
-             "acts_on": {"rule": inputs.rule, "policy": inputs.policy, "certificates": [arn for arn, _c in inputs.certificates],
+             "acts_on": {"rule": inputs.rule, "policy": named, "certificates": [arn for arn, _c in inputs.certificates],
                          "client_ids": list(inputs.clients)},
              "calls": journal, "record": record}
     return record, entry, failures

@@ -51,6 +51,50 @@ THE COMMANDS
                       again, recorded it as deleted. The certificate, which is read by an id only a reply gives
                       and so by no name before its create, is held to its listing instead: with a name there
                       that neither the baseline nor a state knows, nothing is created (listed-not-ours).
+  update-code function
+                      replace the breaker function's code in place with the zip at TWIN_BREAKER_ZIP, for a source change
+                      of breaker.py alone: printed, and run by its own approval, as `apply` prints and runs a render
+                      (--approve function-code:HASH). Its calls: `lambda update-function-code` with that zip, the CLI's
+                      wait until the update is complete, and the read-back. It refuses, each by its name and before any
+                      write: the function's step not recorded as made, or the function not found; a zip that is not the
+                      source's build (zip-not-the-source, as `apply function`); the zip the function was made from
+                      (nothing-to-update); any difference of the function from its render but its code (printed); a
+                      caller that is not the operator role. Read back with the new zip's CodeSha256, the state records
+                      that zip as the function's input, and function-status and the dry trip as needing to run again
+                      (`stale`, which `status` says); what stood on the code that was there is taken back with them, as
+                      when the function is made anew: the alarm tests and reattach-policy are `stale` too, and a step
+                      that needs one waits until it ran again (go-live among them); on a twin that is live the dry trip
+                      and each alarm test cut as a trip does when they run again, and `restore` gives the calls that
+                      make it live again. A call that fails or whose reply is lost leaves the function `updating` with
+                      the call on record, and nothing is retried: `status` and a new update-code read the function's
+                      code and settle the record to the zip it is, after its LastUpdateStatus (InProgress: refused,
+                      `update-in-progress`, the record stays `updating`; Failed: the zip it was made from, the previous
+                      code running; the three values and their meaning from the documentation as remembered, not read
+                      from a live account), or, when it is neither, `update-code` refuses (`update-unsettled`) and
+                      `status` says so.
+                      THE OPERATOR ROLE'S POLICY holds lambda:UpdateFunctionCode on the function while a code update is
+                      due (the function stands on another build than the source's) or on record, and only then, so that
+                      no other render moves; `plan` then covers the update's calls. Changing the role in the account is
+                      the owner's, by hand (IAM).
+  update-config function
+                      VIDEO 3'S FLEET (fleet P2): replace the function's time-out and environment in place with its
+                      render for the breaker's set, the sibling of update-code: printed, and run by its own approval
+                      (--approve function-config:HASH). Its calls: `lambda update-function-configuration` with the set's
+                      time-out and environment, the CLI's wait, the read-back. It refuses, each by its name and before
+                      any write: the function's step not recorded as made, or the function not found; a code update due
+                      (code-first); a car of the set whose attachments are not made and proven (step-needs); any
+                      difference of the function from its render but its time-out and environment (function-differs,
+                      printed); the two already the render's (nothing-to-update); a fleet certificate that reads ACTIVE
+                      (fleet-active-standing); a breaker role that, AS READ, does not allow every certificate, client
+                      and policy of the set (breaker-role-short); a caller that is not the operator role. The update is
+                      on record before it is sent (`updating`, update.kind "config") and never retried; the record holds
+                      the sha256 of the time-out and the variables as read and as rendered, never the values. Every
+                      settler (`status`, update-code, update-config) settles the function's record by its kind: a code
+                      record as above, a configuration record by the two fields as read against the RECORDED hashes
+                      (InProgress refused; `to`, updated, and function-status and the dry trip run again with what stood
+                      on the function; `from`, not updated; neither, update-unsettled; Failed adds a word and overrides
+                      nothing). The operator policy holds lambda:UpdateFunctionConfiguration while a fleet car's steps
+                      are in the table or such an update is on record.
   status              the proving reads of every step as states, never values; each alarm's state, whether its
                       actions are enabled and what they target; the function's reserved concurrency. Fails when
                       the function's certificates are not exactly the twin's, or when an ACTIVE certificate of the
@@ -68,7 +112,9 @@ THE COMMANDS
                       asks for no approval, because stopping is the safe direction and is reversible. ITS FIRST ACT
                       is the file of the manual stop's four calls by hand, <state>/trip-by-hand.txt, written before
                       anything of the trip can be refused: for this twin, as far as the names file and the state
-                      give them. A call whose every value is there is a line to run; a call that lacks one is a
+                      give them. With a fleet car's certificate on record (fleet P2), the file also holds three
+                      calls for each fleet car, after the four: its certificate INACTIVE, its connection deleted,
+                      its own policy detached. A call whose every value is there is a line to run; a call that lacks one is a
                       comment with its slot left in, and each open slot is said by the key its value comes from.
                       The certificate's id is taken from the state only when the state was made under the account,
                       region, prefix and thing the names file gives now; a state that records no names yet (one made
@@ -245,19 +291,49 @@ PHASE 6: THE IMAGE TRANSPORT (the image-transport contract)
   The operator role's policy gains Phase 6's grants only with their keys (D8: templates/operator-role-policy-ecr.json and
   -pull.json, merged into the one document the owner makes the role from); with TWIN_ECR=1 its Deny names ECR Public's writes in
   place of ecr-public:*, so that the exit can read that ECR Public holds nothing. The wildcard exceptions gain the twin's
-  repositories and the pull role's token on * (the spec's), and nothing else.
+  repositories and the pull role's token on *, and nothing else.
   `status` knows two certificate sets: the function's environment is held to the twin's data certificate alone, as before; an
   ACTIVE certificate outside the data set and the pull certificate fails; the pull certificate ACTIVE is said ("active: a board
   day") and is no failure. `exit-checks` adds, with TWIN_ECR=1, no repository policy on a sdv-twin/ repository, no registry
   policy, no replication or pull-through cache rule (the registry's scan type as a shape), nothing in ECR Public (read through
   us-east-1), and the repositories exactly the expected ones, IMMUTABLE, AES256; with TWIN_PULL_ROLE, the pull role, the alias
   and the pull policy as rendered and the pull certificate carrying the pull policy and no other.
-  Does not demonstrate: anything in the account (no step was applied: B1-B5 come after the merge, D10); that the credential
-  provider gives credentials to a certificate attached to no thing (wp0-facts C9); that ECR answers a listing of every
+  Does not demonstrate: the account configuration or a deployment; that the credential
+  provider gives credentials to a certificate attached to no thing; that ECR answers a listing of every
   repository to a principal allowed DescribeRepositories on * (a listing names no repository, so no repository's ARN can hold
   it); which service name CreateRoleAlias passes the pull role to (the statement names the one role and no service); that a
   push from Docker's containerd store keeps the manifest's bytes (the read-back settles it: D4); or that `aws ecr
   get-login-password` knows no skeleton (plan takes it so, from memory of the CLI's customizations).
+
+VIDEO 3'S FLEET (fleet P2): cars B (2) and C (3) beside the twin's own (car A)
+  NOTHING OF IT IS THERE UNTIL ITS KEY IS: with neither TWIN_FLEET_THING_2 nor TWIN_FLEET_THING_3 every render and output is the
+  twin's own, as before (the function's pins move with the breaker's source alone). A car's key adds its seven steps after every
+  step, Phase 6's included, car 2's before car 3's: fleet-thing-k, fleet-shadows-k (no create; approved with fleet-active-k, deleted
+  before the thing by `teardown fleet-shadows-k`), fleet-certificate-k (from TWIN_FLEET_CSR_k, INACTIVE, its PEM to
+  TWIN_FLEET_CERTIFICATE_OUT_k, held to the certificates' listing before its create, recoverable), fleet-policy-k (<prefix>-device-<k>,
+  the device policy with car k's thing, held to topics.py's topics for it), fleet-attachments-k (the policy to the certificate, the
+  certificate to the thing EXCLUSIVE_THING), and the actions fleet-active-k and fleet-inactive-k. A state that records a car's step
+  keeps the car in the table whatever the names file says. Each car's thing is bound once the first of its steps is recorded
+  (FLEET_BOUND, as LATE_BOUND's keys are); a fleet key's fault is refused by the key, never by the value; `trip` is held to none of them
+  (in a stop a fleet key's fault, a fault between them or another binding is said, and the stop goes on).
+  THE BREAKER'S SET is car A and every car whose fleet-attachments-k stands. It takes the function's environment (the certificates,
+  the client ids, and one policy per certificate in their order: breaker.py's pairs), its time-out (30 s for car A alone, 45 s for
+  two or three cars, design values), the breaker role's three resources, reattach-policy, restore's calls and the stop's file. A car
+  joining or leaving the set takes back every record that stood on it (the breaker role's `verified`, function-status, the dry trip,
+  the alarm tests, reattach-policy and every fleet-active-j). A set change is refused while a fleet certificate reads ACTIVE
+  (fleet-active-standing), while a code update is due (code-first; excepted the change back to the set the function names, a leave
+  after which the function names a part of the set, and a teardown on a twin read as cut), and while the function's update is
+  unsettled (still-updating). fleet-active-k's checks: every breaker alarm armed, the car attached, the function as read its render
+  for the set with the recorded code and no code update due, the breaker role as read its render, function-status's last run `done`,
+  and the dry trip's last record a cut of the whole set (its counts.policies among them). fleet-inactive-k needs the certificate alone
+  and is refused by none of those. `status` holds the function's three lists to the set's, paired by position, and its time-out to
+  the count of them; a set car's certificate ACTIVE is no failure only while that proof stands (the alarms armed among it), and in a
+  trip's own status it is the cut that did not reach it. The stop's file keeps each fleet car's three calls also where the state
+  cannot be compared with the names file, its certificate then a slot as the twin's is.
+  A fleet policy or certificate the function's environment names is not torn down (fleet-still-covered) unless the
+  twin is read as cut; `restore` and go-live's checks are refused while the environment names what is not found (fleet-named-gone).
+  `restore` never makes a fleet certificate ACTIVE. Does not demonstrate: anything in the account (IAM's reading of either role,
+  IoT's three exclusive attachments), what the service answers to the configuration update, any timing.
 
 A RECORD DOES NOT OUTLIVE WHAT IT STOOD ON
   An action's `done` (the dry trip, an alarm's test, the policy attached again) and an owner-made step's `verified`
@@ -390,15 +466,41 @@ BREAKER_SOURCE = HERE / "breaker" / "breaker.py"
 ZIP_ENTRY = HANDLER.split(".")[0] + ".py"       # the entry's name and the handler agree, or the function fails at its first invoke
 
 # PHASE 6 WP4: THE ACCOUNT SIDE OF THE IMAGE TRANSPORT (the image-transport contract). Every name a pulling host sees is a
-# constant of the spec, with no value of the names file in it: the repositories' namespace and the role alias.
+# fixed design value, with no value of the names file in it: the repositories' namespace and the role alias.
 ECR_NAMESPACE = "sdv-twin"
 ECR_APPS: Tuple[str, ...] = ("hard-brake-hazard",)  # one repository per app: sdv-twin/<the manifest's name>
 ROLE_ALIAS = "sdv-twin-ecr-pull"
-ROLE_ALIAS_SECONDS = 3600                       # the provider's default and the role's least maximum session (wp0-facts C5)
+ROLE_ALIAS_SECONDS = 3600                       # the provider's default and the role's least maximum session
 LIFECYCLE_KEEP = 10                             # a design value: v1-v3 of a few apps fit, and the rule expires the oldest beyond it
 ECR_STEPS = ("ecr-repository", "ecr-lifecycle")
 PULL_STEPS = ("pull-role", "role-alias", "pull-policy", "pull-certificate", "pull-thing", "pull-attachment", "pull-active", "pull-inactive")
 PULL_UNCONFIRMED = "pull_certificate_id_unconfirmed"
+# VIDEO 3'S FLEET (fleet P2): cars B and C beside the twin's own thing, certificate and policy (car A), numbered as fleet P1's
+# instances. Each car's seven steps, by its number; its policy is <prefix>-device-<k>, made as <prefix>-device is.
+FLEET_CARS: Tuple[int, ...] = (2, 3)
+FLEET_STEP_FORMS = ("fleet-thing-%d", "fleet-shadows-%d", "fleet-certificate-%d", "fleet-policy-%d", "fleet-attachments-%d",
+                    "fleet-active-%d", "fleet-inactive-%d")
+# THE BREAKER'S TIME (design values, breaker.py's THE TIME IT HAS): the one-car twin keeps its 30 s, a set of two or three cars has
+# breaker.py's FUNCTION_TIMEOUT_S; a call is counted at 2 s with one address per name, and 8 s are kept for the cold start and the
+# log record. tests/test_sdv_breaker.py holds the four equal to the function's own.
+ONE_CAR_TIMEOUT_S = 30
+FLEET_TIMEOUT_S = 45
+BREAKER_CALL_S = 2
+BREAKER_RESERVE_S = 8
+
+
+def fleet_steps(k: int) -> Tuple[str, ...]:
+    return tuple(form % k for form in FLEET_STEP_FORMS)
+
+
+def function_timeout(cars: int) -> int:
+    """The function's time-out for a set of `cars` cars, car A among them: the create call's and the read-back's."""
+    return ONE_CAR_TIMEOUT_S if cars <= 1 else FLEET_TIMEOUT_S
+
+
+def breaker_counted_s(certificates: int, client_ids: int, policies: int) -> int:
+    """breaker.py's count: 3C + K + P + 2 calls (with one policy 3C + K + 3), each 2 s, and the reserve."""
+    return (3 * certificates + client_ids + policies + 2) * BREAKER_CALL_S + BREAKER_RESERVE_S
 # ECR Public's actions of the access levels Write, Permissions management and Tagging, as the Service Authorization Reference's
 # page for ECR Public lists them (the AWS Service Authorization Reference): with TWIN_ECR=1 the operator role's Deny names these in
 # place of ecr-public:*, so that its one read (DescribeRepositories, in us-east-1) can say that nothing is there (D8).
@@ -453,8 +555,8 @@ SKELETON_UNSUPPORTED: Tuple[Tuple[str, str], ...] = (("lambda", "invoke"), ("iot
 # And for many calls the CLI builds a sample reply that fails its OWN validation (a size of 0 where the model wants 1
 # or more, a made-up id shorter than a real one) and exits 252 under the heading it would have for a bad value of ours.
 # For such a call ONLY THE OPTIONS' NAMES, THE REQUIRED OPTIONS AND EACH SCALAR'S FORM WERE READ: the service model's
-# validation of the call's own arguments never ran (wp8-item1's probe: with a --tags map whose value is no string and an
-# --environment with an unknown member, the CLI's words for `lambda create-function` were the same eight sample lines).
+# validation of the call's own arguments never ran: a sample reply's failure does not validate a --tags map's
+# values or the members of --environment.
 # plan names these calls by service and operation (no value). The two are told apart line by line (sample_only()): a
 # line is the call's own only when it names an option the call gave AND the value the call gave it, or says "in input",
 # or says that a member is missing from or unknown in a document the call gave (by file or as a structure: the path's
@@ -637,7 +739,8 @@ def now() -> str:
 # --------------------------------------------------------------------------------------------------- the names file
 
 PATH_KEYS = ("TWIN_THRESHOLDS", "TWIN_DERIVE", "TWIN_BREAKER_ZIP", "TWIN_CSR", "TWIN_CERTIFICATE_OUT", "TWIN_REHEARSAL_CSR",
-             "TWIN_REHEARSAL_CERTIFICATE_OUT", "TWIN_ORIN_CSR", "TWIN_ORIN_CERTIFICATE_OUT")
+             "TWIN_REHEARSAL_CERTIFICATE_OUT", "TWIN_ORIN_CSR", "TWIN_ORIN_CERTIFICATE_OUT") + tuple(
+    key % k for k in FLEET_CARS for key in ("TWIN_FLEET_CSR_%d", "TWIN_FLEET_CERTIFICATE_OUT_%d"))
 NAME_KEYS: Dict[str, Tuple[bool, str]] = {
     "TWIN_ACCOUNT": (True, r"[0-9]{12}"),
     "TWIN_REGION": (False, r"[a-z]{2}(?:-[a-z]+)+-[0-9]"),
@@ -656,13 +759,17 @@ NAME_KEYS: Dict[str, Tuple[bool, str]] = {
     "TWIN_RULE_COUNT_METRIC": (False, r"[A-Za-z0-9.]{1,128}"),
     "TWIN_RULE_COUNT_DIMENSIONS": (False, r"[A-Za-z0-9]{1,64}=[A-Za-z0-9_.:-]{1,128}(?:,[A-Za-z0-9]{1,64}=[A-Za-z0-9_.:-]{1,128})*"),
     "TWIN_RULE_COUNT_READING": (False, r"per_execution|per_5kb_unit"),
-    # Phase 6 (spec 2.7): 1 adds the ECR steps; the pull role, given, adds the pull steps; the pull thing only if B3 finds that a
-    # certificate with no thing gets no credentials (wp0-facts C9)
+    # Phase 6: 1 adds the ECR steps; the pull role, given, adds the pull steps; the pull thing only if B3 finds that a
+    # certificate with no thing gets no credentials
     "TWIN_ECR": (False, r"[01]"),
     "TWIN_PULL_ROLE": (False, r"[A-Za-z0-9_.-]{8,64}"),
     "TWIN_PULL_THING": (False, r"[A-Za-z0-9_-]{8,128}"),
 }
+# fleet P2: car k's thing and MQTT client id, in TWIN_THING's form; its signing request and its PEM are PATH_KEYS
+NAME_KEYS.update({"TWIN_FLEET_THING_%d" % k: (False, r"[A-Za-z0-9_-]{8,128}") for k in FLEET_CARS})
 NAME_KEYS.update({k: (False, r"[^\x00-\x1f]{1,1024}") for k in PATH_KEYS})
+# The six fleet keys. No call of a stop is made of any of them, and a stop is not refused by a fault in one (names_given(), stop; fable#4)
+FLEET_KEYS = tuple(key % k for k in FLEET_CARS for key in ("TWIN_FLEET_THING_%d", "TWIN_FLEET_CSR_%d", "TWIN_FLEET_CERTIFICATE_OUT_%d"))
 CONTROL_KEYS = ("TWIN_STATE", "TWIN_RENDER", "TWIN_AWS", "TWIN_NO_NAMES_FILE")
 ROW_19_KEYS = ("TWIN_RULE_COUNT_METRIC", "TWIN_RULE_COUNT_DIMENSIONS", "TWIN_RULE_COUNT_READING")
 NAMES_FILE = "names.env"
@@ -687,7 +794,7 @@ STOP_NAMES = ("TWIN_ACCOUNT", "TWIN_REGION", "TWIN_PREFIX", "TWIN_THING")
 # not take (a role renamed or deleted, and the line edited after it), does not cost the one-command stop: the lack is said
 # and the trip goes on (names_given(), stop). The profile is NOT such a key: every call is sent under it.
 STOP_NEEDS_NOT = ("TWIN_OPERATOR_ROLE",)
-# BOUND ONCE RECORDED (Phase 6, spec 2.7). Not among BOUND_NAMES, which every state binds with its first write: a state made
+# BOUND ONCE RECORDED (Phase 6). Not among BOUND_NAMES, which every state binds with its first write: a state made
 # before Phase 6 records no fingerprint of them, and would be refused (names-changed) for a key it never stood on. Each key with
 # the steps whose record binds it: a state records the key's fingerprint when one of its steps is recorded (Twin.bind_late()), and
 # while one of its steps is ON RECORD in any form but `absent` and `deleted` (an owner's `verified`, an action's `done`, a record
@@ -697,6 +804,11 @@ STOP_NEEDS_NOT = ("TWIN_OPERATOR_ROLE",)
 # thing by its own step (fable#3): pull-attachment's detach and the certificate's teardown read it by that name, and under another
 # one they would record "deleted" while the old thing kept the certificate. Nothing of a stop is made of either.
 LATE_BOUND: Dict[str, Tuple[str, ...]] = {"TWIN_PULL_ROLE": PULL_STEPS, "TWIN_PULL_THING": ("pull-thing",)}
+# fleet P2: car k's thing is bound once recorded as LATE_BOUND's keys are, by EVERY step of car k, from the first
+# one recorded (fleet-policy-k's render is made of the thing's name and may be applied before fleet-thing-k), and held while any of
+# them is on record. A table of its own beside Phase 6's, which a test holds as it is; ALL_LATE_BOUND is what the binding reads
+FLEET_BOUND: Dict[str, Tuple[str, ...]] = {"TWIN_FLEET_THING_%d" % k: fleet_steps(k) for k in FLEET_CARS}
+ALL_LATE_BOUND: Dict[str, Tuple[str, ...]] = dict(LATE_BOUND, **FLEET_BOUND)
 WINDOWS = sys.platform == "win32"
 
 
@@ -705,7 +817,8 @@ def names_given(state_dir: Path, lenient: bool = False, stop: bool = False) -> T
     taken, why, as a clause that goes after the key's name and holds no value). Not lenient, every fault is a refusal by
     its name and the second is empty: that is read_names(), the reading every command stands on. WITH `stop`, THE ONE-COMMAND
     STOP'S OWN READING, one fault is no refusal: a key of STOP_NEEDS_NOT that is not set, or has not its form, is left out
-    and named in the second, and every other fault is refused as for every command.
+    and named in the second, and so is a fleet key (FLEET_KEYS) whose value has not its form; every other fault is refused
+    as for every command.
 
     LENIENT IS THE STOP'S OWN READING, for the file of the four calls by hand (hand_text()), and nothing else reads so.
     Nothing is refused: a names file that cannot be read gives nothing, a line or a variable that is no KEY=VALUE of a
@@ -746,6 +859,9 @@ def names_given(state_dir: Path, lenient: bool = False, stop: bool = False) -> T
             if WINDOWS and key in PATH_KEYS and re.match(r"^/[A-Za-z]/", values[key]):
                 # Git Bash turns /e/... into E:/... on a command line and in the environment; nothing does in a file's text,
                 # and Windows Python then looks for \e\... on the current drive (the hard review's NIT 5: input-missing)
+                if stop and key in FLEET_KEYS:
+                    unfit[key] = "is given in Git Bash's form (/x/...), which Windows Python reads as no path"
+                    continue
                 bad("names-path-form", "line %d of the state directory's %s gives %s in Git Bash's form (/x/...): the file is read by "
                     "Windows Python, which gets no path conversion. Write it as X:/..." % (n, NAMES_FILE, key))
     for key, value in os.environ.items():
@@ -762,6 +878,10 @@ def names_given(state_dir: Path, lenient: bool = False, stop: bool = False) -> T
         if stop and key in STOP_NEEDS_NOT and (values.get(key, "") == "" or not re.fullmatch(pattern, values[key])):
             # the stop needs no value of this key: its fault is said by the key (Twin puts it into `lacks`), and not refused
             unfit[key] = "is not set" if values.get(key, "") == "" else "is not given in the form twinctl takes for it"
+            continue
+        if stop and key in FLEET_KEYS and values.get(key, "") != "" and not re.fullmatch(pattern, values[key]):
+            # fleet P2 (fable#4): nor a fleet key's value that has not its form, as a fault between the fleet keys does not (Names)
+            unfit[key] = "is not given in the form twinctl takes for it"
             continue
         if key not in values or values[key] == "":
             values.pop(key, None)
@@ -809,7 +929,7 @@ class Names:
     """Every name the twin's resources carry, derived from the names file. With `rehearsal`, A2's set: the same
     kinds under the prefix and two more letters, in a state of their own."""
 
-    def __init__(self, values: Dict[str, str], rehearsal: bool = False) -> None:
+    def __init__(self, values: Dict[str, str], rehearsal: bool = False, stop: bool = False) -> None:
         self.v = values
         self.rehearsal = rehearsal
         self.account = values["TWIN_ACCOUNT"]
@@ -841,7 +961,7 @@ class Names:
         self.iot_logging_role = p + "-iot-logging-role"
         self.breaker_role = p + "-breaker-role"
         self.alarm = {k: "%s-%s" % (p, k) for k in BREAKER_ALARMS + ("errors", "rule-count")}
-        # Phase 6: the image transport's names. The repositories and the role alias are constants of the spec; the pull policy is
+        # Phase 6: the image transport's names. The repositories and the role alias are fixed design values; the pull policy is
         # the prefix's like every IoT policy of the twin (the operator role's Policies statement); the pull role is the owner's. `ecr`
         # is the key's here; a Twin whose state records an ECR step as standing sets it whatever the key says (Twin.__init__)
         self.ecr = values.get("TWIN_ECR", "0") == "1"
@@ -850,6 +970,7 @@ class Names:
         if self.pull_thing and not self.pull_thing.startswith(self.prefix):
             refuse("names-invalid", "TWIN_PULL_THING does not begin with TWIN_PREFIX: the operator role's things are the prefix's")
         self.pull_policy = self.prefix + "-ecr-pull"
+        self.update_code = False                    # the code update's grant in the operator policy: Twin sets it (update_grant())
         self.repositories = ["%s/%s" % (ECR_NAMESPACE, app) for app in ECR_APPS]
         self.registry = "%s.dkr.ecr.%s.amazonaws.com" % (self.account, self.region)
         self._thresholds: Optional[Dict[str, int]] = None
@@ -858,6 +979,48 @@ class Names:
         except ValueError:
             refuse("names-invalid", "the thing's or the rule's name cannot go into a topic (sdv/connector/topics.py); the value is not "
                    "printed")
+        # VIDEO 3'S FLEET (fleet P2): car k's thing, by its key TWIN_FLEET_THING_k. A fault is refused by the key, never by
+        # the value; in a stop it is said (`fleet_unfit`) and the fleet's things are left out: the stop is held to the account only
+        self.update_config = False                  # the configuration update's grant in the operator policy: Twin sets it (config_grant())
+        self.fleet: Dict[int, str] = {k: values["TWIN_FLEET_THING_%d" % k] for k in FLEET_CARS if values.get("TWIN_FLEET_THING_%d" % k)}
+        self.fleet_unfit = self._fleet_fault()
+        if self.fleet_unfit:
+            if not stop:
+                refuse("names-invalid", self.fleet_unfit + " (the value is not printed)")
+            self.fleet = {}
+
+    def _fleet_fault(self) -> str:
+        """Why the fleet's things cannot be taken, as a sentence that names keys and no value, or ""."""
+        others = [("TWIN_THING", self.v["TWIN_THING"]), ("TWIN_PULL_THING", self.v.get("TWIN_PULL_THING", "")),
+                  ("the rehearsal's thing", stop_names(self.prefix, "", True)[2])]
+        for k in FLEET_CARS:
+            key = "TWIN_FLEET_THING_%d" % k
+            thing = self.fleet.get(k)
+            if thing is None:
+                continue
+            before = [j for j in FLEET_CARS if j < k and j not in self.fleet]
+            if before:
+                return "%s is given without TWIN_FLEET_THING_%d: the cars are numbered in order, car B (2) before car C (3)" % (key, before[0])
+            if not thing.startswith(self.prefix):
+                return "%s does not begin with TWIN_PREFIX: the operator role's things are the prefix's" % key
+            for what, other in others + [("TWIN_FLEET_THING_%d" % j, self.fleet[j]) for j in FLEET_CARS if j < k and j in self.fleet]:
+                if thing == other:
+                    return "%s is the same name as %s: each car has a thing of its own" % (key, what)
+            try:
+                TOPICS.Topics(thing, self.rule)
+            except ValueError:
+                return "%s cannot go into a topic (sdv/connector/topics.py)" % key
+        return ""
+
+    def fleet_policy(self, k: int) -> str:
+        return self.prefix + "-device-%d" % k
+
+    def fleet_thing(self, k: int) -> str:
+        """Car k's thing, or a refusal by its key when the names file does not give it (a car the state keeps in the table)."""
+        if k not in self.fleet:
+            refuse("names-missing", "TWIN_FLEET_THING_%d is not given in the form twinctl takes for it, and the state records a step of "
+                   "car %d: its renders wait for the key" % (k, k))
+        return self.fleet[k]
 
     def thresholds(self) -> Dict[str, int]:
         """The thresholds file's counts, read and checked once (load_thresholds)."""
@@ -1115,7 +1278,8 @@ class State:
             self.save()
 
 
-OURS = ("creating", "partial", "created", "unverified", "deleting")     # made here and not yet deleted: what "stands"
+# made here and not yet deleted: what "stands". `updating` is the function's alone, while its code update is not settled
+OURS = ("creating", "partial", "created", "unverified", "deleting", "updating")
 # What an action's `done` and an owner-made step's `verified` become once a step they stood on is deleted or made
 # anew (take_back()): the record is of something that is no longer there. Applied again, it is `done` or `verified`.
 STALE = "stale"
@@ -1202,6 +1366,14 @@ class Render:
                 self.provisional.add("pull-certificate")
                 cert = PROVISIONAL_CERT_ID
             return cert if name == "PULL_CERT_ID" else n.arn("iot", "cert/" + cert)
+        fleet = re.fullmatch(r"FLEET_CERT_(ID|ARN)_([0-9])", name)
+        if fleet and int(fleet.group(2)) in FLEET_CARS:             # fleet P2: car k's certificate, by the same rule
+            k = int(fleet.group(2))
+            cert = self.twin.state.fact("fleet_certificate_id_%d" % k)
+            if cert is None:
+                self.provisional.add("fleet-certificate-%d" % k)
+                cert = PROVISIONAL_CERT_ID
+            return cert if fleet.group(1) == "ID" else n.arn("iot", "cert/" + cert)
         if name.startswith("THRESHOLD_"):
             key = name[len("THRESHOLD_"):].lower().replace("_", "-")
             if n.rehearsal:
@@ -1374,7 +1546,7 @@ ALLOWS: Dict[str, Tuple[str, ...]] = {
     "function-policy": ("lambda:InvokeFunction",),
     "function-policy-rule-count": ("lambda:InvokeFunction",),
     # Phase 6: the pull role pulls and does nothing else (no BatchImportUpstreamImage, which AWS's pull-only managed policy holds
-    # for a pull-through cache: wp0-facts R3); the pull certificate's IoT policy takes the role alias's credentials and nothing else
+    # for a pull-through cache); the pull certificate's IoT policy takes the role alias's credentials and nothing else
     "pull-role-policy": ("ecr:GetAuthorizationToken", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"),
     "pull-policy": ("iot:AssumeRoleWithCertificate",),
 }
@@ -1395,6 +1567,10 @@ def expected_actions(doc_id: str, n: "Names") -> Tuple[Set[str], Set[str]]:
             denies = (denies - {"ecr-public:*"}) | set(ECR_PUBLIC_WRITES)
         if n.pull_role:
             allows |= set(OPERATOR_ALLOW_PULL)
+        if n.update_code:
+            allows.add(UPDATE_ACTION)
+        if n.update_config:
+            allows.add(CONFIG_ACTION)
     return allows, denies
 
 
@@ -1437,8 +1613,8 @@ def wildcard_exceptions(n: Names) -> Dict[Tuple[str, str], Tuple[str, ...]]:
         ("iot-logging-role-policy", "Logs"): (n.log_group_arn(n.iot_log_group) + ":log-stream:*",),
         ("breaker-role-policy", "Logs"): (n.log_group_arn(n.breaker_log_group) + ":log-stream:*",),
     }
-    # Phase 6 (spec 5 item 5), each only with its key: the twin's repositories, for the operator's ECR actions and the pull role's
-    # two, and nothing else; and the pull role's GetAuthorizationToken, an action with no resource type, on * as the spec gives it
+    # Phase 6, each only with its key: the twin's repositories, for the operator's ECR actions and the pull role's
+    # two, and nothing else; and the pull role's GetAuthorizationToken, an action with no resource type, on *
     repositories = n.arn("ecr", "repository/%s/*" % ECR_NAMESPACE)
     if n.ecr:
         out[(op, "EcrRepositories")] = (repositories,)
@@ -1664,9 +1840,10 @@ def _check_topic_policy(doc_id: str, obj: Any, n: Names) -> None:
         refuse("document-refused:" + doc_id, "it is not one statement: publish by the alarms' service, from this account")
 
 
-def _check_device_policy(doc_id: str, obj: Any, n: Names) -> None:
-    check_policy(doc_id, obj, n)
-    t = n.topics
+def _check_device_policy(doc_id: str, obj: Any, n: Names, topics: Any = None) -> None:
+    """The device policy held to topics.py's topics for the twin's thing, or (fleet P2) for car k's: `topics`."""
+    check_policy("device-policy", obj, n)
+    t = n.topics if topics is None else topics
     iot = "arn:aws:iot:%s:%s:" % (n.region, n.account)
     by_action = {str(st.get("Action")): sorted(_listed(st.get("Resource"))) for st in obj["Statement"]}
     want = {"iot:Connect": [iot + "client/" + t.client_id], "iot:Publish": sorted(iot + "topic/" + x for x in t.publish),
@@ -1735,7 +1912,7 @@ CHECKS.update({"bucket-lifecycle": _check_lifecycle, "stream-destination": _chec
                "function-environment": _check_environment})
 
 
-# --- Phase 6's documents (spec section 5, items 2 and 3): each held to the one design value it has
+# --- Phase 6's documents: each held to the one design value it has
 
 def _check_pull_trust(doc_id: str, obj: Any, n: Names) -> None:
     """The credential provider alone may assume the pull role, for this account and the twin's role alias only: the IoT
@@ -1773,6 +1950,20 @@ CHECKS.update({
 })
 
 
+def _check_fleet_device_policy(k: int) -> Callable[[str, Any, Names], None]:
+    """fleet P2: car k's device policy, held by _check_device_policy to topics.py's topics for car k's thing."""
+    def check(doc_id: str, obj: Any, n: Names) -> None:
+        try:
+            topics = TOPICS.Topics(n.fleet_thing(k), n.rule)
+        except ValueError:
+            refuse("names-invalid", "TWIN_FLEET_THING_%d cannot go into a topic (sdv/connector/topics.py)" % k)
+        _check_device_policy(doc_id, obj, n, topics)
+    return check
+
+
+CHECKS.update({"fleet-device-policy-%d" % k: _check_fleet_device_policy(k) for k in FLEET_CARS})
+
+
 def check_document(check: str, obj: Any, n: Names) -> None:
     """The check of the document's own kind; a document with none of its own only has to be JSON without a placeholder."""
     if check in CHECKS:
@@ -1793,6 +1984,7 @@ IAM_ACTION = {
     ("s3control", "get-public-access-block"): "s3:GetAccountPublicAccessBlock", ("lambda", "invoke"): "lambda:InvokeFunction",
     ("apigateway", "get-rest-apis"): "apigateway:GET", ("apigatewayv2", "get-apis"): "apigateway:GET",
     ("ecr", "get-login-password"): "ecr:GetAuthorizationToken",      # Phase 6's push: the CLI's customization over that operation
+    ("lambda", "wait"): "lambda:GetFunction",                       # the code update's wait (function-updated-v2) polls get-function
 }
 IAM_TAGS = {"firehose": "firehose:TagDeliveryStream"}           # a create with tags: every other service's is <service>:TagResource
 # The calls that hand a role to a service (iam:PassRole): the service, and the option that carries the role when the
@@ -1800,7 +1992,7 @@ IAM_TAGS = {"firehose": "firehose:TagDeliveryStream"}           # a create with 
 PASSES_ROLE: Dict[Tuple[str, str], Tuple[str, Optional[str]]] = {
     ("iot", "create-topic-rule"): ("iot.amazonaws.com", None), ("iot", "set-v2-logging-options"): ("iot.amazonaws.com", "--role-arn"),
     ("firehose", "create-delivery-stream"): ("firehose.amazonaws.com", None), ("lambda", "create-function"): ("lambda.amazonaws.com", "--role"),
-    # Phase 6: the role alias hands the pull role to the credential provider (wp0-facts C4: iam:PassRole on the role). Which
+    # Phase 6: the role alias hands the pull role to the credential provider (iam:PassRole on the role). Which
     # service name the call passes it to is not read anywhere: the statement that allows it names the one role and no service
     ("iot", "create-role-alias"): ("credentials.iot.amazonaws.com", "--role-arn")}
 
@@ -2060,7 +2252,7 @@ class Step:
                  kind: str = "resource", needs: Sequence[str] = (), rehearse: bool = False, listing: str = "",
                  ready: Optional[Callable[["Twin", Render], Optional[str]]] = None,
                  pre: Optional[Callable[["Twin", Render], Optional[str]]] = None,
-                 after: Optional[Callable[["Twin", int, Any], None]] = None) -> None:
+                 after: Optional[Callable[["Twin", int, Any], None]] = None, base: Optional[str] = None, changes_set: bool = False) -> None:
         self.id = id
         self.row = row
         self.title = title
@@ -2073,7 +2265,9 @@ class Step:
         self.listing = listing
         self.ready = ready              # teardown's precondition: a sentence that refuses, or None
         self.pre = pre                  # apply's precondition
-        self.after = after              # what a create call's reply teaches the state
+        self.after = after              # what a create call's reply teaches the state (an action's call's too)
+        self.base = base                # an `appears` step's teardown base: the step whose resource it is on (the twin's: "thing")
+        self.changes_set = changes_set  # fleet P2: its make and its teardown change the breaker's set (take_back_set())
 
 
 def _policy_of(reply: Any, *path: str) -> Any:
@@ -2092,7 +2286,7 @@ def _role_step(id: str, row: str, title: str, role: Callable[[Names], str], need
             refuse("names-missing", "%s is not given in the form twinctl takes for it: the role's step is not rendered" % key)
 
         def trust(obj: Any) -> Any:
-            if id == "operator-role" and not t.n.mfa:               # section 6, item 2: the owner's choice
+            if id == "operator-role" and not t.n.mfa:               # the owner's MFA choice
                 obj["Statement"][0].pop("Condition", None)
             return obj
 
@@ -2329,8 +2523,8 @@ def _j_thing(t: "Twin", r: Render, got: Dict[str, Any]) -> Tuple[bool, List[str]
     return True, ([] if not got["thing"].get("attributes") else ["it has attributes"])
 
 
-def _shadows_listed(t: "Twin") -> Optional[List[str]]:
-    got = t.aws.read(R("iot-data", "list-named-shadows-for-thing", "--thing-name", t.n.thing))
+def _shadows_listed(t: "Twin", thing: Optional[str] = None) -> Optional[List[str]]:
+    got = t.aws.read(R("iot-data", "list-named-shadows-for-thing", "--thing-name", t.n.thing if thing is None else thing))
     return None if got is None else sorted(str(x) for x in got.get("results", []) or [])
 
 
@@ -2607,6 +2801,7 @@ def check_breaker_source(source: bytes) -> None:
 
 NOT_THE_BUILD = ("the zip at TWIN_BREAKER_ZIP is NOT the build of the breaker's source as it stands (sdv/cloud/breaker/breaker.py was "
                  "changed since it was built, or the file is another zip)")
+CODE_DIFFERS = "its code is not the zip the state records (CodeSha256 differs)"    # the one difference `update-code` lets through
 
 
 def source_build() -> str:
@@ -2632,12 +2827,13 @@ def _b_function(t: "Twin", r: Render) -> Built:
         # (it says which it is); it is never applied, and `plan` refuses the step by the same name
         r.unfit = ("zip-not-the-source", NOT_THE_BUILD + ": the function would run code that is not the source's. `twinctl "
                    "build-breaker` builds it again; nothing was sent")
-    r.doc("function-environment")
+    cars = fleet_set(t)                                             # fleet P2: the breaker's set takes the environment and the time-out
+    r.doc("function-environment", edit=lambda obj: _environment_for(t, r, obj, cars))
     r.doc("function-tags")
     return Built(
         [W("lambda", "create-function", "--function-name", n.function, "--runtime", "python3.12", "--architectures", "arm64", "--handler",
            HANDLER, "--role", n.role_arn(n.breaker_role), "--zip-file", file_url(artefact, binary=True), "--memory-size", "128",
-           "--timeout", "30", "--environment", r.url("function-environment"), "--tags", r.url("function-tags"))],
+           "--timeout", str(function_timeout(1 + len(cars))), "--environment", r.url("function-environment"), "--tags", r.url("function-tags"))],
         [("function", R("lambda", "get-function", "--function-name", n.function)),
          ("urls", R("lambda", "list-function-url-configs", "--function-name", n.function))],
         [W("lambda", "delete-function", "--function-name", n.function)])
@@ -2649,8 +2845,8 @@ def _j_function(t: "Twin", r: Render, got: Dict[str, Any]) -> Tuple[bool, List[s
         return False, []
     n = t.n
     diffs = []
-    want = {"Runtime": "python3.12", "Handler": HANDLER, "Role": n.role_arn(n.breaker_role), "MemorySize": 128, "Timeout": 30,
-            "Architectures": ["arm64"]}
+    want = {"Runtime": "python3.12", "Handler": HANDLER, "Role": n.role_arn(n.breaker_role), "MemorySize": 128,
+            "Timeout": function_timeout(1 + len(fleet_set(t))), "Architectures": ["arm64"]}
     if not subset(want, c):
         diffs.append("its configuration is not the render (runtime, architecture, handler, role, memory, time-out)")
     # held to the hash the state RECORDED when the function was made, which is the one the approved render printed: never to
@@ -2659,7 +2855,7 @@ def _j_function(t: "Twin", r: Render, got: Dict[str, Any]) -> Tuple[bool, List[s
     if recorded is None:
         diffs.append("its code cannot be compared: the state records no hash of the zip it was made from")
     elif c.get("CodeSha256") != code_sha256(recorded):
-        diffs.append("its code is not the zip the state records (CodeSha256 differs)")
+        diffs.append(CODE_DIFFERS)
     if _policy_of(c, "Environment", "Variables") != r.obj("function-environment")["Variables"]:
         diffs.append("its environment is not the render")
     if c.get("Layers") or _policy_of(c, "VpcConfig", "SubnetIds"):
@@ -2704,7 +2900,7 @@ def source_note(t: "Twin") -> str:
     except TwinError:
         return " (the breaker's source cannot be built as it stands: whether it changed since the build this function was made from is not said)"
     return "" if now == recorded else (" (the breaker's source has changed since the build this function was made from: the account runs "
-                                       "the code that was approved; `build-breaker`, then the function's step made anew, put the new one there)")
+                                       "the code that was approved; `build-breaker`, then `twinctl update-code function`, put the new one there)")
 
 
 def zip_note(t: "Twin") -> str:
@@ -2719,6 +2915,83 @@ def zip_note(t: "Twin") -> str:
     except OSError:
         return " (the zip is no longer at its path; the function is held to the sha256 the state records)"
     return "" if same else " (the zip at its path is not the one it was made from; the function is held to the sha256 the state records)"
+
+
+# --- the function's code replaced in place (`update-code function`): its render, and the operator policy's grant for it
+
+UPDATE_ACTION = "lambda:UpdateFunctionCode"
+CONFIG_ACTION = "lambda:UpdateFunctionConfiguration"            # fleet P2: `update-config function`'s, beside the code's
+RUN_AGAIN = ("function-status", "dry-trip")     # what ran on the code that was there (README: after a rebuilt zip they run again)
+
+
+def update_grant(state: State) -> bool:
+    """WHETHER THE OPERATOR POLICY HOLDS THE CODE UPDATE'S ACTION: while an update is due, that is while the function stands on
+    another zip than the one `build-breaker` would write from the source as it stands, and for good once a code update is on
+    record (the role the owner changed keeps it). Not otherwise: every render is then the one the owner made the role from, as
+    Phase 6's grants are there only with their keys. A source that cannot be built makes no update due."""
+    entry = state.data["steps"].get("function", {})
+    if entry.get("code_updates"):
+        return True
+    return code_update_due(state)
+
+
+def config_grant(t: "Twin") -> bool:
+    """WHETHER THE OPERATOR POLICY HOLDS THE CONFIGURATION UPDATE'S ACTION (fleet P2): while a fleet car's steps are in the
+    table, or a configuration update is on record (settled, or `updating`), as update_grant() decides for the code's. Not
+    otherwise: with no fleet key every render is the one the owner made the role from."""
+    entry = t.state.data["steps"].get("function", {})
+    update = entry.get("update")
+    return bool(t.fleet_cars or entry.get("config_updates") or (isinstance(update, dict) and update.get("kind") == "config"))
+
+
+def _grant_update(obj: Any, action: str = UPDATE_ACTION) -> Any:
+    """The operator policy with an update's action in its statement Function (the twin's functions, by the prefix)."""
+    try:
+        function, = [s for s in obj["Statement"] if s["Sid"] == "Function"]
+        function["Action"] = list(function["Action"]) + [action]
+    except (KeyError, TypeError, ValueError):
+        refuse("template-invalid", "the operator policy's template has no one statement Function for the update's action")
+    return obj
+
+
+def _b_function_code(t: "Twin", r: Render) -> Built:
+    """`update-code function`: the code alone replaced by the zip at TWIN_BREAKER_ZIP (no name, role, configuration, concurrency,
+    policy or alarm is in the call), the CLI's wait until the update is complete (function-updated-v2, which polls get-function:
+    from memory of the CLI), and the read-back. The zip is held to the source as `apply function` holds it."""
+    n = t.n
+    artefact = r.input("TWIN_BREAKER_ZIP", "the breaker function's zip, which `twinctl build-breaker` makes; the code update is refused "
+                                           "until it exists")
+    if r.strict and source_build() != r.inputs["TWIN_BREAKER_ZIP"]:
+        r.unfit = ("zip-not-the-source", NOT_THE_BUILD + ": the function would run code that is not the source's. `twinctl "
+                   "build-breaker` builds it again; nothing was sent")
+    return Built([W("lambda", "update-function-code", "--function-name", n.function, "--zip-file", file_url(artefact, binary=True)),
+                  R("lambda", "wait", "function-updated-v2", "--function-name", n.function)],
+                 [("function", R("lambda", "get-function", "--function-name", n.function))])
+
+
+# Not a step of the table (no teardown, no status line, no listing): `update-code function` renders it, and `plan` walks it while
+# the operator policy holds its action (update_grant()). Its approval is `function-code:HASH`.
+FUNCTION_CODE = Step("function-code", "13", "the function's code replaced in place by the zip at TWIN_BREAKER_ZIP, then read back",
+                     _b_function_code, None, kind="update", needs=("function",))
+
+
+def _b_function_config(t: "Twin", r: Render) -> Built:
+    """`update-config function` (fleet P2): the function's time-out and environment replaced in place by the function's
+    render for the breaker's set (no code, name, role, memory, concurrency, policy or alarm is in the call), the CLI's wait until
+    the update is complete, and the read-back."""
+    n = t.n
+    cars = fleet_set(t)
+    r.doc("function-environment", edit=lambda obj: _environment_for(t, r, obj, cars))
+    return Built([W("lambda", "update-function-configuration", "--function-name", n.function, "--timeout", str(function_timeout(1 + len(cars))),
+                    "--environment", r.url("function-environment")),
+                  R("lambda", "wait", "function-updated-v2", "--function-name", n.function)],
+                 [("function", R("lambda", "get-function", "--function-name", n.function))])
+
+
+# A sibling of FUNCTION_CODE, outside the table as it is: `update-config function` renders it, and `plan` walks it while the operator
+# policy holds its action (config_grant()). Its approval is `function-config:HASH`.
+FUNCTION_CONFIG = Step("function-config", "13", "the function's time-out and environment replaced in place by the set's, then read back",
+                       _b_function_config, None, kind="update", needs=("function",))
 
 
 def _b_concurrency(t: "Twin", r: Render) -> Built:
@@ -2770,7 +3043,7 @@ def _b_topic(t: "Twin", r: Render) -> Built:
     reads = [("topic", R("sns", "get-topic-attributes", "--topic-arn", n.topic_arn))]
     if not n.rehearsal:
         if "TWIN_NOTICE_ADDRESS" not in n.v:
-            refuse("input-unset", "TWIN_NOTICE_ADDRESS is not set: the owner gives the notice's address at this step (section 6, item 6)")
+            refuse("input-unset", "TWIN_NOTICE_ADDRESS is not set: the owner gives the notice's address at this step")
         creates.append(W("sns", "subscribe", "--topic-arn", n.topic_arn, "--protocol", "email", "--notification-endpoint",
                          n.v["TWIN_NOTICE_ADDRESS"]))
         reads.append(("subscriptions", R("sns", "list-subscriptions-by-topic", "--topic-arn", n.topic_arn)))
@@ -2846,8 +3119,15 @@ def _pre_go_live(t: "Twin", r: Render) -> Optional[str]:
     if not policy or not thing or kind != "EXCLUSIVE_THING":
         tripped = any(t.state.status(step) in OURS for step in GO_LIVE)         # recorded as made live: the cut is then a trip's
         return ("the policy or the certificate is not attached as rendered (after an alarm's test the policy is attached again first)"
-                + (". " + AFTER_A_TRIP if tripped else ""))
+                + (". " + after_a_trip(t) if tripped else ""))
+    named_gone(t)                                                   # fleet P2: no twin goes live on a breaker that names what is gone
     return None
+
+
+def after_a_trip(t: "Twin") -> str:
+    """AFTER_A_TRIP, and (fleet P2) its second sentence when a fleet certificate is on record: restore attaches each set car's policy too."""
+    on_record = any(t.state.status("fleet-certificate-%d" % k) in OURS for k in FLEET_CARS)
+    return AFTER_A_TRIP + ("; and one call for each fleet car of the set" if on_record else "")
 
 
 def _b_live_rule(t: "Twin", r: Render) -> Built:
@@ -2882,18 +3162,27 @@ def _b_alarm_test(key: str) -> Callable[["Twin", Render], Built]:
 
 
 def _b_reattach(t: "Twin", r: Render) -> Built:
-    return Built([W("iot", "attach-policy", "--policy-name", t.n.policy, "--target", r.lookup("CERT_ARN", "reattach-policy"))])
+    """The twin's policy attached again after the alarm tests, then (fleet P2) each set car's own policy to its certificate."""
+    fleet = [W("iot", "attach-policy", "--policy-name", t.n.fleet_policy(k), "--target", str(r.lookup("FLEET_CERT_ARN_%d" % k, "reattach-policy")))
+             for k in fleet_set(t)]
+    return Built([W("iot", "attach-policy", "--policy-name", t.n.policy, "--target", r.lookup("CERT_ARN", "reattach-policy"))] + fleet)
 
 
-# --- Phase 6 WP4: the ECR repositories (row B2) and the Orin's pull identity (rows B1 and B3); spec section 5, items 2 to 5
+# --- Phase 6 WP4: the ECR repositories (row B2) and the Orin's pull identity (rows B1 and B3)
 
 def _operator_policy(t: "Twin", r: Render, obj: Any) -> Any:
     """THE OPERATOR ROLE'S POLICY WITH PHASE 6'S GRANTS (D8), each part only with its key: templates/operator-role-policy-ecr.json
     with TWIN_ECR=1 (the reads with no resource type added to NoResourceType, ECR Public's writes named in DenyPublicPaths in
     place of ecr-public:*, the statement on the twin's repositories), templates/operator-role-policy-pull.json with TWIN_PULL_ROLE
     (the alias's listing added to NoResourceType, the statements on the alias and on the pull role). The new statements stand
-    before the first Deny. With neither key the document is the template as it is, the one A1 row 3 made the role from."""
+    before the first Deny. With neither key the document is the template as it is, the one A1 row 3 made the role from.
+    THE CODE UPDATE'S ACTION, lambda:UpdateFunctionCode, stands in the statement Function only while update_grant() says so, and the
+    configuration update's, lambda:UpdateFunctionConfiguration, only while config_grant() does (fleet P2)."""
     n = t.n
+    if n.update_code:
+        obj = _grant_update(obj)
+    if n.update_config:
+        obj = _grant_update(obj, CONFIG_ACTION)
     parts = ([r.fragment("operator-role-policy-ecr")] if n.ecr else []) + ([r.fragment("operator-role-policy-pull")] if n.pull_role else [])
     if not parts:
         return obj
@@ -2935,7 +3224,7 @@ def c_credential_endpoint() -> Call:
 
 def _b_ecr_repository(t: "Twin", r: Render) -> Built:
     """One repository per app, IMMUTABLE, encryption AES256 given explicitly, the twin's tag; no scanning configuration (it is the
-    registry's: wp0-facts E1) and NO REPOSITORY POLICY, ever (R2: with none, only this account's principals reach it, through IAM)."""
+    registry's) and NO REPOSITORY POLICY, ever (R2: with none, only this account's principals reach it, through IAM)."""
     r.doc("repository-encryption")
     r.doc("repository-tags")
     creates, reads, deletes = [], [], []
@@ -3156,6 +3445,488 @@ def pull_certificates(t: "Twin") -> List[str]:
     return [cert] if cert and t.state.status("pull-certificate") in OURS else []
 
 
+# --- VIDEO 3'S FLEET (fleet P2): cars B and C, each made as the twin's own thing, certificate, policy and
+# attachments are, by its number k, and THE BREAKER'S SET: car A and every car whose attachments stand
+
+FLEET_UNCONFIRMED = "fleet_certificate_id_%d_unconfirmed"
+
+
+def fleet_set(t: "Twin") -> List[int]:
+    """THE BREAKER'S SET beyond car A: car k while fleet-attachments-k stands. A certificate carries traffic only when
+    ACTIVE with its policy attached, and the device policy is its only grant: so the attachment is the set's boundary, and a car
+    can leave the set before its certificate is deleted."""
+    return [k for k in FLEET_CARS if t.state.status("fleet-attachments-%d" % k) in OURS]
+
+
+def _fleet_cert(t: "Twin", k: int) -> Tuple[Optional[str], Optional[str]]:
+    cert = t.state.fact("fleet_certificate_id_%d" % k)
+    return cert, (t.n.arn("iot", "cert/" + cert) if cert else None)
+
+
+def _own_fleet_cert(t: "Twin", k: int) -> Tuple[Optional[str], Optional[str]]:
+    """The id car k's certificate's own step reads and deletes by, as _own_cert() is the twin's certificate's."""
+    cert = t.state.fact(FLEET_UNCONFIRMED % k) or t.state.fact("fleet_certificate_id_%d" % k)
+    return cert, (t.n.arn("iot", "cert/" + cert) if cert else None)
+
+
+def _environment_for(t: "Twin", r: Render, obj: Any, cars: Sequence[int]) -> Any:
+    """THE FUNCTION'S ENVIRONMENT FOR THE SET: car A's certificate, client id and policy, then each set car's, in car
+    order, one policy name per certificate (the breaker's pairs). With car A alone, the template's render as it is: one name."""
+    if not cars:
+        return obj
+    v = obj["Variables"]
+    certs = [v["TWIN_CERTIFICATE_ARNS"]] + [str(r.lookup("FLEET_CERT_ARN_%d" % k, "function-environment")) for k in cars]
+    clients = [v["TWIN_CLIENT_IDS"]] + [t.n.fleet_thing(k) for k in cars]
+    policies = [v["TWIN_POLICY"]] + [t.n.fleet_policy(k) for k in cars]
+    obj["Variables"] = dict(v, TWIN_CERTIFICATE_ARNS=",".join(certs), TWIN_CLIENT_IDS=",".join(clients), TWIN_POLICY=",".join(policies))
+    return obj
+
+
+def _breaker_role_policy(t: "Twin", r: Render, obj: Any) -> Any:
+    """THE BREAKER ROLE FOR THE SET: the statement Certificate names the set's certificates, Connection the set's
+    clients and PolicyTargets the set's policies; the actions are the template's. With car A alone, a string as today."""
+    cars = fleet_set(t)
+    if not cars:
+        return obj
+    try:
+        by = {s["Sid"]: s for s in obj["Statement"]}
+        by["Certificate"]["Resource"] = [by["Certificate"]["Resource"]] + [str(r.lookup("FLEET_CERT_ARN_%d" % k, "breaker-role")) for k in cars]
+        by["Connection"]["Resource"] = [by["Connection"]["Resource"]] + [t.n.arn("iot", "client/" + t.n.fleet_thing(k)) for k in cars]
+        by["PolicyTargets"]["Resource"] = [by["PolicyTargets"]["Resource"]] + [t.n.arn("iot", "policy/" + t.n.fleet_policy(k)) for k in cars]
+    except (KeyError, TypeError):
+        refuse("template-invalid", "the breaker role's template has not the statements Certificate, Connection and PolicyTargets")
+    return obj
+
+
+def _b_fleet_thing(k: int) -> Callable[["Twin", Render], Built]:
+    def build(t: "Twin", r: Render) -> Built:
+        thing = t.n.fleet_thing(k)
+        return Built([W("iot", "create-thing", "--thing-name", thing)], [("thing", R("iot", "describe-thing", "--thing-name", thing))],
+                     [W("iot", "delete-thing", "--thing-name", thing)])
+    return build
+
+
+def _after_fleet_thing(k: int) -> Callable[["Twin", int, Any], None]:
+    """What car k's thing's create records: a token of THIS making of the thing, which a run of fleet-active-k records beside its
+    own (exit-checks: a car's "at least one vss key" stands on a run since its thing was made)."""
+    def after(t: "Twin", index: int, reply: Any) -> None:
+        t.state.record("fleet-thing-%d" % k, made=os.urandom(8).hex())
+    return after
+
+
+def _ready_fleet_thing(k: int) -> Callable[["Twin", Render], Optional[str]]:
+    def ready(t: "Twin", r: Render) -> Optional[str]:
+        listed = _shadows_listed(t, t.n.fleet_thing(k))
+        if listed:
+            return ("%d named shadow(s) are listed for car %d's thing: they are deleted and listed empty first (the step fleet-shadows-%d); "
+                    "whether deleting the thing removes them is not known, and is not tried" % (len(listed), k, k))
+        return None
+    return ready
+
+
+def _b_fleet_shadows(k: int) -> Callable[["Twin", Render], Built]:
+    def build(t: "Twin", r: Render) -> Built:
+        thing = t.n.fleet_thing(k)
+        deletes = [W("iot-data", "delete-thing-shadow", "--thing-name", thing, "--shadow-name", s,
+                     (t.state_dir / "replies" / ("shadow-deleted-car%d-%s.json" % (k, s))).as_posix()) for s in SHADOWS]
+        return Built([], [("listed", R("iot-data", "list-named-shadows-for-thing", "--thing-name", thing))], deletes)
+    return build
+
+
+def _b_fleet_certificate(k: int) -> Callable[["Twin", Render], Built]:
+    """Car k's certificate, from its signing request (made in WSL, where its key is made), INACTIVE: as the twin's own."""
+    def build(t: "Twin", r: Render) -> Built:
+        n = t.n
+        csr = r.input("TWIN_FLEET_CSR_%d" % k, "car %d's signing request, made where its key is made" % k)
+        key = "TWIN_FLEET_CERTIFICATE_OUT_%d" % k
+        if r.strict and key not in n.v:
+            refuse("input-unset", "%s is not set: where car %d's certificate's PEM is written" % (key, k))
+        out = Path(os.path.expanduser(n.v.get(key, key.lower() + "-is-not-set")))
+        if r.strict and REDACT.in_a_work_tree(out):
+            refuse("inside-a-work-tree", "car %d's certificate's file would lie inside a work tree: it goes to its device directory" % k)
+        cert, _arn = _own_fleet_cert(t, k)
+        creates = [W("iot", "create-certificate-from-csr", "--certificate-signing-request", file_url(csr), "--no-set-as-active",
+                     "--certificate-pem-outfile", out.as_posix())]
+        if cert is None:
+            return Built(creates, [], [])
+        return Built(creates, [("certificate", R("iot", "describe-certificate", "--certificate-id", cert))],
+                     [W("iot", "delete-certificate", "--certificate-id", cert)])
+    return build
+
+
+def _ready_fleet_certificate(k: int) -> Callable[["Twin", Render], Optional[str]]:
+    def ready(t: "Twin", r: Render) -> Optional[str]:
+        cert, arn = _own_fleet_cert(t, k)
+        if cert is None or arn is None:
+            return None
+        d = _policy_of(t.aws.read(R("iot", "describe-certificate", "--certificate-id", cert)), "certificateDescription")
+        if d is None:
+            return None
+        if d.get("status") != "INACTIVE":
+            return "car %d's certificate is not INACTIVE: it is set INACTIVE first (apply fleet-inactive-%d, or a trip)" % (k, k)
+        if (t.aws.read(R("iot", "list-attached-policies", "--target", arn)) or {}).get("policies"):
+            return "a policy is still attached to car %d's certificate: it is detached first (teardown fleet-attachments-%d)" % (k, k)
+        principals = t.aws.read(R("iot", "list-thing-principals-v2", "--thing-name", t.n.fleet_thing(k))) or {}
+        if any(p.get("principal") == arn for p in principals.get("thingPrincipalObjects", []) or []):
+            return "car %d's certificate is still attached to its thing: it is detached first (teardown fleet-attachments-%d)" % (k, k)
+        still_covered(t, "certificate", cert, k)
+        return None
+    return ready
+
+
+def _b_fleet_policy(k: int) -> Callable[["Twin", Render], Built]:
+    """`<prefix>-device-<k>`: templates/device-policy.json with car k's thing, held to topics.py's topics for that thing."""
+    def build(t: "Twin", r: Render) -> Built:
+        n = t.n
+        thing, policy = n.fleet_thing(k), n.fleet_policy(k)
+        r.context.update(THING=thing, CLIENT_ARN=n.arn("iot", "client/" + thing), POLICY=policy, POLICY_ARN=n.arn("iot", "policy/" + policy))
+        r.put("device-policy", r.fragment("device-policy"), "fleet-device-policy-%d" % k)
+        r.doc("policy-tags")
+        return Built([W("iot", "create-policy", "--policy-name", policy, "--policy-document", r.url("device-policy"), "--tags",
+                        r.url("policy-tags"))],
+                     [("policy", R("iot", "get-policy", "--policy-name", policy))],
+                     [W("iot", "delete-policy", "--policy-name", policy)])
+    return build
+
+
+def _ready_fleet_policy(k: int) -> Callable[["Twin", Render], Optional[str]]:
+    def ready(t: "Twin", r: Render) -> Optional[str]:
+        got = t.aws.read(R("iot", "list-targets-for-policy", "--policy-name", t.n.fleet_policy(k)))
+        if got and got.get("targets"):
+            return ("car %d's policy is still attached to %d target(s): it is detached first (teardown fleet-attachments-%d)"
+                    % (k, len(got["targets"]), k))
+        still_covered(t, "policy", t.n.fleet_policy(k), k)
+        return None
+    return ready
+
+
+def _fleet_attached(t: "Twin", k: int) -> Tuple[bool, bool, str]:
+    """(car k's policy is attached to its certificate, the certificate to its thing, the attachment's type)."""
+    _cert_id, arn = _fleet_cert(t, k)
+    if arn is None:
+        return False, False, ""
+    policies = t.aws.read(R("iot", "list-attached-policies", "--target", arn)) or {}
+    principals = t.aws.read(R("iot", "list-thing-principals-v2", "--thing-name", t.n.fleet_thing(k))) or {}
+    mine = [p for p in principals.get("thingPrincipalObjects", []) or [] if p.get("principal") == arn]
+    return (any(p.get("policyName") == t.n.fleet_policy(k) for p in policies.get("policies", []) or []), bool(mine),
+            str(mine[0].get("thingPrincipalType")) if mine else "")
+
+
+def _b_fleet_attachments(k: int) -> Callable[["Twin", Render], Built]:
+    def build(t: "Twin", r: Render) -> Built:
+        n = t.n
+        arn = str(r.lookup("FLEET_CERT_ARN_%d" % k, "fleet-attachments-%d" % k))
+        thing, policy = n.fleet_thing(k), n.fleet_policy(k)
+        reads = [] if ("fleet-certificate-%d" % k) in r.provisional else [
+            ("policies", R("iot", "list-attached-policies", "--target", arn)),
+            ("principals", R("iot", "list-thing-principals-v2", "--thing-name", thing))]
+        return Built([W("iot", "attach-policy", "--policy-name", policy, "--target", arn),
+                      W("iot", "attach-thing-principal", "--thing-name", thing, "--principal", arn, "--thing-principal-type", "EXCLUSIVE_THING")],
+                     reads,
+                     [W("iot", "detach-thing-principal", "--thing-name", thing, "--principal", arn),
+                      W("iot", "detach-policy", "--policy-name", policy, "--target", arn)])
+    return build
+
+
+def _j_fleet_attachments(k: int) -> Judge:
+    def judge(t: "Twin", r: Render, got: Dict[str, Any]) -> Tuple[bool, List[str]]:
+        _cert_id, arn = _fleet_cert(t, k)
+        policy = any(p.get("policyName") == t.n.fleet_policy(k) for p in (got.get("policies") or {}).get("policies", []) or [])
+        mine = [p for p in (got.get("principals") or {}).get("thingPrincipalObjects", []) or [] if p.get("principal") == arn]
+        if not policy and not mine:
+            return False, []
+        diffs = [] if policy else ["the policy is not attached to the certificate (tripped, or half made)"]
+        if not mine:
+            diffs.append("the certificate is not attached to the thing")
+        elif mine[0].get("thingPrincipalType") != "EXCLUSIVE_THING":
+            diffs.append("the certificate's attachment to the thing is not exclusive")
+        return True, diffs
+    return judge
+
+
+def _pre_fleet_attachments(k: int) -> Callable[["Twin", Render], Optional[str]]:
+    def pre(t: "Twin", r: Render) -> Optional[str]:
+        if t.state.status("fleet-attachments-%d" % k) not in OURS:   # a step that stands, read again, changes no set
+            set_change(t, k, join=True)
+        return None
+    return pre
+
+
+def _ready_fleet_attachments(k: int) -> Callable[["Twin", Render], Optional[str]]:
+    def ready(t: "Twin", r: Render) -> Optional[str]:
+        cert, _arn = _fleet_cert(t, k)
+        d = _policy_of(t.aws.read(R("iot", "describe-certificate", "--certificate-id", cert)), "certificateDescription") if cert else None
+        if d is not None and d.get("status") != "INACTIVE":
+            return "car %d's certificate is not INACTIVE: it is set INACTIVE first (apply fleet-inactive-%d, or a trip)" % (k, k)
+        set_change(t, k, join=False)
+        return None
+    return ready
+
+
+def _b_fleet_status(k: int, status: str) -> Callable[["Twin", Render], Built]:
+    def build(t: "Twin", r: Render) -> Built:
+        return Built([W("iot", "update-certificate", "--certificate-id", str(r.lookup("FLEET_CERT_ID_%d" % k, "fleet-certificate-%d" % k)),
+                        "--new-status", status)])
+    return build
+
+
+def _after_fleet_active(k: int) -> Callable[["Twin", int, Any], None]:
+    """A run of fleet-active-k records which making of car k's thing it ran on (_after_fleet_thing())."""
+    def after(t: "Twin", index: int, reply: Any) -> None:
+        made = t.state.data["steps"].get("fleet-thing-%d" % k, {}).get("made")
+        t.state.record("fleet-active-%d" % k, ran_on=made if isinstance(made, str) else "")
+    return after
+
+
+def code_update_due(state: State) -> bool:
+    """update_grant()'s "due": the function stands on another zip than the one `build-breaker` would write from the source as it
+    stands. A source that cannot be built makes none due."""
+    entry = state.data["steps"].get("function", {})
+    inputs = entry.get("inputs")
+    recorded = inputs.get("TWIN_BREAKER_ZIP") if isinstance(inputs, dict) else None
+    if entry.get("status") not in OURS or not isinstance(recorded, str):
+        return False
+    try:
+        return source_build() != recorded
+    except TwinError:
+        return False
+
+
+def _function_read(t: "Twin") -> Optional[Dict[str, Any]]:
+    """The function's configuration as read, or None when it is not found."""
+    got = _policy_of(t.aws.read(R("lambda", "get-function", "--function-name", t.n.function)), "Configuration")
+    return got if isinstance(got, dict) else None
+
+
+def _listed_names(value: Any) -> List[str]:
+    return [x.strip() for x in str(value or "").split(",") if x.strip()]
+
+
+def _pairs(variables: Any) -> Any:
+    """TWIN_POLICY in its form, beside TWIN_CERTIFICATE_ARNS (breaker.py's pairs): one name; or one per certificate, as the set of
+    (certificate, its policy) pairs, so that a pair crossed differs although the two lists hold the same names; or neither."""
+    v = variables if isinstance(variables, dict) else {}
+    certs = _listed_names(v.get("TWIN_CERTIFICATE_ARNS"))
+    policies = [x.strip() for x in str(v.get("TWIN_POLICY") or "").split(",")]
+    if len(policies) == 1:
+        return ("one", policies[0])
+    if len(policies) != len(certs):
+        return ("count", len(policies), len(certs))
+    return ("pairs", sorted(zip(certs, policies)))
+
+
+def set_environment(t: "Twin", cars: Sequence[int]) -> Dict[str, Any]:
+    """The function's environment as rendered for car A and `cars`."""
+    r = Render(t, "function", strict=False)
+    return dict(r.doc("function-environment", edit=lambda obj: _environment_for(t, r, obj, list(cars)))["Variables"])
+
+
+def active_fleet_certificates(t: "Twin") -> List[int]:
+    """The cars whose certificate the state records as made and reads ACTIVE, each read first (`describe-certificate` by its id)."""
+    out = []
+    for k in FLEET_CARS:
+        cert, _arn = _own_fleet_cert(t, k)
+        if cert is None or t.state.status("fleet-certificate-%d" % k) not in OURS:
+            continue
+        d = _policy_of(t.aws.read(R("iot", "describe-certificate", "--certificate-id", cert)), "certificateDescription")
+        if d is not None and d.get("status") == "ACTIVE":
+            out.append(k)
+    return out
+
+
+def twin_read_cut(t: "Twin") -> bool:
+    """THE TWIN READ AS CUT: the rule disabled and every certificate the function's environment names
+    INACTIVE, each READ, never taken from the state. A certificate that is not found carries no traffic, and counts as cut."""
+    rule = _policy_of(t.aws.read(R("iot", "get-topic-rule", "--rule-name", t.n.rule)), "rule")
+    if not isinstance(rule, dict) or rule.get("ruleDisabled") is not True:
+        return False
+    fn = _function_read(t)
+    for entry in _listed_names(_policy_of(fn, "Environment", "Variables", "TWIN_CERTIFICATE_ARNS")):
+        cert = re.fullmatch(r"arn:aws:iot:[a-z0-9-]+:[0-9]+:cert/([0-9a-f]{64})", entry)
+        if cert is None:
+            return False
+        d = _policy_of(t.aws.read(R("iot", "describe-certificate", "--certificate-id", cert.group(1))), "certificateDescription")
+        if d is not None and d.get("status") != "INACTIVE":
+            return False
+    return True
+
+
+STILL_UPDATING = ("the function's update is on record and not settled: `twinctl status`, `twinctl update-code function` or `twinctl update-config "
+                  "function` reads the function and settles the record first; nothing was sent")
+CODE_FIRST = ("a code update is due (the function stands on another zip than the source's build): `twinctl update-code function` carries "
+              "the new code first, on the function as it stands; nothing was sent")
+
+
+def set_change(t: "Twin", k: int, join: bool) -> None:
+    """A SET CHANGE, car k's attachments made (`join`) or torn down, refused before any write, each by its name:
+    while a fleet certificate the state records as made reads ACTIVE (fleet-active-standing: the certificate would stay ACTIVE on a
+    breaker configuration no dry trip cut; `fleet-inactive-j` is the way out); while a code update is due (code-first), except THE
+    CHANGE BACK, after which the set's environment render is the function's environment as read, except A LEAVE TOWARD IT, after
+    which the function's environment as read is the render for a part of the set (fable#2), and except a teardown on a twin read as
+    cut; while the function's update is unsettled (still-updating)."""
+    active = active_fleet_certificates(t)
+    if active:
+        refuse("fleet-active-standing", "%d fleet certificate(s) read ACTIVE (car %s): the breaker's set does not change while one is, since "
+               "it would stay ACTIVE on a configuration no dry trip cut. `twinctl apply fleet-inactive-%d` first; nothing was sent"
+               % (len(active), ", ".join(str(j) for j in active), active[0]))
+    if code_update_due(t.state):
+        after = sorted(set(fleet_set(t)) | {k}) if join else [j for j in fleet_set(t) if j != k]
+        read = _policy_of(_function_read(t), "Environment", "Variables")
+        # A LEAVE goes also when the function names a part of the set after it: it moves the set toward what the function names, and
+        # changes nothing the breaker acts on (with both cars joined before update-config, car C's leaving; car B's is then the change
+        # back, and update-code has its way). A join goes only as the change back itself
+        toward = [after] if join else [[j for i, j in enumerate(after) if part >> i & 1] for part in range(1 << len(after))]
+        back = any(read == set_environment(t, cars) for cars in toward)
+        if not back and not (not join and twin_read_cut(t)):
+            refuse("code-first", CODE_FIRST + ". The breaker's set changes after it (only a change back to the set the function names, "
+                   "or a leave toward it, goes before it)")
+    if t.state.status("function") == "updating":
+        refuse("still-updating", STILL_UPDATING)
+
+
+def take_back_set(t: "Twin", step_id: str, why: str) -> None:
+    """A CAR JOINS OR LEAVES THE SET: every record that stood on the set is taken back, as take_back() does for a step
+    made anew: the breaker role's `verified`, and through it function-status, the dry trip, every alarm test, reattach-policy and
+    every fleet-active-j's `done`."""
+    taken = ["breaker-role"] if t.state.status("breaker-role") == "verified" else []
+    taken += [s.id for s in dependents(t, "breaker-role") if t.state.status(s.id) in ("done", "verified")]
+    for sid in taken:
+        t.state.record(sid, status=STALE, stale_for=step_id)
+    say("%s %s: the breaker's set changed, and %d record(s) stood on it and are taken back (%s): each is applied again before a step "
+        "that needs it, the breaker role read again once the owner made it from its render, and `twinctl update-config function` "
+        "gives the function the set's time-out and environment." % (why, step_id, len(taken), ", ".join(taken) or "none"))
+
+
+def still_covered(t: "Twin", what: str, value: str, k: int) -> None:
+    """fleet-still-covered: car k's policy or certificate is not torn down while the function's environment,
+    as read, names it (TWIN_POLICY the policy, TWIN_CERTIFICATE_ARNS the certificate), unless the twin is read as cut."""
+    variables = _policy_of(_function_read(t), "Environment", "Variables") or {}
+    if what == "policy":
+        named = value in _listed_names(variables.get("TWIN_POLICY"))
+    else:
+        named = any(value in entry for entry in _listed_names(variables.get("TWIN_CERTIFICATE_ARNS")))
+    if named and not twin_read_cut(t):
+        refuse("fleet-still-covered", "the function's environment, as read, names car %d's %s: a breaker whose environment names what is gone "
+               "fails its read-backs. A car's leaving runs `twinctl update-config function` first; on a twin read as cut (a trip) it "
+               "goes without; nothing was sent" % (k, what))
+
+
+def named_gone(t: "Twin") -> None:
+    """fleet-named-gone: the function's environment, as read, names a certificate or a policy beyond car A's that is not
+    found. On a twin read as cut a fleet certificate and policy can be torn down while the environment names them; this keeps that
+    twin from going live on a breaker that would fail every read-back. With the one-car environment it never fires."""
+    variables = _policy_of(_function_read(t), "Environment", "Variables") or {}
+    own = t.state.fact("certificate_id")
+    for entry in _listed_names(variables.get("TWIN_CERTIFICATE_ARNS")):
+        cert = re.fullmatch(r"arn:aws:iot:[a-z0-9-]+:[0-9]+:cert/([0-9a-f]{64})", entry)
+        if (own and own in entry) or cert is None:
+            continue
+        if t.aws.read(R("iot", "describe-certificate", "--certificate-id", cert.group(1))) is None:
+            refuse("fleet-named-gone", "the function's environment names a certificate that is not found: the breaker would fail every "
+                   "read-back. `twinctl update-config function` on the set as it stands, or the whole teardown, first")
+    for policy in _listed_names(variables.get("TWIN_POLICY")):
+        if policy != t.n.policy and t.aws.read(R("iot", "get-policy", "--policy-name", policy)) is None:
+            refuse("fleet-named-gone", "the function's environment names a policy that is not found: the breaker would fail its listing of "
+                   "that policy's targets. `twinctl update-config function` on the set as it stands, or the whole teardown, first")
+
+
+def role_allows_set(t: "Twin", cars: Sequence[int]) -> bool:
+    """Whether the breaker role, AS READ (its inline policy, never its record), allows every certificate, client and policy ARN of
+    the set as rendered, each in an Allow statement that holds the actions the role's render gives that resource."""
+    name = t.n.breaker_role
+    got = _policy_of(t.aws.read(R("iam", "get-role-policy", "--role-name", name, "--policy-name", t.n.role_policy_name(name))), "PolicyDocument")
+    try:
+        doc = json.loads(got) if isinstance(got, str) else got
+        statements = [s for s in _listed(doc["Statement"]) if isinstance(s, dict) and s.get("Effect") == "Allow"]
+    except (ValueError, KeyError, TypeError):
+        return False
+    n = t.n
+    certs = [str(Render(t, "breaker-role", strict=False).lookup("CERT_ARN", "breaker-role"))]
+    certs += [n.arn("iot", "cert/" + str(_fleet_cert(t, k)[0])) for k in cars]
+    need = [(a, c) for c in certs for a in ("iot:UpdateCertificate", "iot:DetachPolicy", "iot:DescribeCertificate")]
+    need += [("iot:DeleteConnection", n.arn("iot", "client/" + thing)) for thing in [n.thing] + [n.fleet_thing(k) for k in cars]]
+    need += [("iot:ListTargetsForPolicy", n.arn("iot", "policy/" + policy)) for policy in [n.policy] + [n.fleet_policy(k) for k in cars]]
+    return all(any(action in [str(x) for x in _listed(s.get("Action"))] and resource in [str(x) for x in _listed(s.get("Resource"))]
+                   for s in statements) for action, resource in need)
+
+
+DRY_TRIP_PAYLOAD = "payload-dry-trip.json"
+
+
+def _pre_fleet_active(k: int) -> Callable[["Twin", Render], Optional[str]]:
+    """FLEET-ACTIVE-K'S PRE (S10's rule held in code): no fleet certificate is ACTIVE unless the function's environment, its
+    role and a dry trip cover it. Each check read before the call, each refused by its own name, nothing sent. `status`'s proof for a
+    set car's ACTIVE certificate holds the same records again (the alarms, the function, function-status, the role, the dry trip)."""
+    def pre(t: "Twin", r: Render) -> Optional[str]:
+        block = alarms_block(t)
+        if block:
+            refuse("breaker-not-armed", block + ": car %d's certificate is not made ACTIVE" % k)
+        policy, thing, kind = _fleet_attached(t, k)
+        if not policy or not thing or kind != "EXCLUSIVE_THING":
+            refuse("fleet-not-attached", "car %d's policy is not attached to its certificate, or the certificate not to its thing exclusively "
+                   "(after an alarm's test the policies are attached again first: reattach-policy)" % k)
+        if t.state.status("function") == "updating":
+            refuse("still-updating", STILL_UPDATING)
+        if code_update_due(t.state):
+            refuse("code-first", CODE_FIRST + ": a rebuilt zip is not passed over")
+        present, diffs = observe(t, t.render(t.step("function"), strict=False))
+        if not present or diffs:
+            refuse("function-not-the-sets", "the function as read is not its render for the set (%s): its environment and time-out are the "
+                   "set's after `twinctl update-config function`, its code the recorded zip" % ("; ".join(diffs) or "not found"))
+        present, diffs = observe(t, t.render(t.step("breaker-role"), strict=False))
+        if not present or diffs:
+            refuse("breaker-role-not-rendered", "the breaker role as read is not its render for the set: the owner makes it from its render, "
+                   "then `twinctl apply breaker-role`")
+        if t.state.status("function-status") != "done":
+            # verify#14: `status`'s proof holds it, and a set change or an update takes it back with the dry trip
+            refuse("function-status-not-done", "function-status's last run is not `done` (a set change or an update of the function took it "
+                   "back): `twinctl apply function-status` reads the function again first")
+        size = 1 + len(fleet_set(t))
+        if t.state.status("dry-trip") != "done" or not dry_trip_covers(t.state_dir / "replies" / DRY_TRIP_PAYLOAD, size):
+            refuse("dry-trip-not-covering", "the dry trip's last run is not `done`, or its record does not show the cut of the whole set (cut, "
+                   "and its certificates, client ids and policies each as many as the set's cars): `twinctl apply dry-trip` on the set first")
+        return None
+    return pre
+
+
+def dry_trip_covers(payload: Path, size: int) -> bool:
+    """Whether the dry trip's record, read in its form only (as trip_facts() reads it), shows the cut of a set of `size` cars:
+    `cut` true and counts.certificates, counts.client_ids and counts.policies each `size` (review S9: the one-name form reads a
+    fleet as cut while each car's own policy stays attached, and its record has no counts.policies)."""
+    try:
+        record = json.loads(payload.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    counts = record.get("counts") if isinstance(record, dict) else None
+    if not isinstance(counts, dict) or record.get("mode") != "trip" or record.get("cut") is not True:
+        return False
+    return all(counts.get(key) == size and not isinstance(counts.get(key), bool) for key in ("certificates", "client_ids", "policies"))
+
+
+def fleet_table(t: "Twin", k: int) -> List[Step]:
+    """Car k's seven steps."""
+    car = "car %s (%d)" % ("BC"[k - 2], k)
+    return [
+        Step("fleet-thing-%d" % k, "F%d" % k, "%s: its thing (TWIN_FLEET_THING_%d)" % (car, k), _b_fleet_thing(k), _j_thing, listing="things",
+             ready=_ready_fleet_thing(k), after=_after_fleet_thing(k)),
+        Step("fleet-shadows-%d" % k, "F%d" % k, "%s: its two named shadows (no create call; approved with fleet-active-%d)" % (car, k),
+             _b_fleet_shadows(k), _j_shadows, kind="appears", needs=("fleet-thing-%d" % k,), base="fleet-thing-%d" % k),
+        Step("fleet-certificate-%d" % k, "F%d" % k, "%s: its certificate, from its signing request, INACTIVE" % car, _b_fleet_certificate(k),
+             _j_pull_certificate, listing="certificates", ready=_ready_fleet_certificate(k),
+             after=_after_cert("fleet_certificate_id_%d" % k, FLEET_UNCONFIRMED % k, "fleet-certificate-%d" % k)),
+        Step("fleet-policy-%d" % k, "F%d" % k, "%s: its device policy" % car, _b_fleet_policy(k), _j_policy, listing="policies",
+             ready=_ready_fleet_policy(k)),
+        Step("fleet-attachments-%d" % k, "F%d" % k, "%s: its two attachments; the car joins the breaker's set" % car, _b_fleet_attachments(k),
+             _j_fleet_attachments(k), needs=("fleet-thing-%d" % k, "fleet-certificate-%d" % k, "fleet-policy-%d" % k),
+             pre=_pre_fleet_attachments(k), ready=_ready_fleet_attachments(k), changes_set=True),
+        Step("fleet-active-%d" % k, "F%d" % k, "%s: its certificate ACTIVE, for a fleet session (by its own printed hash each time)" % car,
+             _b_fleet_status(k, "ACTIVE"), None, kind="action", needs=("fleet-attachments-%d" % k, "reattach-policy"), pre=_pre_fleet_active(k),
+             after=_after_fleet_active(k)),
+        Step("fleet-inactive-%d" % k, "F%d" % k, "%s: its certificate INACTIVE, after the session" % car, _b_fleet_status(k, "INACTIVE"), None,
+             kind="action", needs=("fleet-certificate-%d" % k,)),
+    ]
+
+
 LISTINGS: Dict[str, Tuple[Call, Callable[[Any], List[str]]]] = {
     "buckets": (R("s3api", "list-buckets"), lambda o: [str(b.get("Name")) for b in o.get("Buckets", []) or []]),
     "log-groups": (R("logs", "describe-log-groups"), lambda o: [str(g.get("logGroupName")) for g in o.get("logGroups", []) or []]),
@@ -3222,9 +3993,11 @@ def c_account_block(t: "Twin", region: Optional[str] = None) -> Call:
     return R("s3control", "get-public-access-block", "--account-id", t.n.account, *(("--region", region) if region else ()))
 
 
-def c_shadow_read(t: "Twin", shadow: str) -> Call:
-    return R("iot-data", "get-thing-shadow", "--thing-name", t.n.thing, "--shadow-name", shadow,
-             (t.state_dir / "replies" / ("shadow-read-%s.json" % shadow)).as_posix())
+def c_shadow_read(t: "Twin", shadow: str, car: int = 0) -> Call:
+    """A named shadow's read: the twin's thing's, or (fleet P2) car `car`'s, each into a reply file of its own."""
+    thing, label = (t.n.thing, "") if not car else (t.n.fleet_thing(car), "car%d-" % car)
+    return R("iot-data", "get-thing-shadow", "--thing-name", thing, "--shadow-name", shadow,
+             (t.state_dir / "replies" / ("shadow-read-%s%s.json" % (label, shadow))).as_posix())
 
 
 C_SECURITY_GROUPS = R("ec2", "describe-security-groups")
@@ -3240,6 +4013,14 @@ def stop_calls(rule: str, thing: str, policy: str, cert: str, arn: str) -> List[
     a Names: the file a stop writes first is made of whatever the names file and the state give (hand_text())."""
     return [W("iot", "disable-topic-rule", "--rule-name", rule),
             W("iot", "update-certificate", "--certificate-id", cert, "--new-status", "INACTIVE"),
+            W("iot-data", "delete-connection", "--client-id", thing),
+            W("iot", "detach-policy", "--policy-name", policy, "--target", arn)]
+
+
+def fleet_stop_calls(thing: str, policy: str, cert: str, arn: str) -> List[Call]:
+    """fleet P2: the manual stop's three calls for a fleet car, after the twin's four: its certificate INACTIVE, its
+    connection deleted, its own policy detached. The rule is the twin's, disabled by the first of the four."""
+    return [W("iot", "update-certificate", "--certificate-id", cert, "--new-status", "INACTIVE"),
             W("iot-data", "delete-connection", "--client-id", thing),
             W("iot", "detach-policy", "--policy-name", policy, "--target", arn)]
 
@@ -3281,6 +4062,12 @@ def _b_other(t: "Twin", r: Render) -> Built:
                   R("ecr", "get-registry-scanning-configuration"), R("ecr-public", "describe-repositories", "--region", GLOBAL_REGION)]
     if n.pull_role:
         reads += [c_credential_endpoint()]                         # `ecr-config`'s one read
+    for k in [j for j in t.fleet_cars if j in n.fleet]:
+        # fleet P2: the stop's three calls of each car, restore's attach and its proof, and the car's shadow reads (exit-checks)
+        car_cert, car_arn = str(r.lookup("FLEET_CERT_ID_%d" % k, "other")), str(r.lookup("FLEET_CERT_ARN_%d" % k, "other"))
+        writes += fleet_stop_calls(n.fleet_thing(k), n.fleet_policy(k), car_cert, car_arn)
+        writes += [W("iot", "attach-policy", "--policy-name", n.fleet_policy(k), "--target", car_arn)]
+        reads += [R("iot", "list-attached-policies", "--target", car_arn)] + [c_shadow_read(t, s, k) for s in SHADOWS]
     reads += proofs + [call for _key, (call, _names) in sorted(listings_of(t).items())]
     return Built(writes, [("other-%d" % i, call) for i, call in enumerate(reads)], [])
 
@@ -3316,7 +4103,7 @@ def table(t: "Twin") -> List[Step]:
         Step("workgroup", "10", "the Athena workgroup", _b_workgroup, _j_workgroup, needs=("bucket",), rehearse=True, listing="workgroups"),
         _log_group_step("breaker-log", "11", "the breaker's log group", lambda n: n.breaker_log_group),
         _role_step("breaker-role", "12", "the breaker's role (the owner makes it, once the certificate exists)", lambda n: n.breaker_role,
-                   needs=("certificate",)),
+                   needs=("certificate",), policy=_breaker_role_policy),
         Step("function", "13", "the breaker function", _b_function, _j_function,
              needs=("breaker-role", "breaker-log", "rule", "policy", "certificate", "thing"), listing="functions"),
         Step("function-concurrency", "13", "the function's reserved concurrency of 1", _b_concurrency, _j_concurrency, needs=("function",)),
@@ -3368,7 +4155,7 @@ def table(t: "Twin") -> List[Step]:
             Step("alarm-test-rule-count", "19", "the rule-side alarm set to ALARM once", _b_alarm_test("rule-count"), None, kind="action",
                  needs=("rule-count-alarm",)),
         ]
-    # PHASE 6 (spec section 5): after every step of the twin's, so that a teardown removes them first. In the table with their key,
+    # PHASE 6: after every step of the twin's, so that a teardown removes them first. In the table with their key,
     # and, as row 19's, whatever the names file says once the state records one of them as made (a pull step as made or read).
     if not n.rehearsal and (n.ecr or any(t.state.status(s) in OURS for s in ECR_STEPS)):
         steps += [
@@ -3401,6 +4188,11 @@ def table(t: "Twin") -> List[Step]:
             Step("pull-inactive", "B3", "the pull certificate INACTIVE, after the board day", _b_pull_status("INACTIVE"), None, kind="action",
                  needs=("pull-certificate",)),
         ]
+    # VIDEO 3'S FLEET (fleet P2): after every step, Phase 6's included, so that a teardown removes them first; car 2's before
+    # car 3's. In the table while its key is given, and whatever the names file says once the state records a step of the car
+    if not n.rehearsal:
+        for k in t.fleet_cars:
+            steps += fleet_table(t, k)
     if n.rehearsal:
         kept = [s for s in steps if s.rehearse]
         names = {s.id for s in kept}
@@ -3425,13 +4217,17 @@ class Twin:
     def __init__(self, state_dir: Path, render_dir: Optional[Path], rehearsal: bool, stop: bool = False) -> None:
         self.top = state_dir
         values, eased = names_given(state_dir, stop=stop)
-        self.n = Names(values, rehearsal)
+        self.n = Names(values, rehearsal, stop=stop)
         self.state_dir = state_dir / "rehearsal" if rehearsal else state_dir
         self.render_dir = render_dir if render_dir is not None else state_dir / "render"
         self.stop = stop
-        # a stop's names file without a usable operator role (STOP_NEEDS_NOT): said by the key, with no value, and the stop goes on
+        # a stop's names file without a usable operator role (STOP_NEEDS_NOT), or with a fleet key not in its form (FLEET_KEYS): said by
+        # the key, with no value, and the stop goes on
         self.lacks: List[str] = ["the names file gives no usable %s (it %s): the stop needs none and goes on; every other command "
                                  "is refused until the key is given in its form" % (key, why) for key, why in sorted(eased.items())]
+        if self.n.fleet_unfit:                                      # a stop is held to the account only, not to the fleet's keys
+            self.lacks.append("the names file's fleet things are not taken (%s): the stop goes on; every other command is refused until "
+                              "they are given in order" % self.n.fleet_unfit)
         self._other: Optional[State] = None
         try:
             self.top_state = State(state_dir)                       # the facts of the account: the endpoint, the canonical id
@@ -3450,6 +4246,14 @@ class Twin:
             # Read from the key alone, TWIN_ECR=0 rendered the policy without the grants the steps that stand need. The key takes
             # effect once no ECR step stands
             self.n.ecr = True
+        # THE CODE UPDATE'S GRANT FOLLOWS ITS NEED (update_grant()): the operator policy's lambda:UpdateFunctionCode, and `plan`'s
+        # walk of the update's calls. The rehearsal's set has no function
+        self.n.update_code = not rehearsal and update_grant(self.state)
+        # FLEET P2: the cars in the table, each while its key is given or the state records one of its steps (as Phase 6's), and the
+        # configuration update's grant, which follows them (config_grant())
+        self.fleet_cars: List[int] = [] if rehearsal else [
+            k for k in FLEET_CARS if k in self.n.fleet or any(self.state.status(s) not in ("absent", "deleted") for s in fleet_steps(k))]
+        self.n.update_config = not rehearsal and config_grant(self)
         self.steps = table(self)
         self.by_id = {s.id: s for s in self.steps}
 
@@ -3506,7 +4310,7 @@ class Twin:
                 # LATE_BOUND: each key held while one of its steps is on record (any record but `absent` and `deleted`), and only once a
                 # state recorded its fingerprint (bind_late())
                 late = self.late_fingerprints()
-                changed |= {k for k, steps in LATE_BOUND.items() if k in had and had[k] != late[k]
+                changed |= {k for k, steps in ALL_LATE_BOUND.items() if k in had and had[k] != late[k]
                             and any(state.status(s) not in ("absent", "deleted") for s in steps)}
             # a stop whose names file gives no usable role (STOP_NEEDS_NOT) binds no state to "no role": the names a state
             # records with its first write are names every command can be held to
@@ -3516,7 +4320,7 @@ class Twin:
     def late_fingerprints(self) -> Dict[str, str]:
         """The present value of each of LATE_BOUND (none given is "", which is a value too), salted and hashed."""
         s = salt(self.top)
-        return {k: fingerprint(s, k, self.n.v.get(k, "")) for k in LATE_BOUND}
+        return {k: fingerprint(s, k, self.n.v.get(k, "")) for k in ALL_LATE_BOUND}
 
     def bind_late(self, step_id: str) -> None:
         """BOUND ONCE RECORDED: when a step of a key of LATE_BOUND is recorded, the state records the value the key gives now (the
@@ -3527,7 +4331,7 @@ class Twin:
         had = self.state.data.get("names")
         if isinstance(had, dict) and not self.state.frozen:
             late = self.late_fingerprints()
-            keys = [k for k, steps in LATE_BOUND.items() if step_id in steps and had.get(k) != late[k]]
+            keys = [k for k, steps in ALL_LATE_BOUND.items() if step_id in steps and had.get(k) != late[k]]
             if keys:
                 had.update({k: late[k] for k in keys})
                 self.state.save()
@@ -3549,9 +4353,11 @@ class Twin:
             kinds["pull-role"] = [n.pull_role]
         if n.pull_thing:
             kinds["pull-thing"] = [n.pull_thing]
+        if n.fleet:                                                 # fleet P2: each car's thing given, and below each car's certificate
+            kinds["fleet-thing"] = [n.fleet[k] for k in sorted(n.fleet)]
         other = self.other_state()
-        certs = sorted({x for state in (self.state, other) for x in (state.fact("certificate_id"), state.fact(UNCONFIRMED),
-                                                                     state.fact("pull_certificate_id"), state.fact(PULL_UNCONFIRMED)) if x})
+        facts = [f for fact, unconfirmed in CERT_FACTS.values() for f in (fact, unconfirmed)]
+        certs = sorted({x for state in (self.state, other) for x in (state.fact(f) for f in facts) if x})
         if certs:
             kinds["certificate-id"] = certs
         for kind, fact in (("endpoint-prefix", "endpoint_prefix"), ("canonical-user-id", "canonical_user_id")):
@@ -3607,7 +4413,7 @@ class Twin:
 
 
 OWN_KINDS = ("prefix", "thing", "bucket-suffix", "account", "operator-role", "profile", "notice-address", "certificate-id",
-             "endpoint-prefix", "canonical-user-id", "pull-role", "pull-thing")
+             "endpoint-prefix", "canonical-user-id", "pull-role", "pull-thing", "fleet-thing")
 SKIP_DIRS = (".git", "__pycache__", ".mypy_cache", ".ruff_cache", ".pytest_cache")
 
 
@@ -3738,8 +4544,9 @@ def hold_names(t: Twin, command: str, again: bool) -> None:
     account, the region, the prefix and the thing are what its invoke and its four calls by hand are made of."""
     changed = t.names_changed()
     if command == "trip":
-        # nor to Phase 6's pull role and pull thing (LATE_BOUND): no call of a stop is made of either
-        not_held = STOP_NOT_HELD + tuple(LATE_BOUND)
+        # nor to Phase 6's pull role and pull thing (LATE_BOUND), nor to the fleet's things (FLEET_BOUND): no call of a stop is made of
+        # any of them
+        not_held = STOP_NOT_HELD + tuple(ALL_LATE_BOUND)
         eased = [k for k in changed if k in not_held]
         eased = [k for k in eased if k in t.n.v]                    # one the names file gives no usable value of is said already (Twin)
         changed = [k for k in changed if k not in not_held]
@@ -3781,6 +4588,19 @@ def require_operator(t: Twin) -> None:
     """The caller held as in require_caller(), and only then the runner armed for the calls that change the account."""
     require_caller(t)
     t.aws.arm()
+
+
+def needs_closure(t: Twin, step_id: str) -> Set[str]:
+    """Every step `step_id` stands on, through any chain of `needs`, of every kind."""
+    needs = {s.id: s.needs for s in t.steps}
+    seen: Set[str] = set()
+    todo = list(needs.get(step_id, ()))
+    while todo:
+        need = todo.pop()
+        if need not in seen:
+            seen.add(need)
+            todo += list(needs.get(need, ()))
+    return seen
 
 
 def dependents(t: Twin, step_id: str) -> List[Step]:
@@ -3852,8 +4672,11 @@ def cmd_apply(t: Twin, step_id: str, approve: Optional[str]) -> int:
     if step.kind == "owner":
         return apply_owner(t, rd)
     if step.kind == "appears" and not rd.built.creates:
+        # the twin's shadows are approved with go-live; a fleet car's (fleet P2) with its fleet-active-k, and torn down by their own step
+        car = re.fullmatch(r"fleet-shadows-([0-9])", step.id)
+        approved_with = "go-live" if car is None else "`fleet-active-%s`" % car.group(1)
         say("%s has no create call: the two named shadows appear with the connector's first update and the first desired write, and "
-            "are approved with go-live. `status` lists them; `teardown shadows` deletes them before the thing." % step.id)
+            "are approved with %s. `status` lists them; `teardown %s` deletes them before the thing." % (step.id, approved_with, step.id))
         return EXIT_OK
     if rd.render.provisional:
         refuse("render-provisional", "this step's render stands on a value the state does not hold yet (%s): the step that creates it "
@@ -3872,6 +4695,12 @@ def cmd_apply(t: Twin, step_id: str, approve: Optional[str]) -> int:
     for need in step.needs:
         if t.state.status(need) not in ("created", "verified", "done"):
             refuse("step-needs", "the step %s is not recorded as made and proven, and this step stands on it" % need)
+    if t.state.status("function") == "updating" and "function" in needs_closure(t, step.id):
+        # what stands on the function through the dry trip (go-live-rule, the alarm tests, reattach-policy) is not applied while the
+        # update is unsettled: nothing is read or sent (critic2 r2c#1). The words name no kind: a code's or a configuration's (fleet P2)
+        refuse("still-updating", "the function's update is on record and not settled, and this step stands on the function: "
+               "`twinctl status`, `twinctl update-code function` or `twinctl update-config function` reads the function and settles the "
+               "record first; nothing was sent")
     need_baseline(t)
     require_operator(t)
     note_approval(t, step.id, "apply", digest, "used")
@@ -3894,6 +4723,8 @@ def cmd_apply(t: Twin, step_id: str, approve: Optional[str]) -> int:
         refuse("still-deleting", "this step is recorded as being deleted (something of it is %s): `twinctl verify-gone %s` records it "
                "as deleted once it is not found, or its teardown is run again; only then is it made again"
                % ("still read" if present else "not read any more", step.id))
+    if status == "updating":
+        refuse("still-updating", STILL_UPDATING)
     if status in ("created", "unverified"):
         if not rd.built.reads:
             # no id in the state to read it by (the certificate): "nothing of it is found" would be the word of no read at all
@@ -3902,7 +4733,7 @@ def cmd_apply(t: Twin, step_id: str, approve: Optional[str]) -> int:
                    "this state directory holds; `twinctl verify-gone` lists what the account holds beyond the baseline" % step.id)
         if not present:
             refuse("recorded-not-found", "the state records this step as made and nothing of it is found: `twinctl teardown %s` clears "
-                   "the record" % step.id + (". " + AFTER_A_TRIP if step.id in GO_LIVE else ""))
+                   "the record" % step.id + (". " + after_a_trip(t) if step.id in GO_LIVE else ""))
         diffs = diffs + input_diffs(t, rd)                          # the render that was approved names each file by its content
         return settle(t, rd, diffs, made=False, digest=digest)
     if step.id in RECOVERABLE and step.listing:
@@ -3921,6 +4752,8 @@ def cmd_apply(t: Twin, step_id: str, approve: Optional[str]) -> int:
     t.state.record(step.id, status="creating", render=digest, done=[], sent=[], inputs=dict(rd.render.inputs))
     t.bind_late(step.id)                                            # a pull step: the pull role is bound from here on
     take_back(t, step.id, "apply")                                  # made anew: what stood on it stood on what it was before
+    if step.changes_set:
+        take_back_set(t, step.id, "apply")                          # fleet P2: a car joins the breaker's set
     for i, call in enumerate(rd.built.creates):
         # ON RECORD BEFORE IT IS SENT, AND IT STAYS THERE HOWEVER IT ENDED. A create may go through and its reply be lost: a
         # reply that is no JSON, a CLI that does not come to its end, a run that ends there. `done` alone then said "no create
@@ -4030,6 +4863,8 @@ def apply_action(t: Twin, rd: Rendered, digest: str) -> int:
                 say(error_said(Path(call.args[-1]), step.id), err=True)
                 run_failed(t, step.id)
                 return EXIT_REFUSED
+        if step.after is not None:
+            step.after(t, i, reply.obj)
     t.state.record(step.id, status="done", render=digest)
     t.bind_late(step.id)
     say("apply %s: done; recorded. `twinctl status` shows what it left." % step.id)
@@ -4058,6 +4893,302 @@ def run_failed(t: Twin, step_id: str) -> None:
     say("apply %s: this run did not come to its end, so the record of its earlier run is taken back: the step is applied again, and "
         "runs to its end, before a step that needs it." % step_id, err=True)
     take_back(t, step_id, "apply")
+
+
+# --- update-code: the function's code replaced in place
+
+UPDATE_NOTE = ("  this replaces the code alone: the function's name, ARN, role, configuration, concurrency, policy and alarms are in no call "
+               "of it. Before it the function is read and held to its render in everything but its code; after it its CodeSha256 is "
+               "read back. It needs %s on the function in the operator role: the role's render holds it while an update is due or on "
+               "record (`twinctl apply operator-role` prints it and reads the role), and the role is changed by the owner, by hand "
+               "(IAM)" % UPDATE_ACTION)
+UNSETTLED = ("The state records the function as `updating`, with the call on record: nothing is retried. `twinctl status` or `twinctl "
+             "update-code function` reads the function's code and settles the record to the zip it is.")
+
+
+def _sha_code(value: Any) -> Optional[str]:
+    """A sha256 the state recorded, in the form the service reports a function's code in; None for what is no such hash."""
+    return code_sha256(value) if isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) else None
+
+
+def run_again(t: Twin, by: Step = FUNCTION_CODE) -> List[str]:
+    """What ran on the code that was there before, recorded as needing to run again: function-status and the dry trip, each
+    whose last run is on record as `done`, become `stale` for the code update. A record that is stale already stays as it is.
+    A RECORD DOES NOT OUTLIVE WHAT IT STOOD ON, and the alarm tests and reattach-policy stood on that code through the dry trip
+    (p4-bu-critic's SHOULD 1: go-live passed on a breaker the new code never ran): every other record that stands on the
+    function is taken back, as when the function is made anew (take_back()). That runs nothing; on a twin that is live the
+    dry trip and each alarm test cut as a trip does when they run again. `by` is the update: the code's (FUNCTION_CODE), or the
+    time-out's and the environment's (FUNCTION_CONFIG, fleet P2), which takes back the same records."""
+    marked = [sid for sid in RUN_AGAIN if t.state.status(sid) == "done"]
+    for sid in marked:
+        t.state.record(sid, status=STALE, stale_for=by.id)
+    take_back(t, "function", "update-code" if by is FUNCTION_CODE else "update-config")    # after the two, which stay stale for `by`
+    return marked
+
+
+def run_again_note(t: Twin, step_id: str) -> str:
+    """What `status` adds to an action's line that the code update, or the configuration update, took back."""
+    entry = t.state.data["steps"].get(step_id, {})
+    if entry.get("status") == STALE and entry.get("stale_for") == FUNCTION_CODE.id:
+        return "; the function's code was replaced in place since its last run: `twinctl apply %s` runs it again" % step_id
+    if entry.get("status") == STALE and entry.get("stale_for") == FUNCTION_CONFIG.id:
+        return "; the function's configuration was updated in place since its last run: `twinctl apply %s` runs it again" % step_id
+    return ""
+
+
+def settle_update(t: Twin) -> int:
+    """THE RECORD OF A CODE UPDATE, SETTLED BY THE FUNCTION'S CODE AS IT IS READ. Its CodeSha256 the new zip's: the update went
+    through, the state records that zip as the function's input and the code update, function-status and the dry trip need to
+    run again, and what stood on the old code is taken back (run_again()). The zip it was made from: the update did not replace
+    the code, and the function is recorded as before. Neither, or no function: refused, and the record stays `updating` (it is
+    read by hand). Its LastUpdateStatus is read first, the field the update's wait judges: InProgress is refused
+    (`update-in-progress`), the record stays `updating` and nothing is sent; Failed settles to the zip the function was made from,
+    the previous code running whatever CodeSha256 says; Successful, or none, is judged by CodeSha256 as above. The three values and
+    their meaning are from the service's documentation as remembered, not read from a live account. A read, never a retry."""
+    entry = t.state.data["steps"].get("function", {})
+    update = entry.get("update") if isinstance(entry.get("update"), dict) else {}
+    old, new = update.get("from"), update.get("to")
+    got = t.aws.read(R("lambda", "get-function", "--function-name", t.n.function), FUNCTION_CODE.id)
+    code = _policy_of(got, "Configuration", "CodeSha256")
+    last = _policy_of(got, "Configuration", "LastUpdateStatus")
+    if last == "InProgress":
+        refuse("update-in-progress", "the function's last update (its LastUpdateStatus) is InProgress: the record stays `updating`, nothing "
+               "is sent, and `twinctl status` or `twinctl update-code function` reads it again once the service has finished")
+    if last == "Failed":
+        entry.pop("update", None)
+        t.state.record("function", status="created")
+        say("update-code function: read back, the function's last update (its LastUpdateStatus) is Failed: the previous code runs, "
+            "whatever CodeSha256 says. The function is recorded as made from the zip it was made from, as before; nothing is "
+            "retried, `twinctl status` reads the function as DIFFERS when the service reports the attempted code, and `twinctl "
+            "update-code function` prints the render again.", err=True)
+        return EXIT_REFUSED
+    if code is not None and code == _sha_code(new):
+        entry.pop("update", None)
+        done = list(entry.get("code_updates") or []) + [{"from": old, "to": new, "render": update.get("render"), "at": now()}]
+        t.state.record("function", status="created", inputs={"TWIN_BREAKER_ZIP": new}, code_updates=done)
+        marked = run_again(t)
+        say("update-code function: read back, the function's code is the new zip (its CodeSha256 is that zip's sha256), and the state "
+            "records that zip as the function's input. Recorded as needing to run again: %s. They run again before the twin is relied "
+            "on: `twinctl apply function-status`, then `twinctl apply dry-trip`, then each record the line above took back, if it took "
+            "any, each by its own approval; on a twin that is live the dry trip and each alarm test cut as a trip does, and `twinctl "
+            "restore` gives the calls that make it live again." % (", ".join(marked) or "nothing (neither is on record as done)"))
+        return EXIT_OK
+    if code is not None and code == _sha_code(old):
+        entry.pop("update", None)
+        t.state.record("function", status="created")
+        say("update-code function: read back, the function's code is still the zip it was made from: the update did not replace it. "
+            "The function is recorded as made from that zip, as before; nothing is retried, and `twinctl update-code function` prints "
+            "the render again.", err=True)
+        return EXIT_REFUSED
+    refuse("update-unsettled", "the function's code (its CodeSha256) is neither the zip it was made from nor the one the update sent, "
+           "or the function is not found: the record stays `updating`, nothing is sent, and it is read by hand")
+
+
+def cmd_update_code(t: Twin, approve: Optional[str]) -> int:
+    """`update-code function` (FUNCTION_CODE): the function's code replaced in place, by its own printed render and approval, as
+    `apply` runs a step. Every refusal comes before the first write; the update is on record before it is sent and stays there
+    however it ended, and its record is settled by the code that is read (settle_update())."""
+    t.step("function")
+    if t.state.status("function") == "updating":
+        require_caller(t)                                           # an earlier update is settled first, by a read, by its kind
+        settle_function(t)
+    if t.state.status("function") != "created":
+        refuse("function-not-made", "the function's step is not recorded as made and proven (`twinctl status` says how it stands): its "
+               "code is replaced only in a function that stands as rendered; nothing was sent")
+    rd = t.render(FUNCTION_CODE)
+    rd.render.write()
+    calls = rd.built.creates + [call for _key, call in rd.built.reads]
+    digest = render_hash(t, rd, "update-code", calls)
+    if rd.render.unfit is not None:
+        if approve is None:                                         # as `apply function`: printed, it says which it is; never shown
+            show_render(t, rd, "update-code", calls, digest, note="  " + rd.render.unfit[1], go_on=False)
+        refuse(*rd.render.unfit)
+    old, new = recorded_input(t, "function", "TWIN_BREAKER_ZIP"), rd.render.inputs["TWIN_BREAKER_ZIP"]
+    if new == old:
+        refuse("nothing-to-update", "the zip at TWIN_BREAKER_ZIP is the one the function was made from (its sha256 is the one the state "
+               "records): there is no other code to put there; nothing was sent")
+    if not approved(t, FUNCTION_CODE.id, "update-code", digest, approve):
+        show_render(t, rd, "update-code", calls, digest, note=UPDATE_NOTE, go_on=False)
+        say("to go on, once the owner said yes to this: twinctl update-code function --approve %s:%s" % (FUNCTION_CODE.id, digest))
+        note_approval(t, FUNCTION_CODE.id, "update-code", digest, "shown")
+        return EXIT_SHOWN
+    require_operator(t)                                             # the caller held to the operator role, then the runner armed
+    note_approval(t, FUNCTION_CODE.id, "update-code", digest, "used")
+    present, diffs = observe(t, t.render(t.step("function"), strict=False))
+    if not present:
+        refuse("function-not-found", "the function is not found in the account, and the state records it as made: nothing was sent")
+    other = [d for d in diffs if d != CODE_DIFFERS]
+    if other:
+        for d in other:
+            say("  - " + d, err=True)
+        refuse("function-differs", "the function as it is read differs from its render in more than its code (above): its code is not "
+               "replaced in a function that is not otherwise as rendered; nothing was sent")
+    spend(t, FUNCTION_CODE.id, "update-code", digest)
+    t.state.record("function", status="updating", update={"from": old, "to": new, "render": digest, "sent": []})
+    for i, call in enumerate(rd.built.creates):
+        # ON RECORD BEFORE IT IS SENT, AND IT STAYS THERE HOWEVER IT ENDED, as a create's: a reply that is lost does not say that
+        # the code was not replaced, and an error does not say it either
+        update = dict(t.state.data["steps"]["function"]["update"])
+        t.state.record("function", update=dict(update, sent=list(update["sent"]) + [i]))
+        try:
+            reply = t.aws.run(call, FUNCTION_CODE.id)
+        except TwinError as e:
+            if e.name in OUTCOME_UNKNOWN:
+                say("update-code function: call %d of %d was sent and how it ended is not known (%s). %s"
+                    % (i + 1, len(rd.built.creates), e.name, UNSETTLED), err=True)
+            raise
+        if reply.rc != 0:                                           # not settled: never retried, never recorded as done
+            say("update-code function: call %d of %d failed (%s %s: %s). %s" % (i + 1, len(rd.built.creates), call.service, call.op,
+                                                                              reply.code, UNSETTLED), err=True)
+            return EXIT_REFUSED
+    return settle_update(t)
+
+
+# --- update-config: the function's time-out and environment replaced in place (fleet P2)
+
+CONFIG_NOTE = ("  this replaces the function's time-out and environment alone, with its render for the breaker's set: its code, name, role, "
+               "memory, concurrency, policy and alarms are in no call of it. Before it the function is read and held to its render in "
+               "everything but those two; the breaker role is read and must allow every certificate, client and policy of the set; after "
+               "it the two are read back. It needs %s on the function in the operator role: the role's render holds it while a fleet car's "
+               "steps are in the table or a configuration update is on record, and the role is changed by the owner, by hand (IAM)" % CONFIG_ACTION)
+UNSETTLED_CONFIG = ("The state records the function as `updating`, with the call on record: nothing is retried. `twinctl status` or `twinctl "
+                    "update-config function` reads the function's time-out and environment and settles the record by the hashes it recorded.")
+FAILED_WORD = " (the service reports the last update Failed; the time-out and environment as read decide, and the word changes nothing)"
+
+
+def config_hash(timeout: Any, variables: Any) -> str:
+    """The sha256 of the canonical form of a function's Timeout and Environment.Variables: what a configuration update's record holds
+    in their place. The variables carry the account's and the things' names, and are never recorded or printed."""
+    return hashlib.sha256(json.dumps({"Timeout": timeout, "Variables": variables}, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def settle_function(t: Twin) -> int:
+    """THE FUNCTION'S `updating` RECORD SETTLED BY ITS KIND: a record with no kind (the merged update-code's) or
+    "code" by settle_update(), as merged; "config" by settle_config(). Every settler (`status`, `update-code`, `update-config`) comes here."""
+    update = t.state.data["steps"].get("function", {}).get("update")
+    if isinstance(update, dict) and update.get("kind") == "config":
+        return settle_config(t)
+    return settle_update(t)
+
+
+def settle_config(t: Twin) -> int:
+    """THE RECORD OF A CONFIGURATION UPDATE, SETTLED BY THE FUNCTION'S OWN FIELDS AS THEY ARE READ (review S7, S8). LastUpdateStatus
+    InProgress is refused (`update-in-progress`), the record stays `updating` and nothing is sent. Otherwise the hash of Timeout and
+    Environment.Variables as read decides, against the RECORDED hashes and never against the render as it is now: `to`, updated,
+    recorded in config_updates, and run_again() runs; `from`, not updated, the record cleared; neither, unsettled
+    (`update-unsettled`), the record stays `updating` and it is read by hand. Failed adds a word and never overrides the fields:
+    what the service holds after a failed update is not established, and a failed update that left the new values must still run
+    run_again(). The values and their meaning are from the documentation as remembered, not read from a live account."""
+    entry = t.state.data["steps"].get("function", {})
+    update = entry.get("update") if isinstance(entry.get("update"), dict) else {}
+    got = t.aws.read(R("lambda", "get-function", "--function-name", t.n.function), FUNCTION_CONFIG.id)
+    c = _policy_of(got, "Configuration")
+    last = _policy_of(got, "Configuration", "LastUpdateStatus")
+    if last == "InProgress":
+        refuse("update-in-progress", "the function's last update (its LastUpdateStatus) is InProgress: the record stays `updating`, nothing "
+               "is sent, and `twinctl status` or `twinctl update-config function` reads it again once the service has finished")
+    failed = FAILED_WORD if last == "Failed" else ""
+    read = config_hash(c.get("Timeout"), _policy_of(c, "Environment", "Variables")) if isinstance(c, dict) else None
+    if read is not None and read == update.get("to"):
+        entry.pop("update", None)
+        done = list(entry.get("config_updates") or []) + [{"from": update.get("from"), "to": update.get("to"), "render": update.get("render"),
+                                                            "at": now()}]
+        t.state.record("function", status="created", config_updates=done)
+        marked = run_again(t, FUNCTION_CONFIG)
+        say("update-config function: read back, the function's time-out and environment are the ones the update sent (by the hash the "
+            "state recorded)%s. Recorded as needing to run again: %s. They run again before the twin is relied on: `twinctl apply "
+            "function-status`, then `twinctl apply dry-trip`, then each record the line above took back, each by its own approval; on a "
+            "twin that is live the dry trip and each alarm test cut as a trip does, and `twinctl restore` gives the calls that make it "
+            "live again." % (failed, ", ".join(marked) or "nothing (neither is on record as done)"))
+        return EXIT_OK
+    if read is not None and read == update.get("from"):
+        entry.pop("update", None)
+        t.state.record("function", status="created")
+        say("update-config function: read back, the function's time-out and environment are still the ones it had before (by the hash the "
+            "state recorded)%s: the update did not replace them. Nothing is retried, and `twinctl update-config function` prints the render "
+            "again." % failed, err=True)
+        return EXIT_REFUSED
+    refuse("update-unsettled", "the function's time-out and environment are neither the ones it had nor the ones the update sent (by the "
+           "hashes the state recorded), or the function is not found%s: the record stays `updating`, nothing is sent, and it is read by "
+           "hand" % failed)
+
+
+def cmd_update_config(t: Twin, approve: Optional[str]) -> int:
+    """`update-config function` (FUNCTION_CONFIG): the function's time-out and environment replaced in place by its render for
+    the breaker's set, by its own printed render and approval. Every refusal comes before the first write; the update is on record
+    before it is sent, never retried, and settled by the fields that are read (settle_config())."""
+    t.step("function")
+    if t.state.status("function") == "updating":
+        require_caller(t)                                           # an earlier update is settled first, by a read, by its kind
+        settle_function(t)
+    if t.state.status("function") != "created":
+        refuse("function-not-made", "the function's step is not recorded as made and proven (`twinctl status` says how it stands): its "
+               "configuration is replaced only in a function that stands as rendered; nothing was sent")
+    if code_update_due(t.state):
+        refuse("code-first", CODE_FIRST + ". The configuration that names the fleet goes after it: today's code would read a list of "
+               "policies as one name")
+    cars = fleet_set(t)
+    for k in cars:
+        if t.state.status("fleet-attachments-%d" % k) != "created":
+            refuse("step-needs", "the step fleet-attachments-%d is not recorded as made and proven, and car %d is in the breaker's set" % (k, k))
+    rd = t.render(FUNCTION_CONFIG)
+    rd.render.write()
+    if rd.render.provisional:
+        refuse("render-provisional", "this render stands on a value the state does not hold (%s): nothing is printed to approve"
+               % ", ".join(sorted(rd.render.provisional)))
+    calls = rd.built.creates + [call for _key, call in rd.built.reads]
+    digest = render_hash(t, rd, "update-config", calls)
+    if not approved(t, FUNCTION_CONFIG.id, "update-config", digest, approve):
+        show_render(t, rd, "update-config", calls, digest, note=CONFIG_NOTE, go_on=False)
+        say("to go on, once the owner said yes to this: twinctl update-config function --approve %s:%s" % (FUNCTION_CONFIG.id, digest))
+        note_approval(t, FUNCTION_CONFIG.id, "update-config", digest, "shown")
+        return EXIT_SHOWN
+    require_operator(t)                                             # the caller held to the operator role, then the runner armed
+    note_approval(t, FUNCTION_CONFIG.id, "update-config", digest, "used")
+    frd = t.render(t.step("function"), strict=False)
+    got = {key: t.aws.read(call, FUNCTION_CONFIG.id) for key, call in frd.built.reads}
+    c = _policy_of(got.get("function"), "Configuration")
+    if not isinstance(c, dict):
+        refuse("function-not-found", "the function is not found in the account, and the state records it as made: nothing was sent")
+    timeout, variables = function_timeout(1 + len(cars)), rd.render.obj("function-environment")["Variables"]
+    # HELD TO ITS RENDER IN EVERYTHING BUT THE TWO: the read with the render's time-out and environment in their place is judged whole
+    fixed = dict(got, function=dict(got["function"], Configuration=dict(c, Timeout=timeout, Environment={"Variables": variables})))
+    _present, other = _j_function(t, frd.render, fixed)
+    if other:
+        for d in other:
+            say("  - " + d, err=True)
+        refuse("function-differs", "the function as it is read differs from its render in more than its time-out and environment (above): "
+               "they are not replaced in a function that is not otherwise as rendered; nothing was sent")
+    old, new = config_hash(c.get("Timeout"), _policy_of(c, "Environment", "Variables")), config_hash(timeout, variables)
+    if old == new:
+        refuse("nothing-to-update", "the function's time-out and environment, as read, are its render for the breaker's set already: there "
+               "is nothing to put there; nothing was sent")
+    active = active_fleet_certificates(t)
+    if active:
+        refuse("fleet-active-standing", "%d fleet certificate(s) read ACTIVE (car %s): the breaker's configuration does not change under one. "
+               "`twinctl apply fleet-inactive-%d` first; nothing was sent" % (len(active), ", ".join(str(j) for j in active), active[0]))
+    if not role_allows_set(t, cars):
+        refuse("breaker-role-short", "the breaker role, as read, does not allow every certificate, client and policy of the set as rendered: "
+               "the function would name a car its role refuses calls on. The owner makes the role from its render (`twinctl apply "
+               "breaker-role` prints it and reads it), then this runs; nothing was sent")
+    spend(t, FUNCTION_CONFIG.id, "update-config", digest)
+    t.state.record("function", status="updating", update={"kind": "config", "from": old, "to": new, "render": digest, "sent": []})
+    for i, call in enumerate(rd.built.creates):
+        # ON RECORD BEFORE IT IS SENT, AND IT STAYS THERE HOWEVER IT ENDED, as the code update's
+        update = dict(t.state.data["steps"]["function"]["update"])
+        t.state.record("function", update=dict(update, sent=list(update["sent"]) + [i]))
+        try:
+            reply = t.aws.run(call, FUNCTION_CONFIG.id)
+        except TwinError as e:
+            if e.name in OUTCOME_UNKNOWN:
+                say("update-config function: call %d of %d was sent and how it ended is not known (%s). %s"
+                    % (i + 1, len(rd.built.creates), e.name, UNSETTLED_CONFIG), err=True)
+            raise
+        if reply.rc != 0:                                           # not settled: never retried, never recorded as done
+            say("update-config function: call %d of %d failed (%s %s: %s). %s" % (i + 1, len(rd.built.creates), call.service, call.op,
+                                                                                reply.code, UNSETTLED_CONFIG), err=True)
+            return EXIT_REFUSED
+    return settle_config(t)
 
 
 WRITE_WORD = re.compile(r"ok|answered(?::[A-Za-z][A-Za-z0-9]{0,63})?|refused|failed|not-attempted|no-client-connected|unavailable")
@@ -4159,7 +5290,13 @@ OWN_CLAUSES: Tuple["re.Pattern[str]", ...] = tuple(_form(text) for text in (
     "certificate <n> of <n>: the call that detaches the policy <why>",
     "certificate <n> of <n>: the policy is still attached",
     "the policy's targets could not be read",
-    "client <n> of <n>: the call that deletes its connection <answered>"))
+    "client <n> of <n>: the call that deletes its connection <answered>",
+    # fleet P2: the breaker's pairs (breaker.py's TWIN_POLICY); with one policy every sentence is the one-car twin's
+    "an entry of TWIN_POLICY is empty",
+    "TWIN_POLICY names <n> policies for <n> certificates",
+    "TWIN_POLICY gives one certificate two policies",
+    "TWIN_POLICY names <n> policies, more than the <n> the function's time is counted for",
+    "policy <n> of <n>: its targets could not be read"))
 OWN_HEAD = re.compile(r"the (?:trip|status) did not complete: ([0-9]{1,3}) failure\(s\): ")
 # The function's one sentence for an error no step names. Its slot is the error's class, by its name: the name of an error's
 # class ends in Error or Exception, and no name the driver forms for the twin does (the rule's is the prefix and `_telemetry`).
@@ -4257,7 +5394,7 @@ def cmd_teardown(t: Twin, step_id: Optional[str], approve: Optional[str]) -> int
     rd.render.write()
     if step.kind == "empty":
         return teardown_objects(t, rd, approve)
-    base = "thing" if step.kind == "appears" else step.id
+    base = step.base or ("thing" if step.kind == "appears" else step.id)      # a fleet car's shadows stand on its own thing (fleet P2)
     status = t.state.status(base)
     if status not in OURS + ("deleted",):                           # absent; or the record of a step that was only read (adopted)
         refuse("not-ours", "the state records nothing made for this step: nothing is deleted that was not made here")
@@ -4329,6 +5466,8 @@ def cmd_teardown(t: Twin, step_id: Optional[str], approve: Optional[str]) -> int
     if tracked:
         t.state.record(step.id, status="deleting")
         take_back(t, step.id, "teardown")                           # from the first delete call on, it is no longer what they stood on
+        if step.changes_set:
+            take_back_set(t, step.id, "teardown")                   # fleet P2: a car leaves the breaker's set
     for i, call in enumerate(rd.built.deletes):
         reply = t.aws.run(call, step.id)
         if reply.rc != 0 and not t.aws.gone(call, reply, step.id):
@@ -4462,7 +5601,11 @@ def cmd_plan(t: Twin, no_cli: bool) -> int:
     seen: Dict[Tuple[str, ...], Tuple[str, str]] = {}
     listed: List[Call] = []                                         # every call this plan lists: what the operator role's policy is held to
     operator: Any = None
-    for step in t.steps + [OTHER]:                                  # the table, then the calls a command sends outside it
+    # the code update's calls while the operator policy holds its action (update_grant()), and the configuration update's while it holds
+    # its own (config_grant(), fleet P2): as a step's, before OTHER, which is last
+    update = ([FUNCTION_CODE] if t.n.update_code and "function" in t.by_id else []) + (
+        [FUNCTION_CONFIG] if t.n.update_config and "function" in t.by_id else [])
+    for step in t.steps + update + [OTHER]:                         # the table, then the calls a command sends outside it
         try:
             rd = t.render(step)
             rd.render.write()
@@ -4512,6 +5655,15 @@ def cmd_plan(t: Twin, no_cli: bool) -> int:
     gaps = operator_gaps(operator, listed) if operator is not None else []
     for gap in gaps:
         say("  the operator role's policy: %s" % gap, err=True)
+    if FUNCTION_CODE in update:
+        # THE LIVE GAP, which no read of plan's sees: the role in the account was made from a render without the action
+        say("  the operator role's policy holds %s for `update-code function` while a code update is due or on record: a role made "
+            "from an earlier render lacks it, which `twinctl status` reads (operator-role: its policy is not the render); the role is "
+            "changed by the owner, by hand (IAM)" % UPDATE_ACTION)
+    if FUNCTION_CONFIG in update:
+        say("  the operator role's policy holds %s for `update-config function` while a fleet car's steps are in the table or a "
+            "configuration update is on record: a role made from an earlier render lacks it, which `twinctl status` reads; the role is "
+            "changed by the owner, by hand (IAM)" % CONFIG_ACTION)
     # THE CALLS WHOSE SAMPLE REPLY FAILED ITS OWN VALIDATION: the CLI read their options' names, the required options and each
     # value's form, and never ran the service model's validation of the call's own arguments. Named by service and operation.
     names_only = sorted({"%s %s" % (key[0], key[1]) for key, (verdict, _said) in seen.items() if verdict == "read, sample fails"})
@@ -4540,15 +5692,28 @@ def twin_certificates(t: Twin) -> List[str]:
     return [cert] if cert else []
 
 
-def cmd_status(t: Twin) -> int:
-    """The proving reads of every step, as states. Never a value."""
+def cmd_status(t: Twin, after_trip: bool = False) -> int:
+    """The proving reads of every step, as states. Never a value. `after_trip`: this is a trip's proof (trip_status()), and a set
+    car's certificate still ACTIVE in it is the cut that did not reach it (fleet P2, verify#15)."""
     failed = 0
+    role_ok = False                                                 # fleet P2: whether the breaker role reads as rendered (a proof below)
     say("status (%s):" % ("the rehearsal's set" if t.n.rehearsal else "the twin"))
     for step in t.steps:
         recorded = t.state.status(step.id)
+        if step.id == "function" and recorded == "updating":
+            # AN UPDATE THAT IS NOT SETTLED (a call that failed, a reply that was lost): the function is read and the record settled by
+            # its kind (the code to the zip it is; a configuration by its recorded hashes); when it is neither, that is said, and the
+            # record stays as it is
+            update = t.state.data["steps"]["function"].get("update")
+            command = "update-config" if isinstance(update, dict) and update.get("kind") == "config" else "update-code"
+            try:
+                settle_function(t)
+            except TwinError as e:
+                say("%s function: not settled (%s): %s" % (command, e.name, e.detail))
+            recorded = t.state.status(step.id)
         if step.kind in ("action", "empty"):
             if step.kind == "action":
-                say("  %-22s row %-5s %-10s (an action: nothing to read)" % (step.id, step.row, recorded))
+                say("  %-22s row %-5s %-10s (an action: nothing to read%s)" % (step.id, step.row, recorded, run_again_note(t, step.id)))
             continue
         try:
             rd = t.render(step, strict=False)
@@ -4569,6 +5734,11 @@ def cmd_status(t: Twin) -> int:
             found += " (the render is provisional)"
         if step.id == "function" and present:
             found += zip_note(t) + source_note(t)
+            if t.n.update_config and "its environment is not the render" in diffs:
+                found += (" (the function's time-out and environment are not the breaker's set's: `twinctl update-config function` puts "
+                          "them there)")
+        if step.id == "breaker-role":
+            role_ok = present and not diffs and not rd.render.provisional
         say("  %-22s row %-5s %-10s %s" % (step.id, step.row, recorded, found))
     # Phase 6: every push the state records that is not `pushed` (cmd_push records one before it is sent): said, never a failure
     for key, push in sorted((t.state.data.get("pushes") or {}).items()):
@@ -4604,8 +5774,26 @@ def cmd_status(t: Twin) -> int:
         say("traffic: the certificate is %s; the policy is %s; the thing is %s"
             % ("not there" if d is None else str(d.get("status")), "attached" if policy else "NOT attached",
                ("attached (%s)" % ("exclusive" if kind == "EXCLUSIVE_THING" else "not exclusive")) if thing else "NOT attached"))
-    keys = breaker_alarm_keys(t) + (["errors"] if n.notice else [])
+    cars = fleet_set(t)
+    for k in [j for j in FLEET_CARS if t.state.status("fleet-certificate-%d" % j) in OURS and _fleet_cert(t, j)[0]]:
+        # fleet P2: each fleet certificate that is made, its state, its policy and its thing
+        def car_traffic(k: int = k) -> Any:
+            return (_policy_of(t.aws.read(R("iot", "describe-certificate", "--certificate-id", str(_fleet_cert(t, k)[0]))), "certificateDescription"),
+                    _fleet_attached(t, k))
+        got = tried("traffic: car %d's certificate" % k, car_traffic)
+        if isinstance(got, TwinError):
+            continue
+        d, (policy, thing, kind) = got
+        say("traffic: car %d's certificate is %s; its policy is %s; its thing is %s"
+            % (k, "not there" if d is None else str(d.get("status")), "attached" if policy else "NOT attached",
+               ("attached (%s)" % ("exclusive" if kind == "EXCLUSIVE_THING" else "not exclusive")) if thing else "NOT attached"))
+    breaker_keys = breaker_alarm_keys(t)
+    keys = breaker_keys + (["errors"] if n.notice else [])
     states = tried("the alarms", lambda: _alarm_states(t, keys))
+    # fleet P2 (verify#15): whether every breaker alarm is armed, as fleet-active-k's pre read it (alarms_block()): a proof below
+    armed = not isinstance(states, TwinError) and all(
+        states.get(key) is not None and states[key].get("StateValue") != "ALARM" and states[key].get("ActionsEnabled") is True
+        for key in breaker_keys)
     for key, a in sorted(({} if isinstance(states, TwinError) else states).items()):
         if a is None:
             say("alarm %-10s not there" % key)
@@ -4631,19 +5819,57 @@ def cmd_status(t: Twin) -> int:
     else:
         if fn is None:
             say("the function is not there: its certificates cannot be compared")
+    lists_ok = False                                                # fleet P2: assertion 1 and the time-out assertion, both ok
+    fleet_words = bool(t.fleet_cars or cars)                        # with no fleet key the new checks print only on a failure
     if fn is not None:
         conc = tried("the function's reserved concurrency",
                      lambda: t.aws.read(R("lambda", "get-function-concurrency", "--function-name", n.function)) or {})
         if not isinstance(conc, TwinError):
             say("the function's reserved concurrency: %s" % conc.get("ReservedConcurrentExecutions", "none"))
+        variables = _policy_of(fn, "Environment", "Variables") or {}
         named = sorted(x for x in str(_policy_of(fn, "Environment", "Variables", "TWIN_CERTIFICATE_ARNS") or "").split(",") if x)
-        want = sorted(n.arn("iot", "cert/" + c) for c in certs)
+        want = sorted(n.arn("iot", "cert/" + c) for c in certs + [str(_fleet_cert(t, k)[0]) for k in cars])
         if named != want:
             failed += 1
             say("FAIL: the certificates in the function's environment are not exactly the twin's (%d named, %d of the twin): a "
                 "certificate outside the function is outside the breaker" % (len(named), len(want)), err=True)
         else:
             say("ok: the function's environment names exactly the twin's %d certificate(s)" % len(want))
+        # ASSERTION 1, S10's (fleet P2): the client ids and the policies too, the policies in the set's form and paired with
+        # the certificates by position; and THE TIME-OUT ASSERTION: the function's time-out holds the count of its own lists
+        try:
+            rendered = set_environment(t, cars)
+        except TwinError as e:
+            # one failure, said once (fable#5): nothing is compared with a render that could not be made
+            rendered = {}
+            failed += 1
+            say("FAIL: the set's environment could not be rendered (%s): the function's client ids and policies are not compared with it"
+                % e.name, err=True)
+        clients_ok = bool(rendered) and (sorted(_listed_names(variables.get("TWIN_CLIENT_IDS")))
+                                         == sorted(_listed_names(rendered.get("TWIN_CLIENT_IDS"))))
+        pairs_ok = bool(rendered) and _pairs(variables) == _pairs(rendered)
+        if rendered and not clients_ok:
+            failed += 1
+            say("FAIL: the client ids in the function's environment are not exactly the set's (%d named, %d of the set): a client outside "
+                "the function is outside the breaker" % (len(_listed_names(variables.get("TWIN_CLIENT_IDS"))),
+                                                         len(_listed_names(rendered.get("TWIN_CLIENT_IDS")))), err=True)
+        if rendered and not pairs_ok:
+            failed += 1
+            say("FAIL: the policies in the function's environment are not the set's, paired by position with its certificates: each "
+                "certificate's own policy is what the breaker detaches from it", err=True)
+        if clients_ok and pairs_ok and fleet_words:
+            say("ok: the function's client ids and policies are the set's, paired by position")
+        timeout = fn.get("Timeout")
+        counted = breaker_counted_s(len(named), len(set(_listed_names(variables.get("TWIN_CLIENT_IDS")))),
+                                    len(set(_listed_names(variables.get("TWIN_POLICY")))))
+        timeout_ok = isinstance(timeout, int) and not isinstance(timeout, bool) and timeout >= counted
+        if not timeout_ok:
+            failed += 1
+            say("FAIL: the function's time-out is under the count of its own lists (breaker.py, THE TIME IT HAS): the runtime would end a "
+                "trip before its last steps", err=True)
+        elif fleet_words:
+            say("ok: the function's time-out holds the count of its lists")
+        lists_ok = named == want and clients_ok and pairs_ok and timeout_ok
     try:
         listed = (t.aws.read(LISTINGS["certificates"][0]) or {}).get("certificates", []) or []
     except TwinError as e:
@@ -4651,12 +5877,16 @@ def cmd_status(t: Twin) -> int:
         say("FAIL: the account's certificates could not be listed (%s: %s): whether an ACTIVE one is outside the twin's set is not "
             "known" % (e.name, e.detail), err=True)
         return EXIT_REFUSED
-    # TWO SETS since Phase 6 (spec 5 item 4): the twin's data certificate, which the function's environment names (above, unchanged),
+    # TWO SETS since Phase 6: the twin's data certificate, which the function's environment names (above, unchanged),
     # and the pull certificate, which holds no IoT data permission and is outside the breaker by design. An ACTIVE certificate
     # outside the union fails; the pull certificate ACTIVE is said, and is no failure.
     pull = pull_certificates(t)
-    outside_set = [c for c in listed if c.get("status") == "ACTIVE" and c.get("certificateId") not in certs and c.get("certificateId") not in pull]
+    fleet = {k: str(_fleet_cert(t, k)[0]) for k in cars}           # fleet P2: the set's own certificates, a third set beside the two
+    outside_set = [c for c in listed if c.get("status") == "ACTIVE" and c.get("certificateId") not in certs and c.get("certificateId") not in pull
+                   and c.get("certificateId") not in fleet.values()]
     union = "the twin's set and the pull certificate" if pull else "the twin's set"
+    if fleet:
+        union = "the twin's set, the fleet's set" + (" and the pull certificate" if pull else "")
     if outside_set:
         failed += 1
         say("FAIL: %d ACTIVE certificate(s) of the account are outside %s: the breaker does not act on them"
@@ -4667,6 +5897,27 @@ def cmd_status(t: Twin) -> int:
         state = [str(c.get("status")) for c in listed if c.get("certificateId") == cert]
         say("the pull certificate is ACTIVE: active: a board day (`twinctl apply pull-inactive` ends it)" if state == ["ACTIVE"] else
             "the pull certificate is INACTIVE" if state == ["INACTIVE"] else "the pull certificate is not listed in its one state")
+    # A SET CAR'S CERTIFICATE ACTIVE IS NO FAILURE ONLY WHILE THE BREAKER'S PROOF FOR IT STANDS: its fleet-active-k
+    # `done`; function-status, the dry trip, every alarm test and reattach-policy `done`, none stale; the breaker role read as rendered;
+    # assertion 1 and the time-out assertion ok; and (verify#15) every breaker alarm armed, as fleet-active-k's pre read it. What twinctl
+    # cannot refuse beforehand (an update-code, a role the owner remade, a trip that did not cut, an alarm's own run that did not) takes
+    # one of them back, and the certificate then FAILs with the way out. In a TRIP'S OWN STATUS, its proof, a set car's certificate still
+    # ACTIVE is the cut that did not reach it, whatever the records say: trip_failed() takes the dry trip back only after this
+    tests = [s.id for s in t.steps if s.id.startswith("alarm-test-")]
+    proof = armed and role_ok and lists_ok and all(t.state.status(s) == "done"
+                                                   for s in ["function-status", "dry-trip"] + tests + ["reattach-policy"])
+    for k, cert in sorted(fleet.items()):
+        if [str(c.get("status")) for c in listed if c.get("certificateId") == cert] != ["ACTIVE"]:
+            continue
+        if after_trip:
+            failed += 1
+            say("FAIL: car %d's certificate is still ACTIVE after the trip: the cut did not reach it. Its three calls by hand (the trip's "
+                "file), then `twinctl status`" % k, err=True)
+        elif proof and t.state.status("fleet-active-%d" % k) == "done":
+            say("car %d's certificate is ACTIVE: active: a fleet session (`twinctl apply fleet-inactive-%d` ends it)" % (k, k))
+        else:
+            failed += 1
+            say("FAIL: a fleet certificate is ACTIVE and the breaker's proof is taken back: `twinctl apply fleet-inactive-%d`" % k, err=True)
     return EXIT_REFUSED if failed else EXIT_OK
 
 
@@ -4699,6 +5950,8 @@ PROFILE_LEFT_OFF = (": --profile is left off the calls, which then run under the
 # to run among the four (they stay the manual stop's and nothing else).
 FIND_CERT = ("# TO FIND THE CERTIFICATE'S ID where the state does not give it, a read that changes nothing (each target it lists is a "
              "certificate's ARN, and the id is what follows `cert/`; with it the two calls above are whole):")
+# fleet P2 (fable#1): the same read for a fleet car whose certificate's id is not put in, by its own policy
+FIND_FLEET_CERT = "# TO FIND CAR %d'S CERTIFICATE'S ID the same way, by its own policy (with it its two calls above are whole):"
 INVOKED = False                                 # whether this run's trip reached its invoke: main() sets it, cmd_trip raises it
 THROTTLED = "TooManyRequestsException"          # what the service answers an invoke it has no concurrency for (from memory)
 
@@ -4735,8 +5988,56 @@ def stop_certificate(state_dir: Path, rehearsal: bool, given: Dict[str, str]) ->
     return cert, ""
 
 
+# fleet P2: the head line the file of the calls by hand gains when a fleet car's certificate is on record, and the line said
+FLEET_HEAD = "# and three calls for each fleet car whose certificate the state records, after the four: its INACTIVE, its connection, its policy."
+HAND_FLEET = False                              # whether this run's file holds a fleet car's calls: hand_first() sets it
+
+
+def stop_fleet(state_dir: Path, given: Dict[str, str]) -> List[Tuple[int, Optional[str], Optional[str], str, str]]:
+    """THE FLEET'S CALLS BY HAND (fleet P2): for each car whose certificate id the state records, (k, the id or None, its thing or
+    None, why the thing is not put in, why the id is not). The id is put in by stop_certificate()'s rule: only when the state is
+    this twin's (the four names the state was made under are the names file's now). WHERE THE TWO CANNOT BE COMPARED (another value
+    of one of the four, the salt gone) the car is kept, with its id withheld and the twin's own reason (fable#1), and a state that
+    cannot be read keeps each car the names file gives a thing for, its id withheld: today's rule, by which the twin's own id stays a
+    slot. The thing is the names file's, read leniently, and where the state can be compared, only when it is the name the state's
+    records were bound to (FLEET_BOUND): another one stays a commented slot, named by its key. Reads only; nothing is written."""
+    try:
+        state = State(state_dir)
+    except TwinError as e:
+        return [(k, None, given["TWIN_FLEET_THING_%d" % k], "", "the state cannot be read (%s): whether it records car %d's certificate is "
+                 "not known, and its calls are written because the names file gives its thing" % (e.name, k))
+                for k in FLEET_CARS if given.get("TWIN_FLEET_THING_%d" % k)]
+    had = state.data.get("names")
+    s: Optional[bytes] = None
+    no_cert = ""
+    if isinstance(had, dict):
+        try:
+            s = (state_dir / "salt").read_bytes()
+        except OSError:
+            no_cert = ("the state directory's file `salt` is gone, so the names the state was made under cannot be compared with the names "
+                       "file's: its fleet certificates are not put beside them")
+        else:
+            other = [k for k in STOP_NAMES if k not in given or had.get(k) != fingerprint(s, k, given[k])]
+            if other:
+                no_cert = ("the state's records were made under names the names file does not give now (%s): its fleet certificates may be "
+                           "another twin's, and are not put beside these names" % ", ".join(other))
+    out: List[Tuple[int, Optional[str], Optional[str], str, str]] = []
+    for k in FLEET_CARS:
+        cert = state.fact("fleet_certificate_id_%d" % k)
+        if not cert or not re.fullmatch(r"[0-9a-f]{64}", cert):
+            continue
+        key = "TWIN_FLEET_THING_%d" % k
+        thing, why = given.get(key), ""
+        if thing is None:
+            why = "%s is not given" % key
+        elif not no_cert and isinstance(had, dict) and s is not None and key in had and had[key] != fingerprint(s, key, thing):
+            thing, why = None, "%s gives another name than the one the state's records were bound to" % key
+        out.append((k, None if no_cert else cert, thing, why, no_cert))
+    return out
+
+
 def hand_text(state_dir: Path, rehearsal: bool) -> Tuple[str, List[str]]:
-    """THE FILE OF SECTION 8'S FOUR CALLS BY HAND: (its text; what is not filled in, each by the key its value comes from
+    """THE FILE OF THE MANUAL STOP'S FOUR CALLS BY HAND: (its text; what is not filled in, each by the key its value comes from
     and with no value in it). Made from the names file as the stop reads it (names_given(), lenient: one fault in it
     does not cost the values that are in order) and from the state's one fact, the certificate's id, when the state
     is this twin's (stop_certificate()). FOR THIS TWIN AND NO OTHER, AS FAR AS THE TWO GIVE IT: a call whose every value
@@ -4780,6 +6081,32 @@ def hand_text(state_dir: Path, rehearsal: bool) -> Tuple[str, List[str]]:
         argv = call.argv() + ["--region", region or SLOT_REGION] + (["--profile", profile] if profile else [])
         left = [a for a in argv if a in reason]
         lines.append(("# NOT FILLED IN (%s): aws %s" % (", ".join(left), " ".join(argv))) if left else "aws " + shlex.join(argv))
+    # fleet P2: then, for each fleet car whose certificate id the state records, its three calls, by today's rule
+    fleet = [] if rehearsal else stop_fleet(state_dir, given)
+    finds: List[str] = []                                           # fleet P2 (fable#1): the read that finds a withheld fleet id
+    for k, cert_k, thing_k, why_k, no_cert_k in fleet:
+        policy_k = (prefix + "-device-%d" % k) if prefix is not None else None
+        slots = {"<FLEET_THING_%d>" % k: thing_k, "<FLEET_POLICY_%d>" % k: policy_k, "<FLEET_CERT_ID_%d>" % k: cert_k,
+                 "<car %d's certificate's ARN>" % k: arn_of("iot", region, account, "cert/" + cert_k) if cert_k and region and account else None}
+        thing_slot, policy_slot, cert_slot, arn_slot = list(slots)
+        if thing_k is not None and prefix is not None and not thing_k.startswith(prefix):
+            slots[thing_slot], why_k = None, "TWIN_FLEET_THING_%d does not begin with TWIN_PREFIX" % k
+        for slot, value in slots.items():
+            filled[slot] = value
+            if value is None:
+                reason[slot] = (why_k if slot == thing_slot else
+                                absent.get("TWIN_PREFIX", "TWIN_PREFIX is not given") if slot == policy_slot else
+                                "fleet_certificate_id_%d, a fact of the state: %s" % (k, no_cert_k) if slot == cert_slot else
+                                "it is made of the state's fleet_certificate_id_%d, TWIN_REGION and TWIN_ACCOUNT: " % k + "; ".join(
+                                    x for x in (no_cert_k, absent.get("TWIN_REGION"), absent.get("TWIN_ACCOUNT")) if x))
+        for call in fleet_stop_calls(slots[thing_slot] or thing_slot, slots[policy_slot] or policy_slot, slots[cert_slot] or cert_slot,
+                                     slots[arn_slot] or arn_slot):
+            argv = call.argv() + ["--region", region or SLOT_REGION] + (["--profile", profile] if profile else [])
+            left = [a for a in argv if a in reason]
+            lines.append(("# NOT FILLED IN (%s): aws %s" % (", ".join(left), " ".join(argv))) if left else "aws " + shlex.join(argv))
+        if cert_k is None and region and policy_k:
+            find_k = R("iot", "list-targets-for-policy", "--policy-name", policy_k).argv() + ["--region", region]
+            finds += [FIND_FLEET_CERT % k, "#   aws " + shlex.join(find_k + (["--profile", profile] if profile else []))]
     lacks: List[str] = []
     for why in dict.fromkeys(reason.values()):                      # each reason once, in the slots' order
         lacks.append("%s: %s" % (", ".join(slot for slot in filled if reason.get(slot) == why), why))
@@ -4787,7 +6114,7 @@ def hand_text(state_dir: Path, rehearsal: bool) -> Tuple[str, List[str]]:
     head = ["# twinctl trip: the manual stop's four calls by hand, written at %s as this trip's first act, before any of its "
             "checks." % now(),
             "# For %s, as far as the names file and the state give them. They are for when the function did not make the cut:" % whose,
-            "# under the operator profile, in this order; `twinctl status` afterwards is the proof."]
+            "# under the operator profile, in this order; `twinctl status` afterwards is the proof."] + ([FLEET_HEAD] if fleet else [])
     tail = []
     if lacks:
         tail = ["# NOT FILLED IN, each by the key its value comes from. A call that lacks a value is a comment above: it runs nothing."]
@@ -4798,6 +6125,7 @@ def hand_text(state_dir: Path, rehearsal: bool) -> Tuple[str, List[str]]:
         find = (R("iot", "list-targets-for-policy", "--policy-name", policy) if policy else
                 R("iot", "list-thing-principals-v2", "--thing-name", str(client)))
         tail += [FIND_CERT, "#   aws " + shlex.join(find.argv() + ["--region", region] + (["--profile", profile] if profile else []))]
+    tail += finds
     return "\n".join(head + lines + tail) + "\n", lacks
 
 
@@ -4812,8 +6140,9 @@ def hand_first(state_value: str, rehearsal: bool) -> None:
     directory is named, it would lie in a work tree, the write fails), the four calls are printed with their slots and
     the key each slot is made of. NOTHING OF THE FILE IS PRINTED: it holds the twin's own names, unredacted, and lies
     in the state directory; the terminal gets its place, the slots that stayed open and the keys' names."""
-    global HAND, HAND_FOR
+    global HAND, HAND_FOR, HAND_FLEET
     HAND = None
+    HAND_FLEET = False
     HAND_FOR = "the rehearsal's set" if rehearsal else "this twin"
     why = ""
     lacks: List[str] = []
@@ -4858,9 +6187,12 @@ def hand_first(state_value: str, rehearsal: bool) -> None:
     else:
         say("trip: the four calls by hand (sdv/cloud/README.md), for when the function does not make the cut, are written out for %s "
             "before anything else: %s" % (HAND_FOR, HAND))
+    HAND_FLEET = FLEET_HEAD in text
+    if HAND_FLEET:                                                  # fleet P2: the second line, only with a fleet certificate on record
+        say("trip: and three calls for each fleet car whose certificate the state records, in the same file")
     for lack in lacks:
         say("trip: by hand, NOT FILLED IN there: %s" % lack, err=True)
-    if FIND_CERT in text:
+    if FIND_CERT in text or any(FIND_FLEET_CERT % k in text for k in FLEET_CARS):
         say("trip: by hand: where the certificate's id is not filled in, the file gives the read that finds it in the account.", err=True)
 
 
@@ -4952,7 +6284,7 @@ def trip_status(t: Twin) -> int:
             "that account's and no proof for this twin (this trip's invoke went under the identity that was read first). Look at "
             "the CLI's configuration, then run `twinctl status`; if the cut is not there, RUN THE FOUR CALLS BY HAND.", err=True)
         return EXIT_REFUSED
-    return cmd_status(t)
+    return cmd_status(t, after_trip=True)
 
 
 def cmd_trip(t: Twin, capture: Optional[Path]) -> int:
@@ -5065,9 +6397,11 @@ def cmd_build_breaker(t: Twin) -> int:
 # --- recover: a fact a reply gave, put back into the state from the reply itself
 
 RECOVERABLE = {"certificate": ("iot", "create-certificate-from-csr"), "pull-certificate": ("iot", "create-certificate-from-csr")}
+RECOVERABLE.update({"fleet-certificate-%d" % k: ("iot", "create-certificate-from-csr") for k in FLEET_CARS})      # fleet P2: as the twin's
 # The fact each certificate's step records its id under, and the one it keeps an id under that a refused reply gave (Phase 6
-# adds the pull certificate beside the twin's data certificate).
+# adds the pull certificate beside the twin's data certificate, fleet P2 each car's).
 CERT_FACTS = {"certificate": ("certificate_id", UNCONFIRMED), "pull-certificate": ("pull_certificate_id", PULL_UNCONFIRMED)}
+CERT_FACTS.update({"fleet-certificate-%d" % k: ("fleet_certificate_id_%d" % k, FLEET_UNCONFIRMED % k) for k in FLEET_CARS})
 
 
 def _pem(text: Any) -> str:
@@ -5120,8 +6454,12 @@ def cmd_recover(t: Twin, step_id: str, approve: Optional[str]) -> int:
                "teardown %s` then takes the record back" % (files, step_id))
     # the thing the certificate is held to: the twin's, once the attachments are recorded; the pull thing's, once the pull
     # attachment is recorded and the names give one (Phase 6); none otherwise
+    car = re.fullmatch(r"fleet-certificate-([0-9])", step_id)
     if step_id == "certificate":
         thing, whose = (t.n.thing if t.state.status("attachments") in OURS else ""), "the twin's thing"
+    elif car is not None:                                           # fleet P2: car k's certificate, held to car k's thing
+        k = int(car.group(1))
+        thing, whose = (t.n.fleet_thing(k) if t.state.status("fleet-attachments-%d" % k) in OURS else ""), "car %d's thing" % k
     else:
         thing, whose = (t.n.pull_thing if t.state.status("pull-attachment") in OURS else ""), "the pull thing"
     attached = bool(thing)
@@ -5183,10 +6521,23 @@ def cmd_restore(t: Twin) -> int:
     cert, arn = _cert(t)
     if cert is None or arn is None:
         refuse("render-provisional", "the state holds no certificate: there is nothing to restore")
+    named_gone(t)                                                   # fleet P2: no restore on a breaker that names what is gone
     calls, proofs = restore_calls(n, cert, arn)
+    # fleet P2: one attach for each set car, car k's policy to its certificate, and NEVER a fleet certificate
+    # made ACTIVE: after a restore each fleet-active-k runs again, by its own approval and its pre
+    for k in fleet_set(t):
+        _car_cert, car_arn = _fleet_cert(t, k)
+        if car_arn is None:
+            refuse("render-provisional", "the state holds no certificate of car %d, which is in the breaker's set: `twinctl recover "
+                   "fleet-certificate-%d` puts it back" % (k, k))
+        calls.append(W("iot", "attach-policy", "--policy-name", n.fleet_policy(k), "--target", car_arn))
+        proofs.append(R("iot", "list-attached-policies", "--target", car_arn))
     path = write_calls(t, "restore.txt", [c for pair in zip(calls, proofs) for c in pair])
     say("restore: every breaker alarm is in OK or INSUFFICIENT_DATA with its actions enabled. The owner runs these three, each read "
         "before the next, then `twinctl status`:")
+    if any(t.state.status("fleet-certificate-%d" % k) in OURS for k in FLEET_CARS):
+        say("and one call for each fleet car of the set: its policy attached to its certificate again. No fleet certificate is made ACTIVE "
+            "here: `twinctl apply fleet-active-k` does that, by its own approval and its checks")
     for call, proof in zip(calls, proofs):
         say("  run:   aws " + shlex.join(call.argv()))
         say("  proof: aws " + shlex.join(proof.argv()))
@@ -5250,7 +6601,7 @@ def cmd_verify_gone(t: Twin, step_id: Optional[str]) -> int:
     return EXIT_OK
 
 
-# --- push (Phase 6, spec section 5 item 7): an image into the twin's repository by digest, its config digest proved first
+# --- push (Phase 6): an image into the twin's repository by digest, its config digest proved first
 
 APP_VERSION = re.compile(r"[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}")
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
@@ -5305,7 +6656,7 @@ def other_names(prefix: List[str], store_id: str, ref: str) -> List[str]:
 def proved_config(prefix: List[str], store_id: str) -> Tuple[str, Dict[str, Any]]:
     """The config digest and the config of the image the store ID names, from a `docker save` stream, as sdv/arm64's reader proves
     one: the blob of the store ID hashes to it and is ONE platform's manifest (an index is refused: the push would send it and
-    its attestations, wp0-facts D2, D4), and the config blob hashes to the digest the manifest names."""
+    its attestations), and the config blob hashes to the digest the manifest names."""
     blobs: Dict[str, bytes] = {}
     try:
         p = subprocess.Popen(prefix + ["save", store_id], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
@@ -5481,7 +6832,7 @@ def cmd_push(t: Twin, app: str, version: str, arch: str, store_id: str, config_d
     return EXIT_OK
 
 
-# --- ecr-config (Phase 6, spec section 5 item 8): the pulling host's one root-only file (D7)
+# --- ecr-config (Phase 6): the pulling host's one root-only file (D7)
 
 CREDENTIAL_HOST = re.compile(r"[A-Za-z0-9-]{1,63}\.credentials\.iot\.[a-z0-9-]{1,32}\.amazonaws\.com")
 
@@ -5683,6 +7034,40 @@ def exit_checks(t: Twin, min_vss_keys: int, athena_paths: Optional[Path]) -> Lis
     add("S11: the shadows' keys", s11, vss_keys=len(keys["vss"]), config_paths=len(keys["config"]), least_expected=max(1, min_vss_keys),
         outside_the_allowlist=len(set(keys["vss"]) - shadow_paths) + len(set(keys["config"]) - paths),
         under_the_excluded_branch=under)
+    # fleet P2: the same row for each car whose fleet-thing-k is on record (a car that left the set keeps its
+    # shadows until their teardown). Its "at least one vss key" part applies once a run of its fleet-active-k is on record since its
+    # thing was made; before that, a car with no shadow is no failure, and its allowlist part passes (nothing is there)
+    for k in FLEET_CARS:
+        if t.state.status("fleet-thing-%d" % k) not in OURS:
+            continue
+        if k not in n.fleet:
+            add("S11: the shadows' keys of fleet car %d" % k, None, why="TWIN_FLEET_THING_%d is not given" % k)
+            continue
+        car: Dict[str, List[str]] = {}
+        found = 0
+        for shadow in SHADOWS:
+            call = c_shadow_read(t, shadow, k)
+            outfile = Path(call.args[-1])
+            if outfile.exists():
+                outfile.unlink()
+            got = aws.read(call)
+            found += 1 if got is not None else 0
+            try:
+                reported = json.loads(outfile.read_text(encoding="utf-8"))["state"]["reported"] if got is not None else {}
+            except (OSError, ValueError, KeyError, TypeError):
+                reported = {}
+            car[shadow] = sorted(str(x) for x in reported) if shadow == "vss" else sorted(str(p) for p in reported.get("paths", []) or [])
+        entries = t.state.data["steps"]
+        made = entries.get("fleet-thing-%d" % k, {}).get("made")
+        ran = (t.state.status("fleet-active-%d" % k) in ("done", STALE) and isinstance(made, str)
+               and entries.get("fleet-active-%d" % k, {}).get("ran_on") == made)
+        everything = car["vss"] + car["config"]
+        under = sum(1 for x in everything if x.startswith(excluded))
+        ok = (set(car["vss"]) <= shadow_paths and set(car["config"]) <= paths and not under
+              and (len(car["vss"]) >= max(1, min_vss_keys) or not ran))
+        add("S11: the shadows' keys of fleet car %d" % k, ok, named_shadows=found, vss_keys=len(car["vss"]), config_paths=len(car["config"]),
+            least_expected=max(1, min_vss_keys) if ran else 0,
+            outside_the_allowlist=len(set(car["vss"]) - shadow_paths) + len(set(car["config"]) - paths), under_the_excluded_branch=under)
     if athena_paths is None:
         add("S11: Athena's distinct paths", None, why="the session's query result was not given (--athena-paths)")
     else:
@@ -5701,7 +7086,7 @@ def exit_checks(t: Twin, min_vss_keys: int, athena_paths: Optional[Path]) -> Lis
 
 
 def ecr_exit_checks(t: Twin) -> List[Tuple[str, str, Dict[str, Any]]]:
-    """Phase 6's ECR rows of the exit (spec 5 item 6; prep section 7: ECR's repository policy gives no cross-account or anonymous
+    """Phase 6's ECR rows of the exit (ECR's repository policy gives no cross-account or anonymous
     access, and ECR Public holds nothing): read-only, each a count or a shape."""
     n, aws = t.n, t.aws
     out: List[Tuple[str, str, Dict[str, Any]]] = []
@@ -5732,7 +7117,7 @@ def ecr_exit_checks(t: Twin) -> List[Tuple[str, str, Dict[str, Any]]]:
 
 
 def pull_exit_checks(t: Twin) -> List[Tuple[str, str, Dict[str, Any]]]:
-    """Phase 6's pull-identity rows of the exit (spec 5 item 6): the pull role's trust and policy, the alias, the pull policy, each
+    """Phase 6's pull-identity rows of the exit: the pull role's trust and policy, the alias, the pull policy, each
     as rendered (their steps' own judges), and the pull certificate carrying the pull policy and no other."""
     n = t.n
     out: List[Tuple[str, str, Dict[str, Any]]] = []
@@ -5857,6 +7242,12 @@ def parser() -> argparse.ArgumentParser:
     a = sub.add_parser("apply")
     a.add_argument("step")
     a.add_argument("--approve", metavar="STEP:HASH")
+    uc = sub.add_parser("update-code", help="the function's code replaced in place by the zip at TWIN_BREAKER_ZIP")
+    uc.add_argument("step", choices=["function"])
+    uc.add_argument("--approve", metavar="function-code:HASH")
+    ucf = sub.add_parser("update-config", help="the function's time-out and environment replaced in place by the breaker's set (fleet P2)")
+    ucf.add_argument("step", choices=["function"])
+    ucf.add_argument("--approve", metavar="function-config:HASH")
     sub.add_parser("status")
     tr = sub.add_parser("trip")
     tr.add_argument("--capture", metavar="DIR")
@@ -5912,8 +7303,8 @@ def stop_literals(t: Twin) -> Dict[str, List[str]]:
 
 
 # The commands whose every run reads the account and changes nothing in it: the caller's identity is their first call.
-# `apply`, `teardown`, `recover` and `trip` read it themselves, before their first call, and only where they send one (a
-# render that is only printed sends nothing); `plan`, `literals`, `build-breaker` and `branch-scan` send no call at all.
+# `apply`, `update-code`, `update-config`, `teardown`, `recover` and `trip` read it themselves, before their first call, and only where they send one
+# (a render that is only printed sends nothing); `plan`, `literals`, `build-breaker` and `branch-scan` send no call at all.
 READS_THE_CALLER_FIRST = ("baseline", "status", "restore", "verify-gone", "exit-checks")
 
 
@@ -5967,6 +7358,10 @@ def run(args: argparse.Namespace) -> int:
         return cmd_plan(t, args.no_cli)
     if args.command == "apply":
         return cmd_apply(t, args.step, args.approve)
+    if args.command == "update-code":
+        return cmd_update_code(t, args.approve)
+    if args.command == "update-config":
+        return cmd_update_config(t, args.approve)
     if args.command == "status":
         return cmd_status(t)
     if args.command == "trip":
@@ -5997,6 +7392,8 @@ def stop_by_hand(command: str, refusal: str = "") -> None:
             "profile, with the twin's own names:", err=True)
         for line in STOP_BY_HAND:
             say("  " + line, err=True)
+        if HAND_FLEET:                                              # fleet P2: the second line, only with a fleet certificate on record
+            say("and three calls for each fleet car whose certificate the state records, in the file below", err=True)
         if HAND is not None:
             say("With %s's own values, as far as the names file and the state give them, they are in %s (written before this "
                 "refusal was said)." % (HAND_FOR, HAND), err=True)
@@ -6008,10 +7405,11 @@ def stop_by_hand(command: str, refusal: str = "") -> None:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    global OUT, INVOKED, HAND
+    global OUT, INVOKED, HAND, HAND_FLEET
     OUT = Out()
     INVOKED = False
     HAND = None
+    HAND_FLEET = False
     state_dir = None
     command = ""
     try:

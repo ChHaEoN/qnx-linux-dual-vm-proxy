@@ -3,8 +3,8 @@
 SDV Phase 4, the minimal cloud twin. This directory is the account side of
 the twin: what creates, checks and removes the cloud resources the device side (`sdv/connector`) sends to.
 
-Labels such as A3 row 13, B2, C9, D8 and the gap letters are the project's internal plan items; they are kept so that
-the code and its tests can be read against that plan.
+Labels such as A3 row 13, B2, C9, D8 and the gap letters name the project's local design notes, not in this tree.
+The code and its tests state the rules they implement.
 
 ## What it is
 
@@ -39,9 +39,11 @@ twin, `apply` refuses it as not ours and names the owner's choice: delete it by 
 | `baseline` | Stores what every listing returns, before the first create. |
 | `plan [--no-cli]` | Renders every call of every step and every call a command sends outside the table, checks every document, and gives each call to the CLI to read offline. Holds the operator role's rendered policy to every call it lists; with `--rehearsal`, whose table holds no role, the twin's policy is rendered from the same names, written nowhere, and held to the rehearsal's calls, which are sent under that role too. For a call whose sample reply fails the CLI's own validation only the options' names, the required options and each value's form were read, and `plan` names such calls by service and operation. Executes nothing. A step whose zip is not the build of the source as it stands is refused by the name `zip-not-the-source`, as apply refuses it. |
 | `apply STEP` | Prints the step's calls and documents, redacted, with the render's sha256, and stops. With `--approve STEP:HASH`: the caller must be an assumed session of the operator role; read (what exists and is not ours is refused); create; read back and compare; record. One printing lets one run of the calls through. A step recorded as being deleted is not made again before `verify-gone STEP`, or its teardown run again, recorded it as deleted. Before a certificate is created its listing is read: a name there that neither the baseline nor a state knows, and nothing is created. |
+| `update-code function` | Replaces the function's code in place with the zip at `TWIN_BREAKER_ZIP`, for a source change of `breaker/breaker.py` alone: printed, and run by its own approval (`--approve function-code:HASH`). Below, "Replacing the function's code in place". |
+| `update-config function` | Replaces the function's time-out and environment in place with its render for the breaker's set (video 3's fleet): printed, and run by its own approval (`--approve function-config:HASH`). Below, "Video 3's fleet". |
 | `status` | The proving reads of every step as states, never values; each alarm's state, whether its actions are enabled and what they target; the function's reserved concurrency. Fails when the function's certificates are not exactly the twin's, or an ACTIVE certificate of the account is outside the twin's set. A read that is denied is said in its place and stops neither assertion; a read an assertion stands on, denied, fails it. A step that has no read at all (no id in the state) is said so, never "not found". A go-live step whose rule or certificate is read and is not live says `not live (tripped, or not made live)`: what a trip leaves is there. The function's code is held to the sha256 the state recorded when it was made. Says beside the function's line when the breaker's source has changed since the build the function was made from, or cannot be built: a word, no failure (the account runs what was approved). After the alarms' lines it prints the sha256 of the thresholds file the alarms are rendered from (`TWIN_THRESHOLDS`, as it stands): the burst tool is given that hash as `--thresholds-sha256` and refuses any other file (`burst/README.md`). A hash of the file's bytes, never a count of it. |
-| `trip` | Invokes the function with the manual trip, then `status`. No approval: stopping is the safe direction. Its first act is the file of the four calls by hand, `<state>/trip-by-hand.txt`, written before anything of the trip can be refused: for this twin, as far as the names file and the state give them. A call that lacks a value is a comment there, each open slot is said by the key its value comes from, and the certificate's id is taken from the state only when the state was made under the account, region, prefix and thing the names file gives now (a state that records no names yet, one made before its first write or one whose entry `names` was taken out on the salt-missing advice, gives its certificate with no comparison). The file's place is printed; its content, which is unredacted, never is. It is not stopped by a literals file that is missing or behind, by a state that cannot be read, by an identity that cannot be read, or by another operator role or profile than the state was made under: it is held to the account only, and a caller of another account is refused. Nor is it stopped by another bucket suffix or notice's switch (the owner's A4 answers of 2026-10-16): no call of a stop is made of either. No ending of a trip is only a refusal: one that ends before its invoke holds the file already, the four calls are named once more after the refusal, and where no file could be written they are printed with their slots and the keys the slots are made of. A trip that ran prints what its record says each write was answered (below). `status` follows also when the invoke failed or ended in a function error: it is the proof for the calls by hand. An invoke that was throttled is said to have met a run of the function, which runs one invoke at a time: `status` is read first. An invoke that was sent and whose answer is not known (a reply that is no JSON, a CLI cut off) is said so: the function may have run, `status` follows, and the trip is not called refused before its invoke. The caller is read once more before a trip's status: when the profile now answers for another account, no status is printed (it would be that account's all-clear) and the trip ends as a refusal. The stop needs no operator role: a names file that lost `TWIN_OPERATOR_ROLE`, or gives it in a form the driver does not take, is said by the key and the trip goes on. In the file a call is written without `--profile` where the names file gives none in its form (the profile is then the shell's, as in the plan's own four calls), a comment gives the read that finds the certificate's id where the state does not give it, and a rehearsal's trip says in the file's head and on the terminal that the file is the rehearsal's set's (one file name serves both: a trip of the twin writes the twin's again). When the write could not take the file's place, the file it got as far as (`trip-by-hand.txt.tmp`) is named if it holds this run's calls whole. A command line that names `trip` and cannot be read gets the file too, in the state directory it names by `--state` or by `TWIN_STATE`; of the words it could not read only the options' names are printed, each as typed up to its `=`. With no CLI that runs, the plan's console way is named after the calls. |
-| `restore` | Renders the three reverse calls and their proofs for the owner to run. Refused while a breaker alarm is missing, in ALARM, or has its actions disabled. |
+| `trip` | Invokes the function with the manual trip, then `status`. No approval: stopping is the safe direction. Its first act is the file of the four calls by hand, `<state>/trip-by-hand.txt`, written before anything of the trip can be refused: for this twin, as far as the names file and the state give them. With a fleet car's certificate on record, the file also holds three calls for each fleet car (its certificate INACTIVE, its connection deleted, its own policy detached), by the same rule. Where the state's names cannot be compared with the names file's, or the state cannot be read, each car's certificate is a slot there, as the twin's is. A call that lacks a value is a comment there, each open slot is said by the key its value comes from, and the certificate's id is taken from the state only when the state was made under the account, region, prefix and thing the names file gives now (a state that records no names yet, one made before its first write or one whose entry `names` was taken out on the salt-missing advice, gives its certificate with no comparison). The file's place is printed; its content, which is unredacted, never is. It is not stopped by a literals file that is missing or behind, by a state that cannot be read, by an identity that cannot be read, or by another operator role or profile than the state was made under: it is held to the account only, and a caller of another account is refused. Nor is it stopped by another bucket suffix or notice's switch (the owner's A4 answers of 2026-10-16): no call of a stop is made of either. No ending of a trip is only a refusal: one that ends before its invoke holds the file already, the four calls are named once more after the refusal, and where no file could be written they are printed with their slots and the keys the slots are made of. A trip that ran prints what its record says each write was answered (below). `status` follows also when the invoke failed or ended in a function error: it is the proof for the calls by hand. An invoke that was throttled is said to have met a run of the function, which runs one invoke at a time: `status` is read first. An invoke that was sent and whose answer is not known (a reply that is no JSON, a CLI cut off) is said so: the function may have run, `status` follows, and the trip is not called refused before its invoke. The caller is read once more before a trip's status: when the profile now answers for another account, no status is printed (it would be that account's all-clear) and the trip ends as a refusal. The stop needs no operator role: a names file that lost `TWIN_OPERATOR_ROLE`, or gives it in a form the driver does not take, is said by the key and the trip goes on. In the file a call is written without `--profile` where the names file gives none in its form (the profile is then the shell's, as in the plan's own four calls), a comment gives the read that finds the certificate's id where the state does not give it, and a rehearsal's trip says in the file's head and on the terminal that the file is the rehearsal's set's (one file name serves both: a trip of the twin writes the twin's again). When the write could not take the file's place, the file it got as far as (`trip-by-hand.txt.tmp`) is named if it holds this run's calls whole. A command line that names `trip` and cannot be read gets the file too, in the state directory it names by `--state` or by `TWIN_STATE`; of the words it could not read only the options' names are printed, each as typed up to its `=`. With no CLI that runs, the plan's console way is named after the calls. |
+| `restore` | Renders the three reverse calls and their proofs for the owner to run. Refused while a breaker alarm is missing, in ALARM, or has its actions disabled. With a fleet car's certificate on record, it also gives one call for each fleet car of the set, its policy attached again; it never makes a fleet certificate ACTIVE (below, "Video 3's fleet"). |
 | `teardown [STEP]` | The table in reverse, one approved step at a time, each with its precondition. Emptying the bucket is the step `bucket-objects`, approved for exactly what is listed at that moment. No file a create took its content from has to be there still. A render that stands on a value the state has lost (the certificate's id) is refused whatever it holds, and a step with nothing to read is never called "read back, not found". A create call whose reply was lost, or was an error, is not taken for one that never went through (below). |
 | `recover STEP` | Puts the certificate's id back into a state that lost it, from a reply file the driver itself wrote under the state directory: never a typed id. Printed and approved like a step; it sends reads only. |
 | `verify-gone [STEP]` | Read-only: nothing recorded is found by name, no listing holds a name the baseline lacks, the tag query is empty. A listing that says there is more of it is refused, here as in every read. A step that has no read at all is said so, never "not found". |
@@ -70,9 +72,51 @@ The function is afterwards held to the recorded hash, whatever lies at the path 
 when the zip at the path is no longer that one. A step that stands, printed and approved again with another
 file at the path, is not answered "already made, as rendered": the render that was approved names a file the
 step was not made from, `apply` says so and refuses, and the way to the new file is the step's teardown and a
-new apply (after a rebuilt zip, the function's teardown comes before `function-status` and the dry trip are
-run again). Not held: the file is read once for the hash and again by the CLI inside the one run that sends
-the call. For the zip the read-back catches a change in between; for the signing request nothing does.
+new apply. For the function's zip after a source change of `breaker/breaker.py` alone, `twinctl update-code function`
+(below) replaces the code in place instead of the teardown. Not held: the file is read once for the hash and again
+by the CLI inside the one run that sends the call. For the zip the read-back catches a change in between; for the
+signing request nothing does.
+
+**Replacing the function's code in place.** `twinctl update-code function` is for a source change of
+`breaker/breaker.py` alone, built again with `build-breaker`. It replaces the code of the function that stands with
+the zip at `TWIN_BREAKER_ZIP` and changes nothing else: the function's name, ARN, role, configuration, reserved
+concurrency, resource policy and alarms are in no call of it. It prints its render as `apply` does
+(`lambda update-function-code` with that zip, the CLI's wait until the update is complete, the read-back of the
+function, the zip's sha256 in both forms and the render's hash) and runs only with `--approve function-code:HASH`,
+one run per printing. It refuses, each by its name and before any write: the function's step not recorded as made,
+or the function not found in the account; a zip that is not the source's build (`zip-not-the-source`, as
+`apply function` refuses it); the zip the function was made from (`nothing-to-update`); any difference of the
+function from its render but its code, which it prints; a caller that is not the operator role.
+
+- Read back with the new zip's CodeSha256, the state records that zip as the function's input, so `status` reads the
+  function as rendered and no longer says that the source changed. `function-status` and the dry trip are recorded
+  as needing to run again (`stale`, and `status` says so beside each). What stood on the code that was there is
+  taken back with them, as when the function is made anew ("A record does not outlive what it stood on", below):
+  the alarm tests and `reattach-policy` are `stale` too, and a step that needs one is refused until it ran again
+  (go-live among them). They run again, each by its own approval, before the twin is relied on; on a twin that is
+  live the dry trip and each alarm test cut as a trip does, and `twinctl restore` gives the calls that make it live
+  again.
+- A call that fails, or whose reply is lost, leaves the function recorded as `updating` with the call on record.
+  Nothing is retried and no step that needs the function is applied (`trip` still runs); `status` or a new
+  `update-code function` reads the function's code and settles the record to the zip it is, or, when it is neither,
+  `update-code` refuses (`update-unsettled`) and `status` says so. It reads the function's `LastUpdateStatus` first, the
+  field the update's wait judges: `InProgress` is refused (`update-in-progress`), the record stays `updating`, nothing
+  is sent, and `status` says "not settled (update-in-progress)"; `Failed` settles to the zip the function was made from
+  (the previous code runs, whatever `CodeSha256` says), and `status` then reads the function as DIFFERS when the service
+  reports the attempted code; `Successful`, or no value, is judged by `CodeSha256` alone. The three values and their
+  meaning are from the service's documentation as remembered, not read from a live account: what the real service
+  answers is not established.
+- The operator role needs `lambda:UpdateFunctionCode` on the function. Its render holds that action while an update
+  is due (the function stands on another zip than the source's build) or once one is on record, and only then, so
+  that no other render moves. `plan` then gives the update's calls to the CLI and holds the policy to them, and says
+  that a role made from an earlier render lacks the action; `status` reads that as the operator role's policy not
+  being the render. Changing the role in the account is the owner's, by hand (IAM), from the render
+  `twinctl apply operator-role` prints, which then reads it. Without the action the service refuses the call (from
+  memory of IAM), and the record settles back to the zip the function was made from.
+- Its time-out and its environment are changed in place by `twinctl update-config function`, its sibling for the
+  breaker's set (below, "Video 3's fleet"), which holds the code fixed as this command holds those two. Any other
+  change of the function (its role, its memory, its runtime) is still the step's teardown and a new apply, after which
+  `function-status` and the dry trip run again.
 
 **A create whose reply is lost, or is an error.** Every create call is on record before it is sent, and it
 stays there however it ended. A call whose reply was lost (a reply that is no JSON, a CLI that was cut off,
@@ -212,6 +256,10 @@ whole payload stays in the state directory.
 written from memory of the service's documentation, so the tests show the driver consistent with that
 reading, never the reading itself. An invoke of the function runs the handler of `breaker/breaker.py` out
 of the zip the function was created from, over fake clients that act on the stand-in's own account.
+`tests/test_sdv_cloud_fleet.py` drives the same stand-in, with update-code's two calls and
+update-function-configuration added in each test's own directory; it holds the fleet's steps, the breaker's set,
+update-config and its settle, fleet-active-k's checks, status's assertions, and one whole life in P4's order; it
+takes most of the cloud tests' time.
 
 ## The breaker (`breaker/breaker.py`)
 
@@ -227,6 +275,14 @@ by hand, with `twinctl restore`.
   the detach to the certificate, never to the policy, so the code selects the policy, by the environment's
   name alone. A test holds the operations the file calls to exactly the role's actions, each on the
   resource its call names.
+- **One policy, or the pairs** (video 3's fleet). `TWIN_POLICY` is one name, the policy of every certificate (the
+  one-car twin), or exactly one name per entry of `TWIN_CERTIFICATE_ARNS`, in its order: each certificate's own
+  policy is detached from it, and the read-back lists each distinct policy once and judges each certificate against
+  its own policy's targets. The pairs are counted over the certificate list's entries as given (an entry that is no
+  certificate's ARN among them, its pair passed over) and made before a repeated entry is dropped. Any other count,
+  an empty entry, or one certificate given with two policies is a failure, and no detach is attempted: a pairing is
+  never guessed at. The record gains `counts.policies` when there is more than one policy; with one it is the
+  one-car twin's byte for byte.
 - **When it acts.** On the manual trip, on an alarm in ALARM in either documented shape, and on any event it
   cannot parse: it fails closed. That includes an event its own rules stop on: whatever error reading the
   event ends in, it is the trip, never an error before the first call. A cleanly parsed OK or
@@ -253,7 +309,10 @@ by hand, with `twinctl restore`.
   state is written, and the function's `Errors` metric is the sign that is left (with the notice topic, its
   alarm notifies the owner). How many addresses the two names resolve to is recorded by the function-status reading,
   and the function's time-out is the owner's to raise for it (the file, and the driver's create call and
-  read-back). These are design values; nothing was measured.
+  read-back). A trip makes 3C + K + P + 2 calls (C certificates, K client ids, P distinct policies): the one-car
+  twin's 7 fit its 30 s; the largest set, three cars, makes 17, counted at 42 s, and two or three cars are given
+  45 s (the owner's choice of 2026-11-15); `twinctl status` fails when the function's time-out is under the count
+  of its own lists. These are design values; nothing was measured.
 - **What it returns and raises holds states and counts,** never a value of its environment, of the event
   or of the request: the payload lands in the driver's state directory and `trip --capture` copies it. Its
   log record, inside the account, names what was acted on, what invoked the function and the request.
@@ -359,7 +418,7 @@ render to the baseline recorded before Phase 6 WP4). The keys (`.env.example` ha
 | `TWIN_ECR=1` | the steps `ecr-repository` and `ecr-lifecycle` (row B2), the operator policy's ECR grants, `push`, and the exit's ECR rows. `TWIN_ECR=0` takes effect only once no ECR step stands: while one does, the steps that stand keep all four |
 | `TWIN_PULL_ROLE` | the pull steps (rows B1 and B3), the operator policy's grants on the alias and the pull role, `ecr-config`, the exit's pull rows; bound once a pull step is recorded and held while any pull step is on record: once `apply pull-role` has read the role, for good (twinctl never deletes it) |
 | `TWIN_ORIN_CSR`, `TWIN_ORIN_CERTIFICATE_OUT` | the Orin's signing request (made on the board, where its key stays) and where the pull certificate's PEM is written |
-| `TWIN_PULL_THING` | only if B3 finds that a certificate attached to no thing gets no credentials (wp0-facts C9): the thing it is attached to; bound once `pull-thing` is recorded, while that step is on record |
+| `TWIN_PULL_THING` | only if a certificate attached to no thing gets no credentials: the thing it is attached to; bound once `pull-thing` is recorded, while that step is on record |
 
 A key that is bound (the pull role, the pull thing) refuses every command but `trip` under another value, or none, while its steps
 are on record in any form but absent or deleted (`names-changed`, by the key's name and never by a value). For the pull role that
@@ -399,7 +458,7 @@ delete on that alias, its listing on `*`, and `iam:GetRole`, `iam:GetRolePolicy`
 owner remakes the policy from the render (B1) only when a key is given. The Service Authorization Reference's pages for ECR, ECR
 Public, IoT and IAM were read for the action list (2026-10-17); the listing of every repository is on `*` because a listing names
 no repository, so no repository's ARN can hold it. A narrower `repository/*` of the twin's region and account would need a
-wildcard exception of its own, which spec 5 item 5 does not give (`repository/sdv-twin/*` and nothing else); whether ECR answers
+wildcard exception of its own; the driver permits `repository/sdv-twin/*` and nothing broader. Whether ECR answers
 that listing to this policy is first seen at B2, under the remade policy (`exit-checks` and `verify-gone` read it).
 
 **`status`** knows two certificate sets: the function's environment is held to the twin's data certificate alone, as before; an
@@ -452,6 +511,110 @@ service name `CreateRoleAlias` passes the pull role to (the statement names the 
 Docker's containerd store keeps the manifest's bytes (the read-back settles it, D4); that `aws ecr get-login-password` takes no
 skeleton (`plan` takes it so, from memory); anything on the Orin or on a1.metal; secure OTA (no image signing, no root of trust: a
 token and a key on a host are files); or any timing.
+
+## Video 3's fleet: cars B and C beside the twin
+
+Video 3's fleet P2: the twin's account side for a set of up to three cars. Car A is the twin's own thing, certificate and
+policy, unchanged; cars B and C are 2 and 3 (`sdv/stack/fleet.py`'s instances). **Nothing of it is there until its key
+is given**: with neither `TWIN_FLEET_THING_2` nor `TWIN_FLEET_THING_3`, every render and every output is the twin's own
+(`tests/test_sdv_cloud.py`'s pins hold them; only the function's pins moved, with the breaker's source). The keys
+(`.env.example` has them):
+
+| key | what |
+|---|---|
+| `TWIN_FLEET_THING_2`, `TWIN_FLEET_THING_3` | car k's thing and MQTT client id, in `TWIN_THING`'s form, beginning with `TWIN_PREFIX`; refused by the key, never by the value, when `_3` is given without `_2` or a thing is the twin's, the pull thing's, the other car's or the rehearsal's (`<prefix>rh-thing`); bound once the first of the car's steps is recorded, and held while any is on record |
+| `TWIN_FLEET_CSR_k`, `TWIN_FLEET_CERTIFICATE_OUT_k` | car k's signing request (made in WSL, where its key stays) and where its PEM is written (`device.crt` in its device directory) |
+
+No key names a policy: car k's is `<prefix>-device-<k>`. `trip` is held to none of these keys: a fleet key whose value
+has not its form, a fault between them, or another thing than the state's binding is said, and the stop goes on (a
+key twinctl does not know refuses every command, the stop's among them, as for every key).
+
+**The steps**, after every step of the twin's and Phase 6's, car 2's before car 3's, so that a teardown removes them
+first (car 3's, then car 2's, each car's attachments, policy, certificate, shadows, thing): `fleet-thing-k`;
+`fleet-shadows-k` (no create call; approved with `fleet-active-k`, and deleted before the thing by
+`teardown fleet-shadows-k`); `fleet-certificate-k` (INACTIVE, held to the certificates' listing before its create,
+`recover fleet-certificate-k` as `recover certificate`); `fleet-policy-k` (the device policy with car k's thing,
+held to `topics.py`'s topics for it); `fleet-attachments-k` (the policy to the certificate, the certificate to the
+thing `EXCLUSIVE_THING`); and the actions `fleet-active-k` and `fleet-inactive-k`, each run by its own printed hash.
+A state that records a car's step keeps the car in the table whatever the names file says. While a fleet step stands,
+no pull, ECR or twin step can be torn down before it (the table's order).
+
+**The breaker's set** is car A and every car whose `fleet-attachments-k` stands: a certificate carries traffic only
+when ACTIVE with its policy attached, so the attachment is the boundary, and a car can leave the set before its
+certificate is deleted. The set takes the function's environment (the certificates, the client ids, and one policy
+per certificate in their order: the breaker's pairs), its time-out (30 s for car A alone, 45 s for two or three
+cars), the breaker role's statements `Certificate`, `Connection` and `PolicyTargets` (a list for two or three cars, a
+string for one, as before), `reattach-policy` (one attach for each set car after the twin's), `restore` and the stop's
+file. **A car joining or leaving** the set takes back every record that stood on it: the breaker role's `verified`,
+`function-status`, the dry trip, every alarm test, `reattach-policy` and every `fleet-active-j`. Only the highest car
+whose steps stand can leave. A set change is refused, each by its name and before any write, while a fleet
+certificate reads ACTIVE (`fleet-active-standing`; `fleet-inactive-k` is the way out), while a code update is due
+(`code-first`, except the change back to the set the function names, a leave after which the function names a part of
+the set, and a teardown on a twin read as cut), and while the function's update is not settled (`still-updating`).
+With both cars joined before `update-config` and a code update then due, the way to `update-code` is car C's leaving
+and its other teardowns, then car B's leaving (the change back); the cars join again after the code.
+
+**`twinctl update-config function`** is the sibling of `update-code` for the set: it replaces the function's time-out
+and environment in place with their render for the set and changes nothing else (`lambda
+update-function-configuration`, the CLI's wait, the read-back), printed and run by its own approval
+(`--approve function-config:HASH`). It refuses, each by its name and before any write: the function not recorded as
+made, or not found; a code update due (`code-first`: the code goes first, on the environment the function stands
+on); a car of the set whose attachments are not made and proven; any difference of the function from its render but
+those two (`function-differs`, printed); the two already the render's (`nothing-to-update`); a fleet certificate that
+reads ACTIVE (`fleet-active-standing`); a breaker role that, as read, does not allow every certificate, client and
+policy of the set (`breaker-role-short`: the role is read, not its record, so a car's leaving runs it on the wider role
+and the owner narrows the role after); a caller that is not the operator role. The update is on record before it is
+sent, with the sha256 of the time-out and the variables as read and as rendered (never the values, which name the
+account and the things), and never retried. `status`, `update-code` and `update-config` each settle the function's
+`updating` record by its kind: a code record as `update-code` does; a configuration record by the two fields as read
+against the recorded hashes (`InProgress` refused; the update's `to`, updated, and `function-status` and the dry trip
+run again with what stood on the function; its `from`, not updated; neither, `update-unsettled`, read by hand;
+`Failed` adds a word and overrides nothing). The operator role's policy holds `lambda:UpdateFunctionConfiguration`
+on the function only while a fleet car's steps are in the table or such an update is on record; `plan` then gives its
+calls to the CLI and holds the policy to them.
+
+**`fleet-active-k`** stands on its car's attachments and `reattach-policy`, and its checks are read before its call,
+each refused by its own name with nothing sent: every breaker alarm there, not in ALARM, with its actions enabled; car
+k's policy attached to its certificate and the certificate to its thing, exclusively; the function as read its render
+for the set (environment, time-out, the recorded code) with no code update due and no update unsettled; the breaker
+role as read its render; `function-status`'s last run `done`; the dry trip's last run `done`, and its record a cut
+with `counts.certificates`, `counts.client_ids` and `counts.policies` each the set's size. So no fleet certificate is ACTIVE unless the function's
+environment, its role and a dry trip cover it. `fleet-inactive-k` needs the certificate alone and is refused by none
+of these.
+
+**`status`** gives each fleet certificate's state, its policy and its thing; fails unless the function's
+certificates, client ids and policies are exactly the set's, the policies paired with the certificates by position;
+fails when the function's time-out is under the count of its own lists; and fails on a set car's certificate that is
+ACTIVE unless the breaker's proof for it stands (its `fleet-active-k`, `function-status`, the dry trip, every alarm
+test and `reattach-policy` all `done`, every breaker alarm armed, the breaker role as rendered, both assertions ok):
+"active: a fleet session". In a trip's own `status`, its proof, a set car's certificate that is still ACTIVE fails
+whatever the records say: the cut did not reach it. An alarm's own run that did not cut is seen while its alarm reads
+ALARM, and not once it reads OK again.
+Between a car joining and `update-config` the function names fewer certificates than the set, and the first assertion
+fails: that window is expected, and no fleet certificate is ACTIVE in it. With no fleet key the new checks print only
+on a failure.
+
+**`restore`** gives the twin's three calls and, with a fleet car's certificate on record, one call for each fleet car of
+the set (its policy attached again). It never makes a fleet certificate ACTIVE: after a restore each
+`fleet-active-k` runs again by its own approval and checks (the owner's choice of 2026-11-15). The stop's file holds
+the four calls and, with a fleet car's certificate on record, three calls for each fleet car. A fleet car's
+policy or certificate that the function's environment names is not torn down (`fleet-still-covered`) unless the twin
+is read as cut (the rule disabled and every certificate the environment names INACTIVE, each read); `restore` and
+go-live's checks are refused while the environment names what is not found (`fleet-named-gone`). So the whole
+teardown, the last resort, needs no IAM change and no `update-config`: `twinctl trip` first, then the fleet's steps in
+reverse.
+
+**The thresholds stay derived for one thing** (`DECIDED_THINGS` stays 1, the owner's choice of 2026-11-15). The
+fleet's normal traffic stays under every threshold by design values, but derive.py's checks for the limiter's worst
+case and for restarts do not hold for three connectors: a fleet that misbehaves trips the breaker, which is the safe
+direction, and the bound on a leak stands. Things, certificates, policies and named shadows have no monthly price in
+the cost model.
+
+What these tests (`tests/test_sdv_cloud_fleet.py`, `tests/test_sdv_breaker.py`) do **not** demonstrate: anything in
+the account (IAM's reading of either role, of a list in the breaker role or of a role wider than its render, IoT's
+three exclusive attachments and three policies); what the service answers to `update-function-configuration` or its
+wait, or reports while an update is in progress or after one fails; that the breaker's counted time holds in the
+runtime; the fleet's traffic, or whether the shadow alarm trips under it; any cost or any timing.
 
 ## What it is not
 
