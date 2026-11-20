@@ -615,6 +615,76 @@ them, whose stand-in leaves what the claim node, the scenario driver and the exp
 `sdv/aw` host check on stand-ins for `ip` and `sysctl`. It shows nothing about an instance: not the pull,
 not that Autoware runs there or that the guest judges its commands, nor any timing.
 
+### A g5g session (SDV plan Phase 8)
+
+This is an A6 session on a `g5g.metal` host (Graviton2 with two NVIDIA T4G GPUs) whose five extra phases prepare the
+Linux host for the GPU and the edge-LLM service. The tooling is written and tested against stand-ins; no sentence here
+says that a session has done any of it. What differs from an A6 session:
+
+- **`METAL_TYPE=g5g.metal`** launches as any other type does. `METAL_AZ` is optional: the region's name and one
+  letter, refused before any aws call otherwise. When it is given, `run-instances` asks for that zone and the zone read
+  back must equal it, else the launch terminates. `launch` prints `availability zone: <zone>` or `unread`.
+- **The session's first boot** uses the A6 phases: `run setup`, `run quiesce`, `run launch-live`, `run liveness`, then
+  `run stop`.
+- **Five phases**, each given its words in `LADDER_ENV`:
+  - `run gpu-facts` reads the host and writes nothing else. It may be repeated, into the stems `gpu-facts`,
+    `gpu-facts-2` and so on. Its last line is `gpu-facts: cpu_part=... kvm=... nvidia_pci=... pci_ids=... bound=...
+    driver=... uvm=... nodes=N/4 gpus=... compute_cap=... kernel_oops=... boot=...`, and it never holds a UUID or a
+    serial. Before that line it prints each GPU as `gpu N: <name> (compute_cap <c>)`. The driver's tool is given 60 s;
+    one that does not answer is the word `driver tool: failed (no answer within 60 s)`;
+  - `LADDER_ENV="MODE=plan" run gpu-install`, then `LADDER_ENV="MODE=apply" run gpu-install`;
+  - `run llama-build` prints `started`; `LADDER_ENV="MODE=wait" run llama-build` waits for the build and
+    `LADDER_ENV="MODE=stop" run llama-build` ends it; `JOBS=N MEM_MAX=NG` are optional. A wait ends at once, with
+    `nothing to wait for`, when no build is running and none ended whole (a start that was refused, a stop, a runner
+    that died); a wait that outlives its time exits 2 and can be made again;
+  - `LADDER_ENV="IMAGE=ifs-svc.bin" run launch-svc`;
+  - `run vlm`.
+- **What the install needs first.** The list file `orin-native/edge-llm/g5g-packages.list` is in the repo tarball. In
+  `METAL_FILES` go the approved-names file `g5g-approved.txt` and the key package's `.deb`. The approved-names file's
+  lines are `pkg NAME=VERSION ubuntu|nvidia SIZE SHA256`, `key PACKAGE FILE.deb SHA256`, `keyfile PATH SHA256`,
+  `pins g5g-nvidia-pins SHA256`, `llama COMMIT CAP`, `index-cap BYTES` and `total all BYTES`. The owner's yes to that
+  file's sha256 comes first.
+- **The plan** first reads the approved file whole: each of its `key`, `pins`, `index-cap` and `total all` lines there
+  once and of its form, a `pkg` line for every name of the list file, the key package's sha256 and the generated pin
+  file's sha256. A failure there is `plan: refused` with this host unchanged. Then it makes three changes: it installs
+  the key package from `in/`, writes the pin file `g5g-nvidia-pins` into apt's preferences directory, and holds the
+  index refresh to the index cap. It adds no source and no component. It reads the pins back (`pins in force: N of N`)
+  and ends `plan: approved set <sha256>` or `plan: refused` with `refused: <reason>` lines. A kernel package, a
+  removal, an upgrade, a module package of another kernel and anything outside the approved file are refused. It asks
+  apt for each `.deb`'s SHA256 by name (`Acquire::ForceHash=SHA256`): apt prints one hash a file, and a line that
+  carries another is refused as `no SHA256 from apt (it printed <type>)`.
+- **The apply** refuses without an approved plan. It unloads nouveau first (`nouveau unloaded`, or `nouveau held:
+  nothing installed`), installs exactly the set with `--no-install-recommends`, says `nouveau unloaded again` if it
+  needs `rmmod` once more, loads `nvidia` and `nvidia_uvm` with no reboot, checks the four device nodes, makes none
+  itself, and ends `installed set <sha256>`. It says how many nodes stand after each installed tool that can make
+  them (`nodes after the udev rule and helper (udevadm settle): N of 4`, `nodes after nvidia-smi as root: N of 4`),
+  and gives the driver's tool 60 s there too.
+- **The versions** are written twice: `set.txt` as apt gives them and `set-v.txt` with `_` for `.`. Their equality is
+  shown by hashes, because the redactor's IPv4 rule rewrites some versions.
+- **Every phase's `host-after.txt`** carries `kernel_oops=yes|no|unread` and `boot=same|new`. The marker is
+  `$W/g5g-boot`, a hash held outside `rec`. After `boot=new` only `gpu-facts` runs.
+- **`llama-build`** needs `compute_cap` 7.5 on every GPU, and lingering read back for the user; its architecture
+  word is 75. The approved file's `llama COMMIT CAP` line names the pin that may be cloned; its cap is printed beside
+  the checkout's size after the build and is not enforced: nothing stops a clone that passes it.
+- **`launch-svc`** checks `:7102` by a connection, not by its banner. `vlm` runs `vlm-demo.sh` on the first GPU and
+  records `demo-exit.txt`; a failed demo is not the phase's failure. It prints `host after: kernel_oops=... boot=...`
+  and `stamp: board=... cuda_visible_devices=...` (or `stamp: absent`, `stamp: unreadable`).
+- **`run stop`** is the A6 phase, reachable in every session, and it checks no session marker: it ends every QEMU on
+  the instance, a running vss harness's guest included. In a g5g session it is run between the two boots and before
+  the capture.
+- **The capture** takes a g5g stem with its evidence: `gpu-facts` and `gpu-facts-N` with `host-after.txt` and a
+  `summary.txt` holding `cpu_part=`; `gpu-install` with `host-after.txt` and `set.txt`; `llama-build` with
+  `host-after.txt` and `BUILD-INFO` or a stop; `vlm` with `host-after.txt` and `demo-exit.txt`. It prints the g5g
+  lines, and `capture.log` goes into `pub`. Today's A6 evidence is read from the files outside the g5g stems only.
+  The redactor masks every UUID the scan after the fetch would refuse (`<uuid>`; a GPU's as `<gpu-uuid>`).
+- **A g5g.metal session has no vss host role**: a vss harness is refused before anything reaches the instance.
+- **The KVM caveat** is stated once, at the top of this file, and holds here too.
+
+`tests/test_aws_g5g_driver.py`, `tests/test_aws_g5g_phases.py` and `tests/test_aws_g5g_capture.py` run the driver,
+the phases and the capture against stubs of every command they call. A session of this kind shows no timing, no GPU
+partitioning or pass-through (the GPU is the Linux host's), nothing about the Orin's stack, no QNX-supported
+configuration and nothing certified.
+
 ## What bounds the cost
 
 - **Self-termination, checked before upload.** The instance is

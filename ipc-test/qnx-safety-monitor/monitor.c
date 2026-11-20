@@ -64,6 +64,15 @@
  *                   announces its rules after the claim kinds line, and
  *                   refuses to serve when its compiled catalogue digest is
  *                   not that of its compiled UIDs.
+ *   kind 6, lane  : only in the lane builds (MONITOR_EXT_KINDS 0x50 and 0x54,
+ *                   below; C2b S3): a lane found in a camera frame on the
+ *                   Compute side, with the vehicle's speed and yaw rate at that
+ *                   frame, in its own meaning of payload[0..5] and [25..47].
+ *                   Every other build rejects it as it rejects any other kind.
+ *                   Its REJECT lines have a limiter of their own (lane_log(),
+ *                   below); the lane builds announce its rules after kind 4's
+ *                   and kind 2's, and refuse to serve when its compiled table
+ *                   breaks an invariant.
  *   any other kind: rejected, reason claim-kind-unknown.
  *
  * The kind is dispatched inside check_claim(), which only judge_frame() calls,
@@ -161,13 +170,16 @@
 
 /* The extension-kind switch (sdv Phase 2; kind 4 wire specification, section 11).
  * MONITOR_EXT_KINDS is a bitmask of the extension kinds a build knows: 0x10 vss
- * (kind 4), 0x14 ctl, 0x1C gap. It is undefined in every existing build, which
- * compiles exactly as before: everything it gates sits in bare #if blocks, and
- * every guard tests definedness explicitly rather than let an undefined macro
- * read as 0. The lineage is cumulative, so any other defined value is refused. */
+ * (kind 4), 0x14 ctl, 0x1C gap, and (C2b S3) 0x50 vss and lane (kind 6), 0x54
+ * ctl and lane. It is undefined in every existing build, which compiles exactly
+ * as before: everything it gates sits in bare #if blocks, and every guard tests
+ * definedness explicitly rather than let an undefined macro read as 0. The
+ * lineage is cumulative, and kind 6 reuses kind 4's helpers, so 0x40 comes only
+ * with 0x10, and any other defined value is refused. */
 #if defined(MONITOR_EXT_KINDS)
-#  if MONITOR_EXT_KINDS != 0x10 && MONITOR_EXT_KINDS != 0x14 && MONITOR_EXT_KINDS != 0x1C
-#    error "MONITOR_EXT_KINDS must be 0x10 (vss), 0x14 (ctl) or 0x1C (gap)"
+#  if MONITOR_EXT_KINDS != 0x10 && MONITOR_EXT_KINDS != 0x14 && MONITOR_EXT_KINDS != 0x1C \
+      && MONITOR_EXT_KINDS != 0x50 && MONITOR_EXT_KINDS != 0x54
+#    error "MONITOR_EXT_KINDS must be 0x10 (vss), 0x14 (ctl), 0x1C (gap), 0x50 (vss and lane) or 0x54 (ctl and lane)"
 #  endif
 /* A deviation from section 11 (Phase 2 design decision d), narrowed in Phase 8
  * (WP1a) when kind 2 landed: kind 3 does not exist yet, so a gap build would
@@ -294,6 +306,48 @@
 #define CF_ODOM       0x08u
 #define CF_RESERVED   0xF0u   /* b4..b7: zero */
 #endif
+#if defined(MONITOR_EXT_KINDS) && (MONITOR_EXT_KINDS & 0x40)
+/* CLAIM KIND 6, lane (C2b S3): one lane found in a camera frame by a lane
+ * model on the Compute side (the vehicle's offset from the lane centre, its
+ * heading relative to the lane, the curvature ahead, the width, a confidence),
+ * with the vehicle's speed and yaw rate at that frame carried in the same claim:
+ * each port's monitor is a process of its own and shares no state with another.
+ * Only in the lane builds (MONITOR_EXT_KINDS 0x50, vss and lane, and 0x54, ctl
+ * and lane): kind 6 reuses kind 4's f32_at(), any_nonzero() and dabs(), so it is
+ * only ever built with 0x10. Every other build rejects it as any other unknown
+ * kind. Its reasons 28-31 beside the shared 8, 9 and 10, its own REJECT line and
+ * limiter (lane_log(), below), and its rules announced after kind 2's (or kind
+ * 4's, in 0x50). Its limits are one table in this file (LANE_PROFILE_TABLE: no
+ * generated header, they are not VSS nodes), held by a startup self-check.
+ *
+ * The frame: [6..7] are the verdict and reason as for every kind, [8..23]
+ * are zero in a request (the stamp mode writes them after the judgement), [24]
+ * is the kind. Little-endian throughout, f32 binary32, LEFT positive. With LANE
+ * clear, [1..5] and [25..36] are all zero bytes (a "no lane" claim); with VEH
+ * clear, [37..44] are. "All zero bytes" is 0x00 bytes: -0.0 is not.
+ *
+ * What it is not: kind 6 is advisory; a REJECT is a line and a reply, never a
+ * steer, a brake or a stop, and its limits are design values from road design
+ * ranges and the CARLA taxi, not a validated lane-departure warning. */
+#define KIND_LANE        6u
+#define P_LANE_FLAGS     0u   /* uint8: b0 LANE (a lane found: both
+                                 boundaries), b1 VEH (vehicle values present) */
+#define P_LANE_CONF      1u   /* uint8 confidence, 0..100 (LANE) */
+#define P_LANE_OFFSET    2u   /* f32 the vehicle's centre from the lane centre, m (LANE) */
+#define P_LANE_STAMP     8u   /* [8..23], zero in a request */
+#define P_LANE_HEADING  25u   /* f32 the vehicle's heading relative to the lane, rad (LANE) */
+#define P_LANE_CURV     29u   /* f32 the lane's curvature ahead, 1/m (LANE) */
+#define P_LANE_WIDTH    33u   /* f32 the lane's width, m (LANE) */
+#define P_LANE_SPEED    37u   /* f32 the vehicle's speed at the frame, m/s (VEH) */
+#define P_LANE_YAW      41u   /* f32 the vehicle's yaw rate at the frame, rad/s
+                                 (VEH; judged for finiteness only) */
+#define P_LANE_AGE      45u   /* uint16 the claim's age against the frame's time, ms,
+                                 saturating (carried, not judged) */
+#define P_LANE_PROFILE  47u   /* uint8 profile id, a key into LANE_PROFILE_TABLE (0 is never bound) */
+#define LF_LANE       0x01u
+#define LF_VEH        0x02u
+#define LF_RESERVED   0xFCu   /* b2..b7: zero */
+#endif
 
 /* vlm models this monitor has a configured bound for */
 #define VLM_MODEL_SMOLVLM_500M 1u
@@ -343,6 +397,14 @@
 #define RSN_CTL_LAT_ACCEL    17u  /* b3 and v_meas^2 tan|delta| / L over lat_acc_max + TOL17 */
 #define RSN_CTL_OVERSPEED    18u  /* b3 and |v_meas| over the overspeed bound of |v_cmd| */
 #define RSN_CTL_ROLLING_BACK 19u  /* b3, v_meas below -ROLLBACK_V while v_cmd >= 0 */
+#endif
+#if defined(MONITOR_EXT_KINDS) && (MONITOR_EXT_KINDS & 0x40)
+/* Kind 6's own reasons, beside the shared 8, 9 and 10. */
+#define RSN_LANE_CONF_LOW    28u  /* LANE, and a confidence under conf_min or over 100 */
+#define RSN_LANE_IMPLAUSIBLE 29u  /* the width outside its window, |curvature| over k_max
+                                 or |heading| over h_max */
+#define RSN_LANE_DEPARTURE   30u  /* |offset| over width / 2 - veh_half_w */
+#define RSN_LANE_IMMINENT    31u  /* VEH, over v_min, toward the nearer line and under tlc_min from it */
 #endif
 
 /* Acceptance threshold, percent. Chosen for the demo, not derived from any
@@ -908,6 +970,196 @@ static uint8_t check_ctl(const uint8_t *p, uint8_t *reason)
 	return V_ACCEPT;
 }
 #endif
+#if defined(MONITOR_EXT_KINDS) && (MONITOR_EXT_KINDS & 0x40)
+/* Kind 6's profiles: DESIGN values, from road design ranges and the CARLA
+ * taxi, never fitted to a run, found by the payload's id.
+ * sdv/lane/laneframe.py's PROFILES mirrors this table, and a test holds the
+ * two equal. Nothing in a profile is ever on the wire.
+ *
+ *   id, conf_min [%], width_min [m], width_max [m], k_max [1/m], h_max [rad],
+ *   veh_half_w [m], v_min [m/s], tlc_min [s] */
+#define LANE_PROFILE_TABLE(X) \
+	X(1u, 50u, 2.5, 4.5, 0.1, 0.5, 0.95, 1.0, 1.0)
+
+struct lane_profile {
+	uint8_t  id;
+	uint8_t  conf_min;        /* rule 28: a confidence under it (or over 100) is rejected */
+	double   width_min;       /* rule 29, m */
+	double   width_max;       /* rule 29, m */
+	double   k_max;           /* rule 29: |curvature|, 1/m */
+	double   h_max;           /* rule 29: |heading|, rad; at most LANE_SIN_DOMAIN, which the self-check holds */
+	double   veh_half_w;      /* rules 30 and 31: half the vehicle's width, m */
+	double   v_min;           /* rule 31: judged only over this speed, m/s */
+	double   tlc_min;         /* rule 31: the least time to the nearer line, s */
+};
+
+#define LANE_PROFILE_ROW(id, conf_min, width_min, width_max, k_max, h_max, veh_half_w, v_min, tlc_min) \
+	{ (id), (conf_min), (width_min), (width_max), (k_max), (h_max), (veh_half_w), (v_min), (tlc_min) },
+static const struct lane_profile lane_profiles[] = {
+	LANE_PROFILE_TABLE(LANE_PROFILE_ROW)
+};
+#undef LANE_PROFILE_ROW
+
+/* Every row's id is 1..255, as for kinds 4 and 2: id 0 is never bound, and the
+ * payload carries the id in one byte. A row outside the range is a compile
+ * error, also without -Werror. */
+#define LANE_PROFILE_ID_OK(id, conf_min, width_min, width_max, k_max, h_max, veh_half_w, v_min, tlc_min) \
+	_Static_assert((id) >= 1u && (id) <= 255u, "a lane profile id is 1..255: id 0 is never bound");
+LANE_PROFILE_TABLE(LANE_PROFILE_ID_OK)
+#undef LANE_PROFILE_ID_OK
+_Static_assert(sizeof(lane_profiles) / sizeof(lane_profiles[0]) <= 255u, "at most one lane profile per id");
+
+/* The one lookup of the table: the row with this id, or NULL (reason 8). */
+static const struct lane_profile *lane_profile_find(uint8_t id)
+{
+	size_t i;
+
+	for (i = 0; i < sizeof(lane_profiles) / sizeof(lane_profiles[0]); i++) {
+		if (lane_profiles[i].id == id) {
+			return &lane_profiles[i];
+		}
+	}
+	return NULL;
+}
+
+/* sin without libm, for rule 31: the odd Taylor
+ * polynomial through x^9, by Horner in x^2 with the highest power innermost, in
+ * double. Rule 29 runs first and the self-check holds every h_max at most
+ * LANE_SIN_DOMAIN, so |x| <= 0.5 rad, where it is within 2e-11 of sin. Each
+ * coefficient is the double nearest (-1)^k / (2k+1)!, printed with %.17g, as
+ * sdv/lane/lanerules.py's SIN_COEFFS, and the loop is its lane_sin()'s
+ * arrangement: the lane builds pass -ffp-contract=off, so the two agree bit for
+ * bit. */
+#define LANE_SIN_DOMAIN 0.5
+static const double lane_sin_c[5] = {        /* x^1, x^3, ..., x^9 */
+	1, -0.16666666666666666, 0.0083333333333333332, -0.00019841269841269841, 2.7557319223985893e-06
+};
+
+static double lane_sin(double x)
+{
+	double const x2 = x * x;
+	double s = lane_sin_c[4];
+	int k;
+
+	for (k = 3; k >= 0; k--) {
+		s = lane_sin_c[k] + x2 * s;
+	}
+	return x * s;
+}
+
+/* Reason 9 on one slot: its exponent bits all ones, an infinity or a NaN.
+ * Subnormals and -0.0 are finite. No <math.h>. */
+static int lane_nonfinite(const uint8_t *p, unsigned off)
+{
+	return ((get_u32_le(&p[off]) >> 23) & 0xFFu) == 0xFFu;
+}
+
+/* Rule 31's predicate on values already read (rule 30 has passed, so room -
+ * |off| >= 0): VEH set and the speed over v_min, the lateral speed vl = sp *
+ * sin(h) toward the nearer line (vl > 0 when off > 0, vl < 0 when off < 0, vl !=
+ * 0 when off == 0, LEFT positive), and the margin under tlc_min * |vl| -- a
+ * multiplication, no division. A function of its own so tests/lane_driver.c can
+ * hold it alone; sdv/lane/lanerules.py's imminent() is its twin. */
+static int lane_imminent(const struct lane_profile *pr, uint8_t f, double off, double h, double room, double sp)
+{
+	double vl;
+
+	if (!(f & LF_VEH) || !(sp > pr->v_min)) {
+		return 0;
+	}
+	vl = sp * lane_sin(h);
+	if (!((off > 0.0 && vl > 0.0) || (off < 0.0 && vl < 0.0) || (off == 0.0 && vl != 0.0))) {
+		return 0;
+	}
+	return room - dabs(off) < pr->tlc_min * dabs(vl);
+}
+
+/* Kind 6's judge. Reasons in the order 10,
+ * 9, 8, then a "no lane" claim is accepted, then 28, 29, 30, 31; the first
+ * failure wins. Comparisons are strict, so a value exactly at a limit is
+ * accepted; f32 values are widened to double exactly before any arithmetic.
+ * Stateless: the verdict is a function of the payload and the compiled table
+ * only. sdv/lane/lanerules.py's check_lane() is the reference it is tested
+ * against.
+ *
+ *   10 flags-invalid           b2..b7; a byte of [8..23]; LANE clear and a byte
+ *                              of [1..5] or [25..36]; VEH clear and a byte of
+ *                              [37..44] (-0.0 is not zero bytes)
+ *   9  field-not-finite        a present f32 non-finite: offset, heading,
+ *                              curvature and width when LANE; speed and yaw
+ *                              rate when VEH
+ *   8  profile-unbound         payload[47] is no compiled profile
+ *   -- LANE clear              accepted: a "no lane" claim, nothing to judge
+ *   28 lane-conf-low           confidence < conf_min, or > 100
+ *   29 lane-implausible        width < width_min or > width_max, |curvature| >
+ *                              k_max, or |heading| > h_max
+ *   30 lane-departure          |offset| > room, room = width / 2 - veh_half_w
+ *   31 lane-departure-imminent lane_imminent(): VEH, speed > v_min, toward the
+ *                              nearer line and room - |offset| < tlc_min * |vl|
+ *
+ * The yaw rate and the age are carried, not judged (v1). No value reaches
+ * arithmetic before rule 9 has passed. */
+static uint8_t check_lane(const uint8_t *p, uint8_t *reason)
+{
+	uint8_t const f = p[P_LANE_FLAGS];
+	const struct lane_profile *pr;
+	double off, h, k, w, room;
+
+	/* 10 */
+	if ((f & LF_RESERVED) || any_nonzero(&p[P_LANE_STAMP], 16u)
+	    || (!(f & LF_LANE) && (any_nonzero(&p[P_LANE_CONF], 5u) || any_nonzero(&p[P_LANE_HEADING], 12u)))
+	    || (!(f & LF_VEH) && any_nonzero(&p[P_LANE_SPEED], 8u))) {
+		*reason = RSN_FLAGS_INVALID;
+		return V_REJECT;
+	}
+	/* 9 */
+	if (((f & LF_LANE) && (lane_nonfinite(p, P_LANE_OFFSET) || lane_nonfinite(p, P_LANE_HEADING)
+	                       || lane_nonfinite(p, P_LANE_CURV) || lane_nonfinite(p, P_LANE_WIDTH)))
+	    || ((f & LF_VEH) && (lane_nonfinite(p, P_LANE_SPEED) || lane_nonfinite(p, P_LANE_YAW)))) {
+		*reason = RSN_NOT_FINITE;
+		return V_REJECT;
+	}
+	/* 8 */
+	pr = lane_profile_find(p[P_LANE_PROFILE]);
+	if (pr == NULL) {
+		*reason = RSN_PROFILE_UNBOUND;
+		return V_REJECT;
+	}
+	/* LANE clear: a "no lane" claim */
+	if (!(f & LF_LANE)) {
+		*reason = RSN_OK;
+		return V_ACCEPT;
+	}
+	/* 28 */
+	if (p[P_LANE_CONF] < pr->conf_min || p[P_LANE_CONF] > 100u) {
+		*reason = RSN_LANE_CONF_LOW;
+		return V_REJECT;
+	}
+	off = f32_at(p, P_LANE_OFFSET);
+	h = f32_at(p, P_LANE_HEADING);
+	k = f32_at(p, P_LANE_CURV);
+	w = f32_at(p, P_LANE_WIDTH);
+	/* 29 */
+	if (w < pr->width_min || w > pr->width_max || dabs(k) > pr->k_max || dabs(h) > pr->h_max) {
+		*reason = RSN_LANE_IMPLAUSIBLE;
+		return V_REJECT;
+	}
+	/* 30 */
+	room = w / 2.0 - pr->veh_half_w;
+	if (dabs(off) > room) {
+		*reason = RSN_LANE_DEPARTURE;
+		return V_REJECT;
+	}
+	/* 31 */
+	if (lane_imminent(pr, f, off, h, room, f32_at(p, P_LANE_SPEED))) {
+		*reason = RSN_LANE_IMMINENT;
+		return V_REJECT;
+	}
+
+	*reason = RSN_OK;
+	return V_ACCEPT;
+}
+#endif
 
 /* Returns the verdict, and sets *reason. */
 static uint8_t check_claim(const uint8_t *payload, uint8_t *reason)
@@ -920,6 +1172,9 @@ static uint8_t check_claim(const uint8_t *payload, uint8_t *reason)
 #endif
 #if defined(MONITOR_EXT_KINDS) && (MONITOR_EXT_KINDS & 0x04)
 	case KIND_CTL:   return check_ctl(payload, reason);
+#endif
+#if defined(MONITOR_EXT_KINDS) && (MONITOR_EXT_KINDS & 0x40)
+	case KIND_LANE:  return check_lane(payload, reason);
 #endif
 	default:
 		*reason = RSN_KIND_UNKNOWN;
@@ -960,6 +1215,12 @@ static const char *reason_name(uint8_t r)
 	case RSN_CTL_LAT_ACCEL:    return "ctl-lat-accel";
 	case RSN_CTL_OVERSPEED:    return "ctl-overspeed";
 	case RSN_CTL_ROLLING_BACK: return "ctl-rolling-back";
+#endif
+#if defined(MONITOR_EXT_KINDS) && (MONITOR_EXT_KINDS & 0x40)
+	case RSN_LANE_CONF_LOW:    return "lane-conf-low";
+	case RSN_LANE_IMPLAUSIBLE: return "lane-implausible";
+	case RSN_LANE_DEPARTURE:   return "lane-departure";
+	case RSN_LANE_IMMINENT:    return "lane-departure-imminent";
 #endif
 	default:              return "unknown";
 	}
@@ -1352,6 +1613,183 @@ static void ctl_log_end(struct ctl_log *lg)
 	memset(lg, 0, sizeof(*lg));
 }
 #endif
+#if defined(MONITOR_EXT_KINDS) && (MONITOR_EXT_KINDS & 0x40)
+/* KIND 6'S STARTUP SELF-CHECK: 1 when every compiled profile keeps what the
+ * rules need, as
+ * sdv/lane/laneframe.py's table_errors() holds it: conf_min at most 100; 0 <
+ * width_min < width_max, finite; 0 <= veh_half_w < width_min / 2, so rule 30's
+ * room is positive at the narrowest width rule 29 lets through; 0 < k_max,
+ * finite; 0 < h_max <= LANE_SIN_DOMAIN, so lane_sin() stays inside its domain
+ * (rule 29 runs first); 0 <= v_min, finite; 0 < tlc_min, finite; and an id no
+ * other row has, as lane_profile_find() finds only the first. A NaN fails every
+ * one of these comparisons. main() refuses to serve otherwise (exit 2), so a
+ * hand-edited table never listens. */
+static int lane_table_consistent(void)
+{
+	size_t i, j;
+
+	for (i = 0; i < sizeof(lane_profiles) / sizeof(lane_profiles[0]); i++) {
+		const struct lane_profile *pr = &lane_profiles[i];
+
+		if (pr->conf_min > 100u
+		    || !(pr->width_min > 0.0 && pr->width_min < pr->width_max && pr->width_max <= DBL_MAX)
+		    || !(pr->veh_half_w >= 0.0 && pr->veh_half_w < pr->width_min / 2.0)
+		    || !(pr->k_max > 0.0 && pr->k_max <= DBL_MAX)
+		    || !(pr->h_max > 0.0 && pr->h_max <= LANE_SIN_DOMAIN)
+		    || !(pr->v_min >= 0.0 && pr->v_min <= DBL_MAX)
+		    || !(pr->tlc_min > 0.0 && pr->tlc_min <= DBL_MAX)) {
+			return 0;
+		}
+		for (j = 0; j < i; j++) {
+			if (lane_profiles[j].id == pr->id) {
+				return 0;
+			}
+		}
+	}
+	return 1;
+}
+
+/* The announcement: one line, right
+ * after the ctl rules: and ctl profile lines (the vss ones in 0x50), in every
+ * serving mode: the compiled ids, then each row's limits, from the table itself.
+ * It holds none of the words the harnesses grep. */
+static void lane_announce(void)
+{
+	char ids[4u * 256u];
+	size_t n = 0, i;
+
+	ids[0] = '\0';
+	for (i = 0; i < sizeof(lane_profiles) / sizeof(lane_profiles[0]); i++) {
+		int const k = snprintf(ids + n, sizeof(ids) - n, "%s%u", n != 0u ? " " : "", (unsigned)lane_profiles[i].id);
+
+		if (k < 0 || (size_t)k >= sizeof(ids) - n) {
+			break;  /* cannot happen: at most 255 ids of at most 4 characters */
+		}
+		n += (size_t)k;
+	}
+	printf("monitor: lane rules: profiles %s, kind 6", ids);
+	for (i = 0; i < sizeof(lane_profiles) / sizeof(lane_profiles[0]); i++) {
+		const struct lane_profile *pr = &lane_profiles[i];
+
+		printf("; profile %u: conf_min %u, width %g..%g m, k_max %g 1/m, h_max %g rad, veh_half_w %g m, "
+		       "v_min %g m/s, "
+		       "tlc_min %g s", (unsigned)pr->id, (unsigned)pr->conf_min, pr->width_min, pr->width_max, pr->k_max,
+		       pr->h_max, pr->veh_half_w, pr->v_min, pr->tlc_min);
+	}
+	printf("\n");
+	fflush(stdout);
+}
+
+/* THE KIND 6 CONSOLE LIMITER: kind
+ * 2's four rules (ctl_log(), above) with a state of its own and a cap of its
+ * own, so kind 4's and kind 2's lines and kinds 0, 1 and every unknown kind's
+ * stay as they are.
+ *
+ *   1. A kind 6 REJECT line is printed only when its reason differs from the
+ *      previous kind 6 frame's reason, an ACCEPT counting as reason 0.
+ *   2. Buckets are one-second windows of CLOCK_MONOTONIC (now / 1 s). A bucket
+ *      in which a line was suppressed gets one summary line, printed when the
+ *      first kind 6 frame of a later bucket arrives, or by the session-end
+ *      flush just before the transport's done:/quiet:/burst: line.
+ *   3. At most LANE_LOG_CAP individual lines per bucket; the rest are counted
+ *      into the summary, never lost.
+ *   4. The summary's seen, rejected and suppressed are the bucket's own, and
+ *      `by reason:` counts its suppressed lines, so lines + suppressed =
+ *      rejected in every bucket. The session-end flush, lane_log_end(), prints
+ *      a pending summary and resets everything, so each session's first kind 6
+ *      reject prints.
+ *
+ * Process-global and unlocked, as kind 4's: every transport here judges from
+ * one thread. */
+#define LANE_LOG_CAP       31u                  /* lines per bucket: a 30 Hz camera's frames + 1 (DESIGN) */
+#define LANE_LOG_BUCKET_NS 1000000000ull        /* the summary interval, 1 s */
+#define LANE_LOG_REASONS   32u                  /* by_reason[] covers the reason bytes 0..31 */
+_Static_assert(RSN_PROFILE_UNBOUND < LANE_LOG_REASONS && RSN_NOT_FINITE < LANE_LOG_REASONS
+               && RSN_FLAGS_INVALID < LANE_LOG_REASONS && RSN_LANE_CONF_LOW < LANE_LOG_REASONS
+               && RSN_LANE_IMPLAUSIBLE < LANE_LOG_REASONS && RSN_LANE_DEPARTURE < LANE_LOG_REASONS
+               && RSN_LANE_IMMINENT < LANE_LOG_REASONS,
+               "every reason check_lane() gives indexes by_reason[]");
+
+struct lane_log {
+	uint64_t bucket;                /* the open bucket, now / LANE_LOG_BUCKET_NS */
+	int open;                       /* a kind 6 frame has opened it in this session */
+	uint8_t prev;                   /* rule 1: the previous kind 6 frame's reason, an ACCEPT 0 */
+	unsigned lines;                 /* rule 3: individual lines printed in the open bucket */
+	unsigned long long seen, rejected, suppressed;          /* the open bucket's own */
+	unsigned long long by_reason[LANE_LOG_REASONS];         /* its suppressed lines, by reason */
+};
+
+/* All zero is a session's start: no bucket open, previous reason 0. */
+static struct lane_log g_lane_log;
+
+/* The open bucket's summary line, if a line was suppressed in it. */
+static void lane_log_summary(const struct lane_log *lg)
+{
+	char list[LANE_LOG_REASONS * 26u];      /* " %u=%llu" is at most 24 characters */
+	size_t n = 0;
+	unsigned r;
+
+	if (lg->suppressed == 0u) {
+		return;
+	}
+	list[0] = '\0';
+	for (r = 0; r < LANE_LOG_REASONS; r++) {
+		if (lg->by_reason[r] != 0u) {
+			int const k = snprintf(list + n, sizeof(list) - n, " %u=%llu", r, lg->by_reason[r]);
+
+			if (k < 0 || (size_t)k >= sizeof(list) - n) {
+				break;  /* cannot happen: the buffer holds every entry */
+			}
+			n += (size_t)k;
+		}
+	}
+	printf("monitor: lane summary: seen=%llu rejected=%llu suppressed=%llu by reason:%s\n",
+	       lg->seen, lg->rejected, lg->suppressed, list);
+	fflush(stdout);
+}
+
+/* One judged kind 6 frame (buf holds its verdict and reason already), at `now`
+ * on CLOCK_MONOTONIC. `now` is a parameter so tests/lane_driver.c can script it.
+ * check_lane() gives only reasons below LANE_LOG_REASONS (asserted above). */
+static void lane_log(struct lane_log *lg, const uint8_t *buf, uint8_t reason, uint64_t now)
+{
+	uint64_t const bucket = now / LANE_LOG_BUCKET_NS;
+
+	if (!lg->open || bucket != lg->bucket) {
+		uint8_t const prev = lg->prev;
+
+		lane_log_summary(lg);
+		memset(lg, 0, sizeof(*lg));
+		lg->prev = prev;                /* rule 1 runs on across buckets */
+		lg->bucket = bucket;
+		lg->open = 1;
+	}
+	lg->seen++;
+	if (reason != RSN_OK) {
+		lg->rejected++;
+		if (reason != lg->prev && lg->lines < LANE_LOG_CAP) {
+			lg->lines++;
+			printf("monitor: REJECT seq=%llu kind=lane profile=%u reason=%s\n",
+			       (unsigned long long)frame_get_u64(&buf[0]),
+			       (unsigned)buf[FRAME_HEADER_BYTES + P_LANE_PROFILE], reason_name(reason));
+			fflush(stdout);
+		} else {
+			lg->suppressed++;
+			lg->by_reason[reason]++;
+		}
+	}
+	lg->prev = reason;
+}
+
+/* The session-end flush hook: called immediately before each transport's
+ * session-end line, right before ctl_log_end() (vss_log_end() in 0x50), so a
+ * kind 6 summary comes first. */
+static void lane_log_end(struct lane_log *lg)
+{
+	lane_log_summary(lg);
+	memset(lg, 0, sizeof(*lg));
+}
+#endif
 
 /* Judge one non-sentinel frame in place: write verdict and reason into the
  * payload, log a reject. Shared by every transport. Returns the verdict. */
@@ -1377,6 +1815,14 @@ static uint8_t judge_frame(uint8_t *buf)
 	 * line below; kinds 0 and 1 still read no clock. */
 	if (buf[FRAME_HEADER_BYTES + P_KIND] == KIND_CTL) {
 		ctl_log(&g_ctl_log, buf, reason, now_ns());
+		return verdict;
+	}
+#endif
+#if defined(MONITOR_EXT_KINDS) && (MONITOR_EXT_KINDS & 0x40)
+	/* Kind 6 goes to its own limiter in the same way, never to the generic
+	 * line below; kinds 0 and 1 still read no clock. */
+	if (buf[FRAME_HEADER_BYTES + P_KIND] == KIND_LANE) {
+		lane_log(&g_lane_log, buf, reason, now_ns());
 		return verdict;
 	}
 #endif
@@ -1462,6 +1908,9 @@ static int serve_one_client(int cfd, int stamp)
 		}
 	}
 
+#if defined(MONITOR_EXT_KINDS) && (MONITOR_EXT_KINDS & 0x40)
+	lane_log_end(&g_lane_log);
+#endif
 #if defined(MONITOR_EXT_KINDS) && (MONITOR_EXT_KINDS & 0x04)
 	ctl_log_end(&g_ctl_log);
 #endif
@@ -1532,6 +1981,9 @@ static int serve_udp(int port)
 		}
 	}
 
+#if defined(MONITOR_EXT_KINDS) && (MONITOR_EXT_KINDS & 0x40)
+	lane_log_end(&g_lane_log);
+#endif
 #if defined(MONITOR_EXT_KINDS) && (MONITOR_EXT_KINDS & 0x04)
 	ctl_log_end(&g_ctl_log);
 #endif
@@ -1649,6 +2101,9 @@ static int serve_shm(const char *spec)
 					/* One line per burst of traffic, so a console
 					 * shows sessions the way the TCP path's
 					 * "client done" lines do. */
+#if defined(MONITOR_EXT_KINDS) && (MONITOR_EXT_KINDS & 0x40)
+					lane_log_end(&g_lane_log);
+#endif
 #if defined(MONITOR_EXT_KINDS) && (MONITOR_EXT_KINDS & 0x04)
 					ctl_log_end(&g_ctl_log);
 #endif
@@ -1688,6 +2143,9 @@ static int serve_shm(const char *spec)
 	}
 
 	__atomic_store_n(shm_chan_u32(base, SHM_CHAN_OFF_MAGIC), 0u, __ATOMIC_RELEASE);
+#if defined(MONITOR_EXT_KINDS) && (MONITOR_EXT_KINDS & 0x40)
+	lane_log_end(&g_lane_log);
+#endif
 #if defined(MONITOR_EXT_KINDS) && (MONITOR_EXT_KINDS & 0x04)
 	ctl_log_end(&g_ctl_log);
 #endif
@@ -1758,6 +2216,9 @@ static int serve_kick(const char *spec, const char *kick)
 			if (seen > seen_at_burst && now - last_req_ns > 1000000000ull) {
 				/* A second without requests ends a burst: one line per
 				 * session, as the other servers print. */
+#if defined(MONITOR_EXT_KINDS) && (MONITOR_EXT_KINDS & 0x40)
+				lane_log_end(&g_lane_log);
+#endif
 #if defined(MONITOR_EXT_KINDS) && (MONITOR_EXT_KINDS & 0x04)
 				ctl_log_end(&g_ctl_log);
 #endif
@@ -1797,6 +2258,9 @@ static int serve_kick(const char *spec, const char *kick)
 	}
 
 	shm_kick_get_stats(k, &st);
+#if defined(MONITOR_EXT_KINDS) && (MONITOR_EXT_KINDS & 0x40)
+	lane_log_end(&g_lane_log);
+#endif
 #if defined(MONITOR_EXT_KINDS) && (MONITOR_EXT_KINDS & 0x04)
 	ctl_log_end(&g_ctl_log);
 #endif
@@ -2071,6 +2535,9 @@ static void serve_svc_client(int cfd, struct liveness *lv)
 		}
 	}
 
+#if defined(MONITOR_EXT_KINDS) && (MONITOR_EXT_KINDS & 0x40)
+	lane_log_end(&g_lane_log);
+#endif
 #if defined(MONITOR_EXT_KINDS) && (MONITOR_EXT_KINDS & 0x04)
 	ctl_log_end(&g_ctl_log);
 #endif
@@ -2217,6 +2684,14 @@ int main(int argc, char **argv)
 		return 2;
 	}
 #endif
+#if defined(MONITOR_EXT_KINDS) && (MONITOR_EXT_KINDS & 0x40)
+	/* Kind 6's self-check, right after kind 2's (kind 4's in 0x50) and like them
+	 * before any serving line. */
+	if (!lane_table_consistent()) {
+		fprintf(stderr, "monitor: lane table inconsistent\n");
+		return 2;
+	}
+#endif
 	/* Every serving mode says which claim kinds it judges and with what
 	 * bounds, on its own line: the guest console then shows which rules a
 	 * run was judged by, and an image can be checked for this build by the
@@ -2230,6 +2705,9 @@ int main(int argc, char **argv)
 #endif
 #if defined(MONITOR_EXT_KINDS) && (MONITOR_EXT_KINDS & 0x04)
 	ctl_announce();         /* the ctl rules: and ctl profile lines (Phase 8 specification 2.5) */
+#endif
+#if defined(MONITOR_EXT_KINDS) && (MONITOR_EXT_KINDS & 0x40)
+	lane_announce();        /* the one lane rules: line */
 #endif
 	if (argc > 1 && strcmp(argv[1], "shmkick") == 0) {
 		if (argc != 4) {

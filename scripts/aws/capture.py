@@ -78,6 +78,38 @@ the harness phase's vss harnesses make. For it:
   - this report goes into PUB as capture.log, so the fetched record says what
     was left out and how each stem ended.
 
+A G5G RECORD (2026-11-10; README.md, "A g5g session") is an A6 record, no vss stem in
+it, with a top-level g5g stem: gpu-facts, gpu-facts-N, gpu-install, llama-build or
+vlm, which only remote-ladder.sh's g5g phases make. For it:
+
+  - a g5g stem that holds its own evidence is evidence too, beside the stamp.json
+    and probe output an A6 record needed until then: gpu-facts and gpu-facts-N by
+    host-after.txt and a summary.txt whose line carries cpu_part=; gpu-install by
+    host-after.txt and set.txt; llama-build by host-after.txt and BUILD-INFO or
+    stopped; vlm by host-after.txt and demo-exit.txt (launch-svc's files in the vlm
+    stem are no evidence of the vlm phase). A record with neither kind is refused
+    as before: an empty REC, a REC with setup's files alone, and one whose g5g
+    stems hold no evidence. The older rule reads the files outside the g5g stems
+    only: the stamp.json vlm-demo.sh writes into the vlm stem is no stamp of a
+    probe run, and nothing in a g5g stem is probe output;
+  - the first output line is "capture: a g5g record (STEMS)", or, when the record
+    also passes the older rule, "capture: today's A6 evidence, with g5g stems
+    (STEMS)"; then one line a g5g stem, "STEM: evidence" or "STEM: no evidence
+    (WHAT IS MISSING)". A stem without evidence is packed as it stands, by the
+    same rules;
+  - a *.json or *.jsonl file under a g5g stem gets the vss rule of a stem that did
+    not end whole: one that does not parse is left out and named ("excluded: PATH
+    (does not parse, in a g5g stem: ...)"), and a string holding a newline is
+    redacted line by line and the file named. vlm-demo.sh writes a failed warm-up
+    request's traceback into warmup.json, and one such file must not cost the
+    record. Outside the g5g stems the A6 rule holds as it was, fatal cases too.
+    The byte-for-byte check of the arm files (lat-, kvm-, db-burst, ex-) passes
+    over a file of a g5g stem that was left out: no g5g phase writes such a name,
+    and one that is there and does not parse is named like any other;
+  - this report goes into PUB as capture.log, through the redactor and the IPv6
+    rule, as a vss record's does. An A6 record with no g5g stem publishes none
+    and prints what it printed before.
+
 KVM here boots our startup-qemu-virt; this is not a QNX-supported
 configuration, and no timing claim attaches to the boot.
 """
@@ -107,9 +139,15 @@ ARM = ("lat-", "kvm-", "db-burst", "ex-")   # ex-: run-bellrobust.sh's exchange 
 EXSET = re.compile(r"^\S+ rc=\d+ t0=\d+ t1=\d+$", re.M)
 
 
-def ran_sets():
+def top(d):
+    """The first path component of directory d under REC ("" for REC itself)."""
+    rel = os.path.relpath(d, rec).replace(os.sep, "/")
+    return "" if rel == "." else rel.split("/", 1)[0]
+
+
+def ran_sets(skip=()):
     for d, _s, fs in os.walk(rec):
-        if "scenarios.log" in fs:
+        if "scenarios.log" in fs and top(d) not in skip:
             with open(os.path.join(d, "scenarios.log"), encoding="utf-8", errors="replace") as f:
                 if EXSET.search(f.read()):
                     return True
@@ -150,6 +188,9 @@ VSS_WHITELIST = (
     # unit's under raw/kill; never its detach.log, never a ROS log directory (its working directory holds those, outside the record)
     "aw-g1/host-before.txt", "aw-g1/host-after.txt", "aw-g1/run.log", "aw-g1/status",
     "aw-g1/raw/*", "aw-g1/raw/*/*", "aw-g1/raw/*/*/*", "aw-g1/raw/kill/*/*/*",
+    # PLAN=p6a's four unit directories under raw/, each an arm's form one level down; never a bag, which stays in the
+    # working directory
+    "aw-g1/raw/01-honest/*/*/*", "aw-g1/raw/02-honest/*/*/*", "aw-g1/raw/03-honest/*/*/*", "aw-g1/raw/04-inject/*/*/*",
 ) + tuple("vss-suite/raw/runs/*/*/" + p for p in (                  # each step-3 run's own directory
     "plan.json", "bridge-script.json", "bridge-header.json", "bridge/*", "guest-console.log", "listeners.json",
     "attribution.json", "player.log", "*.log", "result.json", "vss-recorder.csv", "*.jsonl"))
@@ -236,6 +277,36 @@ def vss_state(stem, incomplete):
     return kind, True, "%s, with %s" % (last, result)
 
 
+# --- a g5g record (2026-11-10) -------------------------------------------------------------------
+G5G_STEM = re.compile(r"^(gpu-facts(-[1-9][0-9]*)?|gpu-install|llama-build|vlm)$")
+
+
+def g5g_missing(stem):
+    """What a g5g stem lacks of its own evidence, by name; empty when it holds it all."""
+    d = os.path.join(rec, stem)
+
+    def has(name):
+        return os.path.isfile(os.path.join(d, name))
+
+    missing = [] if has("host-after.txt") else ["host-after.txt"]
+    if stem.startswith("gpu-facts"):
+        ok = False
+        if has("summary.txt"):
+            with open(os.path.join(d, "summary.txt"), encoding="utf-8", errors="replace") as f:
+                ok = "cpu_part=" in f.read()
+        if not ok:
+            missing.append("summary.txt with cpu_part=")
+    elif stem == "gpu-install":
+        if not has("set.txt"):
+            missing.append("set.txt")
+    elif stem == "llama-build":
+        if not (has("BUILD-INFO") or has("stopped")):
+            missing.append("BUILD-INFO or stopped")
+    elif not has("demo-exit.txt"):
+        missing.append("demo-exit.txt")
+    return missing
+
+
 if not os.path.isdir(rec):
     sys.exit("no run directory %s" % rec)
 report = []     # a vss record's report: printed (the capture phase's capture.log), and published as PUB/capture.log
@@ -248,6 +319,8 @@ def note(line):
 
 stems = sorted(n for n in os.listdir(rec) if VSS_STEM.match(n) and os.path.isdir(os.path.join(rec, n)))
 vss = bool(stems)
+# A g5g record's stems (A G5G RECORD, above); none in a vss record, which its whitelist rules whole.
+g5g = [] if vss else sorted(n for n in os.listdir(rec) if G5G_STEM.match(n) and os.path.isdir(os.path.join(rec, n)))
 stem_state = {}     # a vss record's stems: DONE, TIMEOUT, FAILED, INCOMPLETE or NO STATUS
 if vss:
     incomplete = os.environ.get("CAPTURE_INCOMPLETE", "").split()
@@ -265,9 +338,27 @@ if vss:
         sys.exit("%s holds no vss stem with a DONE status line and its result file, no TIMEOUT or FAILED stem and no "
                  "INCOMPLETE one: nothing ran" % rec)
 else:
-    names = [n for _d, _s, fs in os.walk(rec) for n in fs]
-    if "stamp.json" not in names or not (any(n.startswith(("lat-", "ex-")) and n.endswith(".json") for n in names)
-                                         or ran_sets()):
+    # The older rule's files are those outside the g5g stems (none in a record without one, so nothing changes there).
+    names = [n for d, _s, fs in os.walk(rec) if top(d) not in g5g for n in fs]
+    today = "stamp.json" in names and (any(n.startswith(("lat-", "ex-")) and n.endswith(".json") for n in names)
+                                       or ran_sets(g5g))
+    if g5g:
+        lacking = {s: g5g_missing(s) for s in g5g}
+        if today:
+            note("capture: today's A6 evidence, with g5g stems (%s)" % " ".join(g5g))
+        elif not all(lacking.values()):
+            note("capture: a g5g record (%s)" % " ".join(g5g))
+        for s in g5g:
+            if lacking[s]:
+                note("%s: no evidence (%s)" % (s, ", ".join(lacking[s])))
+            else:
+                absent = ["%s absent" % n for n in ("stamp.json", "claims.log")
+                          if s == "vlm" and not os.path.isfile(os.path.join(rec, s, n))]
+                note("%s: evidence%s" % (s, " (%s)" % ", ".join(absent) if absent else ""))
+        if not today and all(lacking.values()):
+            sys.exit("%s holds no stamp.json with lat-*.json, ex-*.json or an exchange set in scenarios.log, and no g5g "
+                     "stem with its evidence: nothing ran" % rec)
+    elif not today:
         sys.exit("%s holds no stamp.json with lat-*.json, ex-*.json or an exchange set in scenarios.log: nothing ran" % rec)
 if os.path.isdir(pub) and os.listdir(pub):
     sys.exit("%s is not empty; refusing to mix captures" % pub)
@@ -390,8 +481,8 @@ def rewritten_json(text, doc, toks, where):
 # What the redactor and the IPv6 rule write in place of what they mask. A vss record's report names, per file, how
 # many of each were written into its JSON strings: the JSON rule keeps every number, but a
 # string is data too, and a mask written into one (a reply frame's trailing zeros) was invisible in the record.
-MASKS = ("<account>", "<arn>", "<eni-id>", "<host>", "<instance-id>", "<ip>", "<ipv6>", "<mac>", "<sg-id>",
-         "<snapshot-id>", "<subnet-id>", "<user>", "<volume-id>", "<vpc-id>")
+MASKS = ("<account>", "<arn>", "<eni-id>", "<gpu-uuid>", "<host>", "<instance-id>", "<ip>", "<ipv6>", "<mac>", "<sg-id>",
+         "<snapshot-id>", "<subnet-id>", "<user>", "<uuid>", "<volume-id>", "<vpc-id>")
 in_strings: "dict[str, dict[str, int]]" = {}     # a vss record's JSON strings: rel -> {mask: times written}
 
 
@@ -613,6 +704,17 @@ for root, name in entries:
         continue
     dst = os.path.join(pub, rel)
     os.makedirs(os.path.dirname(dst), exist_ok=True)
+    if relp.split("/", 1)[0] in g5g and name.endswith((".json", ".jsonl")):
+        # A g5g stem's JSON and JSONL: the vss rule of a stem that did not end whole (A G5G RECORD, above).
+        if name.endswith(".json"):
+            how = json_tokens_file(read_bytes(src), dst, relp, name, "g5g")
+            rewritten += how == "rewritten"
+            verbatim += how == "verbatim"
+        else:
+            got = jsonl_file(read_bytes(src), dst, relp, name, "g5g")
+            rewritten += got is True
+            verbatim += got is False
+        continue
     if name.endswith(".json"):
         raw = open(src, encoding="utf-8").read()
         doc = json.loads(raw)
@@ -717,11 +819,13 @@ else:
             if name.endswith(".json") and name.startswith(ARM):
                 a = os.path.join(root, name)
                 b = os.path.join(pub, os.path.relpath(a, rec))
+                if top(root) in g5g and not os.path.exists(b):
+                    continue    # left out of a g5g stem and named above (it did not parse): there is no copy to compare
                 if open(a, "rb").read() != open(b, "rb").read():
                     sys.exit("%s differs from the run's copy" % os.path.relpath(a, rec))
 
 summary = "capture: %d JSON verbatim, %d JSON with strings redacted, %d text files redacted" % (verbatim, rewritten, texts)
-if vss:
+if vss or g5g:
     # The report itself goes through the redactor and the IPv6 rule too: nothing reaches PUB that did not.
     write_text(os.path.join(pub, "capture.log"),
                "".join(mask_ipv6(x) + "\n" for x in redact_bytes_lines(report + [summary])))

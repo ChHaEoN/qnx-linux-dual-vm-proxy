@@ -80,6 +80,30 @@ filter() {
 		}
 		return out rest
 	}
+	# Any UUID (2026-11-11, a g5g session): the logs a g5g stem brings in are those of package scripts and of a model
+	# server, which this project has not read line by line, and the scan after the fetch refuses any UUID in any
+	# file. THE RULE IS THE ONE OF THAT SCAN (leakscan.py), boundary for boundary: five groups of 8, 4, 4, 4 and 12
+	# hex digits, masked when the character before and the character after are not a letter, a digit or "_". The
+	# shared mask() takes "-" for a word character and would keep "x-<uuid>", which the scan refuses. A candidate
+	# that is glued to a word is passed over by one character, so a second one that overlaps it is still found, as
+	# the scan finds it. The pattern is a string (UU, built below, no {n}); no apostrophe here (see mask).
+	function mask_uuids(s,   out, rest, before, after) {
+		if (index(s, "-") == 0) return s
+		out = ""; rest = s
+		while (match(rest, UU)) {
+			out = out substr(rest, 1, RSTART - 1)
+			before = (length(out) > 0) ? substr(out, length(out), 1) : ""
+			after = substr(rest, RSTART + RLENGTH, 1)
+			if (before !~ /[0-9A-Za-z_]/ && after !~ /[0-9A-Za-z_]/) {
+				out = out "<uuid>"
+				rest = substr(rest, RSTART + RLENGTH)
+			} else {
+				out = out substr(rest, RSTART, 1)
+				rest = substr(rest, RSTART + 1)
+			}
+		}
+		return out rest
+	}
 	function mask_ips(s,   out, rest, tok) {
 		out = ""; rest = s
 		while (match(rest, /[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+/)) {
@@ -154,6 +178,17 @@ filter() {
 		# it -- which is exactly why it asserts the masked direction and not
 		# just that the kept tokens survive.
 		H = "[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]+"
+		# 2026-11-10, a g5g session: a GPU UUID in the form the NVIDIA driver prints it ("GPU-"
+		# and five groups of 8, 4, 4, 4 and 12 hex digits). The log of a model server names the
+		# device it took by it, and the scan after the fetch refuses any UUID (leakscan.py):
+		# unmasked, one line of a server log would hold the whole record on the instance. Before
+		# every other rule: its last group may be twelve digits, which the account rule would
+		# take a part of. Spelled out, with no {n}, and no apostrophe (see the header and mask).
+		X4 = "[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]"
+		line = mask(line, "GPU-" X4 X4 "-" X4 "-" X4 "-" X4 "-" X4 X4 X4, "<gpu-uuid>")
+		# Then every other UUID, by the rule of the scan (mask_uuids), before the account rule for the same reason.
+		UU = X4 X4 "-" X4 "-" X4 "-" X4 "-" X4 X4 X4
+		line = mask_uuids(line)
 		# EC2-assigned hostnames first: they embed the private address, so
 		# masking the address first would leave "ip-<ip>" behind.
 		line = mask(line, "ip-[0-9]+-[0-9]+-[0-9]+-[0-9]+([.][a-z0-9.-]+)?", "<host>")
@@ -213,6 +248,15 @@ if [ "${1:-}" = "selftest" ]; then
 	check "upper-case v6" "ADDR FE80::ABCD:1 UP"               "FE80" 0
 	check "another guest" "fe80::5054:ff:fe11:1112 is not it"  "fe80::" 0
 	check "beside loopback" "addr ::2 is not the loopback one" "::2" 0
+	# 2026-11-10: a GPU UUID as the driver prints it (made up). "all digits": the last group is
+	# masked with the rest, not left as "<account>" inside what remains.
+	check "gpu uuid"      "device 0 (GPU-0a1b2c3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d) ready" "0a1b2c3d" 0
+	check "gpu uuid, upper" "UUID GPU-0A1B2C3D-4E5F-6A7B-8C9D-0E1F2A3B4C5D" "8C9D" 0
+	check "gpu uuid, all digits" "GPU-01234567-0123-0123-0123-012345678901 up" "0123-0123" 0
+	# 2026-11-11: any UUID the scan after the fetch would refuse (made up), by its boundaries.
+	check "uuid"          "I: (UUID=1b2c3d4e-5f6a-7b8c-9d0e-1f2a3b4c5d6e)" "1b2c3d4e" 0
+	check "uuid, after a dash" "dev x-1B2C3D4E-5F6A-7B8C-9D0E-1F2A3B4C5D6E." "5F6A" 0
+	check "uuid, all digits" "id 01234567-0123-0123-0123-012345678901 up" "0123-0123" 0
 
 	echo "preserved direction:"
 	check "br0 addr"      "br0 192.168.100.1/24 up"            "192.168.100.1" 1
@@ -224,6 +268,8 @@ if [ "${1:-}" = "selftest" ]; then
 	check "the figures"   "p50 111.1 us crossing 22.2 us"       "111.1" 1
 	check "kernel ver"    "kernel 6.8.0-1063-aws"              "6.8.0-1063-aws" 1
 	check "sha256"        "sha256 26170cd7dc74c216181db71c5"   "26170cd7dc74c216181db71c5" 1
+	# 2026-11-11: what the scan does not take for a UUID is left as it is.
+	check "uuid, glued"   "id_1b2c3d4e-5f6a-7b8c-9d0e-1f2a3b4c5d6e kept" "id_1b2c3d4e-5f6a-7b8c-9d0e-1f2a3b4c5d6e" 1
 	# 2026-10-08: what only looks like an IPv6 address. The guest link-local address follows
 	# from its fixed MAC; the rest is data. (No kept line here may hold the login of the host
 	# the capture runs on, which the filter masks: the package version below is made up.)

@@ -1,0 +1,21 @@
+# The top-level package names the gpu-install phase asks apt for on a g5g.metal session, one per line as
+# "<list> <name>", in three lists: driver (Ubuntu's archive, restricted), toolkit (NVIDIA's CUDA repository,
+# ubuntu2404/sbsa) and build (Ubuntu's archive, main). Names only, never a version: both modes, plan and apply, ask
+# for each name as name=version from the session's approved file, and the pin file the plan writes from that file
+# holds the names apt is not asked for. @KREL@ is the running kernel's release (uname -r), the kernel ABI in the
+# module package's name; a module package for any other ABI is refused. Neither a session nor its prep changes this
+# file.
+#
+# The driver is Ubuntu's prebuilt, signed proprietary module for the running kernel (no DKMS build) with the 580
+# server user space. No nvidia-modprobe: the udev rule and helper that nvidia-kernel-common-580-server installs make
+# the device nodes, /dev/nvidia-uvm among them. No git and no curl: on an AMI that already has either at an older
+# version, asking for it by version would be an upgrade, which the plan refuses. build-llama.sh refuses without git,
+# and the vlm phase checks for curl by name.
+driver linux-modules-nvidia-580-server-@KREL@
+driver nvidia-kernel-common-580-server
+driver libnvidia-compute-580-server
+driver nvidia-utils-580-server
+toolkit cuda-nvcc-13-2
+toolkit cuda-cudart-dev-13-2
+toolkit libcublas-dev-13-2
+build cmake

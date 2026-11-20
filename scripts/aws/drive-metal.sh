@@ -4,12 +4,14 @@
 #
 #   drive-metal.sh launch        run-instances, self-terminating; root volume read back, its size too
 #                                (METAL_VOLUME_SIZE, whole GiB from 16 to 64, default 16); the session's minutes
-#                                (METAL_SESSION_MIN, 60 to 180, default 90), recorded in the session state
+#                                (METAL_SESSION_MIN, 60 to 180, default 90), recorded in the session state;
+#                                the availability zone when METAL_AZ names one, read back (A G5G SESSION, below)
 #   drive-metal.sh wait          until provisioned; PROVES both self-termination nets are armed, for the state's minutes
 #   drive-metal.sh upload        repo tarball, remote-ladder.sh, capture.py, image(s), gzipped disk, and
 #                                the files METAL_FILES names (to ~/a1/in, each hashed into inputs.env);
 #                                once per session, and a bundle.json among them must name the tarball's commit
-#   drive-metal.sh run PHASE     remote-ladder.sh PHASE (setup|quiesce|launch|ladder|launch-live|liveness|launch-stamp|stamp|metal|someip|harness|wait-run|capture)
+#   drive-metal.sh run PHASE     remote-ladder.sh PHASE (setup|quiesce|launch|ladder|launch-live|liveness|launch-stamp|stamp|metal|someip|harness|wait-run|capture,
+#                                and stop|gpu-facts|gpu-install|llama-build|launch-svc|vlm: A G5G SESSION, below)
 #   drive-metal.sh fetch         pub.tgz back, hash-verified, then leak-scanned
 #   drive-metal.sh terminate     terminate-instances, confirmed
 #   drive-metal.sh verify        nothing running|pending, ours shutting-down|terminated, no
@@ -33,6 +35,15 @@
 #
 # A VSS SESSION (plan Phase 3) carries sdv in its repository tarball.
 # See README.md, "A vss session instead".
+#
+# A G5G SESSION (2026-11-10; README.md, "A g5g session"). METAL_TYPE=g5g.metal launches as any type does: the type is
+# not checked here. METAL_AZ (optional) is the availability zone to launch in, the region's name and one letter
+# (eu-central-1b): refused before any aws call when it is not of that shape or not of this region; given, run-instances
+# asks for that zone, and the zone EC2 reports is read back and must be it, else the launch terminates as for a wrong
+# volume. Not given, run-instances gets the arguments it always got. Either way `launch` says the zone the instance
+# landed in (a zone's name identifies no account, and is not masked), or that it could not be read. Its phases are
+# gpu-facts, gpu-install (LADDER_ENV="MODE=plan", then "MODE=apply"), llama-build, launch-svc and vlm, and `run stop`
+# between its two boots. A g5g.metal session has no vss host role: a vss harness is refused on it.
 #
 # SESSION STATE (instance id, volume id, address, known_hosts) lives in METAL_STATE, by
 # default outside the repo, and the script refuses a state or fetch directory inside
@@ -80,7 +91,7 @@ IP_WAIT_S="${METAL_IP_WAIT_S:-300}"
 PROV_WAIT_S="${METAL_PROV_WAIT_S:-900}"
 CONFIRM_TRIES="${METAL_CONFIRM_TRIES:-6}"
 READBACK_TRIES="${METAL_READBACK_TRIES:-30}"
-PHASES="setup quiesce launch ladder launch-live liveness launch-stamp stamp metal someip harness wait-run capture"
+PHASES="setup quiesce launch ladder launch-live liveness launch-stamp stamp metal someip harness wait-run capture stop gpu-facts gpu-install llama-build launch-svc vlm"
 
 # Local paths in POSIX form: a pasted C:\... path would make scp and tar read "C:" as
 # a host, and sha256sum escape the backslashes in its output.
@@ -431,6 +442,13 @@ main() {
 		local smin="${METAL_SESSION_MIN:-$SESSION_MIN_DEFAULT}"
 		session_min_ok "$smin" \
 			|| die "METAL_SESSION_MIN='$smin' is not a whole number of minutes from 60 to 180 in plain digits (unset or empty: the default $SESSION_MIN_DEFAULT)"
+		# The availability zone (2026-11-10): unset or empty for EC2's choice, else this region's name and one letter,
+		# refused here as the size and the minutes are.
+		local az="${METAL_AZ:-}" place=()
+		if [ -n "$az" ]; then
+			case "$az" in "$REGION"[a-z]) ;; *) die "METAL_AZ='$az' is not an availability zone of $REGION (the region's name and one letter; unset or empty: EC2's choice)" ;; esac
+			place=(--placement "AvailabilityZone=$az")
+		fi
 		need METAL_KEY_NAME METAL_SG_NAME
 		qemu_pkg_shape
 		mkdir "$STATE/lock" 2>/dev/null || die "another launch holds $STATE/lock (or a stale one; remove it after checking)"
@@ -456,7 +474,7 @@ main() {
 		token="qnx-a6-$(date -u +%Y%m%dT%H%M%S)-$$-${RANDOM}"
 		echo "$token" > "$STATE/token"
 		aws_ ec2 run-instances --region "$REGION" --image-id "$AMI" --instance-type "$TYPE" \
-			--key-name "$METAL_KEY_NAME" --security-groups "$METAL_SG_NAME" \
+			--key-name "$METAL_KEY_NAME" --security-groups "$METAL_SG_NAME" ${place[@]+"${place[@]}"} \
 			--client-token "$token" \
 			--instance-initiated-shutdown-behavior terminate \
 			--user-data "$(file_url "$USERDATA_SENT")" \
@@ -513,6 +531,20 @@ main() {
 		done
 		[ "$vsz" = "$VOLUME_SIZE" ] || abort "the root volume reads back as ${vsz:-no size} GiB, not the $VOLUME_SIZE GiB asked for"
 		say "root volume recorded ($1, $vsz GiB, delete on termination)"
+		# The zone the instance landed in (2026-11-10), said in both cases. When one was asked for, the answer must be
+		# it: an instance in another zone, or one whose zone EC2 does not say, is a launch failure. When none was asked
+		# for it is read once, and an answer that is not a zone of this region is said as unread.
+		local zone="" tries=1
+		[ -z "$az" ] || tries="$READBACK_TRIES"
+		for _ in $(seq 1 "$tries"); do
+			zone="$(aws_ ec2 describe-instances --region "$REGION" --instance-ids "$(iid)" \
+				--query 'Reservations[0].Instances[0].Placement.AvailabilityZone' --output text 2>/dev/null || true)"
+			case "$zone" in "$REGION"[a-z]) break ;; esac
+			zone=""
+			[ "$tries" = 1 ] || sleep "$POLL_S"
+		done
+		[ -z "$az" ] || [ "$zone" = "$az" ] || abort "the instance's availability zone reads back as ${zone:-unread}, not the $az asked for"
+		say "availability zone: ${zone:-unread}"
 		trap - ERR
 		;;
 	wait)

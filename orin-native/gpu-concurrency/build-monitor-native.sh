@@ -41,6 +41,13 @@
 # ladder's host arm either: give it its own OUT (Phase 8 uses
 # OUT=$HOME/aw/monitor-ctl).
 #
+# THE LANE MONITORS (C2b S3). MONITOR_EXT_KINDS=0x50 builds the vss monitor
+# with kind 6, the lane claim, and 0x54 the ctl monitor with it. Kind 6's limits
+# are a table in monitor.c itself, so 0x50 takes the generated headers of 0x10
+# and 0x54 those of 0x14, and the switch line names the value: the source-sha256
+# covers both. 0x54's guest build is `make lane` (C2b LB) and 0x50 has none,
+# which the switch line says; each takes its own OUT like the others.
+#
 # BOTH ARE READ FROM THE ENVIRONMENT, as OUT, CC and FORCE are, so a harness
 # that runs this script hands it whatever its own environment holds. They
 # carry this project's prefix for that reason: a generic EXT_KINDS or VSS_GEN
@@ -67,18 +74,18 @@ MONITOR_EXT_KINDS="${MONITOR_EXT_KINDS:-}"
 GEN_HDRS=()
 if [ -n "${MONITOR_EXT_KINDS}" ]; then
 	case "${MONITOR_EXT_KINDS}" in
-		0x10|0x14|0x1C) ;;
+		0x10|0x14|0x1C|0x50|0x54) ;;
 		*)
-			echo "ERROR: MONITOR_EXT_KINDS=${MONITOR_EXT_KINDS}: monitor.c takes 0x10 (vss), 0x14 (ctl) or 0x1C (gap), spelt so." >&2
+			echo "ERROR: MONITOR_EXT_KINDS=${MONITOR_EXT_KINDS}: monitor.c takes 0x10 (vss), 0x14 (ctl), 0x1C (gap), 0x50 (vss and lane) or 0x54 (ctl and lane), spelt so." >&2
 			exit 1 ;;
 	esac
 	MONITOR_VSS_GEN="${MONITOR_VSS_GEN:-${repo}/sdv-out/gen}"
 	GEN_HDRS=("${MONITOR_VSS_GEN}/vss_contract.h" "${MONITOR_VSS_GEN}/vss_profiles.h")
 	case "${MONITOR_EXT_KINDS}" in
-		0x14|0x1C) GEN_HDRS+=("${MONITOR_VSS_GEN}/vss_ctl.h") ;;   # kind 2's contract, after kind 4's two
+		0x14|0x1C|0x54) GEN_HDRS+=("${MONITOR_VSS_GEN}/vss_ctl.h") ;;   # kind 2's contract, after kind 4's two
 	esac
 	if [ "$(realpath -m -- "${OUT}")" = "$(realpath -m -- "${HOME}/ladder/monitor-native")" ]; then
-		echo "ERROR: MONITOR_EXT_KINDS=${MONITOR_EXT_KINDS} builds the vss or ctl monitor, not the ladder's host arm, so it" >&2
+		echo "ERROR: MONITOR_EXT_KINDS=${MONITOR_EXT_KINDS} builds the vss, ctl or lane monitor, not the ladder's host arm, so it" >&2
 		echo "       may not take the default OUT (${HOME}/ladder/monitor-native). Give it its own OUT." >&2
 		exit 1
 	fi
@@ -161,7 +168,15 @@ echo "source: $(sha256sum "${IVC}" | cut -d' ' -f1)  $(basename "${IVC}")"
 for f in ${GEN_HDRS[@]+"${GEN_HDRS[@]}"}; do
 	echo "source: $(sha256sum "$f" | cut -d' ' -f1)  $(basename "$f")"
 done
-[ -z "${MONITOR_EXT_KINDS}" ] || echo "switch: MONITOR_EXT_KINDS=${MONITOR_EXT_KINDS} -ffp-contract=off  (the guest's build: make $([ "${MONITOR_EXT_KINDS}" = 0x14 ] && echo ctl || echo vss))"
+case "${MONITOR_EXT_KINDS}" in
+	'') ;;
+	0x10) build="the guest's build: make vss" ;;
+	0x14) build="the guest's build: make ctl" ;;
+	0x50) build="the vss build with kind 6, lane; no guest build of it yet" ;;
+	0x54) build="the guest's build: make lane" ;;
+	*) build="the gap build: not implemented" ;;   # 0x1C, which stops in the compiler before this line
+esac
+[ -z "${MONITOR_EXT_KINDS}" ] || echo "switch: MONITOR_EXT_KINDS=${MONITOR_EXT_KINDS} -ffp-contract=off  (${build})"
 echo "tree:   ${want_src}  (recorded in $(basename "${SIDE}"))"
 echo
 echo "The guest runs this same monitor.c, cross-compiled with qcc. The binaries"

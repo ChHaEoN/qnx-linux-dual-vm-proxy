@@ -31,10 +31,11 @@ later Python. Run by the harness, one subcommand per call:
         count.
   log --dir D
         a recording directory's log by its manifest line (SDV Phase 7 WP3b): the basename of the line's
-        recording.path when it is its source.generator's (LOG_NAMES: sigsim.log for sigsim, carla.log for carla); prints
-        it. A line that cannot be read, is no JSON object, or pairs a generator with another log (another name, another
-        generator) prints its refusal on one line, naming both, and exits 1. run-vss-setup.sh stages each rec-*.tar by it,
-        and run-vss-suite.sh's PLAN=carla preflight (vss_suite.py recordings) reads it the same way.
+        recording.path when it is its source.generator's (LOG_NAMES: sigsim.log for sigsim, carla.log for carla and for
+        carla-autoware); prints it. A line that cannot be read, is no JSON object, or pairs a generator with another log
+        (another name, another generator) prints its refusal on one line, naming both, and exits 1. run-vss-setup.sh
+        stages each rec-*.tar by it, and run-vss-suite.sh's PLAN=carla preflight (vss_suite.py recordings) reads it the
+        same way.
   smoke   latency_probe.py's output on stdin; prints `result_line yes|no`, `bad N|none`, `rej N|none` and nothing else:
         the probe's latency fields never leave this process.
   bundle --facts D --prefix P
@@ -91,7 +92,7 @@ PROBES_ABOUT = ("run-vss-setup.sh's SIGILL probes (plan Phase 3 WP4, prep gap 4f
 GUEST_NEEDS = ("ready_7160", "c12b_ok", "catalog_is_bridge_label")     # the module docstring, THE GUEST RULE
 # A recording's log by its manifest line's source.generator (the module docstring, log): sdv/inject/inject.py's
 # LOG_NAMES, held equal by tests/test_vss_harness.py (standard library only, so this module keeps its own copy).
-LOG_NAMES = {"sigsim": "sigsim.log", "carla": "carla.log"}
+LOG_NAMES = {"sigsim": "sigsim.log", "carla": "carla.log", "carla-autoware": "carla.log"}
 MANIFEST_LINE = "manifest-line.json"
 # The module docstring, CPUSET RULE: QEMU's cores 0-2 and the probe's core 4 on the Orin are never a container's
 NOT_CONTAINER_CPUS = (0, 1, 2, 4)

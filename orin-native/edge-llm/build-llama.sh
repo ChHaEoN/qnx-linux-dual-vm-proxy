@@ -68,7 +68,11 @@ URL="${LLAMA_URL:-https://github.com/ggml-org/llama.cpp.git}"
 SRC="${SRC:-$HOME/llama.cpp}"
 BUILD="$SRC/build"          # not settable: the harnesses look for $HOME/llama.cpp/build/bin
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FLAGS=(-DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=87 -DLLAMA_CURL=OFF -DCMAKE_BUILD_TYPE=Release
+# 2026-11-10: the CUDA architecture as a word. Unset or empty is 87, the Orin's GPU, as before; 75 is the other value
+# (a T4G on a g5g.metal session, scripts/aws/remote-ladder.sh's llama-build phase), and there is no third. BUILD-INFO's
+# flags line shows the one that was used.
+CUDA_ARCH="${CUDA_ARCH:-87}"
+FLAGS=(-DGGML_CUDA=ON "-DCMAKE_CUDA_ARCHITECTURES=$CUDA_ARCH" -DLLAMA_CURL=OFF -DCMAKE_BUILD_TYPE=Release
 	-DLLAMA_USE_PREBUILT_UI=OFF -DLLAMA_BUILD_UI=OFF)
 TARGETS="llama-server llama-cli llama-bench"
 
@@ -76,6 +80,7 @@ TARGETS="llama-server llama-cli llama-bench"
 . "$here/../gpu-concurrency/lib-build.sh"
 [ "${BUILD_LIB_LOADED:-}" = 1 ] || { echo "FATAL: lib-build.sh did not load" >&2; exit 1; }
 b_begin build-llama
+case "$CUDA_ARCH" in 75|87) ;; *) die "CUDA_ARCH='$CUDA_ARCH' is not a CUDA architecture this script builds for: 75 or 87 (unset: 87)" ;; esac
 
 missing=()
 for c in git cmake make g++ sha256sum; do command -v "$c" >/dev/null || missing+=("$c"); done

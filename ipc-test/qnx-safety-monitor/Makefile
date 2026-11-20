@@ -197,5 +197,104 @@ ifneq ($(filter ctl $(CTL),$(MAKECMDGOALS)),)
 $(foreach h,$(CTL_HEADERS),$(if $(wildcard $(CTL_GEN)/$(h)),,$(error $(CTL_GEN)/$(h) $(CTL_MISSING))))
 endif
 
+# `make ctl-p5` builds the kind 2 (ctl) monitor of a generation that compiles
+# kind 4's profile 5, the CARLA 0.10.0 taxi (sdv Phase 8.5, WP9c), under its
+# own name, qnx-safety-monitor-p5, for the same reason as above;
+# ifs-ctl-p5.build stages it. Its recipe is ctl's,
+# MONITOR_EXT_KINDS=0x14 (kinds 2 and 4) and the same flags, with the contract
+# from CTL_P5_GEN, its own knob as VSS_CARLA_GEN is vss-carla's: CTL_GEN never
+# moves this target, nor CTL_P5_GEN any other. Before any compiler runs the
+# recipe stops when vss_profiles.h holds no X() row for profile 5 or vss_ctl.h
+# none for kind 2's profile 1 (the words "X(5u," and "X(1u," as
+# sdv/vss/generate.py writes its tables, read by $(file)), and when a copy of
+# any of the three headers beside monitor.c or in ../common would be compiled
+# instead of CTL_P5_GEN's (ctl's guard). Until WP3c F-c compiled profile 5
+# the target refused the generation; this tree's generation passes the row-5
+# guard, and a generation without profile 5 is still refused. A missing
+# header stops it as the makefile is read, naming CTL_P5_GEN, whenever the
+# command line names ctl-p5 or its binary; no header rule is defined for
+# CTL_P5_GEN, so none can override vss's or vss-carla's. Its .PHONY line and
+# alias are its own, so that no line above changes. `make clean` does not
+# remove the binary: every other recipe, clean's included, stays as it was.
+CTL_P5 := qnx-safety-monitor-p5
+CTL_P5_GEN ?= ../../sdv-out/gen
+CTL_P5_ROW5 := X(5u,
+CTL_P5_NO_ROW5 = $(CTL_P5_GEN)/vss_profiles.h holds no kind 4 profile 5: generate a \
+	contract that compiles it with sdv/vss/generate.py (sdv/vss/README.md), or point CTL_P5_GEN at one
+CTL_P5_NO_ROW1 = $(CTL_P5_GEN)/vss_ctl.h holds no kind 2 profile 1: generate a \
+	contract that compiles it with sdv/vss/generate.py (sdv/vss/README.md), or point CTL_P5_GEN at one
+CTL_P5_MISSING = is missing: generate the kind 2 and kind 4 contract with sdv/vss/generate.py \
+	(sdv/vss/README.md), or point CTL_P5_GEN at its output
+CTL_P5_STRAY = $(filter-out $(realpath $(addprefix $(CTL_P5_GEN)/,$(CTL_HEADERS))), \
+	$(realpath $(CTL_HEADERS) $(addprefix ../common/,$(CTL_HEADERS))))
+CTL_P5_SHADOW = $(CTL_P5_STRAY) would be compiled instead of the contract in $(CTL_P5_GEN) \
+	(a quoted include looks in monitor.c's directory and ../common first): remove it
+
+.PHONY: ctl-p5
+ctl-p5: $(CTL_P5)
+
+$(CTL_P5): $(SRCS) $(CTL_P5_GEN)/vss_contract.h $(CTL_P5_GEN)/vss_profiles.h $(CTL_P5_GEN)/vss_ctl.h
+	$(if $(filter $(CTL_P5_ROW5),$(file <$(CTL_P5_GEN)/vss_profiles.h)),,$(error $(CTL_P5_NO_ROW5)))
+	$(if $(filter $(CTL_ROW1),$(file <$(CTL_P5_GEN)/vss_ctl.h)),,$(error $(CTL_P5_NO_ROW1)))
+	$(if $(CTL_P5_STRAY),$(error $(CTL_P5_SHADOW)))
+	$(CC) $(TARGET) $(CFLAGS) -ffp-contract=off -DMONITOR_EXT_KINDS=0x14 -I$(CTL_P5_GEN) -o $@ monitor.c ../common/shm_map_qnx.c $(LDFLAGS)
+
+# ctl-p5's three headers are checked as the makefile is read whenever the
+# command line names ctl-p5 or its binary, as ctl's are, so a missing one names
+# CTL_P5_GEN wherever it points.
+ifneq ($(filter ctl-p5 $(CTL_P5),$(MAKECMDGOALS)),)
+$(foreach h,$(CTL_HEADERS),$(if $(wildcard $(CTL_P5_GEN)/$(h)),,$(error $(CTL_P5_GEN)/$(h) $(CTL_P5_MISSING))))
+endif
+
+# `make lane` builds the monitor with kind 6, the lane claim (sdv Phase 9,
+# C2b LB), beside kind 2 and kind 4 with kind 4's profile 5, under its own
+# name, qnx-safety-monitor-lane, for the same
+# reason as above; ifs-lane.build stages it. Its recipe is ctl-p5's with
+# MONITOR_EXT_KINDS=0x54 (kinds 2, 4 and 6: kind 6 reuses kind 4's helpers, so
+# its 0x40 bit is built with 0x10) and the same flags, -ffp-contract=off among
+# them, with the contract from LANE_GEN, its own knob: neither CTL_GEN nor
+# CTL_P5_GEN moves this target, nor LANE_GEN any other. Kind 6's limits are a
+# table in monitor.c itself, so the contract is ctl-p5's three headers and the
+# guards are ctl-p5's: before any compiler runs the recipe stops when
+# vss_profiles.h holds no X() row for profile 5 or vss_ctl.h none for kind 2's
+# profile 1 (the words "X(5u," and "X(1u," as sdv/vss/generate.py writes its
+# tables, read by $(file)), and when a copy of any of the three headers beside
+# monitor.c or in ../common would be compiled instead of LANE_GEN's. Until
+# WP3c F-c compiled profile 5 the target refused the generation; this tree's
+# generation passes the row-5 guard, and a generation without profile 5 is
+# still refused. A missing header stops it as the makefile is read, naming
+# LANE_GEN, whenever the command line names lane or its binary; no header rule
+# is defined for LANE_GEN. Its .PHONY line and alias are its own, so that no
+# line above changes. `make clean` does not remove the binary: every other
+# recipe, clean's included, stays as it was.
+LANE := qnx-safety-monitor-lane
+LANE_GEN ?= ../../sdv-out/gen
+LANE_NO_ROW5 = $(LANE_GEN)/vss_profiles.h holds no kind 4 profile 5: generate a \
+	contract that compiles it with sdv/vss/generate.py (sdv/vss/README.md), or point LANE_GEN at one
+LANE_NO_ROW1 = $(LANE_GEN)/vss_ctl.h holds no kind 2 profile 1: generate a \
+	contract that compiles it with sdv/vss/generate.py (sdv/vss/README.md), or point LANE_GEN at one
+LANE_MISSING = is missing: generate the kind 2 and kind 4 contract with sdv/vss/generate.py \
+	(sdv/vss/README.md), or point LANE_GEN at its output
+LANE_STRAY = $(filter-out $(realpath $(addprefix $(LANE_GEN)/,$(CTL_HEADERS))), \
+	$(realpath $(CTL_HEADERS) $(addprefix ../common/,$(CTL_HEADERS))))
+LANE_SHADOW = $(LANE_STRAY) would be compiled instead of the contract in $(LANE_GEN) \
+	(a quoted include looks in monitor.c's directory and ../common first): remove it
+
+.PHONY: lane
+lane: $(LANE)
+
+$(LANE): $(SRCS) $(LANE_GEN)/vss_contract.h $(LANE_GEN)/vss_profiles.h $(LANE_GEN)/vss_ctl.h
+	$(if $(filter $(CTL_P5_ROW5),$(file <$(LANE_GEN)/vss_profiles.h)),,$(error $(LANE_NO_ROW5)))
+	$(if $(filter $(CTL_ROW1),$(file <$(LANE_GEN)/vss_ctl.h)),,$(error $(LANE_NO_ROW1)))
+	$(if $(LANE_STRAY),$(error $(LANE_SHADOW)))
+	$(CC) $(TARGET) $(CFLAGS) -ffp-contract=off -DMONITOR_EXT_KINDS=0x54 -I$(LANE_GEN) -o $@ monitor.c ../common/shm_map_qnx.c $(LDFLAGS)
+
+# lane's three headers are checked as the makefile is read whenever the command
+# line names lane or its binary, as ctl-p5's are, so a missing one names
+# LANE_GEN wherever it points.
+ifneq ($(filter lane $(LANE),$(MAKECMDGOALS)),)
+$(foreach h,$(CTL_HEADERS),$(if $(wildcard $(LANE_GEN)/$(h)),,$(error $(LANE_GEN)/$(h) $(LANE_MISSING))))
+endif
+
 clean:
 	rm -f $(BIN) $(SVC) $(LIVE) $(STAMP) $(BELL) $(UNMASK) $(VSS)

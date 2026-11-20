@@ -16,18 +16,24 @@
 #     pin fails and whose task directory has gone ended meanwhile ("gone"); any other failed pin counts as failed.
 #   4 reads every thread back, listing the task directory again, so a thread born during step 3 is read too.
 #
-# THE LINE, the only output (stdout), whatever happens:
-#   repin tag=TAG cores=0-2 qemu=PID threads=N off_before=M pin_failed=F gone=G threads_after=A off_after=K on_cores=yes|no
+# THE LINE, the only output (stdout), whatever happens (CORES is QEMU's cores as given: 0-2 unless VSS_REPIN_CORES names
+# others):
+#   repin tag=TAG cores=CORES qemu=PID threads=N off_before=M pin_failed=F gone=G threads_after=A off_after=K on_cores=yes|no
 #     N and M are step 2's (the threads read, those not on QEMU's cores), F and G step 3's, A and K step 4's
-#   repin tag=TAG cores=0-2 qemu=none error=no-qemu            no QEMU runs
-#   repin tag=TAG cores=0-2 qemu=PID,PID,... error=not-one-qemu  more than one runs: which one is the guest's is unknown
-#   repin error=usage: ...                                     not one TAG of letters, digits, '.', '_' or '-'
+#   repin tag=TAG cores=CORES qemu=none error=no-qemu            no QEMU runs
+#   repin tag=TAG cores=CORES qemu=PID,PID,... error=not-one-qemu  more than one runs: which one is the guest's is unknown
+#   repin error=usage: ...                                       not one TAG of letters, digits, '.', '_' or '-'
+#   repin error=usage: VSS_REPIN_CORES='...' is not a CPU list   VSS_REPIN_CORES set and not a CPU list (empty included),
+#                                                                each character other than 0-9 , - shown as ?; after the
+#                                                                TAG's check and before step 1
 #
 # EXIT: 0 only when no pin failed, every thread read back in step 4 is on QEMU's cores, and at least one was read
 # back (on_cores=yes); 1 otherwise (on_cores=no); 2 for a wrong call; 3 when not exactly one QEMU runs.
 #
 # DESIGN VALUE (not measured): QEMU's cores, 0-2, held in QEMU_CORES below and nowhere else; the
-# containers' cores and the probe's core 4 are SDV_CONTAINER_CPUSET's rule, not this script's.
+# containers' cores and the probe's core 4 are SDV_CONTAINER_CPUSET's rule, not this script's. VSS_REPIN_CORES names
+# other cores for QEMU when its caller sets it (2026-11-05); unset, it is 0-2, and run-vss-setup.sh,
+# run-vss-suite.sh and the stack set none.
 #
 # It writes no file, needs no network, sources nothing, and changes nothing but the affinity of QEMU's threads, through
 # sudo -n alone.
@@ -37,7 +43,7 @@
 # timing; any isolation or guarantee: the pin is placement only.
 set -euo pipefail
 
-QEMU_CORES=0-2                  # the design value: QEMU's cores on the Orin
+QEMU_CORES="${VSS_REPIN_CORES-0-2}"   # the design value: QEMU's cores on the Orin; VSS_REPIN_CORES names others
 QEMU_COMM=qemu-system-aar       # qemu-system-aarch64's process name, as the kernel keeps it (15 characters)
 PROC=/proc
 
@@ -51,6 +57,7 @@ cpus_of() {   # LIST: its CPUs, ascending and comma-joined ("2,0-1" gives 0,1,2)
 	local IFS=, part a b c
 	local -a seen=()
 	[ -n "$1" ] || return 1
+	case "$1" in *,) return 1 ;; esac
 	for part in $1; do
 		case "$part" in
 			*-*) a="${part%%-*}"; b="${part#*-}" ;;
@@ -62,7 +69,11 @@ cpus_of() {   # LIST: its CPUs, ascending and comma-joined ("2,0-1" gives 0,1,2)
 	done
 	echo "${!seen[*]}"
 }
-WANT="$(cpus_of "$QEMU_CORES")"
+# under set -e a failing substitution would end the script with 1 and no line: the usage line, exit 2, before pgrep
+WANT="$(cpus_of "$QEMU_CORES")" || {
+	echo "repin error=usage: VSS_REPIN_CORES='${QEMU_CORES//[^0-9,-]/?}' is not a CPU list"
+	exit 2
+}
 
 on_cores() {   # LIST: whether that affinity list names exactly QEMU's cores
 	local got

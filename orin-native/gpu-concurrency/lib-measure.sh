@@ -653,6 +653,13 @@ m_round_order() {   # $1 round, then: first  middle...  last
 # gate, so the stamp REFUSES unless dockerd and containerd run within {3,5} and every running
 # container is too, read both as HostConfig.CpusetCpus (the request) and as its scope's
 # cpuset.cpus.effective (the truth). docker.socket may be active; shims are recorded only.
+# CHANGED 2026-11-05: the set g1 allows is PLATFORM_G1_CORES, a list of cores its caller may
+# give; unset, it is 3,5. Under g1 a value that is not a list of numbers and ascending ranges,
+# empty included, is refused before any file is opened, and every refusal names the set it
+# read. Each number is written without a leading zero and has four digits at most: _cpuset
+# would read 03 as a core named 03 and 5-3 as no core, so that a daemon's refusal would name
+# a set nobody meant, and bash's test compares four digits safely.
+# The refuse and record policies never read it: their {3,5} is the A6 rule.
 #
 # Three functions, so the start of a run and its end read the host the same way:
 # _platform_gather / _platform_containers set the PLAT_* globals and never die,
@@ -866,11 +873,19 @@ _g1_containers() {  # $1 = allowed core list
 # inside $(...): a die there would end only the subshell. Every reason is collected
 # before the die, so one refusal names everything that is wrong.
 m_platform_state() {
-	local host_cores="3,5" d lists cpus parts outside unreadable why reasons=""
+	local host_cores="3,5" g1_cores="${PLATFORM_G1_CORES-3,5}" d lists cpus parts outside unreadable why reasons="" part
 	case "$PLATFORM_POLICY" in
 		refuse|record|g1) ;;
 		*) die "PLATFORM_POLICY='$PLATFORM_POLICY' is not a policy; use 'refuse' (default), 'record' (S6(c) only) or 'g1' (gate G1's)" ;;
 	esac
+	if [ "$PLATFORM_POLICY" = g1 ]; then   # before any file is opened: _cpuset would read a malformed list as no core, or as others
+		[[ "$g1_cores" =~ ^(0|[1-9][0-9]{0,3})(-(0|[1-9][0-9]{0,3}))?(,(0|[1-9][0-9]{0,3})(-(0|[1-9][0-9]{0,3}))?)*$ ]] \
+			|| die "PLATFORM_G1_CORES='${g1_cores//[^0-9,-]/?}' is not a list of cores (numbers and ascending ranges N-M, comma-joined, each number without a leading zero and of four digits at most): PLATFORM_POLICY=g1 refuses it"
+		for part in ${g1_cores//,/ }; do   # four digits at most: bash's test holds them, and _cpuset expands no range past 9999
+			[ "${part%-*}" -le "${part#*-}" ] \
+				|| die "PLATFORM_G1_CORES='${g1_cores//[^0-9,-]/?}' is not a list of cores: its range $part descends; PLATFORM_POLICY=g1 refuses it"
+		done
+	fi
 	[ "${PROC_ROOT:-/proc}" = /proc ] || say "WARNING: PROC_ROOT overridden to $PROC_ROOT -- the platform check reads it; test use only"
 	[ "${SYS_ROOT:-/sys}" = /sys ] || say "WARNING: SYS_ROOT overridden to $SYS_ROOT -- test use only"
 	_platform_gather
@@ -878,21 +893,21 @@ m_platform_state() {
 		for d in dockerd containerd; do
 			case "$d" in dockerd) lists="$PLAT_DOCKERD_CPUS" ;; *) lists="$PLAT_CONTD_CPUS" ;; esac
 			if [ "$lists" = "not running" ]; then
-				reasons="${reasons:+$reasons; }$d is not running, so it is not within {$host_cores}"
+				reasons="${reasons:+$reasons; }$d is not running, so it is not within {$g1_cores}"
 				continue
 			fi
 			IFS=';' read -r -a parts <<< "$lists" || true
 			for cpus in "${parts[@]}"; do
-				if [ "$cpus" = unknown ] || ! _g1_on_cores "$cpus" "$host_cores"; then
-					reasons="${reasons:+$reasons; }$d is running on cores '$lists', outside {$host_cores}"
+				if [ "$cpus" = unknown ] || ! _g1_on_cores "$cpus" "$g1_cores"; then
+					reasons="${reasons:+$reasons; }$d is running on cores '$lists', outside {$g1_cores}"
 					break
 				fi
 			done
 		done
-		_g1_containers "$host_cores"
+		_g1_containers "$g1_cores"
 		[ -z "$G1_REASONS" ] || reasons="${reasons:+$reasons; }$G1_REASONS"
 		[ -z "$reasons" ] \
-			|| die "platform refused under PLATFORM_POLICY=g1: $reasons. Gate G1 keeps dockerd, containerd and every container on {$host_cores}."
+			|| die "platform refused under PLATFORM_POLICY=g1: $reasons. Gate G1 keeps dockerd, containerd and every container on {$g1_cores} (3,5 unless PLATFORM_G1_CORES names another set)."
 	fi
 	if [ "$PLATFORM_POLICY" = refuse ]; then
 		for d in dockerd containerd; do
@@ -1677,8 +1692,12 @@ m_sampler_start() {  # $1 = tag
 		_ "$ceil" "$SAMPLER_LOOP" "$EMC_BPMP" "$EMC_CCF" "$GPU_DEVFREQ" "$OUT/clk-$t.log" 2>/dev/null)"
 	SAMPLER_ROOT="$SAMPLER_ROOT $root"
 }
-# Gate G1's clock sampler: SAMPLER_LOOP alone, on core 4, with the
-# arm's bound as its ceiling, in the same clk-*.log form, for the whole arm. Not m_sampler_start:
+# Gate G1's clock sampler: SAMPLER_LOOP alone, on the instruments' core,
+# with the arm's bound as its ceiling, in the same clk-*.log form, for the whole arm.
+# CHANGED 2026-11-05: that core is the third argument, 4 when not given, and with 4 the sudo call's
+# arguments are what they were. It is written into the sudo script's text, so it is checked to be one
+# number, digits only, before anything: that check is what makes building the text safe, and a core
+# that is not one number returns 2 and starts nothing (the function never dies). Not m_sampler_start:
 # that ceiling comes from a ladder's N and interval, and it starts tegrastats as well. A clock
 # that cannot be read here (a host with no EMC node) leaves its field empty, as the loop does;
 # m_sampler_stop stops it. A GPU node that is absent leaves gpu_hz empty: never a refusal here.
@@ -1691,10 +1710,11 @@ _g1_gpu_node() {
 		case "$(cat "$d/name" 2>/dev/null)$(basename "$d")" in *gpu*) GPU_DEVFREQ="$d/cur_freq"; break ;; esac
 	done
 }
-m_clock_sampler_start() {  # $1 = tag  $2 = ceiling, in seconds
-	local t="$1" ceil="$2" root
+m_clock_sampler_start() {  # $1 = tag  $2 = ceiling, in seconds  [$3 = the core, 4 when not given]
+	local t="$1" ceil="$2" core="${3:-4}" root
+	[[ "$core" =~ ^[0-9]+$ ]] || return 2    # digits only: the core goes into the sudo script's text below
 	_g1_gpu_node
-	root="$(sudo -n bash -c 'timeout "$1" taskset -c 4 env LC_ALL=C bash -c "$2" _ "$3" "$4" "$5" > "$6" 2>/dev/null & echo $!' \
+	root="$(sudo -n bash -c 'timeout "$1" taskset -c '"$core"' env LC_ALL=C bash -c "$2" _ "$3" "$4" "$5" > "$6" 2>/dev/null & echo $!' \
 		_ "$ceil" "$SAMPLER_LOOP" "$EMC_BPMP" "$EMC_CCF" "${GPU_DEVFREQ:-/nonexistent}" "$OUT/clk-$t.log" 2>/dev/null)"
 	SAMPLER_ROOT="$SAMPLER_ROOT $root"
 }
