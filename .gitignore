@@ -51,6 +51,8 @@ ipc-test/qnx-safety-monitor/qnx-safety-monitor-unmask
 ipc-test/qnx-safety-monitor/qnx-safety-monitor-vss
 ipc-test/qnx-safety-monitor/qnx-safety-monitor-carla
 ipc-test/qnx-safety-monitor/qnx-safety-monitor-ctl
+ipc-test/qnx-safety-monitor/qnx-safety-monitor-p5
+ipc-test/qnx-safety-monitor/qnx-safety-monitor-lane
 ipc-test/qnx-safety-monitor/qnx-safety-monitor-gap
 
 # Secrets / credentials / cloud
@@ -235,3 +237,4 @@ logs/sample-boot/*.txt
 # databroker/feeder/connector output, the local manifest and spool, Ditto and hawkBit data,
 # certificates. One ignored root; recordings live outside the repo (~/sdv-recordings/).
 sdv-out/
+sdv/claimrs/target/

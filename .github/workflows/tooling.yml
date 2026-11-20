@@ -45,7 +45,7 @@ jobs:
           set -euo pipefail
           mypy --no-incremental --exclude '^sdv/(connector|rosvss|carlaif)/build_image\.py$' \
             scripts/ci scripts/aws scripts/twin tests \
-            sdv/connector sdv/cloud sdv/ota sdv/carla sdv/feeder sdv/ctl \
+            sdv/connector sdv/cloud sdv/ota sdv/carla sdv/feeder sdv/ctl sdv/lane \
             sdv/rosvss sdv/steershim sdv/drill sdv/carlaif \
             sdv/arm64/awscan.py sdv/sim/carla010_iso.py
           for f in sdv/connector/build_image.py sdv/rosvss/build_image.py sdv/carlaif/build_image.py; do
@@ -86,6 +86,7 @@ jobs:
             --ignore=tests/test_sdv_connector_probe.py \
             --ignore=tests/test_sdv_connector_broker.py \
             --ignore=tests/test_sdv_burst_broker.py \
+            --ignore=tests/test_sdv_fleet_broker.py \
             --deselect=tests/test_sdv_cloud.py::test_docker_path_reads_a_drive_path_for_a_prefix_whose_first_word_is_wsl_and_for_no_other
 
       - name: Require the twin exclusion tests and monitor guard

@@ -143,3 +143,17 @@ sdv/stack/README.md	or not); that a feeder still running 3 s after its start rec
 sdv/steershim/README.md	through a first-order lag (`tau` 0.2 s) after the gain, so the inverse	The inverse model's tau is the interface's configured first-order lag time constant.
 sdv/connector/README.md	a publish exactly 300 s old still counts	limits.py LIMITER_WINDOW_S is a closed window, including its oldest endpoint.
 sdv/ctl/README.md	odometry freshness window 100 ms	ctlclient.py ODOM_FRESH_NS sets the odometry freshness threshold.
+scripts/aws/README.md	The driver's tool is given 60 s	remote-ladder.sh G5G_SMI_WAIT_S's default: the time limit the ladder gives the driver's tool.
+scripts/aws/README.md	no answer within 60 s	remote-ladder.sh G5G_SMI_WAIT_S's default, as the failure word names it.
+scripts/aws/README.md	gives the driver's tool 60 s there too	remote-ladder.sh G5G_SMI_WAIT_S's default, the same limit at the second read.
+sdv/claimrs/README.md	reply deadline (3000 ms by default	link.rs DEFAULT_REPLY_TIMEOUT_MS is the client's configured reply deadline.
+sdv/claimrs/README.md	in the next 200 ms as an error	link.rs TRAILING_WAIT_MS is end_session's configured window for trailing bytes.
+sdv/cloud/README.md	twin's 7 fit its 30 s	twinctl.py ONE_CAR_TIMEOUT_S is the breaker function's configured time-out for one car.
+sdv/cloud/README.md	makes 17, counted at 42 s	twinctl.py's function_timeout: 17 calls times BREAKER_CALL_S plus BREAKER_RESERVE_S, a computed design value.
+sdv/cloud/README.md	45 s (the owner's choice	twinctl.py FLEET_TIMEOUT_S is the configured time-out for two or three cars.
+sdv/cloud/README.md	(30 s for car A alone, 45 s for two or three	twinctl.py ONE_CAR_TIMEOUT_S and FLEET_TIMEOUT_S, the configured time-outs per set.
+sdv/stack/README.md	at least 40 s apart	fleet.py MIN_MOVING_S is the design threshold for a car that moves.
+sdv/stack/README.md	one fleet start per 120 s	limits.py START_SPACING_S is the configured spacing between fleet starts.
+sdv/stack/README.md	at least 10 s inside its own bound	fleet.py PLAYER_MARGIN_S is the configured margin between a log's end and its player's bound.
+sdv/stack/README.md	plus 30 s, rounded up	stack.py PLAYER_HEADROOM_S is the configured headroom past a log's span.
+sdv/stack/README.md	at most 900 s (`player_bound_s`)	stack.py PLAYER_BOUND_MAX_S is the configured ceiling on a replay's player.

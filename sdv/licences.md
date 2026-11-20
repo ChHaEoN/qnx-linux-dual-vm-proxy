@@ -29,12 +29,13 @@ one licence covers a whole container.
 | Cyclone DDS / rmw_cyclonedds_cpp | Autoware image's package set; [ros-env.json](aw/ros-env.json) selects the RMW, no independent version pin | to be confirmed | Middleware supplied by the Autoware image; XML configuration is project source. |
 | Amazon Root CA 1 | sha256 in [ca.json](connector/ca.json) | to be confirmed | Fetched at run time for the connector's TLS trust; not vendored. |
 | Autoware `sample-map-planning` (release 1.9.0's map archive) | map-file sha256 in [sample-lanelet-102.json](ctl/scenarios/sample-lanelet-102.json) | to be confirmed | Supplied outside the repo for the Autoware planning simulation; the scenario binds it by hash; no map file vendored. |
-| zenoh | No active SDV import, download or build pin in this batch | to be confirmed if adopted | Study reference; no zenoh source, generated code or binary is vendored by this batch. |
+| zenoh (`eclipse/zenoh-bridge-ros2dds`) | Pinned by digest in [images.json](stack/images.json); run by digest with its own entrypoint, never pulled, bundled, deployed or scanned by the stack | to be confirmed | Transport bridge image; no zenoh source, generated code or binary is vendored. |
 | python-build-standalone | Runtime supplied to the setup harness in the upload bundle | to be confirmed, including its bundled libraries | Python environment unpacked outside the repo; no interpreter vendored. |
 | OpenCV and NumPy for camera-file tests | Pins below; the camera path also uses the host's python3-opencv package | to be confirmed | Installed into the test venv or supplied by the host; no package vendored. |
 | AWS CLI, Docker Engine / containerd, host Python and native C toolchain | Host-provided; Docker's required major is checked by the harness | to be confirmed, per component | Operator/host tools; no executable or SDK vendored. |
 | GitHub checkout, setup-python and cache actions | v4, v5 and v4 in [tooling.yml](../.github/workflows/tooling.yml) | to be confirmed | CI actions fetched by GitHub, not copied into the repository. |
 | ruff, pytest and mypy | 0.16.8, 9.1.1 and 1.18.2 | to be confirmed | Installed only in the CI tooling environment. |
+| Rust toolchain (rustc, cargo, rust-std, clippy, rustfmt) and rustup | 1.100.0, pinned in [rust-toolchain.toml](claimrs/rust-toolchain.toml); rustup-init from static.rust-lang.org | to be confirmed | Host-provided build tool for sdv/claimrs, installed in WSL only; nothing from it is vendored or redistributed. |
 
 Local project images inherit the base and locked dependencies above. The
 recorder additionally stages the pinned upstream `recorder.py` from
